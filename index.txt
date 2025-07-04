@@ -5,19 +5,21 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Tomb of Light | Preserve Your Legacy on the Blockchain</title>
 <style>
-body { background: linear-gradient(180deg, #000000, #0a0a0a); color: #f0e6d2; font-family: 'Helvetica Neue', sans-serif; text-align: center; margin: 0; padding: 0; }
-header { padding: 60px 20px; }
-img.logo { width: 320px; max-width: 85%; height: auto; display: block; margin: 0 auto; filter: drop-shadow(0 0 25px gold); }
-.tagline { font-size: 1.8em; margin-top: 20px; color: gold; }
-main { padding: 40px 20px; font-size: 1.2em; line-height: 1.6; max-width: 800px; margin: 0 auto; }
-section { margin-bottom: 40px; }
+body { background: #000; color: #f0e6d2; font-family: 'Helvetica Neue', sans-serif; text-align: center; margin: 0; padding: 0; }
+header { padding: 80px 20px 40px 20px; }
+img.logo { width: 340px; max-width: 90%; height: auto; display: block; margin: 0 auto 30px auto; filter: drop-shadow(0 0 25px gold); }
+.tagline { font-size: 1.8em; margin: 40px 0 60px 0; color: gold; }
+main { padding: 20px; font-size: 1.2em; line-height: 1.6; max-width: 800px; margin: 0 auto; }
+section { margin-bottom: 60px; }
 h2 { color: gold; font-size: 1.5em; margin-bottom: 15px; }
 button.cta { background: gold; color: black; padding: 15px 30px; font-size: 1em; border: none; border-radius: 8px; cursor: pointer; transition: background 0.3s ease; margin-top: 30px; }
 button.cta:hover { background: #e5c100; }
-footer { margin-top: 60px; padding: 20px; font-size: 14px; color: #bbb; }
+footer { margin-top: 80px; padding: 20px; font-size: 14px; color: #bbb; }
 footer a { color: #bbb; text-decoration: none; margin: 0 5px; }
 footer a:hover { text-decoration: underline; }
-img.coin { width: 120px; margin: 20px auto 10px; display: block; filter: drop-shadow(0 0 15px gold); }
+img.coin { width: 140px; margin: 30px auto 30px auto; display: block; filter: drop-shadow(0 0 20px gold); }
+.contact-links a { color: gold; text-decoration: none; }
+.contact-links a:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -45,7 +47,7 @@ img.coin { width: 120px; margin: 20px auto 10px; display: block; filter: drop-sh
 
 <section>
 <h2>Contact Us</h2>
-<p>Email: <a href="mailto:thetomboflight@gmail.com">thetomboflight@gmail.com</a><br>
+<p class="contact-links">Email: <a href="mailto:thetomboflight@gmail.com">thetomboflight@gmail.com</a><br>
 Phone: <a href="tel:7577695116">(757) 769-5116</a></p>
 <button class="cta" onclick="window.location.href='mailto:thetomboflight@gmail.com'">Contact Tomb of Light</button>
 </section>
