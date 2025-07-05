@@ -12,20 +12,12 @@ header, footer {
   padding: 20px;
 }
 
-header .logo {
-  width: 80px; /* smaller size */
-  max-width: 100%;
+.logo, .coin {
+  width: 120px; /* balanced medium size */
+  max-width: 90%;
   height: auto;
   display: block;
-  margin: 10px auto;
-}
-
-.coin-section .coin {
-  width: 80px; /* smaller size */
-  max-width: 100%;
-  height: auto;
-  display: block;
-  margin: 10px auto;
+  margin: 15px auto;
 }
 
 .about, .roadmap, .waitlist {
@@ -41,8 +33,16 @@ header .logo {
 }
 
 .roadmap li {
-  margin: 10px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: 1em;
+  margin: 10px 0;
+}
+
+.roadmap li::before {
+  content: '✅';
+  margin-right: 10px;
 }
 
 .waitlist input, .waitlist button {
