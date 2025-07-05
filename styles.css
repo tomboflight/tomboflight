@@ -1,74 +1,54 @@
+/* General Styles */
 body {
-    background-color: #000;
-    color: #fff;
-    font-family: 'Segoe UI', sans-serif;
-    text-align: center;
+    font-family: 'Helvetica Neue', Arial, sans-serif;
     margin: 0;
     padding: 0;
+    background-color: #000;
+    color: #F5F5F5;
+    line-height: 1.6;
 }
 
-header {
-    padding: 50px 20px 20px;
+header, footer {
+    text-align: center;
+    padding: 20px;
 }
 
-header img {
+header img, footer img {
     width: 150px;
-    margin: 10px;
-    border-radius: 12px;
-}
-
-h1 {
-    color: #FFD700;
-    font-size: 2.5em;
-    margin: 10px 0;
-}
-
-.subtitle {
-    color: #ccc;
-    font-size: 1.2em;
-    margin-bottom: 30px;
+    height: auto;
+    background: transparent;
 }
 
 section {
-    max-width: 600px;
-    margin: 0 auto 40px;
-    padding: 0 20px;
-    text-align: left;
+    padding: 40px 20px;
+    max-width: 800px;
+    margin: auto;
+    text-align: center;
 }
 
-section h2 {
+h1, h2 {
     color: #FFD700;
-    border-bottom: 2px solid #444;
-    padding-bottom: 10px;
+    margin-bottom: 20px;
 }
 
-.roadmap-item {
-    background-color: #111;
-    border-radius: 8px;
-    padding: 12px;
-    margin: 10px 0;
-    display: flex;
-    align-items: center;
-    font-size: 1em;
-}
-
-footer {
-    padding: 20px;
-    font-size: 0.9em;
-    color: #666;
-}
-
-footer a {
+a {
     color: #FFD700;
     text-decoration: none;
-    margin: 0 10px;
 }
 
-footer a:hover {
+a:hover {
     text-decoration: underline;
 }
 
-@media (max-width: 600px) {
-    h1 { font-size: 2em; }
-    section h2 { font-size: 1.2em; }
+form {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-top: 20px;
 }
+
+input[type="text"],
+input[type="email"] {
+    padding: 10px;
+    margin: 5px;
+    width: 80%;
