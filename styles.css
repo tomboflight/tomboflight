@@ -5,14 +5,24 @@ body {
   text-align: center;
   margin: 0;
   padding: 0;
+  overflow-x: hidden;
 }
 
 header, footer {
   padding: 20px;
 }
 
-.logo, .coin {
-  max-width: 150px;
+header .logo {
+  width: 120px;
+  max-width: 90%;
+  height: auto;
+  display: block;
+  margin: 20px auto;
+}
+
+.coin-section .coin {
+  width: 120px;
+  max-width: 90%;
   height: auto;
   display: block;
   margin: 20px auto;
@@ -20,34 +30,45 @@ header, footer {
 
 .about, .roadmap, .waitlist {
   padding: 20px;
+  max-width: 600px;
+  margin: 0 auto;
 }
 
 .roadmap ul {
   list-style: none;
   padding: 0;
+  margin: 0;
 }
 
 .roadmap li {
   margin: 10px 0;
+  font-size: 1em;
 }
 
 .waitlist input, .waitlist button {
   padding: 10px;
-  margin: 5px;
+  margin: 5px auto;
   width: 80%;
   max-width: 300px;
+  display: block;
 }
 
 .waitlist button {
-  background-color: #ff0;
+  background-color: #FFD700;
   border: none;
   cursor: pointer;
   font-weight: bold;
+  color: #000;
+}
+
+.waitlist button:hover {
+  background-color: #e6c200;
 }
 
 footer a {
-  color: #ff0;
+  color: #FFD700;
   text-decoration: none;
+  margin: 0 5px;
 }
 
 footer a:hover {
