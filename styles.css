@@ -13,22 +13,22 @@ header, footer {
     padding: 20px;
 }
 
-header img, footer img {
+header img {
     width: 150px;
     height: auto;
     background: transparent;
 }
 
-section {
+main {
     padding: 40px 20px;
     max-width: 800px;
     margin: auto;
-    text-align: center;
 }
 
-h1, h2 {
+h1, h2, h3 {
     color: #FFD700;
     margin-bottom: 20px;
+    text-align: center;
 }
 
 a {
@@ -40,15 +40,16 @@ a:hover {
     text-decoration: underline;
 }
 
-form {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    margin-top: 20px;
+p, li {
+    font-size: 16px;
+    margin-bottom: 12px;
 }
 
-input[type="text"],
-input[type="email"] {
-    padding: 10px;
-    margin: 5px;
-    width: 80%;
+footer p {
+    margin: 5px 0;
+    font-size: 14px;
+}
+
+ul {
+    padding-left: 20px;
+}
