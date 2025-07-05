@@ -13,19 +13,19 @@ header, footer {
 }
 
 header .logo {
-  width: 120px;
-  max-width: 90%;
+  width: 80px; /* smaller size */
+  max-width: 100%;
   height: auto;
   display: block;
-  margin: 20px auto;
+  margin: 10px auto;
 }
 
 .coin-section .coin {
-  width: 120px;
-  max-width: 90%;
+  width: 80px; /* smaller size */
+  max-width: 100%;
   height: auto;
   display: block;
-  margin: 20px auto;
+  margin: 10px auto;
 }
 
 .about, .roadmap, .waitlist {
