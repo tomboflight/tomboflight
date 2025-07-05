@@ -50,18 +50,20 @@ footer p {
 }
 
 ul {
-    padding-left: 20px;
+    list-style: none;
+    padding-left: 0;
 }
 
-#roadmap .roadmap-item {
+#roadmap li {
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-bottom: 10px;
+    margin-bottom: 12px;
 }
 
-.roadmap-icon {
-    font-size: 20px;
+#roadmap li img {
+    width: 24px;
+    height: 24px;
     margin-right: 10px;
 }
 
@@ -107,4 +109,9 @@ form button:hover {
     width: 150px;
     height: auto;
     background: transparent;
+}
+
+#waitlist-description {
+    text-align: center;
+    margin-bottom: 20px;
 }
