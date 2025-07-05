@@ -13,11 +13,16 @@ header, footer {
 }
 
 header .logo {
-  width: 120px; /* increased slightly for visibility */
+  width: 120px;
   max-width: 90%;
   height: auto;
   display: block;
-  margin: 10px auto;
+  margin: 10px auto 20px auto;
+  /* Gold glowing light effect */
+  border-radius: 50%;
+  box-shadow: 0 0 24px 6px #FFD700, 0 0 64px 16px #fff20033;
+  border: 3px solid #FFD700;
+  background: radial-gradient(circle, #FFD70033 60%, transparent 100%);
 }
 
 .coin-section .coin {
@@ -25,7 +30,9 @@ header .logo {
   max-width: 80%;
   height: auto;
   display: block;
-  margin: 10px auto;
+  margin: 10px auto 24px auto;
+  border-radius: 50%;
+  box-shadow: 0 0 16px 4px #FFD70066;
 }
 
 .about, .roadmap, .waitlist {
@@ -41,11 +48,18 @@ header .logo {
 }
 
 .roadmap li {
-  margin: 10px 0;
+  margin: 14px 0;
   font-size: 1em;
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
+}
+
+.roadmap .checkmark {
+  color: #FFD700;
+  font-size: 1.3em;
+  margin-right: 6px;
 }
 
 .waitlist input, .waitlist button {
@@ -62,6 +76,7 @@ header .logo {
   cursor: pointer;
   font-weight: bold;
   color: #000;
+  transition: background 0.2s;
 }
 
 .waitlist button:hover {
