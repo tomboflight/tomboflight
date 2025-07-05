@@ -1,115 +1,55 @@
 body {
-    font-family: 'Helvetica Neue', sans-serif;
-    background-color: #000;
-    color: #fff;
-    margin: 0;
-    padding: 0;
-    line-height: 1.6;
-    text-align: center;
+  font-family: Arial, sans-serif;
+  background-color: #000;
+  color: #fff;
+  text-align: center;
+  margin: 0;
+  padding: 0;
 }
 
-header {
-    padding: 30px 20px;
+header, footer {
+  padding: 20px;
 }
 
-header h1 {
-    font-size: 2em;
-    color: #ffd700;
-    margin-bottom: 10px;
+.logo, .coin {
+  max-width: 150px;
+  height: auto;
+  display: block;
+  margin: 20px auto;
 }
 
-header p {
-    font-size: 1em;
-    color: #ccc;
+.about, .roadmap, .waitlist {
+  padding: 20px;
 }
 
-section {
-    max-width: 800px;
-    margin: 30px auto;
-    padding: 0 20px;
-}
-
-h2 {
-    color: #ffd700;
-    font-size: 1.5em;
-    margin-bottom: 15px;
-}
-
-.about p {
-    margin-bottom: 10px;
-}
-
-.roadmap {
-    list-style: none;
-    padding: 0;
-    text-align: left;
+.roadmap ul {
+  list-style: none;
+  padding: 0;
 }
 
 .roadmap li {
-    display: flex;
-    align-items: center;
-    font-size: 1.1em;
-    margin: 10px 0;
-    padding-left: 10px;
+  margin: 10px 0;
 }
 
-.roadmap li::before {
-    content: "✅";
-    display: inline-block;
-    margin-right: 10px;
-    font-size: 1.2em;
+.waitlist input, .waitlist button {
+  padding: 10px;
+  margin: 5px;
+  width: 80%;
+  max-width: 300px;
 }
 
-.waitlist p {
-    max-width: 600px;
-    margin: 0 auto 20px auto;
-}
-
-form {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-}
-
-input[type="text"],
-input[type="email"] {
-    padding: 10px;
-    margin: 5px 0;
-    width: 80%;
-    max-width: 300px;
-    border: none;
-    border-radius: 5px;
-    font-size: 1em;
-}
-
-button {
-    background-color: #ffd700;
-    color: #000;
-    border: none;
-    padding: 10px 20px;
-    margin-top: 10px;
-    cursor: pointer;
-    font-size: 1em;
-    border-radius: 5px;
-    transition: background-color 0.3s ease;
-}
-
-button:hover {
-    background-color: #e5c100;
-}
-
-footer {
-    background-color: #111;
-    color: #ccc;
-    padding: 20px;
-    font-size: 0.9em;
+.waitlist button {
+  background-color: #ff0;
+  border: none;
+  cursor: pointer;
+  font-weight: bold;
 }
 
 footer a {
-    color: #ffd700;
-    text-decoration: none;
+  color: #ff0;
+  text-decoration: none;
 }
 
 footer a:hover {
-    text-decoration: underline;
+  text-decoration: underline;
 }
