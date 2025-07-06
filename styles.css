@@ -10,13 +10,13 @@ body {
   /* Background logo image styles */
   background-image: url('logo-bg.png');
   background-repeat: no-repeat;
-  background-position: center center;
+  background-position: center 150px; /* try centering lower if needed */
   background-attachment: fixed;
-  background-size: 600px auto; /* Increase for a larger logo */
+  background-size: 700px auto; /* adjust for larger logo */
 }
 
 header, .about, .roadmap, .waitlist, footer {
-  background: rgba(0, 0, 0, 0.66); /* semi-transparent black */
+  background: rgba(0, 0, 0, 0.40); /* lighter so logo shows through */
   border-radius: 12px;
   margin: 24px auto 18px auto;
   max-width: 700px;
@@ -56,27 +56,29 @@ header .logo {
 .roadmap ul {
   list-style: none;
   padding: 0;
-  margin: 0;
+  margin: 0 auto;
+  max-width: 550px;
+  display: grid;
+  row-gap: 18px;
 }
 
 .roadmap li {
-  font-size: 1em;
+  display: grid;
+  grid-template-columns: 26px 1fr;
+  align-items: center;
   text-align: left;
-  margin: 14px 0;
-  padding-left: 2.2em;
+  font-size: 1.1em;
+  gap: 0.5em;
+  padding-left: 0;
   position: relative;
-  line-height: 1.7;
 }
 
 .roadmap .checkmark {
   color: #FFD700;
-  font-size: 1.3em;
-  position: absolute;
-  left: 0;
-  top: 0;
-  line-height: 1.7;
+  font-size: 1.4em;
+  margin-right: 0.2em;
+  justify-self: end;
 }
-
 /* --- End Checkmark Alignment --- */
 
 .waitlist input, .waitlist button {
