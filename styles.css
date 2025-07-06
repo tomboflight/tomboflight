@@ -10,16 +10,19 @@ body {
   overflow-x: hidden;
 }
 
-/* Centered background logo watermark */
-.background-logo {
+/* Centered background logo watermark using ::before */
+body::before {
+  content: "";
   position: fixed;
   top: 50%;
   left: 50%;
+  width: 700px;
+  height: 700px;
   transform: translate(-50%, -50%);
-  opacity: 0.05; /* adjust visibility here */
+  background: url('logo-bg.png') no-repeat center center;
+  background-size: contain;
+  opacity: 0.05; /* adjust visibility */
   z-index: 0;
-  max-width: 80%;
-  height: auto;
   pointer-events: none;
 }
 
