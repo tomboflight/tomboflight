@@ -6,6 +6,13 @@ body {
   margin: 0;
   padding: 0;
   overflow-x: hidden;
+  /* Background logo image */
+  background-image: url('logo-bg.png');
+  background-repeat: no-repeat;
+  background-position: center center;
+  background-attachment: fixed;
+  background-size: 600px auto;
+  /* Optional: add a dark overlay for readability */
 }
 
 header, footer {
@@ -18,7 +25,6 @@ header .logo {
   height: auto;
   display: block;
   margin: 10px auto 20px auto;
-  /* Gold glowing light effect */
   border-radius: 50%;
   box-shadow: 0 0 24px 6px #FFD700, 0 0 64px 16px #fff20033;
   border: 3px solid #FFD700;
@@ -39,6 +45,7 @@ header .logo {
   padding: 20px;
   max-width: 600px;
   margin: 0 auto;
+  background: transparent;
 }
 
 .roadmap ul {
@@ -91,4 +98,11 @@ footer a {
 
 footer a:hover {
   text-decoration: underline;
+}
+
+/* Optional: Improve text readability over the logo background */
+.about, .roadmap, .waitlist, header, footer {
+  background: rgba(0, 0, 0, 0.60);
+  border-radius: 8px;
+  margin-bottom: 18px;
 }
