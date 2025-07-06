@@ -10,7 +10,7 @@ body {
   overflow-x: hidden;
 }
 
-/* Subtle centered watermark background logo */
+/* Gold watermark background logo, centered and subtle */
 body::before {
   content: "";
   position: fixed;
@@ -21,9 +21,13 @@ body::before {
   transform: translate(-50%, -50%);
   background: url('logo-bg.png') no-repeat center center;
   background-size: contain;
-  opacity: 0.02; /* subtle watermark */
+  opacity: 0.15; /* gold and visible but subtle */
   z-index: 0;
   pointer-events: none;
+  /* If your logo is not gold, you can add a gold filter:
+     filter: sepia(1) hue-rotate(10deg) saturate(5) brightness(1.1);
+     (Remove if your logo image is already gold)
+  */
 }
 
 header, .about, .roadmap, .waitlist, footer {
@@ -34,18 +38,6 @@ header, .about, .roadmap, .waitlist, footer {
   padding: 20px 0;
   position: relative;
   z-index: 2;
-}
-
-header .logo {
-  width: 120px;
-  max-width: 90%;
-  height: auto;
-  display: block;
-  margin: 10px auto 20px auto;
-  border-radius: 50%;
-  box-shadow: 0 0 24px 6px #FFD700, 0 0 64px 16px #fff20033;
-  border: 3px solid #FFD700;
-  background: radial-gradient(circle, #FFD70033 60%, transparent 100%);
 }
 
 .coin-section .coin {
@@ -73,19 +65,20 @@ header .logo {
   margin: 0 auto;
   text-align: left;
 }
-
 .roadmap-list li {
   position: relative;
-  padding-left: 30px;
-  margin-bottom: 12px;
+  padding-left: 32px;
+  margin-bottom: 14px;
   font-size: 1.1em;
+  line-height: 1.6;
 }
-
 .roadmap-list li::before {
   content: "✔️";
   position: absolute;
   left: 0;
   top: 0;
+  color: #FFD700;
+  font-size: 1.3em;
 }
 
 .waitlist input, .waitlist button {
@@ -114,7 +107,6 @@ footer a {
   text-decoration: none;
   margin: 0 5px;
 }
-
 footer a:hover {
   text-decoration: underline;
 }
