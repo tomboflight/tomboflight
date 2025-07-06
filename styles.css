@@ -6,17 +6,21 @@ body {
   margin: 0;
   padding: 0;
   overflow-x: hidden;
-  /* Background logo image */
+
+  /* Background logo image styles */
   background-image: url('logo-bg.png');
   background-repeat: no-repeat;
   background-position: center center;
   background-attachment: fixed;
-  background-size: 600px auto;
-  /* Optional: add a dark overlay for readability */
+  background-size: 600px auto; /* Increase for a larger logo */
 }
 
-header, footer {
-  padding: 20px;
+header, .about, .roadmap, .waitlist, footer {
+  background: rgba(0, 0, 0, 0.66); /* semi-transparent black */
+  border-radius: 12px;
+  margin: 24px auto 18px auto;
+  max-width: 700px;
+  padding: 20px 0;
 }
 
 header .logo {
@@ -44,10 +48,11 @@ header .logo {
 .about, .roadmap, .waitlist {
   padding: 20px;
   max-width: 600px;
-  margin: 0 auto;
+  margin: 0 auto 18px auto;
   background: transparent;
 }
 
+/* --- Roadmap Checkmark Alignment --- */
 .roadmap ul {
   list-style: none;
   padding: 0;
@@ -55,19 +60,24 @@ header .logo {
 }
 
 .roadmap li {
-  margin: 14px 0;
   font-size: 1em;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
+  text-align: left;
+  margin: 14px 0;
+  padding-left: 2.2em;
+  position: relative;
+  line-height: 1.7;
 }
 
 .roadmap .checkmark {
   color: #FFD700;
   font-size: 1.3em;
-  margin-right: 6px;
+  position: absolute;
+  left: 0;
+  top: 0;
+  line-height: 1.7;
 }
+
+/* --- End Checkmark Alignment --- */
 
 .waitlist input, .waitlist button {
   padding: 10px;
@@ -98,11 +108,4 @@ footer a {
 
 footer a:hover {
   text-decoration: underline;
-}
-
-/* Optional: Improve text readability over the logo background */
-.about, .roadmap, .waitlist, header, footer {
-  background: rgba(0, 0, 0, 0.60);
-  border-radius: 8px;
-  margin-bottom: 18px;
 }
