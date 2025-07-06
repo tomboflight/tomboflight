@@ -20,11 +20,11 @@ body::before {
   height: 100vh;
   background: url('logo-bg.png') no-repeat center 150px;
   background-size: 700px auto;
-  opacity: 0.35;
+  opacity: 0.32; /* Adjust for more/less visibility */
   z-index: 0;
   pointer-events: none;
   /* If your image is white or light, this makes it gold: */
-  filter: sepia(1) saturate(7) hue-rotate(20deg) brightness(1.25);
+  filter: sepia(1) saturate(7) hue-rotate(15deg) brightness(1.1);
 }
 
 header, .about, .roadmap, .waitlist, footer {
