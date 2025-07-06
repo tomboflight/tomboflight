@@ -8,56 +8,64 @@ body {
   min-height: 100vh;
   position: relative;
   overflow-x: hidden;
+  font-size: 18px;
+  line-height: 1.6;
 }
 
-/* Gold watermark background logo, centered and subtle */
+/* Subtle centered watermark logo background */
 body::before {
   content: "";
   position: fixed;
   top: 50%;
   left: 50%;
-  width: 700px;
-  height: 700px;
+  width: 600px;
+  height: 600px;
   transform: translate(-50%, -50%);
   background: url('logo-bg.png') no-repeat center center;
   background-size: contain;
-  opacity: 0.15; /* gold and visible but subtle */
+  opacity: 0.02; /* extremely subtle to avoid clutter */
   z-index: 0;
   pointer-events: none;
-  /* If your logo is not gold, you can add a gold filter:
-     filter: sepia(1) hue-rotate(10deg) saturate(5) brightness(1.1);
-     (Remove if your logo image is already gold)
-  */
 }
 
 header, .about, .roadmap, .waitlist, footer {
   background: rgba(0, 0, 0, 0.45);
   border-radius: 12px;
-  margin: 24px auto 18px auto;
+  margin: 20px auto;
   max-width: 700px;
-  padding: 20px 0;
+  padding: 20px;
   position: relative;
   z-index: 2;
 }
 
+header .logo {
+  width: 100px;
+  max-width: 90%;
+  height: auto;
+  display: block;
+  margin: 10px auto 15px auto;
+  border-radius: 50%;
+  box-shadow: 0 0 20px 5px #FFD700, 0 0 40px 10px #fff20033;
+  border: 2px solid #FFD700;
+  background: radial-gradient(circle, #FFD70033 60%, transparent 100%);
+}
+
 .coin-section .coin {
-  width: 80px;
+  width: 70px;
   max-width: 80%;
   height: auto;
   display: block;
-  margin: 10px auto 24px auto;
+  margin: 10px auto 20px auto;
   border-radius: 50%;
-  box-shadow: 0 0 16px 4px #FFD70066;
+  box-shadow: 0 0 14px 4px #FFD70066;
 }
 
 .about, .roadmap, .waitlist {
-  padding: 20px;
+  padding: 18px;
   max-width: 600px;
-  margin: 0 auto 18px auto;
-  background: transparent;
+  margin: 0 auto 15px auto;
 }
 
-/* Aligned Roadmap checkmarks */
 .roadmap-list {
   list-style: none;
   padding: 0;
@@ -65,20 +73,21 @@ header, .about, .roadmap, .waitlist, footer {
   margin: 0 auto;
   text-align: left;
 }
+
 .roadmap-list li {
   position: relative;
   padding-left: 32px;
-  margin-bottom: 14px;
-  font-size: 1.1em;
-  line-height: 1.6;
+  margin-bottom: 12px;
+  font-size: 1em;
 }
+
 .roadmap-list li::before {
   content: "✔️";
   position: absolute;
   left: 0;
   top: 0;
   color: #FFD700;
-  font-size: 1.3em;
+  font-size: 1.2em;
 }
 
 .waitlist input, .waitlist button {
@@ -87,6 +96,7 @@ header, .about, .roadmap, .waitlist, footer {
   width: 80%;
   max-width: 300px;
   display: block;
+  font-size: 1em;
 }
 
 .waitlist button {
@@ -107,6 +117,27 @@ footer a {
   text-decoration: none;
   margin: 0 5px;
 }
+
 footer a:hover {
   text-decoration: underline;
+}
+
+/* Mobile fine-tuning */
+@media (max-width: 600px) {
+  body {
+    font-size: 16px;
+    line-height: 1.5;
+  }
+
+  header .logo {
+    width: 80px;
+  }
+
+  .coin-section .coin {
+    width: 60px;
+  }
+
+  .roadmap-list li {
+    font-size: 0.95em;
+  }
 }
