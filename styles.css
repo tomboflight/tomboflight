@@ -6,21 +6,35 @@ body {
   margin: 0;
   padding: 0;
   overflow-x: hidden;
+  position: relative;
+  z-index: 1;
+}
 
-  /* Background logo image styles */
-  background-image: url('logo-bg.png');
-  background-repeat: no-repeat;
-  background-position: center 150px; /* try centering lower if needed */
-  background-attachment: fixed;
-  background-size: 700px auto; /* adjust for larger logo */
+/* Gold background logo overlay */
+body::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: url('logo-bg.png') no-repeat center 150px;
+  background-size: 700px auto;
+  opacity: 0.35;
+  z-index: 0;
+  pointer-events: none;
+  /* If your image is white or light, this makes it gold: */
+  filter: sepia(1) saturate(7) hue-rotate(20deg) brightness(1.25);
 }
 
 header, .about, .roadmap, .waitlist, footer {
-  background: rgba(0, 0, 0, 0.40); /* lighter so logo shows through */
+  background: rgba(0, 0, 0, 0.40);
   border-radius: 12px;
   margin: 24px auto 18px auto;
   max-width: 700px;
   padding: 20px 0;
+  position: relative;
+  z-index: 2;
 }
 
 header .logo {
@@ -61,7 +75,6 @@ header .logo {
   display: grid;
   row-gap: 18px;
 }
-
 .roadmap li {
   display: grid;
   grid-template-columns: 26px 1fr;
@@ -72,7 +85,6 @@ header .logo {
   padding-left: 0;
   position: relative;
 }
-
 .roadmap .checkmark {
   color: #FFD700;
   font-size: 1.4em;
@@ -88,7 +100,6 @@ header .logo {
   max-width: 300px;
   display: block;
 }
-
 .waitlist button {
   background-color: #FFD700;
   border: none;
@@ -97,17 +108,14 @@ header .logo {
   color: #000;
   transition: background 0.2s;
 }
-
 .waitlist button:hover {
   background-color: #e6c200;
 }
-
 footer a {
   color: #FFD700;
   text-decoration: none;
   margin: 0 5px;
 }
-
 footer a:hover {
   text-decoration: underline;
 }
