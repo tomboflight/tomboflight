@@ -10,7 +10,7 @@ body {
   overflow-x: hidden;
 }
 
-/* Centered background logo watermark using ::before */
+/* Subtle centered watermark background logo */
 body::before {
   content: "";
   position: fixed;
@@ -21,7 +21,7 @@ body::before {
   transform: translate(-50%, -50%);
   background: url('logo-bg.png') no-repeat center center;
   background-size: contain;
-  opacity: 0.05; /* adjust for visibility */
+  opacity: 0.02; /* subtle watermark */
   z-index: 0;
   pointer-events: none;
 }
