@@ -1,43 +1,117 @@
 body {
-  background: #000;
+  font-family: Arial, sans-serif;
+  background-color: #000;
   color: #fff;
-  min-height: 100vh;
+  text-align: center;
   margin: 0;
   padding: 0;
-  /* GOLD LOGO BACKGROUND */
+  min-height: 100vh;
   position: relative;
+  overflow-x: hidden;
 }
-body::before {
-  content: "";
+
+/* Centered background logo watermark */
+.background-logo {
   position: fixed;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: url('logo-bg.png') no-repeat center 150px;
-  background-size: 650px auto;
-  opacity: 0.32;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  opacity: 0.05; /* adjust visibility here */
   z-index: 0;
-  filter: sepia(1) saturate(7) hue-rotate(15deg) brightness(1.1);
+  max-width: 80%;
+  height: auto;
   pointer-events: none;
 }
-h1 { position: relative; z-index: 1; }
-.roadmap {
-  list-style: none;
-  display: grid;
-  gap: 18px;
-  max-width: 480px;
-  margin: 50px auto;
-  padding: 0;
+
+header, .about, .roadmap, .waitlist, footer {
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 12px;
+  margin: 24px auto 18px auto;
+  max-width: 700px;
+  padding: 20px 0;
   position: relative;
-  z-index: 1;
+  z-index: 2;
 }
-.roadmap li {
-  display: grid;
-  grid-template-columns: 28px 1fr;
-  align-items: center;
-  font-size: 1.2em;
+
+header .logo {
+  width: 120px;
+  max-width: 90%;
+  height: auto;
+  display: block;
+  margin: 10px auto 20px auto;
+  border-radius: 50%;
+  box-shadow: 0 0 24px 6px #FFD700, 0 0 64px 16px #fff20033;
+  border: 3px solid #FFD700;
+  background: radial-gradient(circle, #FFD70033 60%, transparent 100%);
+}
+
+.coin-section .coin {
+  width: 80px;
+  max-width: 80%;
+  height: auto;
+  display: block;
+  margin: 10px auto 24px auto;
+  border-radius: 50%;
+  box-shadow: 0 0 16px 4px #FFD70066;
+}
+
+.about, .roadmap, .waitlist {
+  padding: 20px;
+  max-width: 600px;
+  margin: 0 auto 18px auto;
+  background: transparent;
+}
+
+/* Aligned Roadmap checkmarks */
+.roadmap-list {
+  list-style: none;
+  padding: 0;
+  max-width: 550px;
+  margin: 0 auto;
   text-align: left;
 }
-.checkmark {
+
+.roadmap-list li {
+  position: relative;
+  padding-left: 30px;
+  margin-bottom: 12px;
+  font-size: 1.1em;
+}
+
+.roadmap-list li::before {
+  content: "✔️";
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+.waitlist input, .waitlist button {
+  padding: 10px;
+  margin: 5px auto;
+  width: 80%;
+  max-width: 300px;
+  display: block;
+}
+
+.waitlist button {
+  background-color: #FFD700;
+  border: none;
+  cursor: pointer;
+  font-weight: bold;
+  color: #000;
+  transition: background 0.2s;
+}
+
+.waitlist button:hover {
+  background-color: #e6c200;
+}
+
+footer a {
   color: #FFD700;
-  font-size: 1.4em;
-  justify-self: end;
+  text-decoration: none;
+  margin: 0 5px;
+}
+
+footer a:hover {
+  text-decoration: underline;
 }
