@@ -21,7 +21,7 @@ body::before {
   transform: translate(-50%, -50%);
   background: url('logo-bg.png') no-repeat center center;
   background-size: contain;
-  opacity: 0.05; /* adjust visibility */
+  opacity: 0.05; /* adjust for visibility */
   z-index: 0;
   pointer-events: none;
 }
