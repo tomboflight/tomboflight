@@ -23,7 +23,7 @@ body::before {
   transform: translate(-50%, -50%);
   background: url('logo-bg.png') no-repeat center center;
   background-size: contain;
-  opacity: 0.02; /* extremely subtle to avoid clutter */
+  opacity: 0.02;
   z-index: 0;
   pointer-events: none;
 }
@@ -48,6 +48,23 @@ header .logo {
   box-shadow: 0 0 20px 5px #FFD700, 0 0 40px 10px #fff20033;
   border: 2px solid #FFD700;
   background: radial-gradient(circle, #FFD70033 60%, transparent 100%);
+}
+
+/* QUOTE STYLING */
+.quote {
+  font-style: italic;
+  font-size: 1.1em;
+  color: #ddd;
+  max-width: 90%;
+  margin: 10px auto 0 auto;
+  line-height: 1.5;
+}
+.quote-author {
+  display: block;
+  font-style: normal;
+  font-size: 0.95em;
+  color: #aaa;
+  margin-top: 5px;
 }
 
 .coin-section .coin {
