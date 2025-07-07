@@ -4,9 +4,36 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Tomb of Light LLC</title>
-  <link rel="icon" href="favicon.png" type="image/png">
+
+  <!-- Apple Touch Icon -->
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon.png">
+
+  <!-- Stylesheet -->
   <link rel="stylesheet" href="styles.css" />
+
+  <!-- Subtle Logo Background -->
+  <style>
+    body::before {
+      content: "";
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      width: 80%;
+      height: 80%;
+      background: url('logo-bg.png') center center no-repeat;
+      background-size: contain;
+      opacity: 0.05;
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+      z-index: 0;
+    }
+  </style>
 </head>
+
 <body>
 
   <header>
@@ -46,7 +73,7 @@
     <p>Be among the first to preserve your family’s legacy forever on the blockchain.</p>
     <form>
       <input type="text" placeholder="Your Name (optional)" />
-      <input type="email" placeholder="Your Email" />
+      <input type="email" placeholder="Your Email" required />
       <button type="submit">Join Now</button>
     </form>
   </section>
