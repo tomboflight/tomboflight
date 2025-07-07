@@ -12,23 +12,22 @@ body {
   line-height: 1.6;
 }
 
-/* Visible, centered, gold watermark logo background */
+/* Gold watermark logo background */
 body::before {
   content: "";
   position: fixed;
   top: 50%;
   left: 50%;
-  width: 650px;
-  height: 650px;
+  width: 700px;
+  height: 700px;
   transform: translate(-50%, -50%);
   background: url('logo-bg.png') no-repeat center center;
   background-size: contain;
-  opacity: 0.16; /* More visible! */
+  opacity: 0.22; /* Adjust this (0.18-0.30) if needed */
   z-index: 0;
   pointer-events: none;
-  /* If your watermark file is NOT gold, uncomment the filter line:
-     filter: sepia(1) hue-rotate(15deg) saturate(5) brightness(1.1);
-     Otherwise, leave it commented out. */
+  /* If your logo-bg.png is not gold, uncomment the line below: */
+  /* filter: sepia(1) hue-rotate(15deg) saturate(5) brightness(1.1); */
 }
 
 header, .about, .roadmap, .waitlist, footer {
