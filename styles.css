@@ -1,5 +1,7 @@
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
+
 body {
-  font-family: Arial, sans-serif;
+  font-family: 'Roboto', sans-serif;
   background-color: #000;
   color: #fff;
   text-align: center;
@@ -17,14 +19,15 @@ body::before {
   position: fixed;
   top: 50%;
   left: 50%;
-  width: 700px;
-  height: 700px;
+  width: 600px;
+  height: 600px;
   transform: translate(-50%, -50%);
-  background: url('logo-bg.png') no-repeat center center;
+  background: url('seal.png') no-repeat center center;
   background-size: contain;
-  opacity: 0.22;
+  opacity: 0.08;
   z-index: 0;
   pointer-events: none;
+  filter: brightness(1.4) contrast(1.2);
 }
 
 header, .about, .roadmap, .waitlist, .faq, footer {
@@ -47,6 +50,13 @@ header .logo {
   box-shadow: 0 0 20px 5px #FFD700, 0 0 40px 10px #fff20033;
   border: 2px solid #FFD700;
   background: radial-gradient(circle, #FFD70033 60%, transparent 100%);
+  animation: glow 6s infinite;
+}
+
+@keyframes glow {
+  0% { box-shadow: 0 0 20px 5px #FFD700; }
+  50% { box-shadow: 0 0 40px 10px #FFD700; }
+  100% { box-shadow: 0 0 20px 5px #FFD700; }
 }
 
 .quote {
@@ -67,6 +77,14 @@ header .logo {
 
 .quote + .quote {
   margin-top: 14px;
+}
+
+.section-divider {
+  width: 60%;
+  height: 1px;
+  background: #FFD700;
+  margin: 40px auto;
+  opacity: 0.4;
 }
 
 .coin-section .coin {
