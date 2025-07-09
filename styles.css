@@ -12,7 +12,6 @@ body {
   line-height: 1.6;
 }
 
-/* Gold watermark logo background */
 body::before {
   content: "";
   position: fixed;
@@ -23,14 +22,12 @@ body::before {
   transform: translate(-50%, -50%);
   background: url('logo-bg.png') no-repeat center center;
   background-size: contain;
-  opacity: 0.22; /* Adjust this (0.18-0.30) if needed */
+  opacity: 0.22;
   z-index: 0;
   pointer-events: none;
-  /* If your logo-bg.png is not gold, uncomment the line below: */
-  /* filter: sepia(1) hue-rotate(15deg) saturate(5) brightness(1.1); */
 }
 
-header, .about, .roadmap, .waitlist, footer {
+header, .about, .roadmap, .waitlist, .faq, footer {
   background: rgba(0, 0, 0, 0.45);
   border-radius: 12px;
   margin: 20px auto;
@@ -52,7 +49,6 @@ header .logo {
   background: radial-gradient(circle, #FFD70033 60%, transparent 100%);
 }
 
-/* QUOTE STYLING */
 .quote {
   font-style: italic;
   font-size: 1.1em;
@@ -69,6 +65,10 @@ header .logo {
   margin-top: 5px;
 }
 
+.quote + .quote {
+  margin-top: 14px;
+}
+
 .coin-section .coin {
   width: 70px;
   max-width: 80%;
@@ -79,12 +79,6 @@ header .logo {
   box-shadow: 0 0 14px 4px #FFD70066;
 }
 
-.about, .roadmap, .waitlist {
-  padding: 18px;
-  max-width: 600px;
-  margin: 0 auto 15px auto;
-}
-
 .roadmap-list {
   list-style: none;
   padding: 0;
@@ -92,14 +86,12 @@ header .logo {
   margin: 0 auto;
   text-align: left;
 }
-
 .roadmap-list li {
   position: relative;
   padding-left: 32px;
   margin-bottom: 12px;
   font-size: 1em;
 }
-
 .roadmap-list li::before {
   content: "✔️";
   position: absolute;
@@ -117,7 +109,6 @@ header .logo {
   display: block;
   font-size: 1em;
 }
-
 .waitlist button {
   background-color: #FFD700;
   border: none;
@@ -126,7 +117,6 @@ header .logo {
   color: #000;
   transition: background 0.2s;
 }
-
 .waitlist button:hover {
   background-color: #e6c200;
 }
@@ -136,26 +126,27 @@ footer a {
   text-decoration: none;
   margin: 0 5px;
 }
-
 footer a:hover {
   text-decoration: underline;
 }
 
-/* Mobile fine-tuning */
+footer .contact-email {
+  display: inline-block;
+  margin: 0 5px;
+  color: #FFD700;
+}
+
 @media (max-width: 600px) {
   body {
     font-size: 16px;
     line-height: 1.5;
   }
-
   header .logo {
     width: 80px;
   }
-
   .coin-section .coin {
     width: 60px;
   }
-
   .roadmap-list li {
     font-size: 0.95em;
   }
