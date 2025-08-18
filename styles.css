@@ -1,171 +1,127 @@
 @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
 
-body {
-  font-family: 'Roboto', sans-serif;
-  background-color: #000;
-  color: #fff;
-  text-align: center;
-  margin: 0;
-  padding: 0;
-  min-height: 100vh;
-  position: relative;
-  overflow-x: hidden;
-  font-size: 18px;
-  line-height: 1.6;
+:root{
+  --bg:#000;
+  --fg:#fff;
+  --gold:#FFD700;
+  --muted:#bbb;
+  --panel: rgba(0,0,0,.45);
+  --maxw: 880px;
 }
 
-body::before {
-  content: "";
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  width: 600px;
-  height: 600px;
-  transform: translate(-50%, -50%);
-  background: url('seal.png') no-repeat center center;
-  background-size: contain;
-  opacity: 0.08;
-  z-index: 0;
-  pointer-events: none;
-  filter: brightness(1.4) contrast(1.2);
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  font-family:'Roboto',sans-serif;
+  background:#000;
+  color:#fff;
+  min-height:100vh;
+  font-size:18px; line-height:1.6;
+  overflow-x:hidden;
+  text-rendering:optimizeLegibility;
 }
 
-header, .about, .roadmap, .waitlist, .faq, footer {
-  background: rgba(0, 0, 0, 0.45);
-  border-radius: 12px;
-  margin: 20px auto;
-  max-width: 700px;
-  padding: 20px;
-  position: relative;
-  z-index: 2;
+body::before{
+  content:"";
+  position:fixed; inset:0; margin:auto;
+  width:640px; height:640px;
+  background:url('seal.png') no-repeat center/contain;
+  opacity:.07; z-index:0; pointer-events:none;
+  filter:brightness(1.3) contrast(1.15);
 }
 
-header .logo {
-  width: 100px;
-  max-width: 90%;
-  height: auto;
-  display: block;
-  margin: 10px auto 15px auto;
-  border-radius: 50%;
-  box-shadow: 0 0 20px 5px #FFD700, 0 0 40px 10px #fff20033;
-  border: 2px solid #FFD700;
+.container{max-width:var(--maxw); margin:0 auto; padding:20px; position:relative; z-index:2}
+
+header.site{
+  text-align:center;
+  padding:48px 20px 24px;
+}
+.logo{
+  width:96px; height:auto; display:block; margin:0 auto 12px;
+  border-radius:50%;
+  border:2px solid var(--gold);
+  box-shadow:0 0 20px 5px var(--gold), 0 0 40px 10px #fff20033;
   background: radial-gradient(circle, #FFD70033 60%, transparent 100%);
-  animation: glow 6s infinite;
+  animation:glow 6s infinite;
+}
+@keyframes glow{
+  0%{box-shadow:0 0 20px 5px var(--gold)}
+  50%{box-shadow:0 0 40px 10px var(--gold)}
+  100%{box-shadow:0 0 20px 5px var(--gold)}
 }
 
-@keyframes glow {
-  0% { box-shadow: 0 0 20px 5px #FFD700; }
-  50% { box-shadow: 0 0 40px 10px #FFD700; }
-  100% { box-shadow: 0 0 20px 5px #FFD700; }
+h1,h2,h3{margin:0 0 10px}
+p{margin:0 0 14px}
+
+.nav{
+  display:flex; gap:14px; flex-wrap:wrap; justify-content:center; margin:10px 0 0;
+}
+.nav a{
+  color:var(--gold); text-decoration:none; padding:6px 10px; border-radius:999px;
+  border:1px solid #ffffff22; background:#111; font-size:.95rem;
+}
+.nav a:hover{border-color:var(--gold)}
+
+.panel{
+  background:var(--panel);
+  border-radius:14px;
+  padding:18px 20px;
+  margin:18px 0;
 }
 
-.quote {
-  font-style: italic;
-  font-size: 1.1em;
-  color: #ddd;
-  max-width: 90%;
-  margin: 10px auto 0 auto;
-  line-height: 1.5;
+.hero{
+  display:grid; gap:14px;
+  text-align:center;
 }
-.quote-author {
-  display: block;
-  font-style: normal;
-  font-size: 0.95em;
-  color: #aaa;
-  margin-top: 5px;
+.hero h1{font-size:2rem}
+.tagline{color:#ddd}
+
+.cta{
+  display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top:6px;
+}
+.button{
+  background:var(--gold); color:#000; font-weight:700; border:none; cursor:pointer;
+  padding:10px 16px; border-radius:8px; transition:filter .2s;
+}
+.button:hover{filter:brightness(.95)}
+.button.secondary{
+  background:transparent; color:var(--gold); border:1px solid var(--gold)
 }
 
-.quote + .quote {
-  margin-top: 14px;
+.grid{display:grid; gap:14px}
+.grid.two{grid-template-columns:1fr 1fr}
+@media (max-width:800px){.grid.two{grid-template-columns:1fr}}
+
+.list{padding-left:1.2rem}
+.list li{margin:6px 0}
+
+footer.site{
+  text-align:center; padding:24px 20px 40px; color:#aaa;
+}
+footer.site a{color:var(--gold); text-decoration:none}
+footer.site nav{margin:6px 0 8px}
+footer.site nav a{margin:0 6px}
+
+.notice{font-size:.95rem; color:#bbb}
+
+.section-divider{
+  width:60%; height:1px; background:var(--gold);
+  opacity:.35; margin:28px auto;
 }
 
-.section-divider {
-  width: 60%;
-  height: 1px;
-  background: #FFD700;
-  margin: 40px auto;
-  opacity: 0.4;
+/* Quotes at bottom */
+.quotes p{
+  font-style:italic; color:#ddd; margin-bottom:12px;
 }
+.quotes .author{display:block; font-style:normal; color:#aaa; font-size:.95rem}
 
-.coin-section .coin {
-  width: 70px;
-  max-width: 80%;
-  height: auto;
-  display: block;
-  margin: 10px auto 20px auto;
-  border-radius: 50%;
-  box-shadow: 0 0 14px 4px #FFD70066;
+/* Cookie banner */
+.cookie-banner{
+  position:fixed; left:16px; right:16px; bottom:16px; z-index:50;
+  background:#111; color:#eee; border:1px solid #333; border-radius:12px; padding:12px 12px;
+  display:none;
 }
-
-.roadmap-list {
-  list-style: none;
-  padding: 0;
-  max-width: 550px;
-  margin: 0 auto;
-  text-align: left;
-}
-.roadmap-list li {
-  position: relative;
-  padding-left: 32px;
-  margin-bottom: 12px;
-  font-size: 1em;
-}
-.roadmap-list li::before {
-  content: "✔️";
-  position: absolute;
-  left: 0;
-  top: 0;
-  color: #FFD700;
-  font-size: 1.2em;
-}
-
-.waitlist input, .waitlist button {
-  padding: 10px;
-  margin: 5px auto;
-  width: 80%;
-  max-width: 300px;
-  display: block;
-  font-size: 1em;
-}
-.waitlist button {
-  background-color: #FFD700;
-  border: none;
-  cursor: pointer;
-  font-weight: bold;
-  color: #000;
-  transition: background 0.2s;
-}
-.waitlist button:hover {
-  background-color: #e6c200;
-}
-
-footer a {
-  color: #FFD700;
-  text-decoration: none;
-  margin: 0 5px;
-}
-footer a:hover {
-  text-decoration: underline;
-}
-
-footer .contact-email {
-  display: inline-block;
-  margin: 0 5px;
-  color: #FFD700;
-}
-
-@media (max-width: 600px) {
-  body {
-    font-size: 16px;
-    line-height: 1.5;
-  }
-  header .logo {
-    width: 80px;
-  }
-  .coin-section .coin {
-    width: 60px;
-  }
-  .roadmap-list li {
-    font-size: 0.95em;
-  }
-}
+.cookie-actions{margin-top:8px; display:flex; gap:8px; flex-wrap:wrap}
+.cookie-actions button{padding:8px 12px; border-radius:8px; border:1px solid #222; cursor:pointer}
+.cookie-accept{background:var(--gold); color:#000; border:none}
+.cookie-decline{background:transparent; color:#eee; border:1px solid #444}

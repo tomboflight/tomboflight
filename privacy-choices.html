@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Your Privacy Choices | Tomb of Light</title>
+<link rel="stylesheet" href="styles.css"/>
+</head>
+<body>
+<header class="site"><div class="container">
+  <img src="logo.png" class="logo" alt="Tomb of Light"/>
+  <nav class="nav" aria-label="Primary">
+    <a href="index.html">Home</a><a href="how-it-works.html">How It Works</a>
+    <a href="team.html">Team</a><a href="roadmap.html">Roadmap</a>
+    <a href="faq.html">FAQ</a><a href="compliance.html">Compliance & Legal</a>
+  </nav>
+</div></header>
+
+<main class="container">
+  <section class="panel">
+    <h1>Your Privacy Choices</h1>
+    <p>Use this page to exercise privacy choices, including opting out of targeted advertising or sale/sharing of personal information where applicable. We honor supported universal opt-out signals such as Global Privacy Control (GPC).</p>
+    <form method="post" action="/privacy/optout">
+      <input type="email" name="email" placeholder="Your Email" required autocomplete="email"/>
+      <select name="scope" aria-label="Privacy choice">
+        <option value="sale">Do Not Sell</option>
+        <option value="share">Do Not Share (cross-context behavioral advertising)</option>
+        <option value="targeted">Opt Out of Targeted Advertising</option>
+      </select>
+      <button type="submit" class="button">Submit</button>
+    </form>
+    <p class="notice">You may also email us at <a href="mailto:admin@tomboflight.com">admin@tomboflight.com</a>.</p>
+  </section>
+</main>
+
+<footer class="site">
+  <nav aria-label="Footer">
+    <a href="privacy.html">Privacy Policy</a> | <a href="privacy-choices.html">Your Privacy Choices</a> |
+    <a href="privacy-state-notices.html">State Privacy Notices</a> | <a href="cookie-policy.html">Cookie Policy</a> |
+    <a href="accessibility.html">Accessibility</a> | <a href="terms.html">Terms of Service</a>
+  </nav>
+  <p>© 2025 Tomb of Light LLC™.</p>
+  <p>Contact: <a href="mailto:admin@tomboflight.com">admin@tomboflight.com</a></p>
+</footer>
+<script src="app.js"></script>
+</body>
+</html>
