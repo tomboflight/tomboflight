@@ -1,0 +1,23 @@
+# macOS system files
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+.AppleDouble
+.LSOverride
+.fseventsd
+.TemporaryItems
+
+# Editor/project folders (safe if they appear)
+.vscode/
+.idea/
+
+# Build folders (if you ever add tooling)
+node_modules/
+dist/
+build/
+
+# Env files (never commit secrets)
+.env
+.env.*
+
