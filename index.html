@@ -3,114 +3,119 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <meta name="description" content="Tomb of Light preserves your family legacy on the blockchain with a living, zoomable family tree NFT."/>
+  <meta name="description" content="Tomb of Light preserves your family's legacy with a private, zoomable family tree NFT anchored to secure storage.">
   <title>Tomb of Light LLC</title>
   <link rel="stylesheet" href="styles.css"/>
+  <script defer src="app.js"></script>
 </head>
 <body>
-  <header class="site">
-    <div class="container">
-      <img src="logo.png" alt="Tomb of Light Logo" class="logo"/>
-      <nav class="nav" aria-label="Primary">
-        <a href="index.html">Home</a>
-        <a href="how-it-works.html">How It Works</a>
-        <a href="team.html">Team</a>
-        <a href="roadmap.html">Roadmap</a>
-        <a href="faq.html">FAQ</a>
-        <a href="compliance.html">Compliance & Legal</a>
-      </nav>
-    </div>
+  <header class="container">
+    <img src="logo.png" alt="Tomb of Light Logo" class="logo"/>
+    <nav>
+      <a class="nav-link current" href="index.html">Home</a>
+      <a class="nav-link" href="how-it-works.html">How It Works</a>
+      <a class="nav-link" href="faq.html">FAQ</a>
+      <a class="nav-link" href="compliance.html">Compliance & Legal</a>
+    </nav>
   </header>
 
   <main class="container">
-    <section class="panel hero">
+    <!-- HERO -->
+    <section class="section hero">
       <h1>Preserve Your Family’s Legacy</h1>
-      <p class="tagline">A private, zoomable family tree NFT secured on the blockchain.</p>
-      <div class="cta">
-        <a class="button" href="#waitlist">Join the Waitlist</a>
-        <a class="button secondary" href="how-it-works.html">See How It Works</a>
+      <p class="lead">A private, zoomable family tree NFT anchored to secure storage. Built for privacy, ownership, and generational storytelling.</p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="mailto:admin@tomboflight.com?subject=Join%20the%20Waitlist">Join the Waitlist</a>
+        <a class="btn btn-outline" href="how-it-works.html">See How It Works</a>
       </div>
     </section>
 
-    <div class="section-divider"></div>
-
-    <!-- About (moved to top) -->
-    <section class="panel">
+    <!-- ABOUT -->
+    <section class="section">
       <h2>About Tomb of Light</h2>
-      <p>Tomb of Light LLC helps families preserve their legacy using blockchain and NFTs to create interactive, secure, and permanent family heritage records. Your portrait is the anchor: zoom in to reveal descendants; zoom out to visit ancestors.</p>
-      <p>We are currently onboarding families for our Genesis NFT Collection, allowing you to secure your family's legacy for generations.</p>
+      <p class="lead" style="max-width:850px;margin:0 auto">
+        Tomb of Light LLC helps families preserve their legacy using blockchain-anchored, interactive records. Your portrait becomes the anchor for a living, visual family tree you privately explore with loved ones.
+      </p>
     </section>
 
-    <!-- Why Choose (second) -->
-    <section class="panel">
+    <!-- WHY CHOOSE -->
+    <section class="section">
       <h2>Why Choose Tomb of Light?</h2>
-      <ul class="list">
-        <li><strong>Forever Linked:</strong> Each generation seamlessly adds their legacy, creating a perpetual family chain secured on the blockchain.</li>
-        <li><strong>Interactive & Visual:</strong> A living, zoomable family tree you can explore together.</li>
-        <li><strong>Private & Simple:</strong> We handle the tech; you control access with owner keys and family sub-keys.</li>
+      <ul class="clean">
+        <li><strong>Privacy & Ownership.</strong> You control access with owner keys and optional family sub-keys.</li>
+        <li><strong>Built for Longevity.</strong> Images and metadata can be anchored to durable, decentralized storage.</li>
+        <li><strong>Simple to Use.</strong> We handle the tech; you keep the story.</li>
       </ul>
     </section>
 
-    <!-- What You Get (third) -->
-    <section class="panel">
+    <!-- WHAT YOU GET -->
+    <section class="section">
       <h2>What You Get</h2>
-      <div class="grid two">
-        <div>
-          <p><strong>Living Family NFT.</strong> Begin with your portrait, then expand as your family grows.</p>
-          <p><strong>Owner Access Control.</strong> Owner holds the master key; invite editors with sub-keys.</p>
+      <div class="grid">
+        <div class="card">
+          <h3>Living Family NFT</h3>
+          <p>Begin with your portrait; grow as your family grows with a zoomable, visual tree.</p>
         </div>
-        <div>
-          <p><strong>Durable Storage.</strong> Images and metadata can be anchored to decentralized storage.</p>
-          <p><strong>Guided Onboarding.</strong> We support you through ID verification and setup.</p>
+        <div class="card">
+          <h3>Owner Access Control</h3>
+          <p>Owner holds the master key; invite trusted editors with sub-keys.</p>
+        </div>
+        <div class="card">
+          <h3>Durable Storage</h3>
+          <p>Designed to anchor media and metadata to decentralized storage for persistence.</p>
+        </div>
+        <div class="card">
+          <h3>Guided Onboarding</h3>
+          <p>Optional support for ID verification and setup, aligned with compliance requirements.</p>
         </div>
       </div>
     </section>
 
-    <!-- Waitlist -->
-    <section id="waitlist" class="panel">
+    <!-- WAITLIST -->
+    <section class="section">
       <h2>Join the Waitlist</h2>
-      <form data-waitlist>
-        <input type="text" name="name" placeholder="Your Name (optional)" autocomplete="name" />
-        <input type="email" placeholder="Your Email" required autocomplete="email" />
-        <button type="submit" class="button">Join Now</button>
-      </form>
-      <p class="notice">By joining, you agree to our <a href="privacy.html">Privacy Policy</a>.</p>
+      <p>Send us your name and preferred email. We’ll contact you with next steps.</p>
+      <div class="waitlist">
+        <a class="btn btn-primary" href="mailto:admin@tomboflight.com?subject=Waitlist&body=Please%20add%20me%20to%20the%20waitlist.">Email admin@tomboflight.com</a>
+      </div>
     </section>
 
-    <!-- Quotes at bottom -->
-    <section class="panel quotes">
+    <!-- QUOTES AT BOTTOM -->
+    <section class="section quotes">
       <h2>What People Are Saying</h2>
-      <p>“Technology evolves. People grow. Legacies endure. Tomb of Light ensures they are never forgotten.”<span class="author"><br>— Larry Robinson, Founder</span></p>
-      <p>“Whether it’s a move, a flood, or a fire, Tomb of Light will always keep your family’s memories safe.”<span class="author"><br>— Jennifer Wood</span></p>
-      <p>“There is nothing sweeter than family and building a legacy for our kids. Tomb of Light will ensure that and more, allowing you to see the past, the present, and the future.”<span class="author"><br>— Toni Floyd</span></p>
-      <p>“Tomb of Light isn’t just another NFT; it’s a portal to family legacy, symbolism, and digital immortality.”<span class="author"><br>— Leon Floyd</span></p>
-      <p>“Every soul leaves a trace. Tomb of Light ensures that trace becomes eternal—not in tombstones, but in truth, secured on the blockchain.”<span class="author"><br>— Marquis Floyd</span></p>
+      <p class="quote">“Technology evolves. People grow. Legacies endure. Tomb of Light ensures they are never forgotten.” <span class="who">— Larry Robinson, Founder</span></p>
+      <p class="quote">“Whether it’s a move, a flood, or a fire, Tomb of Light will always keep your family’s memories safe.” <span class="who">— Jennifer Wood</span></p>
+      <p class="quote">“There is nothing sweeter than family and building a legacy for our kids. Tomb of Light will ensure that and more.” <span class="who">— Toni Floyd</span></p>
+      <p class="quote">“Tomb of Light isn’t just another NFT; it’s a portal to family legacy, symbolism, and digital immortality.” <span class="who">— Leon Floyd</span></p>
+      <p class="quote">“Every soul leaves a trace. Tomb of Light ensures that trace becomes eternal—secured on the blockchain.” <span class="who">— Marquis Floyd</span></p>
     </section>
   </main>
 
-  <footer class="site">
-    <nav aria-label="Footer">
+  <!-- COOKIE BANNER -->
+  <div id="cookie-banner" class="cookie-banner">
+    <div style="text-align:left;max-width:760px">
+      <strong>Cookies & Preferences.</strong>
+      We use essential cookies to run this site. Optional analytics/ads are off by default and only enabled if you consent.
+      We honor Global Privacy Control (GPC). Manage preferences in <a href="privacy-choices.html" style="color:#FFD700">Your Privacy Choices</a>.
+    </div>
+    <div class="cookie-actions">
+      <button class="btn btn-primary" onclick="tolConsent.set('accepted')">Accept Optional Cookies</button>
+      <button class="btn btn-outline" onclick="tolConsent.set('declined')">Decline</button>
+      <a class="btn btn-outline" href="privacy-choices.html">Your Privacy Choices</a>
+    </div>
+  </div>
+
+  <footer class="container">
+    <div class="footer-links">
       <a href="privacy.html">Privacy Policy</a> |
       <a href="privacy-choices.html">Your Privacy Choices</a> |
       <a href="privacy-state-notices.html">State Privacy Notices</a> |
       <a href="cookie-policy.html">Cookie Policy</a> |
       <a href="accessibility.html">Accessibility</a> |
       <a href="terms.html">Terms of Service</a>
-    </nav>
+    </div>
     <p>© 2025 Tomb of Light LLC™. All rights reserved.</p>
     <p>Contact: <a href="mailto:admin@tomboflight.com">admin@tomboflight.com</a></p>
   </footer>
-
-  <!-- Cookie banner -->
-  <div class="cookie-banner" role="dialog" aria-live="polite" aria-label="Cookie preferences">
-    <div><strong>Cookies & Preferences.</strong> We use essential cookies to run this site. Analytics/ads are optional. We honor Global Privacy Control (GPC).</div>
-    <div class="cookie-actions">
-      <button class="cookie-accept">Accept Optional Cookies</button>
-      <button class="cookie-decline">Decline</button>
-      <a href="privacy-choices.html" class="button secondary" style="padding:6px 10px;">Your Privacy Choices</a>
-    </div>
-  </div>
-
-  <script src="app.js"></script>
 </body>
 </html>
