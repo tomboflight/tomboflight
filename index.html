@@ -93,7 +93,7 @@
       <p>Drop your name and email. We’ll reach out with next steps.</p>
 
       <form class="waitlistForm"
-            action="https://formsubmit.co/ajax/waitlist@tomboflight.com"
+            action="https://formsubmit.co/ajax/422507e8ae32532a167cff416c7e7c3"
             method="POST" novalidate>
         <div class="wl-row" style="margin-bottom:.5rem;">
           <input class="wl-input" type="text" name="name" placeholder="Your name (optional)">
@@ -103,6 +103,8 @@
           <button class="wl-btn btn btn-primary" type="submit">Join</button>
         </div>
 
+        <input type="hidden" name="_replyto">
+        <input type="hidden" name="_template" value="table">
         <input type="hidden" name="_subject" value="New waitlist signup">
         <input type="hidden" name="_captcha" value="false">
         <input type="hidden" name="_autoresponse"
@@ -161,7 +163,7 @@
       <p>Join the Tomb of Light waitlist for early access and launch updates.</p>
 
       <form class="waitlistForm"
-            action="https://formsubmit.co/ajax/waitlist@tomboflight.com"
+            action="https://formsubmit.co/ajax/422507e8ae32532a167cff416c7e7c3"
             method="POST" novalidate>
         <div class="wl-row" style="margin-bottom:.5rem;">
           <input class="wl-input" type="text" name="name" placeholder="Your name (optional)">
@@ -171,6 +173,8 @@
           <button class="wl-btn btn btn-primary" type="submit">Join</button>
         </div>
 
+        <input type="hidden" name="_replyto">
+        <input type="hidden" name="_template" value="table">
         <input type="hidden" name="_subject" value="New waitlist signup">
         <input type="hidden" name="_captcha" value="false">
         <input type="hidden" name="_autoresponse"
@@ -204,17 +208,25 @@
 
             // Honeypot
             const hp = form.querySelector('[name="website"]');
-            if (hp && hp.value) return;
+            if (hp && hp.value) { msg && (msg.textContent = 'Bot check failed.'); return; }
 
             const original = btn ? btn.textContent : '';
             if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
 
             try {
+              const fd = new FormData(form);
+              const emailInput = form.querySelector('input[name="email"]');
+              if (emailInput && emailInput.value) fd.set('_replyto', emailInput.value);
+              fd.set('_template', 'table');
+
               const resp = await fetch(form.action, {
                 method: 'POST',
                 headers: { 'Accept': 'application/json' },
-                body: new FormData(form)
+                body: fd
               });
+
+              // Debug log to help diagnose if needed
+              try { const clone = resp.clone(); clone.text().then(t => console.log('[FormSubmit]', resp.status, t)); } catch {}
 
               if (resp.ok) {
                 msg && (msg.textContent = 'Thanks! You’re on the list.');
