@@ -7,6 +7,22 @@
   <title>Tomb of Light LLC</title>
   <link rel="stylesheet" href="styles.css"/>
   <script defer src="app.js"></script>
+
+  <!-- Minimal styles for the waitlist modal (self-contained) -->
+  <style>
+    .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.65); display: none; align-items: center; justify-content: center; z-index: 9999; backdrop-filter: blur(2px); }
+    .modal-backdrop.show { display: flex; }
+    .modal-card { width: min(560px, 92vw); background: #0f0f12; color: #fff; border: 1px solid #2a2a2a; border-radius: 16px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,.4); }
+    .modal-card h3 { margin: 0 0 8px; }
+    .modal-actions { display:flex; gap:10px; margin-top:10px; justify-content:flex-end; }
+    .modal-close { background: transparent; color: #aaa; border: 0; cursor: pointer; font-size: 14px; }
+    .waitlistForm { width: 100%; }
+    .wl-row { display:flex; gap:8px; max-width:520px; margin:0 auto; }
+    .wl-input { flex:1; padding:10px; border:1px solid #444; border-radius:10px; background:#0f0f12; color:#fff; }
+    .wl-btn { padding:10px 16px; border:0; border-radius:10px; cursor:pointer; }
+    .wl-msg { margin-top:.5rem; text-align:center; min-height:1.2em; }
+    @media (max-width: 480px) { .wl-row { flex-direction: column; } }
+  </style>
 </head>
 <body>
   <header class="container">
@@ -25,7 +41,7 @@
       <h1>Preserve Your Family’s Legacy</h1>
       <p class="lead">A private, zoomable family tree NFT anchored to secure storage. Built for privacy, ownership, and generational storytelling.</p>
       <div class="cta-row">
-        <a class="btn btn-primary" href="mailto:admin@tomboflight.com?subject=Join%20the%20Waitlist">Join the Waitlist</a>
+        <a class="btn btn-primary" href="#waitlist">Join the Waitlist</a>
         <a class="btn btn-outline" href="how-it-works.html">See How It Works</a>
       </div>
     </section>
@@ -71,13 +87,33 @@
       </div>
     </section>
 
-    <!-- WAITLIST -->
-    <section class="section">
+    <!-- WAITLIST (in-page form) -->
+    <section id="waitlist" class="section">
       <h2>Join the Waitlist</h2>
-      <p>Send us your name and preferred email. We’ll contact you with next steps.</p>
-      <div class="waitlist">
-        <a class="btn btn-primary" href="mailto:admin@tomboflight.com?subject=Waitlist&body=Please%20add%20me%20to%20the%20waitlist.">Email admin@tomboflight.com</a>
-      </div>
+      <p>Drop your name and email. We’ll reach out with next steps.</p>
+
+      <form class="waitlistForm"
+            action="https://formsubmit.co/ajax/waitlist@tomboflight.com"
+            method="POST" novalidate>
+        <div class="wl-row" style="margin-bottom:.5rem;">
+          <input class="wl-input" type="text" name="name" placeholder="Your name (optional)">
+        </div>
+        <div class="wl-row">
+          <input class="wl-input" name="email" type="email" placeholder="you@example.com" required>
+          <button class="wl-btn btn btn-primary" type="submit">Join</button>
+        </div>
+
+        <input type="hidden" name="_subject" value="New waitlist signup">
+        <input type="hidden" name="_captcha" value="false">
+        <input type="hidden" name="_autoresponse"
+               value="Thanks for joining the Tomb of Light waitlist! We’ll be in touch with next steps soon. —Tomb of Light"/>
+
+        <!-- Honeypot -->
+        <input type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true"
+               style="position:absolute;left:-9999px;height:0;width:0;padding:0;border:0;">
+
+        <p class="wl-msg" aria-live="polite"></p>
+      </form>
     </section>
 
     <!-- QUOTES AT BOTTOM -->
@@ -117,5 +153,128 @@
     <p>© 2025 Tomb of Light LLC™. All rights reserved.</p>
     <p>Contact: <a href="mailto:admin@tomboflight.com">admin@tomboflight.com</a></p>
   </footer>
+
+  <!-- Waitlist Modal (first-visit popup) -->
+  <div id="waitlistModal" class="modal-backdrop" aria-hidden="true" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <h3>Be first in line</h3>
+      <p>Join the Tomb of Light waitlist for early access and launch updates.</p>
+
+      <form class="waitlistForm"
+            action="https://formsubmit.co/ajax/waitlist@tomboflight.com"
+            method="POST" novalidate>
+        <div class="wl-row" style="margin-bottom:.5rem;">
+          <input class="wl-input" type="text" name="name" placeholder="Your name (optional)">
+        </div>
+        <div class="wl-row">
+          <input class="wl-input" name="email" type="email" placeholder="you@example.com" required>
+          <button class="wl-btn btn btn-primary" type="submit">Join</button>
+        </div>
+
+        <input type="hidden" name="_subject" value="New waitlist signup">
+        <input type="hidden" name="_captcha" value="false">
+        <input type="hidden" name="_autoresponse"
+               value="Thanks for joining the Tomb of Light waitlist! We’ll be in touch with next steps soon. —Tomb of Light"/>
+
+        <input type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true"
+               style="position:absolute;left:-9999px;height:0;width:0;padding:0;border:0;">
+        <p class="wl-msg" aria-live="polite"></p>
+      </form>
+
+      <div class="modal-actions">
+        <button id="closeModalBtn" class="modal-close" aria-label="Close waitlist popup">No thanks</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Inline JS: handles both forms + popup -->
+  <script>
+    (function () {
+      // Attach AJAX submit to all forms with class "waitlistForm"
+      function bindWaitlistForms() {
+        document.querySelectorAll('form.waitlistForm').forEach((form) => {
+          if (form.__bound) return; form.__bound = true;
+          const msg = form.querySelector('.wl-msg');
+          const btn = form.querySelector('button[type="submit"]');
+
+          form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            msg && (msg.textContent = '');
+            if (!form.reportValidity()) return;
+
+            // Honeypot
+            const hp = form.querySelector('[name="website"]');
+            if (hp && hp.value) return;
+
+            const original = btn ? btn.textContent : '';
+            if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+
+            try {
+              const resp = await fetch(form.action, {
+                method: 'POST',
+                headers: { 'Accept': 'application/json' },
+                body: new FormData(form)
+              });
+
+              if (resp.ok) {
+                msg && (msg.textContent = 'Thanks! You’re on the list.');
+                form.reset();
+
+                // Close modal if this was inside it and remember dismissal
+                const modal = document.getElementById('waitlistModal');
+                if (modal && modal.classList.contains('show')) {
+                  modal.classList.remove('show');
+                  modal.setAttribute('aria-hidden', 'true');
+                  try { localStorage.setItem('tol_waitlist_modal_dismissed', '1'); } catch {}
+                }
+              } else {
+                let text = 'Something went wrong. Please try again.';
+                try { const data = await resp.json(); if (data && data.message) text = data.message; } catch {}
+                msg && (msg.textContent = text);
+              }
+            } catch {
+              msg && (msg.textContent = 'Network error. Please try again.');
+            } finally {
+              if (btn) { btn.disabled = false; btn.textContent = original; }
+            }
+          });
+        });
+      }
+
+      // Popup logic
+      const MODAL_KEY = 'tol_waitlist_modal_dismissed';
+      const modal = document.getElementById('waitlistModal');
+      const closeBtn = document.getElementById('closeModalBtn');
+
+      function showModal() {
+        if (!modal) return;
+        modal.classList.add('show');
+        modal.setAttribute('aria-hidden', 'false');
+        const email = modal.querySelector('input[type="email"]');
+        if (email) setTimeout(() => email.focus(), 50);
+      }
+      function dismissModal() {
+        if (!modal) return;
+        modal.classList.remove('show');
+        modal.setAttribute('aria-hidden', 'true');
+        try { localStorage.setItem(MODAL_KEY, '1'); } catch {}
+      }
+      function maybeShowModal() {
+        if (!modal) return;
+        if (location.hash === '#waitlist') return; // don't pop if user clicked the hero CTA
+        if (!localStorage.getItem(MODAL_KEY)) {
+          const delay = (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) ? 0 : 1200;
+          setTimeout(showModal, delay);
+        }
+      }
+      closeBtn && closeBtn.addEventListener('click', dismissModal);
+      modal && modal.addEventListener('click', (e) => { if (e.target === modal) dismissModal(); });
+
+      // Init
+      bindWaitlistForms();
+      maybeShowModal();
+      document.addEventListener('DOMContentLoaded', bindWaitlistForms);
+    })();
+  </script>
 </body>
 </html>
