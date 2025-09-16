@@ -1,3 +1,6 @@
+/* ==========================================================================
+   Fonts & Root tokens
+   ========================================================================== */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
 
 :root{
@@ -9,8 +12,18 @@
   --gold-soft:#fff20033;
   --ring:rgba(255,215,0,.5);
   --link:#FFD700;
+
+  /* light theme tokens */
+  --bg-light:#0f0f12;                 /* page background behind light cards */
+  --text-light:#0d0d0d;
+  --panel-light:#ffffff;              /* card/panel surface */
+  --panel-border:#e9e9e9;
+  --muted-light:#666;
 }
 
+/* ==========================================================================
+   Base
+   ========================================================================== */
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
 body{
@@ -24,7 +37,7 @@ body{
   overflow-x:hidden;
 }
 
-/* watermark */
+/* Watermark (seal) */
 body::before{
   content:"";
   position:fixed;
@@ -39,7 +52,7 @@ body::before{
   pointer-events:none;
 }
 
-/* layout containers */
+/* Layout containers */
 .container{max-width:1000px;margin:0 auto;padding:0 20px;position:relative;z-index:2}
 .section{
   background:var(--panel);
@@ -51,7 +64,13 @@ body::before{
   margin:18px auto;
 }
 
-/* header / nav */
+/* Typographic helpers */
+.muted{color:var(--muted)}
+.max-w-800{max-width:800px;margin:0 auto}
+
+/* ==========================================================================
+   Header / Nav
+   ========================================================================== */
 header{margin:20px auto 8px auto}
 .logo{
   width:96px;height:96px;border-radius:50%;
@@ -78,7 +97,9 @@ nav{
 .nav-link:hover{filter:brightness(.92)}
 .nav-link.current{background:var(--gold);border-color:#b69700}
 
-/* hero */
+/* ==========================================================================
+   Hero / Buttons
+   ========================================================================== */
 .hero h1{margin:.2rem 0 .6rem 0;font-size:clamp(28px,4vw,44px)}
 .hero p.lead{color:#ddd;max-width:850px;margin:0 auto 18px auto}
 
@@ -91,7 +112,9 @@ nav{
 .btn-outline{background:transparent;color:var(--gold);border:2px solid var(--gold)}
 .btn:hover{transform:translateY(-1px);filter:brightness(1.05)}
 
-/* lists/typography */
+/* ==========================================================================
+   Lists / Grid / Cards
+   ========================================================================== */
 h2{font-size:clamp(22px,3.2vw,30px);margin:4px 0 10px 0}
 ul.clean{list-style:none;padding:0;margin:12px auto;text-align:left;max-width:800px}
 ul.clean li{padding-left:28px;position:relative;margin:10px 0;color:#e9e9e9}
@@ -108,24 +131,32 @@ ul.clean li::before{content:"•";position:absolute;left:6px;top:0;color:var(--g
 .card h3{margin:6px 0 6px 0}
 .card p{color:#e5e5e5;margin:0}
 
-/* quotes */
+/* Quotes */
 .quotes .quote{font-style:italic;color:#ddd;margin:8px auto;max-width:900px}
 .quotes .who{display:block;color:#a9a9a9;margin-top:4px}
 
-/* footer */
+/* Footer */
 footer{margin:22px auto 40px auto}
 .footer-links{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin:10px 0}
 footer a{color:var(--link);text-decoration:none}
 footer a:hover{text-decoration:underline}
 
-/* waitlist */
+/* ==========================================================================
+   Forms (waitlist / data-request)
+   ========================================================================== */
 .waitlist input, .waitlist button{
   width:min(300px,86%);padding:10px;margin:6px auto;display:block;font-size:1rem;border-radius:10px;border:1px solid #333;background:#0b0b0b;color:#fff
 }
 .waitlist button{background:var(--gold);color:#000;border:none;font-weight:800;cursor:pointer}
 .waitlist button:hover{filter:brightness(.96)}
 
-/* cookie banner */
+.wl-input{ /* used on data-request */
+  border:1px solid #333;background:#0b0b0b;color:#fff;border-radius:10px;padding:10px
+}
+
+/* ==========================================================================
+   Cookie banner
+   ========================================================================== */
 .cookie-banner{
   position:fixed;left:16px;right:16px;bottom:16px;z-index:99;
   background:rgba(12,12,12,.95);border:1px solid rgba(255,255,255,.08);
@@ -135,9 +166,57 @@ footer a:hover{text-decoration:underline}
 .cookie-actions{display:flex;gap:10px;flex-wrap:wrap}
 .cookie-banner .btn{padding:10px 14px}
 
-/* responsive */
+/* ==========================================================================
+   LIGHT THEME (used by legal/compliance pages)
+   Add class="light" on <body>. Keep the seal with body.light.seal-on
+   ========================================================================== */
+body.light{
+  background:var(--bg-light);
+  color:var(--text-light);
+}
+body.light .section{
+  background:var(--panel-light);
+  border:1px solid var(--panel-border);
+  box-shadow:0 8px 24px rgba(0,0,0,.12);
+}
+body.light .hero p.lead,
+body.light .muted{color:var(--muted-light)}
+body.light ul.clean li{color:#2b2b2b}
+body.light .grid .card{
+  background:#fff;border:1px solid var(--panel-border)
+}
+body.light .nav-link{background:#fff;color:#111;border-color:#ddd}
+body.light footer a{color:#7b6a00} /* softer gold link on light */
+
+/* Keep the seal watermark on light pages when you add class="seal-on" */
+body.light.seal-on::before { display:block; opacity:.04; }
+
+/* OPTIONAL: specific “light card” variant if you use .section-light */
+.section-light{ /* works on either theme */
+  background:var(--panel-light);
+  color:var(--text-light);
+  border:1px solid var(--panel-border);
+}
+.section-light .muted{color:var(--muted-light)}
+.section-light ul.clean li{color:#2b2b2b}
+
+/* ==========================================================================
+   Responsive
+   ========================================================================== */
 @media (max-width:720px){
   body{font-size:16px}
   .grid{grid-template-columns:1fr}
 }
 
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce){
+  .btn, .logo { animation:none; transition:none; }
+}
+
+/* ==========================================================================
+   Accessibility helpers
+   ========================================================================== */
+.sr-only{
+  position:absolute !important; width:1px; height:1px; padding:0; margin:-1px;
+  overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0;
+}

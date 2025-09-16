@@ -1,24 +1,51 @@
-// Simple consent + "Your Privacy Choices" handling (no analytics loaded here)
-const CONSENT_KEY = 'tol-consent'; // values: 'accepted'|'declined'|'essential'
+// app.js — consent helper with GPC support + cookie banner hooks
 
-function showCookieBanner(){
-  const el = document.getElementById('cookie-banner');
-  if(!el) return;
-  const v = localStorage.getItem(CONSENT_KEY);
-  if(!v){ el.style.display = 'flex'; }
-}
+(function () {
+  const KEY = 'tol_cookies'; // 'accepted' | 'declined'
+  const MODAL_KEY = 'tol_waitlist_modal_dismissed'; // used on index.html
 
-function setConsent(value){
-  localStorage.setItem(CONSENT_KEY, value);
-  const el = document.getElementById('cookie-banner');
-  if(el) el.style.display='none';
-}
+  function hasGPC() {
+    try { return navigator.globalPrivacyControl === true; }
+    catch { return false; }
+  }
 
-// Expose to Privacy Choices page
-window.tolConsent = {
-  get:()=>localStorage.getItem(CONSENT_KEY)||'',
-  set:setConsent,
-  clear:()=>localStorage.removeItem(CONSENT_KEY)
-};
+  // Public API used by privacy-choices.html and the cookie banner
+  window.tolConsent = {
+    get() {
+      if (hasGPC()) return 'declined';          // respect GPC: treat as essential-only
+      return localStorage.getItem(KEY) || 'essential';
+    },
+    set(v) {
+      try { localStorage.setItem(KEY, v); } catch {}
+      updateCookieBanner();
+    },
+    clear() {
+      try { localStorage.removeItem(KEY); } catch {}
+      updateCookieBanner();
+    }
+  };
 
-document.addEventListener('DOMContentLoaded', showCookieBanner);
+  // ----- Cookie banner control (index.html expects this) -----
+  function updateCookieBanner() {
+    const el = document.getElementById('cookie-banner');
+    if (!el) return;
+
+    const pref = window.tolConsent.get();
+    // Show banner if no explicit choice and no GPC
+    if (pref === 'essential' && !hasGPC()) {
+      el.style.display = 'flex';
+    } else {
+      el.style.display = 'none';
+    }
+  }
+
+  // Initialize on load
+  document.addEventListener('DOMContentLoaded', updateCookieBanner);
+
+  // Optional: if you use the waitlist modal, expose helpers
+  window.tolModal = {
+    dismiss() {
+      try { localStorage.setItem(MODAL_KEY, '1'); } catch {}
+    }
+  };
+})();

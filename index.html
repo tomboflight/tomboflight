@@ -5,7 +5,11 @@
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <meta name="description" content="Tomb of Light preserves your family's legacy with a private, zoomable family tree NFT anchored to secure storage.">
   <title>Tomb of Light LLC</title>
+
+  <!-- Theme / layout -->
   <link rel="stylesheet" href="styles.css"/>
+
+  <!-- Keep your existing app.js if needed -->
   <script defer src="app.js"></script>
 
   <!-- Minimal styles for the waitlist modal (self-contained) -->
@@ -24,49 +28,55 @@
     @media (max-width: 480px) { .wl-row { flex-direction: column; } }
   </style>
 </head>
+
 <body>
-  <header class="container">
-    <img src="logo.png" alt="Tomb of Light Logo" class="logo"/>
-    <nav>
+  <!-- HEADER -->
+  <header class="container" role="banner">
+    <img src="logo.png" alt="Tomb of Light logo" class="logo" />
+    <nav aria-label="Main">
       <a class="nav-link current" href="index.html">Home</a>
       <a class="nav-link" href="how-it-works.html">How It Works</a>
       <a class="nav-link" href="faq.html">FAQ</a>
       <a class="nav-link" href="compliance.html">Compliance & Legal</a>
+      <!-- (Optional) add login links when portals go live:
+      <a class="nav-link" href="app/login.html">Customer Login</a>
+      <a class="nav-link" href="app/staff.html">Staff Login</a>
+      -->
     </nav>
   </header>
 
-  <main class="container">
-    <!-- HERO -->
-    <section class="section hero">
-      <h1>Preserve Your Family’s Legacy</h1>
+  <main class="container" id="content">
+    <!-- HERO (dark/glass) -->
+    <section class="section section-dark hero" aria-labelledby="hero-title">
+      <h1 id="hero-title">Preserve Your Family’s Legacy</h1>
       <p class="lead">A private, zoomable family tree NFT anchored to secure storage. Built for privacy, ownership, and generational storytelling.</p>
-      <div class="cta-row">
+      <div class="cta-row" role="group" aria-label="Primary actions">
         <a class="btn btn-primary" href="#waitlist">Join the Waitlist</a>
         <a class="btn btn-outline" href="how-it-works.html">See How It Works</a>
       </div>
     </section>
 
-    <!-- ABOUT -->
-    <section class="section">
-      <h2>About Tomb of Light</h2>
-      <p class="lead" style="max-width:850px;margin:0 auto">
+    <!-- ABOUT (light panel) -->
+    <section class="section section-light center" aria-labelledby="about-title">
+      <h2 id="about-title">About Tomb of Light</h2>
+      <p class="lead max-w-800" style="margin:0 auto">
         Tomb of Light LLC helps families preserve their legacy using blockchain-anchored, interactive records. Your portrait becomes the anchor for a living, visual family tree you privately explore with loved ones.
       </p>
     </section>
 
-    <!-- WHY CHOOSE -->
-    <section class="section">
-      <h2>Why Choose Tomb of Light?</h2>
-      <ul class="clean">
+    <!-- WHY CHOOSE (light panel) -->
+    <section class="section section-light" aria-labelledby="why-title">
+      <h2 id="why-title" class="center">Why Choose Tomb of Light?</h2>
+      <ul class="clean max-w-800">
         <li><strong>Privacy & Ownership.</strong> You control access with owner keys and optional family sub-keys.</li>
-        <li><strong>Built for Longevity.</strong> Images and metadata can be anchored to durable, decentralized storage.</li>
-        <li><strong>Simple to Use.</strong> We handle the tech; you keep the story.</li>
+        <li><strong>Built for Longevity.</strong> Images and metadata can be anchored to durable storage.</li>
+        <li><strong>Simple to Use.</strong> We handle the tech; you shape the story.</li>
       </ul>
     </section>
 
-    <!-- WHAT YOU GET -->
-    <section class="section">
-      <h2>What You Get</h2>
+    <!-- WHAT YOU GET (light cards) -->
+    <section class="section section-light" aria-labelledby="what-title">
+      <h2 id="what-title" class="center">What You Get</h2>
       <div class="grid">
         <div class="card">
           <h3>Living Family NFT</h3>
@@ -78,28 +88,30 @@
         </div>
         <div class="card">
           <h3>Durable Storage</h3>
-          <p>Designed to anchor media and metadata to decentralized storage for persistence.</p>
+          <p>Designed to anchor media and metadata to long-term storage for persistence.</p>
         </div>
         <div class="card">
           <h3>Guided Onboarding</h3>
-          <p>Optional support for ID verification and setup, aligned with compliance requirements.</p>
+          <p>Optional support for identity verification and setup, aligned with compliance requirements.</p>
         </div>
       </div>
     </section>
 
-    <!-- WAITLIST (in-page form) -->
-    <section id="waitlist" class="section">
-      <h2>Join the Waitlist</h2>
-      <p>Drop your name and email. We’ll reach out with next steps.</p>
+    <!-- WAITLIST (light panel with in-page form) -->
+    <section id="waitlist" class="section section-light center" aria-labelledby="waitlist-title">
+      <h2 id="waitlist-title">Join the Waitlist</h2>
+      <p class="max-w-800" style="margin:0 auto">Drop your name and email. We’ll reach out with next steps.</p>
 
       <form class="waitlistForm"
             action="https://formsubmit.co/ajax/422507e8ae32532a167cff416c7e7c3"
-            method="POST" novalidate>
+            method="POST" novalidate aria-label="Waitlist form">
         <div class="wl-row" style="margin-bottom:.5rem;">
-          <input class="wl-input" type="text" name="name" placeholder="Your name (optional)">
+          <label class="sr-only" for="wl-name">Name</label>
+          <input id="wl-name" class="wl-input" type="text" name="name" placeholder="Your name (optional)">
         </div>
         <div class="wl-row">
-          <input class="wl-input" name="email" type="email" placeholder="you@example.com" required>
+          <label class="sr-only" for="wl-email">Email</label>
+          <input id="wl-email" class="wl-input" name="email" type="email" placeholder="you@example.com" required aria-required="true">
           <button class="wl-btn btn btn-primary" type="submit">Join</button>
         </div>
 
@@ -118,9 +130,9 @@
       </form>
     </section>
 
-    <!-- QUOTES AT BOTTOM -->
-    <section class="section quotes">
-      <h2>What People Are Saying</h2>
+    <!-- QUOTES (light panel) -->
+    <section class="section section-light quotes" aria-labelledby="quotes-title">
+      <h2 id="quotes-title" class="center">What People Are Saying</h2>
       <p class="quote">“Technology evolves. People grow. Legacies endure. Tomb of Light ensures they are never forgotten.” <span class="who">— Larry Robinson, Founder</span></p>
       <p class="quote">“Whether it’s a move, a flood, or a fire, Tomb of Light will always keep your family’s memories safe.” <span class="who">— Jennifer Wood</span></p>
       <p class="quote">“There is nothing sweeter than family and building a legacy for our kids. Tomb of Light will ensure that and more.” <span class="who">— Toni Floyd</span></p>
@@ -130,20 +142,21 @@
   </main>
 
   <!-- COOKIE BANNER -->
-  <div id="cookie-banner" class="cookie-banner">
+  <div id="cookie-banner" class="cookie-banner" role="region" aria-label="Cookie preferences">
     <div style="text-align:left;max-width:760px">
       <strong>Cookies & Preferences.</strong>
       We use essential cookies to run this site. Optional analytics/ads are off by default and only enabled if you consent.
       We honor Global Privacy Control (GPC). Manage preferences in <a href="privacy-choices.html" style="color:#FFD700">Your Privacy Choices</a>.
     </div>
-    <div class="cookie-actions">
-      <button class="btn btn-primary" onclick="tolConsent.set('accepted')">Accept Optional Cookies</button>
-      <button class="btn btn-outline" onclick="tolConsent.set('declined')">Decline</button>
+    <div class="cookie-actions" role="group" aria-label="Cookie actions">
+      <button class="btn btn-primary" onclick="tolConsent?.set?.('accepted')">Accept Optional Cookies</button>
+      <button class="btn btn-outline" onclick="tolConsent?.set?.('declined')">Decline</button>
       <a class="btn btn-outline" href="privacy-choices.html">Your Privacy Choices</a>
     </div>
   </div>
 
-  <footer class="container">
+  <!-- FOOTER -->
+  <footer class="container" role="contentinfo">
     <div class="footer-links">
       <a href="privacy.html">Privacy Policy</a> |
       <a href="privacy-choices.html">Your Privacy Choices</a> |
@@ -164,12 +177,14 @@
 
       <form class="waitlistForm"
             action="https://formsubmit.co/ajax/422507e8ae32532a167cff416c7e7c3"
-            method="POST" novalidate>
+            method="POST" novalidate aria-label="Waitlist popup form">
         <div class="wl-row" style="margin-bottom:.5rem;">
-          <input class="wl-input" type="text" name="name" placeholder="Your name (optional)">
+          <label class="sr-only" for="wlm-name">Name</label>
+          <input id="wlm-name" class="wl-input" type="text" name="name" placeholder="Your name (optional)">
         </div>
         <div class="wl-row">
-          <input class="wl-input" name="email" type="email" placeholder="you@example.com" required>
+          <label class="sr-only" for="wlm-email">Email</label>
+          <input id="wlm-email" class="wl-input" name="email" type="email" placeholder="you@example.com" required aria-required="true">
           <button class="wl-btn btn btn-primary" type="submit">Join</button>
         </div>
 
@@ -180,6 +195,7 @@
         <input type="hidden" name="_autoresponse"
                value="Thanks for joining the Tomb of Light waitlist! We’ll be in touch with next steps soon. —Tomb of Light"/>
 
+        <!-- Honeypot -->
         <input type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true"
                style="position:absolute;left:-9999px;height:0;width:0;padding:0;border:0;">
         <p class="wl-msg" aria-live="polite"></p>
