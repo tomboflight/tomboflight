@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Data Rights Request – Tomb of Light</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="light seal-on">
+<header class="container" role="banner">
+  <img src="logo.png" alt="Tomb of Light Logo" class="logo">
+  <nav aria-label="Main">
+    <a class="nav-link" href="index.html">Home</a>
+    <a class="nav-link" href="privacy.html">Privacy</a>
+    <a class="nav-link current" href="data-request.html">Data Request</a>
+  </nav>
+</header>
+
+<main class="container">
+  <section class="section section-light">
+    <h1>Request Your Data Rights</h1>
+    <p class="max-w-800">Use this form to request access, correction, deletion, opt-out of certain processing, or to withdraw consent.</p>
+
+    <form class="max-w-800"
+      action="https://formspree.io/f/your-id-or-backend-endpoint"
+      method="POST" novalidate>
+      <label>Full Name
+        <input name="name" required class="waitlist wl-input" style="width:100%">
+      </label>
+      <label>Email
+        <input type="email" name="email" required class="waitlist wl-input" style="width:100%">
+      </label>
+      <label>Request Type
+        <select name="type" required class="waitlist wl-input" style="width:100%">
+          <option>Access My Data</option>
+          <option>Correct My Data</option>
+          <option>Delete My Data</option>
+          <option>Opt-Out of Processing</option>
+          <option>Withdraw Consent</option>
+        </select>
+      </label>
+      <label>Details
+        <textarea name="details" rows="6" class="waitlist wl-input" style="width:100%"></textarea>
+      </label>
+
+      <div class="cta-row" style="justify-content:flex-start">
+        <button class="btn btn-primary" type="submit">Submit Request</button>
+        <a class="btn btn-outline" href="privacy.html">Read Privacy Policy</a>
+      </div>
+
+      <p class="muted">We may verify your identity to protect your privacy. We respond within timeframes required by law.</p>
+    </form>
+  </section>
+</main>
+
+<footer class="container" role="contentinfo">
+  <div class="footer-links">
+    <a href="privacy.html">Privacy Policy</a> |
+    <a href="privacy-choices.html">Your Privacy Choices</a> |
+    <a href="privacy-state-notices.html">State Privacy Notices</a> |
+    <a href="data-request.html">Data Request</a> |
+    <a href="cookie-policy.html">Cookie Policy</a> |
+    <a href="accessibility.html">Accessibility</a> |
+    <a href="terms.html">Terms of Service</a> |
+    <a href="security.html">Security</a>
+  </div>
+  <p>© 2025 Tomb of Light LLC™. All rights reserved.</p>
+</footer>
+</body>
+</html>

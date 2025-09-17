@@ -1,65 +1,66 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Your Privacy Choices | Tomb of Light</title>
-  <link rel="stylesheet" href="styles.css"/>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Your Privacy Choices – Tomb of Light</title>
+  <link rel="stylesheet" href="styles.css">
   <script defer src="app.js"></script>
 </head>
-<body>
-  <header class="container">
-    <img src="logo.png" alt="Tomb of Light Logo" class="logo"/>
-    <nav>
-      <a class="nav-link" href="index.html">Home</a>
-      <a class="nav-link current" href="privacy-choices.html">Your Privacy Choices</a>
-      <a class="nav-link" href="privacy-state-notices.html">State Notices</a>
-      <a class="nav-link" href="compliance.html">Compliance & Legal</a>
-    </nav>
-  </header>
+<body class="light seal-on">
+<header class="container" role="banner">
+  <img src="logo.png" alt="Tomb of Light Logo" class="logo">
+  <nav aria-label="Main">
+    <a class="nav-link" href="index.html">Home</a>
+    <a class="nav-link current" href="privacy-choices.html">Your Privacy Choices</a>
+    <a class="nav-link" href="privacy.html">Privacy</a>
+    <a class="nav-link" href="data-request.html">Data Request</a>
+  </nav>
+</header>
 
-  <main class="container">
-    <section class="section">
-      <h2>Your Privacy Choices</h2>
-      <p>Optional analytics/advertising cookies are off by default. Use the controls below to manage preferences on this browser.</p>
+<main class="container">
+  <section class="section section-light">
+    <h1>Your Privacy Choices</h1>
+    <p class="max-w-800">Optional analytics cookies are off by default. Use the controls below to manage preferences on this browser.</p>
 
-      <div class="grid">
-        <div class="card">
-          <h3>Current Preference</h3>
-          <p id="pref">Loading…</p>
-        </div>
-        <div class="card">
-          <h3>Manage</h3>
-          <p>
-            <button class="btn btn-primary" onclick="tolConsent.set('accepted');updatePref()">Accept Optional Cookies</button>
-            <button class="btn btn-outline" onclick="tolConsent.set('declined');updatePref()">Decline</button>
-            <button class="btn btn-outline" onclick="tolConsent.clear();updatePref()">Reset</button>
-          </p>
-          <p style="color:#bbb">We honor Global Privacy Control (GPC) where supported.</p>
-        </div>
+    <div class="grid">
+      <div class="card">
+        <h3>Current Preference</h3>
+        <p id="pref">Loading…</p>
       </div>
-    </section>
-  </main>
-
-  <footer class="container">
-    <div class="footer-links">
-      <a href="privacy.html">Privacy Policy</a> |
-      <a href="privacy-choices.html">Your Privacy Choices</a> |
-      <a href="privacy-state-notices.html">State Privacy Notices</a> |
-      <a href="cookie-policy.html">Cookie Policy</a> |
-      <a href="accessibility.html">Accessibility</a> |
-      <a href="terms.html">Terms of Service</a>
+      <div class="card">
+        <h3>Manage</h3>
+        <p>
+          <button class="btn btn-primary" onclick="tolConsent.set('accepted');updatePref()">Accept Optional Cookies</button>
+          <button class="btn btn-outline" onclick="tolConsent.set('declined');updatePref()">Decline</button>
+          <button class="btn btn-outline" onclick="tolConsent.clear();updatePref()">Reset</button>
+        </p>
+        <p class="muted">We honor Global Privacy Control (GPC) where supported.</p>
+      </div>
     </div>
-    <p>© 2025 Tomb of Light LLC™. All rights reserved.</p>
-  </footer>
+  </section>
+</main>
 
-  <script>
-    function updatePref(){
-      const v = window.tolConsent.get() || 'not set (defaults to essential only)';
-      document.getElementById('pref').textContent = v;
-    }
-    document.addEventListener('DOMContentLoaded', updatePref);
-  </script>
+<footer class="container" role="contentinfo">
+  <div class="footer-links">
+    <a href="privacy.html">Privacy Policy</a> |
+    <a href="privacy-choices.html">Your Privacy Choices</a> |
+    <a href="privacy-state-notices.html">State Privacy Notices</a> |
+    <a href="data-request.html">Data Request</a> |
+    <a href="cookie-policy.html">Cookie Policy</a> |
+    <a href="accessibility.html">Accessibility</a> |
+    <a href="terms.html">Terms of Service</a> |
+    <a href="security.html">Security</a>
+  </div>
+  <p>© 2025 Tomb of Light LLC™. All rights reserved.</p>
+</footer>
+
+<script>
+  function updatePref(){
+    const v = window.tolConsent.get() || 'essential';
+    document.getElementById('pref').textContent = v;
+  }
+  document.addEventListener('DOMContentLoaded', updatePref);
+</script>
 </body>
 </html>
-
