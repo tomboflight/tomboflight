@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Genesis Prototype — Tomb of Light</title>
+  <link rel="stylesheet" href="genesis-prototype.css" />
+</head>
+<body>
+  <main class="app" aria-labelledby="pageTitle">
+    <header class="app__header">
+      <div class="app__heading">
+        <a class="app__back" href="index.html">← Back to Tomb of Light</a>
+        <h1 id="pageTitle">Genesis Prototype – Tomb of Light</h1>
+        <p id="instructionsText" class="app__subtitle">
+          Use scroll, pinch, keyboard arrows, or the onscreen controls to explore the family tree.
+        </p>
+      </div>
+      <div class="app__controls" role="group" aria-label="Zoom controls">
+        <button id="zoomOutBtn" class="control-btn" type="button" aria-label="Zoom out">
+          <span aria-hidden="true">−</span>
+        </button>
+        <button id="zoomInBtn" class="control-btn" type="button" aria-label="Zoom in">
+          <span aria-hidden="true">+</span>
+        </button>
+      </div>
+    </header>
+
+    <section class="viewer" aria-live="polite">
+      <div id="stateChip" class="state-chip" role="status" aria-live="polite"></div>
+      <div id="imageWrapper" class="image-wrapper" data-state="">
+        <button id="zone-julian" class="zone" type="button" aria-label="View Julian Moreland" hidden></button>
+        <button id="zone-malik" class="zone" type="button" aria-label="View Malik Moreland" hidden></button>
+        <button id="zone-selah" class="zone" type="button" aria-label="View Selah Carter" hidden></button>
+
+        <img id="nftImage" src="" alt="" draggable="false" />
+        <div id="loadingSpinner" class="loading" role="status" aria-live="assertive" aria-hidden="true">
+          <span class="loading__spinner" aria-hidden="true"></span>
+          <span class="loading__text">Loading portrait…</span>
+        </div>
+      </div>
+      <p id="stateDescription" class="state-description"></p>
+    </section>
+
+    <section class="legend" aria-label="Navigation tips">
+      <h2 class="legend__title">Navigation Tips</h2>
+      <ul class="legend__list">
+        <li><strong>Scroll / Swipe up</strong> to zoom in. <strong>Scroll / Swipe down</strong> to zoom out.</li>
+        <li><strong>Double tap</strong> or press the <kbd>Enter</kbd> key to zoom in on touch devices.</li>
+        <li><strong>Arrow Up</strong> and <strong>Arrow Down</strong> keys move between generations. <strong>Number keys</strong> jump directly to highlighted siblings.</li>
+        <li>When viewing the parents, <strong>tap a name tag</strong> to jump to that sibling’s branch.</li>
+      </ul>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="alert" aria-live="assertive" hidden></div>
+
+  <script src="genesis-prototype.js" type="module"></script>
+</body>
+</html>
