@@ -29,7 +29,7 @@ if (navToggle && navMenu) {
 
   function maybeLoadOptional() {
     if (getChoice() === 'accepted') {
-      // Example: dynamically load analytics only after consent
+      // Example: only load analytics AFTER explicit consent
       // const s = document.createElement('script');
       // s.src = 'https://analytics.example.com/script.js';
       // s.async = true;
