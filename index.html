@@ -1,308 +1,157 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <meta name="description" content="Tomb of Light preserves your family's legacy with a private, zoomable family tree NFT anchored to secure storage.">
-  <title>Tomb of Light LLC</title>
-
-  <!-- Theme / layout -->
-  <link rel="stylesheet" href="styles.css"/>
-
-  <!-- Keep your existing app.js if needed -->
-  <script defer src="app.js"></script>
-
-  <!-- Minimal styles for the waitlist modal (self-contained) -->
-  <style>
-    .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.65); display: none; align-items: center; justify-content: center; z-index: 9999; backdrop-filter: blur(2px); }
-    .modal-backdrop.show { display: flex; }
-    .modal-card { width: min(560px, 92vw); background: #0f0f12; color: #fff; border: 1px solid #2a2a2a; border-radius: 16px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,.4); }
-    .modal-card h3 { margin: 0 0 8px; }
-    .modal-actions { display:flex; gap:10px; margin-top:10px; justify-content:flex-end; }
-    .modal-close { background: transparent; color: #aaa; border: 0; cursor: pointer; font-size: 14px; }
-    .waitlistForm { width: 100%; }
-    .wl-row { display:flex; gap:8px; max-width:520px; margin:0 auto; }
-    .wl-input { flex:1; padding:10px; border:1px solid #444; border-radius:10px; background:#0f0f12; color:#fff; }
-    .wl-btn { padding:10px 16px; border:0; border-radius:10px; cursor:pointer; }
-    .wl-msg { margin-top:.5rem; text-align:center; min-height:1.2em; }
-    @media (max-width: 480px) { .wl-row { flex-direction: column; } }
-  </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tomb of Light – Preserve Your Family’s Legacy</title>
+  <!-- Global CSS (includes font imports) -->
+  <link rel="stylesheet" href="styles.css">
+  <!-- AOS library CSS for scroll animations -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/aos/2.3.4/aos.css" integrity="sha384-pHBd1BP7MBrVBcXPRfsjIFlXn21Bq1ZNJ3v+CTGwMB2JSZ4mni+L2scuJoE6f86o" crossorigin="anonymous">
 </head>
-
 <body>
-  <!-- HEADER -->
-  <header class="container" role="banner">
-    <img src="logo.png" alt="Tomb of Light logo" class="logo" />
-    <nav aria-label="Main">
-      <a class="nav-link current" href="index.html">Home</a>
-      <a class="nav-link" href="how-it-works.html">How It Works</a>
-      <a class="nav-link" href="faq.html">FAQ</a>
-      <a class="nav-link" href="compliance.html">Compliance & Legal</a>
-      <!-- (Optional) add login links when portals go live:
-      <a class="nav-link" href="app/login.html">Customer Login</a>
-      <a class="nav-link" href="app/staff.html">Staff Login</a>
-      -->
+  <!-- Navigation -->
+  <header>
+    <nav class="navbar">
+      <div class="nav-brand">
+        <a href="index.html">
+          <img src="logo.png" alt="Tomb of Light Logo" class="logo">
+        </a>
+      </div>
+      <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation">&#9776;</button>
+      <ul class="nav-links" id="nav-menu">
+        <li><a href="how-it-works.html">How It Works</a></li>
+        <li><a href="faq.html">FAQ</a></li>
+        <li><a href="compliance.html">Compliance &amp; Legal</a></li>
+        <li><a href="signin.html">Sign In</a></li>
+        <li><a href="signup.html" class="btn btn-nav">Join Now</a></li>
+      </ul>
     </nav>
   </header>
 
-  <main class="container" id="content">
-    <!-- HERO (dark/glass) -->
-    <section class="section section-dark hero" aria-labelledby="hero-title">
-      <h1 id="hero-title">Preserve Your Family’s Legacy</h1>
-      <p class="lead">A private, zoomable family tree NFT anchored to secure storage. Built for privacy, ownership, and generational storytelling.</p>
-      <div class="cta-row" role="group" aria-label="Primary actions">
-        <a class="btn btn-primary" href="#waitlist">Join the Waitlist</a>
-        <a class="btn btn-outline" href="how-it-works.html">See How It Works</a>
-      </div>
-    </section>
-
-    <!-- ABOUT (light panel) -->
-    <section class="section section-light center" aria-labelledby="about-title">
-      <h2 id="about-title">About Tomb of Light</h2>
-      <p class="lead max-w-800" style="margin:0 auto">
-        Tomb of Light LLC helps families preserve their legacy using blockchain-anchored, interactive records. Your portrait becomes the anchor for a living, visual family tree you privately explore with loved ones.
-      </p>
-    </section>
-
-    <!-- WHY CHOOSE (light panel) -->
-    <section class="section section-light" aria-labelledby="why-title">
-      <h2 id="why-title" class="center">Why Choose Tomb of Light?</h2>
-      <ul class="clean max-w-800">
-        <li><strong>Privacy & Ownership.</strong> You control access with owner keys and optional family sub-keys.</li>
-        <li><strong>Built for Longevity.</strong> Images and metadata can be anchored to durable storage.</li>
-        <li><strong>Simple to Use.</strong> We handle the tech; you shape the story.</li>
-      </ul>
-    </section>
-
-    <!-- WHAT YOU GET (light cards) -->
-    <section class="section section-light" aria-labelledby="what-title">
-      <h2 id="what-title" class="center">What You Get</h2>
-      <div class="grid">
-        <div class="card">
-          <h3>Living Family NFT</h3>
-          <p>Begin with your portrait; grow as your family grows with a zoomable, visual tree.</p>
-        </div>
-        <div class="card">
-          <h3>Owner Access Control</h3>
-          <p>Owner holds the master key; invite trusted editors with sub-keys.</p>
-        </div>
-        <div class="card">
-          <h3>Durable Storage</h3>
-          <p>Designed to anchor media and metadata to long-term storage for persistence.</p>
-        </div>
-        <div class="card">
-          <h3>Guided Onboarding</h3>
-          <p>Optional support for identity verification and setup, aligned with compliance requirements.</p>
+  <main>
+    <!-- Hero Section -->
+    <section class="hero-section" id="hero">
+      <div class="container hero-content" data-aos="fade-up">
+        <h1>Preserve Your Family’s Legacy</h1>
+        <p class="subtitle">A private, zoomable family tree NFT anchored to secure, decentralized storage – built for privacy, ownership, and generational storytelling.</p>
+        <div class="hero-buttons">
+          <a href="how-it-works.html" class="btn btn-secondary">View Demo</a>
+          <a href="signup.html" class="btn btn-primary">Join Now</a>
         </div>
       </div>
     </section>
 
-    <!-- WAITLIST (light panel with in-page form) -->
-    <section id="waitlist" class="section section-light center" aria-labelledby="waitlist-title">
-      <h2 id="waitlist-title">Join the Waitlist</h2>
-      <p class="max-w-800" style="margin:0 auto">Drop your name and email. We’ll reach out with next steps.</p>
-
-      <form class="waitlistForm"
-            action="https://formsubmit.co/ajax/422507e8ae32532a167cff416c7e7c3"
-            method="POST" novalidate aria-label="Waitlist form">
-        <div class="wl-row" style="margin-bottom:.5rem;">
-          <label class="sr-only" for="wl-name">Name</label>
-          <input id="wl-name" class="wl-input" type="text" name="name" placeholder="Your name (optional)">
-        </div>
-        <div class="wl-row">
-          <label class="sr-only" for="wl-email">Email</label>
-          <input id="wl-email" class="wl-input" name="email" type="email" placeholder="you@example.com" required aria-required="true">
-          <button class="wl-btn btn btn-primary" type="submit">Join</button>
-        </div>
-
-        <input type="hidden" name="_replyto">
-        <input type="hidden" name="_template" value="table">
-        <input type="hidden" name="_subject" value="New waitlist signup">
-        <input type="hidden" name="_captcha" value="false">
-        <input type="hidden" name="_autoresponse"
-               value="Thanks for joining the Tomb of Light waitlist! We’ll be in touch with next steps soon. —Tomb of Light"/>
-
-        <!-- Honeypot -->
-        <input type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true"
-               style="position:absolute;left:-9999px;height:0;width:0;padding:0;border:0;">
-
-        <p class="wl-msg" aria-live="polite"></p>
-      </form>
+    <!-- About Section -->
+    <section class="about-section">
+      <div class="container" data-aos="fade-up">
+        <h2>About Tomb of Light</h2>
+        <p>Tomb of Light helps families preserve their legacy using blockchain-anchored, interactive records. Your portrait becomes the anchor for a living, visual family tree that you can privately explore with loved ones.</p>
+      </div>
     </section>
 
-    <!-- QUOTES (light panel) -->
-    <section class="section section-light quotes" aria-labelledby="quotes-title">
-      <h2 id="quotes-title" class="center">What People Are Saying</h2>
-      <p class="quote">“Technology evolves. People grow. Legacies endure. Tomb of Light ensures they are never forgotten.” <span class="who">— Larry Robinson, Founder</span></p>
-      <p class="quote">“Whether it’s a move, a flood, or a fire, Tomb of Light will always keep your family’s memories safe.” <span class="who">— Jennifer Wood</span></p>
-      <p class="quote">“There is nothing sweeter than family and building a legacy for our kids. Tomb of Light will ensure that and more.” <span class="who">— Toni Floyd</span></p>
-      <p class="quote">“Tomb of Light isn’t just another NFT; it’s a portal to family legacy, symbolism, and digital immortality.” <span class="who">— Leon Floyd</span></p>
-      <p class="quote">“Every soul leaves a trace. Tomb of Light ensures that trace becomes eternal—secured on the blockchain.” <span class="who">— Marquis Floyd</span></p>
+    <!-- Why Choose Section -->
+    <section class="values-section">
+      <div class="container">
+        <h2 data-aos="fade-up">Why Choose Tomb of Light?</h2>
+        <div class="values-list">
+          <div class="value-item" data-aos="fade-up">
+            <h3>Privacy &amp; Ownership</h3>
+            <p>You maintain full control of your family data with secure owner keys and optional sub-keys for family members.</p>
+          </div>
+          <div class="value-item" data-aos="fade-up" data-aos-delay="100">
+            <h3>Built for Longevity</h3>
+            <p>Images and metadata are anchored to durable, decentralized storage to ensure persistence across generations.</p>
+          </div>
+          <div class="value-item" data-aos="fade-up" data-aos-delay="200">
+            <h3>Simple to Use</h3>
+            <p>Focus on family stories while we handle the complex tech behind the scenes, making it easy for all ages.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Features Section (What You Get) -->
+    <section class="features-section">
+      <div class="container">
+        <h2 data-aos="fade-up">What You Get</h2>
+        <div class="features-grid">
+          <div class="feature-item" data-aos="fade-up">
+            <h3>Living Family NFT</h3>
+            <p>Begin with a personal portrait that grows into a visual family tree as your family expands — zoomable and interactive.</p>
+          </div>
+          <div class="feature-item" data-aos="fade-up" data-aos-delay="100">
+            <h3>Owner Access Control</h3>
+            <p>You hold the master key to your family vault. Invite trusted relatives as collaborators with their own secure sub-keys.</p>
+          </div>
+          <div class="feature-item" data-aos="fade-up" data-aos-delay="200">
+            <h3>Durable Storage</h3>
+            <p>Media and metadata are anchored to decentralized, long-term storage solutions for future-safe keeping of your memories.</p>
+          </div>
+          <div class="feature-item" data-aos="fade-up" data-aos-delay="300">
+            <h3>Guided Onboarding</h3>
+            <p>Get started smoothly with optional support, including identity verification and compliance-aligned setup guidance.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Testimonials Section -->
+    <section class="testimonials-section">
+      <div class="container">
+        <h2 data-aos="fade-up">What People Are Saying</h2>
+        <div class="testimonials-list">
+          <figure class="testimonial" data-aos="fade-up">
+            <blockquote>“Technology evolves. People grow. Legacies endure. Tomb of Light ensures they are never forgotten.”</blockquote>
+            <figcaption>&mdash; Larry Robinson, Founder</figcaption>
+          </figure>
+          <figure class="testimonial" data-aos="fade-up" data-aos-delay="100">
+            <blockquote>“Whether it’s a move, a flood, or a fire, Tomb of Light will always keep your family’s memories safe.”</blockquote>
+            <figcaption>&mdash; Jennifer Wood</figcaption>
+          </figure>
+          <figure class="testimonial" data-aos="fade-up" data-aos-delay="200">
+            <blockquote>“There is nothing sweeter than family and building a legacy for our kids. Tomb of Light will ensure that and more.”</blockquote>
+            <figcaption>&mdash; Toni Floyd</figcaption>
+          </figure>
+          <figure class="testimonial" data-aos="fade-up" data-aos-delay="300">
+            <blockquote>“Tomb of Light isn’t just another NFT; it’s a portal to family legacy, symbolism, and digital immortality.”</blockquote>
+            <figcaption>&mdash; Leon Floyd</figcaption>
+          </figure>
+          <figure class="testimonial" data-aos="fade-up" data-aos-delay="400">
+            <blockquote>“Every soul leaves a trace. Tomb of Light ensures that trace becomes eternal — secured on the blockchain.”</blockquote>
+            <figcaption>&mdash; Marquis Floyd</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <!-- Call-to-Action Section -->
+    <section class="cta-section">
+      <div class="container" data-aos="fade-up">
+        <h2>Ready to Preserve Your Legacy?</h2>
+        <p>Join Tomb of Light today and secure your family’s memories for generations to come.</p>
+        <a href="signup.html" class="btn btn-primary cta-btn">Join Now</a>
+      </div>
     </section>
   </main>
 
-  <!-- COOKIE BANNER -->
-  <div id="cookie-banner" class="cookie-banner" role="region" aria-label="Cookie preferences">
-    <div style="text-align:left;max-width:760px">
-      <strong>Cookies & Preferences.</strong>
-      We use essential cookies to run this site. Optional analytics/ads are off by default and only enabled if you consent.
-      We honor Global Privacy Control (GPC). Manage preferences in <a href="privacy-choices.html" style="color:#FFD700">Your Privacy Choices</a>.
-    </div>
-    <div class="cookie-actions" role="group" aria-label="Cookie actions">
-      <button class="btn btn-primary" onclick="tolConsent?.set?.('accepted')">Accept Optional Cookies</button>
-      <button class="btn btn-outline" onclick="tolConsent?.set?.('declined')">Decline</button>
-      <a class="btn btn-outline" href="privacy-choices.html">Your Privacy Choices</a>
-    </div>
-  </div>
-
-  <!-- FOOTER -->
-  <footer class="container" role="contentinfo">
-    <div class="footer-links">
-      <a href="privacy.html">Privacy Policy</a> |
-      <a href="privacy-choices.html">Your Privacy Choices</a> |
-      <a href="privacy-state-notices.html">State Privacy Notices</a> |
-      <a href="cookie-policy.html">Cookie Policy</a> |
-      <a href="accessibility.html">Accessibility</a> |
-      <a href="terms.html">Terms of Service</a>
-    </div>
-    <p>© 2025 Tomb of Light LLC™. All rights reserved.</p>
-    <p>Contact: <a href="mailto:admin@tomboflight.com">admin@tomboflight.com</a></p>
-  </footer>
-
-  <!-- Waitlist Modal (first-visit popup) -->
-  <div id="waitlistModal" class="modal-backdrop" aria-hidden="true" role="dialog" aria-modal="true">
-    <div class="modal-card">
-      <h3>Be first in line</h3>
-      <p>Join the Tomb of Light waitlist for early access and launch updates.</p>
-
-      <form class="waitlistForm"
-            action="https://formsubmit.co/ajax/422507e8ae32532a167cff416c7e7c3"
-            method="POST" novalidate aria-label="Waitlist popup form">
-        <div class="wl-row" style="margin-bottom:.5rem;">
-          <label class="sr-only" for="wlm-name">Name</label>
-          <input id="wlm-name" class="wl-input" type="text" name="name" placeholder="Your name (optional)">
-        </div>
-        <div class="wl-row">
-          <label class="sr-only" for="wlm-email">Email</label>
-          <input id="wlm-email" class="wl-input" name="email" type="email" placeholder="you@example.com" required aria-required="true">
-          <button class="wl-btn btn btn-primary" type="submit">Join</button>
-        </div>
-
-        <input type="hidden" name="_replyto">
-        <input type="hidden" name="_template" value="table">
-        <input type="hidden" name="_subject" value="New waitlist signup">
-        <input type="hidden" name="_captcha" value="false">
-        <input type="hidden" name="_autoresponse"
-               value="Thanks for joining the Tomb of Light waitlist! We’ll be in touch with next steps soon. —Tomb of Light"/>
-
-        <!-- Honeypot -->
-        <input type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true"
-               style="position:absolute;left:-9999px;height:0;width:0;padding:0;border:0;">
-        <p class="wl-msg" aria-live="polite"></p>
-      </form>
-
-      <div class="modal-actions">
-        <button id="closeModalBtn" class="modal-close" aria-label="Close waitlist popup">No thanks</button>
+  <!-- Footer -->
+  <footer>
+    <div class="footer-container">
+      <div class="footer-links">
+        <a href="privacy.html">Privacy Policy</a> | 
+        <a href="terms.html">Terms of Service</a> | 
+        <a href="accessibility.html">Accessibility</a>
+      </div>
+      <div class="footer-info">
+        <p>&copy; 2025 Tomb of Light LLC. All rights reserved.</p>
+        <p>Contact: <a href="mailto:admin@tomboflight.com">admin@tomboflight.com</a></p>
       </div>
     </div>
-  </div>
+  </footer>
 
-  <!-- Inline JS: handles both forms + popup -->
-  <script>
-    (function () {
-      // Attach AJAX submit to all forms with class "waitlistForm"
-      function bindWaitlistForms() {
-        document.querySelectorAll('form.waitlistForm').forEach((form) => {
-          if (form.__bound) return; form.__bound = true;
-          const msg = form.querySelector('.wl-msg');
-          const btn = form.querySelector('button[type="submit"]');
-
-          form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            msg && (msg.textContent = '');
-            if (!form.reportValidity()) return;
-
-            // Honeypot
-            const hp = form.querySelector('[name="website"]');
-            if (hp && hp.value) { msg && (msg.textContent = 'Bot check failed.'); return; }
-
-            const original = btn ? btn.textContent : '';
-            if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
-
-            try {
-              const fd = new FormData(form);
-              const emailInput = form.querySelector('input[name="email"]');
-              if (emailInput && emailInput.value) fd.set('_replyto', emailInput.value);
-              fd.set('_template', 'table');
-
-              const resp = await fetch(form.action, {
-                method: 'POST',
-                headers: { 'Accept': 'application/json' },
-                body: fd
-              });
-
-              // Debug log to help diagnose if needed
-              try { const clone = resp.clone(); clone.text().then(t => console.log('[FormSubmit]', resp.status, t)); } catch {}
-
-              if (resp.ok) {
-                msg && (msg.textContent = 'Thanks! You’re on the list.');
-                form.reset();
-
-                // Close modal if this was inside it and remember dismissal
-                const modal = document.getElementById('waitlistModal');
-                if (modal && modal.classList.contains('show')) {
-                  modal.classList.remove('show');
-                  modal.setAttribute('aria-hidden', 'true');
-                  try { localStorage.setItem('tol_waitlist_modal_dismissed', '1'); } catch {}
-                }
-              } else {
-                let text = 'Something went wrong. Please try again.';
-                try { const data = await resp.json(); if (data && data.message) text = data.message; } catch {}
-                msg && (msg.textContent = text);
-              }
-            } catch {
-              msg && (msg.textContent = 'Network error. Please try again.');
-            } finally {
-              if (btn) { btn.disabled = false; btn.textContent = original; }
-            }
-          });
-        });
-      }
-
-      // Popup logic
-      const MODAL_KEY = 'tol_waitlist_modal_dismissed';
-      const modal = document.getElementById('waitlistModal');
-      const closeBtn = document.getElementById('closeModalBtn');
-
-      function showModal() {
-        if (!modal) return;
-        modal.classList.add('show');
-        modal.setAttribute('aria-hidden', 'false');
-        const email = modal.querySelector('input[type="email"]');
-        if (email) setTimeout(() => email.focus(), 50);
-      }
-      function dismissModal() {
-        if (!modal) return;
-        modal.classList.remove('show');
-        modal.setAttribute('aria-hidden', 'true');
-        try { localStorage.setItem(MODAL_KEY, '1'); } catch {}
-      }
-      function maybeShowModal() {
-        if (!modal) return;
-        if (location.hash === '#waitlist') return; // don't pop if user clicked the hero CTA
-        if (!localStorage.getItem(MODAL_KEY)) {
-          const delay = (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) ? 0 : 1200;
-          setTimeout(showModal, delay);
-        }
-      }
-      closeBtn && closeBtn.addEventListener('click', dismissModal);
-      modal && modal.addEventListener('click', (e) => { if (e.target === modal) dismissModal(); });
-
-      // Init
-      bindWaitlistForms();
-      maybeShowModal();
-      document.addEventListener('DOMContentLoaded', bindWaitlistForms);
-    })();
-  </script>
+  <!-- JS Libraries and Scripts -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/aos/2.3.4/aos.js" integrity="sha384-wpOohNkj/IdgTswFGMQz0fDxRugv6GvMQAdblV0l93jAkG0USAHjHQCZtFHfWAdy" crossorigin="anonymous"></script>
+  <script src="app.js"></script>
 </body>
 </html>
