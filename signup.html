@@ -1,149 +1,95 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Sign Up – Tomb of Light</title>
-    <link rel="stylesheet" href="styles.css" />
-  </head>
-  <body>
-    <header>
-      <nav class="navbar">
-        <div class="nav-brand">
-          <a href="index.html"
-            ><img src="logo.svg" alt="Tomb of Light Logo" class="logo"
-          /></a>
-        </div>
-        <button
-          class="nav-toggle"
-          id="nav-toggle"
-          aria-label="Toggle navigation"
-        >
-          ☰
-        </button>
-        <ul class="nav-links" id="nav-menu">
-          <li><a href="how-it-works.html">How It Works</a></li>
-          <li><a href="faq.html">FAQ</a></li>
-          <li><a href="compliance.html">Compliance &amp; Legal</a></li>
-          <li><a href="signin.html">Sign In</a></li>
-          <li><a href="signup.html" class="btn btn-nav">Join Now</a></li>
-        </ul>
-      </nav>
-    </header>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sign Up – Tomb of Light</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" type="image/png" sizes="32x32" href="site-coin-32.png">
+</head>
+<body>
+  <header>
+    <nav class="navbar">
+      <a href="index.html" class="nav-brand">
+        <img src="site-logo-header.png" class="logo" alt="Tomb of Light Logo">
+      </a>
+      <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">☰</button>
+      <ul class="nav-links" id="nav-menu">
+        <li><a href="how-it-works.html">How It Works</a></li>
+        <li><a href="faq.html">FAQ</a></li>
+        <li><a href="compliance.html">Compliance &amp; Legal</a></li>
+        <li><a href="signin.html">Sign In</a></li>
+        <li><a href="signup.html" class="btn btn-nav">Join Now</a></li>
+      </ul>
+    </nav>
+  </header>
 
-    <main>
-      <section class="auth-section">
-        <div class="form-container">
-          <h1>Create Your Account</h1>
-          <p>Preserve your legacy with a secure digital family vault.</p>
+  <main>
+    <section class="auth-section">
+      <div class="form-container">
+        <h1>Create Your Account</h1>
+        <p>Preserve your legacy with a secure digital family vault.</p>
 
-          <form id="signup-form" novalidate>
-            <div class="form-field">
-              <label for="name">Full Name</label>
-              <input
-                id="name"
-                name="name"
-                type="text"
-                placeholder="Jane Doe"
-                required
-              />
-            </div>
+        <form id="signup-form" novalidate>
+          <div class="form-field">
+            <label for="name">Full Name</label>
+            <input id="name" name="name" type="text" placeholder="Jane Doe" required />
+          </div>
 
-            <div class="form-field">
-              <label for="email">Email Address</label>
-              <input
-                id="email"
-                name="email"
-                type="email"
-                placeholder="you@example.com"
-                required
-              />
-            </div>
+          <div class="form-field">
+            <label for="email">Email Address</label>
+            <input id="email" name="email" type="email" placeholder="you@example.com" required />
+          </div>
 
-            <div class="form-field">
-              <label for="password">Password</label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                placeholder="At least 8 characters"
-                minlength="8"
-                required
-              />
-            </div>
+          <div class="form-field">
+            <label for="password">Password</label>
+            <input id="password" name="password" type="password" placeholder="At least 8 characters" minlength="8" required />
+          </div>
 
-            <div class="form-field">
-              <label for="confirm_password">Confirm Password</label>
-              <input
-                id="confirm_password"
-                name="confirm_password"
-                type="password"
-                minlength="8"
-                required
-              />
-              <p id="confirm-error" class="error-message"></p>
-            </div>
+          <div class="form-field">
+            <label for="confirm_password">Confirm Password</label>
+            <input id="confirm_password" name="confirm_password" type="password" minlength="8" required />
+            <p id="confirm-error" class="error-message"></p>
+          </div>
 
-            <div class="form-field checkbox-field">
-              <input type="checkbox" id="agree" required />
-              <label for="agree"
-                >I agree to the
-                <a href="terms.html" target="_blank">Terms</a> and
-                <a href="privacy.html" target="_blank">Privacy Policy</a
-                >.</label
-              >
-            </div>
+          <div class="form-field checkbox-field">
+            <input type="checkbox" id="agree" required />
+            <label for="agree">I agree to the <a href="terms.html" target="_blank">Terms</a> and <a href="privacy.html" target="_blank">Privacy Policy</a>.</label>
+          </div>
 
-            <button type="submit" class="btn btn-primary">Sign Up</button>
-          </form>
+          <button type="submit" class="btn btn-primary">Sign Up</button>
+        </form>
 
-          <p class="form-note">
-            Already have an account? <a href="signin.html">Sign In</a>
-          </p>
-        </div>
-      </section>
-    </main>
-
-    <footer>
-      <div class="footer-container">
-        <div class="footer-links">
-          <a href="privacy.html">Privacy Policy</a> |
-          <a href="terms.html">Terms of Service</a> |
-          <a href="accessibility.html">Accessibility</a> |
-          <a href="cookie-policy.html">Cookie Policy</a> |
-          <a href="privacy-choices.html">Your Privacy Choices</a>
-        </div>
-        <div class="footer-info">
-          <p>&copy; 2025 Tomb of Light LLC. All rights reserved.</p>
-          <p>
-            Contact:
-            <a href="mailto:admin@tomboflight.com">admin@tomboflight.com</a>
-          </p>
-        </div>
+        <p class="form-note">Already have an account? <a href="signin.html">Sign In</a></p>
       </div>
-    </footer>
+    </section>
+  </main>
 
-    <div
-      class="cookies-banner"
-      id="cookies-banner"
-      role="dialog"
-      aria-live="polite"
-    >
-      <p>
-        We use essential cookies to run this site. Optional analytics are off by
-        default and load only if you consent.
-      </p>
-      <div class="cookies-actions">
-        <button class="btn-ghost" id="cookies-decline">Decline</button>
-        <a class="btn-ghost" href="privacy-choices.html"
-          >Your Privacy Choices</a
-        >
-        <button class="btn btn-primary" id="cookies-accept">
-          Accept Optional Cookies
-        </button>
+  <footer>
+    <div class="footer-container">
+      <div class="footer-links">
+        <a href="privacy.html">Privacy Policy</a> |
+        <a href="terms.html">Terms of Service</a> |
+        <a href="accessibility.html">Accessibility</a> |
+        <a href="cookie-policy.html">Cookie Policy</a> |
+        <a href="privacy-choices.html">Your Privacy Choices</a>
+      </div>
+      <div class="footer-info">
+        <p>&copy; 2025 Tomb of Light LLC. All rights reserved.</p>
+        <p>Contact: <a href="mailto:admin@tomboflight.com">admin@tomboflight.com</a></p>
       </div>
     </div>
+  </footer>
 
-    <script src="app.js"></script>
-  </body>
+  <div class="cookies-banner" id="cookies-banner" role="dialog" aria-live="polite">
+    <p>We use essential cookies to run this site. Optional analytics are off by default and load only if you consent.</p>
+    <div class="cookies-actions">
+      <button class="btn-ghost" id="cookies-decline">Decline</button>
+      <a class="btn-ghost" href="privacy-choices.html">Your Privacy Choices</a>
+      <button class="btn btn-primary" id="cookies-accept">Accept Optional Cookies</button>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
 </html>
