@@ -1,240 +1,315 @@
-// Tomb of Light Frontend JS
-// Handles: mobile nav, cookie consent (including GPC), privacy choices page,
-// signup validation, and signin placeholder flow.
+document.addEventListener("DOMContentLoaded", () => {
+  const body = document.body;
+  const menuToggle = document.getElementById("menu-toggle");
+  const mobileMenu = document.getElementById("mobile-menu");
 
-/* =========================
-   Mobile Navigation
-========================= */
-(function () {
-  const navToggle = document.getElementById('nav-toggle');
-  const navMenu = document.getElementById('nav-menu');
+  const cookieBanner = document.getElementById("cookie-banner");
+  const acceptCookiesBtn = document.getElementById("accept-cookies");
+  const declineCookiesBtn = document.getElementById("decline-cookies");
+  const cookieStatusEls = document.querySelectorAll("[data-cookie-status]");
 
-  if (!navToggle || !navMenu) return;
+  const privacyForm = document.getElementById("privacy-choices-form");
+  const dataRequestForm = document.getElementById("data-request-form");
+  const signInForm = document.getElementById("signin-form");
+  const signUpForm = document.getElementById("signup-form");
+
+  const COOKIE_KEY = "tol_cookie_consent";
+  const PRIVACY_KEY = "tol_privacy_choices";
 
   function setMenuState(isOpen) {
-    navMenu.classList.toggle('open', isOpen);
-    navToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    if (!menuToggle || !mobileMenu) return;
+
+    menuToggle.classList.toggle("active", isOpen);
+    menuToggle.setAttribute("aria-expanded", String(isOpen));
+    mobileMenu.classList.toggle("show", isOpen);
+    body.classList.toggle("menu-open", isOpen);
   }
 
-  navToggle.addEventListener('click', () => {
-    const isOpen = !navMenu.classList.contains('open');
-    setMenuState(isOpen);
-  });
+  if (menuToggle && mobileMenu) {
+    menuToggle.addEventListener("click", () => {
+      const isOpen = menuToggle.getAttribute("aria-expanded") === "true";
+      setMenuState(!isOpen);
+    });
 
-  // Close menu when a link is clicked
-  navMenu.querySelectorAll('a').forEach((link) => {
-    link.addEventListener('click', () => {
-      if (window.innerWidth <= 900) {
+    mobileMenu.querySelectorAll("a").forEach((link) => {
+      link.addEventListener("click", () => {
+        setMenuState(false);
+      });
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
         setMenuState(false);
       }
     });
-  });
 
-  // Close menu when clicking outside
-  document.addEventListener('click', (event) => {
-    const clickedInsideMenu = navMenu.contains(event.target);
-    const clickedToggle = navToggle.contains(event.target);
+    document.addEventListener("click", (event) => {
+      const clickedInsideMenu = mobileMenu.contains(event.target);
+      const clickedToggle = menuToggle.contains(event.target);
 
-    if (!clickedInsideMenu && !clickedToggle && navMenu.classList.contains('open')) {
-      setMenuState(false);
-    }
-  });
+      if (!clickedInsideMenu && !clickedToggle) {
+        setMenuState(false);
+      }
+    });
+  }
 
-  // Reset menu state on resize to desktop
-  window.addEventListener('resize', () => {
-    if (window.innerWidth > 900) {
-      navMenu.classList.remove('open');
-      navToggle.setAttribute('aria-expanded', 'false');
-    }
-  });
-})();
+  function updateCookieStatus(value) {
+    cookieStatusEls.forEach((el) => {
+      if (value === "accepted") {
+        el.textContent = "Optional analytics cookies are enabled.";
+      } else if (value === "declined") {
+        el.textContent = "Optional analytics cookies are disabled.";
+      } else {
+        el.textContent = "Your cookie preference has not been set yet.";
+      }
+    });
+  }
 
-/* =========================
-   Cookie Consent + GPC
-========================= */
-(function () {
-  const KEY = 'tol_cookies'; // accepted | declined
-  const banner = document.getElementById('cookies-banner');
-  const btnAccept = document.getElementById('cookies-accept');
-  const btnDecline = document.getElementById('cookies-decline');
-
-  function hasGPC() {
-    try {
-      return navigator.globalPrivacyControl === true;
-    } catch (error) {
-      return false;
+  function hideCookieBanner() {
+    if (cookieBanner) {
+      cookieBanner.classList.remove("show");
+      cookieBanner.setAttribute("hidden", "hidden");
     }
   }
 
-  function setChoice(value) {
-    localStorage.setItem(KEY, value);
-  }
-
-  function getChoice() {
-    if (hasGPC()) return 'declined';
-    return localStorage.getItem(KEY);
-  }
-
-  function clearChoice() {
-    localStorage.removeItem(KEY);
-  }
-
-  function showBanner() {
-    if (banner) banner.classList.add('show');
-  }
-
-  function hideBanner() {
-    if (banner) banner.classList.remove('show');
-  }
-
-  function maybeLoadOptional() {
-    if (getChoice() === 'accepted') {
-      // Optional scripts go here only AFTER explicit consent.
-      // Example:
-      // const s = document.createElement('script');
-      // s.src = 'https://analytics.example.com/script.js';
-      // s.async = true;
-      // document.head.appendChild(s);
+  function showCookieBanner() {
+    if (cookieBanner) {
+      cookieBanner.classList.add("show");
+      cookieBanner.removeAttribute("hidden");
     }
   }
 
-  // Expose helper globally for privacy-choices.html
-  window.tolConsent = {
-    set(value) {
-      setChoice(value);
-      maybeLoadOptional();
-    },
-    get() {
-      return getChoice();
-    },
-    clear() {
-      clearChoice();
-    },
-    hasGPC() {
-      return hasGPC();
-    }
-  };
+  const savedCookieConsent = localStorage.getItem(COOKIE_KEY);
+  updateCookieStatus(savedCookieConsent);
 
-  const currentChoice = getChoice();
-
-  if (!currentChoice) {
-    showBanner();
+  if (!savedCookieConsent) {
+    showCookieBanner();
   } else {
-    hideBanner();
+    hideCookieBanner();
   }
 
-  maybeLoadOptional();
-
-  if (btnAccept) {
-    btnAccept.addEventListener('click', () => {
-      setChoice('accepted');
-      hideBanner();
-      maybeLoadOptional();
+  if (acceptCookiesBtn) {
+    acceptCookiesBtn.addEventListener("click", () => {
+      localStorage.setItem(COOKIE_KEY, "accepted");
+      updateCookieStatus("accepted");
+      hideCookieBanner();
     });
   }
 
-  if (btnDecline) {
-    btnDecline.addEventListener('click', () => {
-      setChoice('declined');
-      hideBanner();
+  if (declineCookiesBtn) {
+    declineCookiesBtn.addEventListener("click", () => {
+      localStorage.setItem(COOKIE_KEY, "declined");
+      updateCookieStatus("declined");
+      hideCookieBanner();
     });
   }
-})();
 
-/* =========================
-   Sign-Up Form
-========================= */
-(function () {
-  const signupForm = document.getElementById('signup-form');
-  if (!signupForm) return;
-
-  signupForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-
-    const name = document.getElementById('name')?.value?.trim() || '';
-    const email = document.getElementById('email')?.value?.trim() || '';
-    const password = document.getElementById('password')?.value || '';
-    const confirm = document.getElementById('confirm_password')?.value || '';
-    const agree = document.getElementById('agree')?.checked || false;
-    const errEl = document.getElementById('confirm-error');
-
-    if (errEl) errEl.textContent = '';
-
-    if (!name || !email || !password || !confirm) {
-      alert('Please fill out all required fields.');
-      return;
-    }
-
-    if (!agree) {
-      alert('You must agree to the Terms and Privacy Policy.');
-      return;
-    }
-
-    if (password.length < 8) {
-      alert('Password must be at least 8 characters.');
-      return;
-    }
-
-    if (password !== confirm) {
-      if (errEl) errEl.textContent = 'Passwords do not match.';
-      return;
-    }
-
+  function loadPrivacyChoices() {
     try {
-      // Future backend hookup example:
-      // const res = await fetch('/api/signup', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({ name, email, password })
-      // });
-      //
-      // if (!res.ok) {
-      //   const message = await res.text();
-      //   throw new Error(message || 'Signup failed');
-      // }
-
-      alert('Account created successfully! Please sign in.');
-      window.location.href = 'signin.html';
+      const raw = localStorage.getItem(PRIVACY_KEY);
+      return raw ? JSON.parse(raw) : null;
     } catch (error) {
-      alert(error.message || 'Signup failed. Please try again.');
+      return null;
+    }
+  }
+
+  function savePrivacyChoices(data) {
+    localStorage.setItem(PRIVACY_KEY, JSON.stringify(data));
+  }
+
+  if (privacyForm) {
+    const analyticsField = document.getElementById("privacy-analytics");
+    const gpcField = document.getElementById("privacy-gpc");
+    const marketingField = document.getElementById("privacy-marketing");
+    const privacyMessage = document.getElementById("privacy-choices-message");
+
+    const existingChoices = loadPrivacyChoices();
+    if (existingChoices) {
+      if (analyticsField) analyticsField.checked = !!existingChoices.analytics;
+      if (gpcField) gpcField.checked = !!existingChoices.gpc;
+      if (marketingField) marketingField.checked = !!existingChoices.marketing;
+    }
+
+    privacyForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+
+      const choiceData = {
+        analytics: analyticsField ? analyticsField.checked : false,
+        gpc: gpcField ? gpcField.checked : false,
+        marketing: marketingField ? marketingField.checked : false,
+        updatedAt: new Date().toISOString()
+      };
+
+      savePrivacyChoices(choiceData);
+
+      if (choiceData.analytics) {
+        localStorage.setItem(COOKIE_KEY, "accepted");
+        updateCookieStatus("accepted");
+      } else {
+        localStorage.setItem(COOKIE_KEY, "declined");
+        updateCookieStatus("declined");
+      }
+
+      if (privacyMessage) {
+        privacyMessage.textContent =
+          "Your privacy choices were saved on this device successfully.";
+      }
+    });
+  }
+
+  function showFormMessage(targetId, message, isError = false) {
+    const el = document.getElementById(targetId);
+    if (!el) return;
+
+    el.textContent = message;
+    el.style.color = isError ? "#ff8f8f" : "#9fe3bf";
+  }
+
+  if (dataRequestForm) {
+    dataRequestForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+
+      const fullName = document.getElementById("request-name")?.value.trim() || "";
+      const email = document.getElementById("request-email")?.value.trim() || "";
+      const requestType = document.getElementById("request-type")?.value || "";
+      const details = document.getElementById("request-details")?.value.trim() || "";
+
+      if (!fullName || !email || !requestType || !details) {
+        showFormMessage(
+          "data-request-message",
+          "Please complete all required fields before submitting your request.",
+          true
+        );
+        return;
+      }
+
+      const emailIsValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+      if (!emailIsValid) {
+        showFormMessage(
+          "data-request-message",
+          "Please enter a valid email address.",
+          true
+        );
+        return;
+      }
+
+      showFormMessage(
+        "data-request-message",
+        "Your request form is complete and ready to connect to your backend or email workflow."
+      );
+
+      dataRequestForm.reset();
+    });
+  }
+
+  if (signInForm) {
+    signInForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+
+      const email = document.getElementById("signin-email")?.value.trim() || "";
+      const password = document.getElementById("signin-password")?.value || "";
+
+      if (!email || !password) {
+        showFormMessage(
+          "signin-message",
+          "Please enter your email and password.",
+          true
+        );
+        return;
+      }
+
+      const emailIsValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+      if (!emailIsValid) {
+        showFormMessage(
+          "signin-message",
+          "Please enter a valid email address.",
+          true
+        );
+        return;
+      }
+
+      showFormMessage(
+        "signin-message",
+        "Front-end sign-in check passed. Connect this form to your real authentication backend next."
+      );
+    });
+  }
+
+  if (signUpForm) {
+    signUpForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+
+      const fullName = document.getElementById("signup-name")?.value.trim() || "";
+      const email = document.getElementById("signup-email")?.value.trim() || "";
+      const password = document.getElementById("signup-password")?.value || "";
+      const confirmPassword = document.getElementById("signup-confirm-password")?.value || "";
+      const consent = document.getElementById("signup-consent")?.checked || false;
+
+      if (!fullName || !email || !password || !confirmPassword) {
+        showFormMessage(
+          "signup-message",
+          "Please complete all required fields.",
+          true
+        );
+        return;
+      }
+
+      const emailIsValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+      if (!emailIsValid) {
+        showFormMessage(
+          "signup-message",
+          "Please enter a valid email address.",
+          true
+        );
+        return;
+      }
+
+      if (password.length < 8) {
+        showFormMessage(
+          "signup-message",
+          "Your password must be at least 8 characters long.",
+          true
+        );
+        return;
+      }
+
+      if (password !== confirmPassword) {
+        showFormMessage(
+          "signup-message",
+          "Your passwords do not match.",
+          true
+        );
+        return;
+      }
+
+      if (!consent) {
+        showFormMessage(
+          "signup-message",
+          "You must confirm the consent and policy acknowledgment checkbox.",
+          true
+        );
+        return;
+      }
+
+      showFormMessage(
+        "signup-message",
+        "Front-end sign-up check passed. Connect this form to your real registration backend next."
+      );
+
+      signUpForm.reset();
+    });
+  }
+
+  const currentPath = window.location.pathname.split("/").pop() || "index.html";
+  const navLinks = document.querySelectorAll("[data-nav-link]");
+  navLinks.forEach((link) => {
+    const href = link.getAttribute("href");
+    if (
+      href === currentPath ||
+      (currentPath === "" && href === "index.html") ||
+      (currentPath === "/" && href === "index.html")
+    ) {
+      link.classList.add("active");
     }
   });
-})();
-
-/* =========================
-   Sign-In Form
-========================= */
-(function () {
-  const signinForm = document.getElementById('signin-form');
-  if (!signinForm) return;
-
-  signinForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-
-    const email = document.getElementById('signin-email')?.value?.trim() || '';
-    const password = document.getElementById('signin-password')?.value || '';
-
-    if (!email || !password) {
-      alert('Please enter your email and password.');
-      return;
-    }
-
-    try {
-      // Future backend hookup example:
-      // const res = await fetch('/api/login', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({ email, password })
-      // });
-      //
-      // if (!res.ok) {
-      //   throw new Error('Invalid credentials');
-      // }
-
-      alert('Sign-in successful!');
-      window.location.href = 'index.html';
-    } catch (error) {
-      alert(error.message || 'Sign-in failed. Please try again.');
-    }
-  });
-})();
+});
