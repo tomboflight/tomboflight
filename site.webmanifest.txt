@@ -1,21 +1,10 @@
 {
   "name": "Tomb of Light",
   "short_name": "Tomb of Light",
-  "description": "A private, zoomable family tree legacy platform built for privacy, ownership, and generational storytelling.",
+  "description": "Tomb of Light is building a secure, privacy-first family legacy platform for preserving generational history and future ownership.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#3b82f6",
-  "icons": [
-    {
-      "src": "site-coin-192.png",
-      "sizes": "192x192",
-      "type": "image/png"
-    },
-    {
-      "src": "site-coin-512.png",
-      "sizes": "512x512",
-      "type": "image/png"
-    }
-  ]
+  "background_color": "#07090f",
+  "theme_color": "#07090f",
+  "icons": []
 }

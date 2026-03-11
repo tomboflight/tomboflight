@@ -1,67 +1,316 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  />
   <title>How It Works | Tomb of Light</title>
-  <link rel="stylesheet" href="styles.css"/>
-  <script defer src="app.js"></script>
+  <meta
+    name="description"
+    content="Learn how Tomb of Light is building a privacy-first family legacy platform with secure vaults, controlled access, and future blockchain-backed ownership."
+  />
+  <meta
+    name="theme-color"
+    content="#07090f"
+  />
+  <link
+    rel="manifest"
+    href="site.webmanifest"
+  />
+  <link
+    rel="stylesheet"
+    href="styles.css"
+  />
 </head>
 <body>
-  <header>
-    <nav class="navbar">
-      <a href="index.html" class="nav-brand" aria-label="Tomb of Light Home">
-        <img src="site-logo-header.png" class="logo" alt="Tomb of Light Logo">
+  <header class="site-header">
+    <div class="container navbar">
+      <a class="brand" href="index.html" aria-label="Tomb of Light home">
+        <div class="brand-mark">TL</div>
+        <div class="brand-text">
+          <strong>Tomb of Light</strong>
+          <span>Generational legacy, secured</span>
+        </div>
       </a>
 
-      <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-expanded="false">
-        ☰
-      </button>
+      <nav class="nav-links" aria-label="Primary navigation">
+        <a href="how-it-works.html" data-nav-link>How It Works</a>
+        <a href="faq.html" data-nav-link>FAQ</a>
+        <a href="security.html" data-nav-link>Security</a>
+        <a href="compliance.html" data-nav-link>Compliance &amp; Legal</a>
+      </nav>
 
-      <ul class="nav-links" id="nav-menu">
-        <li><a href="how-it-works.html">How It Works</a></li>
-        <li><a href="faq.html">FAQ</a></li>
-        <li><a href="compliance.html">Compliance &amp; Legal</a></li>
-        <li><a href="signin.html">Sign In</a></li>
-        <li><a href="signup.html" class="btn btn-nav">Join Now</a></li>
-      </ul>
-    </nav>
+      <div class="nav-actions">
+        <a class="btn btn-secondary" href="signin.html">Sign In</a>
+        <a class="btn btn-primary" href="signup.html">Join Now</a>
+        <button
+          class="menu-toggle"
+          id="menu-toggle"
+          type="button"
+          aria-label="Open menu"
+          aria-expanded="false"
+          aria-controls="mobile-menu"
+        >
+          <span></span>
+        </button>
+      </div>
+    </div>
+
+    <div class="container mobile-menu" id="mobile-menu">
+      <div class="mobile-menu-inner">
+        <nav aria-label="Mobile navigation">
+          <a href="index.html" data-nav-link>Home</a>
+          <a href="how-it-works.html" data-nav-link>How It Works</a>
+          <a href="faq.html" data-nav-link>FAQ</a>
+          <a href="security.html" data-nav-link>Security</a>
+          <a href="compliance.html" data-nav-link>Compliance &amp; Legal</a>
+          <a href="privacy.html" data-nav-link>Privacy Policy</a>
+          <a href="terms.html" data-nav-link>Terms of Service</a>
+          <a href="data-request.html" data-nav-link>Data Request</a>
+        </nav>
+
+        <div class="mobile-actions">
+          <a class="btn btn-secondary" href="signin.html">Sign In</a>
+          <a class="btn btn-primary" href="signup.html">Join Now</a>
+        </div>
+      </div>
+    </div>
   </header>
 
   <main>
+    <section class="page-hero">
+      <div class="container">
+        <span class="eyebrow">Platform overview</span>
+        <h1>How Tomb of Light works</h1>
+        <p>
+          Tomb of Light is being built as a secure family legacy platform where
+          portraits, stories, and lineage records can be preserved in protected
+          storage and later connected to blockchain-backed ownership without making
+          private family data public.
+        </p>
+      </div>
+    </section>
+
     <section class="section">
       <div class="container">
-        <h2>How It Works (High-Level)</h2>
-        <ul class="clean">
-          <li><strong>Your Portrait.</strong> The experience begins with a single portrait that represents the family owner.</li>
-          <li><strong>Zoom Navigation.</strong> Zooming provides a private, visual way to explore close relatives in your family tree.</li>
-          <li><strong>Owner Keys.</strong> The owner controls access. Optional sub-keys allow trusted family editors.</li>
-          <li><strong>Durable Storage.</strong> Images and metadata can be anchored to decentralized storage for persistence.</li>
-          <li><strong>NFT Anchor.</strong> A non-financial NFT anchors your private family page and access controls.</li>
-        </ul>
+        <div class="grid grid-3">
+          <article class="card">
+            <h3>1. Start with a family anchor</h3>
+            <p>
+              A family experience begins with a primary portrait, memorial point,
+              or lineage anchor. This becomes the starting point for organizing the
+              broader family legacy.
+            </p>
+          </article>
 
-        <p style="color:#cfcfcf;max-width:820px;margin:10px auto 0">
-          We purposely share only high-level information publicly. Details about interfaces and data models are provided to customers during onboarding.
+          <article class="card">
+            <h3>2. Build the protected vault</h3>
+            <p>
+              Stories, media, names, dates, and legacy records are intended to be
+              managed in controlled, protected systems rather than exposed in public
+              blockchain metadata.
+            </p>
+          </article>
+
+          <article class="card">
+            <h3>3. Enable future ownership</h3>
+            <p>
+              Once ownership features are activated, a family vault can be linked to
+              a blockchain record that represents ownership while sensitive family
+              material remains off-chain.
+            </p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="container content-wrap">
+        <article class="card">
+          <span class="eyebrow">The foundation</span>
+          <h2>Private family content stays separate from public ownership records.</h2>
+          <p>
+            Tomb of Light is not designed to publish a family’s private memories to
+            the blockchain. Instead, the platform direction is to keep personal
+            family data, stories, portraits, and records protected in controlled
+            storage while using blockchain only for limited ownership or reference
+            purposes where appropriate.
+          </p>
+          <ul class="check-list">
+            <li>Private family stories and records are intended to remain off-chain.</li>
+            <li>Ownership references should avoid exposing sensitive identifying details.</li>
+            <li>Permissions and consent matter before living family members are included.</li>
+          </ul>
+        </article>
+
+        <article class="card">
+          <span class="eyebrow">Experience flow</span>
+          <h2>The planned user journey</h2>
+          <div class="grid grid-3" style="margin-top: 18px;">
+            <div class="info-card">
+              <h3>Create</h3>
+              <p>
+                A user begins with a family profile, memorial concept, or legacy
+                vault setup tied to a portrait and basic lineage structure.
+              </p>
+            </div>
+            <div class="info-card">
+              <h3>Protect</h3>
+              <p>
+                Sensitive materials are organized into protected storage with access
+                controls, policy rules, and future governance options.
+              </p>
+            </div>
+            <div class="info-card">
+              <h3>Anchor</h3>
+              <p>
+                A future NFT layer may represent vault ownership or reference status
+                without revealing private family information on a public chain.
+              </p>
+            </div>
+          </div>
+        </article>
+
+        <article class="card">
+          <span class="eyebrow">What makes this different</span>
+          <h2>A family legacy system, not a public social feed.</h2>
+          <p>
+            Tomb of Light is being shaped around long-term family continuity,
+            controlled sharing, and secure digital preservation. The goal is not to
+            create another public posting platform. The goal is to create a secure
+            environment where family meaning can be preserved with dignity.
+          </p>
+          <ul class="feature-list">
+            <li>Designed for multi-generational legacy</li>
+            <li>Built around privacy and consent expectations</li>
+            <li>Structured for future premium and immersive experiences</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="container">
+        <span class="eyebrow">Consent and responsibility</span>
+        <h2 class="section-title">Family participation must be handled carefully.</h2>
+        <p class="section-subtitle">
+          Tomb of Light’s public-facing policies are designed to make clear that
+          living individuals should not be added casually, minors require parent or
+          guardian permission, and inaccurate or disputed data must have a correction path.
         </p>
+
+        <div class="grid grid-2" style="margin-top: 28px;">
+          <article class="card">
+            <h3>Living family members</h3>
+            <p>
+              Family entries involving living individuals should be based on lawful,
+              respectful participation and proper authorization where required.
+            </p>
+            <ul class="policy-list">
+              <li>Consent-sensitive onboarding</li>
+              <li>Correction and removal pathways</li>
+              <li>Identity-aware family handling</li>
+            </ul>
+          </article>
+
+          <article class="card">
+            <h3>Minors and sensitive family data</h3>
+            <p>
+              If minors are ever included in a family experience, verified parent or
+              guardian permission should be required. Sensitive family material should
+              receive heightened protection.
+            </p>
+            <ul class="policy-list">
+              <li>Parental or guardian authorization expectations</li>
+              <li>Private-by-default treatment</li>
+              <li>Limited public exposure design</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section-sm">
+      <div class="container">
+        <div class="cta-banner">
+          <h3>Review the trust pages behind the platform.</h3>
+          <p>
+            Learn more about how Tomb of Light approaches privacy, security,
+            compliance, and user rights as the platform evolves.
+          </p>
+          <div class="cta-actions">
+            <a class="btn btn-primary" href="security.html">Security</a>
+            <a class="btn btn-secondary" href="privacy.html">Privacy Policy</a>
+            <a class="btn btn-secondary" href="faq.html">FAQ</a>
+          </div>
+        </div>
       </div>
     </section>
   </main>
 
-  <footer>
-    <div class="footer-container">
-      <div class="footer-links">
-        <a href="privacy.html">Privacy Policy</a> |
-        <a href="terms.html">Terms of Service</a> |
-        <a href="accessibility.html">Accessibility</a> |
-        <a href="cookie-policy.html">Cookie Policy</a> |
-        <a href="privacy-choices.html">Your Privacy Choices</a>
+  <footer class="site-footer">
+    <div class="container footer-container">
+      <div class="footer-top">
+        <div class="footer-copy">
+          <a class="brand" href="index.html" aria-label="Tomb of Light home">
+            <div class="brand-mark">TL</div>
+            <div class="brand-text">
+              <strong>Tomb of Light</strong>
+              <span>Secure digital family legacy infrastructure</span>
+            </div>
+          </a>
+          <p>
+            Tomb of Light is building a privacy-first platform for preserving family
+            history, protecting sensitive legacy records, and enabling future ownership
+            systems without exposing personal family data on public blockchains.
+          </p>
+        </div>
+
+        <div class="footer-links">
+          <div>
+            <h4>Platform</h4>
+            <a href="how-it-works.html">How It Works</a>
+            <a href="faq.html">FAQ</a>
+            <a href="security.html">Security</a>
+            <a href="compliance.html">Compliance &amp; Legal</a>
+          </div>
+          <div>
+            <h4>Policies</h4>
+            <a href="privacy.html">Privacy Policy</a>
+            <a href="terms.html">Terms of Service</a>
+            <a href="cookie-policy.html">Cookie Policy</a>
+            <a href="data-request.html">Data Request</a>
+            <a href="privacy-choices.html">Your Privacy Choices</a>
+            <a href="privacy-state-notices.html">State Privacy Notices</a>
+            <a href="accessibility.html">Accessibility</a>
+          </div>
+        </div>
       </div>
 
-      <div class="footer-info">
-        <p>&copy; 2025 Tomb of Light LLC. All rights reserved.</p>
-        <p>Contact: <a href="mailto:admin@tomboflight.com">admin@tomboflight.com</a></p>
+      <div class="footer-bottom">
+        <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
+        <span data-cookie-status>Your cookie preference has not been set yet.</span>
       </div>
     </div>
   </footer>
+
+  <div class="cookie-banner" id="cookie-banner" hidden>
+    <div class="cookie-inner">
+      <p>
+        We use essential site technologies and may use optional analytics tools only
+        where permitted. You can accept or decline optional analytics cookies and
+        review your choices at any time.
+      </p>
+      <div class="cookie-actions">
+        <button class="btn btn-primary" id="accept-cookies" type="button">Accept</button>
+        <button class="btn btn-secondary" id="decline-cookies" type="button">Decline</button>
+        <a class="btn btn-ghost" href="privacy-choices.html">Privacy Choices</a>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
 </body>
 </html>
