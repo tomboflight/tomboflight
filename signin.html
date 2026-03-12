@@ -6,179 +6,150 @@
   <title>Sign In | Tomb of Light</title>
   <meta
     name="description"
-    content="Sign in to Tomb of Light to access your account, manage your legacy profile, and review protected platform features."
+    content="Sign in to Tomb of Light if you already have approved access."
   />
-  <link rel="canonical" href="https://tomboflight.com/signin.html" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header class="site-header">
-    <div class="container nav-wrap">
-      <a href="index.html" class="logo" aria-label="Tomb of Light home">
-        <span class="logo-mark">TL</span>
-        <span class="logo-text">
-          <strong>Tomb of Light</strong>
-          <small>Secure digital family legacy infrastructure</small>
-        </span>
-      </a>
+  <div class="page-wrap">
+    <header class="site-header">
+      <div class="container site-header-inner">
+        <a class="brand" href="index.html" aria-label="Tomb of Light home">
+          <span>Tomb of Light<span class="brand-symbol">™</span></span>
+        </a>
 
-      <nav class="main-nav" aria-label="Main navigation">
-        <a href="index.html">Home</a>
-        <a href="how-it-works.html">How It Works</a>
-        <a href="faq.html">FAQ</a>
-        <a href="security.html">Security</a>
-        <a href="compliance.html">Compliance</a>
-        <a href="privacy.html">Privacy Policy</a>
-        <a href="terms.html">Terms of Service</a>
-        <a href="data-request.html">Data Request</a>
-      </nav>
+        <button class="menu-toggle" type="button" aria-label="Toggle navigation">
+          Menu
+        </button>
 
-      <div class="nav-actions">
-        <a href="signin.html" class="btn btn-secondary" aria-current="page">Sign In</a>
-        <a href="signup.html" class="btn btn-primary">Join Now</a>
+        <nav class="site-nav" aria-label="Primary navigation">
+          <a href="how-it-works.html">How It Works</a>
+          <a href="security.html">Security</a>
+          <a href="compliance.html">Compliance</a>
+          <a href="faq.html">FAQ</a>
+        </nav>
+
+        <div class="header-actions">
+          <a class="btn btn-primary" href="signup.html">Request Access</a>
+        </div>
       </div>
-    </div>
-  </header>
+    </header>
 
-  <main>
-    <section class="auth-page">
-      <div class="container auth-container">
-        <div class="auth-card">
-          <p class="section-kicker">Account Access</p>
-          <h1>Sign In</h1>
-          <p class="auth-intro">
-            Access your Tomb of Light account to review protected features, submitted records,
-            and future legacy platform tools as they become available.
-          </p>
-
-          <form class="auth-form" action="#" method="post">
-            <div class="form-group">
-              <label for="email">Email Address</label>
-              <input
-                type="email"
-                id="email"
-                name="email"
-                autocomplete="email"
-                placeholder="you@example.com"
-                required
-              />
-            </div>
-
-            <div class="form-group">
-              <label for="password">Password</label>
-              <input
-                type="password"
-                id="password"
-                name="password"
-                autocomplete="current-password"
-                placeholder="Enter your password"
-                required
-              />
-            </div>
-
-            <div class="form-row form-row-between">
-              <label class="checkbox-inline">
-                <input type="checkbox" name="remember" />
-                <span>Remember me</span>
-              </label>
-
-              <a href="data-request.html" class="text-link">Need account help?</a>
-            </div>
-
-            <button type="submit" class="btn btn-primary btn-full">Sign In</button>
-          </form>
-
-          <div class="security-note">
+    <main>
+      <section class="page-hero">
+        <div class="container">
+          <div class="page-hero-panel">
+            <span class="eyebrow">Approved Access</span>
+            <h1>Sign In</h1>
             <p>
-              🔒 Your information is protected using encrypted connections and secure account access practices.
-            </p>
-            <p>
-              Use a strong password and do not share your login details with anyone.
-            </p>
-            <p>
-              Need help accessing your account?
-              <a href="mailto:support@tomboflight.com">Contact support</a>.
-            </p>
-          </div>
-
-          <div class="auth-links">
-            <p>
-              Don’t have an account yet?
-              <a href="signup.html">Create one here</a>.
-            </p>
-            <p>
-              By signing in, you agree to our
-              <a href="terms.html">Terms of Service</a>
-              and acknowledge our
-              <a href="privacy.html">Privacy Policy</a>.
+              This sign-in page is intended for users who already have approved
+              or provisioned access to Tomb of Light systems.
             </p>
           </div>
         </div>
-      </div>
-    </section>
-  </main>
+      </section>
 
-  <footer class="site-footer">
-    <div class="container footer-grid">
-      <div class="footer-brand">
-        <a href="index.html" class="logo footer-logo" aria-label="Tomb of Light home">
-          <span class="logo-mark">TL</span>
-          <span class="logo-text">
-            <strong>Tomb of Light</strong>
-            <small>Secure digital family legacy infrastructure</small>
-          </span>
-        </a>
-        <p>
-          Tomb of Light is building a privacy-first platform for preserving family history,
-          protecting sensitive legacy records, and enabling future ownership systems without
-          exposing personal family data on public blockchains.
-        </p>
-      </div>
+      <section class="page-sections">
+        <div class="container form-shell">
+          <div class="form-panel">
+            <form class="form-grid" action="#" method="post">
+              <label>
+                Email Address
+                <input type="email" name="email" placeholder="you@example.com" />
+              </label>
 
-      <div>
-        <h3>Platform</h3>
-        <ul>
-          <li><a href="how-it-works.html">How It Works</a></li>
-          <li><a href="faq.html">FAQ</a></li>
-          <li><a href="security.html">Security</a></li>
-          <li><a href="compliance.html">Compliance</a></li>
-        </ul>
-      </div>
+              <label>
+                Password
+                <input type="password" name="password" placeholder="Enter your password" />
+              </label>
 
-      <div>
-        <h3>Policies</h3>
-        <ul>
-          <li><a href="privacy.html">Privacy Policy</a></li>
-          <li><a href="terms.html">Terms of Service</a></li>
-          <li><a href="cookie-policy.html">Cookie Policy</a></li>
-          <li><a href="data-request.html">Data Request</a></li>
-          <li><a href="privacy-choices.html">Your Privacy Choices</a></li>
-          <li><a href="privacy-state-notices.html">State Privacy Notices</a></li>
-          <li><a href="accessibility.html">Accessibility</a></li>
-        </ul>
-      </div>
+              <div class="inline-actions">
+                <button class="btn btn-primary" type="submit">Sign In</button>
+                <a class="btn btn-secondary" href="signup.html">Request Access</a>
+              </div>
+            </form>
 
-      <div>
-        <h3>Contact</h3>
-        <p>
-          Tomb of Light LLC<br />
-          3007 Woodland Hills Dr<br />
-          PMB 176<br />
-          Kingwood, TX 77339<br />
-          United States
-        </p>
-        <p>
-          <a href="mailto:support@tomboflight.com">support@tomboflight.com</a>
-        </p>
+            <div class="small-link-row">
+              <a href="privacy.html">Privacy Policy</a>
+              <a href="security.html">Security</a>
+              <a href="terms.html">Terms</a>
+            </div>
+          </div>
+
+          <div class="form-panel">
+            <span class="eyebrow">Need Access?</span>
+            <h2>Request entry to the platform.</h2>
+            <p class="card-copy">
+              If you do not already have approved access, use the Request Access
+              flow rather than treating this site as an unrestricted public
+              sign-up system.
+            </p>
+
+            <div class="notice">
+              Tomb of Light is positioned for a controlled rollout. Public-facing
+              messaging should align with access readiness and onboarding review.
+            </div>
+
+            <div class="inline-actions">
+              <a class="btn btn-primary" href="signup.html">Request Access</a>
+              <a class="btn btn-secondary" href="faq.html">Read FAQ</a>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="container">
+        <div class="footer-card">
+          <div class="footer-top">
+            <div>
+              <div class="footer-brand">Tomb of Light<span class="brand-symbol">™</span></div>
+              <p class="footer-copy">
+                A private, cinematic platform for preserving and exploring family
+                lineage across generations.
+              </p>
+              <div class="cookie-status" data-cookie-status>
+                Your cookie preference has not been set yet.
+              </div>
+            </div>
+
+            <div class="footer-links">
+              <a href="privacy.html">Privacy Policy</a>
+              <a href="terms.html">Terms</a>
+              <a href="cookie-policy.html">Cookie Policy</a>
+              <a href="accessibility.html">Accessibility</a>
+              <a href="data-request.html">Data Requests</a>
+              <a href="privacy-state-notices.html">State Privacy Notices</a>
+              <a href="privacy-choices.html">Privacy Choices</a>
+              <a href="compliance.html">Compliance &amp; Legal</a>
+            </div>
+          </div>
+
+          <div class="footer-bottom">
+            <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
+            <span>Tomb of Light technology and platform design are proprietary.</span>
+          </div>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <div class="cookie-banner" data-cookie-banner>
+    <div class="cookie-inner">
+      <div class="cookie-copy">
+        We use essential site technologies and may use optional analytics tools
+        only where permitted. You can accept or decline optional analytics
+        cookies and review your choices at any time.
+      </div>
+      <div class="cookie-actions">
+        <button class="btn btn-primary" type="button" data-cookie-accept>Accept</button>
+        <button class="btn btn-secondary" type="button" data-cookie-decline>Decline</button>
+        <a class="btn btn-ghost" href="privacy-choices.html">Privacy Choices</a>
       </div>
     </div>
-
-    <div class="container footer-bottom">
-      <p>© 2026 Tomb of Light LLC. All rights reserved.</p>
-    </div>
-  </footer>
+  </div>
 
   <script src="app.js"></script>
 </body>
 </html>
-
