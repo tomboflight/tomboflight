@@ -1,53 +1,103 @@
-document.addEventListener("DOMContentLoaded", () => {
-  const banner = document.getElementById("cookie-banner");
-  const acceptBtn = document.getElementById("cookie-accept");
-  const declineBtn = document.getElementById("cookie-decline");
+(function () {
+  const header = document.querySelector(".site-header");
+  const menuToggle = document.querySelector(".menu-toggle");
+  const banner = document.querySelector("[data-cookie-banner]");
+  const acceptBtns = document.querySelectorAll("[data-cookie-accept]");
+  const declineBtns = document.querySelectorAll("[data-cookie-decline]");
+  const statusEls = document.querySelectorAll("[data-cookie-status]");
+  const storageKey = "tol_cookie_choice";
 
-  if (!banner || !acceptBtn || !declineBtn) {
-    console.warn("Cookie banner elements not found.");
-    return;
-  }
+  function setStatusText(value) {
+    let message = "Your cookie preference has not been set yet.";
 
-  const COOKIE_KEY = "tol_cookie_choice";
-
-  function hideBanner() {
-    banner.classList.remove("show");
-    banner.setAttribute("aria-hidden", "true");
-  }
-
-  function showBanner() {
-    banner.classList.add("show");
-    banner.setAttribute("aria-hidden", "false");
-  }
-
-  function saveChoice(choice) {
-    try {
-      localStorage.setItem(COOKIE_KEY, choice);
-    } catch (error) {
-      console.error("Could not save cookie choice:", error);
+    if (value === "accepted") {
+      message = "Optional analytics cookies are currently accepted on this device.";
+    } else if (value === "declined") {
+      message = "Optional analytics cookies are currently declined on this device.";
     }
-    hideBanner();
+
+    statusEls.forEach((el) => {
+      el.textContent = message;
+    });
   }
 
-  let existingChoice = null;
-
-  try {
-    existingChoice = localStorage.getItem(COOKIE_KEY);
-  } catch (error) {
-    console.error("Could not read cookie choice:", error);
+  function getChoice() {
+    try {
+      return localStorage.getItem(storageKey);
+    } catch (error) {
+      return null;
+    }
   }
 
-  if (!existingChoice) {
-    showBanner();
-  } else {
-    hideBanner();
+  function saveChoice(value) {
+    try {
+      localStorage.setItem(storageKey, value);
+    } catch (error) {
+      /* no-op */
+    }
+    setStatusText(value);
+    if (banner) {
+      banner.classList.remove("visible");
+    }
   }
 
-  acceptBtn.addEventListener("click", () => {
-    saveChoice("accepted");
+  function closeMenu() {
+    if (header) {
+      header.classList.remove("open");
+    }
+    document.body.classList.remove("menu-open");
+  }
+
+  function toggleMenu() {
+    if (!header) return;
+    const isOpen = header.classList.toggle("open");
+    document.body.classList.toggle("menu-open", isOpen);
+  }
+
+  if (menuToggle) {
+    menuToggle.addEventListener("click", toggleMenu);
+  }
+
+  document.querySelectorAll(".site-nav a, .header-actions a").forEach((link) => {
+    link.addEventListener("click", closeMenu);
   });
 
-  declineBtn.addEventListener("click", () => {
-    saveChoice("declined");
+  const path = window.location.pathname;
+  const currentPath = path.split("/").pop() || "index.html";
+
+  document.querySelectorAll(".site-nav a").forEach((link) => {
+    const href = link.getAttribute("href");
+    if (
+      href === currentPath ||
+      (currentPath === "" && href === "index.html") ||
+      (path === "/" && href === "index.html")
+    ) {
+      link.classList.add("active");
+    }
   });
-});
+
+  const choice = getChoice();
+  setStatusText(choice);
+
+  if (!choice && banner) {
+    banner.classList.add("visible");
+  }
+
+  acceptBtns.forEach((btn) => {
+    btn.addEventListener("click", function () {
+      saveChoice("accepted");
+    });
+  });
+
+  declineBtns.forEach((btn) => {
+    btn.addEventListener("click", function () {
+      saveChoice("declined");
+    });
+  });
+
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape") {
+      closeMenu();
+    }
+  });
+})();
