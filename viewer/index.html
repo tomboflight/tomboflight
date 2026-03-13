@@ -2,10 +2,15 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Family Tree: Tomb of Light</title>
     <link rel="stylesheet" href="css/style.css" />
   </head>
   <body>
+    <div class="header-bar">
+      <a href="/" class="back-button">← Back to Home</a>
+      <h1 class="viewer-title">Family Tree Prototype</h1>
+    </div>
     <div class="slideshow" id="slideshow">
       <img id="slideImg" src="images/malik.jpg" alt="Malik" class="zoom-in" />
       <div id="branch-buttons" class="branch-options">
@@ -14,13 +19,11 @@
         <button id="btnSelah">Selah</button>
       </div>
     </div>
-
     <div class="controls">
-      <button onclick="prevSlide()">Prev</button>
-      <button onclick="togglePlay()" id="playPauseBtn">Pause</button>
-      <button onclick="nextSlide()">Next</button>
+      <button id="prevBtn">Prev</button>
+      <button id="playPauseBtn">Pause</button>
+      <button id="nextBtn">Next</button>
     </div>
-
     <script src="js/script.js"></script>
   </body>
 </html>
