@@ -52,12 +52,14 @@ body.menu-open {
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background-image: url('/images/logo-bg.png');
+
+  background-image: url('/images/tol-watermark.png');
   background-repeat: no-repeat;
-  background-position: center;
-  background-size: 900px;
+  background-position: center center;
+  background-size: min(58vw, 760px);
+
   opacity: 0.06;
-  filter: contrast(120%) brightness(90%);
+  filter: contrast(115%) brightness(92%);
 }
 
 img {
