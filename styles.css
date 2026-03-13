@@ -50,16 +50,16 @@ body.menu-open {
 .site-watermark {
   position: fixed;
   inset: 0;
-  z-index: 0;
+  z-index: -1;
   pointer-events: none;
 
-  background-image: url('/images/tol-watermark-clean.png');
+  background-image: url("/images/tol-watermark-clean.png");
   background-repeat: no-repeat;
-  background-position: center;
-  background-size: min(55vw, 700px);
+  background-position: center center;
+  background-size: 700px;
 
-  opacity: 0.18;
-  filter: brightness(1.1) contrast(1.05);
+  opacity: 0.15;
+  filter: brightness(1.15) contrast(1.05);
 }
 
 img {
