@@ -89,7 +89,7 @@ body.menu-open {
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background-image: url("/images/tol-watermark-clean.png");
+  background-image: url("images/tol-watermark-clean.png");
   background-repeat: no-repeat;
   background-position: center center;
   background-size: 700px;
