@@ -59,6 +59,7 @@ body.menu-open {
   background-size: 700px;
 
   opacity: 0.15;
+  mix-blend-mode: screen;
   filter: brightness(1.15) contrast(1.05);
 }
 
