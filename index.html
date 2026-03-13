@@ -19,20 +19,28 @@
 </head>
 <body>
 
-<div class="site-watermark"></div>
+<!-- Skip to content link for keyboard accessibility -->
+<a href="#main-content" class="skip-to-content">Skip to main content</a>
+
+<div class="site-watermark" aria-hidden="true"></div>
 
 <div class="page-wrap">
-    <header class="site-header">
+    <header class="site-header" role="banner">
       <div class="container site-header-inner">
         <a class="brand" href="index.html" aria-label="Tomb of Light home">
           <span>Tomb of Light<span class="brand-symbol">™</span></span>
         </a>
 
-        <button class="menu-toggle" type="button" aria-label="Toggle navigation">
+        <button 
+          class="menu-toggle" 
+          type="button" 
+          aria-label="Toggle navigation menu"
+          aria-expanded="false"
+          aria-controls="site-nav">
           Menu
         </button>
 
-        <nav class="site-nav" aria-label="Primary navigation">
+        <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
           <a href="how-it-works.html">How It Works</a>
           <a href="security.html">Security</a>
           <a href="compliance.html">Compliance</a>
@@ -45,12 +53,12 @@
       </div>
     </header>
 
-    <main>
-      <section class="hero hero-premium hero-tech-fixed">
+    <main id="main-content" role="main">
+      <section class="hero hero-premium hero-tech-fixed" aria-labelledby="hero-title">
         <div class="container hero-shell hero-shell-tech">
           <div class="hero-copy hero-copy-premium hero-copy-tech">
             <span class="eyebrow">Digital Legacy Infrastructure</span>
-            <h1>Your Family Tree.<br><span class="hero-gold">Alive. Navigable. Forever.</span></h1>
+            <h1 id="hero-title">Your Family Tree.<br><span class="hero-gold">Alive. Navigable. Forever.</span></h1>
 
             <p class="hero-lead">
               Tomb of Light transforms family history into a cinematic digital experience —
@@ -63,7 +71,7 @@
               <a class="btn btn-secondary" href="#pricing">Explore Packages</a>
             </div>
 
-            <div class="hero-meta">
+            <div class="hero-meta" aria-label="Platform features">
               <span class="meta-pill">Cinematic</span>
               <span class="meta-pill">Interactive</span>
               <span class="meta-pill">Navigable</span>
@@ -85,7 +93,7 @@
               <div class="hero-demo-embed">
                 <iframe
                   src="/viewer/"
-                  title="Tomb of Light Prototype Viewer"
+                  title="Tomb of Light Prototype Viewer - Interactive family lineage experience"
                   loading="lazy"
                   allowfullscreen>
                 </iframe>
@@ -101,13 +109,13 @@
                   and continue through descendants, branches, and future generations.
                 </p>
 
-                <div class="lineage-track">
+                <div class="lineage-track" aria-label="Platform progression steps">
                   <div class="lineage-node">01 Anchor Portrait</div>
-                  <div class="lineage-line"></div>
+                  <div class="lineage-line" aria-hidden="true"></div>
                   <div class="lineage-node">02 Parent Structure</div>
-                  <div class="lineage-line"></div>
+                  <div class="lineage-line" aria-hidden="true"></div>
                   <div class="lineage-node">03 Descendant Branches</div>
-                  <div class="lineage-line"></div>
+                  <div class="lineage-line" aria-hidden="true"></div>
                   <div class="lineage-node">04 Future Legacy Layers</div>
                 </div>
               </div>
@@ -117,7 +125,7 @@
 
                 <div class="mini-stack">
                   <div class="mini-stack-item">
-                    <span class="stack-num">01</span>
+                    <span class="stack-num" aria-hidden="true">01</span>
                     <div>
                       <h3>Lineage Engine</h3>
                       <p>Structures names, relationships, generations, and family branches.</p>
@@ -125,7 +133,7 @@
                   </div>
 
                   <div class="mini-stack-item">
-                    <span class="stack-num">02</span>
+                    <span class="stack-num" aria-hidden="true">02</span>
                     <div>
                       <h3>Legacy Vault</h3>
                       <p>Supports protected handling of photos, stories, records, and memory assets.</p>
@@ -133,7 +141,7 @@
                   </div>
 
                   <div class="mini-stack-item">
-                    <span class="stack-num">03</span>
+                    <span class="stack-num" aria-hidden="true">03</span>
                     <div>
                       <h3>Ownership Layer</h3>
                       <p>Supports controlled participation, future access logic, and long-term continuity.</p>
@@ -146,11 +154,11 @@
         </div>
       </section>
 
-      <section class="section section-tight">
+      <section class="section section-tight" aria-labelledby="section-platform">
         <div class="container">
           <div class="section-head section-head-wide">
             <span class="eyebrow">A New Category of Digital Heritage</span>
-            <h2>Built like a platform, not a static archive.</h2>
+            <h2 id="section-platform">Built like a platform, not a static archive.</h2>
             <p class="section-lead">
               Tomb of Light is not just a family tree and not just a photo archive.
               It is a guided digital framework for organizing legacy, navigating lineage,
@@ -160,7 +168,7 @@
 
           <div class="feature-strip">
             <article class="feature-card feature-card-clean">
-              <div class="card-number">01</div>
+              <div class="card-number" aria-hidden="true">01</div>
               <h3>Build Your Lineage</h3>
               <p class="card-copy">
                 Organize portraits, names, relationships, and generations into a structured family system.
@@ -168,7 +176,7 @@
             </article>
 
             <article class="feature-card feature-card-clean">
-              <div class="card-number">02</div>
+              <div class="card-number" aria-hidden="true">02</div>
               <h3>Create the Experience</h3>
               <p class="card-copy">
                 Turn family history into a more visual, guided, and zoomable journey across branches and generations.
@@ -176,7 +184,7 @@
             </article>
 
             <article class="feature-card feature-card-clean">
-              <div class="card-number">03</div>
+              <div class="card-number" aria-hidden="true">03</div>
               <h3>Protect the Legacy</h3>
               <p class="card-copy">
                 Support continuity, privacy, and stewardship through a trust-first digital environment.
@@ -186,12 +194,12 @@
         </div>
       </section>
 
-      <section class="section architecture-section">
+      <section class="section architecture-section" aria-labelledby="section-architecture">
         <div class="container">
           <div class="architecture-panel">
             <div class="section-head">
               <span class="eyebrow">System Architecture</span>
-              <h2>A clearer way to understand the platform.</h2>
+              <h2 id="section-architecture">A clearer way to understand the platform.</h2>
               <p class="section-lead">
                 Tomb of Light works in layers. Each layer helps the customer understand
                 how the system moves from identity to structure to preservation.
@@ -201,13 +209,13 @@
             <div class="architecture-grid">
               <div class="architecture-column">
                 <div class="arch-box">
-                  <span class="flow-label">01</span>
+                  <span class="flow-label" aria-hidden="true">01</span>
                   <h3>Identity Layer</h3>
                   <p>Establishes the central person, portrait, and family entry point.</p>
                 </div>
-                <div class="arch-arrow">↓</div>
+                <div class="arch-arrow" aria-hidden="true">↓</div>
                 <div class="arch-box">
-                  <span class="flow-label">02</span>
+                  <span class="flow-label" aria-hidden="true">02</span>
                   <h3>Lineage Layer</h3>
                   <p>Connects parents, children, siblings, descendants, and future branches.</p>
                 </div>
@@ -215,13 +223,13 @@
 
               <div class="architecture-column">
                 <div class="arch-box">
-                  <span class="flow-label">03</span>
+                  <span class="flow-label" aria-hidden="true">03</span>
                   <h3>Vault Layer</h3>
                   <p>Supports storage for family photos, documents, stories, narration, and records.</p>
                 </div>
-                <div class="arch-arrow">↓</div>
+                <div class="arch-arrow" aria-hidden="true">↓</div>
                 <div class="arch-box">
-                  <span class="flow-label">04</span>
+                  <span class="flow-label" aria-hidden="true">04</span>
                   <h3>Stewardship Layer</h3>
                   <p>Supports controlled access, guided continuity, and long-term family preservation.</p>
                 </div>
@@ -231,13 +239,13 @@
         </div>
       </section>
 
-      <section class="section">
+      <section class="section" aria-labelledby="section-prototype">
         <div class="container">
           <div class="viewer-panel viewer-panel-premium">
             <div class="viewer-panel-top">
               <div>
                 <span class="eyebrow">Prototype Experience</span>
-                <h2>See how the platform is meant to feel.</h2>
+                <h2 id="section-prototype">See how the platform is meant to feel.</h2>
               </div>
 
               <div class="inline-actions">
@@ -269,12 +277,12 @@
         </div>
       </section>
 
-      <section class="section">
+      <section class="section" aria-labelledby="section-understanding">
         <div class="container">
           <div class="architecture-panel">
             <div class="section-head">
               <span class="eyebrow">How Customers Understand It</span>
-              <h2>A simpler breakdown for the reader.</h2>
+              <h2 id="section-understanding">A simpler breakdown for the reader.</h2>
               <p class="section-lead">
                 When someone lands on Tomb of Light, they should immediately understand what the platform does,
                 how it works, and why it matters.
@@ -284,12 +292,12 @@
             <div class="architecture-grid">
               <div class="architecture-column">
                 <div class="arch-box">
-                  <span class="flow-label">01 What It Is</span>
+                  <span class="flow-label" aria-hidden="true">01 What It Is</span>
                   <h3>A digital legacy platform</h3>
                   <p>Tomb of Light helps families organize and preserve lineage in a more structured digital form.</p>
                 </div>
                 <div class="arch-box">
-                  <span class="flow-label">02 What It Does</span>
+                  <span class="flow-label" aria-hidden="true">02 What It Does</span>
                   <h3>Turns memory into structure</h3>
                   <p>It transforms names, portraits, stories, and family connections into a guided legacy experience.</p>
                 </div>
@@ -297,12 +305,12 @@
 
               <div class="architecture-column">
                 <div class="arch-box">
-                  <span class="flow-label">03 Why It Matters</span>
+                  <span class="flow-label" aria-hidden="true">03 Why It Matters</span>
                   <h3>Protects continuity</h3>
                   <p>It helps families preserve memory across generations instead of letting it stay scattered or lost.</p>
                 </div>
                 <div class="arch-box">
-                  <span class="flow-label">04 What Comes Next</span>
+                  <span class="flow-label" aria-hidden="true">04 What Comes Next</span>
                   <h3>Grows with the family</h3>
                   <p>One family record can expand into future branches, descendants, and deeper legacy layers over time.</p>
                 </div>
@@ -312,11 +320,11 @@
         </div>
       </section>
 
-      <section class="section" id="pricing">
+      <section class="section" id="pricing" aria-labelledby="pricing-title">
         <div class="container">
           <div class="section-head section-head-wide">
             <span class="eyebrow">Pricing &amp; Packages</span>
-            <h2>Choose the legacy experience that fits your family.</h2>
+            <h2 id="pricing-title">Choose the legacy experience that fits your family.</h2>
             <p class="section-lead">
               Every Tomb of Light package includes one year of platform maintenance,
               secure delivery, and a guided digital legacy experience. Larger family
@@ -326,58 +334,58 @@
 
           <div class="feature-strip">
             <article class="feature-card feature-card-clean">
-              <div class="card-number">01</div>
+              <div class="card-number" aria-hidden="true">01</div>
               <span class="eyebrow">Entry Legacy</span>
               <h3>Digital Legacy Portrait</h3>
               <p class="card-copy">
                 Designed for individuals who want a preserved digital portrait and
                 legacy archive without a full family tree.
               </p>
-              <div class="hero-meta">
+              <div class="hero-meta" aria-label="Package details">
                 <span class="meta-pill">$399</span>
                 <span class="meta-pill">3–5 business days</span>
               </div>
               <div class="inline-actions">
-                <a class="btn btn-primary" href="https://buy.stripe.com/28EeVdeMK4g74mW3d3bEA01" target="_blank" rel="noopener noreferrer">
+                <a class="btn btn-primary" href="https://buy.stripe.com/28EeVdeMK4g74mW3d3bEA01" target="_blank" rel="noopener noreferrer" aria-label="Begin Legacy - opens payment page in new window">
                   Begin Legacy
                 </a>
               </div>
             </article>
 
             <article class="feature-card feature-card-clean">
-              <div class="card-number">02</div>
+              <div class="card-number" aria-hidden="true">02</div>
               <span class="eyebrow">Family Foundation</span>
               <h3>Starter Family Tree</h3>
               <p class="card-copy">
                 Designed for small families creating their first interactive digital
                 lineage record.
               </p>
-              <div class="hero-meta">
+              <div class="hero-meta" aria-label="Package details">
                 <span class="meta-pill">$799</span>
                 <span class="meta-pill">5–7 business days</span>
               </div>
               <div class="inline-actions">
-                <a class="btn btn-primary" href="https://buy.stripe.com/5kQdR99sq3c32eOdRHbEA02" target="_blank" rel="noopener noreferrer">
+                <a class="btn btn-primary" href="https://buy.stripe.com/5kQdR99sq3c32eOdRHbEA02" target="_blank" rel="noopener noreferrer" aria-label="Start My Tree - opens payment page in new window">
                   Start My Tree
                 </a>
               </div>
             </article>
 
             <article class="feature-card feature-card-clean">
-              <div class="card-number">03</div>
+              <div class="card-number" aria-hidden="true">03</div>
               <span class="eyebrow">Most Popular</span>
               <h3>Heirloom Legacy Tree</h3>
               <p class="card-copy">
                 Designed for families preserving multi-generation lineage with a
                 premium interactive experience.
               </p>
-              <div class="hero-meta">
+              <div class="hero-meta" aria-label="Package details">
                 <span class="meta-pill">$1,500</span>
                 <span class="meta-pill">Early Access $1,200</span>
                 <span class="meta-pill">10–15 business days</span>
               </div>
               <div class="inline-actions">
-                <a class="btn btn-primary" href="https://buy.stripe.com/7sY6oHbAybIzf1A6pfbEA00" target="_blank" rel="noopener noreferrer">
+                <a class="btn btn-primary" href="https://buy.stripe.com/7sY6oHbAybIzf1A6pfbEA00" target="_blank" rel="noopener noreferrer" aria-label="Build My Legacy - opens payment page in new window">
                   Build My Legacy
                 </a>
               </div>
@@ -386,34 +394,34 @@
 
           <div class="feature-strip pricing-row-two">
             <article class="feature-card feature-card-clean">
-              <div class="card-number">04</div>
+              <div class="card-number" aria-hidden="true">04</div>
               <span class="eyebrow">Expanded Archive</span>
               <h3>Legacy Plus Tree</h3>
               <p class="card-copy">
                 Designed for larger families and expanded digital heritage archives
                 with deeper narrative and zoom architecture.
               </p>
-              <div class="hero-meta">
+              <div class="hero-meta" aria-label="Package details">
                 <span class="meta-pill">$3,200</span>
                 <span class="meta-pill">Early Access $2,750</span>
                 <span class="meta-pill">15–25 business days</span>
               </div>
               <div class="inline-actions">
-                <a class="btn btn-primary" href="https://buy.stripe.com/9B6aEX7ki8wndXwaFvbEA03" target="_blank" rel="noopener noreferrer">
+                <a class="btn btn-primary" href="https://buy.stripe.com/9B6aEX7ki8wndXwaFvbEA03" target="_blank" rel="noopener noreferrer" aria-label="Create My Dynasty - opens payment page in new window">
                   Create My Dynasty
                 </a>
               </div>
             </article>
 
             <article class="feature-card feature-card-clean">
-              <div class="card-number">05</div>
+              <div class="card-number" aria-hidden="true">05</div>
               <span class="eyebrow">Private Engagement</span>
               <h3>Family Estate Concierge</h3>
               <p class="card-copy">
                 Estate-level heritage preservation for large archives, multiple
                 branches, and white-glove production support.
               </p>
-              <div class="hero-meta">
+              <div class="hero-meta" aria-label="Package details">
                 <span class="meta-pill">$6,500–$12,000</span>
                 <span class="meta-pill">4–8 weeks</span>
               </div>
@@ -427,11 +435,11 @@
         </div>
       </section>
 
-      <section class="section section-tight">
+      <section class="section section-tight" aria-labelledby="section-trust">
         <div class="container">
           <div class="section-head section-head-wide">
             <span class="eyebrow">Trust, Security, and Continuity</span>
-            <h2>Designed for serious stewardship.</h2>
+            <h2 id="section-trust">Designed for serious stewardship.</h2>
             <p class="section-lead">
               Tomb of Light is positioned around privacy, structured access,
               responsible platform thinking, and long-term care for family legacy.
@@ -470,11 +478,11 @@
         </div>
       </section>
 
-      <section class="section">
+      <section class="section" aria-labelledby="section-cta">
         <div class="container">
           <div class="cta-panel cta-panel-premium">
             <span class="eyebrow">Preserve What Time Should Never Erase</span>
-            <h2>Begin your family’s legacy journey.</h2>
+            <h2 id="section-cta">Begin your family's legacy journey.</h2>
             <p class="section-lead">
               Start with a digital portrait, build a multi-generation lineage
               experience, or request a private estate-level consultation for
@@ -490,7 +498,7 @@
       </section>
     </main>
 
-    <footer class="footer">
+    <footer class="footer" role="contentinfo">
       <div class="container">
         <div class="footer-card">
           <div class="footer-top">
@@ -526,7 +534,7 @@
     </footer>
   </div>
 
-  <div class="cookie-banner" data-cookie-banner>
+  <div class="cookie-banner" data-cookie-banner role="contentinfo" aria-label="Cookie preferences">
     <div class="cookie-inner">
       <div class="cookie-copy">
         We use essential site technologies and may use optional analytics tools
