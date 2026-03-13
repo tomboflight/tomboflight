@@ -8,7 +8,7 @@
   --border-soft: rgba(255, 255, 255, 0.06);
   --border-strong: rgba(214, 176, 102, 0.24);
   --text: #f4f7fb;
-  --muted: #b4becc;
+  --muted: #c8d1e0;
   --muted-2: #8d9aae;
   --gold: #d6b066;
   --white-btn: #f4f5f8;
@@ -68,6 +68,65 @@ img {
 a {
   color: inherit;
   text-decoration: none;
+}
+
+/* ================= SKIP LINK ================= */
+
+.skip-link {
+  position: absolute;
+  left: -999px;
+  top: auto;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  z-index: 9999;
+}
+
+.skip-link:focus {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: auto;
+  height: auto;
+  padding: 12px 20px;
+  background: var(--gold);
+  color: #000;
+  font-weight: 700;
+  border-radius: 0 0 8px 0;
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+/* ================= FOCUS INDICATORS ================= */
+
+:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
+}
+
+a:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
+}
+
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.feature-card:focus-within,
+.trust-card:focus-within {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
 }
 
 button,
@@ -775,11 +834,18 @@ select:focus {
   right: 20px;
   bottom: 20px;
   z-index: 1100;
-  display: none;
+  transform: translateY(calc(100% + 40px));
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform 400ms ease,
+    opacity 400ms ease;
 }
 
 .cookie-banner.visible {
-  display: block;
+  transform: translateY(0);
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .cookie-inner {
@@ -1026,5 +1092,25 @@ select:focus {
   .thank-you-actions .btn-secondary {
     width: 100%;
     justify-content: center;
+  }
+}
+
+/* ================= REDUCED MOTION ================= */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  html {
+    scroll-behavior: auto;
+  }
+
+  .cookie-banner {
+    transition: none;
   }
 }

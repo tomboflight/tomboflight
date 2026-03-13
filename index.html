@@ -19,20 +19,23 @@
 </head>
 <body>
 
-<div class="site-watermark"></div>
+<a class="skip-link" href="#main-content">Skip to main content</a>
+
+<div class="site-watermark" aria-hidden="true"></div>
 
 <div class="page-wrap">
-    <header class="site-header">
+    <header class="site-header" role="banner">
       <div class="container site-header-inner">
         <a class="brand" href="index.html" aria-label="Tomb of Light home">
-          <span>Tomb of Light<span class="brand-symbol">™</span></span>
+          <span>Tomb of Light<span class="brand-symbol" aria-hidden="true">™</span></span>
         </a>
 
-        <button class="menu-toggle" type="button" aria-label="Toggle navigation">
+        <button class="menu-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false" aria-controls="site-navigation">
           Menu
         </button>
 
-        <nav class="site-nav" aria-label="Primary navigation">
+        <nav id="site-navigation" class="site-nav" aria-label="Primary navigation">
+          <a href="index.html" aria-current="page">Home</a>
           <a href="how-it-works.html">How It Works</a>
           <a href="security.html">Security</a>
           <a href="compliance.html">Compliance</a>
@@ -45,12 +48,12 @@
       </div>
     </header>
 
-    <main>
-      <section class="hero hero-premium hero-tech-fixed">
+    <main id="main-content" role="main">
+      <section id="hero" class="hero hero-premium hero-tech-fixed" aria-labelledby="hero-heading">
         <div class="container hero-shell hero-shell-tech">
           <div class="hero-copy hero-copy-premium hero-copy-tech">
             <span class="eyebrow">Digital Legacy Infrastructure</span>
-            <h1>Your Family Tree.<br><span class="hero-gold">Alive. Navigable. Forever.</span></h1>
+            <h1 id="hero-heading">Your Family Tree.<br><span class="hero-gold">Alive. Navigable. Forever.</span></h1>
 
             <p class="hero-lead">
               Tomb of Light transforms family history into a cinematic digital experience —
@@ -85,7 +88,7 @@
               <div class="hero-demo-embed">
                 <iframe
                   src="/viewer/"
-                  title="Tomb of Light Prototype Viewer"
+                  title="Interactive prototype of the Tomb of Light family lineage viewer"
                   loading="lazy"
                   allowfullscreen>
                 </iframe>
@@ -103,11 +106,11 @@
 
                 <div class="lineage-track">
                   <div class="lineage-node">01 Anchor Portrait</div>
-                  <div class="lineage-line"></div>
+                  <div class="lineage-line" aria-hidden="true"></div>
                   <div class="lineage-node">02 Parent Structure</div>
-                  <div class="lineage-line"></div>
+                  <div class="lineage-line" aria-hidden="true"></div>
                   <div class="lineage-node">03 Descendant Branches</div>
-                  <div class="lineage-line"></div>
+                  <div class="lineage-line" aria-hidden="true"></div>
                   <div class="lineage-node">04 Future Legacy Layers</div>
                 </div>
               </div>
@@ -146,7 +149,7 @@
         </div>
       </section>
 
-      <section class="section section-tight">
+      <section id="features" class="section section-tight">
         <div class="container">
           <div class="section-head section-head-wide">
             <span class="eyebrow">A New Category of Digital Heritage</span>
@@ -186,7 +189,7 @@
         </div>
       </section>
 
-      <section class="section architecture-section">
+      <section id="architecture" class="section architecture-section">
         <div class="container">
           <div class="architecture-panel">
             <div class="section-head">
@@ -205,7 +208,7 @@
                   <h3>Identity Layer</h3>
                   <p>Establishes the central person, portrait, and family entry point.</p>
                 </div>
-                <div class="arch-arrow">↓</div>
+                <div class="arch-arrow" aria-hidden="true">↓</div>
                 <div class="arch-box">
                   <span class="flow-label">02</span>
                   <h3>Lineage Layer</h3>
@@ -219,7 +222,7 @@
                   <h3>Vault Layer</h3>
                   <p>Supports storage for family photos, documents, stories, narration, and records.</p>
                 </div>
-                <div class="arch-arrow">↓</div>
+                <div class="arch-arrow" aria-hidden="true">↓</div>
                 <div class="arch-box">
                   <span class="flow-label">04</span>
                   <h3>Stewardship Layer</h3>
@@ -231,7 +234,7 @@
         </div>
       </section>
 
-      <section class="section">
+      <section id="prototype" class="section">
         <div class="container">
           <div class="viewer-panel viewer-panel-premium">
             <div class="viewer-panel-top">
@@ -269,7 +272,7 @@
         </div>
       </section>
 
-      <section class="section">
+      <section id="overview" class="section">
         <div class="container">
           <div class="architecture-panel">
             <div class="section-head">
@@ -427,7 +430,7 @@
         </div>
       </section>
 
-      <section class="section section-tight">
+      <section id="trust" class="section section-tight">
         <div class="container">
           <div class="section-head section-head-wide">
             <span class="eyebrow">Trust, Security, and Continuity</span>
@@ -470,7 +473,7 @@
         </div>
       </section>
 
-      <section class="section">
+      <section id="cta" class="section">
         <div class="container">
           <div class="cta-panel cta-panel-premium">
             <span class="eyebrow">Preserve What Time Should Never Erase</span>
@@ -490,12 +493,12 @@
       </section>
     </main>
 
-    <footer class="footer">
+    <footer class="footer" role="contentinfo">
       <div class="container">
         <div class="footer-card">
           <div class="footer-top">
             <div>
-              <div class="footer-brand">Tomb of Light<span class="brand-symbol">™</span></div>
+              <div class="footer-brand">Tomb of Light<span class="brand-symbol" aria-hidden="true">™</span></div>
               <p class="footer-copy">
                 A private, cinematic platform for preserving and exploring family
                 lineage across generations.
@@ -526,14 +529,14 @@
     </footer>
   </div>
 
-  <div class="cookie-banner" data-cookie-banner>
+  <div class="cookie-banner" data-cookie-banner role="region" aria-label="Cookie preference">
     <div class="cookie-inner">
-      <div class="cookie-copy">
+      <div class="cookie-copy" id="cookie-desc">
         We use essential site technologies and may use optional analytics tools
         only where permitted. You can accept or decline optional analytics
         cookies and review your choices at any time.
       </div>
-      <div class="cookie-actions">
+      <div class="cookie-actions" aria-describedby="cookie-desc">
         <button class="btn btn-primary" type="button" data-cookie-accept>Accept</button>
         <button class="btn btn-secondary" type="button" data-cookie-decline>Decline</button>
         <a class="btn btn-ghost" href="privacy-choices.html">Privacy Choices</a>
