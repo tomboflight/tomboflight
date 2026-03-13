@@ -52,12 +52,12 @@ body.menu-open {
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background-image: url('/images/tol-watermark.png');
+  background-image: url('/images/logo-bg.png');
   background-repeat: no-repeat;
-  background-position: center 42%;
-  background-size: min(52vw, 620px);
-  opacity: 0.035;
-  filter: saturate(0.9);
+  background-position: center;
+  background-size: 900px;
+  opacity: 0.06;
+  filter: contrast(120%) brightness(90%);
 }
 
 img {
@@ -417,6 +417,10 @@ select {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 22px;
+}
+
+.pricing-row-two {
+  margin-top: 22px;
 }
 
 .feature-card,
