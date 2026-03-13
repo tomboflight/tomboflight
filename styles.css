@@ -58,7 +58,7 @@ body.menu-open {
   background-position: center center;
   background-size: min(58vw, 760px);
 
-  opacity: 0.06;
+  opacity: 0.08;
   filter: contrast(115%) brightness(92%);
 }
 
