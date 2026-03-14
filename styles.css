@@ -64,22 +64,28 @@ body.menu-open {
 
 .skip-to-content {
   position: absolute;
-  top: -40px;
-  left: 0;
+  left: -9999px;
+  top: auto;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+.skip-to-content:focus {
+  left: 16px;
+  top: 16px;
+  width: auto;
+  height: auto;
+  overflow: visible;
   background: var(--white-btn);
   color: var(--white-btn-text);
   padding: 12px 18px;
   z-index: 9999;
   font-weight: 700;
-  border-radius: 0 0 8px 0;
-  text-decoration: none;
-  transition: top var(--transition);
-}
-
-.skip-to-content:focus 
-  top: 0;
+  border-radius: 12px;
   outline: 2px solid var(--gold);
   outline-offset: 2px;
+  text-decoration: none;
 }
 
 /* ================= SITE WATERMARK ================= */
