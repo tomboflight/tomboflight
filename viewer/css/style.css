@@ -344,12 +344,6 @@ a {
   .viewer-stage-panel,
   .viewer-side-panel .side-card {
     border-radius: 24px;
-  }
-
-  .viewer-brand-wrap,
-  .viewer-header-copy,
-  .viewer-stage-panel,
-  .viewer-side-panel .side-card {
     padding: 22px;
   }
 
