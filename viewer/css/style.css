@@ -294,9 +294,27 @@ a {
   box-shadow: 0 10px 24px rgba(0,0,0,0.18);
 }
 
-.branch-options {
+.narration-text {
+  position: absolute;
+  bottom: 24px;
+  left: 24px;
+  right: 24px;
+  z-index: 6;
+  padding: 16px 20px;
+  border-radius: 16px;
+  background: rgba(3, 6, 13, 0.82);
+  border: 1px solid rgba(214, 176, 102, 0.18);
+  backdrop-filter: blur(8px);
+  color: var(--text);
+  font-size: 0.96rem;
+  line-height: 1.6;
+  text-align: center;
+  opacity: 0;
+  transition: opacity 0.6s ease;
+  pointer-events: none;
+}
 
-  display: none;
+.branch-options {
 
   position: absolute;
 
