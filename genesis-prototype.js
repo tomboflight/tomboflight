@@ -69,6 +69,7 @@ const STATES = {
 const INITIAL_STATE = "malik";
 const TRANSITION_DELAY = 260;
 const TRANSITION_BUFFER = 120;
+const SVG_NS = "http://www.w3.org/2000/svg";
 
 const imageWrapper = document.getElementById("imageWrapper");
 const image = document.getElementById("nftImage");
@@ -101,12 +102,68 @@ function preloadImage(src) {
   const promise = new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(src);
-    img.onerror = () => reject(new Error(`Failed to load image: ${src}`));
+    img.onerror = () => {
+      imageCache.delete(src);
+      reject(new Error(`Failed to load image: ${src}`));
+    };
     img.src = src;
   });
 
   imageCache.set(src, promise);
   return promise;
+}
+
+function createFallbackPortrait(state) {
+  const title = state?.title ?? "Portrait unavailable";
+  const subtitle = "Image unavailable in this build";
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("xmlns", SVG_NS);
+  svg.setAttribute("viewBox", "0 0 1200 1500");
+
+  const defs = document.createElementNS(SVG_NS, "defs");
+  const gradient = document.createElementNS(SVG_NS, "linearGradient");
+  gradient.setAttribute("id", "bg");
+  gradient.setAttribute("x1", "0%");
+  gradient.setAttribute("x2", "100%");
+  gradient.setAttribute("y1", "0%");
+  gradient.setAttribute("y2", "100%");
+
+  const stop1 = document.createElementNS(SVG_NS, "stop");
+  stop1.setAttribute("offset", "0%");
+  stop1.setAttribute("stop-color", "#10263d");
+  const stop2 = document.createElementNS(SVG_NS, "stop");
+  stop2.setAttribute("offset", "100%");
+  stop2.setAttribute("stop-color", "#050608");
+
+  gradient.append(stop1, stop2);
+  defs.appendChild(gradient);
+
+  const bg = document.createElementNS(SVG_NS, "rect");
+  bg.setAttribute("width", "1200");
+  bg.setAttribute("height", "1500");
+  bg.setAttribute("fill", "url(#bg)");
+
+  const titleText = document.createElementNS(SVG_NS, "text");
+  titleText.setAttribute("x", "600");
+  titleText.setAttribute("y", "680");
+  titleText.setAttribute("fill", "#f9fafc");
+  titleText.setAttribute("font-size", "64");
+  titleText.setAttribute("font-family", "Segoe UI, Tahoma, Geneva, Verdana, sans-serif");
+  titleText.setAttribute("font-weight", "700");
+  titleText.setAttribute("text-anchor", "middle");
+  titleText.textContent = title;
+
+  const subtitleText = document.createElementNS(SVG_NS, "text");
+  subtitleText.setAttribute("x", "600");
+  subtitleText.setAttribute("y", "770");
+  subtitleText.setAttribute("fill", "#71dfff");
+  subtitleText.setAttribute("font-size", "38");
+  subtitleText.setAttribute("font-family", "Segoe UI, Tahoma, Geneva, Verdana, sans-serif");
+  subtitleText.setAttribute("text-anchor", "middle");
+  subtitleText.textContent = subtitle;
+
+  svg.append(defs, bg, titleText, subtitleText);
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg.outerHTML)}`;
 }
 
 function showToast(message) {
@@ -218,22 +275,21 @@ async function transitionTo(stateId, reason = "navigate") {
   imageWrapper.classList.toggle("zooming-out", reason === "zoomOut");
   spinner.setAttribute("aria-hidden", "false");
 
+  let imageSource = state.image;
   try {
     await Promise.all([
       preloadImage(state.image),
       new Promise((resolve) => setTimeout(resolve, TRANSITION_DELAY)),
     ]);
   } catch (error) {
-    showToast(error.message);
-    spinner.setAttribute("aria-hidden", "true");
-    imageWrapper.classList.remove("is-transitioning", "zooming-in", "zooming-out");
-    transitioning = false;
-    return;
+    showToast(`${error.message}. Showing fallback artwork.`);
+    imageSource = createFallbackPortrait(state);
+    await new Promise((resolve) => setTimeout(resolve, TRANSITION_DELAY));
   }
 
   await new Promise((resolve) => setTimeout(resolve, TRANSITION_BUFFER));
 
-  image.src = state.image;
+  image.src = imageSource;
   imageWrapper.dataset.state = state.id;
   currentState = stateId;
   setImageAttributes(stateId);
@@ -321,6 +377,7 @@ function handleTouchStart(event) {
 
 function handleTouchMove(event) {
   if (transitioning || event.touches.length < 2 || initialPinchDistance === null) return;
+  event.preventDefault();
   const distance = getTouchDistance(event.touches);
   const delta = distance - initialPinchDistance;
 
@@ -335,6 +392,10 @@ function handleTouchMove(event) {
 }
 
 function handleTouchEnd(event) {
+  if (event.changedTouches.length !== 1) {
+    return;
+  }
+
   if (event.touches.length === 0) {
     initialPinchDistance = null;
   }
@@ -361,7 +422,7 @@ function initialise() {
   registerZoneHandlers();
   imageWrapper.addEventListener("wheel", handleWheel, { passive: false });
   imageWrapper.addEventListener("touchstart", handleTouchStart, { passive: true });
-  imageWrapper.addEventListener("touchmove", handleTouchMove, { passive: true });
+  imageWrapper.addEventListener("touchmove", handleTouchMove, { passive: false });
   imageWrapper.addEventListener("touchend", handleTouchEnd, { passive: true });
   imageWrapper.addEventListener("dblclick", (event) => {
     event.preventDefault();
@@ -376,13 +437,7 @@ function initialise() {
     showToast("We couldn’t load that portrait. Please try again later.");
   });
 
-  preloadImage(STATES[INITIAL_STATE].image)
-    .then(() => {
-      transitionTo(INITIAL_STATE);
-    })
-    .catch((error) => {
-      showToast(error.message);
-    });
+  transitionTo(INITIAL_STATE);
 }
 
 initialise();
