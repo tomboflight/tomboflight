@@ -46,6 +46,8 @@
             <img id="viewerImage" src="images/malik.jpg" alt="Malik Moreland" />
           </div>
 
+          <div id="narrationDisplay" class="narration-text"></div>
+
           <div class="branch-options" id="branchOptions">
             <button type="button" onclick="selectBranch('julian')">Julian</button>
             <button type="button" onclick="selectBranch('malik')">Malik</button>
@@ -59,6 +61,7 @@
           <button type="button" onclick="zoomOut()">Zoom Out</button>
           <button type="button" onclick="zoomIn()">Zoom In</button>
           <button type="button" onclick="resetViewer()">Reset</button>
+          <button type="button" id="narrationToggleBtn" onclick="toggleNarration()">Narration: ON</button>
         </div>
       </section>
 
