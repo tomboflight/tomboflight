@@ -76,7 +76,7 @@ body.menu-open {
   transition: top var(--transition);
 }
 
-.skip-to-content:focus {
+.skip-to-content:focus-visible
   top: 0;
   outline: 2px solid var(--gold);
   outline-offset: 2px;
