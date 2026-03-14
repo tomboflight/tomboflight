@@ -124,6 +124,15 @@ body::before {
   opacity: 0.4;
 }
 
+.control-btn__icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  fill: none;
+  stroke-linecap: round;
+}
+
 .control-btn:not(:disabled):hover,
 .control-btn:not(:disabled):focus-visible {
   background: rgba(113, 223, 255, 0.35);
