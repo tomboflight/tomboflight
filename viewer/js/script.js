@@ -1,6 +1,8 @@
 const slideImg = document.getElementById("slideImg");
 const branchButtons = document.getElementById("branch-buttons");
 const playPauseBtn = document.getElementById("playPauseBtn");
+const prevBtn = document.getElementById("prevBtn");
+const nextBtn = document.getElementById("nextBtn");
 
 const viewerTitle = document.getElementById("viewerTitle");
 const viewerStatus = document.getElementById("viewerStatus");
@@ -155,13 +157,7 @@ function pauseSlideshow() {
 }
 
 function togglePlay() {
-  if (interval) {
-    pauseSlideshow();
-    playPauseBtn.innerText = "Play";
-  } else {
-    playSlideshow();
-    playPauseBtn.innerText = "Pause";
-  }
+  interval ? pauseSlideshow() : playSlideshow();
 }
 
 document.getElementById("btnJulian").onclick = () => {

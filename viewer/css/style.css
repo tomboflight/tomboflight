@@ -183,7 +183,7 @@ a {
   position: absolute;
   width: 680px;
   height: 680px;
-  border-radius: 50%;
+  borderpast-radius: 50%;
   background: radial-gradient(circle, rgba(214, 176, 102, 0.14), transparent 68%);
   filter: blur(58px);
   opacity: 0.8;
