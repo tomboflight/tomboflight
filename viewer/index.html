@@ -1,93 +1,139 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tomb of Light Viewer</title>
-    <link rel="stylesheet" href="css/style.css" />
-  </head>
-  <body>
-    <div class="viewer-page">
-      <header class="viewer-header">
-        <div class="viewer-brand-wrap">
-          <a href="/" class="back-link">← Back to Home</a>
-          <div class="viewer-brand">Tomb of Light<span class="brand-symbol">™</span></div>
-        </div>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-        <div class="viewer-header-copy">
-          <div class="viewer-kicker">Genesis Lineage Viewer</div>
-          <h1>Navigate a living family legacy.</h1>
-          <p>
-            Move through anchor portraits, parent structure, descendants,
-            and family branches in a cinematic digital lineage experience.
-          </p>
-        </div>
-      </header>
+<title>Tomb of Light | Genesis Prototype</title>
 
-      <main class="viewer-main">
-        <section class="viewer-stage-panel">
-          <div class="viewer-stage-top">
-            <div>
-              <div class="panel-kicker">Interactive Experience</div>
-              <h2 id="viewerTitle">Anchor Portrait</h2>
-            </div>
+<link rel="stylesheet" href="css/style.css">
 
-            <div class="viewer-status" id="viewerStatus">Malik Moreland Line</div>
-          </div>
+</head>
 
-          <div class="viewer-stage-shell">
-            <div class="viewer-stage-glow"></div>
+<body>
 
-            <div class="slideshow" id="slideshow">
-              <img id="slideImg" src="images/malik.jpg" alt="Malik Moreland" class="zoom-in" />
+<div class="viewer-page">
 
-              <div id="branch-buttons" class="branch-options">
-                <button id="btnJulian" type="button">Julian</button>
-                <button id="btnMalik" type="button">Malik</button>
-                <button id="btnSelah" type="button">Selah</button>
-              </div>
-            </div>
-          </div>
+<header class="viewer-header">
 
-          <div class="viewer-line"></div>
+<div class="viewer-brand-wrap">
 
-          <div class="controls">
-            <button type="button" onclick="prevSlide()">Prev</button>
-            <button type="button" onclick="togglePlay()" id="playPauseBtn">Pause</button>
-            <button type="button" onclick="nextSlide()">Next</button>
-          </div>
-        </section>
+<a href="/" class="back-link">← Back to Tomb of Light</a>
 
-        <aside class="viewer-side-panel">
-          <div class="side-card">
-            <div class="panel-kicker">Current Mode</div>
-            <h3 id="currentNode">Malik Moreland</h3>
-            <p id="currentDescription">
-              Starting at the central anchor portrait for the Genesis lineage experience.
-            </p>
-          </div>
+<div class="viewer-brand">
+Tomb of Light<span class="brand-symbol">™</span>
+</div>
 
-          <div class="side-card">
-            <div class="panel-kicker">Lineage Path</div>
-            <div class="path-list">
-              <div class="path-item">01 Anchor Portrait</div>
-              <div class="path-item">02 Parent Structure</div>
-              <div class="path-item">03 Descendant Branches</div>
-              <div class="path-item">04 Future Legacy Layers</div>
-            </div>
-          </div>
+</div>
 
-          <div class="side-card">
-            <div class="panel-kicker">Branch Access</div>
-            <p>
-              When the parents image appears, choose Julian, Malik, or Selah
-              to move into the desired family branch.
-            </p>
-          </div>
-        </aside>
-      </main>
-    </div>
+<div class="viewer-header-copy">
 
-    <script src="js/script.js"></script>
-  </body>
+<span class="viewer-kicker">Genesis Prototype</span>
+
+<h1>Interactive Family Lineage</h1>
+
+<p>
+Navigate through generations of the Moreland lineage.  
+Zoom through family branches to explore how the Tomb of Light preserves digital heritage.
+</p>
+
+</div>
+
+</header>
+
+
+<main class="viewer-main">
+
+<section class="viewer-stage-panel">
+
+<div class="viewer-stage-top">
+
+<h2>Lineage Viewer</h2>
+
+<div class="viewer-status">
+Interactive Prototype
+</div>
+
+</div>
+
+<div class="viewer-stage-shell">
+
+<div class="viewer-stage-glow"></div>
+
+<div class="slideshow">
+
+<img id="viewerImage" src="../images/malik.jpg" alt="viewer">
+
+</div>
+
+<div class="branch-options" id="branchOptions">
+
+<button onclick="selectBranch('julian')">Julian</button>
+
+<button onclick="selectBranch('selah')">Selah</button>
+
+</div>
+
+</div>
+
+<div class="viewer-line"></div>
+
+<div class="controls">
+
+<button onclick="zoomOut()">Zoom Out</button>
+
+<button onclick="zoomIn()">Zoom In</button>
+
+<button onclick="resetViewer()">Reset</button>
+
+</div>
+
+</section>
+
+
+<aside class="viewer-side-panel">
+
+<div class="side-card">
+
+<span class="panel-kicker">Navigation</span>
+
+<h3>Zoom Paths</h3>
+
+<p>
+Explore lineage connections through zoom navigation.
+</p>
+
+</div>
+
+<div class="side-card">
+
+<h3>Lineage Flow</h3>
+
+<div class="path-list">
+
+<div class="path-item">
+Malik → Parents
+</div>
+
+<div class="path-item">
+Malik → Descendants
+</div>
+
+<div class="path-item">
+Imani → Benton Family
+</div>
+
+</div>
+
+</div>
+
+</aside>
+
+</main>
+
+</div>
+
+<script src="js/script.js"></script>
+
+</body>
 </html>
