@@ -59,23 +59,23 @@
               applicable law, and operational circumstances.
             </div>
 
-            <form class="form-grid" action="#" method="post">
+            <form class="form-grid" data-mailto-form data-form-subject="Data request submission">
               <div class="form-grid two-col">
                 <label>
                   Full Name
-                  <input type="text" name="full_name" placeholder="Your full name" />
+                  <input type="text" name="full_name" data-label="Full Name" placeholder="Your full name" required />
                 </label>
 
                 <label>
                   Email Address
-                  <input type="email" name="email" placeholder="you@example.com" />
+                  <input type="email" name="email" data-label="Email Address" placeholder="you@example.com" required />
                 </label>
               </div>
 
               <div class="form-grid two-col">
                 <label>
                   Request Type
-                  <select name="request_type">
+                  <select name="request_type" data-label="Request Type" required>
                     <option value="">Select a request type</option>
                     <option>Access Request</option>
                     <option>Correction Request</option>
@@ -87,7 +87,7 @@
 
                 <label>
                   Jurisdiction or State
-                  <input type="text" name="jurisdiction" placeholder="State or country, if relevant" />
+                  <input type="text" name="jurisdiction" data-label="Jurisdiction or State" placeholder="State or country, if relevant" />
                 </label>
               </div>
 
@@ -95,7 +95,9 @@
                 Details
                 <textarea
                   name="details"
+                  data-label="Details"
                   placeholder="Describe your request with enough detail for review."
+                  required
                 ></textarea>
               </label>
 
@@ -103,11 +105,13 @@
                 Verification Information
                 <textarea
                   name="verification"
+                  data-label="Verification Information"
                   placeholder="Provide any information that may help verify your request, if appropriate."
                 ></textarea>
               </label>
 
               <div class="helper">
+                This opens your email app to send the request to support@tomboflight.com.
                 Do not include sensitive passwords, payment data, or other
                 unnecessary confidential information in this form.
               </div>

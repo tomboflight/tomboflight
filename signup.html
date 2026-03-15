@@ -52,23 +52,23 @@
       <section class="page-sections">
         <div class="container form-shell">
           <div class="form-panel">
-            <form class="form-grid" action="#" method="post">
+            <form class="form-grid" data-mailto-form data-form-subject="Request access inquiry">
               <div class="form-grid two-col">
                 <label>
                   Full Name
-                  <input type="text" name="full_name" placeholder="Your full name" />
+                  <input type="text" name="full_name" data-label="Full Name" placeholder="Your full name" required />
                 </label>
 
                 <label>
                   Email Address
-                  <input type="email" name="email" placeholder="you@example.com" />
+                  <input type="email" name="email" data-label="Email Address" placeholder="you@example.com" required />
                 </label>
               </div>
 
               <div class="form-grid two-col">
                 <label>
                   Interest Type
-                  <select name="interest_type">
+                  <select name="interest_type" data-label="Interest Type" required>
                     <option value="">Select one</option>
                     <option>Family Legacy Access</option>
                     <option>Business / Partnership Inquiry</option>
@@ -79,7 +79,7 @@
 
                 <label>
                   Organization or Family Name
-                  <input type="text" name="organization" placeholder="Optional" />
+                  <input type="text" name="organization" data-label="Organization or Family Name" placeholder="Optional" />
                 </label>
               </div>
 
@@ -87,11 +87,14 @@
                 Message
                 <textarea
                   name="message"
+                  data-label="Message"
                   placeholder="Tell Tomb of Light what you're interested in and how you hope to use the platform."
+                  required
                 ></textarea>
               </label>
 
               <div class="helper">
+                This opens your email app to send your request to support@tomboflight.com.
                 Submitting a request does not guarantee immediate approval, account
                 creation, or product availability.
               </div>
