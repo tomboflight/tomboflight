@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Sign In | Tomb of Light</title>
+  <title>Sign-In Assistance | Tomb of Light</title>
   <meta
     name="description"
-    content="Sign in to Tomb of Light if you already have approved access."
+    content="Request sign-in assistance from Tomb of Light if you already have approved access."
   />
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -40,10 +40,11 @@
         <div class="container">
           <div class="page-hero-panel">
             <span class="eyebrow">Approved Access</span>
-            <h1>Sign In</h1>
+            <h1>Sign-In Assistance</h1>
             <p>
-              This sign-in page is intended for users who already have approved
-              or provisioned access to Tomb of Light systems.
+              Secure self-serve sign-in is not yet available on the public site.
+              If you already have approved or provisioned access, use this page to
+              contact support for account entry assistance.
             </p>
           </div>
         </div>
@@ -52,19 +53,28 @@
       <section class="page-sections">
         <div class="container form-shell">
           <div class="form-panel">
-            <form class="form-grid" action="#" method="post">
+            <form class="form-grid" data-mailto-form data-form-subject="Sign-in assistance request">
               <label>
                 Email Address
-                <input type="email" name="email" placeholder="you@example.com" />
+                <input type="email" name="email" data-label="Email Address" placeholder="you@example.com" required />
               </label>
 
               <label>
-                Password
-                <input type="password" name="password" placeholder="Enter your password" />
+                Access Reference or Note
+                <textarea
+                  name="access_note"
+                  data-label="Access Reference or Note"
+                  placeholder="Share any approved-access details that help support identify your account."
+                ></textarea>
               </label>
 
+              <div class="helper">
+                This opens your email app to contact support@tomboflight.com.
+                No password is collected through this public website.
+              </div>
+
               <div class="inline-actions">
-                <button class="btn btn-primary" type="submit">Sign In</button>
+                <button class="btn btn-primary" type="submit">Email Sign-In Request</button>
                 <a class="btn btn-secondary" href="signup.html">Request Access</a>
               </div>
             </form>

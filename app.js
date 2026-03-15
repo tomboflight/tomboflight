@@ -9,14 +9,15 @@
   const doc = document;
   const body = doc.body;
 
-  const menuToggle = doc.querySelector('.menu-toggle');
-  const siteNav = doc.querySelector('#site-nav');
+  const menuToggle = doc.querySelector('.menu-toggle, .nav-toggle');
+  const siteNav = doc.querySelector('#site-nav, .site-nav');
   const siteHeader = doc.querySelector('.site-header');
 
   const cookieBanner = doc.querySelector('[data-cookie-banner]');
-  const cookieStatus = doc.querySelector('[data-cookie-status]');
+  const cookieStatuses = Array.from(doc.querySelectorAll('[data-cookie-status]'));
   const acceptBtn = doc.querySelector('[data-cookie-accept]');
   const declineBtn = doc.querySelector('[data-cookie-decline]');
+  const supportEmail = 'support@tomboflight.com';
 
   const COOKIE_NAME = 'tol_cookie_preference';
   const COOKIE_EXPIRY_DAYS = 365;
@@ -37,6 +38,18 @@
 
   function setupMobileMenu() {
     if (!menuToggle || !siteNav || !siteHeader) return;
+
+    if (!siteNav.id) {
+      siteNav.id = 'site-nav';
+    }
+
+    if (!menuToggle.hasAttribute('aria-controls')) {
+      menuToggle.setAttribute('aria-controls', siteNav.id);
+    }
+
+    if (!menuToggle.hasAttribute('aria-expanded')) {
+      menuToggle.setAttribute('aria-expanded', 'false');
+    }
 
     menuToggle.addEventListener('click', function () {
       const isExpanded = menuToggle.getAttribute('aria-expanded') === 'true';
@@ -96,16 +109,20 @@
   }
 
   function updateCookieStatus(preference) {
-    if (!cookieStatus) return;
+    if (!cookieStatuses.length) return;
+
+    let message = 'Your cookie preference has not been set yet.';
 
     if (preference === 'true') {
-      cookieStatus.textContent = 'Analytics cookies are enabled.';
+      message = 'Analytics cookies are enabled.';
       initializeAnalytics();
     } else if (preference === 'false') {
-      cookieStatus.textContent = 'Analytics cookies are disabled.';
-    } else {
-      cookieStatus.textContent = 'Your cookie preference has not been set yet.';
+      message = 'Analytics cookies are disabled.';
     }
+
+    cookieStatuses.forEach(function (node) {
+      node.textContent = message;
+    });
   }
 
   function showCookieBanner() {
@@ -124,6 +141,53 @@
     setCookie(COOKIE_NAME, value, COOKIE_EXPIRY_DAYS);
     updateCookieStatus(value);
     hideCookieBanner();
+  }
+
+  function buildMailtoBody(form) {
+    const formData = new FormData(form);
+    const lines = [
+      'Submitted from the Tomb of Light website.',
+      `Page: ${window.location.href}`,
+      ''
+    ];
+
+    formData.forEach(function (value, key) {
+      const normalizedValue = String(value).trim();
+      if (!normalizedValue) return;
+
+      const field = form.elements[key];
+      const label = field && field.dataset && field.dataset.label
+        ? field.dataset.label
+        : key.replace(/_/g, ' ');
+
+      lines.push(`${label}: ${normalizedValue}`);
+    });
+
+    return lines.join('\n');
+  }
+
+  function setupMailtoForms() {
+    const forms = Array.from(doc.querySelectorAll('[data-mailto-form]'));
+    if (!forms.length) return;
+
+    forms.forEach(function (form) {
+      form.addEventListener('submit', function (event) {
+        event.preventDefault();
+
+        if (typeof form.reportValidity === 'function' && !form.reportValidity()) {
+          return;
+        }
+
+        const subject = form.dataset.formSubject || 'Website inquiry';
+        const body = buildMailtoBody(form);
+        const params = new URLSearchParams({
+          subject: subject,
+          body: body
+        });
+
+        window.location.href = `mailto:${supportEmail}?${params.toString()}`;
+      });
+    });
   }
 
   function setupCookiePreferences() {
@@ -155,6 +219,7 @@
   function init() {
     setupMobileMenu();
     setupCookiePreferences();
+    setupMailtoForms();
   }
 
   if (doc.readyState === 'loading') {
