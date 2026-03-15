@@ -3,93 +3,121 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Compliance & Legal | Tomb of Light</title>
+
+  <title>Compliance &amp; Legal | Tomb of Light</title>
+
   <meta
     name="description"
-    content="Review Tomb of Light’s public-facing compliance and legal framework, including privacy, consent, accessibility, data requests, and governance expectations."
+    content="Review Tomb of Light’s public-facing compliance and legal framework, including privacy, consent, accessibility, data requests, governance expectations, and user rights."
   />
+
+  <link rel="icon" href="favicon.ico" sizes="any" />
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+
+  <a href="#main-content" class="skip-to-content">Skip to main content</a>
+
+  <div class="site-watermark" aria-hidden="true"></div>
+
   <div class="page-wrap">
-    <header class="site-header">
+    <header class="site-header" role="banner">
       <div class="container site-header-inner">
         <a class="brand" href="index.html" aria-label="Tomb of Light home">
           <span>Tomb of Light<span class="brand-symbol">™</span></span>
         </a>
 
-        <button class="menu-toggle" type="button" aria-label="Toggle navigation">
+        <button
+          class="menu-toggle"
+          type="button"
+          aria-label="Toggle navigation menu"
+          aria-expanded="false"
+          aria-controls="site-nav">
           Menu
         </button>
 
-        <nav class="site-nav" aria-label="Primary navigation">
+        <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
+          <a href="platform.html">Platform</a>
           <a href="how-it-works.html">How It Works</a>
           <a href="security.html">Security</a>
-          <a href="compliance.html">Compliance</a>
+          <a href="compliance.html" class="active" aria-current="page">Compliance</a>
           <a href="faq.html">FAQ</a>
         </nav>
 
         <div class="header-actions">
-          <a class="btn btn-primary" href="signup.html">Request Access</a>
+          <a class="btn btn-primary" href="signup.html">Request Early Access</a>
         </div>
       </div>
     </header>
 
-    <main>
-      <section class="page-hero">
+    <main id="main-content" role="main">
+      <section class="page-hero" aria-labelledby="compliance-hero-title">
         <div class="container">
           <div class="page-hero-panel">
             <span class="eyebrow">Governance Framework</span>
-            <h1>Compliance &amp; Legal</h1>
+            <h1 id="compliance-hero-title">Compliance and legal standards designed for dignity, privacy, and accountability.</h1>
             <p>
-              Tomb of Light’s public-facing framework is designed to support
-              privacy, respectful family participation, user rights, accessibility,
-              and responsible stewardship as the platform evolves.
+              Tomb of Light’s public-facing framework is built to support respectful family participation,
+              privacy-aware handling, accessibility, user rights, and responsible platform stewardship as the
+              product grows.
             </p>
 
             <div class="hero-actions">
-              <a class="btn btn-primary" href="signup.html">Request Access</a>
+              <a class="btn btn-primary" href="signup.html">Request Early Access</a>
               <a class="btn btn-secondary" href="terms.html">Terms of Service</a>
+            </div>
+
+            <div class="hero-meta" aria-label="Compliance page highlights">
+              <span class="meta-pill">Privacy Expectations</span>
+              <span class="meta-pill">Consent Standards</span>
+              <span class="meta-pill">User Rights</span>
+              <span class="meta-pill">Governance Framework</span>
             </div>
           </div>
         </div>
       </section>
 
-      <section class="page-sections">
+      <section class="page-sections" aria-labelledby="compliance-principles-title">
         <div class="container">
           <div class="page-stack">
             <article class="section-card">
               <span class="eyebrow">Core Principles</span>
-              <div class="grid-3">
-                <div>
-                  <div class="card-number">1</div>
-                  <h3>Privacy and dignity</h3>
-                  <p class="card-copy">
-                    Family legacy systems should be handled with care, especially
-                    when records involve living relatives, sensitive stories, or
-                    private identifying details.
-                  </p>
-                </div>
+              <h2 id="compliance-principles-title">The framework begins with three public-facing commitments.</h2>
+              <p class="card-copy">
+                Tomb of Light is shaped around the idea that digital lineage systems should be governed with
+                care, clarity, and respect for the people represented inside them.
+              </p>
 
-                <div>
-                  <div class="card-number">2</div>
-                  <h3>Consent and participation</h3>
+              <div class="feature-strip">
+                <article class="feature-card feature-card-clean">
+                  <div class="card-number" aria-hidden="true">01</div>
+                  <h3>Privacy and Dignity</h3>
                   <p class="card-copy">
-                    Family participation should not be assumed casually.
-                    Depending on the context, consent, authorization, or lawful
-                    basis may be needed before including living individuals.
+                    Family legacy records should be handled with restraint, especially when they involve
+                    living relatives, sensitive history, or identifying details.
                   </p>
-                </div>
+                </article>
 
-                <div>
-                  <div class="card-number">3</div>
-                  <h3>Rights and accountability</h3>
+                <article class="feature-card feature-card-clean">
+                  <div class="card-number" aria-hidden="true">02</div>
+                  <h3>Consent and Participation</h3>
                   <p class="card-copy">
-                    Users should be able to review key policies, request help,
-                    and use available channels for privacy choices, data requests,
-                    corrections, and support.
+                    Family participation should not be assumed casually. Depending on the context,
+                    authorization, consent, or another lawful basis may be needed.
                   </p>
-                </div>
+                </article>
+
+                <article class="feature-card feature-card-clean">
+                  <div class="card-number" aria-hidden="true">03</div>
+                  <h3>Rights and Accountability</h3>
+                  <p class="card-copy">
+                    Users should be able to review policies, request help, and use clear channels for
+                    privacy choices, corrections, data requests, and support.
+                  </p>
+                </article>
               </div>
             </article>
 
@@ -97,49 +125,65 @@
               <span class="eyebrow">Privacy and Data Handling</span>
               <h2>Private family material should be handled in controlled systems.</h2>
               <p class="card-copy">
-                Tomb of Light is designed around the principle that sensitive
-                family content, personal stories, and related records should be
-                treated carefully and should not be openly published merely for
-                convenience or visibility. The platform direction favors protected
-                systems over public exposure.
+                Tomb of Light is built around the principle that sensitive family content, stories,
+                lineage details, and related materials should be treated carefully and not exposed casually
+                for convenience or visibility.
               </p>
+
               <ul class="section-list">
                 <li>Private family data should be handled with restraint.</li>
-                <li>Public-facing ownership layers should avoid unnecessary disclosure.</li>
-                <li>Published policy pages help communicate expected handling standards.</li>
+                <li>Public-facing layers should avoid unnecessary disclosure of sensitive details.</li>
+                <li>Published policy pages help communicate expected standards of handling.</li>
               </ul>
             </article>
 
             <article class="section-card">
               <span class="eyebrow">Family Participation Standards</span>
-              <div class="grid-2">
-                <div class="policy-card">
-                  <h3>Living individuals</h3>
+              <h2>Respectful inclusion matters when real families are involved.</h2>
+              <p class="card-copy">
+                Compliance is not only about documents. It also depends on how people are represented,
+                what authority exists for participation, and how sensitive relationships are handled.
+              </p>
+
+              <div class="feature-strip">
+                <article class="policy-card">
+                  <h3>Living Individuals</h3>
                   <p class="card-copy">
-                    Where family experiences involve living people, inclusion
-                    should be respectful, accurate, and supported by appropriate
-                    authority, consent, or legitimate basis depending on the context.
+                    Where a family experience involves living people, inclusion should be respectful,
+                    accurate, and supported by appropriate authority, consent, or legitimate basis.
                   </p>
                   <ul class="policy-list">
                     <li>Accuracy matters</li>
                     <li>Correction and review pathways matter</li>
                     <li>Casual misuse should be discouraged</li>
                   </ul>
-                </div>
+                </article>
 
-                <div class="policy-card">
-                  <h3>Minors and sensitive family information</h3>
+                <article class="policy-card">
+                  <h3>Minors and Sensitive Family Information</h3>
                   <p class="card-copy">
-                    If minors or highly sensitive family data are ever involved,
-                    parent or guardian permission and elevated protection
-                    expectations should apply.
+                    If minors or highly sensitive family materials are ever involved, parent or guardian
+                    permission and heightened protection expectations should apply.
                   </p>
                   <ul class="policy-list">
                     <li>Parent or guardian authorization</li>
                     <li>Private-by-default handling</li>
                     <li>Reduced public exposure expectations</li>
                   </ul>
-                </div>
+                </article>
+
+                <article class="policy-card">
+                  <h3>Disputes and Corrections</h3>
+                  <p class="card-copy">
+                    Where information is inaccurate, disputed, or incomplete, the platform should support
+                    a responsible path for correction, review, and respectful follow-up.
+                  </p>
+                  <ul class="policy-list">
+                    <li>Correction-aware handling</li>
+                    <li>Review pathways</li>
+                    <li>Integrity-focused stewardship</li>
+                  </ul>
+                </article>
               </div>
             </article>
 
@@ -147,28 +191,38 @@
               <span class="eyebrow">Public Trust Pages</span>
               <h2>Compliance is supported by a broader transparency layer.</h2>
               <p class="card-copy">
-                Tomb of Light’s public trust framework includes pages that help
-                users understand privacy terms, cookie controls, accessibility
-                commitments, user request channels, and state privacy notices.
+                Tomb of Light’s public trust framework includes pages that help users understand privacy terms,
+                cookie controls, accessibility commitments, request channels, and related operational standards.
               </p>
 
-              <div class="grid-2">
-                <div>
-                  <ul class="section-list">
-                    <li>Privacy Policy</li>
-                    <li>Terms of Service</li>
-                    <li>Cookie Policy</li>
-                    <li>Privacy Choices</li>
-                  </ul>
-                </div>
-                <div>
-                  <ul class="section-list">
-                    <li>Data Request page</li>
-                    <li>Accessibility statement</li>
-                    <li>State Privacy Notices</li>
-                    <li>Security page</li>
-                  </ul>
-                </div>
+              <div class="trust-grid trust-grid-clean">
+                <article class="trust-card">
+                  <h3>Privacy Policy</h3>
+                  <p class="card-copy">
+                    Explains how information may be handled, used, and protected across the website and platform.
+                  </p>
+                </article>
+
+                <article class="trust-card">
+                  <h3>Terms of Service</h3>
+                  <p class="card-copy">
+                    Defines key usage expectations, responsibilities, and operational boundaries for the platform.
+                  </p>
+                </article>
+
+                <article class="trust-card">
+                  <h3>Privacy Choices and Cookies</h3>
+                  <p class="card-copy">
+                    Helps users understand cookie preferences, optional technologies, and related user controls.
+                  </p>
+                </article>
+
+                <article class="trust-card">
+                  <h3>Accessibility and Data Requests</h3>
+                  <p class="card-copy">
+                    Supports user rights, access concerns, accommodation expectations, and formal request pathways.
+                  </p>
+                </article>
               </div>
             </article>
 
@@ -176,11 +230,11 @@
               <span class="eyebrow">Evolving Legal and Regulatory Context</span>
               <h2>This framework may evolve as the platform grows.</h2>
               <p class="card-copy">
-                Digital lineage systems, privacy expectations, consumer rights,
-                and blockchain-related legal considerations can change over time.
-                Tomb of Light may revise public-facing documents, internal
-                practices, and governance standards as the product matures.
+                Digital lineage systems, privacy expectations, consumer rights, and platform governance
+                considerations can change over time. Tomb of Light may revise public-facing documents,
+                internal practices, and governance standards as the product matures.
               </p>
+
               <ul class="section-list">
                 <li>Policies may be updated when operations change.</li>
                 <li>Compliance expectations may vary by jurisdiction and product scope.</li>
@@ -192,20 +246,18 @@
               <span class="eyebrow">Important Limitation</span>
               <h2>Public website materials are informational and operational in nature.</h2>
               <p class="card-copy">
-                Tomb of Light’s public-facing pages are intended to explain the
-                platform direction, usage expectations, and trust framework.
-                They do not replace formal legal advice for users or visitors.
-                Where needed, individuals should consult their own legal or
-                professional advisors.
+                Tomb of Light’s public-facing pages are intended to explain platform direction, usage expectations,
+                and the trust framework surrounding the service. They do not replace formal legal advice for
+                visitors or users. Where needed, individuals should consult their own legal or professional advisors.
               </p>
             </article>
 
-            <article class="cta-panel">
+            <article class="cta-panel cta-panel-premium">
               <span class="eyebrow">Explore More</span>
               <h2>Review the policies connected to this framework.</h2>
               <p class="section-lead">
-                Compliance and legal clarity depend on the broader trust system
-                surrounding privacy, security, accessibility, and user rights.
+                Compliance and legal clarity depend on the broader trust system surrounding privacy,
+                security, accessibility, and user rights.
               </p>
 
               <div class="cta-actions">
@@ -219,15 +271,14 @@
       </section>
     </main>
 
-    <footer class="footer">
+    <footer class="footer" role="contentinfo">
       <div class="container">
         <div class="footer-card">
           <div class="footer-top">
             <div>
               <div class="footer-brand">Tomb of Light<span class="brand-symbol">™</span></div>
               <p class="footer-copy">
-                A private, cinematic platform for preserving and exploring family
-                lineage across generations.
+                A private digital legacy platform for preserving and exploring family lineage across generations.
               </p>
               <div class="cookie-status" data-cookie-status>
                 Your cookie preference has not been set yet.
@@ -235,6 +286,7 @@
             </div>
 
             <div class="footer-links">
+              <a href="platform.html">Platform</a>
               <a href="privacy.html">Privacy Policy</a>
               <a href="terms.html">Terms</a>
               <a href="cookie-policy.html">Cookie Policy</a>
@@ -255,7 +307,7 @@
     </footer>
   </div>
 
-  <div class="cookie-banner" data-cookie-banner>
+  <div class="cookie-banner" data-cookie-banner role="contentinfo" aria-label="Cookie preferences">
     <div class="cookie-inner">
       <div class="cookie-copy">
         We use essential site technologies and may use optional analytics tools

@@ -3,26 +3,44 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
   <title>Terms of Service | Tomb of Light</title>
+
   <meta
     name="description"
-    content="Read the Tomb of Light Terms of Service for website use, acceptable conduct, intellectual property, disclaimers, and related conditions."
+    content="Read the Tomb of Light Terms of Service for website use, acceptable conduct, intellectual property, disclaimers, limitations, and related conditions."
   />
+
+  <link rel="icon" href="favicon.ico" sizes="any" />
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+
+  <a href="#main-content" class="skip-to-content">Skip to main content</a>
+
+  <div class="site-watermark" aria-hidden="true"></div>
+
   <div class="page-wrap">
-    <header class="site-header">
+    <header class="site-header" role="banner">
       <div class="container site-header-inner">
         <a class="brand" href="index.html" aria-label="Tomb of Light home">
           <span>Tomb of Light<span class="brand-symbol">™</span></span>
         </a>
 
-        <button class="menu-toggle" type="button" aria-label="Toggle navigation">
+        <button
+          class="menu-toggle"
+          type="button"
+          aria-label="Toggle navigation menu"
+          aria-expanded="false"
+          aria-controls="site-nav">
           Menu
         </button>
 
-        <nav class="site-nav" aria-label="Primary navigation">
+        <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
+          <a href="platform.html">Platform</a>
           <a href="how-it-works.html">How It Works</a>
           <a href="security.html">Security</a>
           <a href="compliance.html">Compliance</a>
@@ -30,30 +48,44 @@
         </nav>
 
         <div class="header-actions">
-          <a class="btn btn-primary" href="signup.html">Request Access</a>
+          <a class="btn btn-primary" href="signup.html">Request Early Access</a>
         </div>
       </div>
     </header>
 
-    <main>
-      <section class="page-hero">
+    <main id="main-content" role="main">
+      <section class="page-hero" aria-labelledby="terms-hero-title">
         <div class="container">
           <div class="page-hero-panel">
             <span class="eyebrow">Terms of Service</span>
-            <h1>Terms of Service</h1>
+            <h1 id="terms-hero-title">Terms that govern access to the Tomb of Light website and related materials.</h1>
             <p>
               These Terms of Service govern access to and use of the Tomb of Light
-              public website and related materials, features, and communications.
+              public website, public-facing materials, request flows, and related
+              communications.
             </p>
+
+            <div class="hero-actions">
+              <a class="btn btn-secondary" href="privacy.html">Privacy Policy</a>
+              <a class="btn btn-secondary" href="compliance.html">Compliance</a>
+            </div>
+
+            <div class="hero-meta" aria-label="Terms highlights">
+              <span class="meta-pill">Website Use</span>
+              <span class="meta-pill">Acceptable Conduct</span>
+              <span class="meta-pill">Intellectual Property</span>
+              <span class="meta-pill">Legal Conditions</span>
+            </div>
           </div>
         </div>
       </section>
 
-      <section class="page-sections">
+      <section class="page-sections" aria-labelledby="terms-main-title">
         <div class="container">
           <div class="page-stack">
             <article class="section-card">
               <span class="eyebrow">1. Acceptance</span>
+              <h2 id="terms-main-title">By using the website, you agree to these terms.</h2>
               <p class="card-copy">
                 By accessing or using the Tomb of Light website, you agree to these
                 Terms of Service and any other applicable notices or policies posted
@@ -63,75 +95,92 @@
 
             <article class="section-card">
               <span class="eyebrow">2. Website Purpose</span>
+              <h2>The website exists to provide information, public materials, and request pathways.</h2>
               <p class="card-copy">
                 The website provides information about Tomb of Light, its platform
-                direction, prototype experiences, trust framework, and related
-                request-access or support channels. Features may change over time.
+                direction, prototype experience, trust framework, pricing, and related
+                request or support channels. Features, descriptions, and workflows may
+                change over time.
               </p>
             </article>
 
             <article class="section-card">
               <span class="eyebrow">3. Acceptable Use</span>
-              <div class="grid-2">
-                <div class="policy-card">
-                  <h3>You may use the site to</h3>
+              <h2>Use of the website must be lawful, respectful, and consistent with these terms.</h2>
+
+              <div class="feature-strip">
+                <article class="policy-card">
+                  <h3>You May Use the Site To</h3>
                   <ul class="policy-list">
                     <li>Learn about Tomb of Light and its services</li>
                     <li>Review public trust and policy pages</li>
                     <li>Submit lawful inquiries or access requests</li>
                     <li>View approved public-facing materials</li>
                   </ul>
-                </div>
+                </article>
 
-                <div class="policy-card">
-                  <h3>You may not use the site to</h3>
+                <article class="policy-card">
+                  <h3>You May Not Use the Site To</h3>
                   <ul class="policy-list">
                     <li>Violate laws or third-party rights</li>
                     <li>Attempt unauthorized access or disruption</li>
                     <li>Scrape, reverse engineer, or abuse the website</li>
                     <li>Upload harmful code or misleading information</li>
                   </ul>
-                </div>
+                </article>
+
+                <article class="policy-card">
+                  <h3>Operational Expectation</h3>
+                  <p class="card-copy">
+                    Visitors are expected to use the website responsibly and not
+                    interfere with its operation, security, availability, or public trust framework.
+                  </p>
+                </article>
               </div>
             </article>
 
             <article class="section-card">
               <span class="eyebrow">4. Intellectual Property</span>
+              <h2>Tomb of Light’s brand, design, content, and platform concepts remain protected.</h2>
               <p class="card-copy">
                 Tomb of Light, its branding, platform concepts, visual materials,
-                written content, designs, interfaces, and related technology are
-                protected by intellectual property and other applicable laws.
+                written content, designs, interfaces, naming, and related technology
+                are protected by intellectual property and other applicable laws.
                 Except as expressly permitted, no part of the site may be copied,
-                reproduced, distributed, or exploited without authorization.
+                reproduced, distributed, republished, or exploited without authorization.
               </p>
             </article>
 
             <article class="section-card">
               <span class="eyebrow">5. Platform Status and Forward-Looking Content</span>
+              <h2>Some public content may describe evolving or future capabilities.</h2>
               <p class="card-copy">
-                Certain website content may describe planned, evolving, or future
-                platform capabilities. Public descriptions do not guarantee that
-                every feature, release, or workflow is currently available.
+                Certain website materials may describe planned, evolving, prototype,
+                or future platform capabilities. Public descriptions do not guarantee
+                that every feature, workflow, timeline, or release is currently available.
               </p>
             </article>
 
             <article class="section-card">
               <span class="eyebrow">6. User Submissions</span>
+              <h2>Information you submit should be lawful and accurate to the best of your knowledge.</h2>
               <p class="card-copy">
-                If you send inquiries, request-access information, or other
-                submissions through the website, you represent that your submission
-                is lawful, accurate to the best of your knowledge, and does not
-                violate the rights of others.
+                If you send inquiries, request-access information, support messages,
+                or other submissions through the website, you represent that your
+                submission is lawful, accurate to the best of your knowledge, and
+                does not violate the rights of others.
               </p>
             </article>
 
             <article class="section-card">
               <span class="eyebrow">7. Privacy and Related Policies</span>
+              <h2>Use of the website is also subject to related trust and policy pages.</h2>
               <p class="card-copy">
                 Use of the website is also subject to Tomb of Light’s Privacy Policy,
-                Cookie Policy, Security page, Accessibility page, and other public
-                trust notices.
+                Cookie Policy, Security page, Accessibility page, Compliance page,
+                and other public trust notices where applicable.
               </p>
+
               <div class="inline-actions">
                 <a class="btn btn-secondary" href="privacy.html">Privacy Policy</a>
                 <a class="btn btn-secondary" href="cookie-policy.html">Cookie Policy</a>
@@ -141,46 +190,73 @@
 
             <article class="section-card">
               <span class="eyebrow">8. Disclaimers</span>
+              <h2>The website is provided on an “as is” and “as available” basis.</h2>
               <p class="card-copy">
-                The website and its materials are provided on an “as is” and “as
-                available” basis to the extent permitted by law. Tomb of Light does
+                To the extent permitted by law, the website and its materials are
+                provided on an “as is” and “as available” basis. Tomb of Light does
                 not promise that the website will always be uninterrupted, error-free,
-                or suitable for every purpose.
+                complete, or suitable for every purpose.
               </p>
             </article>
 
             <article class="section-card">
               <span class="eyebrow">9. Limitation of Liability</span>
+              <h2>Liability is limited to the extent permitted by law.</h2>
               <p class="card-copy">
                 To the extent permitted by law, Tomb of Light will not be liable for
-                indirect, incidental, special, consequential, or similar damages
-                arising from or related to website use, inability to use the site,
-                or reliance on website materials.
+                indirect, incidental, special, consequential, exemplary, or similar damages
+                arising from or related to use of the website, inability to use the website,
+                or reliance on public website materials.
               </p>
             </article>
 
             <article class="section-card">
               <span class="eyebrow">10. Changes</span>
+              <h2>These Terms may be updated as the website and business evolve.</h2>
               <p class="card-copy">
                 Tomb of Light may update these Terms of Service as the website,
-                business, or legal framework evolves. Updated terms will be posted
-                on this page.
+                business operations, product framework, or legal environment changes.
+                Updated terms will be posted on this page.
               </p>
+            </article>
+
+            <article class="section-card">
+              <span class="eyebrow">11. Governing Framework</span>
+              <h2>These public terms operate within the broader Tomb of Light trust structure.</h2>
+              <p class="card-copy">
+                These Terms of Service should be read together with Tomb of Light’s
+                broader public trust framework, including privacy, security, compliance,
+                accessibility, and user-rights related notices.
+              </p>
+            </article>
+
+            <article class="cta-panel cta-panel-premium">
+              <span class="eyebrow">Related Legal Pages</span>
+              <h2>Review the broader policy and governance framework.</h2>
+              <p class="section-lead">
+                These Terms work together with Tomb of Light’s privacy, security,
+                compliance, cookie, accessibility, and request pages.
+              </p>
+
+              <div class="cta-actions">
+                <a class="btn btn-secondary" href="privacy.html">Privacy Policy</a>
+                <a class="btn btn-secondary" href="compliance.html">Compliance</a>
+                <a class="btn btn-secondary" href="cookie-policy.html">Cookie Policy</a>
+              </div>
             </article>
           </div>
         </div>
       </section>
     </main>
 
-    <footer class="footer">
+    <footer class="footer" role="contentinfo">
       <div class="container">
         <div class="footer-card">
           <div class="footer-top">
             <div>
               <div class="footer-brand">Tomb of Light<span class="brand-symbol">™</span></div>
               <p class="footer-copy">
-                A private, cinematic platform for preserving and exploring family
-                lineage across generations.
+                A private digital legacy platform for preserving and exploring family lineage across generations.
               </p>
               <div class="cookie-status" data-cookie-status>
                 Your cookie preference has not been set yet.
@@ -188,6 +264,7 @@
             </div>
 
             <div class="footer-links">
+              <a href="platform.html">Platform</a>
               <a href="privacy.html">Privacy Policy</a>
               <a href="terms.html">Terms</a>
               <a href="cookie-policy.html">Cookie Policy</a>
@@ -208,7 +285,7 @@
     </footer>
   </div>
 
-  <div class="cookie-banner" data-cookie-banner>
+  <div class="cookie-banner" data-cookie-banner role="contentinfo" aria-label="Cookie preferences">
     <div class="cookie-inner">
       <div class="cookie-copy">
         We use essential site technologies and may use optional analytics tools
