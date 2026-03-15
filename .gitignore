@@ -8,16 +8,27 @@
 .fseventsd
 .TemporaryItems
 
-# Editor/project folders (safe if they appear)
+# Editor/project folders
 .vscode/
 .idea/
 
-# Build folders (if you ever add tooling)
+# Build folders
 node_modules/
 dist/
 build/
 
-# Env files (never commit secrets)
+# Environment files
 .env
 .env.*
 
+# Python / FastAPI backend
+backend/venv/
+backend/__pycache__/
+backend/**/*.pyc
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Logs
+*.log
