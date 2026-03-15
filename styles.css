@@ -1160,6 +1160,60 @@ textarea {
   line-height: 1.7;
 }
 
+/* ================= HOMEPAGE CONTENT UPGRADES ================= */
+
+.package-list {
+  margin: 18px 0 0;
+  padding-left: 18px;
+  color: var(--muted);
+}
+
+.package-list li {
+  margin-bottom: 8px;
+}
+
+.pricing-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.pricing-card .inline-actions {
+  margin-top: auto;
+  padding-top: 18px;
+}
+
+.pricing-card-featured {
+  border-color: rgba(214, 176, 102, 0.34);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    0 0 0 1px rgba(214, 176, 102, 0.08);
+}
+
+.section-note {
+  margin-top: 22px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  color: var(--muted);
+  border: 1px solid rgba(214, 176, 102, 0.18);
+  background: rgba(214, 176, 102, 0.05);
+}
+
+.founder-panel {
+  max-width: 980px;
+  margin: 0 auto;
+}
+
+.founder-copy {
+  max-width: 70ch;
+}
+
+.founder-signoff {
+  margin-top: 24px;
+  color: var(--gold);
+  font-weight: 700;
+  line-height: 1.7;
+}
+
 /* ================= RESPONSIVE ================= */
 
 @media (max-width: 1180px) {
@@ -1318,5 +1372,9 @@ textarea {
   .signal-row {
     gap: 10px 14px;
     font-size: 0.88rem;
+  }
+
+  .package-list {
+    padding-left: 18px;
   }
 }
