@@ -9,6 +9,7 @@ from app.database import close_mongo_connection, connect_to_mongo
 from app.routes.audit_logs import router as audit_logs_router
 from app.routes.auth import router as auth_router
 from app.routes.canonical_persons import router as canonical_persons_router
+from app.routes.certificate_versions import router as certificate_versions_router
 from app.routes.consistency import router as consistency_router
 from app.routes.families import router as families_router
 from app.routes.family_members import router as family_members_router
@@ -91,6 +92,7 @@ app.include_router(lineage_graph_router)
 app.include_router(lineage_proof_router)
 app.include_router(lineage_certificate_router)
 app.include_router(issued_certificates_router)
+app.include_router(certificate_versions_router)
 
 # Audit
 app.include_router(audit_logs_router)
@@ -138,7 +140,11 @@ def root():
             "/lineage-certificate/{family_id}",
             "/issued-certificates/issue/{family_id}",
             "/issued-certificates",
+            "/issued-certificates/by-certificate-id/{certificate_id}",
             "/issued-certificates/{record_id}",
+            "/certificate-versions/family/{family_id}",
+            "/certificate-versions/family/{family_id}/latest",
+            "/certificate-versions/ensure-indexes",
             "/audit-logs",
             "/docs",
         ],

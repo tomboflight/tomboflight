@@ -3,7 +3,6 @@ from pymongo.database import Database
 
 from app.config import settings
 
-
 client: MongoClient | None = None
 db: Database | None = None
 
@@ -17,9 +16,9 @@ def connect_to_mongo() -> Database | None:
 
     try:
         client = MongoClient(settings.mongodb_uri)
-        db = client[settings.database_name]
+        db = client[settings.mongodb_db_name]
         client.admin.command("ping")
-        print(f"Connected to MongoDB database: {settings.database_name}")
+        print(f"Connected to MongoDB database: {settings.mongodb_db_name}")
         return db
     except Exception as exc:
         print(f"MongoDB connection failed: {exc}")
@@ -33,7 +32,11 @@ def get_database() -> Database | None:
 
 
 def close_mongo_connection() -> None:
-    global client
+    global client, db
+
     if client is not None:
         client.close()
         print("MongoDB connection closed.")
+
+    client = None
+    db = None

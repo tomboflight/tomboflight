@@ -45,6 +45,22 @@ def list_issued_certificates(limit: int = Query(default=50, ge=1, le=200)):
         ) from exc
 
 
+@router.get("/by-certificate-id/{certificate_id}")
+def get_issued_certificate_by_certificate_id(certificate_id: str):
+    try:
+        return service.get_certificate_by_certificate_id(certificate_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch issued certificate: {str(exc)}",
+        ) from exc
+
+
 @router.get("/{record_id}")
 def get_issued_certificate(record_id: str):
     try:
