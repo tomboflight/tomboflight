@@ -1,6 +1,7 @@
 /**
  * Tomb of Light - Main Application Script
- * Accessibility, navigation, and cookie preference handling
+ * Accessibility, navigation, cookie preference handling,
+ * and backend connectivity checks
  */
 
 (function () {
@@ -8,6 +9,8 @@
 
   const doc = document;
   const body = doc.body;
+
+  const API_BASE_URL = 'https://tomboflight-api.onrender.com';
 
   const menuToggle = doc.querySelector('.menu-toggle, .nav-toggle');
   const siteNav = doc.querySelector('#site-nav, .site-nav');
@@ -216,10 +219,33 @@
     }
   }
 
+  async function checkBackendHealth() {
+    try {
+      const response = await fetch(`${API_BASE_URL}/health`, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Health check failed with status ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('Tomb of Light backend is connected:', data);
+      body.dataset.apiStatus = 'online';
+    } catch (error) {
+      console.error('Tomb of Light backend connection failed:', error);
+      body.dataset.apiStatus = 'offline';
+    }
+  }
+
   function init() {
     setupMobileMenu();
     setupCookiePreferences();
     setupMailtoForms();
+    checkBackendHealth();
   }
 
   if (doc.readyState === 'loading') {
