@@ -1,8 +1,12 @@
 (function () {
   'use strict';
 
-  const API_BASE_URL = 'https://tomboflight-api.onrender.com';
+  const API_BASE_URL =
+    (window.TOL_CONFIG && window.TOL_CONFIG.API_BASE_URL) ||
+    'http://127.0.0.1:8000';
+
   const TOKEN_KEY = 'tol_access_token';
+  const USER_KEY = 'tol_user';
 
   function saveToken(token) {
     localStorage.setItem(TOKEN_KEY, token);
@@ -14,6 +18,28 @@
 
   function clearToken() {
     localStorage.removeItem(TOKEN_KEY);
+  }
+
+  function saveUser(user) {
+    localStorage.setItem(USER_KEY, JSON.stringify(user || {}));
+  }
+
+  function getSavedUser() {
+    try {
+      const raw = localStorage.getItem(USER_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function clearUser() {
+    localStorage.removeItem(USER_KEY);
+  }
+
+  function clearSession() {
+    clearToken();
+    clearUser();
   }
 
   async function apiRequest(path, options = {}) {
@@ -37,16 +63,27 @@
       headers
     });
 
+    const contentType = response.headers.get('content-type') || '';
     let data = null;
+
     try {
-      data = await response.json();
+      if (contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        const text = await response.text();
+        data = text ? { detail: text } : null;
+      }
     } catch (error) {
       data = null;
     }
 
     if (!response.ok) {
       const message =
-        (data && (data.detail || data.message || data.error)) ||
+        (data &&
+          (data.detail ||
+            data.message ||
+            data.error ||
+            (Array.isArray(data.errors) && data.errors.join(', ')))) ||
         `Request failed with status ${response.status}`;
       throw new Error(message);
     }
@@ -56,10 +93,18 @@
 
   function setStatus(node, message, type) {
     if (!node) return;
+
     node.style.display = 'block';
     node.textContent = message;
     node.dataset.state = type || 'info';
-    node.style.color = type === 'error' ? '#ffb3b3' : '#cfe8cf';
+
+    if (type === 'error') {
+      node.style.color = '#ffb3b3';
+    } else if (type === 'success') {
+      node.style.color = '#cfe8cf';
+    } else {
+      node.style.color = '#d6e6ff';
+    }
   }
 
   function clearStatus(node) {
@@ -69,7 +114,28 @@
     node.dataset.state = '';
   }
 
-  async function setupSignupForm() {
+  async function handleLogin(email, password) {
+    const loginData = await apiRequest('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({
+        email,
+        password
+      })
+    });
+
+    if (!loginData || !loginData.access_token) {
+      throw new Error('Login succeeded but no access token was returned.');
+    }
+
+    saveToken(loginData.access_token);
+
+    const me = await apiRequest('/auth/me', { method: 'GET' });
+    saveUser(me);
+
+    return { loginData, me };
+  }
+
+  function setupSignupForm() {
     const form = document.querySelector('[data-signup-form]');
     if (!form) return;
 
@@ -85,22 +151,23 @@
       }
 
       const formData = new FormData(form);
+      const fullName = String(formData.get('full_name') || '').trim();
+      const email = String(formData.get('email') || '').trim().toLowerCase();
       const password = String(formData.get('password') || '').trim();
       const confirmPassword = String(formData.get('confirm_password') || '').trim();
 
-      if (password !== confirmPassword) {
-        setStatus(statusNode, 'Passwords do not match.', 'error');
+      if (!fullName || !email || !password || !confirmPassword) {
+        setStatus(statusNode, 'Please complete all required fields.', 'error');
         return;
       }
 
-      const payload = {
-        full_name: String(formData.get('full_name') || '').trim(),
-        email: String(formData.get('email') || '').trim(),
-        password: password
-      };
+      if (password.length < 8) {
+        setStatus(statusNode, 'Password must be at least 8 characters long.', 'error');
+        return;
+      }
 
-      if (!payload.full_name || !payload.email || !payload.password) {
-        setStatus(statusNode, 'Please complete all required fields.', 'error');
+      if (password !== confirmPassword) {
+        setStatus(statusNode, 'Passwords do not match.', 'error');
         return;
       }
 
@@ -110,27 +177,17 @@
       try {
         await apiRequest('/auth/signup', {
           method: 'POST',
-          body: JSON.stringify(payload)
+          body: JSON.stringify({
+            full_name: fullName,
+            email,
+            password
+          })
         });
 
         setStatus(statusNode, 'Account created successfully. Signing you in...', 'success');
 
-        const loginData = await apiRequest('/auth/login', {
-          method: 'POST',
-          body: JSON.stringify({
-            email: payload.email,
-            password: payload.password
-          })
-        });
-
-        if (loginData.access_token) {
-          saveToken(loginData.access_token);
-          window.location.href = 'dashboard.html';
-          return;
-        }
-
-        setStatus(statusNode, 'Account created. Please sign in.', 'success');
-        form.reset();
+        await handleLogin(email, password);
+        window.location.href = 'dashboard.html';
       } catch (error) {
         setStatus(statusNode, error.message || 'Signup failed.', 'error');
       } finally {
@@ -140,7 +197,7 @@
     });
   }
 
-  async function setupSigninForm() {
+  function setupSigninForm() {
     const form = document.querySelector('[data-signin-form]');
     if (!form) return;
 
@@ -156,13 +213,10 @@
       }
 
       const formData = new FormData(form);
+      const email = String(formData.get('email') || '').trim().toLowerCase();
+      const password = String(formData.get('password') || '').trim();
 
-      const payload = {
-        email: String(formData.get('email') || '').trim(),
-        password: String(formData.get('password') || '').trim()
-      };
-
-      if (!payload.email || !payload.password) {
+      if (!email || !password) {
         setStatus(statusNode, 'Please enter your email and password.', 'error');
         return;
       }
@@ -171,16 +225,7 @@
       submitBtn.textContent = 'Signing In...';
 
       try {
-        const loginData = await apiRequest('/auth/login', {
-          method: 'POST',
-          body: JSON.stringify(payload)
-        });
-
-        if (!loginData.access_token) {
-          throw new Error('Login succeeded but no access token was returned.');
-        }
-
-        saveToken(loginData.access_token);
+        await handleLogin(email, password);
         window.location.href = 'dashboard.html';
       } catch (error) {
         setStatus(statusNode, error.message || 'Login failed.', 'error');
@@ -209,18 +254,31 @@
       return;
     }
 
+    const savedUser = getSavedUser();
+    if (savedUser) {
+      if (userName) userName.textContent = savedUser.full_name || 'User';
+      if (userEmail) userEmail.textContent = savedUser.email || '';
+      if (userRole) userRole.textContent = savedUser.role || 'user';
+    }
+
     try {
       const me = await apiRequest('/auth/me', { method: 'GET' });
+      saveUser(me);
 
       if (authRequired) authRequired.style.display = 'block';
       if (userName) userName.textContent = me.full_name || 'User';
       if (userEmail) userEmail.textContent = me.email || '';
       if (userRole) userRole.textContent = me.role || 'user';
 
-      setStatus(statusNode, 'You are signed in and connected to the Tomb of Light platform.', 'success');
+      setStatus(
+        statusNode,
+        'You are signed in and connected to the Tomb of Light platform.',
+        'success'
+      );
     } catch (error) {
-      clearToken();
+      clearSession();
       setStatus(statusNode, 'Your session expired. Please sign in again.', 'error');
+
       setTimeout(function () {
         window.location.href = 'signin.html';
       }, 1200);
@@ -229,13 +287,33 @@
 
     if (logoutBtn) {
       logoutBtn.addEventListener('click', function () {
-        clearToken();
+        clearSession();
         window.location.href = 'signin.html';
       });
     }
   }
 
+  function protectAuthPages() {
+    const body = document.body;
+    if (!body) return;
+
+    const isSigninPage = !!document.querySelector('[data-signin-form]');
+    const isSignupPage = !!document.querySelector('[data-signup-form]');
+    const token = getToken();
+
+    if ((isSigninPage || isSignupPage) && token) {
+      apiRequest('/auth/me', { method: 'GET' })
+        .then(function () {
+          window.location.href = 'dashboard.html';
+        })
+        .catch(function () {
+          clearSession();
+        });
+    }
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
+    protectAuthPages();
     setupSignupForm();
     setupSigninForm();
     setupDashboard();
@@ -245,6 +323,10 @@
     saveToken,
     getToken,
     clearToken,
+    saveUser,
+    getSavedUser,
+    clearUser,
+    clearSession,
     apiRequest
   };
 })();

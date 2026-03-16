@@ -18,7 +18,13 @@
           <span>Tomb of Light<span class="brand-symbol">™</span></span>
         </a>
 
-        <button class="menu-toggle" type="button" aria-label="Toggle navigation menu" aria-expanded="false" aria-controls="site-nav">
+        <button
+          class="menu-toggle"
+          type="button"
+          aria-label="Toggle navigation menu"
+          aria-expanded="false"
+          aria-controls="site-nav"
+        >
           Menu
         </button>
 
@@ -55,24 +61,50 @@
               <div class="form-grid two-col">
                 <label>
                   Full Name
-                  <input type="text" name="full_name" placeholder="Your full name" required />
+                  <input
+                    type="text"
+                    name="full_name"
+                    placeholder="Your full name"
+                    autocomplete="name"
+                    required
+                  />
                 </label>
 
                 <label>
                   Email Address
-                  <input type="email" name="email" placeholder="you@example.com" required />
+                  <input
+                    type="email"
+                    name="email"
+                    placeholder="you@example.com"
+                    autocomplete="email"
+                    required
+                  />
                 </label>
               </div>
 
               <div class="form-grid two-col">
                 <label>
                   Password
-                  <input type="password" name="password" placeholder="Create a password" required />
+                  <input
+                    type="password"
+                    name="password"
+                    placeholder="Create a password"
+                    autocomplete="new-password"
+                    minlength="8"
+                    required
+                  />
                 </label>
 
                 <label>
                   Confirm Password
-                  <input type="password" name="confirm_password" placeholder="Confirm your password" required />
+                  <input
+                    type="password"
+                    name="confirm_password"
+                    placeholder="Confirm your password"
+                    autocomplete="new-password"
+                    minlength="8"
+                    required
+                  />
                 </label>
               </div>
 
@@ -80,10 +112,17 @@
                 By creating an account, you are entering the Tomb of Light platform and can begin building your private legacy record.
               </div>
 
-              <div class="helper" data-signup-status aria-live="polite" style="display:none;"></div>
+              <div
+                class="helper"
+                data-signup-status
+                aria-live="polite"
+                style="display: none;"
+              ></div>
 
               <div class="inline-actions">
-                <button class="btn btn-primary" type="submit" data-submit-btn>Create Account</button>
+                <button class="btn btn-primary" type="submit" data-submit-btn>
+                  Create Account
+                </button>
                 <a class="btn btn-secondary" href="signin.html">Already have an account?</a>
               </div>
             </form>
@@ -135,6 +174,7 @@
     </footer>
   </div>
 
+  <script src="config.js"></script>
   <script src="app.js"></script>
   <script src="auth.js"></script>
 </body>

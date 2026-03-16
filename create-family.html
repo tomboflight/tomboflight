@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Create Family | Tomb of Light</title>
+  <meta
+    name="description"
+    content="Create your first Tomb of Light family record."
+  />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="page-wrap">
+    <header class="site-header">
+      <div class="container site-header-inner">
+        <a class="brand" href="index.html" aria-label="Tomb of Light home">
+          <span>Tomb of Light<span class="brand-symbol">™</span></span>
+        </a>
+
+        <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
+          <a href="platform.html">Platform</a>
+          <a href="how-it-works.html">How It Works</a>
+          <a href="security.html">Security</a>
+          <a href="faq.html">FAQ</a>
+        </nav>
+
+        <div class="header-actions">
+          <a class="btn btn-secondary" href="dashboard.html">Dashboard</a>
+          <button class="btn btn-secondary" type="button" data-logout-btn>Log Out</button>
+        </div>
+      </div>
+    </header>
+
+    <main data-dashboard>
+      <section class="page-hero">
+        <div class="container">
+          <div class="page-hero-panel">
+            <span class="eyebrow">Family Foundation</span>
+            <h1>Create Your First Family Record</h1>
+            <p>
+              Begin your Tomb of Light lineage structure by creating the core family record that future members and relationships will connect to.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="page-sections">
+        <div class="container form-shell" data-auth-required style="display: none;">
+          <div class="form-panel">
+            <form class="form-grid" data-create-family-form novalidate>
+              <label>
+                Family Name
+                <input
+                  type="text"
+                  name="family_name"
+                  placeholder="Example: Moreland Family"
+                  required
+                />
+              </label>
+
+              <label>
+                Created By
+                <input
+                  type="text"
+                  name="created_by"
+                  placeholder="Your name"
+                  required
+                />
+              </label>
+
+              <label>
+                Description
+                <textarea
+                  name="description"
+                  rows="5"
+                  placeholder="Optional description of this family line, branch, or legacy record."
+                ></textarea>
+              </label>
+
+              <div
+                class="helper"
+                data-family-status
+                aria-live="polite"
+                style="display: none;"
+              ></div>
+
+              <div class="inline-actions">
+                <button class="btn btn-primary" type="submit" data-submit-btn>
+                  Create Family
+                </button>
+                <a class="btn btn-secondary" href="dashboard.html">Back to Dashboard</a>
+              </div>
+            </form>
+          </div>
+
+          <div class="form-panel">
+            <span class="eyebrow">Why This Matters</span>
+
+            <div class="grid-3">
+              <div>
+                <div class="card-number">1</div>
+                <h3>Establish the family root</h3>
+                <p class="card-copy">
+                  This record becomes the base structure for your lineage and future family members.
+                </p>
+              </div>
+
+              <div>
+                <div class="card-number">2</div>
+                <h3>Prepare for member creation</h3>
+                <p class="card-copy">
+                  Once the family exists, the next phase is adding parents, children, spouses, and branches.
+                </p>
+              </div>
+
+              <div>
+                <div class="card-number">3</div>
+                <h3>Support the lineage engine</h3>
+                <p class="card-copy">
+                  This is the first true data object in the Tomb of Light genealogy system.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="container">
+        <div class="footer-card">
+          <div class="footer-bottom">
+            <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
+          </div>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script src="auth.js"></script>
+  <script src="family.js"></script>
+</body>
+</html>
