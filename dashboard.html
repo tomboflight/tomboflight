@@ -22,9 +22,11 @@
           <a href="platform.html">Platform</a>
           <a href="how-it-works.html">How It Works</a>
           <a href="security.html">Security</a>
+          <a href="faq.html">FAQ</a>
         </nav>
 
         <div class="header-actions">
+          <a class="btn btn-primary" href="create-family.html">Create Family</a>
           <button class="btn btn-secondary" type="button" data-logout-btn>Log Out</button>
         </div>
       </div>
@@ -36,17 +38,16 @@
           <div class="page-hero-panel">
             <span class="eyebrow">Platform Access</span>
             <h1>Your Dashboard</h1>
-            <p data-dashboard-status>
-              Loading your account...
-            </p>
+            <p data-dashboard-status>Loading your account...</p>
           </div>
         </div>
       </section>
 
       <section class="page-sections">
-        <div class="container form-shell" data-auth-required style="display:none;">
+        <div class="container form-shell" data-auth-required style="display: none;">
           <div class="form-panel">
             <span class="eyebrow">Account Profile</span>
+
             <div class="grid-3">
               <div>
                 <div class="card-number">1</div>
@@ -69,24 +70,93 @@
           </div>
 
           <div class="form-panel">
-            <span class="eyebrow">What Comes Next</span>
+            <span class="eyebrow">Your First Family Step</span>
+
             <div class="grid-3">
               <div>
                 <div class="card-number">1</div>
                 <h3>Create your family record</h3>
-                <p class="card-copy">Next we will connect this dashboard to family creation and lineage building.</p>
+                <p class="card-copy">
+                  Start the lineage structure by creating the base family record.
+                </p>
               </div>
 
               <div>
                 <div class="card-number">2</div>
                 <h3>Add members</h3>
-                <p class="card-copy">You will be able to add parents, children, spouses, and branches.</p>
+                <p class="card-copy">
+                  After your family exists, we will connect parents, children, spouses, and branches.
+                </p>
               </div>
 
               <div>
                 <div class="card-number">3</div>
-                <h3>Upload portraits</h3>
-                <p class="card-copy">The dashboard will later support secure media uploads and lineage assembly.</p>
+                <h3>Build the living tree</h3>
+                <p class="card-copy">
+                  The family record becomes the foundation of the Tomb of Light lineage engine.
+                </p>
+              </div>
+            </div>
+
+            <div class="inline-actions" style="margin-top: 1.5rem;">
+              <a class="btn btn-primary" href="create-family.html">Create Your First Family</a>
+            </div>
+          </div>
+
+          <div class="form-panel">
+            <div style="display: flex; justify-content: space-between; gap: 1rem; align-items: center; flex-wrap: wrap;">
+              <span class="eyebrow">Your Family Records</span>
+              <span class="helper" data-families-count>Loading...</span>
+            </div>
+
+            <div
+              class="helper"
+              data-families-error
+              aria-live="polite"
+              style="display: none; color: #ffb3b3; margin-top: 1rem;"
+            ></div>
+
+            <div
+              class="helper"
+              data-families-empty
+              style="display: none; margin-top: 1rem;"
+            >
+              No family records have been created yet. Start by creating your first family.
+            </div>
+
+            <div
+              data-families-list
+              class="grid-3"
+              style="margin-top: 1.5rem;"
+            ></div>
+          </div>
+
+          <div class="form-panel">
+            <span class="eyebrow">Platform Status</span>
+
+            <div class="grid-3">
+              <div>
+                <div class="card-number">A</div>
+                <h3>Authentication</h3>
+                <p class="card-copy">
+                  Your account is connected to the Tomb of Light backend and verified through JWT authentication.
+                </p>
+              </div>
+
+              <div>
+                <div class="card-number">B</div>
+                <h3>Database</h3>
+                <p class="card-copy">
+                  Your platform is connected to the Tomb of Light MongoDB lineage infrastructure.
+                </p>
+              </div>
+
+              <div>
+                <div class="card-number">C</div>
+                <h3>Next Build Phase</h3>
+                <p class="card-copy">
+                  The next step after family creation is member creation and relationship mapping.
+                </p>
               </div>
             </div>
           </div>
@@ -105,7 +175,9 @@
     </footer>
   </div>
 
+  <script src="config.js"></script>
   <script src="app.js"></script>
   <script src="auth.js"></script>
+  <script src="families-list.js"></script>
 </body>
 </html>
