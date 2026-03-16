@@ -18,11 +18,16 @@
           <span>Tomb of Light<span class="brand-symbol">™</span></span>
         </a>
 
-        <button class="menu-toggle" type="button" aria-label="Toggle navigation">
+        <button
+          class="menu-toggle"
+          type="button"
+          aria-label="Toggle navigation menu"
+          aria-expanded="false"
+          aria-controls="site-nav">
           Menu
         </button>
 
-        <nav class="site-nav" aria-label="Primary navigation">
+        <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
           <a href="how-it-works.html">How It Works</a>
           <a href="security.html">Security</a>
           <a href="compliance.html">Compliance</a>
@@ -52,16 +57,32 @@
       <section class="page-sections">
         <div class="container form-shell">
           <div class="form-panel">
-            <form class="form-grid" data-mailto-form data-form-subject="Request access inquiry">
+            <form
+              class="form-grid"
+              data-request-access-form
+              novalidate
+            >
               <div class="form-grid two-col">
                 <label>
                   Full Name
-                  <input type="text" name="full_name" data-label="Full Name" placeholder="Your full name" required />
+                  <input
+                    type="text"
+                    name="full_name"
+                    data-label="Full Name"
+                    placeholder="Your full name"
+                    required
+                  />
                 </label>
 
                 <label>
                   Email Address
-                  <input type="email" name="email" data-label="Email Address" placeholder="you@example.com" required />
+                  <input
+                    type="email"
+                    name="email"
+                    data-label="Email Address"
+                    placeholder="you@example.com"
+                    required
+                  />
                 </label>
               </div>
 
@@ -70,16 +91,21 @@
                   Interest Type
                   <select name="interest_type" data-label="Interest Type" required>
                     <option value="">Select one</option>
-                    <option>Family Legacy Access</option>
-                    <option>Business / Partnership Inquiry</option>
-                    <option>Press / Media Interest</option>
-                    <option>General Platform Interest</option>
+                    <option value="Family Legacy Access">Family Legacy Access</option>
+                    <option value="Business / Partnership Inquiry">Business / Partnership Inquiry</option>
+                    <option value="Press / Media Interest">Press / Media Interest</option>
+                    <option value="General Platform Interest">General Platform Interest</option>
                   </select>
                 </label>
 
                 <label>
                   Organization or Family Name
-                  <input type="text" name="organization" data-label="Organization or Family Name" placeholder="Optional" />
+                  <input
+                    type="text"
+                    name="organization"
+                    data-label="Organization or Family Name"
+                    placeholder="Optional"
+                  />
                 </label>
               </div>
 
@@ -94,13 +120,22 @@
               </label>
 
               <div class="helper">
-                This opens your email app to send your request to support@tomboflight.com.
-                Submitting a request does not guarantee immediate approval, account
-                creation, or product availability.
+                Requests are submitted securely to the Tomb of Light access pipeline.
+                Submission does not guarantee immediate approval, account creation,
+                or product availability.
               </div>
 
+              <div
+                class="helper"
+                data-form-status
+                aria-live="polite"
+                style="display:none;"
+              ></div>
+
               <div class="inline-actions">
-                <button class="btn btn-primary" type="submit">Submit Request</button>
+                <button class="btn btn-primary" type="submit" data-submit-btn>
+                  Submit Request
+                </button>
                 <a class="btn btn-secondary" href="faq.html">Read FAQ</a>
               </div>
             </form>
