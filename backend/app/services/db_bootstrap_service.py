@@ -21,7 +21,7 @@ CORE_COLLECTIONS: dict[str, list[tuple[list[tuple[str, int]], dict]]] = {
                 "unique": True,
                 "name": "idx_family_members_member_id_unique",
                 "partialFilterExpression": {
-                    "member_id": {"$exists": True, "$type": "string", "$ne": ""}
+                    "member_id": {"$type": "string"}
                 },
             },
         ),
@@ -35,7 +35,7 @@ CORE_COLLECTIONS: dict[str, list[tuple[list[tuple[str, int]], dict]]] = {
                 "unique": True,
                 "name": "idx_households_household_key_unique",
                 "partialFilterExpression": {
-                    "household_key": {"$exists": True, "$type": "string", "$ne": ""}
+                    "household_key": {"$type": "string"}
                 },
             },
         ),
@@ -58,7 +58,7 @@ CORE_COLLECTIONS: dict[str, list[tuple[list[tuple[str, int]], dict]]] = {
                 "unique": True,
                 "name": "idx_lineage_nodes_node_id_unique",
                 "partialFilterExpression": {
-                    "node_id": {"$exists": True, "$type": "string", "$ne": ""}
+                    "node_id": {"$type": "string"}
                 },
             },
         ),
@@ -93,7 +93,7 @@ CORE_COLLECTIONS: dict[str, list[tuple[list[tuple[str, int]], dict]]] = {
                 "unique": True,
                 "name": "idx_issued_certificates_certificate_id_unique",
                 "partialFilterExpression": {
-                    "certificate_id": {"$exists": True, "$type": "string", "$ne": ""}
+                    "certificate_id": {"$type": "string"}
                 },
             },
         ),

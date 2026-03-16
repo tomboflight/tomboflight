@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.database import close_mongo_connection, connect_to_mongo
+from app.database import close_mongo_connection, connect_to_mongo, get_database
 
 from app.routes.audit_logs import router as audit_logs_router
 from app.routes.auth import router as auth_router
@@ -15,6 +15,7 @@ from app.routes.db_bootstrap import router as db_bootstrap_router
 from app.routes.families import router as families_router
 from app.routes.family_members import router as family_members_router
 from app.routes.family_networks import router as family_networks_router
+from app.routes.graph_integrity import router as graph_integrity_router
 from app.routes.health import router as health_router
 from app.routes.household_links import router as household_links_router
 from app.routes.households import router as households_router
@@ -26,6 +27,7 @@ from app.routes.lineage_certificate import router as lineage_certificate_router
 from app.routes.lineage_graph import router as lineage_graph_router
 from app.routes.lineage_nodes import router as lineage_nodes_router
 from app.routes.lineage_proof import router as lineage_proof_router
+from app.routes.lineage_query import router as lineage_query_router
 from app.routes.link_requests import router as link_requests_router
 from app.routes.match_candidates import router as match_candidates_router
 from app.routes.match_generation import router as match_generation_router
@@ -38,10 +40,13 @@ from app.routes.verification_records import router as verification_records_route
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI):
+async def lifespan(app: FastAPI):
     connect_to_mongo()
+    app.state.db = get_database()
+    print("Connected to MongoDB database.")
     yield
     close_mongo_connection()
+    print("MongoDB connection closed.")
 
 
 app = FastAPI(
@@ -50,6 +55,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins_list,
@@ -57,6 +63,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # Core Routes
 app.include_router(health_router)
@@ -73,6 +80,7 @@ app.include_router(households_router)
 app.include_router(household_links_router)
 app.include_router(relationships_router)
 app.include_router(db_bootstrap_router)
+app.include_router(graph_integrity_router)
 
 # Identity System
 app.include_router(canonical_persons_router)
@@ -95,6 +103,7 @@ app.include_router(lineage_proof_router)
 app.include_router(lineage_certificate_router)
 app.include_router(issued_certificates_router)
 app.include_router(certificate_versions_router)
+app.include_router(lineage_query_router)
 
 # Audit
 app.include_router(audit_logs_router)
@@ -126,7 +135,11 @@ def root():
             "/households",
             "/household-links",
             "/relationships",
+            "/relationships/family/{family_id}",
+            "/relationships/member/{member_id}",
+            "/relationships/{relationship_id}",
             "/db-bootstrap/",
+            "/graph-integrity/{family_id}",
             "/canonical-persons",
             "/match-candidates",
             "/match-generation/preview",
@@ -148,6 +161,11 @@ def root():
             "/certificate-versions/family/{family_id}",
             "/certificate-versions/family/{family_id}/latest",
             "/certificate-versions/ensure-indexes",
+            "/lineage-query/ancestors/{member_id}",
+            "/lineage-query/descendants/{member_id}",
+            "/lineage-query/tree/{member_id}",
+            "/lineage-query/family-graph/{family_id}",
+            "/lineage-query/neighbors/{member_id}",
             "/audit-logs",
             "/docs",
         ],
