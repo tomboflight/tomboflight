@@ -1,5 +1,6 @@
 from pymongo import MongoClient
 from pymongo.database import Database
+import certifi
 
 from app.config import settings
 
@@ -15,7 +16,14 @@ def connect_to_mongo() -> Database | None:
         return None
 
     try:
-        client = MongoClient(settings.mongodb_uri)
+        client = MongoClient(
+            settings.mongodb_uri,
+            tls=True,
+            tlsCAFile=certifi.where(),
+            serverSelectionTimeoutMS=10000,
+            connectTimeoutMS=10000,
+            socketTimeoutMS=10000,
+        )
         db = client[settings.mongodb_db_name]
         client.admin.command("ping")
         print(f"Connected to MongoDB database: {settings.mongodb_db_name}")
