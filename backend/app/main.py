@@ -11,6 +11,7 @@ from app.routes.auth import router as auth_router
 from app.routes.canonical_persons import router as canonical_persons_router
 from app.routes.certificate_versions import router as certificate_versions_router
 from app.routes.consistency import router as consistency_router
+from app.routes.db_bootstrap import router as db_bootstrap_router
 from app.routes.families import router as families_router
 from app.routes.family_members import router as family_members_router
 from app.routes.family_networks import router as family_networks_router
@@ -71,6 +72,7 @@ app.include_router(family_networks_router)
 app.include_router(households_router)
 app.include_router(household_links_router)
 app.include_router(relationships_router)
+app.include_router(db_bootstrap_router)
 
 # Identity System
 app.include_router(canonical_persons_router)
@@ -124,6 +126,7 @@ def root():
             "/households",
             "/household-links",
             "/relationships",
+            "/db-bootstrap/",
             "/canonical-persons",
             "/match-candidates",
             "/match-generation/preview",
