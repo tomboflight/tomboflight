@@ -1,7 +1,7 @@
 /**
  * Tomb of Light - Main Application Script
  * Accessibility, navigation, cookie preference handling,
- * and backend connectivity checks
+ * backend connectivity, and request access form submission
  */
 
 (function () {
@@ -21,6 +21,10 @@
   const acceptBtn = doc.querySelector('[data-cookie-accept]');
   const declineBtn = doc.querySelector('[data-cookie-decline]');
   const supportEmail = 'support@tomboflight.com';
+
+  const requestAccessForm = doc.querySelector('[data-request-access-form]');
+  const formStatus = doc.querySelector('[data-form-status]');
+  const submitBtn = doc.querySelector('[data-submit-btn]');
 
   const COOKIE_NAME = 'tol_cookie_preference';
   const COOKIE_EXPIRY_DAYS = 365;
@@ -104,7 +108,6 @@
 
   function initializeAnalytics() {
     try {
-      // Place analytics initialization here when ready.
       console.log('Analytics initialized');
     } catch (error) {
       console.error('Analytics initialization failed:', error);
@@ -241,10 +244,107 @@
     }
   }
 
+  function setFormStatus(message, type) {
+    if (!formStatus) return;
+
+    formStatus.style.display = 'block';
+    formStatus.textContent = message;
+    formStatus.dataset.state = type || 'info';
+    formStatus.style.color = type === 'error' ? '#ffb3b3' : '#cfe8cf';
+  }
+
+  function clearFormStatus() {
+    if (!formStatus) return;
+    formStatus.style.display = 'none';
+    formStatus.textContent = '';
+    formStatus.dataset.state = '';
+  }
+
+  async function submitRequestAccessForm(event) {
+    event.preventDefault();
+
+    if (!requestAccessForm) return;
+
+    clearFormStatus();
+
+    if (typeof requestAccessForm.reportValidity === 'function' && !requestAccessForm.reportValidity()) {
+      return;
+    }
+
+    const formData = new FormData(requestAccessForm);
+
+    const payload = {
+      full_name: String(formData.get('full_name') || '').trim(),
+      email: String(formData.get('email') || '').trim(),
+      interest_type: String(formData.get('interest_type') || '').trim(),
+      organization: String(formData.get('organization') || '').trim(),
+      message: String(formData.get('message') || '').trim()
+    };
+
+    if (!payload.full_name || !payload.email || !payload.interest_type || !payload.message) {
+      setFormStatus('Please complete all required fields before submitting.', 'error');
+      return;
+    }
+
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Submitting...';
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/intake/request-access`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      let responseData = null;
+
+      try {
+        responseData = await response.json();
+      } catch (jsonError) {
+        responseData = null;
+      }
+
+      if (!response.ok) {
+        const message =
+          (responseData && (responseData.detail || responseData.message)) ||
+          'Your request could not be submitted right now. Please try again.';
+        throw new Error(message);
+      }
+
+      requestAccessForm.reset();
+      setFormStatus(
+        'Your request has been submitted successfully. Tomb of Light will review your information and follow up when appropriate.',
+        'success'
+      );
+    } catch (error) {
+      console.error('Request access submission failed:', error);
+      setFormStatus(
+        error.message || 'Submission failed. Please try again later.',
+        'error'
+      );
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Submit Request';
+      }
+    }
+  }
+
+  function setupRequestAccessForm() {
+    if (!requestAccessForm) return;
+    requestAccessForm.addEventListener('submit', submitRequestAccessForm);
+  }
+
   function init() {
     setupMobileMenu();
     setupCookiePreferences();
     setupMailtoForms();
+    setupRequestAccessForm();
     checkBackendHealth();
   }
 
