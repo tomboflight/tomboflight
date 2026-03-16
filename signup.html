@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Request Access | Tomb of Light</title>
+  <title>Create Account | Tomb of Light</title>
   <meta
     name="description"
-    content="Request access to Tomb of Light and share interest in the platform, onboarding, and future participation."
+    content="Create your Tomb of Light account and begin building your digital legacy."
   />
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -18,24 +18,19 @@
           <span>Tomb of Light<span class="brand-symbol">™</span></span>
         </a>
 
-        <button
-          class="menu-toggle"
-          type="button"
-          aria-label="Toggle navigation menu"
-          aria-expanded="false"
-          aria-controls="site-nav">
+        <button class="menu-toggle" type="button" aria-label="Toggle navigation menu" aria-expanded="false" aria-controls="site-nav">
           Menu
         </button>
 
         <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
+          <a href="platform.html">Platform</a>
           <a href="how-it-works.html">How It Works</a>
           <a href="security.html">Security</a>
-          <a href="compliance.html">Compliance</a>
           <a href="faq.html">FAQ</a>
         </nav>
 
         <div class="header-actions">
-          <a class="btn btn-primary" href="signup.html">Request Access</a>
+          <a class="btn btn-secondary" href="signin.html">Sign In</a>
         </div>
       </div>
     </header>
@@ -44,11 +39,10 @@
       <section class="page-hero">
         <div class="container">
           <div class="page-hero-panel">
-            <span class="eyebrow">Controlled Rollout</span>
-            <h1>Request Access</h1>
+            <span class="eyebrow">Open Access</span>
+            <h1>Create Your Account</h1>
             <p>
-              Share your interest in Tomb of Light, request onboarding information,
-              and join the platform’s early access pipeline as availability expands.
+              Open your Tomb of Light account and begin building your family’s digital legacy.
             </p>
           </div>
         </div>
@@ -57,125 +51,64 @@
       <section class="page-sections">
         <div class="container form-shell">
           <div class="form-panel">
-            <form
-              class="form-grid"
-              data-request-access-form
-              novalidate
-            >
+            <form class="form-grid" data-signup-form novalidate>
               <div class="form-grid two-col">
                 <label>
                   Full Name
-                  <input
-                    type="text"
-                    name="full_name"
-                    data-label="Full Name"
-                    placeholder="Your full name"
-                    required
-                  />
+                  <input type="text" name="full_name" placeholder="Your full name" required />
                 </label>
 
                 <label>
                   Email Address
-                  <input
-                    type="email"
-                    name="email"
-                    data-label="Email Address"
-                    placeholder="you@example.com"
-                    required
-                  />
+                  <input type="email" name="email" placeholder="you@example.com" required />
                 </label>
               </div>
 
               <div class="form-grid two-col">
                 <label>
-                  Interest Type
-                  <select name="interest_type" data-label="Interest Type" required>
-                    <option value="">Select one</option>
-                    <option value="Family Legacy Access">Family Legacy Access</option>
-                    <option value="Business / Partnership Inquiry">Business / Partnership Inquiry</option>
-                    <option value="Press / Media Interest">Press / Media Interest</option>
-                    <option value="General Platform Interest">General Platform Interest</option>
-                  </select>
+                  Password
+                  <input type="password" name="password" placeholder="Create a password" required />
                 </label>
 
                 <label>
-                  Organization or Family Name
-                  <input
-                    type="text"
-                    name="organization"
-                    data-label="Organization or Family Name"
-                    placeholder="Optional"
-                  />
+                  Confirm Password
+                  <input type="password" name="confirm_password" placeholder="Confirm your password" required />
                 </label>
               </div>
 
-              <label>
-                Message
-                <textarea
-                  name="message"
-                  data-label="Message"
-                  placeholder="Tell Tomb of Light what you're interested in and how you hope to use the platform."
-                  required
-                ></textarea>
-              </label>
-
               <div class="helper">
-                Requests are submitted securely to the Tomb of Light access pipeline.
-                Submission does not guarantee immediate approval, account creation,
-                or product availability.
+                By creating an account, you are entering the Tomb of Light platform and can begin building your private legacy record.
               </div>
 
-              <div
-                class="helper"
-                data-form-status
-                aria-live="polite"
-                style="display:none;"
-              ></div>
+              <div class="helper" data-signup-status aria-live="polite" style="display:none;"></div>
 
               <div class="inline-actions">
-                <button class="btn btn-primary" type="submit" data-submit-btn>
-                  Submit Request
-                </button>
-                <a class="btn btn-secondary" href="faq.html">Read FAQ</a>
+                <button class="btn btn-primary" type="submit" data-submit-btn>Create Account</button>
+                <a class="btn btn-secondary" href="signin.html">Already have an account?</a>
               </div>
             </form>
           </div>
 
           <div class="form-panel">
-            <span class="eyebrow">Why Request Access?</span>
+            <span class="eyebrow">What Happens Next?</span>
             <div class="grid-3">
               <div>
                 <div class="card-number">1</div>
-                <h3>Premium onboarding</h3>
-                <p class="card-copy">
-                  Tomb of Light is positioned as a guided, high-trust platform
-                  rather than a rushed open-registration experience.
-                </p>
+                <h3>Create your account</h3>
+                <p class="card-copy">Start with your identity and secure access to the platform.</p>
               </div>
 
               <div>
                 <div class="card-number">2</div>
-                <h3>Readiness alignment</h3>
-                <p class="card-copy">
-                  Request-based intake helps align public demand with platform
-                  maturity, support capacity, and rollout timing.
-                </p>
+                <h3>Enter your family data</h3>
+                <p class="card-copy">Add members, relationships, and future generations over time.</p>
               </div>
 
               <div>
                 <div class="card-number">3</div>
-                <h3>Better user experience</h3>
-                <p class="card-copy">
-                  A controlled access model supports stronger trust, smoother
-                  onboarding, and a more intentional first impression.
-                </p>
+                <h3>Build your living legacy</h3>
+                <p class="card-copy">Prepare the foundation for your family’s visual lineage experience.</p>
               </div>
-            </div>
-
-            <div class="small-link-row">
-              <a href="how-it-works.html">How It Works</a>
-              <a href="privacy.html">Privacy Policy</a>
-              <a href="signin.html">Already have access?</a>
             </div>
           </div>
         </div>
@@ -189,50 +122,20 @@
             <div>
               <div class="footer-brand">Tomb of Light<span class="brand-symbol">™</span></div>
               <p class="footer-copy">
-                A private, cinematic platform for preserving and exploring family
-                lineage across generations.
+                A private, cinematic platform for preserving and exploring family lineage across generations.
               </p>
-              <div class="cookie-status" data-cookie-status>
-                Your cookie preference has not been set yet.
-              </div>
-            </div>
-
-            <div class="footer-links">
-              <a href="privacy.html">Privacy Policy</a>
-              <a href="terms.html">Terms</a>
-              <a href="cookie-policy.html">Cookie Policy</a>
-              <a href="accessibility.html">Accessibility</a>
-              <a href="data-request.html">Data Requests</a>
-              <a href="privacy-state-notices.html">State Privacy Notices</a>
-              <a href="privacy-choices.html">Privacy Choices</a>
-              <a href="compliance.html">Compliance &amp; Legal</a>
             </div>
           </div>
 
           <div class="footer-bottom">
             <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
-            <span>Tomb of Light technology and platform design are proprietary.</span>
           </div>
         </div>
       </div>
     </footer>
   </div>
 
-  <div class="cookie-banner" data-cookie-banner>
-    <div class="cookie-inner">
-      <div class="cookie-copy">
-        We use essential site technologies and may use optional analytics tools
-        only where permitted. You can accept or decline optional analytics
-        cookies and review your choices at any time.
-      </div>
-      <div class="cookie-actions">
-        <button class="btn btn-primary" type="button" data-cookie-accept>Accept</button>
-        <button class="btn btn-secondary" type="button" data-cookie-decline>Decline</button>
-        <a class="btn btn-ghost" href="privacy-choices.html">Privacy Choices</a>
-      </div>
-    </div>
-  </div>
-
   <script src="app.js"></script>
+  <script src="auth.js"></script>
 </body>
 </html>

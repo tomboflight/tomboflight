@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Sign In | Tomb of Light</title>
+  <title>Dashboard | Tomb of Light</title>
   <meta
     name="description"
-    content="Sign in to your Tomb of Light account."
+    content="Your Tomb of Light dashboard."
   />
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -18,78 +18,75 @@
           <span>Tomb of Light<span class="brand-symbol">™</span></span>
         </a>
 
-        <button class="menu-toggle" type="button" aria-label="Toggle navigation menu" aria-expanded="false" aria-controls="site-nav">
-          Menu
-        </button>
-
         <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
           <a href="platform.html">Platform</a>
           <a href="how-it-works.html">How It Works</a>
           <a href="security.html">Security</a>
-          <a href="faq.html">FAQ</a>
         </nav>
 
         <div class="header-actions">
-          <a class="btn btn-primary" href="signup.html">Create Account</a>
+          <button class="btn btn-secondary" type="button" data-logout-btn>Log Out</button>
         </div>
       </div>
     </header>
 
-    <main>
+    <main data-dashboard>
       <section class="page-hero">
         <div class="container">
           <div class="page-hero-panel">
-            <span class="eyebrow">Account Access</span>
-            <h1>Sign In</h1>
-            <p>
-              Enter your Tomb of Light account and continue building your digital legacy.
+            <span class="eyebrow">Platform Access</span>
+            <h1>Your Dashboard</h1>
+            <p data-dashboard-status>
+              Loading your account...
             </p>
           </div>
         </div>
       </section>
 
       <section class="page-sections">
-        <div class="container form-shell">
+        <div class="container form-shell" data-auth-required style="display:none;">
           <div class="form-panel">
-            <form class="form-grid" data-signin-form novalidate>
-              <label>
-                Email Address
-                <input type="email" name="email" placeholder="you@example.com" required />
-              </label>
-
-              <label>
-                Password
-                <input type="password" name="password" placeholder="Enter your password" required />
-              </label>
-
-              <div class="helper" data-signin-status aria-live="polite" style="display:none;"></div>
-
-              <div class="inline-actions">
-                <button class="btn btn-primary" type="submit" data-submit-btn>Sign In</button>
-                <a class="btn btn-secondary" href="signup.html">Create Account</a>
-              </div>
-            </form>
-          </div>
-
-          <div class="form-panel">
-            <span class="eyebrow">Why Sign In?</span>
+            <span class="eyebrow">Account Profile</span>
             <div class="grid-3">
               <div>
                 <div class="card-number">1</div>
-                <h3>Secure access</h3>
-                <p class="card-copy">Your account protects your family records and platform activity.</p>
+                <h3>Name</h3>
+                <p class="card-copy" data-user-name></p>
               </div>
 
               <div>
                 <div class="card-number">2</div>
-                <h3>Continue your build</h3>
-                <p class="card-copy">Return to your family structure, lineage data, and future uploads.</p>
+                <h3>Email</h3>
+                <p class="card-copy" data-user-email></p>
               </div>
 
               <div>
                 <div class="card-number">3</div>
-                <h3>Prepare for expansion</h3>
-                <p class="card-copy">Your account becomes the foundation for tree building and media uploads.</p>
+                <h3>Role</h3>
+                <p class="card-copy" data-user-role></p>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-panel">
+            <span class="eyebrow">What Comes Next</span>
+            <div class="grid-3">
+              <div>
+                <div class="card-number">1</div>
+                <h3>Create your family record</h3>
+                <p class="card-copy">Next we will connect this dashboard to family creation and lineage building.</p>
+              </div>
+
+              <div>
+                <div class="card-number">2</div>
+                <h3>Add members</h3>
+                <p class="card-copy">You will be able to add parents, children, spouses, and branches.</p>
+              </div>
+
+              <div>
+                <div class="card-number">3</div>
+                <h3>Upload portraits</h3>
+                <p class="card-copy">The dashboard will later support secure media uploads and lineage assembly.</p>
               </div>
             </div>
           </div>
