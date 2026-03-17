@@ -47,7 +47,6 @@ body.menu-open {
   overflow: hidden;
 }
 
-/* ================= PREFERS REDUCED MOTION ================= */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -59,7 +58,6 @@ body.menu-open {
   }
 }
 
-/* ================= SKIP TO CONTENT ================= */
 .skip-to-content {
   position: absolute;
   left: -9999px;
@@ -86,7 +84,6 @@ body.menu-open {
   text-decoration: none;
 }
 
-/* ================= SITE WATERMARK ================= */
 .site-watermark {
   position: fixed;
   inset: 0;
@@ -100,7 +97,6 @@ body.menu-open {
   filter: brightness(1.32) contrast(1.08);
 }
 
-/* ================= BASE ELEMENTS ================= */
 img {
   max-width: 100%;
   display: block;
@@ -129,7 +125,6 @@ select {
   z-index: 1;
 }
 
-/* ================= HEADER ================= */
 .site-header {
   position: sticky;
   top: 0;
@@ -228,7 +223,6 @@ select {
   border-color: var(--border);
 }
 
-/* ================= BUTTONS ================= */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -307,7 +301,6 @@ select {
   border-radius: 4px;
 }
 
-/* ================= PANELS / SHARED CARDS ================= */
 .eyebrow {
   display: inline-block;
   margin-bottom: 16px;
@@ -318,46 +311,22 @@ select {
   text-transform: uppercase;
 }
 
-.hero-copy,
-.hero-visual-card,
-.section-card,
-.feature-card,
-.viewer-panel,
-.trust-card,
-.policy-card,
-.footer-card,
-.cta-panel,
-.page-hero-panel,
-.form-panel,
-.architecture-panel,
-.thank-you-card {
+.page-hero {
+  padding: 72px 0 20px;
+}
+
+.page-hero-panel {
+  padding: 42px;
   background: linear-gradient(180deg, rgba(10, 16, 28, 0.82), rgba(6, 10, 18, 0.92));
   border: 1px solid var(--border);
   border-radius: 32px;
   box-shadow: var(--shadow);
   backdrop-filter: blur(12px);
-}
-
-.hero-copy-premium,
-.hero-visual-card,
-.architecture-panel,
-.viewer-panel,
-.feature-card,
-.trust-card,
-.cta-panel,
-.footer-card {
   position: relative;
   overflow: hidden;
 }
 
-.hero-copy-premium::before,
-.hero-visual-card::before,
-.architecture-panel::before,
-.viewer-panel::before,
-.feature-card::before,
-.trust-card::before,
-.cta-panel::before,
-.footer-card::before {
+.page-hero-panel::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -368,57 +337,41 @@ select {
   opacity: 0.9;
 }
 
-.hero-copy-premium > *,
-.hero-visual-card > *,
-.architecture-panel > *,
-.viewer-panel > *,
-.feature-card > *,
-.trust-card > *,
-.cta-panel > *,
-.footer-card > * {
+.page-hero-panel > * {
   position: relative;
   z-index: 1;
 }
 
-/* ================= PAGE HERO / FORMS ================= */
-.page-hero {
-  padding: 72px 0 20px;
-}
-
-.page-hero-panel {
-  padding: 42px;
-}
-
 .page-hero h1 {
+  margin: 0 0 10px;
   font-size: clamp(2.3rem, 4vw, 4rem);
-  margin: 0 0 14px;
-  letter-spacing: -0.06em;
+  letter-spacing: -0.05em;
   line-height: 1.05;
 }
 
 .page-hero p {
   margin: 0;
   color: var(--muted);
-  font-size: 1.04rem;
+  max-width: 70ch;
 }
 
 .page-sections {
   padding: 12px 0 34px;
 }
 
-.page-stack,
 .form-shell,
 .form-grid {
   display: grid;
   gap: 22px;
 }
 
-.form-grid.two-col {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
 .form-panel {
   padding: 30px;
+  background: linear-gradient(180deg, rgba(10, 16, 28, 0.82), rgba(6, 10, 18, 0.92));
+  border: 1px solid var(--border);
+  border-radius: 32px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(12px);
 }
 
 label {
@@ -449,11 +402,6 @@ select:focus {
   box-shadow: 0 0 0 4px rgba(214, 176, 102, 0.15);
 }
 
-input:invalid:not(:placeholder-shown),
-textarea:invalid:not(:placeholder-shown) {
-  border-color: #ff6b6b;
-}
-
 textarea {
   min-height: 150px;
   resize: vertical;
@@ -468,16 +416,22 @@ textarea {
   display: flex;
   flex-wrap: wrap;
   gap: 14px;
-  margin-top: 12px;
+  margin-top: 14px;
 }
 
 /* ================= FOOTER ================= */
+
 .footer {
   padding: 24px 0 44px;
 }
 
 .footer-card {
   padding: 34px;
+  background: linear-gradient(180deg, rgba(10, 16, 28, 0.82), rgba(6, 10, 18, 0.92));
+  border: 1px solid var(--border);
+  border-radius: 32px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(12px);
 }
 
 .footer-bottom {
@@ -485,282 +439,252 @@ textarea {
   flex-wrap: wrap;
   justify-content: space-between;
   gap: 12px 20px;
-  margin-top: 10px;
-  padding-top: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 18px;
   color: var(--muted-2);
   font-size: 0.96rem;
 }
 
-/* =========================================================
-   LINEAGE CERTIFICATE — EXECUTIVE (ONE PAGE) STYLES
-   Use with your lineage-certificate.js output.
-   (This keeps it “certified” looking while staying compact.)
-   ========================================================= */
+/* ============================================================
+   EXECUTIVE CERTIFICATE (ON-SCREEN)
+   ============================================================ */
 
-/* Optional wrapper you can use around the certificate output container */
-.certificate-print-stack,
-.certificate-exec-print-stack {
-  display: block;
+.exec-certificate-stage {
+  border-radius: 32px;
+  border: 1px solid rgba(214, 176, 102, 0.18);
+  background: rgba(3, 6, 13, 0.35);
+  padding: 26px;
+  box-shadow: 0 24px 70px rgba(0,0,0,0.35);
 }
 
-/* White paper inside dark UI */
-.exec-certificate-paper,
-.certificate-exec-paper,
-.certificate-paper-exec {
+.exec-certificate-empty {
+  padding: 18px 6px;
+}
+
+.exec-certificate-paper {
   background: #ffffff;
   color: #111111;
   border-radius: 26px;
-  border: 1px solid rgba(0,0,0,0.12);
-  box-shadow: 0 18px 50px rgba(0,0,0,0.22);
-  padding: 34px 38px;
+  padding: 34px;
+  border: 1px solid #e6e6e6;
   position: relative;
   overflow: hidden;
 }
 
-/* subtle inner border */
-.exec-certificate-paper::before,
-.certificate-exec-paper::before,
-.certificate-paper-exec::before {
+.exec-certificate-paper::before {
   content: "";
   position: absolute;
   inset: 14px;
-  border: 1px solid rgba(0,0,0,0.12);
+  border: 1px solid rgba(214, 176, 102, 0.25);
   border-radius: 18px;
   pointer-events: none;
 }
 
-/* title area */
-.exec-certificate-title,
-.certificate-exec-title {
-  text-align: center;
-  margin-bottom: 18px;
+.exec-certificate-paper > * {
   position: relative;
   z-index: 1;
 }
 
-.exec-certificate-title h2,
-.certificate-exec-title h2 {
+.exec-cert-topline {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+  font-size: 0.92rem;
+}
+
+.exec-cert-brand {
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #111111;
+}
+
+.exec-cert-badge {
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(214, 176, 102, 0.14);
+  border: 1px solid rgba(214, 176, 102, 0.28);
+  color: #6f551f;
+  font-weight: 800;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.exec-cert-title {
+  text-align: center;
+  margin: 8px 0 18px;
+}
+
+.exec-cert-title .eyebrow {
+  color: #8a6a2f;
+  margin-bottom: 10px;
+}
+
+.exec-cert-title h2 {
   margin: 0;
-  font-size: 42px;
+  font-size: 2.25rem;
   line-height: 1.05;
   letter-spacing: -0.04em;
+  color: #111111;
 }
 
-.exec-certificate-subtitle,
-.certificate-exec-subtitle {
+.exec-cert-subtitle {
   margin: 10px auto 0;
-  max-width: 72ch;
-  color: rgba(0,0,0,0.68);
-  font-size: 16px;
+  max-width: 70ch;
+  color: #333333;
 }
 
-.exec-certificate-eyebrow,
-.certificate-exec-eyebrow {
-  display: inline-block;
-  margin-bottom: 10px;
-  font-size: 12px;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  font-weight: 800;
-  color: #8a6a2f;
-}
-
-/* compact grid that fits one page */
-.exec-certificate-grid,
-.certificate-exec-grid {
+.exec-cert-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 14px;
   margin-top: 18px;
-  position: relative;
-  z-index: 1;
 }
 
-/* field cards */
-.exec-certificate-field,
-.certificate-exec-field {
-  border: 1px solid rgba(0,0,0,0.14);
-  border-radius: 14px;
+.exec-cert-card {
+  border: 1px solid #e2e2e2;
+  border-radius: 16px;
   padding: 14px 16px;
   background: #ffffff;
 }
 
-.exec-certificate-label,
-.certificate-exec-label {
+.exec-cert-label {
   display: block;
-  font-size: 12px;
-  letter-spacing: 0.18em;
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
+  color: #666666;
   font-weight: 800;
-  color: rgba(0,0,0,0.55);
   margin-bottom: 6px;
 }
 
-.exec-certificate-value,
-.certificate-exec-value {
-  font-size: 18px;
-  font-weight: 700;
+.exec-cert-value {
   color: #111111;
+  font-weight: 800;
+  font-size: 1.05rem;
   word-break: break-word;
 }
 
-/* long blocks go full width */
-.exec-certificate-block,
-.certificate-exec-block {
+.exec-cert-wide {
   grid-column: 1 / -1;
-  border: 1px solid rgba(0,0,0,0.14);
-  border-radius: 14px;
+}
+
+.exec-cert-note {
+  margin-top: 14px;
+  border: 1px solid #e2e2e2;
+  border-radius: 16px;
   padding: 14px 16px;
+  color: #222222;
   background: #ffffff;
 }
 
-/* compact list text */
-.exec-certificate-block p,
-.certificate-exec-block p,
-.exec-certificate-block ul,
-.certificate-exec-block ul {
-  margin: 0;
-  color: rgba(0,0,0,0.72);
-  font-size: 15px;
-  line-height: 1.45;
-}
-
-.exec-certificate-block ul,
-.certificate-exec-block ul {
-  padding-left: 18px;
-}
-
-.exec-certificate-block li + li,
-.certificate-exec-block li + li {
-  margin-top: 4px;
-}
-
-/* signature row — keeps it official */
-.exec-certificate-signatures,
-.certificate-exec-signatures {
+.exec-cert-sign {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 18px;
-  margin-top: 16px;
-  position: relative;
-  z-index: 1;
+  margin-top: 18px;
+  align-items: end;
 }
 
-.exec-certificate-signature,
-.certificate-exec-signature {
-  border-top: 1px solid rgba(0,0,0,0.6);
+.exec-cert-line {
+  border-top: 1px solid #111111;
   padding-top: 8px;
-  color: rgba(0,0,0,0.78);
-  font-size: 15px;
+  font-weight: 700;
+  color: #111111;
 }
 
-/* small badge right (like your screenshot) */
-.exec-certificate-badge,
-.certificate-exec-badge {
-  position: absolute;
-  right: 22px;
-  top: 22px;
-  border: 1px solid rgba(0,0,0,0.16);
-  border-radius: 999px;
-  padding: 8px 12px;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  color: rgba(0,0,0,0.7);
-  background: rgba(255,255,255,0.95);
+.exec-cert-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 18px;
 }
 
-/* =========================================================
-   PRINT — EXECUTIVE CERTIFICATE (ONE PAGE)
-   ========================================================= */
+/* ============================================================
+   EXECUTIVE CERTIFICATE (PRINT - ONE PAGE)
+   IMPORTANT: no global visibility hiding
+   ============================================================ */
+
 @media print {
   @page {
     size: letter portrait;
     margin: 0.45in;
   }
 
-  html,
-  body {
+  html, body {
     background: #ffffff !important;
     color: #111111 !important;
   }
 
-  /* hide everything by default */
-  body * {
-    visibility: hidden !important;
+  /* Hide site chrome + controls */
+  .site-header,
+  .footer,
+  .page-hero,
+  .form-panel,
+  nav,
+  .header-actions,
+  [data-certificate-status],
+  [data-certificate-empty],
+  .exec-cert-actions {
+    display: none !important;
   }
 
-  /* show only certificate stack */
-  .certificate-print-stack,
-  .certificate-print-stack *,
-  .certificate-exec-print-stack,
-  .certificate-exec-print-stack * {
-    visibility: visible !important;
-  }
-
-  .certificate-print-stack,
-  .certificate-exec-print-stack {
-    position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
-    width: 100% !important;
-    display: block !important;
-  }
-
-  /* print paper should be flat + clean */
-  .exec-certificate-paper,
-  .certificate-exec-paper,
-  .certificate-paper-exec {
+  /* Make certificate fill the page */
+  .exec-certificate-stage {
+    padding: 0 !important;
+    border: none !important;
+    background: transparent !important;
     box-shadow: none !important;
+  }
+
+  .exec-certificate-paper,
+  .exec-certificate-paper * {
+    color: #111111 !important;
+    box-shadow: none !important;
+  }
+
+  .exec-certificate-paper {
     border: 1px solid #d9d9d9 !important;
     border-radius: 0 !important;
-    padding: 0.32in !important;
+    padding: 0.35in !important;
     overflow: visible !important;
   }
 
-  .exec-certificate-paper::before,
-  .certificate-exec-paper::before,
-  .certificate-paper-exec::before {
+  .exec-certificate-paper::before {
     display: none !important;
   }
 
-  /* keep it on ONE page */
-  .exec-certificate-title,
-  .certificate-exec-title,
-  .exec-certificate-grid,
-  .certificate-exec-grid,
-  .exec-certificate-signatures,
-  .certificate-exec-signatures {
+  /* Tighten spacing for single page */
+  .exec-cert-title { margin: 6px 0 10px !important; }
+  .exec-cert-title h2 { font-size: 1.85rem !important; }
+  .exec-cert-subtitle { margin-top: 6px !important; font-size: 0.95rem !important; }
+
+  .exec-cert-grid { gap: 10px !important; margin-top: 10px !important; }
+  .exec-cert-card { padding: 10px 12px !important; }
+  .exec-cert-label { font-size: 0.72rem !important; margin-bottom: 4px !important; }
+  .exec-cert-value { font-size: 0.98rem !important; }
+
+  .exec-cert-note { margin-top: 10px !important; padding: 10px 12px !important; font-size: 0.95rem !important; }
+
+  .exec-cert-sign { margin-top: 12px !important; gap: 14px !important; }
+  .exec-cert-line { padding-top: 6px !important; font-size: 0.95rem !important; }
+
+  /* Avoid breaks */
+  .exec-certificate-paper,
+  .exec-cert-grid,
+  .exec-cert-note,
+  .exec-cert-sign {
     break-inside: avoid !important;
     page-break-inside: avoid !important;
-  }
-
-  /* ensure no UI prints */
-  .site-header,
-  .footer,
-  nav,
-  .header-actions,
-  .page-hero,
-  .form-panel:first-child,
-  [data-certificate-status],
-  [data-certificate-empty],
-  .certificate-actions,
-  button,
-  .btn {
-    display: none !important;
-  }
-
-  a {
-    text-decoration: none !important;
-    color: inherit !important;
   }
 }
 
 /* ================= RESPONSIVE ================= */
+
 @media (max-width: 1180px) {
-  .site-nav {
-    gap: 18px;
-  }
+  .site-nav { gap: 18px; }
 }
 
 @media (max-width: 860px) {
@@ -780,20 +704,12 @@ textarea {
     flex-wrap: nowrap;
   }
 
-  .menu-toggle {
-    display: inline-flex;
-    margin-left: auto;
-  }
-
   .site-nav,
   .header-actions {
     display: none;
   }
 
-  .page-hero {
-    padding-top: 42px;
-  }
-
+  .page-hero { padding-top: 42px; }
   .page-hero-panel,
   .form-panel,
   .footer-card {
@@ -801,23 +717,15 @@ textarea {
     border-radius: 26px;
   }
 
-  .brand {
-    font-size: 1.5rem;
+  .brand { font-size: 1.5rem; }
+
+  .btn { width: 100%; }
+
+  .exec-cert-grid {
+    grid-template-columns: 1fr;
   }
 
-  .page-hero h1 {
-    max-width: none;
-    font-size: clamp(2.3rem, 8vw, 3.6rem);
-  }
-
-  .btn {
-    width: 100%;
-  }
-
-  .exec-certificate-grid,
-  .certificate-exec-grid,
-  .exec-certificate-signatures,
-  .certificate-exec-signatures {
+  .exec-cert-sign {
     grid-template-columns: 1fr;
   }
 }
