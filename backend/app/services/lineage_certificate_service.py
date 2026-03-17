@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional
 
 from bson import ObjectId
 
@@ -12,14 +12,14 @@ import app.database as database
 
 class LineageCertificateService:
     """
-    Builds a lineage certificate payload from existing Tomb of Light records.
+    Builds an executive lineage certificate payload from existing Tomb of Light records.
 
-    Version 1:
     - reads family data
     - reads family members
     - reads relationships
     - reads verification records
-    - produces a deterministic integrity hash
+    - produces deterministic integrity hash
+    - computes executive fields so the certificate stops showing "not available"
     """
 
     @staticmethod
@@ -58,17 +58,14 @@ class LineageCertificateService:
             return value
 
     @staticmethod
-    def _to_int(value: Any) -> int | None:
-        """Best-effort convert to int; returns None if not possible."""
-        if value is None:
-            return None
-        if isinstance(value, bool):
-            return None
-        if isinstance(value, int):
-            return value
+    def _to_int(value: Any) -> Optional[int]:
         try:
+            if value is None:
+                return None
+            if isinstance(value, int):
+                return value
             s = str(value).strip()
-            if s == "":
+            if not s:
                 return None
             return int(s)
         except Exception:
@@ -139,17 +136,16 @@ class LineageCertificateService:
         first_name = str(member.get("first_name", "") or "").strip()
         last_name = str(member.get("last_name", "") or "").strip()
         joined = f"{first_name} {last_name}".strip()
+
         return joined or "Unknown"
 
     def _member_summary(self, member: dict) -> dict:
-        gen_int = self._to_int(member.get("generation"))
         return {
             "id": str(member.get("_id", "")),
             "full_name": self._display_name(member),
             "role": member.get("role"),
             "relationship_type": member.get("relationship_type"),
-            # IMPORTANT: normalize generation to int so comparisons work
-            "generation": gen_int,
+            "generation": self._to_int(member.get("generation")),
             "gender": member.get("gender"),
             "birth_date": self._serialize_value(member.get("birth_date")),
             "is_verified": bool(member.get("is_verified", False)),
@@ -184,85 +180,42 @@ class LineageCertificateService:
 
     @staticmethod
     def _compute_generation_count(member_summaries: list[dict]) -> int:
-        gens: list[int] = []
-        for m in member_summaries:
-            g = m.get("generation")
-            if isinstance(g, int):
-                gens.append(g)
+        gens = [m.get("generation") for m in member_summaries if isinstance(m.get("generation"), int)]
         if not gens:
             return 0
         return max(gens) - min(gens) + 1
 
     @staticmethod
-    def _safe_name_list(member_summaries: list[dict], generation_value: int) -> list[str]:
-        out: list[str] = []
-        for m in member_summaries:
-            if m.get("generation") == generation_value:
-                name = m.get("full_name") or ""
-                name = str(name).strip()
-                if name and name.lower() != "unknown":
-                    out.append(name)
-        # de-dupe while preserving order
-        seen = set()
-        uniq: list[str] = []
-        for n in out:
-            if n not in seen:
-                seen.add(n)
-                uniq.append(n)
-        return uniq
+    def _compute_executive_fields(member_summaries: list[dict], record_integrity: str) -> dict:
+        gens = [m.get("generation") for m in member_summaries if isinstance(m.get("generation"), int)]
+        min_gen = min(gens) if gens else None
+        max_gen = max(gens) if gens else None
 
-    @staticmethod
-    def _compute_executive_fields(member_summaries: list[dict]) -> dict:
-        gens = [m["generation"] for m in member_summaries if isinstance(m.get("generation"), int)]
+        founders = []
+        if min_gen is not None:
+            founders = [m["full_name"] for m in member_summaries if m.get("generation") == min_gen and m.get("full_name")]
 
-        if not gens:
-            return {
-                "record_integrity": "Recorded",
-                "founding_line": "Founding lineage not available.",
-                "verified_branches": "No verified branches recorded.",
-                "key_lineage_path": [],
-                "descendant_summary": "No descendant records summarized on this certificate.",
-            }
+        latest = []
+        if max_gen is not None:
+            latest = [m["full_name"] for m in member_summaries if m.get("generation") == max_gen and m.get("full_name")]
 
-        min_gen = min(gens)
-        max_gen = max(gens)
+        verified_count = sum(1 for m in member_summaries if m.get("is_verified"))
 
-        founders = LineageCertificateService._safe_name_list(member_summaries, min_gen)
-        latest = LineageCertificateService._safe_name_list(member_summaries, max_gen)
-
-        total = len(member_summaries)
-        verified_count = sum(1 for m in member_summaries if m.get("is_verified") is True)
-
-        # Key lineage path: up to 8 names ordered by generation then name
-        sortable = []
-        for m in member_summaries:
-            g = m.get("generation")
-            name = (m.get("full_name") or "").strip()
-            if isinstance(g, int) and name:
-                sortable.append((g, name))
-        sortable.sort(key=lambda x: (x[0], x[1]))
-        key_path = [name for _, name in sortable[:8]]
-
-        founding_text = (
-            f"Founding generation (G{min_gen}): " + " + ".join(founders)
-            if founders
-            else "Founding lineage not available."
+        ordered = sorted(
+            [m for m in member_summaries if m.get("full_name")],
+            key=lambda m: (
+                m.get("generation") if isinstance(m.get("generation"), int) else 9999,
+                str(m.get("full_name", "")).lower(),
+            ),
         )
-
-        descendant_text = (
-            f"Latest generation (G{max_gen}) recorded: " + ", ".join(latest)
-            if latest
-            else "No descendant records summarized on this certificate."
-        )
-
-        verified_text = f"Verified members: {verified_count} / {total}" if total else "No verified branches recorded."
+        key_path = [m["full_name"] for m in ordered[:10]]
 
         return {
-            "record_integrity": "Recorded",
-            "founding_line": founding_text,
-            "verified_branches": verified_text,
+            "record_integrity": record_integrity,
+            "founding_line": f"Founding generation: {' + '.join(founders)}" if founders else "Founding lineage not available.",
+            "verified_branches": f"Verified members: {verified_count} / {len(member_summaries)}" if member_summaries else "No verified branches recorded.",
             "key_lineage_path": key_path,
-            "descendant_summary": descendant_text,
+            "descendant_summary": f"Latest generation recorded: {', '.join(latest)}" if latest else "No descendant records summarized on this certificate.",
         }
 
     def build_certificate(self, family_id: str) -> dict:
@@ -275,6 +228,7 @@ class LineageCertificateService:
         verification_records = self._find_verification_records(family_id)
 
         normalized_family = self._normalize_document(family)
+
         member_summaries = [self._member_summary(m) for m in self._normalize_documents(members)]
         relationship_summaries = [self._relationship_summary(r) for r in self._normalize_documents(relationships)]
         verification_summaries = [self._verification_summary(v) for v in self._normalize_documents(verification_records)]
@@ -291,7 +245,9 @@ class LineageCertificateService:
         created_by = normalized_family.get("created_by") or normalized_family.get("owner") or "Unknown"
 
         generation_count = self._compute_generation_count(member_summaries)
-        executive = self._compute_executive_fields(member_summaries)
+
+        overall_status = "Verified" if verification_pass_count > 0 else "Recorded"
+        executive = self._compute_executive_fields(member_summaries, overall_status)
 
         certificate_core = {
             "certificate_type": "lineage_certificate",
@@ -319,17 +275,13 @@ class LineageCertificateService:
         }
 
         integrity_hash = self._calculate_integrity_hash(certificate_core)
-        overall_status = "verified" if verification_pass_count > 0 else "pending"
-
-        # reflect status into executive record_integrity
-        certificate_core["executive"]["record_integrity"] = overall_status.capitalize()
 
         return {
             "success": True,
             "certificate": {
                 **certificate_core,
                 "certificate_id": f"LC-{family_record_id}",
-                "status": overall_status,
+                "status": overall_status.lower(),  # frontend can title-case if needed
                 "integrity_hash": integrity_hash,
             },
         }
