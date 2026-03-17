@@ -13,6 +13,7 @@ from app.routes.certificate_versions import router as certificate_versions_route
 from app.routes.consistency import router as consistency_router
 from app.routes.db_bootstrap import router as db_bootstrap_router
 from app.routes.families import router as families_router
+from app.routes.family_graph import router as family_graph_router
 from app.routes.family_members import router as family_members_router
 from app.routes.family_networks import router as family_networks_router
 from app.routes.graph_integrity import router as graph_integrity_router
@@ -71,6 +72,7 @@ app.include_router(auth_router)
 app.include_router(intake_router)
 app.include_router(projects_router)
 app.include_router(families_router)
+app.include_router(family_graph_router)
 app.include_router(users_router)
 app.include_router(family_members_router)
 app.include_router(lineage_nodes_router)
@@ -124,8 +126,10 @@ def root():
             "/intake",
             "/projects",
             "/families",
+            "/families/{family_id}/graph",
             "/users",
             "/family-members",
+            "/family-members-index",
             "/lineage-nodes",
             "/tree/{family_id}",
             "/tree/{family_id}/verified",

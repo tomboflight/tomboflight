@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Family Graph | Tomb of Light</title>
+  <meta
+    name="description"
+    content="View a Tomb of Light family graph with members, relationships, and lineage summary."
+  />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="page-wrap">
+    <header class="site-header">
+      <div class="container site-header-inner">
+        <a class="brand" href="index.html" aria-label="Tomb of Light home">
+          <span>Tomb of Light<span class="brand-symbol">™</span></span>
+        </a>
+
+        <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
+          <a href="platform.html">Platform</a>
+          <a href="how-it-works.html">How It Works</a>
+          <a href="security.html">Security</a>
+          <a href="faq.html">FAQ</a>
+        </nav>
+
+        <div class="header-actions">
+          <a class="btn btn-secondary" href="dashboard.html">Dashboard</a>
+          <button class="btn btn-secondary" type="button" data-logout-btn>Log Out</button>
+        </div>
+      </div>
+    </header>
+
+    <main data-dashboard data-family-graph-page>
+      <section class="page-hero">
+        <div class="container">
+          <div class="page-hero-panel">
+            <span class="eyebrow">Lineage Graph Engine</span>
+            <h1>Family Graph Viewer</h1>
+            <p>
+              View the assembled Tomb of Light family graph, including members, relationships, and lineage summary.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="page-sections">
+        <div class="container form-shell" data-auth-required style="display: none;">
+          <div class="form-panel">
+            <div class="form-grid">
+              <label>
+                Select Family
+                <select data-graph-family-select>
+                  <option value="">Select a family</option>
+                </select>
+              </label>
+
+              <div
+                class="helper"
+                data-graph-status
+                aria-live="polite"
+                style="display: none;"
+              ></div>
+
+              <div class="inline-actions">
+                <button class="btn btn-primary" type="button" data-load-graph-btn>
+                  Load Family Graph
+                </button>
+                <a class="btn btn-secondary" href="dashboard.html">Back to Dashboard</a>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-panel">
+            <span class="eyebrow">Graph Summary</span>
+            <div data-graph-summary class="grid-3" style="margin-top: 1rem;"></div>
+          </div>
+
+          <div class="form-panel">
+            <span class="eyebrow">Family Members</span>
+            <div data-graph-members class="grid-3" style="margin-top: 1rem;"></div>
+          </div>
+
+          <div class="form-panel">
+            <span class="eyebrow">Relationships</span>
+            <div data-graph-relationships class="grid-3" style="margin-top: 1rem;"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="container">
+        <div class="footer-card">
+          <div class="footer-bottom">
+            <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
+          </div>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script src="auth.js"></script>
+  <script src="family-graph.js"></script>
+</body>
+</html>

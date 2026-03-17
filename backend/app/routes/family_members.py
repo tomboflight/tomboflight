@@ -12,6 +12,35 @@ from app.services.matching import generate_match_candidates_for_member
 router = APIRouter(prefix="/family-members", tags=["family_members"])
 
 
+@router.get("-index")
+def list_family_members_index(current_user: dict = Depends(get_current_user)):
+    db = get_database()
+    if db is None:
+        raise HTTPException(status_code=500, detail="Database is not connected.")
+
+    members = []
+    cursor = db.family_members.find().sort("created_at", 1)
+
+    for member in cursor:
+      members.append(
+          {
+              "id": str(member.get("_id")),
+              "family_id": member.get("family_id"),
+              "first_name": member.get("first_name"),
+              "last_name": member.get("last_name"),
+              "birth_year": member.get("birth_year"),
+              "generation": member.get("generation"),
+              "father_id": member.get("father_id"),
+              "mother_id": member.get("mother_id"),
+              "spouse_id": member.get("spouse_id"),
+              "bio": member.get("bio"),
+              "created_at": member.get("created_at"),
+          }
+      )
+
+    return members
+
+
 @router.post("")
 def create_family_member(payload: Dict[str, Any], current_user: dict = Depends(get_current_user)):
     db = get_database()

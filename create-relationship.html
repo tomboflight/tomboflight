@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Create Relationship | Tomb of Light</title>
+
+<link rel="stylesheet" href="styles.css">
+
+<style>
+.container {
+    max-width: 900px;
+    margin: auto;
+    padding: 40px;
+}
+
+.card {
+    background: rgba(10,16,28,0.9);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    padding: 30px;
+}
+
+label {
+    display:block;
+    margin-top:20px;
+    color:#ddd;
+}
+
+input, select {
+    width:100%;
+    padding:10px;
+    margin-top:5px;
+    border-radius:6px;
+    border:1px solid #444;
+    background:#0c111b;
+    color:white;
+}
+
+button {
+    margin-top:25px;
+    padding:12px 20px;
+    border:none;
+    border-radius:8px;
+    background:#d6b066;
+    color:black;
+    font-weight:bold;
+    cursor:pointer;
+}
+
+.success {
+    margin-top:20px;
+    color:#6be675;
+}
+</style>
+
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>Create Relationship</h1>
+
+<div class="card">
+
+<label>Family</label>
+<select id="familySelect"></select>
+
+<label>Relationship Type</label>
+<select id="relationshipType">
+<option value="spouse">Spouse</option>
+<option value="parent">Parent</option>
+<option value="child">Child</option>
+</select>
+
+<label>Person A (Member ID)</label>
+<input id="personA">
+
+<label>Person B (Member ID)</label>
+<input id="personB">
+
+<button onclick="createRelationship()">Create Relationship</button>
+
+<div id="message" class="success"></div>
+
+</div>
+</div>
+
+<script>
+
+const API = "http://127.0.0.1:8000";
+
+async function loadFamilies() {
+
+const res = await fetch(`${API}/families/`);
+const families = await res.json();
+
+const select = document.getElementById("familySelect");
+
+families.forEach(f => {
+const opt = document.createElement("option");
+opt.value = f.id;
+opt.textContent = `${f.name} (${f.created_by})`;
+select.appendChild(opt);
+});
+
+}
+
+async function createRelationship() {
+
+const payload = {
+family_id: document.getElementById("familySelect").value,
+person_a: document.getElementById("personA").value,
+person_b: document.getElementById("personB").value,
+relationship_type: document.getElementById("relationshipType").value
+};
+
+const res = await fetch(`${API}/relationships/`,{
+method:"POST",
+headers:{
+"Content-Type":"application/json"
+},
+body: JSON.stringify(payload)
+});
+
+if(res.ok){
+document.getElementById("message").innerText = "Relationship created successfully";
+}else{
+document.getElementById("message").innerText = "Error creating relationship";
+}
+
+}
+
+loadFamilies();
+
+</script>
+
+</body>
+</html>
