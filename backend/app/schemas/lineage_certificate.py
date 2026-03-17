@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, List, Optional, Dict
+from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, Field
 
 
@@ -50,6 +51,14 @@ class LineageCertificateVerificationRecord(BaseModel):
     updated_at: Optional[str] = None
 
 
+class LineageCertificateExecutive(BaseModel):
+    record_integrity: str = "Recorded"
+    founding_line: str = "Founding lineage not available."
+    verified_branches: str = "Branch summary not available."
+    key_lineage_path: List[str] = Field(default_factory=list)
+    descendant_summary: str = "No descendant records summarized on this certificate."
+
+
 class LineageCertificatePayload(BaseModel):
     certificate_type: str = "lineage_certificate"
     certificate_version: str = "1.0.0"
@@ -62,13 +71,14 @@ class LineageCertificatePayload(BaseModel):
     family: LineageCertificateFamily
     summary: LineageCertificateSummary
 
-    # Full detail (still available even if the UI only shows executive summary)
+    executive: LineageCertificateExecutive = Field(default_factory=LineageCertificateExecutive)
+
     members: List[LineageCertificateMember] = Field(default_factory=list)
     relationships: List[LineageCertificateRelationship] = Field(default_factory=list)
     verification_records: List[LineageCertificateVerificationRecord] = Field(default_factory=list)
 
-    # Executive one-page helpers (frontend uses these)
-    executive: Dict[str, Any] = Field(default_factory=dict)
+    # optional extra metadata if you want it later
+    meta: Dict[str, Any] = Field(default_factory=dict)
 
 
 class LineageCertificateResponse(BaseModel):
