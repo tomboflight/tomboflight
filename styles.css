@@ -1347,6 +1347,42 @@ textarea {
   flex-wrap: wrap;
 }
 
+/* ==========================================
+   LINEAGE INTELLIGENCE DASHBOARD
+========================================== */
+
+.intelligence-cards {
+  margin-top: 30px;
+}
+
+.intelligence-cards .feature-card {
+  text-align: center;
+}
+
+.intelligence-cards .feature-card h3 {
+  margin-bottom: 12px;
+}
+
+.intelligence-cards .feature-card div {
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--text);
+}
+
+.intelligence-report {
+  margin-top: 30px;
+}
+
+.intelligence-report h3 {
+  margin-bottom: 14px;
+}
+
+.intelligence-report .helper,
+.intelligence-report p {
+  color: var(--muted);
+}
+
 @media print {
   @page {
     size: letter portrait;
