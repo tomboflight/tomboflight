@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lineage Certificate | Tomb of Light</title>
+  <meta
+    name="description"
+    content="Generate and view lineage certificates for Tomb of Light family records."
+  />
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .certificate-shell {
+      display: grid;
+      gap: 1.25rem;
+    }
+
+    .certificate-card {
+      background: rgba(10, 16, 28, 0.96);
+      border: 1px solid rgba(214, 176, 102, 0.18);
+      border-radius: 24px;
+      padding: 1.5rem;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22);
+    }
+
+    .certificate-paper {
+      position: relative;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.02)),
+        rgba(9, 14, 24, 0.98);
+      border: 1px solid rgba(214, 176, 102, 0.22);
+      border-radius: 28px;
+      padding: 2rem;
+      overflow: hidden;
+    }
+
+    .certificate-paper::before {
+      content: "";
+      position: absolute;
+      inset: 14px;
+      border: 1px solid rgba(214, 176, 102, 0.14);
+      border-radius: 20px;
+      pointer-events: none;
+    }
+
+    .certificate-title {
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .certificate-title .eyebrow {
+      margin-bottom: 0.75rem;
+    }
+
+    .certificate-title h2 {
+      margin: 0;
+      font-size: clamp(2rem, 4vw, 3rem);
+      line-height: 1.05;
+      letter-spacing: -0.05em;
+    }
+
+    .certificate-subtitle {
+      margin: 0.65rem auto 0;
+      max-width: 60ch;
+      text-align: center;
+      color: var(--muted);
+    }
+
+    .certificate-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1rem;
+      margin-top: 1.5rem;
+    }
+
+    .certificate-item {
+      padding: 1rem 1rem 0.95rem;
+      border-radius: 18px;
+      background: rgba(255,255,255,0.025);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .certificate-label {
+      display: block;
+      font-size: 0.78rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 0.35rem;
+    }
+
+    .certificate-value {
+      color: var(--text);
+      word-break: break-word;
+    }
+
+    .certificate-list {
+      margin: 0;
+      padding-left: 1.1rem;
+      color: var(--muted);
+    }
+
+    .certificate-list li + li {
+      margin-top: 0.35rem;
+    }
+
+    .certificate-summary {
+      margin-top: 1.5rem;
+      padding: 1.1rem 1.15rem;
+      border-radius: 18px;
+      background: rgba(214, 176, 102, 0.06);
+      border: 1px solid rgba(214, 176, 102, 0.14);
+      color: var(--muted);
+    }
+
+    .certificate-id {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.92rem;
+    }
+
+    .certificate-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.8rem;
+      margin-top: 1.5rem;
+    }
+
+    @media (max-width: 860px) {
+      .certificate-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page-wrap">
+    <header class="site-header">
+      <div class="container site-header-inner">
+        <a class="brand" href="index.html" aria-label="Tomb of Light home">
+          <span>Tomb of Light<span class="brand-symbol">™</span></span>
+        </a>
+
+        <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
+          <a href="platform.html">Platform</a>
+          <a href="how-it-works.html">How It Works</a>
+          <a href="security.html">Security</a>
+          <a href="faq.html">FAQ</a>
+        </nav>
+
+        <div class="header-actions">
+          <a class="btn btn-secondary" href="dashboard.html">Dashboard</a>
+          <button class="btn btn-secondary" type="button" data-logout-btn>Log Out</button>
+        </div>
+      </div>
+    </header>
+
+    <main data-dashboard data-lineage-certificate-page>
+      <section class="page-hero">
+        <div class="container">
+          <div class="page-hero-panel">
+            <span class="eyebrow">Verification Layer</span>
+            <h1>Lineage Certificate</h1>
+            <p>
+              Generate and review lineage certificate data for a Tomb of Light family record.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="page-sections">
+        <div class="container form-shell" data-auth-required style="display: none;">
+          <div class="certificate-shell">
+            <div class="form-panel">
+              <div class="form-grid">
+                <label>
+                  Select Family
+                  <select data-certificate-family-select>
+                    <option value="">Select a family</option>
+                  </select>
+                </label>
+
+                <div
+                  class="helper"
+                  data-certificate-status
+                  aria-live="polite"
+                  style="display: none;"
+                ></div>
+
+                <div class="inline-actions">
+                  <button class="btn btn-primary" type="button" data-load-certificate-btn>
+                    Load Certificate
+                  </button>
+                  <a class="btn btn-secondary" href="tree-view.html">Back to Family Tree</a>
+                </div>
+              </div>
+            </div>
+
+            <div class="certificate-card">
+              <div data-certificate-empty class="helper">
+                Select a family to generate its lineage certificate view.
+              </div>
+              <div data-certificate-output style="display: none;"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="container">
+        <div class="footer-card">
+          <div class="footer-bottom">
+            <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
+          </div>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script src="auth.js"></script>
+  <script src="lineage-certificate.js"></script>
+</body>
+</html>
