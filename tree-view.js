@@ -23,7 +23,7 @@
     try {
       await window.TOLAuth.apiRequest('/auth/me', { method: 'GET' });
     } catch (error) {
-      window.TOLAuth.clearSession();
+      window.TOLAuth.clearToken();
       window.location.href = 'signin.html';
       return;
     }
@@ -47,6 +47,7 @@
       familySelect.addEventListener('change', async function () {
         const familyId = familySelect.value;
         if (!familyId) return;
+
         clearDetailPanel(detailPanel, detailEmpty);
         await loadAndRenderTree(familyId, canvas, statusNode, detailPanel, detailEmpty);
       });
@@ -229,17 +230,51 @@
       enrichedItems.forEach(item => {
         if (item.type === 'single') {
           const member = item.members[0];
-          placeMemberNode(wrapper, member, currentX, y, nodeWidth, nodeHeight, detailPanel, detailEmpty, memberMap, relationships);
+          placeMemberNode(
+            wrapper,
+            member,
+            currentX,
+            y,
+            nodeWidth,
+            nodeHeight,
+            detailPanel,
+            detailEmpty,
+            memberMap,
+            relationships
+          );
           positions.set(member.id, buildPosition(currentX, y, nodeWidth, nodeHeight));
           currentX += nodeWidth + itemGap;
         } else {
           const [leftMember, rightMember] = item.members;
 
-          placeMemberNode(wrapper, leftMember, currentX, y, nodeWidth, nodeHeight, detailPanel, detailEmpty, memberMap, relationships);
+          placeMemberNode(
+            wrapper,
+            leftMember,
+            currentX,
+            y,
+            nodeWidth,
+            nodeHeight,
+            detailPanel,
+            detailEmpty,
+            memberMap,
+            relationships
+          );
           positions.set(leftMember.id, buildPosition(currentX, y, nodeWidth, nodeHeight));
 
           const rightX = currentX + nodeWidth + coupleGap;
-          placeMemberNode(wrapper, rightMember, rightX, y, nodeWidth, nodeHeight, detailPanel, detailEmpty, memberMap, relationships);
+
+          placeMemberNode(
+            wrapper,
+            rightMember,
+            rightX,
+            y,
+            nodeWidth,
+            nodeHeight,
+            detailPanel,
+            detailEmpty,
+            memberMap,
+            relationships
+          );
           positions.set(rightMember.id, buildPosition(rightX, y, nodeWidth, nodeHeight));
 
           svg.appendChild(
@@ -311,9 +346,22 @@
       const branchTopY = coupleBottomY + 22;
       const branchBottomY = childTopY - 18;
 
-      svg.appendChild(makeVerticalLine(svgNS, coupleCenterX, coupleBottomY, branchTopY, 'tree-line parent-child'));
-      svg.appendChild(makeCurvedLine(svgNS, coupleCenterX, branchTopY, childPos.centerX, branchBottomY, 'tree-line parent-child'));
-      svg.appendChild(makeVerticalLine(svgNS, childPos.centerX, branchBottomY, childTopY, 'tree-line parent-child'));
+      svg.appendChild(
+        makeVerticalLine(svgNS, coupleCenterX, coupleBottomY, branchTopY, 'tree-line parent-child')
+      );
+      svg.appendChild(
+        makeCurvedLine(
+          svgNS,
+          coupleCenterX,
+          branchTopY,
+          childPos.centerX,
+          branchBottomY,
+          'tree-line parent-child'
+        )
+      );
+      svg.appendChild(
+        makeVerticalLine(svgNS, childPos.centerX, branchBottomY, childTopY, 'tree-line parent-child')
+      );
     });
 
     const groupedChildIds = new Set(
@@ -360,7 +408,10 @@
     `;
 
     card.addEventListener('click', function () {
-      document.querySelectorAll('.tree-node.is-active').forEach(node => node.classList.remove('is-active'));
+      document.querySelectorAll('.tree-node.is-active').forEach(node => {
+        node.classList.remove('is-active');
+      });
+
       card.classList.add('is-active');
       renderDetailPanel(member, memberMap, relationships, detailPanel, detailEmpty);
     });
@@ -468,6 +519,7 @@
       detailPanel.style.display = 'none';
       detailPanel.innerHTML = '';
     }
+
     if (detailEmpty) {
       detailEmpty.style.display = 'block';
     }
@@ -505,7 +557,9 @@
       });
 
       if (parentCenters.length) {
-        anchorValues.push(parentCenters.reduce((sum, value) => sum + value, 0) / parentCenters.length);
+        anchorValues.push(
+          parentCenters.reduce((sum, value) => sum + value, 0) / parentCenters.length
+        );
       }
     });
 
@@ -534,8 +588,13 @@
     });
 
     spouseLinks.forEach(rel => {
-      if (!spouseGraph.has(rel.source_member_id)) spouseGraph.set(rel.source_member_id, new Set());
-      if (!spouseGraph.has(rel.target_member_id)) spouseGraph.set(rel.target_member_id, new Set());
+      if (!spouseGraph.has(rel.source_member_id)) {
+        spouseGraph.set(rel.source_member_id, new Set());
+      }
+      if (!spouseGraph.has(rel.target_member_id)) {
+        spouseGraph.set(rel.target_member_id, new Set());
+      }
+
       spouseGraph.get(rel.source_member_id).add(rel.target_member_id);
       spouseGraph.get(rel.target_member_id).add(rel.source_member_id);
     });
@@ -592,6 +651,7 @@
       .forEach(rel => {
         const key = buildPairKey(rel.source_member_id, rel.target_member_id);
         if (seen.has(key)) return;
+
         seen.add(key);
         pairs.push({
           a: rel.source_member_id,
@@ -648,10 +708,12 @@
   function makeCurvedLine(svgNS, x1, y1, x2, y2, className) {
     const path = document.createElementNS(svgNS, 'path');
     const midY = y1 + (y2 - y1) / 2;
+
     const d = [
       `M ${x1} ${y1}`,
       `C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`
     ].join(' ');
+
     path.setAttribute('d', d);
     path.setAttribute('class', className);
     return path;
@@ -659,12 +721,15 @@
 
   function showStatus(node, message, type) {
     if (!node) return;
+
     node.style.display = 'block';
     node.textContent = message;
     node.style.color =
-      type === 'error' ? '#ffb3b3' :
-      type === 'success' ? '#cfe8cf' :
-      '#d6e6ff';
+      type === 'error'
+        ? '#ffb3b3'
+        : type === 'success'
+          ? '#cfe8cf'
+          : '#d6e6ff';
   }
 
   function hideStatus(node) {
