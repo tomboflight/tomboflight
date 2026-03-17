@@ -27,10 +27,8 @@
 
         <div class="header-actions">
           <a class="btn btn-primary" href="create-family.html">Create Family</a>
-          <a class="btn btn-secondary" href="add-member.html">Add Member</a>
-          <a class="btn btn-secondary" href="create-relationship.html">Add Relationship</a>
-          <a class="btn btn-secondary" href="family-graph.html">View Graph</a>
-          <a class="btn btn-secondary" href="tree-view.html">View Tree</a>
+          <a class="btn btn-secondary" href="tree-view.html">Family Tree</a>
+          <a class="btn btn-secondary" href="lineage-certificate.html">Lineage Certificate</a>
           <button class="btn btn-secondary" type="button" data-logout-btn>Log Out</button>
         </div>
       </div>
@@ -74,7 +72,7 @@
           </div>
 
           <div class="form-panel">
-            <span class="eyebrow">Lineage Build Steps</span>
+            <span class="eyebrow">Your First Family Step</span>
 
             <div class="grid-3">
               <div>
@@ -87,56 +85,26 @@
 
               <div>
                 <div class="card-number">2</div>
-                <h3>Add family members</h3>
+                <h3>Add members</h3>
                 <p class="card-copy">
-                  Create the people who belong inside the family line.
+                  After your family exists, connect parents, children, spouses, and branches.
                 </p>
               </div>
 
               <div>
                 <div class="card-number">3</div>
-                <h3>Map relationships</h3>
+                <h3>Build the living tree</h3>
                 <p class="card-copy">
-                  Connect members as parents, children, spouses, siblings, guardians, or step-family.
+                  The family record becomes the foundation of the Tomb of Light lineage engine.
                 </p>
               </div>
             </div>
 
             <div class="inline-actions" style="margin-top: 1.5rem;">
-              <a class="btn btn-primary" href="create-family.html">Create Family</a>
-              <a class="btn btn-secondary" href="add-member.html">Add Family Member</a>
-              <a class="btn btn-secondary" href="create-relationship.html">Create Relationship</a>
-              <a class="btn btn-secondary" href="family-graph.html">View Family Graph</a>
-              <a class="btn btn-secondary" href="tree-view.html">View Family Tree</a>
+              <a class="btn btn-primary" href="create-family.html">Create Your First Family</a>
+              <a class="btn btn-secondary" href="tree-view.html">Open Family Tree</a>
+              <a class="btn btn-secondary" href="lineage-certificate.html">Open Lineage Certificate</a>
             </div>
-          </div>
-
-          <div class="form-panel">
-            <div style="display: flex; justify-content: space-between; gap: 1rem; align-items: center; flex-wrap: wrap;">
-              <span class="eyebrow">Your Family Records</span>
-              <span class="helper" data-families-count>Loading...</span>
-            </div>
-
-            <div
-              class="helper"
-              data-families-error
-              aria-live="polite"
-              style="display: none; color: #ffb3b3; margin-top: 1rem;"
-            ></div>
-
-            <div
-              class="helper"
-              data-families-empty
-              style="display: none; margin-top: 1rem;"
-            >
-              No family records have been created yet. Start by creating your first family.
-            </div>
-
-            <div
-              data-families-list
-              class="grid-3"
-              style="margin-top: 1.5rem;"
-            ></div>
           </div>
 
           <div class="form-panel">
@@ -163,7 +131,7 @@
                 <div class="card-number">C</div>
                 <h3>Next Build Phase</h3>
                 <p class="card-copy">
-                  The next step after graph viewing is visual lineage rendering and advanced relationship logic.
+                  The next step after tree rendering is lineage certification and verified record presentation.
                 </p>
               </div>
             </div>
@@ -186,6 +154,5 @@
   <script src="config.js"></script>
   <script src="app.js"></script>
   <script src="auth.js"></script>
-  <script src="families-list.js"></script>
 </body>
 </html>
