@@ -71,11 +71,20 @@
     outputNode.innerHTML = '';
 
     try {
-      const certificate = await window.TOLAuth.apiRequest(`/lineage-certificate/${familyId}`, {
-        method: 'GET'
-      });
+      const [certificateResult, graphResult] = await Promise.allSettled([
+        window.TOLAuth.apiRequest(`/lineage-certificate/${familyId}`, { method: 'GET' }),
+        window.TOLAuth.apiRequest(`/families/${familyId}/graph`, { method: 'GET' })
+      ]);
 
-      renderCertificate(certificate, outputNode);
+      const certificate =
+        certificateResult.status === 'fulfilled' ? certificateResult.value : {};
+
+      const graph =
+        graphResult.status === 'fulfilled' ? graphResult.value : null;
+
+      const merged = buildCertificateViewModel(certificate, graph, familyId);
+
+      renderCertificate(merged, outputNode);
       outputNode.style.display = 'block';
 
       if (emptyNode) {
@@ -91,53 +100,176 @@
     }
   }
 
-  function renderCertificate(certificate, outputNode) {
+  function buildCertificateViewModel(certificate, graph, familyId) {
+    const family = graph?.family || certificate.family || {};
+    const members = Array.isArray(graph?.members) ? graph.members : [];
+    const relationships = Array.isArray(graph?.relationships) ? graph.relationships : [];
+    const summary = graph?.summary || {};
+
+    const memberMap = new Map();
+    members.forEach(function (member) {
+      memberMap.set(member.id, member);
+    });
+
+    const lineageProof = buildLineageProof(relationships, memberMap);
+    const descendants = buildDescendantRecords(members, summary);
+
     const certificateId =
       certificate.certificate_id ||
       certificate.id ||
       certificate.record_id ||
-      'Pending';
+      `LC-${String(familyId).slice(-8).toUpperCase()}`;
 
     const familyName =
       certificate.family_name ||
-      certificate.family?.family_name ||
+      family.family_name ||
       certificate.family ||
       'Unknown Family';
 
     const createdBy =
       certificate.created_by ||
-      certificate.family?.created_by ||
+      family.created_by ||
       'Unknown';
 
     const issuedAt =
       certificate.issued_at ||
       certificate.created_at ||
       certificate.generated_at ||
-      'Not provided';
+      new Date().toLocaleString();
 
-    const summary =
+    const narrativeSummary =
       certificate.summary ||
       certificate.statement ||
       certificate.description ||
-      'This lineage certificate summarizes the current family lineage record stored within Tomb of Light.';
+      buildNarrativeSummary(familyName, summary, members, relationships);
 
-    const lineageProof = normalizeList(
-      certificate.lineage_proof ||
-      certificate.ancestors ||
-      certificate.proof ||
-      certificate.lineage ||
-      []
-    );
+    return {
+      certificateId: certificateId,
+      familyName: familyName,
+      createdBy: createdBy,
+      issuedAt: issuedAt,
+      lineageProof: lineageProof,
+      descendants: descendants,
+      summary: narrativeSummary,
+      metadataEntries: buildMetadataEntries(certificate, summary, members, relationships)
+    };
+  }
 
-    const descendants = normalizeList(
-      certificate.descendants ||
-      certificate.children ||
-      certificate.branch_members ||
-      []
-    );
+  function buildLineageProof(relationships, memberMap) {
+    const parentChildLinks = relationships.filter(function (rel) {
+      return rel.relationship_type === 'parent_child';
+    });
 
-    const metadataEntries = collectMetadataEntries(certificate);
+    if (!parentChildLinks.length) return [];
 
+    return parentChildLinks.map(function (rel) {
+      const source = memberMap.get(rel.source_member_id);
+      const target = memberMap.get(rel.target_member_id);
+
+      const sourceName = getPersonName(source, rel.source_member_id);
+      const targetName = getPersonName(target, rel.target_member_id);
+
+      return `${sourceName} → ${targetName}`;
+    });
+  }
+
+  function buildDescendantRecords(members, summary) {
+    const generationCount = Number.isInteger(summary.generation_count) ? summary.generation_count : 0;
+    const memberCount = Number.isInteger(summary.member_count) ? summary.member_count : members.length;
+
+    const generationMap = new Map();
+    members.forEach(function (member) {
+      const generation = Number.isInteger(member.generation) ? member.generation : 0;
+      generationMap.set(generation, (generationMap.get(generation) || 0) + 1);
+    });
+
+    const results = [
+      `${memberCount} total family members`,
+      `${generationCount} total generations`
+    ];
+
+    Array.from(generationMap.keys())
+      .sort(function (a, b) { return a - b; })
+      .forEach(function (generation) {
+        results.push(`Generation ${generation}: ${generationMap.get(generation)} member(s)`);
+      });
+
+    return results;
+  }
+
+  function buildNarrativeSummary(familyName, summary, members, relationships) {
+    const memberCount = Number.isInteger(summary.member_count) ? summary.member_count : members.length;
+    const relationshipCount = Number.isInteger(summary.relationship_count) ? summary.relationship_count : relationships.length;
+    const generationCount = Number.isInteger(summary.generation_count) ? summary.generation_count : 0;
+
+    return `${familyName} currently contains ${memberCount} recorded family member(s), ${relationshipCount} relationship link(s), and spans ${generationCount} generation layer(s) within the Tomb of Light lineage system.`;
+  }
+
+  function buildMetadataEntries(certificate, summary, members, relationships) {
+    const entries = [];
+
+    if (Number.isInteger(summary.member_count) || members.length) {
+      entries.push({
+        label: 'Member Count',
+        value: String(Number.isInteger(summary.member_count) ? summary.member_count : members.length)
+      });
+    }
+
+    if (Number.isInteger(summary.relationship_count) || relationships.length) {
+      entries.push({
+        label: 'Relationship Count',
+        value: String(Number.isInteger(summary.relationship_count) ? summary.relationship_count : relationships.length)
+      });
+    }
+
+    if (Number.isInteger(summary.generation_count)) {
+      entries.push({
+        label: 'Generation Count',
+        value: String(summary.generation_count)
+      });
+    }
+
+    Object.keys(certificate || {}).forEach(function (key) {
+      const ignoredKeys = new Set([
+        'certificate_id',
+        'id',
+        'record_id',
+        'family_name',
+        'family',
+        'created_by',
+        'issued_at',
+        'created_at',
+        'generated_at',
+        'summary',
+        'statement',
+        'description',
+        'lineage_proof',
+        'ancestors',
+        'proof',
+        'lineage',
+        'descendants',
+        'children',
+        'branch_members',
+        'success'
+      ]);
+
+      if (ignoredKeys.has(key)) return;
+
+      const value = certificate[key];
+      if (value == null) return;
+      if (typeof value === 'object') return;
+      if (key === 'success') return;
+
+      entries.push({
+        label: formatLabel(key),
+        value: String(value)
+      });
+    });
+
+    return entries.slice(0, 6);
+  }
+
+  function renderCertificate(model, outputNode) {
     outputNode.innerHTML = `
       <div class="certificate-paper">
         <div class="certificate-title">
@@ -151,38 +283,38 @@
         <div class="certificate-grid">
           <div class="certificate-item">
             <span class="certificate-label">Certificate ID</span>
-            <div class="certificate-value certificate-id">${escapeHtml(String(certificateId))}</div>
+            <div class="certificate-value certificate-id">${escapeHtml(String(model.certificateId))}</div>
           </div>
 
           <div class="certificate-item">
             <span class="certificate-label">Family Name</span>
-            <div class="certificate-value">${escapeHtml(String(familyName))}</div>
+            <div class="certificate-value">${escapeHtml(String(model.familyName))}</div>
           </div>
 
           <div class="certificate-item">
             <span class="certificate-label">Created By</span>
-            <div class="certificate-value">${escapeHtml(String(createdBy))}</div>
+            <div class="certificate-value">${escapeHtml(String(model.createdBy))}</div>
           </div>
 
           <div class="certificate-item">
             <span class="certificate-label">Issued At</span>
-            <div class="certificate-value">${escapeHtml(String(issuedAt))}</div>
+            <div class="certificate-value">${escapeHtml(String(model.issuedAt))}</div>
           </div>
 
           <div class="certificate-item">
             <span class="certificate-label">Lineage Proof</span>
-            ${renderList(lineageProof)}
+            ${renderList(model.lineageProof)}
           </div>
 
           <div class="certificate-item">
             <span class="certificate-label">Descendant Records</span>
-            ${renderList(descendants)}
+            ${renderList(model.descendants)}
           </div>
         </div>
 
-        ${metadataEntries.length ? `
+        ${model.metadataEntries.length ? `
           <div class="certificate-grid" style="margin-top: 1rem;">
-            ${metadataEntries.map(function (entry) {
+            ${model.metadataEntries.map(function (entry) {
               return `
                 <div class="certificate-item">
                   <span class="certificate-label">${escapeHtml(entry.label)}</span>
@@ -194,7 +326,7 @@
         ` : ''}
 
         <div class="certificate-summary">
-          ${escapeHtml(String(summary))}
+          ${escapeHtml(String(model.summary))}
         </div>
 
         <div class="certificate-actions">
@@ -204,74 +336,8 @@
     `;
   }
 
-  function collectMetadataEntries(certificate) {
-    const ignoredKeys = new Set([
-      'certificate_id',
-      'id',
-      'record_id',
-      'family_name',
-      'family',
-      'created_by',
-      'issued_at',
-      'created_at',
-      'generated_at',
-      'summary',
-      'statement',
-      'description',
-      'lineage_proof',
-      'ancestors',
-      'proof',
-      'lineage',
-      'descendants',
-      'children',
-      'branch_members'
-    ]);
-
-    const entries = [];
-
-    Object.keys(certificate || {}).forEach(function (key) {
-      if (ignoredKeys.has(key)) return;
-
-      const value = certificate[key];
-      if (value == null) return;
-      if (typeof value === 'object') return;
-
-      entries.push({
-        label: formatLabel(key),
-        value: String(value)
-      });
-    });
-
-    return entries.slice(0, 6);
-  }
-
-  function normalizeList(value) {
-    if (!Array.isArray(value)) return [];
-
-    return value.map(function (item) {
-      if (item == null) return '';
-
-      if (typeof item === 'string' || typeof item === 'number') {
-        return String(item);
-      }
-
-      if (typeof item === 'object') {
-        return (
-          item.display_name ||
-          item.name ||
-          item.full_name ||
-          item.label ||
-          item.id ||
-          JSON.stringify(item)
-        );
-      }
-
-      return String(item);
-    }).filter(Boolean);
-  }
-
   function renderList(items) {
-    if (!items.length) {
+    if (!items || !items.length) {
       return '<div class="certificate-value">None recorded.</div>';
     }
 
@@ -282,6 +348,17 @@
         }).join('')}
       </ul>
     `;
+  }
+
+  function getPersonName(person, fallbackId) {
+    if (!person) return `Unknown (${String(fallbackId).slice(-6)})`;
+
+    return (
+      person.display_name ||
+      `${person.first_name || ''} ${person.last_name || ''}`.trim() ||
+      fallbackId ||
+      'Unknown'
+    );
   }
 
   function formatLabel(key) {
