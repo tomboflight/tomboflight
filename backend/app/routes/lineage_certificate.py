@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, status
 
+from app.schemas.lineage_certificate import LineageCertificateResponse
 from app.services.lineage_certificate_service import LineageCertificateService
 
 router = APIRouter(
@@ -10,7 +11,7 @@ router = APIRouter(
 service = LineageCertificateService()
 
 
-@router.get("/{family_id}")
+@router.get("/{family_id}", response_model=LineageCertificateResponse)
 def get_lineage_certificate(family_id: str):
     try:
         return service.build_certificate(family_id)
