@@ -8,6 +8,9 @@
   const TOKEN_KEY = 'tol_access_token';
   const USER_KEY = 'tol_user';
 
+  // Change this only if your real file is named differently.
+  const POST_LOGIN_REDIRECT = 'dashboard.html';
+
   function saveToken(token) {
     localStorage.setItem(TOKEN_KEY, token);
   }
@@ -50,7 +53,6 @@
       ...(options.headers || {})
     };
 
-    // only set JSON header when body is not FormData
     if (!(options.body instanceof FormData) && !headers['Content-Type']) {
       headers['Content-Type'] = 'application/json';
     }
@@ -60,19 +62,19 @@
     }
 
     let response;
+
     try {
       response = await fetch(`${API_BASE_URL}${path}`, {
         ...options,
         headers
       });
     } catch (networkError) {
-      // This is the classic "Load failed" case (CORS, blocked origin, server down, wrong port).
-      const hint =
+      throw new Error(
         `Network error calling API.\n\n` +
         `API_BASE_URL: ${API_BASE_URL}\n` +
         `Page origin: ${window.location.origin}\n\n` +
-        `Fix: Ensure backend is running + ALLOWED_ORIGINS includes your origin (often http://[::1]:5500).`;
-      throw new Error(hint);
+        `Make sure frontend is on http://127.0.0.1:5500 and backend is on http://127.0.0.1:8000.`
+      );
     }
 
     const contentType = response.headers.get('content-type') || '';
@@ -97,6 +99,7 @@
             data.error ||
             (Array.isArray(data.errors) && data.errors.join(', ')))) ||
         `Request failed with status ${response.status}`;
+
       throw new Error(message);
     }
 
@@ -132,16 +135,38 @@
       body: JSON.stringify({ email, password })
     });
 
-    if (!loginData || !loginData.access_token) {
+    const token =
+      loginData?.access_token ||
+      loginData?.token ||
+      loginData?.accessToken ||
+      null;
+
+    if (!token) {
       throw new Error('Login succeeded but no access token was returned.');
     }
 
-    saveToken(loginData.access_token);
+    saveToken(token);
 
     const me = await apiRequest('/auth/me', { method: 'GET' });
     saveUser(me);
 
     return { loginData, me };
+  }
+
+  function redirectAfterLogin() {
+    const target = POST_LOGIN_REDIRECT;
+
+    fetch(target, { method: 'HEAD' })
+      .then(function (response) {
+        if (response.ok) {
+          window.location.href = target;
+        } else {
+          window.location.href = 'index.html';
+        }
+      })
+      .catch(function () {
+        window.location.href = 'index.html';
+      });
   }
 
   function setupSignupForm() {
@@ -190,7 +215,7 @@
         setStatus(statusNode, 'Account created successfully. Signing you in...', 'success');
 
         await handleLogin(email, password);
-        window.location.href = 'dashboard.html';
+        redirectAfterLogin();
       } catch (error) {
         setStatus(statusNode, error.message || 'Signup failed.', 'error');
       } finally {
@@ -227,7 +252,8 @@
 
       try {
         await handleLogin(email, password);
-        window.location.href = 'dashboard.html';
+        setStatus(statusNode, 'Sign-in successful.', 'success');
+        redirectAfterLogin();
       } catch (error) {
         setStatus(statusNode, error.message || 'Login failed.', 'error');
       } finally {
@@ -273,7 +299,7 @@
       setStatus(statusNode, 'You are signed in and connected to the Tomb of Light platform.', 'success');
     } catch (error) {
       clearSession();
-      setStatus(statusNode, 'Your session expired. Please sign in again.', 'error');
+      setStatus(statusNode, 'Your session is not valid. Please sign in again.', 'error');
       setTimeout(function () {
         window.location.href = 'signin.html';
       }, 1200);
@@ -296,7 +322,7 @@
     if ((isSigninPage || isSignupPage) && token) {
       apiRequest('/auth/me', { method: 'GET' })
         .then(function () {
-          window.location.href = 'dashboard.html';
+          redirectAfterLogin();
         })
         .catch(function () {
           clearSession();
