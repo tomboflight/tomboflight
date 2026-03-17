@@ -47,6 +47,7 @@ body.menu-open {
   overflow: hidden;
 }
 
+/* ================= PREFERS REDUCED MOTION ================= */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -58,6 +59,7 @@ body.menu-open {
   }
 }
 
+/* ================= SKIP TO CONTENT ================= */
 .skip-to-content {
   position: absolute;
   left: -9999px;
@@ -84,6 +86,7 @@ body.menu-open {
   text-decoration: none;
 }
 
+/* ================= SITE WATERMARK ================= */
 .site-watermark {
   position: fixed;
   inset: 0;
@@ -97,6 +100,7 @@ body.menu-open {
   filter: brightness(1.32) contrast(1.08);
 }
 
+/* ================= BASE ELEMENTS ================= */
 img {
   max-width: 100%;
   display: block;
@@ -125,6 +129,7 @@ select {
   z-index: 1;
 }
 
+/* ================= HEADER ================= */
 .site-header {
   position: sticky;
   top: 0;
@@ -223,6 +228,7 @@ select {
   border-color: var(--border);
 }
 
+/* ================= BUTTONS ================= */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -301,6 +307,23 @@ select {
   border-radius: 4px;
 }
 
+/* ================= HERO ================= */
+.hero {
+  padding: 72px 0 42px;
+}
+
+.hero-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1.04fr) minmax(0, 0.96fr);
+  gap: 26px;
+  align-items: stretch;
+}
+
+.hero-shell-tech {
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  align-items: start;
+}
+
 .eyebrow {
   display: inline-block;
   margin-bottom: 16px;
@@ -311,22 +334,46 @@ select {
   text-transform: uppercase;
 }
 
-.page-hero {
-  padding: 72px 0 20px;
-}
-
-.page-hero-panel {
-  padding: 42px;
+.hero-copy,
+.hero-visual-card,
+.section-card,
+.feature-card,
+.viewer-panel,
+.trust-card,
+.policy-card,
+.footer-card,
+.cta-panel,
+.page-hero-panel,
+.form-panel,
+.architecture-panel,
+.thank-you-card {
   background: linear-gradient(180deg, rgba(10, 16, 28, 0.82), rgba(6, 10, 18, 0.92));
   border: 1px solid var(--border);
   border-radius: 32px;
   box-shadow: var(--shadow);
   backdrop-filter: blur(12px);
+}
+
+.hero-copy-premium,
+.hero-visual-card,
+.architecture-panel,
+.viewer-panel,
+.feature-card,
+.trust-card,
+.cta-panel,
+.footer-card {
   position: relative;
   overflow: hidden;
 }
 
-.page-hero-panel::before {
+.hero-copy-premium::before,
+.hero-visual-card::before,
+.architecture-panel::before,
+.viewer-panel::before,
+.feature-card::before,
+.trust-card::before,
+.cta-panel::before,
+.footer-card::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -337,28 +384,82 @@ select {
   opacity: 0.9;
 }
 
-.page-hero-panel > * {
+.hero-copy-premium > *,
+.hero-visual-card > *,
+.architecture-panel > *,
+.viewer-panel > *,
+.feature-card > *,
+.trust-card > *,
+.cta-panel > *,
+.footer-card > * {
   position: relative;
   z-index: 1;
 }
 
-.page-hero h1 {
-  margin: 0 0 10px;
-  font-size: clamp(2.3rem, 4vw, 4rem);
-  letter-spacing: -0.05em;
-  line-height: 1.05;
+.hero-copy-premium {
+  padding: 42px;
+  min-height: 100%;
 }
 
-.page-hero p {
-  margin: 0;
+.hero-copy-tech {
+  position: sticky;
+  top: 112px;
+}
+
+.hero-copy h1,
+.page-hero h1 {
+  margin: 0 0 18px;
+  font-size: clamp(2.9rem, 5vw, 5rem);
+  line-height: 0.98;
+  letter-spacing: -0.06em;
+  max-width: 11.5ch;
+}
+
+.hero-gold {
+  color: var(--text);
+}
+
+.hero-lead,
+.hero-copy p,
+.page-hero p,
+.section-lead,
+.card-copy,
+.footer-copy {
   color: var(--muted);
-  max-width: 70ch;
+  font-size: 1.04rem;
+}
+
+.hero-lead {
+  max-width: 58ch;
+}
+
+.hero-actions,
+.cta-actions,
+.inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 28px;
+}
+
+/* ================= PAGE HERO / FORMS ================= */
+.page-hero {
+  padding: 72px 0 20px;
+}
+
+.page-hero-panel {
+  padding: 42px;
+}
+
+.page-hero h1 {
+  font-size: clamp(2.3rem, 4vw, 4rem);
 }
 
 .page-sections {
   padding: 12px 0 34px;
 }
 
+.page-stack,
 .form-shell,
 .form-grid {
   display: grid;
@@ -367,11 +468,6 @@ select {
 
 .form-panel {
   padding: 30px;
-  background: linear-gradient(180deg, rgba(10, 16, 28, 0.82), rgba(6, 10, 18, 0.92));
-  border: 1px solid var(--border);
-  border-radius: 32px;
-  box-shadow: var(--shadow);
-  backdrop-filter: blur(12px);
 }
 
 label {
@@ -412,26 +508,13 @@ textarea {
   font-size: 0.94rem;
 }
 
-.inline-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 14px;
-  margin-top: 14px;
-}
-
 /* ================= FOOTER ================= */
-
 .footer {
   padding: 24px 0 44px;
 }
 
 .footer-card {
   padding: 34px;
-  background: linear-gradient(180deg, rgba(10, 16, 28, 0.82), rgba(6, 10, 18, 0.92));
-  border: 1px solid var(--border);
-  border-radius: 32px;
-  box-shadow: var(--shadow);
-  backdrop-filter: blur(12px);
 }
 
 .footer-bottom {
@@ -439,252 +522,368 @@ textarea {
   flex-wrap: wrap;
   justify-content: space-between;
   gap: 12px 20px;
+  margin-top: 0;
+  padding-top: 24px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
-  padding-top: 18px;
   color: var(--muted-2);
   font-size: 0.96rem;
 }
 
-/* ============================================================
-   EXECUTIVE CERTIFICATE (ON-SCREEN)
-   ============================================================ */
+/* =========================================================
+   EXECUTIVE LINEAGE CERTIFICATE (ONE-PAGE) + SEAL WATERMARK
+========================================================= */
 
-.exec-certificate-stage {
-  border-radius: 32px;
-  border: 1px solid rgba(214, 176, 102, 0.18);
-  background: rgba(3, 6, 13, 0.35);
-  padding: 26px;
-  box-shadow: 0 24px 70px rgba(0,0,0,0.35);
+.tol-certificate-shell {
+  display: grid;
+  gap: 22px;
 }
 
-.exec-certificate-empty {
-  padding: 18px 6px;
+.tol-certificate-output {
+  min-height: 120px;
 }
 
-.exec-certificate-paper {
+.tol-cert-print-area {
+  width: 100%;
+}
+
+.tol-cert-paper {
+  position: relative;
+  border-radius: 28px;
   background: #ffffff;
   color: #111111;
-  border-radius: 26px;
-  padding: 34px;
-  border: 1px solid #e6e6e6;
-  position: relative;
+  border: 1px solid rgba(0,0,0,0.12);
+  box-shadow: 0 18px 60px rgba(0,0,0,0.25);
   overflow: hidden;
+  padding: 28px;
 }
 
-.exec-certificate-paper::before {
-  content: "";
+.tol-cert-watermark {
   position: absolute;
-  inset: 14px;
-  border: 1px solid rgba(214, 176, 102, 0.25);
-  border-radius: 18px;
+  inset: 0;
   pointer-events: none;
+  background-image: url("images/tol-watermark-clean.png");
+  background-repeat: no-repeat;
+  background-position: center 52%;
+  background-size: min(520px, 72vw);
+  opacity: 0.10;
+  filter: grayscale(100%);
 }
 
-.exec-certificate-paper > * {
+.tol-cert-top {
   position: relative;
   z-index: 1;
-}
-
-.exec-cert-topline {
   display: flex;
+  align-items: flex-start;
   justify-content: space-between;
-  align-items: center;
   gap: 16px;
-  margin-bottom: 12px;
-  font-size: 0.92rem;
-}
-
-.exec-cert-brand {
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  color: #111111;
-}
-
-.exec-cert-badge {
-  padding: 8px 12px;
-  border-radius: 999px;
-  background: rgba(214, 176, 102, 0.14);
-  border: 1px solid rgba(214, 176, 102, 0.28);
-  color: #6f551f;
-  font-weight: 800;
-  font-size: 0.78rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.exec-cert-title {
-  text-align: center;
-  margin: 8px 0 18px;
-}
-
-.exec-cert-title .eyebrow {
-  color: #8a6a2f;
   margin-bottom: 10px;
 }
 
-.exec-cert-title h2 {
-  margin: 0;
-  font-size: 2.25rem;
-  line-height: 1.05;
-  letter-spacing: -0.04em;
-  color: #111111;
-}
-
-.exec-cert-subtitle {
-  margin: 10px auto 0;
-  max-width: 70ch;
-  color: #333333;
-}
-
-.exec-cert-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
-  margin-top: 18px;
-}
-
-.exec-cert-card {
-  border: 1px solid #e2e2e2;
-  border-radius: 16px;
-  padding: 14px 16px;
-  background: #ffffff;
-}
-
-.exec-cert-label {
-  display: block;
-  font-size: 0.78rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: #666666;
+.tol-cert-brand-title {
   font-weight: 800;
+  letter-spacing: -0.02em;
+  font-size: 1.05rem;
+}
+
+.tol-cert-brand-sub {
+  color: rgba(0,0,0,0.6);
+  font-weight: 700;
+  margin-top: 2px;
+}
+
+.tol-cert-badge {
+  font-weight: 800;
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 10px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(0,0,0,0.12);
+  background: rgba(214, 176, 102, 0.16);
+  color: #6b4f1f;
+  white-space: nowrap;
+}
+
+.tol-cert-title {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  margin: 10px 0 18px;
+}
+
+.tol-cert-eyebrow {
+  font-weight: 900;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  font-size: 0.78rem;
+  color: #6b4f1f;
+  margin-bottom: 10px;
+}
+
+.tol-cert-title h2 {
+  margin: 0;
+  font-size: clamp(1.7rem, 3.4vw, 2.4rem);
+  letter-spacing: -0.04em;
+}
+
+.tol-cert-title p {
+  margin: 10px auto 0;
+  max-width: 72ch;
+  color: rgba(0,0,0,0.65);
+  font-weight: 600;
+}
+
+.tol-cert-grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.tol-cert-card {
+  border: 1px solid rgba(0,0,0,0.12);
+  border-radius: 14px;
+  padding: 12px 12px 11px;
+  background: rgba(255,255,255,0.92);
+}
+
+.tol-cert-card-label {
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  color: rgba(0,0,0,0.58);
   margin-bottom: 6px;
 }
 
-.exec-cert-value {
-  color: #111111;
+.tol-cert-card-value {
   font-weight: 800;
-  font-size: 1.05rem;
+  font-size: 1rem;
+  color: #111111;
   word-break: break-word;
 }
 
-.exec-cert-wide {
-  grid-column: 1 / -1;
+.tol-cert-split {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 1.12fr 0.88fr;
+  gap: 12px;
+  margin-top: 12px;
 }
 
-.exec-cert-note {
-  margin-top: 14px;
-  border: 1px solid #e2e2e2;
-  border-radius: 16px;
-  padding: 14px 16px;
-  color: #222222;
-  background: #ffffff;
+.tol-cert-block {
+  border: 1px solid rgba(0,0,0,0.12);
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(255,255,255,0.92);
 }
 
-.exec-cert-sign {
+.tol-cert-label {
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  color: rgba(0,0,0,0.58);
+  margin-bottom: 8px;
+}
+
+.tol-cert-list {
+  margin: 0;
+  padding-left: 18px;
+  color: rgba(0,0,0,0.78);
+  font-weight: 650;
+  font-size: 0.94rem;
+}
+
+.tol-cert-list li + li {
+  margin-top: 4px;
+}
+
+.tol-cert-muted {
+  color: rgba(0,0,0,0.68);
+  font-weight: 650;
+  font-size: 0.95rem;
+}
+
+.tol-cert-footnote {
+  margin-top: 8px;
+  color: rgba(0,0,0,0.55);
+  font-weight: 700;
+  font-size: 0.86rem;
+}
+
+.tol-cert-statement {
+  position: relative;
+  z-index: 1;
+  margin-top: 12px;
+  border: 1px solid rgba(0,0,0,0.12);
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(214, 176, 102, 0.10);
+  color: rgba(0,0,0,0.72);
+  font-weight: 700;
+}
+
+.tol-cert-sign {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 18px;
-  margin-top: 18px;
+  margin-top: 14px;
   align-items: end;
 }
 
-.exec-cert-line {
-  border-top: 1px solid #111111;
-  padding-top: 8px;
-  font-weight: 700;
-  color: #111111;
+.tol-cert-signline {
+  border-bottom: 1px solid rgba(0,0,0,0.55);
+  height: 24px;
 }
 
-.exec-cert-actions {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-top: 18px;
+.tol-cert-signlabel {
+  margin-top: 8px;
+  color: rgba(0,0,0,0.72);
+  font-weight: 800;
 }
 
-/* ============================================================
-   EXECUTIVE CERTIFICATE (PRINT - ONE PAGE)
-   IMPORTANT: no global visibility hiding
-   ============================================================ */
+.tol-cert-actions {
+  position: relative;
+  z-index: 1;
+  margin-top: 14px;
+}
 
+.no-print {}
+
+@media (max-width: 860px) {
+  .tol-cert-paper {
+    padding: 18px;
+  }
+  .tol-cert-grid {
+    grid-template-columns: 1fr;
+  }
+  .tol-cert-split {
+    grid-template-columns: 1fr;
+  }
+  .tol-cert-sign {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ================= PRINT (EXECUTIVE CERTIFICATE ONE PAGE) ================= */
 @media print {
   @page {
     size: letter portrait;
     margin: 0.45in;
   }
 
-  html, body {
+  html,
+  body {
     background: #ffffff !important;
     color: #111111 !important;
   }
 
-  /* Hide site chrome + controls */
+  body * {
+    visibility: hidden !important;
+  }
+
+  .tol-cert-print-area,
+  .tol-cert-print-area * {
+    visibility: visible !important;
+  }
+
+  .tol-cert-print-area {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+  }
+
+  .tol-cert-paper {
+    box-shadow: none !important;
+    border: 1px solid #d9d9d9 !important;
+    border-radius: 0 !important;
+    padding: 14px !important;
+  }
+
+  .tol-cert-watermark {
+    opacity: 0.07 !important;
+    filter: grayscale(100%) !important;
+  }
+
+  .no-print,
   .site-header,
   .footer,
   .page-hero,
-  .form-panel,
   nav,
   .header-actions,
   [data-certificate-status],
   [data-certificate-empty],
-  .exec-cert-actions {
+  .form-panel:first-child {
     display: none !important;
   }
 
-  /* Make certificate fill the page */
-  .exec-certificate-stage {
-    padding: 0 !important;
-    border: none !important;
-    background: transparent !important;
-    box-shadow: none !important;
+  .tol-cert-title {
+    margin: 6px 0 10px !important;
   }
 
-  .exec-certificate-paper,
-  .exec-certificate-paper * {
-    color: #111111 !important;
-    box-shadow: none !important;
+  .tol-cert-title p {
+    margin-top: 6px !important;
   }
 
-  .exec-certificate-paper {
-    border: 1px solid #d9d9d9 !important;
-    border-radius: 0 !important;
-    padding: 0.35in !important;
-    overflow: visible !important;
+  .tol-cert-grid {
+    gap: 8px !important;
+    margin-top: 10px !important;
   }
 
-  .exec-certificate-paper::before {
-    display: none !important;
+  .tol-cert-card {
+    padding: 9px !important;
   }
 
-  /* Tighten spacing for single page */
-  .exec-cert-title { margin: 6px 0 10px !important; }
-  .exec-cert-title h2 { font-size: 1.85rem !important; }
-  .exec-cert-subtitle { margin-top: 6px !important; font-size: 0.95rem !important; }
+  .tol-cert-split {
+    gap: 8px !important;
+    margin-top: 8px !important;
+  }
 
-  .exec-cert-grid { gap: 10px !important; margin-top: 10px !important; }
-  .exec-cert-card { padding: 10px 12px !important; }
-  .exec-cert-label { font-size: 0.72rem !important; margin-bottom: 4px !important; }
-  .exec-cert-value { font-size: 0.98rem !important; }
+  .tol-cert-block {
+    padding: 9px !important;
+  }
 
-  .exec-cert-note { margin-top: 10px !important; padding: 10px 12px !important; font-size: 0.95rem !important; }
+  .tol-cert-list {
+    font-size: 0.88rem !important;
+  }
 
-  .exec-cert-sign { margin-top: 12px !important; gap: 14px !important; }
-  .exec-cert-line { padding-top: 6px !important; font-size: 0.95rem !important; }
+  .tol-cert-statement {
+    margin-top: 8px !important;
+    padding: 9px !important;
+  }
 
-  /* Avoid breaks */
-  .exec-certificate-paper,
-  .exec-cert-grid,
-  .exec-cert-note,
-  .exec-cert-sign {
-    break-inside: avoid !important;
-    page-break-inside: avoid !important;
+  .tol-cert-sign {
+    margin-top: 8px !important;
+    gap: 12px !important;
+  }
+
+  a {
+    text-decoration: none !important;
+    color: inherit !important;
   }
 }
 
 /* ================= RESPONSIVE ================= */
-
 @media (max-width: 1180px) {
-  .site-nav { gap: 18px; }
+  .hero-shell,
+  .hero-shell-tech {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-copy-tech {
+    position: static;
+  }
+
+  .site-nav {
+    gap: 18px;
+  }
 }
 
 @media (max-width: 860px) {
@@ -704,12 +903,21 @@ textarea {
     flex-wrap: nowrap;
   }
 
+  .menu-toggle {
+    display: inline-flex;
+    margin-left: auto;
+  }
+
   .site-nav,
   .header-actions {
     display: none;
   }
 
-  .page-hero { padding-top: 42px; }
+  .hero,
+  .page-hero {
+    padding-top: 42px;
+  }
+
   .page-hero-panel,
   .form-panel,
   .footer-card {
@@ -717,15 +925,16 @@ textarea {
     border-radius: 26px;
   }
 
-  .brand { font-size: 1.5rem; }
-
-  .btn { width: 100%; }
-
-  .exec-cert-grid {
-    grid-template-columns: 1fr;
+  .brand {
+    font-size: 1.5rem;
   }
 
-  .exec-cert-sign {
-    grid-template-columns: 1fr;
+  .page-hero h1 {
+    max-width: none;
+    font-size: clamp(2.3rem, 8vw, 3.6rem);
+  }
+
+  .btn {
+    width: 100%;
   }
 }

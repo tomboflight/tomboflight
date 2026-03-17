@@ -22,7 +22,8 @@
     try {
       await window.TOLAuth.apiRequest('/auth/me', { method: 'GET' });
     } catch (error) {
-      window.TOLAuth.clearSession();
+      window.TOLAuth.clearSession?.();
+      window.TOLAuth.clearToken?.();
       window.location.href = 'signin.html';
       return;
     }
@@ -52,8 +53,8 @@
 
       families.forEach(function (family) {
         const option = document.createElement('option');
-        option.value = family.id;
-        option.textContent = `${family.family_name} (${family.created_by})`;
+        option.value = family.id || family._id || '';
+        option.textContent = `${family.family_name || family.name || 'Family'} (${family.created_by || 'Unknown'})`;
         selectNode.appendChild(option);
       });
 
@@ -66,7 +67,7 @@
   async function loadCertificate(familyId, outputNode, emptyNode, statusNode) {
     if (!outputNode || !window.TOLAuth) return;
 
-    showStatus(statusNode, 'Loading executive lineage certificate...', 'info');
+    showStatus(statusNode, 'Generating executive lineage certificate...', 'info');
     outputNode.style.display = 'none';
     outputNode.innerHTML = '';
 
@@ -77,376 +78,212 @@
 
       renderExecutiveCertificate(certificate, outputNode);
       outputNode.style.display = 'block';
-
-      if (emptyNode) {
-        emptyNode.style.display = 'none';
-      }
+      if (emptyNode) emptyNode.style.display = 'none';
 
       showStatus(statusNode, 'Executive lineage certificate loaded successfully.', 'success');
     } catch (error) {
-      if (emptyNode) {
-        emptyNode.style.display = 'block';
-      }
+      if (emptyNode) emptyNode.style.display = 'block';
       showStatus(statusNode, error.message || 'Failed to load lineage certificate.', 'error');
     }
   }
 
-  function renderExecutiveCertificate(certificate, outputNode) {
-    const certificateId =
-      certificate.certificate_id ||
-      certificate.id ||
-      certificate.record_id ||
-      'Pending';
+  function renderExecutiveCertificate(c, outputNode) {
+    // --- Flexible key picks (prevents "Unknown" when API uses different names) ---
+    const certificateId = pickFirst(c, [
+      'certificate_id', 'certificateId', 'id', 'record_id', 'recordId'
+    ], 'Pending');
 
-    const familyName =
-      certificate.family_name ||
-      certificate.family?.family_name ||
-      certificate.family ||
-      'Unknown Family';
+    const familyName = pickFirst(c, [
+      'family_name', 'familyName', 'family', 'familyTitle'
+    ], 'Unknown Family');
 
-    const createdBy =
-      certificate.created_by ||
-      certificate.family?.created_by ||
-      'Unknown';
+    // If family is object, prefer family.family_name
+    const familyNameResolved = (typeof familyName === 'object' && familyName)
+      ? (familyName.family_name || familyName.name || 'Unknown Family')
+      : familyName;
 
-    const issuedAt =
-      certificate.issued_at ||
-      certificate.created_at ||
-      certificate.generated_at ||
-      'Not provided';
+    const createdBy = pickFirst(c, [
+      'created_by', 'createdBy', 'issued_by', 'issuedBy', 'owner'
+    ], 'Unknown');
 
-    const summary =
-      certificate.summary ||
-      certificate.statement ||
-      certificate.description ||
-      'This document certifies that the lineage structure shown for this family has been recorded and verified within the Tomb of Light system as of the issue date below.';
+    const issuedAt = pickFirst(c, [
+      'issued_at', 'issuedAt', 'created_at', 'createdAt', 'generated_at', 'generatedAt'
+    ], 'Not provided');
 
-    const memberCount =
-      certificate.member_count ??
-      certificate.members_count ??
-      certificate.summary_data?.member_count ??
-      certificate.family_member_count ??
-      'Not available';
-
-    const relationshipCount =
-      certificate.relationship_count ??
-      certificate.relationships_count ??
-      certificate.summary_data?.relationship_count ??
-      'Not available';
-
-    const generationCount =
-      certificate.generation_count ??
-      certificate.generations_count ??
-      certificate.summary_data?.generation_count ??
-      'Not available';
-
+    // Pull lists / summaries
     const lineageProof = normalizeList(
-      certificate.lineage_proof ||
-      certificate.ancestors ||
-      certificate.proof ||
-      certificate.lineage ||
-      []
+      pickFirst(c, ['lineage_proof', 'lineageProof', 'proof', 'ancestors', 'lineage'], [])
     );
 
     const descendants = normalizeList(
-      certificate.descendants ||
-      certificate.children ||
-      certificate.branch_members ||
-      []
+      pickFirst(c, ['descendants', 'children', 'branch_members', 'branchMembers'], [])
     );
 
-    const members = normalizeMemberObjects(certificate.members || certificate.family_members || []);
-    const relationships = Array.isArray(certificate.relationships) ? certificate.relationships : [];
+    // Counts (if API provides them, great; else compute best effort)
+    const memberCount = toInt(pickFirst(c, ['member_count', 'memberCount', 'members_total', 'membersTotal'], null), null);
+    const relationshipCount = toInt(pickFirst(c, ['relationship_count', 'relationshipCount', 'relationships_total', 'relationshipsTotal'], null), null);
+    const generationCount = toInt(pickFirst(c, ['generation_count', 'generationCount', 'generations_total', 'generationsTotal'], null), null);
 
-    const foundingLine = deriveFoundingLine(members, relationships);
-    const branches = deriveBranchSummary(members, relationships);
-    const keyLine = deriveKeyLineageLine(members, relationships);
-    const descendantSummary = buildDescendantSummary(descendants);
-    const integrityStatus = relationshipCount === 'Not available' ? 'Recorded' : 'Verified';
+    // If descendants is an array of strings like "Generation 2: 3 member(s)", keep it short
+    const branchSummaryLines = summarizeBranches(descendants);
+
+    // Key lineage path: show up to 10 lines for 1-page
+    const keyPath = lineageProof.slice(0, 10);
+
+    const integrity = pickFirst(c, ['integrity', 'record_integrity', 'recordIntegrity', 'status'], 'Recorded');
 
     outputNode.innerHTML = `
-      <div class="certificate-print-stack">
-        <section class="certificate-paper certificate-page certificate-page-executive">
-          <div class="certificate-executive-topbar">
-            <div class="certificate-mark">Tomb of Light</div>
-            <div class="certificate-badge">Certified Executive Record</div>
+      <div class="tol-cert-print-area">
+        <div class="tol-cert-paper">
+          <div class="tol-cert-watermark" aria-hidden="true"></div>
+
+          <div class="tol-cert-top">
+            <div class="tol-cert-brand">
+              <div class="tol-cert-brand-title">Tomb of Light</div>
+              <div class="tol-cert-brand-sub">Certified Executive Record</div>
+            </div>
+
+            <div class="tol-cert-badge">Certified Executive Record</div>
           </div>
 
-          <div class="certificate-title certificate-title-executive">
-            <span class="eyebrow">Certified Lineage Record</span>
+          <div class="tol-cert-title">
+            <div class="tol-cert-eyebrow">Certified Lineage Record</div>
             <h2>Executive Lineage Certificate</h2>
-            <p class="certificate-subtitle">
+            <p>
               Official summary certification of a recorded family lineage within the Tomb of Light verification system.
             </p>
           </div>
 
-          <div class="certificate-executive-grid">
-            <div class="certificate-item">
-              <span class="certificate-label">Certificate ID</span>
-              <div class="certificate-value certificate-id">${escapeHtml(String(certificateId))}</div>
+          <div class="tol-cert-grid">
+            ${kvCard('Certificate ID', certificateId)}
+            ${kvCard('Family Name', familyNameResolved)}
+            ${kvCard('Issued By', createdBy)}
+            ${kvCard('Issue Date', formatDate(issuedAt))}
+            ${kvCard('Members Recorded', memberCount != null ? String(memberCount) : 'Not available')}
+            ${kvCard('Relationships Recorded', relationshipCount != null ? String(relationshipCount) : 'Not available')}
+            ${kvCard('Generations Recorded', generationCount != null ? String(generationCount) : 'Not available')}
+            ${kvCard('Record Integrity', String(integrity))}
+          </div>
+
+          <div class="tol-cert-split">
+            <div class="tol-cert-block">
+              <div class="tol-cert-label">Key Lineage Path</div>
+              ${keyPath.length ? `
+                <ul class="tol-cert-list">
+                  ${keyPath.map(li => `<li>${escapeHtml(li)}</li>`).join('')}
+                </ul>
+              ` : `<div class="tol-cert-muted">Key lineage path not available.</div>`}
+              ${lineageProof.length > 10 ? `<div class="tol-cert-footnote">Appendix available in full certificate view.</div>` : ``}
             </div>
 
-            <div class="certificate-item">
-              <span class="certificate-label">Family Name</span>
-              <div class="certificate-value">${escapeHtml(String(familyName))}</div>
-            </div>
+            <div class="tol-cert-block">
+              <div class="tol-cert-label">Verified Branches</div>
+              ${branchSummaryLines.length ? `
+                <ul class="tol-cert-list">
+                  ${branchSummaryLines.map(li => `<li>${escapeHtml(li)}</li>`).join('')}
+                </ul>
+              ` : `<div class="tol-cert-muted">Branch summary not available.</div>`}
 
-            <div class="certificate-item">
-              <span class="certificate-label">Issued By</span>
-              <div class="certificate-value">${escapeHtml(String(createdBy))}</div>
-            </div>
-
-            <div class="certificate-item">
-              <span class="certificate-label">Issue Date</span>
-              <div class="certificate-value">${escapeHtml(String(issuedAt))}</div>
+              <div class="tol-cert-label" style="margin-top: 14px;">Descendant Summary</div>
+              ${descendants.length ? `
+                <div class="tol-cert-muted">
+                  ${escapeHtml(descendantsSummary(descendants))}
+                </div>
+              ` : `<div class="tol-cert-muted">No descendant records summarized on this certificate.</div>`}
             </div>
           </div>
 
-          <div class="certificate-executive-grid certificate-executive-grid-secondary">
-            <div class="certificate-item">
-              <span class="certificate-label">Members Recorded</span>
-              <div class="certificate-value">${escapeHtml(String(memberCount))}</div>
-            </div>
+          <div class="tol-cert-statement">
+            This document certifies that the lineage structure shown for this family has been recorded and verified within the Tomb of Light system as of the issue date above.
+          </div>
 
-            <div class="certificate-item">
-              <span class="certificate-label">Relationships Recorded</span>
-              <div class="certificate-value">${escapeHtml(String(relationshipCount))}</div>
+          <div class="tol-cert-sign">
+            <div class="tol-cert-signbox">
+              <div class="tol-cert-signline"></div>
+              <div class="tol-cert-signlabel">Authorized Signature</div>
             </div>
-
-            <div class="certificate-item">
-              <span class="certificate-label">Generations Recorded</span>
-              <div class="certificate-value">${escapeHtml(String(generationCount))}</div>
-            </div>
-
-            <div class="certificate-item">
-              <span class="certificate-label">Record Integrity</span>
-              <div class="certificate-value">${escapeHtml(integrityStatus)}</div>
+            <div class="tol-cert-signbox">
+              <div class="tol-cert-signline"></div>
+              <div class="tol-cert-signlabel">Tomb of Light Certification Authority</div>
             </div>
           </div>
 
-          <div class="certificate-executive-proof">
-            <div class="certificate-item certificate-item-full">
-              <span class="certificate-label">Founding Line</span>
-              <div class="certificate-value">${escapeHtml(foundingLine)}</div>
-            </div>
-
-            <div class="certificate-item certificate-item-full">
-              <span class="certificate-label">Verified Branches</span>
-              <div class="certificate-value">${escapeHtml(branches)}</div>
-            </div>
-
-            <div class="certificate-item certificate-item-full">
-              <span class="certificate-label">Key Lineage Path</span>
-              <div class="certificate-value">${escapeHtml(keyLine)}</div>
-            </div>
-
-            <div class="certificate-item certificate-item-full">
-              <span class="certificate-label">Descendant Summary</span>
-              <div class="certificate-value">${escapeHtml(descendantSummary)}</div>
-            </div>
-          </div>
-
-          <div class="certificate-summary certificate-summary-executive">
-            ${escapeHtml(String(summary))}
-          </div>
-
-          <div class="certificate-signature-row certificate-signature-row-executive">
-            <div class="certificate-signature-block">
-              <div class="certificate-signature-line"></div>
-              <div class="certificate-signature-label">Authorized Signature</div>
-            </div>
-
-            <div class="certificate-signature-block">
-              <div class="certificate-signature-line"></div>
-              <div class="certificate-signature-label">Tomb of Light Certification Authority</div>
-            </div>
-          </div>
-
-          <div class="certificate-actions">
+          <div class="tol-cert-actions no-print">
             <button class="btn btn-secondary" type="button" onclick="window.print()">Print Certificate</button>
           </div>
-        </section>
+        </div>
       </div>
     `;
   }
 
-  function normalizeMemberObjects(items) {
-    if (!Array.isArray(items)) return [];
-
-    return items.map(function (item) {
-      if (!item || typeof item !== 'object') return null;
-
-      return {
-        id: item.id || item._id || item.member_id || '',
-        first_name: item.first_name || '',
-        last_name: item.last_name || '',
-        display_name:
-          item.display_name ||
-          item.full_name ||
-          [item.first_name || '', item.last_name || ''].join(' ').trim(),
-        generation: Number.isInteger(item.generation) ? item.generation : null
-      };
-    }).filter(Boolean);
+  function kvCard(label, value) {
+    return `
+      <div class="tol-cert-card">
+        <div class="tol-cert-card-label">${escapeHtml(label)}</div>
+        <div class="tol-cert-card-value">${escapeHtml(String(value ?? ''))}</div>
+      </div>
+    `;
   }
 
-  function deriveFoundingLine(members, relationships) {
-    if (!members.length) return 'Founding lineage not available.';
-
-    const generationZero = members.filter(function (member) {
-      return member.generation === 0;
-    });
-
-    if (generationZero.length >= 2) {
-      const spouseLinks = relationships.filter(function (rel) {
-        return rel.relationship_type === 'spouse';
-      });
-
-      for (const rel of spouseLinks) {
-        const source = generationZero.find(function (m) { return m.id === rel.source_member_id; });
-        const target = generationZero.find(function (m) { return m.id === rel.target_member_id; });
-
-        if (source && target) {
-          return `${displayName(source)} + ${displayName(target)}`;
-        }
-      }
-
-      return generationZero.slice(0, 2).map(displayName).join(' + ');
+  function pickFirst(obj, keys, fallback) {
+    for (const k of keys) {
+      if (obj && Object.prototype.hasOwnProperty.call(obj, k) && obj[k] != null) return obj[k];
     }
-
-    if (generationZero.length === 1) {
-      return displayName(generationZero[0]);
-    }
-
-    const sorted = [...members].sort(function (a, b) {
-      return (a.generation ?? 999) - (b.generation ?? 999);
-    });
-
-    return sorted.length ? displayName(sorted[0]) : 'Founding lineage not available.';
+    return fallback;
   }
 
-  function deriveBranchSummary(members) {
-    if (!members.length) return 'Branch summary not available.';
-
-    const generationOne = members.filter(function (member) {
-      return member.generation === 1;
-    });
-
-    if (generationOne.length) {
-      return generationOne.map(displayName).join(' • ');
-    }
-
-    const generationBuckets = [...new Set(
-      members
-        .map(function (member) { return member.generation; })
-        .filter(function (gen) { return Number.isInteger(gen); })
-    )].sort(function (a, b) { return a - b; });
-
-    return generationBuckets.length
-      ? `Verified across ${generationBuckets.length} generational layer(s)`
-      : 'Branch summary not available.';
-  }
-
-  function deriveKeyLineageLine(members, relationships) {
-    if (!members.length) return 'Key lineage path not available.';
-
-    const byId = new Map();
-    members.forEach(function (member) {
-      byId.set(member.id, member);
-    });
-
-    const parentChild = relationships.filter(function (rel) {
-      return rel.relationship_type === 'parent_child';
-    });
-
-    if (!parentChild.length) {
-      const sorted = [...members].sort(function (a, b) {
-        return (a.generation ?? 999) - (b.generation ?? 999);
-      });
-      return sorted.slice(0, 4).map(displayName).join(' → ') || 'Key lineage path not available.';
-    }
-
-    const childToParents = new Map();
-    parentChild.forEach(function (rel) {
-      if (!childToParents.has(rel.target_member_id)) {
-        childToParents.set(rel.target_member_id, []);
-      }
-      childToParents.get(rel.target_member_id).push(rel.source_member_id);
-    });
-
-    const deepestMember = [...members]
-      .filter(function (member) { return Number.isInteger(member.generation); })
-      .sort(function (a, b) { return (b.generation ?? -1) - (a.generation ?? -1); })[0];
-
-    if (!deepestMember) return 'Key lineage path not available.';
-
-    const path = [deepestMember];
-    let current = deepestMember;
-    let safety = 0;
-
-    while (current && safety < 10) {
-      safety += 1;
-      const parents = childToParents.get(current.id) || [];
-      if (!parents.length) break;
-
-      const nextParent = parents
-        .map(function (id) { return byId.get(id); })
-        .filter(Boolean)
-        .sort(function (a, b) { return (a.generation ?? 999) - (b.generation ?? 999); })[0];
-
-      if (!nextParent) break;
-
-      path.unshift(nextParent);
-      current = nextParent;
-    }
-
-    return path.map(displayName).join(' → ');
-  }
-
-  function buildDescendantSummary(descendants) {
-    if (!descendants.length) return 'No descendant records summarized on this certificate.';
-    return descendants.slice(0, 8).join(' • ');
-  }
-
-  function displayName(member) {
-    return member.display_name || [member.first_name || '', member.last_name || ''].join(' ').trim() || 'Unknown';
+  function toInt(v, fallback) {
+    const n = Number.parseInt(v, 10);
+    return Number.isFinite(n) ? n : fallback;
   }
 
   function normalizeList(value) {
     if (!Array.isArray(value)) return [];
-
-    return value.map(function (item) {
-      if (item == null) return '';
-
-      if (typeof item === 'string' || typeof item === 'number') {
+    return value
+      .map(item => {
+        if (item == null) return '';
+        if (typeof item === 'string' || typeof item === 'number') return String(item);
+        if (typeof item === 'object') {
+          return item.display_name || item.name || item.full_name || item.label || item.id || '';
+        }
         return String(item);
-      }
+      })
+      .filter(Boolean);
+  }
 
-      if (typeof item === 'object') {
-        return (
-          item.display_name ||
-          item.name ||
-          item.full_name ||
-          item.label ||
-          item.id ||
-          JSON.stringify(item)
-        );
-      }
+  function summarizeBranches(descendants) {
+    // If your API already returns generation lines, keep up to 6
+    const genLines = descendants.filter(x => /generation/i.test(x)).slice(0, 6);
+    if (genLines.length) return genLines;
 
-      return String(item);
-    }).filter(Boolean);
+    // Otherwise: just summarize top 6 descendants by name
+    return descendants.slice(0, 6);
+  }
+
+  function descendantsSummary(descendants) {
+    // Prefer a compact sentence instead of dumping everything
+    const totalLine = descendants.find(x => /total/i.test(x));
+    if (totalLine) return totalLine;
+    return `${descendants.length} descendant record(s) captured in the lineage system.`;
+  }
+
+  function formatDate(value) {
+    if (!value) return 'Not provided';
+    // if already formatted, leave it
+    if (typeof value === 'string' && (value.includes('/') || value.includes(':') || value.includes('-'))) {
+      return value;
+    }
+    return String(value);
   }
 
   function showStatus(node, message, type) {
     if (!node) return;
-
     node.style.display = 'block';
     node.textContent = message;
     node.style.color =
-      type === 'error'
-        ? '#ffb3b3'
-        : type === 'success'
-          ? '#cfe8cf'
-          : '#d6e6ff';
+      type === 'error' ? '#ffb3b3' :
+      type === 'success' ? '#cfe8cf' :
+      '#d6e6ff';
   }
 
   function hideStatus(node) {
