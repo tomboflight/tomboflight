@@ -10,7 +10,18 @@
   const doc = document;
   const body = doc.body;
 
-  const API_BASE_URL = 'https://tomboflight-api.onrender.com';
+  /**
+   * API base URL auto-switch:
+   * - Local dev (127.0.0.1 / localhost): use local FastAPI
+   * - Live site: use Render API
+   */
+  const isLocal =
+    window.location.hostname === '127.0.0.1' ||
+    window.location.hostname === 'localhost';
+
+  const API_BASE_URL = isLocal
+    ? 'http://127.0.0.1:8000'
+    : 'https://tomboflight-api.onrender.com';
 
   const menuToggle = doc.querySelector('.menu-toggle, .nav-toggle');
   const siteNav = doc.querySelector('#site-nav, .site-nav');
@@ -185,10 +196,10 @@
         }
 
         const subject = form.dataset.formSubject || 'Website inquiry';
-        const body = buildMailtoBody(form);
+        const bodyText = buildMailtoBody(form);
         const params = new URLSearchParams({
           subject: subject,
-          body: body
+          body: bodyText
         });
 
         window.location.href = `mailto:${supportEmail}?${params.toString()}`;
@@ -346,6 +357,9 @@
     setupMailtoForms();
     setupRequestAccessForm();
     checkBackendHealth();
+
+    // helpful debug
+    console.log('[TOL] API_BASE_URL:', API_BASE_URL);
   }
 
   if (doc.readyState === 'loading') {

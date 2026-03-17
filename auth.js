@@ -8,6 +8,9 @@
   const TOKEN_KEY = 'tol_access_token';
   const USER_KEY = 'tol_user';
 
+  // Change this only if your real file is named differently.
+  const POST_LOGIN_REDIRECT = 'dashboard.html';
+
   function saveToken(token) {
     localStorage.setItem(TOKEN_KEY, token);
   }
@@ -58,10 +61,21 @@
       headers.Authorization = `Bearer ${token}`;
     }
 
-    const response = await fetch(`${API_BASE_URL}${path}`, {
-      ...options,
-      headers
-    });
+    let response;
+
+    try {
+      response = await fetch(`${API_BASE_URL}${path}`, {
+        ...options,
+        headers
+      });
+    } catch (networkError) {
+      throw new Error(
+        `Network error calling API.\n\n` +
+        `API_BASE_URL: ${API_BASE_URL}\n` +
+        `Page origin: ${window.location.origin}\n\n` +
+        `Make sure frontend is on http://127.0.0.1:5500 and backend is on http://127.0.0.1:8000.`
+      );
+    }
 
     const contentType = response.headers.get('content-type') || '';
     let data = null;
@@ -85,6 +99,7 @@
             data.error ||
             (Array.isArray(data.errors) && data.errors.join(', ')))) ||
         `Request failed with status ${response.status}`;
+
       throw new Error(message);
     }
 
@@ -117,22 +132,41 @@
   async function handleLogin(email, password) {
     const loginData = await apiRequest('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({
-        email,
-        password
-      })
+      body: JSON.stringify({ email, password })
     });
 
-    if (!loginData || !loginData.access_token) {
+    const token =
+      loginData?.access_token ||
+      loginData?.token ||
+      loginData?.accessToken ||
+      null;
+
+    if (!token) {
       throw new Error('Login succeeded but no access token was returned.');
     }
 
-    saveToken(loginData.access_token);
+    saveToken(token);
 
     const me = await apiRequest('/auth/me', { method: 'GET' });
     saveUser(me);
 
     return { loginData, me };
+  }
+
+  function redirectAfterLogin() {
+    const target = POST_LOGIN_REDIRECT;
+
+    fetch(target, { method: 'HEAD' })
+      .then(function (response) {
+        if (response.ok) {
+          window.location.href = target;
+        } else {
+          window.location.href = 'index.html';
+        }
+      })
+      .catch(function () {
+        window.location.href = 'index.html';
+      });
   }
 
   function setupSignupForm() {
@@ -146,9 +180,7 @@
       event.preventDefault();
       clearStatus(statusNode);
 
-      if (typeof form.reportValidity === 'function' && !form.reportValidity()) {
-        return;
-      }
+      if (typeof form.reportValidity === 'function' && !form.reportValidity()) return;
 
       const formData = new FormData(form);
       const fullName = String(formData.get('full_name') || '').trim();
@@ -177,17 +209,13 @@
       try {
         await apiRequest('/auth/signup', {
           method: 'POST',
-          body: JSON.stringify({
-            full_name: fullName,
-            email,
-            password
-          })
+          body: JSON.stringify({ full_name: fullName, email, password })
         });
 
         setStatus(statusNode, 'Account created successfully. Signing you in...', 'success');
 
         await handleLogin(email, password);
-        window.location.href = 'dashboard.html';
+        redirectAfterLogin();
       } catch (error) {
         setStatus(statusNode, error.message || 'Signup failed.', 'error');
       } finally {
@@ -208,9 +236,7 @@
       event.preventDefault();
       clearStatus(statusNode);
 
-      if (typeof form.reportValidity === 'function' && !form.reportValidity()) {
-        return;
-      }
+      if (typeof form.reportValidity === 'function' && !form.reportValidity()) return;
 
       const formData = new FormData(form);
       const email = String(formData.get('email') || '').trim().toLowerCase();
@@ -226,7 +252,8 @@
 
       try {
         await handleLogin(email, password);
-        window.location.href = 'dashboard.html';
+        setStatus(statusNode, 'Sign-in successful.', 'success');
+        redirectAfterLogin();
       } catch (error) {
         setStatus(statusNode, error.message || 'Login failed.', 'error');
       } finally {
@@ -248,7 +275,6 @@
     const statusNode = document.querySelector('[data-dashboard-status]');
 
     const token = getToken();
-
     if (!token) {
       window.location.href = 'signin.html';
       return;
@@ -270,15 +296,10 @@
       if (userEmail) userEmail.textContent = me.email || '';
       if (userRole) userRole.textContent = me.role || 'user';
 
-      setStatus(
-        statusNode,
-        'You are signed in and connected to the Tomb of Light platform.',
-        'success'
-      );
+      setStatus(statusNode, 'You are signed in and connected to the Tomb of Light platform.', 'success');
     } catch (error) {
       clearSession();
-      setStatus(statusNode, 'Your session expired. Please sign in again.', 'error');
-
+      setStatus(statusNode, 'Your session is not valid. Please sign in again.', 'error');
       setTimeout(function () {
         window.location.href = 'signin.html';
       }, 1200);
@@ -294,9 +315,6 @@
   }
 
   function protectAuthPages() {
-    const body = document.body;
-    if (!body) return;
-
     const isSigninPage = !!document.querySelector('[data-signin-form]');
     const isSignupPage = !!document.querySelector('[data-signup-form]');
     const token = getToken();
@@ -304,7 +322,7 @@
     if ((isSigninPage || isSignupPage) && token) {
       apiRequest('/auth/me', { method: 'GET' })
         .then(function () {
-          window.location.href = 'dashboard.html';
+          redirectAfterLogin();
         })
         .catch(function () {
           clearSession();
