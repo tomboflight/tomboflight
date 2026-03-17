@@ -48,6 +48,7 @@ body.menu-open {
 }
 
 /* ================= PREFERS REDUCED MOTION ================= */
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -60,6 +61,7 @@ body.menu-open {
 }
 
 /* ================= SKIP TO CONTENT ================= */
+
 .skip-to-content {
   position: absolute;
   left: -9999px;
@@ -87,6 +89,7 @@ body.menu-open {
 }
 
 /* ================= SITE WATERMARK ================= */
+
 .site-watermark {
   position: fixed;
   inset: 0;
@@ -101,6 +104,7 @@ body.menu-open {
 }
 
 /* ================= BASE ELEMENTS ================= */
+
 img {
   max-width: 100%;
   display: block;
@@ -130,6 +134,7 @@ select {
 }
 
 /* ================= HEADER ================= */
+
 .site-header {
   position: sticky;
   top: 0;
@@ -229,6 +234,7 @@ select {
 }
 
 /* ================= BUTTONS ================= */
+
 .btn {
   display: inline-flex;
   align-items: center;
@@ -308,6 +314,7 @@ select {
 }
 
 /* ================= HERO ================= */
+
 .hero {
   padding: 72px 0 42px;
 }
@@ -442,7 +449,53 @@ select {
   margin-top: 28px;
 }
 
+.hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.meta-pill {
+  padding: 10px 14px;
+  border-radius: 999px;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.02);
+  font-size: 0.94rem;
+  font-weight: 600;
+}
+
+.signal-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 18px;
+  margin-top: 20px;
+  color: var(--muted-2);
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.signal-row span {
+  position: relative;
+  padding-left: 14px;
+}
+
+.signal-row span::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.52em;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 12px rgba(214, 176, 102, 0.6);
+}
+
 /* ================= PAGE HERO / FORMS ================= */
+
 .page-hero {
   padding: 72px 0 20px;
 }
@@ -464,6 +517,10 @@ select {
 .form-grid {
   display: grid;
   gap: 22px;
+}
+
+.form-grid.two-col {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .form-panel {
@@ -508,7 +565,15 @@ textarea {
   font-size: 0.94rem;
 }
 
+.inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 18px;
+}
+
 /* ================= FOOTER ================= */
+
 .footer {
   padding: 24px 0 44px;
 }
@@ -522,256 +587,219 @@ textarea {
   flex-wrap: wrap;
   justify-content: space-between;
   gap: 12px 20px;
-  margin-top: 0;
+  margin-top: 28px;
   padding-top: 24px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   color: var(--muted-2);
   font-size: 0.96rem;
 }
 
-/* =========================================================
-   EXECUTIVE LINEAGE CERTIFICATE (ONE-PAGE) + SEAL WATERMARK
-========================================================= */
+/* =================================================================== */
+/* ================= EXECUTIVE LINEAGE CERTIFICATE (UPDATE) =========== */
+/* =================================================================== */
 
-.tol-certificate-shell {
-  display: grid;
-  gap: 22px;
+.exec-cert {
+  padding: 0;
 }
 
-.tol-certificate-output {
-  min-height: 120px;
-}
-
-.tol-cert-print-area {
-  width: 100%;
-}
-
-.tol-cert-paper {
+.exec-cert__paper {
   position: relative;
-  border-radius: 28px;
   background: #ffffff;
-  color: #111111;
-  border: 1px solid rgba(0,0,0,0.12);
-  box-shadow: 0 18px 60px rgba(0,0,0,0.25);
+  color: #0b0f16;
+  border-radius: 28px;
+  padding: 44px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
   overflow: hidden;
-  padding: 28px;
+  box-shadow: 0 26px 90px rgba(0, 0, 0, 0.35);
 }
 
-.tol-cert-watermark {
+.exec-cert__watermark {
   position: absolute;
   inset: 0;
-  pointer-events: none;
   background-image: url("images/tol-watermark-clean.png");
   background-repeat: no-repeat;
-  background-position: center 52%;
-  background-size: min(520px, 72vw);
-  opacity: 0.10;
-  filter: grayscale(100%);
+  background-position: center 58%;
+  background-size: min(78%, 720px);
+  opacity: 0.07;
+  filter: grayscale(1) contrast(1.05);
+  pointer-events: none;
 }
 
-.tol-cert-top {
-  position: relative;
-  z-index: 1;
+.exec-cert__topline {
   display: flex;
-  align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 10px;
-}
-
-.tol-cert-brand-title {
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  font-size: 1.05rem;
-}
-
-.tol-cert-brand-sub {
-  color: rgba(0,0,0,0.6);
-  font-weight: 700;
-  margin-top: 2px;
-}
-
-.tol-cert-badge {
-  font-weight: 800;
-  font-size: 0.82rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  padding: 10px 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(0,0,0,0.12);
-  background: rgba(214, 176, 102, 0.16);
-  color: #6b4f1f;
-  white-space: nowrap;
-}
-
-.tol-cert-title {
+  align-items: flex-start;
+  gap: 18px;
   position: relative;
   z-index: 1;
+}
+
+.exec-cert__brand-name {
+  font-weight: 800;
+  font-size: 1.05rem;
+  letter-spacing: -0.02em;
+}
+
+.exec-cert__badge {
+  margin-top: 6px;
+  color: rgba(0, 0, 0, 0.62);
+  font-weight: 700;
+}
+
+.exec-cert__seal {
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  border-radius: 999px;
+  padding: 10px 14px;
+  font-weight: 800;
+  font-size: 0.92rem;
+  color: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.exec-cert__title {
   text-align: center;
-  margin: 10px 0 18px;
+  margin-top: 18px;
+  position: relative;
+  z-index: 1;
 }
 
-.tol-cert-eyebrow {
-  font-weight: 900;
+.exec-cert__eyebrow {
   letter-spacing: 0.22em;
-  text-transform: uppercase;
+  font-weight: 900;
   font-size: 0.78rem;
-  color: #6b4f1f;
-  margin-bottom: 10px;
+  color: #8a6a2f;
 }
 
-.tol-cert-title h2 {
-  margin: 0;
-  font-size: clamp(1.7rem, 3.4vw, 2.4rem);
-  letter-spacing: -0.04em;
+.exec-cert__title h2 {
+  margin: 12px 0 10px;
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 1.02;
+  letter-spacing: -0.055em;
 }
 
-.tol-cert-title p {
-  margin: 10px auto 0;
-  max-width: 72ch;
-  color: rgba(0,0,0,0.65);
+.exec-cert__title p {
+  margin: 0 auto;
+  max-width: 70ch;
+  color: rgba(0, 0, 0, 0.68);
   font-weight: 600;
 }
 
-.tol-cert-grid {
-  position: relative;
-  z-index: 1;
+.exec-cert__grid {
+  margin-top: 22px;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 16px;
+  gap: 14px;
+  position: relative;
+  z-index: 1;
 }
 
-.tol-cert-card {
-  border: 1px solid rgba(0,0,0,0.12);
-  border-radius: 14px;
-  padding: 12px 12px 11px;
-  background: rgba(255,255,255,0.92);
+.exec-cert__metric {
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  border-radius: 16px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.7);
 }
 
-.tol-cert-card-label {
-  font-weight: 900;
-  letter-spacing: 0.14em;
+.exec-cert__metric-label {
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  font-size: 0.7rem;
-  color: rgba(0,0,0,0.58);
-  margin-bottom: 6px;
+  color: #8a6a2f;
+  font-weight: 900;
 }
 
-.tol-cert-card-value {
+.exec-cert__metric-value {
+  margin-top: 6px;
+  font-size: 1.05rem;
   font-weight: 800;
-  font-size: 1rem;
-  color: #111111;
-  word-break: break-word;
+  color: rgba(0, 0, 0, 0.88);
 }
 
-.tol-cert-split {
-  position: relative;
-  z-index: 1;
+.exec-cert__sections {
+  margin-top: 14px;
   display: grid;
-  grid-template-columns: 1.12fr 0.88fr;
   gap: 12px;
-  margin-top: 12px;
+  position: relative;
+  z-index: 1;
 }
 
-.tol-cert-block {
-  border: 1px solid rgba(0,0,0,0.12);
-  border-radius: 14px;
-  padding: 12px;
-  background: rgba(255,255,255,0.92);
+.exec-cert__section {
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  border-radius: 16px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.7);
 }
 
-.tol-cert-label {
-  font-weight: 900;
-  letter-spacing: 0.14em;
+.exec-cert__section-label {
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  font-size: 0.7rem;
-  color: rgba(0,0,0,0.58);
-  margin-bottom: 8px;
+  color: #8a6a2f;
+  font-weight: 900;
 }
 
-.tol-cert-list {
-  margin: 0;
-  padding-left: 18px;
-  color: rgba(0,0,0,0.78);
-  font-weight: 650;
-  font-size: 0.94rem;
-}
-
-.tol-cert-list li + li {
-  margin-top: 4px;
-}
-
-.tol-cert-muted {
-  color: rgba(0,0,0,0.68);
-  font-weight: 650;
-  font-size: 0.95rem;
-}
-
-.tol-cert-footnote {
+.exec-cert__section-value {
   margin-top: 8px;
-  color: rgba(0,0,0,0.55);
-  font-weight: 700;
-  font-size: 0.86rem;
+  color: rgba(0, 0, 0, 0.78);
+  font-weight: 650;
+  line-height: 1.55;
 }
 
-.tol-cert-statement {
+.exec-cert__attestation {
+  margin-top: 14px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 16px;
+  padding: 14px 16px;
+  background: rgba(0, 0, 0, 0.02);
+  color: rgba(0, 0, 0, 0.75);
+  font-weight: 650;
   position: relative;
   z-index: 1;
-  margin-top: 12px;
-  border: 1px solid rgba(0,0,0,0.12);
-  border-radius: 14px;
-  padding: 12px;
-  background: rgba(214, 176, 102, 0.10);
-  color: rgba(0,0,0,0.72);
-  font-weight: 700;
 }
 
-.tol-cert-sign {
-  position: relative;
-  z-index: 1;
+.exec-cert__sign {
+  margin-top: 18px;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 18px;
-  margin-top: 14px;
-  align-items: end;
+  position: relative;
+  z-index: 1;
 }
 
-.tol-cert-signline {
-  border-bottom: 1px solid rgba(0,0,0,0.55);
-  height: 24px;
+.exec-cert__sig-line {
+  height: 1px;
+  background: rgba(0, 0, 0, 0.55);
+  margin-bottom: 10px;
 }
 
-.tol-cert-signlabel {
-  margin-top: 8px;
-  color: rgba(0,0,0,0.72);
+.exec-cert__sig-label {
+  color: rgba(0, 0, 0, 0.75);
   font-weight: 800;
 }
 
-.tol-cert-actions {
+.exec-cert__actions {
+  margin-top: 16px;
+  display: flex;
+  gap: 12px;
   position: relative;
   z-index: 1;
-  margin-top: 14px;
 }
 
-.no-print {}
-
+/* Mobile */
 @media (max-width: 860px) {
-  .tol-cert-paper {
-    padding: 18px;
+  .exec-cert__paper {
+    padding: 24px;
+    border-radius: 22px;
   }
-  .tol-cert-grid {
+  .exec-cert__grid {
     grid-template-columns: 1fr;
   }
-  .tol-cert-split {
-    grid-template-columns: 1fr;
-  }
-  .tol-cert-sign {
+  .exec-cert__sign {
     grid-template-columns: 1fr;
   }
 }
 
-/* ================= PRINT (EXECUTIVE CERTIFICATE ONE PAGE) ================= */
+/* PRINT: force one-page executive layout */
 @media print {
   @page {
     size: letter portrait;
@@ -784,96 +812,36 @@ textarea {
     color: #111111 !important;
   }
 
-  body * {
-    visibility: hidden !important;
-  }
-
-  .tol-cert-print-area,
-  .tol-cert-print-area * {
-    visibility: visible !important;
-  }
-
-  .tol-cert-print-area {
-    position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
-    width: 100% !important;
-  }
-
-  .tol-cert-paper {
-    box-shadow: none !important;
-    border: 1px solid #d9d9d9 !important;
-    border-radius: 0 !important;
-    padding: 14px !important;
-  }
-
-  .tol-cert-watermark {
-    opacity: 0.07 !important;
-    filter: grayscale(100%) !important;
-  }
-
   .no-print,
   .site-header,
   .footer,
-  .page-hero,
   nav,
   .header-actions,
+  .page-hero,
+  .form-panel:first-child,
   [data-certificate-status],
-  [data-certificate-empty],
-  .form-panel:first-child {
+  [data-certificate-empty] {
     display: none !important;
   }
 
-  .tol-cert-title {
-    margin: 6px 0 10px !important;
+  .exec-cert__paper {
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    border: 1px solid #d9d9d9 !important;
+    padding: 0.32in !important;
   }
 
-  .tol-cert-title p {
-    margin-top: 6px !important;
-  }
-
-  .tol-cert-grid {
-    gap: 8px !important;
-    margin-top: 10px !important;
-  }
-
-  .tol-cert-card {
-    padding: 9px !important;
-  }
-
-  .tol-cert-split {
-    gap: 8px !important;
-    margin-top: 8px !important;
-  }
-
-  .tol-cert-block {
-    padding: 9px !important;
-  }
-
-  .tol-cert-list {
-    font-size: 0.88rem !important;
-  }
-
-  .tol-cert-statement {
-    margin-top: 8px !important;
-    padding: 9px !important;
-  }
-
-  .tol-cert-sign {
-    margin-top: 8px !important;
-    gap: 12px !important;
-  }
-
-  a {
-    text-decoration: none !important;
-    color: inherit !important;
+  .exec-cert__watermark {
+    opacity: 0.05 !important;
   }
 }
 
-/* ================= RESPONSIVE ================= */
+/* ================= RESPONSIVE (GENERAL) ================= */
+
 @media (max-width: 1180px) {
   .hero-shell,
-  .hero-shell-tech {
+  .hero-shell-tech,
+  .form-grid.two-col {
     grid-template-columns: 1fr;
   }
 
@@ -913,6 +881,32 @@ textarea {
     display: none;
   }
 
+  .site-header.open .site-nav,
+  .site-header.open .header-actions {
+    display: flex;
+    width: 100%;
+  }
+
+  .site-header.open .site-header-inner {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .site-nav {
+    order: 3;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 14px 0 6px;
+    margin-left: 0;
+  }
+
+  .header-actions {
+    order: 4;
+    justify-content: flex-start;
+    padding-bottom: 10px;
+  }
+
   .hero,
   .page-hero {
     padding-top: 42px;
@@ -929,6 +923,7 @@ textarea {
     font-size: 1.5rem;
   }
 
+  .hero-copy h1,
   .page-hero h1 {
     max-width: none;
     font-size: clamp(2.3rem, 8vw, 3.6rem);
@@ -936,5 +931,9 @@ textarea {
 
   .btn {
     width: 100%;
+  }
+
+  .inline-actions {
+    flex-direction: column;
   }
 }
