@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Lineage Intelligence | Tomb of Light</title>
+
+<meta name="description"
+content="Lineage intelligence dashboard for analyzing family structure, generations, and relationship networks inside Tomb of Light."/>
+
+<link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+
+<div class="page-wrap">
+
+<header class="site-header">
+<div class="container site-header-inner">
+
+<a class="brand" href="index.html">
+Tomb of Light<span class="brand-symbol">™</span>
+</a>
+
+<nav class="site-nav">
+<a href="tree-view.html">Family Tree</a>
+<a href="lineage-certificate.html">Certificates</a>
+<a href="lineage-intelligence.html" class="active">Lineage Intelligence</a>
+</nav>
+
+<div class="header-actions">
+<a class="btn btn-secondary" href="dashboard.html">Dashboard</a>
+<button class="btn btn-secondary" data-logout-btn>Log Out</button>
+</div>
+
+</div>
+</header>
+
+<main data-lineage-intelligence>
+
+<section class="page-hero">
+<div class="container">
+<div class="page-hero-panel">
+
+<span class="eyebrow">Analysis Layer</span>
+
+<h1>Lineage Intelligence</h1>
+
+<p>
+Analyze generational structure, family branches, and relationship networks
+within a verified Tomb of Light lineage.
+</p>
+
+</div>
+</div>
+</section>
+
+
+<section class="page-sections">
+
+<div class="container form-shell">
+
+<div class="form-panel">
+
+<label>
+Select Family
+<select data-family-select>
+<option value="">Select a family</option>
+</select>
+</label>
+
+<button class="btn btn-primary" data-load-intelligence>
+Analyze Lineage
+</button>
+
+</div>
+
+
+<div class="feature-strip intelligence-cards">
+
+<div class="feature-card">
+<h3>Total Members</h3>
+<div data-stat-members>—</div>
+</div>
+
+<div class="feature-card">
+<h3>Total Relationships</h3>
+<div data-stat-relations>—</div>
+</div>
+
+<div class="feature-card">
+<h3>Generations</h3>
+<div data-stat-generations>—</div>
+</div>
+
+<div class="feature-card">
+<h3>Family Branches</h3>
+<div data-stat-branches>—</div>
+</div>
+
+</div>
+
+
+<div class="section-card intelligence-report">
+
+<h3>Lineage Summary</h3>
+
+<div data-lineage-summary class="helper">
+Select a family to generate lineage intelligence.
+</div>
+
+</div>
+
+</div>
+
+</section>
+
+</main>
+
+
+<footer class="footer">
+<div class="container">
+<div class="footer-card">
+<div class="footer-bottom">
+© 2026 Tomb of Light LLC
+</div>
+</div>
+</div>
+</footer>
+
+</div>
+
+<script src="config.js"></script>
+<script src="app.js"></script>
+<script src="auth.js"></script>
+<script src="lineage-intelligence.js"></script>
+
+</body>
+</html>
