@@ -166,14 +166,59 @@ class LineageCertificateService:
         return hashlib.sha256(encoded).hexdigest()
 
     @staticmethod
-    def _generation_count(member_summaries: list[dict]) -> int:
+    def _compute_generation_count(member_summaries: list[dict]) -> int:
         gens = []
         for m in member_summaries:
-            g = m.get("generation")
-            if isinstance(g, int):
+            try:
+                g = int(m.get("generation"))
                 gens.append(g)
-        # if generations start at 0, count is max+1
-        return (max(gens) + 1) if gens else 0
+            except Exception:
+                continue
+        if not gens:
+            return 0
+        return max(gens) - min(gens) + 1
+
+    @staticmethod
+    def _compute_executive_fields(member_summaries: list[dict]) -> dict:
+        # Founding line: earliest generation names
+        gens = []
+        for m in member_summaries:
+            try:
+                gens.append(int(m.get("generation")))
+            except Exception:
+                continue
+
+        if gens:
+            min_gen = min(gens)
+            max_gen = max(gens)
+        else:
+            min_gen = None
+            max_gen = None
+
+        founders = []
+        if min_gen is not None:
+            founders = [m["full_name"] for m in member_summaries if m.get("full_name") and m.get("generation") == min_gen]
+
+        verified_count = sum(1 for m in member_summaries if m.get("is_verified"))
+
+        latest = []
+        if max_gen is not None:
+            latest = [m["full_name"] for m in member_summaries if m.get("full_name") and m.get("generation") == max_gen]
+
+        # Key lineage path (executive): top 8 names by generation
+        sorted_members = sorted(
+            [m for m in member_summaries if m.get("full_name")],
+            key=lambda x: (int(x.get("generation")) if str(x.get("generation")).isdigit() else 0, x.get("full_name")),
+        )
+        key_path = [m["full_name"] for m in sorted_members[:8]]
+
+        return {
+            "record_integrity": "Recorded",
+            "founding_line": f"Founding generation: {' + '.join(founders)}" if founders else "Founding lineage not available.",
+            "verified_branches": f"Verified members: {verified_count} / {len(member_summaries)}" if member_summaries else "No verified branches recorded.",
+            "key_lineage_path": key_path,
+            "descendant_summary": f"Latest generation recorded: {', '.join(latest)}" if latest else "No descendant records summarized on this certificate.",
+        }
 
     def build_certificate(self, family_id: str) -> dict:
         family = self._find_family(family_id)
@@ -198,15 +243,15 @@ class LineageCertificateService:
 
         family_record_id = str(normalized_family.get("_id", family_id))
         family_name = normalized_family.get("family_name") or normalized_family.get("name") or "Unnamed Family"
-        created_by = normalized_family.get("created_by") or normalized_family.get("owner") or normalized_family.get("requested_by")
+        created_by = normalized_family.get("created_by") or normalized_family.get("owner") or "Unknown"
 
-        generation_count = self._generation_count(member_summaries)
+        generation_count = self._compute_generation_count(member_summaries)
+        executive = self._compute_executive_fields(member_summaries)
 
         certificate_core = {
             "certificate_type": "lineage_certificate",
             "certificate_version": "1.0.0",
             "issued_at": datetime.now(timezone.utc).isoformat(),
-
             "family": {
                 "id": family_record_id,
                 "family_name": family_name,
@@ -214,7 +259,6 @@ class LineageCertificateService:
                 "status": normalized_family.get("status"),
                 "created_by": created_by,
             },
-
             "summary": {
                 "member_count": len(member_summaries),
                 "relationship_count": len(relationship_summaries),
@@ -223,16 +267,7 @@ class LineageCertificateService:
                 "verification_pass_count": verification_pass_count,
                 "generation_count": generation_count,
             },
-
-            # EXECUTIVE fields used by your one-page certificate UI
-            "executive": {
-                "record_integrity": "Verified" if verification_pass_count > 0 else "Recorded",
-                "founding_line": "Founding lineage not available.",
-                "verified_branches": "Branch summary not available.",
-                "key_lineage_path": [],
-                "descendant_summary": "No descendant records summarized on this certificate.",
-            },
-
+            "executive": executive,
             "members": member_summaries,
             "relationships": relationship_summaries,
             "verification_records": verification_summaries,
@@ -240,6 +275,9 @@ class LineageCertificateService:
 
         integrity_hash = self._calculate_integrity_hash(certificate_core)
         overall_status = "verified" if verification_pass_count > 0 else "pending"
+
+        # reflect status into executive record_integrity
+        certificate_core["executive"]["record_integrity"] = overall_status.capitalize()
 
         return {
             "success": True,
