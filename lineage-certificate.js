@@ -144,12 +144,12 @@
       buildNarrativeSummary(familyName, summary, members, relationships);
 
     return {
-      certificateId: certificateId,
-      familyName: familyName,
-      createdBy: createdBy,
-      issuedAt: issuedAt,
-      lineageProof: lineageProof,
-      descendants: descendants,
+      certificateId,
+      familyName,
+      createdBy,
+      issuedAt,
+      lineageProof,
+      descendants,
       summary: narrativeSummary,
       metadataEntries: buildMetadataEntries(certificate, summary, members, relationships)
     };
@@ -208,26 +208,20 @@
   function buildMetadataEntries(certificate, summary, members, relationships) {
     const entries = [];
 
-    if (Number.isInteger(summary.member_count) || members.length) {
-      entries.push({
-        label: 'Member Count',
-        value: String(Number.isInteger(summary.member_count) ? summary.member_count : members.length)
-      });
-    }
+    entries.push({
+      label: 'Member Count',
+      value: String(Number.isInteger(summary.member_count) ? summary.member_count : members.length)
+    });
 
-    if (Number.isInteger(summary.relationship_count) || relationships.length) {
-      entries.push({
-        label: 'Relationship Count',
-        value: String(Number.isInteger(summary.relationship_count) ? summary.relationship_count : relationships.length)
-      });
-    }
+    entries.push({
+      label: 'Relationship Count',
+      value: String(Number.isInteger(summary.relationship_count) ? summary.relationship_count : relationships.length)
+    });
 
-    if (Number.isInteger(summary.generation_count)) {
-      entries.push({
-        label: 'Generation Count',
-        value: String(summary.generation_count)
-      });
-    }
+    entries.push({
+      label: 'Generation Count',
+      value: String(Number.isInteger(summary.generation_count) ? summary.generation_count : 0)
+    });
 
     Object.keys(certificate || {}).forEach(function (key) {
       const ignoredKeys = new Set([
@@ -258,7 +252,6 @@
       const value = certificate[key];
       if (value == null) return;
       if (typeof value === 'object') return;
-      if (key === 'success') return;
 
       entries.push({
         label: formatLabel(key),
@@ -270,69 +263,129 @@
   }
 
   function renderCertificate(model, outputNode) {
+    const appendixProof = model.lineageProof || [];
+    const appendixDescendants = model.descendants || [];
+
     outputNode.innerHTML = `
-      <div class="certificate-paper">
-        <div class="certificate-title">
-          <span class="eyebrow">Certified Lineage Record</span>
-          <h2>Lineage Certificate</h2>
-          <p class="certificate-subtitle">
-            Tomb of Light lineage verification record for the selected family structure.
-          </p>
-        </div>
-
-        <div class="certificate-grid">
-          <div class="certificate-item">
-            <span class="certificate-label">Certificate ID</span>
-            <div class="certificate-value certificate-id">${escapeHtml(String(model.certificateId))}</div>
+      <div class="certificate-print-stack">
+        <section class="certificate-paper certificate-page certificate-page-main">
+          <div class="certificate-title">
+            <span class="eyebrow">Certified Lineage Record</span>
+            <h2>Lineage Certificate</h2>
+            <p class="certificate-subtitle">
+              Tomb of Light lineage verification record for the selected family structure.
+            </p>
           </div>
 
-          <div class="certificate-item">
-            <span class="certificate-label">Family Name</span>
-            <div class="certificate-value">${escapeHtml(String(model.familyName))}</div>
+          <div class="certificate-grid">
+            <div class="certificate-item">
+              <span class="certificate-label">Certificate ID</span>
+              <div class="certificate-value certificate-id">${escapeHtml(String(model.certificateId))}</div>
+            </div>
+
+            <div class="certificate-item">
+              <span class="certificate-label">Family Name</span>
+              <div class="certificate-value">${escapeHtml(String(model.familyName))}</div>
+            </div>
+
+            <div class="certificate-item">
+              <span class="certificate-label">Created By</span>
+              <div class="certificate-value">${escapeHtml(String(model.createdBy))}</div>
+            </div>
+
+            <div class="certificate-item">
+              <span class="certificate-label">Issued At</span>
+              <div class="certificate-value">${escapeHtml(String(model.issuedAt))}</div>
+            </div>
           </div>
 
-          <div class="certificate-item">
-            <span class="certificate-label">Created By</span>
-            <div class="certificate-value">${escapeHtml(String(model.createdBy))}</div>
+          <div class="certificate-grid certificate-grid-tight">
+            <div class="certificate-item">
+              <span class="certificate-label">Lineage Proof Summary</span>
+              ${renderPreviewList(model.lineageProof, 6)}
+            </div>
+
+            <div class="certificate-item">
+              <span class="certificate-label">Descendant Records</span>
+              ${renderList(model.descendants)}
+            </div>
           </div>
 
-          <div class="certificate-item">
-            <span class="certificate-label">Issued At</span>
-            <div class="certificate-value">${escapeHtml(String(model.issuedAt))}</div>
+          ${model.metadataEntries.length ? `
+            <div class="certificate-grid certificate-grid-meta">
+              ${model.metadataEntries.map(function (entry) {
+                return `
+                  <div class="certificate-item">
+                    <span class="certificate-label">${escapeHtml(entry.label)}</span>
+                    <div class="certificate-value">${escapeHtml(entry.value)}</div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          ` : ''}
+
+          <div class="certificate-summary">
+            ${escapeHtml(String(model.summary))}
           </div>
 
-          <div class="certificate-item">
-            <span class="certificate-label">Lineage Proof</span>
-            ${renderList(model.lineageProof)}
+          <div class="certificate-signature-row">
+            <div class="certificate-signature-block">
+              <div class="certificate-signature-line"></div>
+              <div class="certificate-signature-label">Tomb of Light Lineage Record</div>
+            </div>
+            <div class="certificate-signature-block">
+              <div class="certificate-signature-line"></div>
+              <div class="certificate-signature-label">Issued Verification</div>
+            </div>
           </div>
 
-          <div class="certificate-item">
-            <span class="certificate-label">Descendant Records</span>
-            ${renderList(model.descendants)}
+          <div class="certificate-actions">
+            <button class="btn btn-secondary" type="button" onclick="window.print()">Print Certificate</button>
           </div>
-        </div>
+        </section>
 
-        ${model.metadataEntries.length ? `
-          <div class="certificate-grid" style="margin-top: 1rem;">
-            ${model.metadataEntries.map(function (entry) {
-              return `
-                <div class="certificate-item">
-                  <span class="certificate-label">${escapeHtml(entry.label)}</span>
-                  <div class="certificate-value">${escapeHtml(entry.value)}</div>
-                </div>
-              `;
-            }).join('')}
+        <section class="certificate-paper certificate-page certificate-page-appendix">
+          <div class="certificate-title certificate-title-appendix">
+            <span class="eyebrow">Appendix A</span>
+            <h2>Lineage Proof Appendix</h2>
+            <p class="certificate-subtitle">
+              Detailed parent-to-child relationship record for ${escapeHtml(String(model.familyName))}.
+            </p>
           </div>
-        ` : ''}
 
-        <div class="certificate-summary">
-          ${escapeHtml(String(model.summary))}
-        </div>
+          <div class="certificate-appendix-grid">
+            <div class="certificate-item certificate-item-full">
+              <span class="certificate-label">Full Lineage Proof</span>
+              ${renderNumberedList(appendixProof)}
+            </div>
 
-        <div class="certificate-actions">
-          <button class="btn btn-secondary" type="button" onclick="window.print()">Print Certificate</button>
-        </div>
+            <div class="certificate-item certificate-item-full">
+              <span class="certificate-label">Descendant Summary</span>
+              ${renderNumberedList(appendixDescendants)}
+            </div>
+          </div>
+        </section>
       </div>
+    `;
+  }
+
+  function renderPreviewList(items, limit) {
+    const safeItems = Array.isArray(items) ? items : [];
+
+    if (!safeItems.length) {
+      return '<div class="certificate-value">None recorded.</div>';
+    }
+
+    const preview = safeItems.slice(0, limit);
+    const remaining = safeItems.length - preview.length;
+
+    return `
+      <ul class="certificate-list">
+        ${preview.map(function (item) {
+          return `<li>${escapeHtml(String(item))}</li>`;
+        }).join('')}
+        ${remaining > 0 ? `<li><em>+ ${remaining} additional record(s) listed in Appendix A</em></li>` : ''}
+      </ul>
     `;
   }
 
@@ -347,6 +400,20 @@
           return `<li>${escapeHtml(String(item))}</li>`;
         }).join('')}
       </ul>
+    `;
+  }
+
+  function renderNumberedList(items) {
+    if (!items || !items.length) {
+      return '<div class="certificate-value">None recorded.</div>';
+    }
+
+    return `
+      <ol class="certificate-list certificate-list-numbered">
+        ${items.map(function (item) {
+          return `<li>${escapeHtml(String(item))}</li>`;
+        }).join('')}
+      </ol>
     `;
   }
 

@@ -23,6 +23,11 @@
       box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22);
     }
 
+    .certificate-print-stack {
+      display: grid;
+      gap: 1.5rem;
+    }
+
     .certificate-paper {
       position: relative;
       background:
@@ -43,9 +48,15 @@
       pointer-events: none;
     }
 
+    .certificate-page {
+      min-height: 0;
+    }
+
     .certificate-title {
       text-align: center;
       margin-bottom: 1.5rem;
+      position: relative;
+      z-index: 1;
     }
 
     .certificate-title .eyebrow {
@@ -59,11 +70,17 @@
       letter-spacing: -0.05em;
     }
 
+    .certificate-title-appendix h2 {
+      font-size: clamp(1.8rem, 3.6vw, 2.5rem);
+    }
+
     .certificate-subtitle {
       margin: 0.65rem auto 0;
       max-width: 60ch;
       text-align: center;
       color: var(--muted);
+      position: relative;
+      z-index: 1;
     }
 
     .certificate-grid {
@@ -71,6 +88,24 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 1rem;
       margin-top: 1.5rem;
+      position: relative;
+      z-index: 1;
+    }
+
+    .certificate-grid-tight {
+      align-items: start;
+    }
+
+    .certificate-grid-meta {
+      margin-top: 1rem;
+    }
+
+    .certificate-appendix-grid {
+      display: grid;
+      gap: 1rem;
+      margin-top: 1.25rem;
+      position: relative;
+      z-index: 1;
     }
 
     .certificate-item {
@@ -78,6 +113,10 @@
       border-radius: 18px;
       background: rgba(255,255,255,0.025);
       border: 1px solid rgba(255,255,255,0.06);
+    }
+
+    .certificate-item-full {
+      width: 100%;
     }
 
     .certificate-label {
@@ -104,6 +143,10 @@
       margin-top: 0.35rem;
     }
 
+    .certificate-list-numbered {
+      padding-left: 1.35rem;
+    }
+
     .certificate-summary {
       margin-top: 1.5rem;
       padding: 1.1rem 1.15rem;
@@ -111,6 +154,8 @@
       background: rgba(214, 176, 102, 0.06);
       border: 1px solid rgba(214, 176, 102, 0.14);
       color: var(--muted);
+      position: relative;
+      z-index: 1;
     }
 
     .certificate-id {
@@ -123,10 +168,39 @@
       flex-wrap: wrap;
       gap: 0.8rem;
       margin-top: 1.5rem;
+      position: relative;
+      z-index: 1;
+    }
+
+    .certificate-signature-row {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 2rem;
+      margin-top: 1.75rem;
+      position: relative;
+      z-index: 1;
+    }
+
+    .certificate-signature-block {
+      display: grid;
+      gap: 0.55rem;
+      align-content: end;
+    }
+
+    .certificate-signature-line {
+      height: 1px;
+      background: rgba(214, 176, 102, 0.5);
+      width: 100%;
+    }
+
+    .certificate-signature-label {
+      color: var(--muted-2);
+      font-size: 0.9rem;
     }
 
     @media (max-width: 860px) {
-      .certificate-grid {
+      .certificate-grid,
+      .certificate-signature-row {
         grid-template-columns: 1fr;
       }
     }
