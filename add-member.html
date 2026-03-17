@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Add Family Member | Tomb of Light</title>
+  <meta
+    name="description"
+    content="Add a family member to your Tomb of Light lineage structure."
+  />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="page-wrap">
+    <header class="site-header">
+      <div class="container site-header-inner">
+        <a class="brand" href="index.html" aria-label="Tomb of Light home">
+          <span>Tomb of Light<span class="brand-symbol">™</span></span>
+        </a>
+
+        <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
+          <a href="platform.html">Platform</a>
+          <a href="how-it-works.html">How It Works</a>
+          <a href="security.html">Security</a>
+          <a href="faq.html">FAQ</a>
+        </nav>
+
+        <div class="header-actions">
+          <a class="btn btn-secondary" href="dashboard.html">Dashboard</a>
+          <button class="btn btn-secondary" type="button" data-logout-btn>Log Out</button>
+        </div>
+      </div>
+    </header>
+
+    <main data-dashboard>
+      <section class="page-hero">
+        <div class="container">
+          <div class="page-hero-panel">
+            <span class="eyebrow">Lineage Construction</span>
+            <h1>Add a Family Member</h1>
+            <p>
+              Create a person record inside a family so Tomb of Light can begin building a living lineage structure.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="page-sections">
+        <div class="container form-shell" data-auth-required style="display: none;">
+          <div class="form-panel">
+            <form class="form-grid" data-add-member-form novalidate>
+              <label>
+                Family
+                <select name="family_id" required>
+                  <option value="">Select a family</option>
+                </select>
+              </label>
+
+              <div class="form-grid two-col">
+                <label>
+                  First Name
+                  <input
+                    type="text"
+                    name="first_name"
+                    placeholder="Example: Malik"
+                    required
+                  />
+                </label>
+
+                <label>
+                  Last Name
+                  <input
+                    type="text"
+                    name="last_name"
+                    placeholder="Example: Moreland"
+                    required
+                  />
+                </label>
+              </div>
+
+              <div class="form-grid two-col">
+                <label>
+                  Birth Year
+                  <input
+                    type="number"
+                    name="birth_year"
+                    placeholder="Example: 1994"
+                  />
+                </label>
+
+                <label>
+                  Generation
+                  <input
+                    type="number"
+                    name="generation"
+                    placeholder="Example: 1"
+                    min="0"
+                    required
+                  />
+                </label>
+              </div>
+
+              <div class="form-grid two-col">
+                <label>
+                  Father ID
+                  <input
+                    type="text"
+                    name="father_id"
+                    placeholder="Optional existing member ID"
+                  />
+                </label>
+
+                <label>
+                  Mother ID
+                  <input
+                    type="text"
+                    name="mother_id"
+                    placeholder="Optional existing member ID"
+                  />
+                </label>
+              </div>
+
+              <label>
+                Spouse ID
+                <input
+                  type="text"
+                  name="spouse_id"
+                  placeholder="Optional existing member ID"
+                />
+              </label>
+
+              <label>
+                Bio / Notes
+                <textarea
+                  name="bio"
+                  rows="5"
+                  placeholder="Optional family notes, short biography, or lineage context."
+                ></textarea>
+              </label>
+
+              <div
+                class="helper"
+                data-member-status
+                aria-live="polite"
+                style="display: none;"
+              ></div>
+
+              <div class="inline-actions">
+                <button class="btn btn-primary" type="submit" data-submit-btn>
+                  Add Family Member
+                </button>
+                <a class="btn btn-secondary" href="dashboard.html">Back to Dashboard</a>
+              </div>
+            </form>
+          </div>
+
+          <div class="form-panel">
+            <span class="eyebrow">What This Creates</span>
+
+            <div class="grid-3">
+              <div>
+                <div class="card-number">1</div>
+                <h3>Person record</h3>
+                <p class="card-copy">
+                  This creates a person inside the selected family record.
+                </p>
+              </div>
+
+              <div>
+                <div class="card-number">2</div>
+                <h3>Generation placement</h3>
+                <p class="card-copy">
+                  The generation field helps place the person inside the lineage structure.
+                </p>
+              </div>
+
+              <div>
+                <div class="card-number">3</div>
+                <h3>Relationship readiness</h3>
+                <p class="card-copy">
+                  Parent and spouse IDs prepare the member for future relationship mapping.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="container">
+        <div class="footer-card">
+          <div class="footer-bottom">
+            <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
+          </div>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script src="auth.js"></script>
+  <script src="member.js"></script>
+</body>
+</html>
