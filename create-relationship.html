@@ -1,140 +1,172 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Create Relationship | Tomb of Light</title>
-
-<link rel="stylesheet" href="styles.css">
-
-<style>
-.container {
-    max-width: 900px;
-    margin: auto;
-    padding: 40px;
-}
-
-.card {
-    background: rgba(10,16,28,0.9);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 12px;
-    padding: 30px;
-}
-
-label {
-    display:block;
-    margin-top:20px;
-    color:#ddd;
-}
-
-input, select {
-    width:100%;
-    padding:10px;
-    margin-top:5px;
-    border-radius:6px;
-    border:1px solid #444;
-    background:#0c111b;
-    color:white;
-}
-
-button {
-    margin-top:25px;
-    padding:12px 20px;
-    border:none;
-    border-radius:8px;
-    background:#d6b066;
-    color:black;
-    font-weight:bold;
-    cursor:pointer;
-}
-
-.success {
-    margin-top:20px;
-    color:#6be675;
-}
-</style>
-
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Create Relationship | Tomb of Light</title>
+  <meta
+    name="description"
+    content="Create a relationship between family members in Tomb of Light."
+  />
+  <link rel="stylesheet" href="styles.css" />
 </head>
-
 <body>
+  <div class="page-wrap">
+    <header class="site-header">
+      <div class="container site-header-inner">
+        <a class="brand" href="index.html" aria-label="Tomb of Light home">
+          <span>Tomb of Light<span class="brand-symbol">™</span></span>
+        </a>
 
-<div class="container">
+        <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
+          <a href="platform.html">Platform</a>
+          <a href="how-it-works.html">How It Works</a>
+          <a href="security.html">Security</a>
+          <a href="faq.html">FAQ</a>
+        </nav>
 
-<h1>Create Relationship</h1>
+        <div class="header-actions">
+          <a class="btn btn-secondary" href="dashboard.html">Dashboard</a>
+          <button class="btn btn-secondary" type="button" data-logout-btn>Log Out</button>
+        </div>
+      </div>
+    </header>
 
-<div class="card">
+    <main data-dashboard>
+      <section class="page-hero">
+        <div class="container">
+          <div class="page-hero-panel">
+            <span class="eyebrow">Relationship Mapping</span>
+            <h1>Create Relationship</h1>
+            <p>
+              Connect family members as spouses, parent-child relationships, siblings, guardians, or step-family.
+            </p>
+          </div>
+        </div>
+      </section>
 
-<label>Family</label>
-<select id="familySelect"></select>
+      <section class="page-sections">
+        <div class="container form-shell" data-auth-required style="display: none;">
+          <div class="form-panel">
+            <form class="form-grid" data-relationship-form novalidate>
+              <label>
+                Family
+                <select name="family_id" required>
+                  <option value="">Select a family</option>
+                </select>
+              </label>
 
-<label>Relationship Type</label>
-<select id="relationshipType">
-<option value="spouse">Spouse</option>
-<option value="parent">Parent</option>
-<option value="child">Child</option>
-</select>
+              <label>
+                Relationship Type
+                <select name="relationship_type" required>
+                  <option value="">Select relationship type</option>
+                  <option value="spouse">spouse</option>
+                  <option value="parent_child">parent_child</option>
+                  <option value="sibling">sibling</option>
+                  <option value="guardian">guardian</option>
+                  <option value="adoptive_parent_child">adoptive_parent_child</option>
+                  <option value="step_parent_child">step_parent_child</option>
+                </select>
+              </label>
 
-<label>Person A (Member ID)</label>
-<input id="personA">
+              <label>
+                Source Member ID
+                <input
+                  type="text"
+                  name="source_member_id"
+                  placeholder="Example: 69b8c44898aa11f9a41fc1ca"
+                  required
+                />
+              </label>
 
-<label>Person B (Member ID)</label>
-<input id="personB">
+              <label>
+                Target Member ID
+                <input
+                  type="text"
+                  name="target_member_id"
+                  placeholder="Example: 69b8c48b98aa11f9a41fc1cc"
+                  required
+                />
+              </label>
 
-<button onclick="createRelationship()">Create Relationship</button>
+              <label>
+                Created By
+                <input
+                  type="text"
+                  name="created_by"
+                  placeholder="Auto-filled from your account"
+                />
+              </label>
 
-<div id="message" class="success"></div>
+              <label>
+                Notes
+                <textarea
+                  name="notes"
+                  rows="4"
+                  placeholder="Optional notes about the relationship"
+                ></textarea>
+              </label>
 
-</div>
-</div>
+              <div
+                class="helper"
+                data-relationship-status
+                aria-live="polite"
+                style="display: none;"
+              ></div>
 
-<script>
+              <div class="inline-actions">
+                <button class="btn btn-primary" type="submit" data-submit-btn>
+                  Create Relationship
+                </button>
+                <a class="btn btn-secondary" href="family-graph.html">View Family Graph</a>
+              </div>
+            </form>
+          </div>
 
-const API = "http://127.0.0.1:8000";
+          <div class="form-panel">
+            <span class="eyebrow">Genesis Relationship Notes</span>
+            <div class="grid-3">
+              <div>
+                <div class="card-number">1</div>
+                <h3>Spouse links</h3>
+                <p class="card-copy">
+                  Use <strong>spouse</strong> for married or partner relationships.
+                </p>
+              </div>
+              <div>
+                <div class="card-number">2</div>
+                <h3>Parent-child links</h3>
+                <p class="card-copy">
+                  Use <strong>parent_child</strong> when connecting a parent to a child.
+                </p>
+              </div>
+              <div>
+                <div class="card-number">3</div>
+                <h3>Graph assembly</h3>
+                <p class="card-copy">
+                  Every relationship becomes part of the lineage graph engine.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
 
-async function loadFamilies() {
+    <footer class="footer">
+      <div class="container">
+        <div class="footer-card">
+          <div class="footer-bottom">
+            <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
+          </div>
+        </div>
+      </div>
+    </footer>
+  </div>
 
-const res = await fetch(`${API}/families/`);
-const families = await res.json();
-
-const select = document.getElementById("familySelect");
-
-families.forEach(f => {
-const opt = document.createElement("option");
-opt.value = f.id;
-opt.textContent = `${f.name} (${f.created_by})`;
-select.appendChild(opt);
-});
-
-}
-
-async function createRelationship() {
-
-const payload = {
-family_id: document.getElementById("familySelect").value,
-person_a: document.getElementById("personA").value,
-person_b: document.getElementById("personB").value,
-relationship_type: document.getElementById("relationshipType").value
-};
-
-const res = await fetch(`${API}/relationships/`,{
-method:"POST",
-headers:{
-"Content-Type":"application/json"
-},
-body: JSON.stringify(payload)
-});
-
-if(res.ok){
-document.getElementById("message").innerText = "Relationship created successfully";
-}else{
-document.getElementById("message").innerText = "Error creating relationship";
-}
-
-}
-
-loadFamilies();
-
-</script>
-
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script src="auth.js"></script>
+  <script src="relationship.js"></script>
 </body>
 </html>
