@@ -47,8 +47,6 @@ body.menu-open {
   overflow: hidden;
 }
 
-/* ================= PREFERS REDUCED MOTION ================= */
-
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -59,8 +57,6 @@ body.menu-open {
     scroll-behavior: auto !important;
   }
 }
-
-/* ================= SKIP TO CONTENT ================= */
 
 .skip-to-content {
   position: absolute;
@@ -88,8 +84,6 @@ body.menu-open {
   text-decoration: none;
 }
 
-/* ================= SITE WATERMARK ================= */
-
 .site-watermark {
   position: fixed;
   inset: 0;
@@ -102,8 +96,6 @@ body.menu-open {
   opacity: 0.18;
   filter: brightness(1.32) contrast(1.08);
 }
-
-/* ================= BASE ELEMENTS ================= */
 
 img {
   max-width: 100%;
@@ -132,8 +124,6 @@ select {
   position: relative;
   z-index: 1;
 }
-
-/* ================= HEADER ================= */
 
 .site-header {
   position: sticky;
@@ -233,8 +223,6 @@ select {
   border-color: var(--border);
 }
 
-/* ================= BUTTONS ================= */
-
 .btn {
   display: inline-flex;
   align-items: center;
@@ -312,8 +300,6 @@ select {
   outline-offset: 2px;
   border-radius: 4px;
 }
-
-/* ================= HERO ================= */
 
 .hero {
   padding: 72px 0 42px;
@@ -660,8 +646,6 @@ select {
   color: var(--muted);
 }
 
-/* ================= SECTIONS ================= */
-
 .section {
   padding: 28px 0 10px;
 }
@@ -728,8 +712,6 @@ select {
   color: var(--muted);
 }
 
-/* ================= ARCHITECTURE ================= */
-
 .architecture-panel {
   padding: 34px;
 }
@@ -790,8 +772,6 @@ select {
   margin-top: 24px;
 }
 
-/* ================= VIEWER ================= */
-
 .viewer-panel {
   padding: 34px;
 }
@@ -843,15 +823,11 @@ select {
   color: var(--muted);
 }
 
-/* ================= TRUST ================= */
-
 .trust-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 20px;
 }
-
-/* ================= CTA ================= */
 
 .cta-panel {
   padding: 40px;
@@ -861,8 +837,6 @@ select {
 .cta-panel-premium {
   text-align: left;
 }
-
-/* ================= PAGE HERO / FORMS ================= */
 
 .page-hero {
   padding: 72px 0 20px;
@@ -970,8 +944,6 @@ textarea {
   border-radius: 4px;
 }
 
-/* ================= FOOTER ================= */
-
 .footer {
   padding: 24px 0 44px;
 }
@@ -1028,8 +1000,6 @@ textarea {
   color: var(--muted-2);
   font-size: 0.96rem;
 }
-
-/* ================= COOKIE ================= */
 
 .cookie-banner {
   position: fixed;
@@ -1093,8 +1063,6 @@ textarea {
   font-size: 0.94rem;
   margin-top: 8px;
 }
-
-/* ================= THANK YOU ================= */
 
 .thank-you-hero {
   padding: 96px 0 64px;
@@ -1160,8 +1128,6 @@ textarea {
   line-height: 1.7;
 }
 
-/* ================= HOMEPAGE CONTENT UPGRADES ================= */
-
 .package-list {
   margin: 18px 0 0;
   padding-left: 18px;
@@ -1214,12 +1180,10 @@ textarea {
   line-height: 1.7;
 }
 
-/* ================= PRINT ================= */
-
 @media print {
   @page {
     size: letter portrait;
-    margin: 0.5in;
+    margin: 0.45in;
   }
 
   html,
@@ -1251,7 +1215,7 @@ textarea {
     max-width: 100% !important;
     min-height: auto !important;
     margin: 0 !important;
-    padding: 0.38in !important;
+    padding: 0.32in !important;
     background: #ffffff !important;
     color: #111111 !important;
     border: 1px solid #d9d9d9 !important;
@@ -1266,11 +1230,16 @@ textarea {
   }
 
   .certificate-page-appendix {
-    break-before: page !important;
-    page-break-before: always !important;
+    break-before: auto !important;
+    page-break-before: auto !important;
+    margin-top: 0 !important;
   }
 
-  .certificate-paper {
+  .certificate-paper,
+  .certificate-title,
+  .certificate-item,
+  .certificate-summary,
+  .certificate-signature-row {
     break-inside: avoid !important;
     page-break-inside: avoid !important;
   }
@@ -1299,23 +1268,16 @@ textarea {
   }
 
   .certificate-grid,
-  .certificate-grid-tight,
   .certificate-grid-meta,
   .certificate-signature-row,
   .certificate-appendix-grid {
     display: grid !important;
-    gap: 12px !important;
-    break-inside: avoid;
-    page-break-inside: avoid;
+    gap: 10px !important;
   }
 
   .certificate-grid,
-  .certificate-grid-tight,
+  .certificate-grid-meta,
   .certificate-signature-row {
-    grid-template-columns: 1fr 1fr !important;
-  }
-
-  .certificate-grid-meta {
     grid-template-columns: 1fr 1fr !important;
   }
 
@@ -1323,37 +1285,35 @@ textarea {
     grid-template-columns: 1fr !important;
   }
 
-  .certificate-item,
-  .certificate-summary,
-  .certificate-signature-row,
   .certificate-title {
+    padding: 10px !important;
+    margin-bottom: 10px !important;
     border: 1px solid #d9d9d9 !important;
-    break-inside: avoid;
-    page-break-inside: avoid;
-  }
-
-  .certificate-title {
-    padding: 0.16in !important;
-    margin-bottom: 12px !important;
   }
 
   .certificate-grid {
-    gap: 12px !important;
-    margin-top: 12px !important;
+    margin-top: 10px !important;
   }
 
   .certificate-item {
-    padding: 10px 12px !important;
+    padding: 8px 10px !important;
+    border: 1px solid #d9d9d9 !important;
   }
 
   .certificate-summary {
-    margin-top: 14px !important;
-    padding: 12px !important;
+    margin-top: 10px !important;
+    padding: 10px !important;
+    border: 1px solid #d9d9d9 !important;
   }
 
   .certificate-signature-row {
-    margin-top: 16px !important;
-    padding: 12px !important;
+    margin-top: 10px !important;
+    padding: 10px !important;
+    border: 1px solid #d9d9d9 !important;
+  }
+
+  .certificate-list li + li {
+    margin-top: 2px !important;
   }
 
   .certificate-actions,
@@ -1373,8 +1333,6 @@ textarea {
     color: inherit !important;
   }
 }
-
-/* ================= RESPONSIVE ================= */
 
 @media (max-width: 1180px) {
   .hero-shell,
