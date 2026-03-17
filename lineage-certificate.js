@@ -1,18 +1,27 @@
 (function () {
   'use strict';
 
+  console.log('LINEAGE CERTIFICATE JS LOADED');
+
   const API_BASE_URL =
     (window.TOL_CONFIG && window.TOL_CONFIG.API_BASE_URL) ||
     'http://127.0.0.1:8000';
 
   const output = document.querySelector('[data-certificate-output]');
+  const emptyState = document.querySelector('[data-certificate-empty]');
   const statusNode = document.querySelector('[data-certificate-status]');
+  const familySelect = document.querySelector('[data-certificate-family-select]');
+  const loadBtn = document.querySelector('[data-load-certificate-btn]');
   const printBtn = document.querySelector('[data-certificate-print]');
 
-  function setStatus(message, type) {
+  function getToken() {
+    return localStorage.getItem('tol_access_token');
+  }
+
+  function setStatus(message, type = 'info') {
     if (!statusNode) return;
     statusNode.textContent = message;
-    statusNode.dataset.state = type || 'info';
+    statusNode.dataset.state = type;
     statusNode.style.display = 'block';
   }
 
@@ -23,33 +32,20 @@
     statusNode.style.display = 'none';
   }
 
-  function getFamilyId() {
-    const params = new URLSearchParams(window.location.search);
-    return params.get('family_id') || '';
+  function showEmptyState(show) {
+    if (!emptyState) return;
+    emptyState.style.display = show ? 'block' : 'none';
   }
 
-  function getToken() {
-    return localStorage.getItem('tol_access_token');
+  function showOutput(show) {
+    if (!output) return;
+    output.style.display = show ? 'block' : 'none';
   }
 
-  async function fetchCertificate(familyId) {
-    const token = getToken();
-
-    const response = await fetch(`${API_BASE_URL}/lineage-certificate/${encodeURIComponent(familyId)}`, {
-      method: 'GET',
-      headers: {
-        Accept: 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {})
-      }
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.detail || 'Failed to load lineage certificate.');
-    }
-
-    return data;
+  function setLoadButtonState(isLoading) {
+    if (!loadBtn) return;
+    loadBtn.disabled = isLoading;
+    loadBtn.textContent = isLoading ? 'Generating...' : 'Generate Certificate';
   }
 
   function safe(value, fallback = 'Not available') {
@@ -63,9 +59,82 @@
       return '<li>Not available</li>';
     }
 
-    return items.map(function (item) {
-      return `<li>${safe(item)}</li>`;
-    }).join('');
+    return items
+      .map(function (item) {
+        return `<li>${safe(item)}</li>`;
+      })
+      .join('');
+  }
+
+  function getFamilyIdFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('family_id') || '';
+  }
+
+  function setFamilyIdInUrl(familyId) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('family_id', familyId);
+    window.history.replaceState({}, '', url.toString());
+  }
+
+  async function apiGet(path) {
+    const token = getToken();
+
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {})
+      }
+    });
+
+    const contentType = response.headers.get('content-type') || '';
+    let data = null;
+
+    try {
+      if (contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        const text = await response.text();
+        data = text ? { detail: text } : null;
+      }
+    } catch (error) {
+      data = null;
+    }
+
+    if (!response.ok) {
+      throw new Error(
+        (data && (data.detail || data.message || data.error)) ||
+        `Request failed with status ${response.status}`
+      );
+    }
+
+    return data;
+  }
+
+  async function fetchFamilies() {
+    return apiGet('/families');
+  }
+
+  async function fetchCertificate(familyId) {
+    return apiGet(`/lineage-certificate/${encodeURIComponent(familyId)}`);
+  }
+
+  function populateFamilyDropdown(families) {
+    if (!familySelect) return;
+
+    familySelect.innerHTML = '<option value="">Select a family</option>';
+
+    families.forEach(function (family) {
+      if (!family || !family.id) return;
+
+      const option = document.createElement('option');
+      option.value = family.id;
+      option.textContent = family.family_name || family.id;
+      familySelect.appendChild(option);
+    });
+
+    console.log('Families loaded into dropdown:', families.length);
   }
 
   function renderCertificate(payload) {
@@ -86,7 +155,7 @@
               <div class="exec-cert-brandsub">Executive Lineage Certificate</div>
             </div>
           </div>
-          <div class="exec-cert-badge">${safe(certificate.status, 'Recorded')}</div>
+          <div class="exec-cert-badge">${safe(certificate.status, 'recorded')}</div>
         </div>
 
         <div class="exec-cert-title">
@@ -172,26 +241,103 @@
     `;
   }
 
-  async function init() {
-    if (!output) return;
+  async function loadFamilyOptions() {
+    if (!familySelect) return;
 
-    const familyId = getFamilyId();
+    familySelect.disabled = true;
+    familySelect.innerHTML = '<option value="">Loading families...</option>';
+
+    try {
+      const families = await fetchFamilies();
+
+      if (!Array.isArray(families)) {
+        throw new Error('Unexpected family response format.');
+      }
+
+      populateFamilyDropdown(families);
+
+      if (!families.length) {
+        familySelect.innerHTML = '<option value="">No families available</option>';
+        setStatus('No families were found for this account.', 'error');
+        return;
+      }
+
+      const urlFamilyId = getFamilyIdFromUrl();
+      if (urlFamilyId) {
+        familySelect.value = urlFamilyId;
+      }
+
+      clearStatus();
+    } catch (error) {
+      familySelect.innerHTML = '<option value="">Unable to load families</option>';
+      setStatus(error.message || 'Failed to load family list.', 'error');
+    } finally {
+      familySelect.disabled = false;
+    }
+  }
+
+  async function generateSelectedCertificate() {
+    if (!familySelect || !output) return;
+
+    const familyId = String(familySelect.value || '').trim();
 
     if (!familyId) {
-      setStatus('Missing family_id in URL. Example: lineage-certificate.html?family_id=YOUR_ID', 'error');
+      showOutput(false);
+      showEmptyState(true);
+      output.innerHTML = '';
+      setStatus('Please select a family first.', 'error');
       return;
     }
 
+    setLoadButtonState(true);
     clearStatus();
+    showEmptyState(false);
+    showOutput(true);
     output.innerHTML = '<p>Loading certificate...</p>';
 
     try {
+      setFamilyIdInUrl(familyId);
       const data = await fetchCertificate(familyId);
       renderCertificate(data);
+      clearStatus();
     } catch (error) {
       output.innerHTML = '';
+      showOutput(false);
+      showEmptyState(true);
       setStatus(error.message || 'Failed to load certificate.', 'error');
+    } finally {
+      setLoadButtonState(false);
     }
+  }
+
+  async function init() {
+    if (!output) return;
+
+    showEmptyState(true);
+    showOutput(false);
+    clearStatus();
+
+    await loadFamilyOptions();
+
+    const urlFamilyId = getFamilyIdFromUrl();
+    if (urlFamilyId && familySelect) {
+      familySelect.value = urlFamilyId;
+      if (familySelect.value) {
+        await generateSelectedCertificate();
+      }
+    }
+  }
+
+  if (loadBtn) {
+    loadBtn.addEventListener('click', function () {
+      generateSelectedCertificate();
+    });
+  }
+
+  if (familySelect) {
+    familySelect.addEventListener('change', function () {
+      clearStatus();
+    });
   }
 
   if (printBtn) {
