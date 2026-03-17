@@ -22,8 +22,7 @@
     try {
       await window.TOLAuth.apiRequest('/auth/me', { method: 'GET' });
     } catch (error) {
-      window.TOLAuth.clearSession?.();
-      window.TOLAuth.clearToken?.();
+      window.TOLAuth.clearSession();
       window.location.href = 'signin.html';
       return;
     }
@@ -41,6 +40,15 @@
         await loadCertificate(familyId, outputNode, emptyNode, statusNode);
       });
     }
+
+    // auto-load on change (optional)
+    if (familySelect) {
+      familySelect.addEventListener('change', async function () {
+        const familyId = familySelect.value;
+        if (!familyId) return;
+        await loadCertificate(familyId, outputNode, emptyNode, statusNode);
+      });
+    }
   }
 
   async function loadFamilyOptions(selectNode, statusNode) {
@@ -51,10 +59,10 @@
     try {
       const families = await window.TOLAuth.apiRequest('/families/', { method: 'GET' });
 
-      (families || []).forEach(function (family) {
+      families.forEach(function (family) {
         const option = document.createElement('option');
-        option.value = family.id || family._id || '';
-        option.textContent = `${family.family_name || 'Unnamed Family'} (${family.created_by || 'Unknown'})`;
+        option.value = family.id;
+        option.textContent = `${family.family_name} (${family.created_by})`;
         selectNode.appendChild(option);
       });
 
@@ -72,18 +80,15 @@
     outputNode.innerHTML = '';
 
     try {
-      const raw = await window.TOLAuth.apiRequest(`/lineage-certificate/${encodeURIComponent(familyId)}`, {
-        method: 'GET'
-      });
+      const data = await window.TOLAuth.apiRequest(`/lineage-certificate/${familyId}`, { method: 'GET' });
 
-      // ✅ IMPORTANT: unwrap common API response shapes
-      const certificate = unwrapCertificate(raw);
+      // IMPORTANT: backend returns { success, certificate: {...} }
+      const payload = data && data.certificate ? data.certificate : data;
 
-      renderExecutiveCertificate(certificate, outputNode);
+      renderExecutiveCertificate(payload, outputNode);
       outputNode.style.display = 'block';
 
       if (emptyNode) emptyNode.style.display = 'none';
-
       showStatus(statusNode, 'Executive lineage certificate loaded successfully.', 'success');
     } catch (error) {
       if (emptyNode) emptyNode.style.display = 'block';
@@ -91,153 +96,84 @@
     }
   }
 
-  function unwrapCertificate(raw) {
-    if (!raw) return {};
+  function renderExecutiveCertificate(cert, outputNode) {
+    const family = cert.family || {};
+    const summary = cert.summary || {};
+    const exec = cert.executive || {};
 
-    // If backend returns {success, data:{...}}
-    if (raw.data && typeof raw.data === 'object') return raw.data;
+    const certificateId = cert.certificate_id || 'Pending';
+    const familyName = family.family_name || 'Unknown Family';
+    const issuedBy = family.created_by || 'Unknown';
+    const issuedAt = cert.issued_at || 'Not provided';
 
-    // If backend returns {success, certificate:{...}}
-    if (raw.certificate && typeof raw.certificate === 'object') return raw.certificate;
+    const membersRecorded = numberOrFallback(summary.member_count, 'Not available');
+    const relationshipsRecorded = numberOrFallback(summary.relationship_count, 'Not available');
+    const generationsRecorded = numberOrFallback(summary.generation_count, 'Not available');
 
-    // If backend returns {result:{...}} or {payload:{...}}
-    if (raw.result && typeof raw.result === 'object') return raw.result;
-    if (raw.payload && typeof raw.payload === 'object') return raw.payload;
+    const recordIntegrity = exec.record_integrity || (cert.status ? titleCase(cert.status) : 'Recorded');
 
-    // If backend returns {success:true, ...certificateFields}
-    return raw;
-  }
-
-  function renderExecutiveCertificate(certificate, outputNode) {
-    const certificateId =
-      certificate.certificate_id ||
-      certificate.id ||
-      certificate.record_id ||
-      'Pending';
-
-    const familyName =
-      certificate.family_name ||
-      certificate.family?.family_name ||
-      certificate.family?.name ||
-      certificate.family ||
-      'Unknown Family';
-
-    const issuedBy =
-      certificate.created_by ||
-      certificate.issued_by ||
-      certificate.family?.created_by ||
-      certificate.owner ||
-      'Unknown';
-
-    const issuedAt =
-      certificate.issued_at ||
-      certificate.created_at ||
-      certificate.generated_at ||
-      certificate.issue_date ||
-      'Not provided';
-
-    // Counts (if your backend provides them)
-    const memberCount =
-      certificate.member_count ??
-      certificate.members_count ??
-      certificate.members?.length ??
-      null;
-
-    const relationshipCount =
-      certificate.relationship_count ??
-      certificate.relationships_count ??
-      certificate.relationships?.length ??
-      null;
-
-    const generationCount =
-      certificate.generation_count ??
-      certificate.generations_count ??
-      certificate.generations ??
-      null;
-
-    // Executive summaries
-    const keyLineagePath = normalizeText(
-      certificate.key_lineage_path ||
-      certificate.key_path ||
-      certificate.primary_lineage ||
-      ''
-    );
-
-    const verifiedBranches = normalizeText(
-      certificate.verified_branches ||
-      certificate.branch_summary ||
-      ''
-    );
-
-    const descendantSummary = normalizeText(
-      certificate.descendant_summary ||
-      certificate.descendants_summary ||
-      ''
-    );
+    const foundingLine = exec.founding_line || 'Founding lineage not available.';
+    const verifiedBranches = exec.verified_branches || 'Branch summary not available.';
+    const keyLineagePath = normalizeList(exec.key_lineage_path || []);
+    const descendantSummary = exec.descendant_summary || 'No descendant records summarized on this certificate.';
 
     outputNode.innerHTML = `
-      <div class="exec-cert">
-        <div class="exec-cert__paper">
-          <div class="exec-cert__watermark" aria-hidden="true"></div>
-
-          <div class="exec-cert__topline">
-            <div class="exec-cert__brand">
-              <div class="exec-cert__brand-name">Tomb of Light</div>
-              <div class="exec-cert__badge">Certified Executive Record</div>
-            </div>
-            <div class="exec-cert__seal">Certified Executive Record</div>
-          </div>
-
-          <div class="exec-cert__title">
-            <div class="exec-cert__eyebrow">CERTIFIED LINEAGE RECORD</div>
-            <h2>Executive Lineage Certificate</h2>
-            <p>Official summary certification of a recorded family lineage within the Tomb of Light verification system.</p>
-          </div>
-
-          <div class="exec-cert__grid">
-            ${metric('Certificate ID', certificateId)}
-            ${metric('Family Name', familyName)}
-            ${metric('Issued By', issuedBy)}
-            ${metric('Issue Date', issuedAt)}
-            ${metric('Members Recorded', memberCount == null ? 'Not available' : String(memberCount))}
-            ${metric('Relationships Recorded', relationshipCount == null ? 'Not available' : String(relationshipCount))}
-            ${metric('Generations Recorded', generationCount == null ? 'Not available' : String(generationCount))}
-            ${metric('Record Integrity', 'Recorded')}
-          </div>
-
-          <div class="exec-cert__sections">
-            <div class="exec-cert__section">
-              <div class="exec-cert__section-label">KEY LINEAGE PATH</div>
-              <div class="exec-cert__section-value">${escapeHtml(keyLineagePath || 'Key lineage path not available.')}</div>
-            </div>
-
-            <div class="exec-cert__section">
-              <div class="exec-cert__section-label">VERIFIED BRANCHES</div>
-              <div class="exec-cert__section-value">${escapeHtml(verifiedBranches || 'Branch summary not available.')}</div>
-            </div>
-
-            <div class="exec-cert__section">
-              <div class="exec-cert__section-label">DESCENDANT SUMMARY</div>
-              <div class="exec-cert__section-value">${escapeHtml(descendantSummary || 'No descendant records summarized on this certificate.')}</div>
+      <div class="exec-certificate" data-print-certificate>
+        <div class="exec-cert-header">
+          <div class="exec-cert-brand">
+            <img class="exec-cert-logo" src="images/tol-watermark-clean.png" alt="Tomb of Light logo" />
+            <div class="exec-cert-brandtext">
+              <div class="exec-cert-brandname">Tomb of Light</div>
+              <div class="exec-cert-brandsub">Certified Executive Record</div>
             </div>
           </div>
 
-          <div class="exec-cert__attestation">
+          <div class="exec-cert-badge">Certified Executive Record</div>
+        </div>
+
+        <div class="exec-cert-title">
+          <div class="exec-cert-eyebrow">CERTIFIED LINEAGE RECORD</div>
+          <h2>Executive Lineage Certificate</h2>
+          <p>Official summary certification of a recorded family lineage within the Tomb of Light verification system.</p>
+        </div>
+
+        <div class="exec-cert-watermark" aria-hidden="true"></div>
+
+        <div class="exec-cert-grid">
+          ${card('Certificate ID', certificateId)}
+          ${card('Family Name', familyName)}
+          ${card('Issued By', issuedBy)}
+          ${card('Issue Date', formatDate(issuedAt))}
+          ${card('Members Recorded', membersRecorded)}
+          ${card('Relationships Recorded', relationshipsRecorded)}
+          ${card('Generations Recorded', generationsRecorded)}
+          ${card('Record Integrity', recordIntegrity)}
+        </div>
+
+        <div class="exec-cert-wide">
+          ${wideCard('Founding Line', foundingLine)}
+          ${wideCard('Verified Branches', verifiedBranches)}
+          ${wideCard('Key Lineage Path', renderBulletList(keyLineagePath, 'Key lineage path not available.'))}
+          ${wideCard('Descendant Summary', descendantSummary)}
+        </div>
+
+        <div class="exec-cert-footer">
+          <div class="exec-cert-statement">
             This document certifies that the lineage structure shown for this family has been recorded and verified within the Tomb of Light system as of the issue date above.
           </div>
 
-          <div class="exec-cert__sign">
-            <div class="exec-cert__sig">
-              <div class="exec-cert__sig-line"></div>
-              <div class="exec-cert__sig-label">Authorized Signature</div>
+          <div class="exec-cert-signatures">
+            <div class="exec-cert-sign">
+              <div class="exec-cert-line"></div>
+              <div class="exec-cert-signlabel">Authorized Signature</div>
             </div>
-            <div class="exec-cert__sig">
-              <div class="exec-cert__sig-line"></div>
-              <div class="exec-cert__sig-label">Tomb of Light Certification Authority</div>
+            <div class="exec-cert-sign">
+              <div class="exec-cert-line"></div>
+              <div class="exec-cert-signlabel">Tomb of Light Certification Authority</div>
             </div>
           </div>
 
-          <div class="exec-cert__actions no-print">
+          <div class="exec-cert-actions">
             <button class="btn btn-secondary" type="button" onclick="window.print()">Print Certificate</button>
           </div>
         </div>
@@ -245,21 +181,58 @@
     `;
   }
 
-  function metric(label, value) {
+  function card(label, value) {
     return `
-      <div class="exec-cert__metric">
-        <div class="exec-cert__metric-label">${escapeHtml(label)}</div>
-        <div class="exec-cert__metric-value">${escapeHtml(String(value))}</div>
+      <div class="exec-cert-card">
+        <div class="exec-cert-label">${escapeHtml(label)}</div>
+        <div class="exec-cert-value">${escapeHtml(String(value))}</div>
       </div>
     `;
   }
 
-  function normalizeText(value) {
-    if (value == null) return '';
-    if (typeof value === 'string' || typeof value === 'number') return String(value);
-    if (Array.isArray(value)) return value.map(v => String(v)).join(' • ');
-    if (typeof value === 'object') return JSON.stringify(value);
-    return String(value);
+  function wideCard(label, valueHtml) {
+    return `
+      <div class="exec-cert-card exec-cert-card-wide">
+        <div class="exec-cert-label">${escapeHtml(label)}</div>
+        <div class="exec-cert-value">${typeof valueHtml === 'string' ? valueHtml : ''}</div>
+      </div>
+    `;
+  }
+
+  function renderBulletList(items, emptyText) {
+    if (!items || !items.length) {
+      return `<div>${escapeHtml(emptyText)}</div>`;
+    }
+    return `
+      <ul class="exec-cert-list">
+        ${items.map(item => `<li>${escapeHtml(String(item))}</li>`).join('')}
+      </ul>
+    `;
+  }
+
+  function normalizeList(value) {
+    if (!Array.isArray(value)) return [];
+    return value.map(v => (v == null ? '' : String(v))).filter(Boolean);
+  }
+
+  function numberOrFallback(value, fallback) {
+    if (typeof value === 'number') return String(value);
+    if (typeof value === 'string' && value.trim() !== '') return value;
+    return fallback;
+  }
+
+  function formatDate(value) {
+    try {
+      const dt = new Date(value);
+      if (Number.isNaN(dt.getTime())) return String(value);
+      return dt.toLocaleString();
+    } catch {
+      return String(value);
+    }
+  }
+
+  function titleCase(value) {
+    return String(value).replace(/\b\w/g, c => c.toUpperCase());
   }
 
   function showStatus(node, message, type) {
@@ -267,11 +240,9 @@
     node.style.display = 'block';
     node.textContent = message;
     node.style.color =
-      type === 'error'
-        ? '#ffb3b3'
-        : type === 'success'
-          ? '#cfe8cf'
-          : '#d6e6ff';
+      type === 'error' ? '#ffb3b3' :
+      type === 'success' ? '#cfe8cf' :
+      '#d6e6ff';
   }
 
   function hideStatus(node) {
