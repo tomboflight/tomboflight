@@ -8,12 +8,11 @@ client: MongoClient | None = None
 db: Database | None = None
 
 
-def connect_to_mongo() -> Database | None:
+def connect_to_mongo() -> Database:
     global client, db
 
     if not settings.mongodb_uri:
-        print("MongoDB URI not set yet. Running without database connection.")
-        return None
+        raise RuntimeError("MongoDB URI is not set.")
 
     try:
         client = MongoClient(
@@ -29,13 +28,14 @@ def connect_to_mongo() -> Database | None:
         print(f"Connected to MongoDB database: {settings.mongodb_db_name}")
         return db
     except Exception as exc:
-        print(f"MongoDB connection failed: {exc}")
         client = None
         db = None
-        return None
+        raise RuntimeError(f"MongoDB connection failed: {exc}") from exc
 
 
-def get_database() -> Database | None:
+def get_database() -> Database:
+    if db is None:
+      raise RuntimeError("Database connection has not been initialized.")
     return db
 
 
