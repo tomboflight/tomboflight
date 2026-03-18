@@ -1381,7 +1381,6 @@ textarea {
   .site-header.open .site-nav,
   .site-header.open .header-actions {
     display: flex;
-    width: 100%;
   }
 
   .site-header.open .site-header-inner {
