@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Household Setup | Tomb of Light</title>
+    <meta
+      name="description"
+      content="Set up your Tomb of Light household information."
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="page-wrap">
+      <header class="site-header">
+        <div class="container site-header-inner">
+          <a class="brand" href="index.html" aria-label="Tomb of Light home">
+            <span>Tomb of Light<span class="brand-symbol">™</span></span>
+          </a>
+
+          <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
+            <a href="dashboard.html">Dashboard</a>
+            <a href="intake-welcome.html">Intake Welcome</a>
+            <a href="platform.html">Platform</a>
+            <a href="faq.html">FAQ</a>
+          </nav>
+
+          <div class="header-actions">
+            <a class="btn btn-secondary" href="intake-welcome.html"
+              >Back to Intake Welcome</a
+            >
+          </div>
+        </div>
+      </header>
+
+      <main data-intake-household>
+        <section class="page-hero">
+          <div class="container">
+            <div class="page-hero-panel">
+              <span class="eyebrow">Step 1 of 5</span>
+              <h1>Household Setup</h1>
+              <p data-household-status>
+                Confirm the main household owner and project scope before
+                building the family structure.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section class="page-sections">
+          <div class="container form-shell">
+            <div class="form-panel">
+              <span class="eyebrow">Household Owner</span>
+
+              <form class="form-grid" data-household-form novalidate>
+                <div class="form-grid two-col">
+                  <label>
+                    Household Name
+                    <input
+                      type="text"
+                      name="household_name"
+                      placeholder="Example: Robinson Household"
+                      required
+                    />
+                  </label>
+
+                  <label>
+                    Primary Contact Full Name
+                    <input
+                      type="text"
+                      name="primary_contact_name"
+                      placeholder="Your full name"
+                      required
+                    />
+                  </label>
+                </div>
+
+                <div class="form-grid two-col">
+                  <label>
+                    Primary Contact Email
+                    <input
+                      type="email"
+                      name="primary_contact_email"
+                      placeholder="you@example.com"
+                      required
+                    />
+                  </label>
+
+                  <label>
+                    Primary Contact Phone
+                    <input
+                      type="tel"
+                      name="primary_contact_phone"
+                      placeholder="(555) 555-5555"
+                    />
+                  </label>
+                </div>
+
+                <div class="form-grid two-col">
+                  <label>
+                    Co-Owner / Spouse Name
+                    <input
+                      type="text"
+                      name="co_owner_name"
+                      placeholder="Optional"
+                    />
+                  </label>
+
+                  <label>
+                    Household Role
+                    <select name="household_role" required>
+                      <option value="">Select one</option>
+                      <option value="owner">Owner</option>
+                      <option value="owner_and_spouse">Owner and spouse</option>
+                      <option value="parent_household">Parent household</option>
+                      <option value="branch_household">Branch household</option>
+                    </select>
+                  </label>
+                </div>
+
+                <label>
+                  Project Scope Summary
+                  <textarea
+                    name="project_scope"
+                    rows="5"
+                    placeholder="Briefly describe the family branch or household you want Tomb of Light to build."
+                    required
+                  ></textarea>
+                </label>
+
+                <label>
+                  Special Notes
+                  <textarea
+                    name="special_notes"
+                    rows="4"
+                    placeholder="Optional notes about household structure, privacy, special family context, or project direction."
+                  ></textarea>
+                </label>
+
+                <div
+                  class="helper"
+                  data-household-form-status
+                  aria-live="polite"
+                  style="display: none"
+                ></div>
+
+                <div class="inline-actions" style="margin-top: 1.5rem">
+                  <button
+                    class="btn btn-primary"
+                    type="submit"
+                    data-household-submit-btn
+                  >
+                    Save Household Setup
+                  </button>
+                  <a class="btn btn-secondary" href="intake-family-map.html">
+                    Continue to Family Map
+                  </a>
+                </div>
+              </form>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Why This Step Matters</span>
+              <div class="grid-3">
+                <div>
+                  <div class="card-number">1</div>
+                  <h3>Ownership</h3>
+                  <p class="card-copy">
+                    Tomb of Light is built around household ownership, not one
+                    giant shared tree.
+                  </p>
+                </div>
+
+                <div>
+                  <div class="card-number">2</div>
+                  <h3>Scope Control</h3>
+                  <p class="card-copy">
+                    This step defines which household or branch is being
+                    represented in this package.
+                  </p>
+                </div>
+
+                <div>
+                  <div class="card-number">3</div>
+                  <h3>Production Readiness</h3>
+                  <p class="card-copy">
+                    Clear household details make the next family map and upload
+                    steps cleaner and faster.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Next Step</span>
+              <h2>Family Map</h2>
+              <p class="card-copy">
+                After household setup, you will begin outlining the family
+                structure for the household, including parents, spouses,
+                children, and the branch that belongs in this build.
+              </p>
+
+              <div class="inline-actions" style="margin-top: 1.5rem">
+                <a class="btn btn-primary" href="intake-family-map.html"
+                  >Go to Family Map</a
+                >
+                <a class="btn btn-secondary" href="intake-welcome.html"
+                  >Back to Welcome</a
+                >
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <div class="container">
+          <div class="footer-card">
+            <div class="footer-bottom">
+              <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
+            </div>
+          </div>
+        </div>
+      </footer>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+    <script src="auth.js"></script>
+  </body>
+</html>
