@@ -1,6 +1,7 @@
 /**
  * Tomb of Light - Main Application Script
  * Dashboard: orders + intake status + intake history
+ * Intake: local draft steps (household, family map, uploads)
  */
 
 (function () {
@@ -214,6 +215,20 @@
     }
   }
 
+  // ---- Local intake draft storage
+  function setLocalIntakeData(key, value) {
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch (_) {}
+  }
+
+  function getLocalIntakeData(key) {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   // ---- Orders UI
   function setPaidAccessState(hasPaidOrder, orders) {
     const accessStatus = doc.querySelector('[data-access-status]');
@@ -304,7 +319,7 @@
       const orders = Array.isArray(response) ? response : (response.orders || []);
       renderOrders(orders);
       return orders;
-    } catch (error) {
+    } catch (_) {
       if (ordersStatus) ordersStatus.textContent = 'Orders unavailable right now.';
       setPaidAccessState(false, []);
       return [];
@@ -362,7 +377,7 @@
       const submission = await apiRequest('/intake-submissions/my-latest', { method: 'GET' });
       cacheLatestIntake(submission);
       updateDashboardIntakeCard(submission);
-    } catch (error) {
+    } catch (_) {
       const cached = getCachedLatestIntake();
       updateDashboardIntakeCard(cached);
     }
@@ -381,7 +396,6 @@
     }
 
     statusNode.textContent = 'Your intake submission history is listed below.';
-
     listNode.innerHTML = items.map(function (item, index) {
       const pkg = item.package_name || item.package_slug || 'Package';
       const status = item.status || 'submitted';
@@ -410,10 +424,70 @@
     try {
       const list = await apiRequest('/intake-submissions/my-list?limit=10', { method: 'GET' });
       renderIntakeHistory(list);
-    } catch (error) {
+    } catch (_) {
       if (statusNode) statusNode.textContent = 'Intake history unavailable right now.';
       renderIntakeHistory([]);
     }
+  }
+
+  // ---- Intake Uploads (Step 4)
+  function setupIntakeUploads() {
+    const page = doc.querySelector('[data-intake-uploads]');
+    if (!page) return;
+
+    const form = doc.querySelector('[data-intake-uploads-form]');
+    const statusNode = doc.querySelector('[data-intake-uploads-form-status]');
+    const submitBtn = doc.querySelector('[data-intake-uploads-submit-btn]');
+    if (!form) return;
+
+    const saved = getLocalIntakeData('tol_intake_uploads');
+    if (saved) {
+      Object.keys(saved).forEach(function (key) {
+        const field = form.elements[key];
+        if (field) field.value = saved[key] || '';
+      });
+    }
+
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
+
+      if (statusNode) {
+        statusNode.style.display = 'none';
+        statusNode.textContent = '';
+      }
+
+      if (typeof form.reportValidity === 'function' && !form.reportValidity()) return;
+
+      const fd = new FormData(form);
+      const payload = {
+        approx_upload_count: String(fd.get('approx_upload_count') || '').trim(),
+        primary_asset_type: String(fd.get('primary_asset_type') || '').trim(),
+        key_portraits: String(fd.get('key_portraits') || '').trim(),
+        supporting_records: String(fd.get('supporting_records') || '').trim(),
+        quality_notes: String(fd.get('quality_notes') || '').trim()
+      };
+
+      setLocalIntakeData('tol_intake_uploads', payload);
+
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Saved';
+      }
+
+      if (statusNode) {
+        statusNode.style.display = 'block';
+        statusNode.textContent = 'Upload plan saved locally. Continue to Consent.';
+        statusNode.dataset.state = 'success';
+        statusNode.style.color = '#cfe8cf';
+      }
+
+      setTimeout(function () {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Save Upload Plan';
+        }
+      }, 900);
+    });
   }
 
   // ---- Init
@@ -425,6 +499,8 @@
       loadDashboardIntakeStatus();
       loadDashboardIntakeHistory();
     });
+
+    setupIntakeUploads();
 
     console.log('[TOL] API_BASE_URL:', API_BASE_URL);
   }
