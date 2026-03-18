@@ -20,6 +20,18 @@ def submit_intake(payload: IntakeSubmissionCreate, current_user: dict = Depends(
             detail="You must confirm intake accuracy before submission.",
         )
 
+    # 🔒 Lock: prevent duplicate submissions for same user (for now)
+    try:
+        existing = get_latest_intake_submission_for_user(str(current_user["_id"]))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    if existing is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="An intake submission already exists for this account. Intake is locked after submission.",
+        )
+
     try:
         record = create_intake_submission(
             current_user=current_user,

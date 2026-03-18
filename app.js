@@ -1,10 +1,6 @@
 /**
  * Tomb of Light - Main Application Script
- * Accessibility, navigation, cookie preference handling,
- * backend connectivity, request access form submission,
- * thank-you order recording, dashboard order loading,
- * paid-access gating, intake onboarding routing,
- * backend intake submission, and dashboard intake status.
+ * Dashboard: orders + intake status + intake history
  */
 
 (function () {
@@ -17,6 +13,10 @@
     (window.TOL_CONFIG && window.TOL_CONFIG.API_BASE_URL) ||
     'http://127.0.0.1:8000';
 
+  const TOKEN_KEY = 'tol_access_token';
+  const CURRENT_ORDER_CACHE_KEY = 'tol_current_order';
+  const LATEST_INTAKE_CACHE_KEY = 'tol_latest_intake_submission';
+
   const menuToggle = doc.querySelector('.menu-toggle, .nav-toggle');
   const siteNav = doc.querySelector('#site-nav, .site-nav');
   const siteHeader = doc.querySelector('.site-header');
@@ -25,45 +25,15 @@
   const cookieStatuses = Array.from(doc.querySelectorAll('[data-cookie-status]'));
   const acceptBtn = doc.querySelector('[data-cookie-accept]');
   const declineBtn = doc.querySelector('[data-cookie-decline]');
-  const supportEmail = 'support@tomboflight.com';
-
-  const requestAccessForm = doc.querySelector('[data-request-access-form]');
-  const formStatus = doc.querySelector('[data-form-status]');
-  const submitBtn = doc.querySelector('[data-submit-btn]');
-
   const COOKIE_NAME = 'tol_cookie_preference';
   const COOKIE_EXPIRY_DAYS = 365;
-  const TOKEN_KEY = 'tol_access_token';
-
-  const CURRENT_ORDER_CACHE_KEY = 'tol_current_order';
-  const LATEST_INTAKE_CACHE_KEY = 'tol_latest_intake_submission';
 
   const PACKAGE_CATALOG = {
-    'digital-legacy-portrait': {
-      slug: 'digital-legacy-portrait',
-      name: 'Digital Legacy Portrait',
-      price_label: '$399'
-    },
-    'starter-family-tree': {
-      slug: 'starter-family-tree',
-      name: 'Starter Family Tree',
-      price_label: '$799'
-    },
-    'heirloom-legacy-tree': {
-      slug: 'heirloom-legacy-tree',
-      name: 'Heirloom Legacy Tree',
-      price_label: '$1,500'
-    },
-    'legacy-plus': {
-      slug: 'legacy-plus',
-      name: 'Legacy Plus',
-      price_label: '$3,200'
-    },
-    'family-estate-concierge': {
-      slug: 'family-estate-concierge',
-      name: 'Family Estate Concierge',
-      price_label: '$6,500–$12,000'
-    }
+    'digital-legacy-portrait': { name: 'Digital Legacy Portrait' },
+    'starter-family-tree': { name: 'Starter Family Tree' },
+    'heirloom-legacy-tree': { name: 'Heirloom Legacy Tree' },
+    'legacy-plus': { name: 'Legacy Plus' },
+    'family-estate-concierge': { name: 'Family Estate Concierge' }
   };
 
   function getToken() {
@@ -79,23 +49,18 @@
 
   async function apiRequest(path, options = {}) {
     const headers = getAuthHeaders(options.headers || {});
-
     if (!(options.body instanceof FormData) && !headers['Content-Type']) {
       headers['Content-Type'] = 'application/json';
     }
 
-    const response = await fetch(`${API_BASE_URL}${path}`, {
-      ...options,
-      headers
-    });
+    const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
 
     const contentType = response.headers.get('content-type') || '';
     let data = null;
 
     try {
-      if (contentType.includes('application/json')) {
-        data = await response.json();
-      } else {
+      if (contentType.includes('application/json')) data = await response.json();
+      else {
         const text = await response.text();
         data = text ? { detail: text } : null;
       }
@@ -113,7 +78,7 @@
     return data;
   }
 
-  // ---------- UI / Menu ----------
+  // ---- Menu
   function closeMenu() {
     if (!menuToggle || !siteHeader) return;
     menuToggle.setAttribute('aria-expanded', 'false');
@@ -130,7 +95,6 @@
 
   function setupMobileMenu() {
     if (!menuToggle || !siteNav || !siteHeader) return;
-
     if (!siteNav.id) siteNav.id = 'site-nav';
     if (!menuToggle.hasAttribute('aria-controls')) menuToggle.setAttribute('aria-controls', siteNav.id);
     if (!menuToggle.hasAttribute('aria-expanded')) menuToggle.setAttribute('aria-expanded', 'false');
@@ -157,7 +121,7 @@
     });
   }
 
-  // ---------- Cookies ----------
+  // ---- Cookies
   function setCookie(name, value, days) {
     const expiryDate = new Date();
     expiryDate.setTime(expiryDate.getTime() + (days * 24 * 60 * 60 * 1000));
@@ -176,14 +140,10 @@
 
   function updateCookieStatus(preference) {
     if (!cookieStatuses.length) return;
-
     let message = 'Your cookie preference has not been set yet.';
     if (preference === 'true') message = 'Analytics cookies are enabled.';
     if (preference === 'false') message = 'Analytics cookies are disabled.';
-
-    cookieStatuses.forEach(function (node) {
-      node.textContent = message;
-    });
+    cookieStatuses.forEach((n) => (n.textContent = message));
   }
 
   function showCookieBanner() {
@@ -200,7 +160,6 @@
 
   function setupCookiePreferences() {
     const savedPreference = getCookie(COOKIE_NAME);
-
     if (savedPreference === 'true' || savedPreference === 'false') {
       updateCookieStatus(savedPreference);
       hideCookieBanner();
@@ -228,22 +187,9 @@
     }
   }
 
-  // ---------- Backend Health ----------
-  async function checkBackendHealth() {
-    try {
-      const response = await fetch(`${API_BASE_URL}/health`, { method: 'GET', headers: { Accept: 'application/json' } });
-      if (!response.ok) throw new Error('Health check failed');
-      body.dataset.apiStatus = 'online';
-    } catch (_) {
-      body.dataset.apiStatus = 'offline';
-    }
-  }
-
-  // ---------- Orders / Purchase gating ----------
+  // ---- Cache helpers
   function setCurrentOrderCache(order) {
-    try {
-      localStorage.setItem(CURRENT_ORDER_CACHE_KEY, JSON.stringify(order || null));
-    } catch (_) {}
+    try { localStorage.setItem(CURRENT_ORDER_CACHE_KEY, JSON.stringify(order || null)); } catch (_) {}
   }
 
   function getCurrentOrderCache() {
@@ -255,34 +201,45 @@
     }
   }
 
-  function setPaidActionNodeState(node, enabled) {
-    if (!node) return;
-
-    if (enabled) {
-      node.classList.remove('is-disabled');
-      node.removeAttribute('aria-disabled');
-      node.removeAttribute('title');
-      node.style.pointerEvents = '';
-      node.style.opacity = '';
-      if (node.dataset.originalHref) node.setAttribute('href', node.dataset.originalHref);
-      return;
-    }
-
-    if (node.tagName.toLowerCase() === 'a' && !node.dataset.originalHref) {
-      node.dataset.originalHref = node.getAttribute('href') || '';
-    }
-
-    node.classList.add('is-disabled');
-    node.setAttribute('aria-disabled', 'true');
-    node.setAttribute('title', 'Purchase a package to unlock this feature');
-    node.style.pointerEvents = 'none';
-    node.style.opacity = '0.55';
+  function cacheLatestIntake(submission) {
+    try { localStorage.setItem(LATEST_INTAKE_CACHE_KEY, JSON.stringify(submission || null)); } catch (_) {}
   }
 
+  function getCachedLatestIntake() {
+    try {
+      const raw = localStorage.getItem(LATEST_INTAKE_CACHE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // ---- Orders UI
   function setPaidAccessState(hasPaidOrder, orders) {
     const accessStatus = doc.querySelector('[data-access-status]');
     const paidActions = Array.from(doc.querySelectorAll('[data-paid-action]'));
     const upgradeActions = Array.from(doc.querySelectorAll('[data-upgrade-action]'));
+
+    function setNode(node, enabled) {
+      if (!node) return;
+      if (enabled) {
+        node.classList.remove('is-disabled');
+        node.removeAttribute('aria-disabled');
+        node.removeAttribute('title');
+        node.style.pointerEvents = '';
+        node.style.opacity = '';
+        if (node.dataset.originalHref) node.setAttribute('href', node.dataset.originalHref);
+        return;
+      }
+      if (node.tagName.toLowerCase() === 'a' && !node.dataset.originalHref) {
+        node.dataset.originalHref = node.getAttribute('href') || '';
+      }
+      node.classList.add('is-disabled');
+      node.setAttribute('aria-disabled', 'true');
+      node.setAttribute('title', 'Purchase a package to unlock this feature');
+      node.style.pointerEvents = 'none';
+      node.style.opacity = '0.55';
+    }
 
     if (hasPaidOrder) {
       if (accessStatus) {
@@ -290,30 +247,27 @@
         const packageName = first?.package_name || first?.package_slug || 'your package';
         accessStatus.textContent = `Access unlocked. Your account has an active purchase record for ${packageName}.`;
       }
-      paidActions.forEach((n) => setPaidActionNodeState(n, true));
+      paidActions.forEach((n) => setNode(n, true));
       upgradeActions.forEach((n) => (n.textContent = 'View Packages'));
       return;
     }
 
-    if (accessStatus) {
-      accessStatus.textContent = 'Purchase required. Buy a Tomb of Light package to unlock platform tools.';
-    }
-    paidActions.forEach((n) => setPaidActionNodeState(n, false));
+    if (accessStatus) accessStatus.textContent = 'Purchase required. Buy a Tomb of Light package to unlock platform tools.';
+    paidActions.forEach((n) => setNode(n, false));
     upgradeActions.forEach((n) => (n.textContent = 'Unlock Access'));
   }
 
   function renderOrders(orders) {
     const ordersList = doc.querySelector('[data-orders-list]');
     const ordersStatus = doc.querySelector('[data-orders-status]');
-
-    if (!ordersList || !ordersStatus) return orders || [];
+    if (!ordersList || !ordersStatus) return;
 
     if (!Array.isArray(orders) || !orders.length) {
       ordersStatus.textContent = 'No purchases have been recorded yet.';
       ordersList.innerHTML = '';
       setPaidAccessState(false, []);
       setCurrentOrderCache(null);
-      return [];
+      return;
     }
 
     ordersStatus.textContent = 'Your purchases are recorded below.';
@@ -336,8 +290,6 @@
         </div>
       `;
     }).join('');
-
-    return orders;
   }
 
   async function loadDashboardOrders() {
@@ -350,7 +302,8 @@
     try {
       const response = await apiRequest('/orders/my-orders', { method: 'GET' });
       const orders = Array.isArray(response) ? response : (response.orders || []);
-      return renderOrders(orders);
+      renderOrders(orders);
+      return orders;
     } catch (error) {
       if (ordersStatus) ordersStatus.textContent = 'Orders unavailable right now.';
       setPaidAccessState(false, []);
@@ -358,22 +311,7 @@
     }
   }
 
-  // ---------- Intake submission status (Dashboard) ----------
-  function cacheLatestIntake(submission) {
-    try {
-      localStorage.setItem(LATEST_INTAKE_CACHE_KEY, JSON.stringify(submission || null));
-    } catch (_) {}
-  }
-
-  function getCachedLatestIntake() {
-    try {
-      const raw = localStorage.getItem(LATEST_INTAKE_CACHE_KEY);
-      return raw ? JSON.parse(raw) : null;
-    } catch (_) {
-      return null;
-    }
-  }
-
+  // ---- Intake Status UI
   function updateDashboardIntakeCard(submission) {
     const cardStatus = doc.querySelector('[data-intake-card-status]');
     const currentPackageNode = doc.querySelector('[data-intake-current-package]');
@@ -384,9 +322,7 @@
     const lockNoteNode = doc.querySelector('[data-intake-lock-note]');
     const openActionNode = doc.querySelector('[data-intake-open-action]');
 
-    if (!cardStatus || !currentPackageNode || !statusBadgeNode || !submissionIdNode || !submittedAtNode || !nextStepNode || !lockNoteNode || !openActionNode) {
-      return;
-    }
+    if (!cardStatus || !currentPackageNode || !statusBadgeNode || !submissionIdNode || !submittedAtNode || !nextStepNode || !lockNoteNode || !openActionNode) return;
 
     const order = getCurrentOrderCache();
     const packageName =
@@ -432,23 +368,67 @@
     }
   }
 
-  // ---------- Init ----------
+  // ---- Intake History UI
+  function renderIntakeHistory(items) {
+    const statusNode = doc.querySelector('[data-intake-history-status]');
+    const listNode = doc.querySelector('[data-intake-history-list]');
+    if (!statusNode || !listNode) return;
+
+    if (!Array.isArray(items) || items.length === 0) {
+      statusNode.textContent = 'No intake submissions found yet.';
+      listNode.innerHTML = '';
+      return;
+    }
+
+    statusNode.textContent = 'Your intake submission history is listed below.';
+
+    listNode.innerHTML = items.map(function (item, index) {
+      const pkg = item.package_name || item.package_slug || 'Package';
+      const status = item.status || 'submitted';
+      const createdAt = item.created_at ? new Date(item.created_at).toLocaleString() : '—';
+      const id = item.id || '—';
+
+      return `
+        <div>
+          <div class="card-number">${index + 1}</div>
+          <h3>${pkg}</h3>
+          <p class="card-copy"><strong>Status:</strong> ${status}</p>
+          <p class="card-copy"><strong>Submitted:</strong> ${createdAt}</p>
+          <p class="card-copy"><strong>ID:</strong> ${id}</p>
+        </div>
+      `;
+    }).join('');
+  }
+
+  async function loadDashboardIntakeHistory() {
+    const dashboard = doc.querySelector('[data-dashboard]');
+    if (!dashboard) return;
+
+    const statusNode = doc.querySelector('[data-intake-history-status]');
+    if (statusNode) statusNode.textContent = 'Loading your intake history...';
+
+    try {
+      const list = await apiRequest('/intake-submissions/my-list?limit=10', { method: 'GET' });
+      renderIntakeHistory(list);
+    } catch (error) {
+      if (statusNode) statusNode.textContent = 'Intake history unavailable right now.';
+      renderIntakeHistory([]);
+    }
+  }
+
+  // ---- Init
   function init() {
     setupMobileMenu();
     setupCookiePreferences();
-    checkBackendHealth();
 
-    // Dashboard loads
     loadDashboardOrders().then(function () {
       loadDashboardIntakeStatus();
+      loadDashboardIntakeHistory();
     });
 
     console.log('[TOL] API_BASE_URL:', API_BASE_URL);
   }
 
-  if (doc.readyState === 'loading') {
-    doc.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
+  if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', init);
+  else init();
 })();
