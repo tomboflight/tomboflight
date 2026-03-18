@@ -26,9 +26,9 @@
         </nav>
 
         <div class="header-actions">
-          <a class="btn btn-primary" href="create-family.html">Create Family</a>
-          <a class="btn btn-secondary" href="tree-view.html">Family Tree</a>
-          <a class="btn btn-secondary" href="lineage-certificate.html">Lineage Certificate</a>
+          <a class="btn btn-primary" href="create-family.html" data-paid-action>Create Family</a>
+          <a class="btn btn-secondary" href="tree-view.html" data-paid-action>Family Tree</a>
+          <a class="btn btn-secondary" href="lineage-certificate.html" data-paid-action>Lineage Certificate</a>
           <button class="btn btn-secondary" type="button" data-logout-btn>Log Out</button>
         </div>
       </div>
@@ -72,17 +72,30 @@
           </div>
 
           <div class="form-panel">
+            <span class="eyebrow">Purchase Access</span>
+            <p class="card-copy" data-access-status>
+              Checking your purchase access...
+            </p>
+
+            <div class="inline-actions" style="margin-top: 1.5rem;">
+              <a class="btn btn-primary" href="create-family.html" data-paid-action>Start Your Family Record</a>
+              <a class="btn btn-secondary" href="tree-view.html" data-paid-action>Open Family Tree</a>
+              <a class="btn btn-secondary" href="lineage-certificate.html" data-paid-action>Open Lineage Certificate</a>
+            </div>
+
+            <div class="inline-actions" style="margin-top: 1rem;">
+              <a class="btn btn-secondary" href="index.html#pricing" data-upgrade-action>View Packages</a>
+              <a class="btn btn-secondary" href="how-it-works.html">Review Process</a>
+            </div>
+          </div>
+
+          <div class="form-panel">
             <span class="eyebrow">Your Orders</span>
             <p class="card-copy" data-orders-status>
               Loading your purchases...
             </p>
 
             <div class="grid-3" data-orders-list></div>
-
-            <div class="inline-actions" style="margin-top: 1.5rem;">
-              <a class="btn btn-primary" href="index.html#pricing">View Packages</a>
-              <a class="btn btn-secondary" href="how-it-works.html">Review Process</a>
-            </div>
           </div>
 
           <div class="form-panel">
@@ -113,12 +126,6 @@
                 </p>
               </div>
             </div>
-
-            <div class="inline-actions" style="margin-top: 1.5rem;">
-              <a class="btn btn-primary" href="create-family.html">Create Your First Family</a>
-              <a class="btn btn-secondary" href="tree-view.html">Open Family Tree</a>
-              <a class="btn btn-secondary" href="lineage-certificate.html">Open Lineage Certificate</a>
-            </div>
           </div>
 
           <div class="form-panel">
@@ -143,9 +150,9 @@
 
               <div>
                 <div class="card-number">C</div>
-                <h3>Next Build Phase</h3>
+                <h3>Purchase Access</h3>
                 <p class="card-copy">
-                  Your next step is linking paid orders to intake and project production.
+                  Your build tools unlock once a paid package has been recorded to your account.
                 </p>
               </div>
             </div>

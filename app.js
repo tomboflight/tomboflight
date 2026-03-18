@@ -2,7 +2,8 @@
  * Tomb of Light - Main Application Script
  * Accessibility, navigation, cookie preference handling,
  * backend connectivity, request access form submission,
- * thank-you order recording, and dashboard order loading
+ * thank-you order recording, dashboard order loading,
+ * and paid-access gating.
  */
 
 (function () {
@@ -433,6 +434,68 @@
     };
   }
 
+  function setPaidActionNodeState(node, enabled) {
+    if (!node) return;
+
+    if (enabled) {
+      node.classList.remove('is-disabled');
+      node.removeAttribute('aria-disabled');
+      node.removeAttribute('title');
+      node.style.pointerEvents = '';
+      node.style.opacity = '';
+      if (node.dataset.originalHref) {
+        node.setAttribute('href', node.dataset.originalHref);
+      }
+      return;
+    }
+
+    if (node.tagName.toLowerCase() === 'a' && !node.dataset.originalHref) {
+      node.dataset.originalHref = node.getAttribute('href') || '';
+    }
+
+    node.classList.add('is-disabled');
+    node.setAttribute('aria-disabled', 'true');
+    node.setAttribute('title', 'Purchase a package to unlock this feature');
+    node.style.pointerEvents = 'none';
+    node.style.opacity = '0.55';
+  }
+
+  function setPaidAccessState(hasPaidOrder, orders) {
+    const accessStatus = doc.querySelector('[data-access-status]');
+    const paidActions = Array.from(doc.querySelectorAll('[data-paid-action]'));
+    const upgradeActions = Array.from(doc.querySelectorAll('[data-upgrade-action]'));
+
+    if (hasPaidOrder) {
+      if (accessStatus) {
+        const firstOrder = Array.isArray(orders) && orders.length ? orders[0] : null;
+        const packageName = firstOrder && firstOrder.package_name ? firstOrder.package_name : 'your paid package';
+        accessStatus.textContent = `Access unlocked. Your account has an active purchase record for ${packageName}. You can now begin your family record and platform workflow.`;
+      }
+
+      paidActions.forEach(function (node) {
+        setPaidActionNodeState(node, true);
+      });
+
+      upgradeActions.forEach(function (node) {
+        node.textContent = 'View Packages';
+      });
+
+      return;
+    }
+
+    if (accessStatus) {
+      accessStatus.textContent = 'Purchase required. Buy a Tomb of Light package to unlock family creation, lineage tools, and guided intake.';
+    }
+
+    paidActions.forEach(function (node) {
+      setPaidActionNodeState(node, false);
+    });
+
+    upgradeActions.forEach(function (node) {
+      node.textContent = 'Unlock Access';
+    });
+  }
+
   function renderOrders(orders) {
     const ordersList = doc.querySelector('[data-orders-list]');
     const ordersStatus = doc.querySelector('[data-orders-status]');
@@ -442,10 +505,12 @@
     if (!Array.isArray(orders) || !orders.length) {
       ordersStatus.textContent = 'No purchases have been recorded yet.';
       ordersList.innerHTML = '';
+      setPaidAccessState(false, []);
       return;
     }
 
     ordersStatus.textContent = 'Your purchases are recorded below.';
+    setPaidAccessState(true, orders);
 
     ordersList.innerHTML = orders.map(function (order, index) {
       const packageName = order.package_name || order.package_slug || 'Package';
@@ -484,6 +549,7 @@
       if (ordersStatus) {
         ordersStatus.textContent = 'Orders are not available yet. The account is ready, but the order API still needs to be connected.';
       }
+      setPaidAccessState(false, []);
       console.error('Dashboard orders load failed:', error);
     }
   }
