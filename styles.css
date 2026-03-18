@@ -338,18 +338,18 @@ a {
 /* ================= HERO ================= */
 
 .hero {
-  padding: 72px 0 42px;
+  padding: 48px 0 28px;
 }
 
 .hero-shell {
   display: grid;
-  grid-template-columns: minmax(0, 0.88fr) minmax(0, 1.12fr);
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
   gap: 22px;
   align-items: stretch;
 }
 
 .hero-shell-tech {
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
   align-items: start;
 }
 
@@ -512,7 +512,7 @@ a {
 
 .hero-demo-embed {
   width: 100%;
-  min-height: 460px;
+  min-height: 520px;
   overflow: hidden;
   border-radius: 26px;
   border: 1px solid var(--border-soft);
@@ -1381,7 +1381,6 @@ textarea {
   .site-header.open .site-nav,
   .site-header.open .header-actions {
     display: flex;
-    width: 100%;
   }
 
   .site-header.open .site-header-inner {
