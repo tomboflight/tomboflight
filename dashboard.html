@@ -4,10 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Dashboard | Tomb of Light</title>
-  <meta
-    name="description"
-    content="Your Tomb of Light dashboard."
-  />
+  <meta name="description" content="Your Tomb of Light dashboard." />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -47,22 +44,20 @@
 
       <section class="page-sections">
         <div class="container form-shell" data-auth-required style="display: none;">
+          <!-- Account -->
           <div class="form-panel">
             <span class="eyebrow">Account Profile</span>
-
             <div class="grid-3">
               <div>
                 <div class="card-number">1</div>
                 <h3>Name</h3>
                 <p class="card-copy" data-user-name></p>
               </div>
-
               <div>
                 <div class="card-number">2</div>
                 <h3>Email</h3>
                 <p class="card-copy" data-user-email></p>
               </div>
-
               <div>
                 <div class="card-number">3</div>
                 <h3>Role</h3>
@@ -71,11 +66,10 @@
             </div>
           </div>
 
+          <!-- Purchase -->
           <div class="form-panel">
             <span class="eyebrow">Purchase Access</span>
-            <p class="card-copy" data-access-status>
-              Checking your purchase access...
-            </p>
+            <p class="card-copy" data-access-status>Checking your purchase access...</p>
 
             <div class="inline-actions" style="margin-top: 1.5rem;">
               <a class="btn btn-primary" href="create-family.html" data-paid-action>Start Your Family Record</a>
@@ -89,74 +83,108 @@
             </div>
           </div>
 
+          <!-- Orders -->
           <div class="form-panel">
             <span class="eyebrow">Your Orders</span>
-            <p class="card-copy" data-orders-status>
-              Loading your purchases...
-            </p>
-
+            <p class="card-copy" data-orders-status>Loading your purchases...</p>
             <div class="grid-3" data-orders-list></div>
           </div>
 
+          <!-- Intake Status -->
           <div class="form-panel">
-            <span class="eyebrow">Your First Family Step</span>
-
-            <div class="grid-3">
-              <div>
-                <div class="card-number">1</div>
-                <h3>Create your family record</h3>
-                <p class="card-copy">
-                  Start the lineage structure by creating the base family record.
-                </p>
-              </div>
-
-              <div>
-                <div class="card-number">2</div>
-                <h3>Add members</h3>
-                <p class="card-copy">
-                  After your family exists, connect parents, children, spouses, and branches.
-                </p>
-              </div>
-
-              <div>
-                <div class="card-number">3</div>
-                <h3>Build the living tree</h3>
-                <p class="card-copy">
-                  The family record becomes the foundation of the Tomb of Light lineage engine.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div class="form-panel">
-            <span class="eyebrow">Platform Status</span>
+            <span class="eyebrow">Intake Status</span>
+            <p class="card-copy" data-intake-card-status>Checking your onboarding submission...</p>
 
             <div class="grid-3">
               <div>
                 <div class="card-number">A</div>
-                <h3>Authentication</h3>
-                <p class="card-copy">
-                  Your account is connected to the Tomb of Light backend and verified through JWT authentication.
-                </p>
+                <h3>Current Package</h3>
+                <p class="card-copy" data-intake-current-package>Loading...</p>
               </div>
 
               <div>
                 <div class="card-number">B</div>
-                <h3>Database</h3>
-                <p class="card-copy">
-                  Your platform is connected to the Tomb of Light MongoDB lineage infrastructure.
-                </p>
+                <h3>Submission Status</h3>
+                <p class="card-copy" data-intake-status-badge>Checking...</p>
               </div>
 
               <div>
                 <div class="card-number">C</div>
-                <h3>Purchase Access</h3>
-                <p class="card-copy">
-                  Your build tools unlock once a paid package has been recorded to your account.
-                </p>
+                <h3>Submission ID</h3>
+                <p class="card-copy" data-intake-submission-id>—</p>
+              </div>
+            </div>
+
+            <div class="grid-3" style="margin-top: 1.5rem;">
+              <div>
+                <div class="card-number">D</div>
+                <h3>Submitted At</h3>
+                <p class="card-copy" data-intake-submitted-at>—</p>
+              </div>
+
+              <div>
+                <div class="card-number">E</div>
+                <h3>Next Step</h3>
+                <p class="card-copy" data-intake-next-step>—</p>
+              </div>
+
+              <div>
+                <div class="card-number">F</div>
+                <h3>Submission Lock</h3>
+                <p class="card-copy" data-intake-lock-note>—</p>
+              </div>
+            </div>
+
+            <div class="inline-actions" style="margin-top: 1.5rem;">
+              <a class="btn btn-primary" href="intake-welcome.html" data-intake-open-action>Open Intake</a>
+              <a class="btn btn-secondary" href="intake-review.html">Review Intake</a>
+            </div>
+          </div>
+
+          <!-- Guidance -->
+          <div class="form-panel">
+            <span class="eyebrow">Your First Family Step</span>
+            <div class="grid-3">
+              <div>
+                <div class="card-number">1</div>
+                <h3>Create your family record</h3>
+                <p class="card-copy">Start the lineage structure by creating the base family record.</p>
+              </div>
+              <div>
+                <div class="card-number">2</div>
+                <h3>Add members</h3>
+                <p class="card-copy">Connect parents, children, spouses, and branches over time.</p>
+              </div>
+              <div>
+                <div class="card-number">3</div>
+                <h3>Build the living tree</h3>
+                <p class="card-copy">Your record becomes the foundation of the Tomb of Light lineage engine.</p>
               </div>
             </div>
           </div>
+
+          <!-- Platform Status -->
+          <div class="form-panel">
+            <span class="eyebrow">Platform Status</span>
+            <div class="grid-3">
+              <div>
+                <div class="card-number">A</div>
+                <h3>Authentication</h3>
+                <p class="card-copy">Your account is verified through JWT authentication.</p>
+              </div>
+              <div>
+                <div class="card-number">B</div>
+                <h3>Database</h3>
+                <p class="card-copy">Your platform is connected to the Tomb of Light MongoDB infrastructure.</p>
+              </div>
+              <div>
+                <div class="card-number">C</div>
+                <h3>Purchase Access</h3>
+                <p class="card-copy">Build tools unlock once a paid package is recorded to your account.</p>
+              </div>
+            </div>
+          </div>
+
         </div>
       </section>
     </main>
