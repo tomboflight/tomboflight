@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Uploads | Tomb of Light</title>
+    <meta
+      name="description"
+      content="Upload preparation and asset intake for Tomb of Light onboarding."
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="page-wrap">
+      <header class="site-header">
+        <div class="container site-header-inner">
+          <a class="brand" href="index.html" aria-label="Tomb of Light home">
+            <span>Tomb of Light<span class="brand-symbol">™</span></span>
+          </a>
+
+          <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
+            <a href="dashboard.html">Dashboard</a>
+            <a href="intake-welcome.html">Intake Welcome</a>
+            <a href="intake-household.html">Household Setup</a>
+            <a href="intake-family-map.html">Family Map</a>
+            <a href="intake-review.html">Review</a>
+          </nav>
+
+          <div class="header-actions">
+            <a class="btn btn-secondary" href="intake-review.html">Back to Review</a>
+          </div>
+        </div>
+      </header>
+
+      <main data-intake-uploads>
+        <section class="page-hero">
+          <div class="container">
+            <div class="page-hero-panel">
+              <span class="eyebrow">Step 4 of 5</span>
+              <h1>Uploads</h1>
+              <p class="card-copy">
+                List the assets you will provide for this package. Upload processing will be connected next.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section class="page-sections">
+          <div class="container form-shell">
+            <div class="form-panel">
+              <span class="eyebrow">Upload Planning</span>
+
+              <form class="form-grid" data-intake-uploads-form novalidate>
+                <div class="form-grid two-col">
+                  <label>
+                    Approx. Total Uploads
+                    <input
+                      type="number"
+                      name="approx_upload_count"
+                      min="0"
+                      placeholder="e.g., 20"
+                    />
+                  </label>
+
+                  <label>
+                    Primary Asset Type
+                    <select name="primary_asset_type">
+                      <option value="">Select one</option>
+                      <option value="photos">Photos</option>
+                      <option value="videos">Videos</option>
+                      <option value="documents">Documents</option>
+                      <option value="mixed">Mixed</option>
+                    </select>
+                  </label>
+                </div>
+
+                <label>
+                  Key Photos / Portraits Needed (names + what you have)
+                  <textarea
+                    name="key_portraits"
+                    rows="5"
+                    placeholder="Example: Malik Moreland (adult portrait), Elias + Clara (parents), Imani (adult), etc."
+                  ></textarea>
+                </label>
+
+                <label>
+                  Supporting Records (optional)
+                  <textarea
+                    name="supporting_records"
+                    rows="4"
+                    placeholder="Example: birth certificates, marriage records, obituaries, family documents, etc."
+                  ></textarea>
+                </label>
+
+                <label>
+                  Notes about file quality, missing images, or what needs retouching
+                  <textarea
+                    name="quality_notes"
+                    rows="4"
+                    placeholder="Example: need scan cleanup, missing one sibling portrait, phone photos need sharpening, etc."
+                  ></textarea>
+                </label>
+
+                <div
+                  class="helper"
+                  data-intake-uploads-form-status
+                  aria-live="polite"
+                  style="display: none"
+                ></div>
+
+                <div class="inline-actions" style="margin-top: 1.5rem">
+                  <button
+                    class="btn btn-primary"
+                    type="submit"
+                    data-intake-uploads-submit-btn
+                  >
+                    Save Upload Plan
+                  </button>
+                  <a class="btn btn-secondary" href="intake-review.html">
+                    Back to Review
+                  </a>
+                </div>
+              </form>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Why This Step Matters</span>
+              <div class="grid-3">
+                <div>
+                  <div class="card-number">1</div>
+                  <h3>Scope Control</h3>
+                  <p class="card-copy">
+                    Uploads define what’s inside this package boundary.
+                  </p>
+                </div>
+                <div>
+                  <div class="card-number">2</div>
+                  <h3>Production Speed</h3>
+                  <p class="card-copy">
+                    Clear asset lists reduce back-and-forth and delays.
+                  </p>
+                </div>
+                <div>
+                  <div class="card-number">3</div>
+                  <h3>Quality Standards</h3>
+                  <p class="card-copy">
+                    We flag missing or low-quality media before the build stage.
+                  </p>
+                </div>
+              </div>
+
+              <div class="inline-actions" style="margin-top: 1.25rem">
+                <a class="btn btn-secondary" href="intake-welcome.html">Back to Welcome</a>
+                <a class="btn btn-secondary" href="dashboard.html">Return to Dashboard</a>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <div class="container">
+          <div class="footer-card">
+            <div class="footer-bottom">
+              <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
+            </div>
+          </div>
+        </div>
+      </footer>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+    <script src="auth.js"></script>
+  </body>
+</html>
