@@ -1,42 +1,42 @@
 from datetime import datetime
-from typing import Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
 
-class HouseholdIntakePayload(BaseModel):
+class IntakeHouseholdPayload(BaseModel):
     household_name: str = Field(..., min_length=1)
     primary_contact_name: str = Field(..., min_length=1)
     primary_contact_email: str = Field(..., min_length=1)
-    primary_contact_phone: Optional[str] = ""
-    co_owner_name: Optional[str] = ""
-    household_role: str = Field(..., min_length=1)
-    project_scope: str = Field(..., min_length=1)
-    special_notes: Optional[str] = ""
+    primary_contact_phone: str = Field(default="")
+    co_owner_name: str = Field(default="")
+    household_role: str = Field(default="")
+    project_scope: str = Field(default="")
+    special_notes: str = Field(default="")
 
 
-class FamilyMapIntakePayload(BaseModel):
+class IntakeFamilyMapPayload(BaseModel):
     family_branch_name: str = Field(..., min_length=1)
-    people_in_scope: str = Field(..., min_length=1)
-    parent_one: str = Field(..., min_length=1)
-    parent_two: Optional[str] = ""
-    spouse_partner: Optional[str] = ""
-    children_names: str = Field(..., min_length=1)
-    family_structure_summary: str = Field(..., min_length=1)
-    branch_notes: Optional[str] = ""
+    people_in_scope: str = Field(default="")
+    parent_one: str = Field(default="")
+    parent_two: str = Field(default="")
+    spouse_partner: str = Field(default="")
+    children_names: str = Field(default="")
+    family_structure_summary: str = Field(default="")
+    branch_notes: str = Field(default="")
 
 
-class ReviewIntakePayload(BaseModel):
-    final_intake_notes: Optional[str] = ""
-    confirm_accuracy: bool = False
+class IntakeReviewPayload(BaseModel):
+    final_intake_notes: str = Field(default="")
+    confirm_accuracy: bool = Field(default=False)
 
 
 class IntakeSubmissionCreate(BaseModel):
     package_slug: str = Field(..., min_length=1)
     package_name: str = Field(..., min_length=1)
-    household: HouseholdIntakePayload
-    family_map: FamilyMapIntakePayload
-    review: ReviewIntakePayload
+    household: IntakeHouseholdPayload
+    family_map: IntakeFamilyMapPayload
+    review: IntakeReviewPayload
 
 
 class IntakeSubmissionResponse(BaseModel):
@@ -46,19 +46,8 @@ class IntakeSubmissionResponse(BaseModel):
     package_slug: str
     package_name: str
     status: str
-    created_at: datetime
-    updated_at: datetime
-
-
-class IntakeSubmissionDetailResponse(BaseModel):
-    id: str
-    user_id: str
-    email: str
-    package_slug: str
-    package_name: str
-    status: str
-    household: HouseholdIntakePayload
-    family_map: FamilyMapIntakePayload
-    review: ReviewIntakePayload
+    household: dict[str, Any]
+    family_map: dict[str, Any]
+    review: dict[str, Any]
     created_at: datetime
     updated_at: datetime
