@@ -23,6 +23,7 @@ from app.routes.households import router as households_router
 from app.routes.identity_anchor import router as identity_anchor_router
 from app.routes.identity_links import router as identity_links_router
 from app.routes.intake import router as intake_router
+from app.routes.intake_submissions import router as intake_submissions_router
 from app.routes.issued_certificates import router as issued_certificates_router
 from app.routes.lineage_certificate import router as lineage_certificate_router
 from app.routes.lineage_graph import router as lineage_graph_router
@@ -71,6 +72,7 @@ app.add_middleware(
 app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(intake_router)
+app.include_router(intake_submissions_router)
 app.include_router(projects_router)
 app.include_router(families_router)
 app.include_router(family_graph_router)
@@ -126,6 +128,9 @@ def root():
             "/auth/login",
             "/auth/me",
             "/intake",
+            "/intake-submissions",
+            "/intake-submissions/my-latest",
+            "/intake-submissions/{submission_id}",
             "/projects",
             "/families",
             "/families/{family_id}/graph",

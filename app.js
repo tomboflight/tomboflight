@@ -3,7 +3,8 @@
  * Accessibility, navigation, cookie preference handling,
  * backend connectivity, request access form submission,
  * thank-you order recording, dashboard order loading,
- * paid-access gating, and intake onboarding routing.
+ * paid-access gating, intake onboarding routing,
+ * and backend intake submission.
  */
 
 (function () {
@@ -785,6 +786,32 @@
     }
   }
 
+  function getCurrentPackageFromOrders() {
+    try {
+      const raw = localStorage.getItem('tol_current_order');
+      return raw ? JSON.parse(raw) : null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function setCurrentPackageFromOrders(orders) {
+    try {
+      const firstOrder = Array.isArray(orders) && orders.length ? orders[0] : null;
+      if (!firstOrder) return;
+
+      const packageData = {
+        package_slug: firstOrder.package_slug || '',
+        package_name: firstOrder.package_name || '',
+        price_label: firstOrder.price_label || ''
+      };
+
+      localStorage.setItem('tol_current_order', JSON.stringify(packageData));
+    } catch (error) {
+      console.error('[TOL intake] failed to save current order:', error);
+    }
+  }
+
   function setupIntakeHousehold() {
     const householdPage = doc.querySelector('[data-intake-household]');
     if (!householdPage) return;
@@ -1006,7 +1033,7 @@
       }
     }
 
-    form.addEventListener('submit', function (event) {
+    form.addEventListener('submit', async function (event) {
       event.preventDefault();
 
       if (statusNode) {
@@ -1030,23 +1057,83 @@
 
       const formData = new FormData(form);
 
-      const payload = {
+      const reviewPayload = {
         final_intake_notes: String(formData.get('final_intake_notes') || '').trim(),
-        confirm_accuracy: form.elements.confirm_accuracy.checked
+        confirm_accuracy: !!form.elements.confirm_accuracy.checked
       };
 
-      setLocalIntakeData('tol_intake_review', payload);
+      setLocalIntakeData('tol_intake_review', reviewPayload);
 
-      if (submitBtn) {
-        submitBtn.disabled = true;
-        submitBtn.textContent = 'Saved';
+      if (!reviewPayload.confirm_accuracy) {
+        if (statusNode) {
+          statusNode.style.display = 'block';
+          statusNode.textContent = 'You must confirm the intake accuracy before submitting.';
+          statusNode.dataset.state = 'error';
+          statusNode.style.color = '#ffb3b3';
+        }
+        return;
       }
 
-      if (statusNode) {
-        statusNode.style.display = 'block';
-        statusNode.textContent = 'Review step saved locally. Your intake checkpoint is now preserved.';
-        statusNode.dataset.state = 'success';
-        statusNode.style.color = '#cfe8cf';
+      const currentOrder = getCurrentPackageFromOrders();
+
+      if (!currentOrder || !currentOrder.package_slug || !currentOrder.package_name) {
+        if (statusNode) {
+          statusNode.style.display = 'block';
+          statusNode.textContent = 'No package was found for this intake. Return to your dashboard and refresh your order data.';
+          statusNode.dataset.state = 'error';
+          statusNode.style.color = '#ffb3b3';
+        }
+        return;
+      }
+
+      const payload = {
+        package_slug: currentOrder.package_slug,
+        package_name: currentOrder.package_name,
+        household: household,
+        family_map: familyMap,
+        review: reviewPayload
+      };
+
+      try {
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.textContent = 'Submitting...';
+        }
+
+        const response = await apiRequest('/intake-submissions', {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+
+        setLocalIntakeData('tol_intake_submission_result', response);
+
+        if (statusNode) {
+          statusNode.style.display = 'block';
+          statusNode.textContent =
+            `Intake submitted successfully. Submission ID: ${response.id}`;
+          statusNode.dataset.state = 'success';
+          statusNode.style.color = '#cfe8cf';
+        }
+
+        if (submitBtn) {
+          submitBtn.textContent = 'Submitted';
+        }
+      } catch (error) {
+        console.error('Intake submission failed:', error);
+
+        if (statusNode) {
+          statusNode.style.display = 'block';
+          statusNode.textContent =
+            error.message || 'Intake submission failed. Please try again.';
+          statusNode.dataset.state = 'error';
+          statusNode.style.color = '#ffb3b3';
+        }
+
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Save Review Step';
+        }
+        return;
       }
 
       setTimeout(function () {
@@ -1054,8 +1141,18 @@
           submitBtn.disabled = false;
           submitBtn.textContent = 'Save Review Step';
         }
-      }, 800);
+      }, 1200);
     });
+  }
+
+  async function primeCurrentOrderCache() {
+    try {
+      const response = await apiRequest('/orders/my-orders', { method: 'GET' });
+      const orders = Array.isArray(response) ? response : (response.orders || []);
+      setCurrentPackageFromOrders(orders);
+    } catch (error) {
+      console.error('[TOL intake] could not prime current order cache:', error);
+    }
   }
 
   function init() {
@@ -1066,6 +1163,7 @@
     checkBackendHealth();
     recordCheckoutOrder();
     loadDashboardOrders();
+    primeCurrentOrderCache();
     setupIntakeWelcome();
     setupIntakeHousehold();
     setupIntakeFamilyMap();
