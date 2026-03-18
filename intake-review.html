@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Review & Submit | Tomb of Light</title>
+  <meta
+    name="description"
+    content="Review your Tomb of Light intake details before submission."
+  />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="page-wrap">
+    <header class="site-header">
+      <div class="container site-header-inner">
+        <a class="brand" href="index.html" aria-label="Tomb of Light home">
+          <span>Tomb of Light<span class="brand-symbol">™</span></span>
+        </a>
+
+        <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
+          <a href="dashboard.html">Dashboard</a>
+          <a href="intake-welcome.html">Intake Welcome</a>
+          <a href="intake-household.html">Household Setup</a>
+          <a href="intake-family-map.html">Family Map</a>
+        </nav>
+
+        <div class="header-actions">
+          <a class="btn btn-secondary" href="intake-family-map.html">Back to Family Map</a>
+        </div>
+      </div>
+    </header>
+
+    <main data-intake-review>
+      <section class="page-hero">
+        <div class="container">
+          <div class="page-hero-panel">
+            <span class="eyebrow">Step 3 of 5</span>
+            <h1>Review &amp; Submit</h1>
+            <p data-intake-review-status>
+              Review your household and family structure details before moving forward.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="page-sections">
+        <div class="container form-shell">
+          <div class="form-panel">
+            <span class="eyebrow">Household Summary</span>
+            <div class="grid-3" data-review-household-summary>
+              <div>
+                <div class="card-number">1</div>
+                <h3>Loading household details</h3>
+                <p class="card-copy">Your saved household information will appear here.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-panel">
+            <span class="eyebrow">Family Map Summary</span>
+            <div class="grid-3" data-review-family-map-summary>
+              <div>
+                <div class="card-number">2</div>
+                <h3>Loading family map</h3>
+                <p class="card-copy">Your saved family structure information will appear here.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-panel">
+            <span class="eyebrow">Submission Confirmation</span>
+
+            <form class="form-grid" data-intake-review-form novalidate>
+              <label>
+                Final Intake Notes
+                <textarea
+                  name="final_intake_notes"
+                  rows="5"
+                  placeholder="Optional final notes before Tomb of Light moves into the next onboarding stage."
+                ></textarea>
+              </label>
+
+              <label style="display: flex; gap: 0.75rem; align-items: flex-start;">
+                <input type="checkbox" name="confirm_accuracy" required style="margin-top: 0.35rem;" />
+                <span>
+                  I confirm that the household and family map details entered so far are accurate
+                  enough to move into the next Tomb of Light onboarding stage.
+                </span>
+              </label>
+
+              <div
+                class="helper"
+                data-intake-review-form-status
+                aria-live="polite"
+                style="display: none;"
+              ></div>
+
+              <div class="inline-actions" style="margin-top: 1.5rem;">
+                <button class="btn btn-primary" type="submit" data-intake-review-submit-btn>
+                  Save Review Step
+                </button>
+                <a class="btn btn-secondary" href="dashboard.html">
+                  Return to Dashboard
+                </a>
+              </div>
+            </form>
+          </div>
+
+          <div class="form-panel">
+            <span class="eyebrow">What Happens Next</span>
+            <div class="grid-3">
+              <div>
+                <div class="card-number">1</div>
+                <h3>Intake Locked In</h3>
+                <p class="card-copy">
+                  Your first onboarding details are preserved and ready for the next build stage.
+                </p>
+              </div>
+
+              <div>
+                <div class="card-number">2</div>
+                <h3>Next Intake Layers</h3>
+                <p class="card-copy">
+                  Uploads, consent, and deeper project stages can be added after this review checkpoint.
+                </p>
+              </div>
+
+              <div>
+                <div class="card-number">3</div>
+                <h3>Production Readiness</h3>
+                <p class="card-copy">
+                  This review step helps confirm that the family branch is mapped correctly before expansion.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="container">
+        <div class="footer-card">
+          <div class="footer-bottom">
+            <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
+          </div>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script src="auth.js"></script>
+</body>
+</html>

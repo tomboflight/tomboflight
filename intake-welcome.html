@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Intake Welcome | Tomb of Light</title>
+  <meta
+    name="description"
+    content="Welcome to Tomb of Light intake. Begin your family legacy onboarding."
+  />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="page-wrap">
+    <header class="site-header">
+      <div class="container site-header-inner">
+        <a class="brand" href="index.html" aria-label="Tomb of Light home">
+          <span>Tomb of Light<span class="brand-symbol">™</span></span>
+        </a>
+
+        <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
+          <a href="dashboard.html">Dashboard</a>
+          <a href="platform.html">Platform</a>
+          <a href="how-it-works.html">How It Works</a>
+          <a href="security.html">Security</a>
+          <a href="faq.html">FAQ</a>
+        </nav>
+
+        <div class="header-actions">
+          <a class="btn btn-secondary" href="dashboard.html">Back to Dashboard</a>
+        </div>
+      </div>
+    </header>
+
+    <main data-intake-welcome>
+      <section class="page-hero">
+        <div class="container">
+          <div class="page-hero-panel">
+            <span class="eyebrow">Intake Welcome</span>
+            <h1>Begin Your Tomb of Light Onboarding</h1>
+            <p data-intake-status>
+              Loading your package and onboarding path...
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="page-sections">
+        <div class="container form-shell">
+          <div class="form-panel">
+            <span class="eyebrow">Purchased Package</span>
+            <h2 data-package-name>Checking package...</h2>
+            <p class="card-copy" data-package-summary>
+              We are reviewing your account access and purchase record now.
+            </p>
+
+            <div class="grid-3">
+              <div>
+                <div class="card-number">1</div>
+                <h3>Household Setup</h3>
+                <p class="card-copy">
+                  Confirm the main household owner, household name, and contact details.
+                </p>
+              </div>
+
+              <div>
+                <div class="card-number">2</div>
+                <h3>Family Structure</h3>
+                <p class="card-copy">
+                  Begin outlining the family map that will guide your lineage build.
+                </p>
+              </div>
+
+              <div>
+                <div class="card-number">3</div>
+                <h3>Review & Submit</h3>
+                <p class="card-copy">
+                  Review your intake details before moving into the production process.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-panel">
+            <span class="eyebrow">Your Onboarding Path</span>
+            <div class="grid-3" data-package-path>
+              <div>
+                <div class="card-number">A</div>
+                <h3>Checking access</h3>
+                <p class="card-copy">
+                  Your package-specific onboarding sequence will appear here.
+                </p>
+              </div>
+            </div>
+
+            <div class="inline-actions" style="margin-top: 1.5rem;">
+              <a class="btn btn-primary" href="intake-household.html" data-intake-start>
+                Start Intake
+              </a>
+              <a class="btn btn-secondary" href="dashboard.html">
+                Return to Dashboard
+              </a>
+            </div>
+          </div>
+
+          <div class="form-panel">
+            <span class="eyebrow">Important Preparation</span>
+            <div class="grid-3">
+              <div>
+                <div class="card-number">I</div>
+                <h3>Gather family information</h3>
+                <p class="card-copy">
+                  Prepare names, relationships, and your first branch structure before continuing.
+                </p>
+              </div>
+
+              <div>
+                <div class="card-number">II</div>
+                <h3>Prepare uploads</h3>
+                <p class="card-copy">
+                  Collect the photos, videos, and records that belong in this project scope.
+                </p>
+              </div>
+
+              <div>
+                <div class="card-number">III</div>
+                <h3>Expect package limits</h3>
+                <p class="card-copy">
+                  Your upload count, family scope, and onboarding depth depend on your purchased package.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="container">
+        <div class="footer-card">
+          <div class="footer-bottom">
+            <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
+          </div>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script src="auth.js"></script>
+</body>
+</html>

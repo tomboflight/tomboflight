@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Family Map | Tomb of Light</title>
+  <meta
+    name="description"
+    content="Outline your household family structure for Tomb of Light onboarding."
+  />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="page-wrap">
+    <header class="site-header">
+      <div class="container site-header-inner">
+        <a class="brand" href="index.html" aria-label="Tomb of Light home">
+          <span>Tomb of Light<span class="brand-symbol">™</span></span>
+        </a>
+
+        <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
+          <a href="dashboard.html">Dashboard</a>
+          <a href="intake-welcome.html">Intake Welcome</a>
+          <a href="intake-household.html">Household Setup</a>
+          <a href="faq.html">FAQ</a>
+        </nav>
+
+        <div class="header-actions">
+          <a class="btn btn-secondary" href="intake-household.html">Back to Household Setup</a>
+        </div>
+      </div>
+    </header>
+
+    <main data-intake-family-map>
+      <section class="page-hero">
+        <div class="container">
+          <div class="page-hero-panel">
+            <span class="eyebrow">Step 2 of 5</span>
+            <h1>Family Map</h1>
+            <p data-family-map-status>
+              Begin outlining the family structure that belongs in this Tomb of Light build.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="page-sections">
+        <div class="container form-shell">
+          <div class="form-panel">
+            <span class="eyebrow">Family Structure</span>
+
+            <form class="form-grid" data-family-map-form novalidate>
+              <div class="form-grid two-col">
+                <label>
+                  Family / Branch Name
+                  <input
+                    type="text"
+                    name="family_branch_name"
+                    placeholder="Example: Moreland Main Branch"
+                    required
+                  />
+                </label>
+
+                <label>
+                  Approximate Number of People in Scope
+                  <input
+                    type="number"
+                    name="people_in_scope"
+                    min="1"
+                    placeholder="Example: 6"
+                    required
+                  />
+                </label>
+              </div>
+
+              <div class="form-grid two-col">
+                <label>
+                  Parent Figure One
+                  <input
+                    type="text"
+                    name="parent_one"
+                    placeholder="Full name"
+                    required
+                  />
+                </label>
+
+                <label>
+                  Parent Figure Two
+                  <input
+                    type="text"
+                    name="parent_two"
+                    placeholder="Full name"
+                  />
+                </label>
+              </div>
+
+              <div class="form-grid two-col">
+                <label>
+                  Spouse / Partner in Scope
+                  <input
+                    type="text"
+                    name="spouse_partner"
+                    placeholder="Optional"
+                  />
+                </label>
+
+                <label>
+                  Children in Scope
+                  <input
+                    type="text"
+                    name="children_names"
+                    placeholder="Example: Malik, Selah, Julian"
+                    required
+                  />
+                </label>
+              </div>
+
+              <label>
+                Family Structure Summary
+                <textarea
+                  name="family_structure_summary"
+                  rows="5"
+                  placeholder="Describe how this family is structured, who belongs in this branch, and how the first generation should be understood."
+                  required
+                ></textarea>
+              </label>
+
+              <label>
+                Branch Notes
+                <textarea
+                  name="branch_notes"
+                  rows="4"
+                  placeholder="Optional notes about step-parents, adopted members, branch separation, household differences, or special mapping instructions."
+                ></textarea>
+              </label>
+
+              <div
+                class="helper"
+                data-family-map-form-status
+                aria-live="polite"
+                style="display: none;"
+              ></div>
+
+              <div class="inline-actions" style="margin-top: 1.5rem;">
+                <button class="btn btn-primary" type="submit" data-family-map-submit-btn>
+                  Save Family Map
+                </button>
+                <a class="btn btn-secondary" href="intake-review.html">
+                  Continue to Review
+                </a>
+              </div>
+            </form>
+          </div>
+
+          <div class="form-panel">
+            <span class="eyebrow">What This Step Defines</span>
+            <div class="grid-3">
+              <div>
+                <div class="card-number">1</div>
+                <h3>Core Household Branch</h3>
+                <p class="card-copy">
+                  This identifies which branch or family group belongs in the current build.
+                </p>
+              </div>
+
+              <div>
+                <div class="card-number">2</div>
+                <h3>Relationship Starting Point</h3>
+                <p class="card-copy">
+                  This gives Tomb of Light the first parent, spouse, and child structure to follow.
+                </p>
+              </div>
+
+              <div>
+                <div class="card-number">3</div>
+                <h3>Package Scope Control</h3>
+                <p class="card-copy">
+                  This helps keep the onboarding within the purchased package size and branch limits.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-panel">
+            <span class="eyebrow">Next Step</span>
+            <h2>Review &amp; Submit</h2>
+            <p class="card-copy">
+              After saving your family map, you will review the household and structure details
+              before the next onboarding stages are added.
+            </p>
+
+            <div class="inline-actions" style="margin-top: 1.5rem;">
+              <a class="btn btn-primary" href="intake-review.html">Go to Review</a>
+              <a class="btn btn-secondary" href="intake-household.html">Back to Household Setup</a>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="container">
+        <div class="footer-card">
+          <div class="footer-bottom">
+            <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
+          </div>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+  <script src="auth.js"></script>
+</body>
+</html>

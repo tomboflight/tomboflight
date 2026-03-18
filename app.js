@@ -3,7 +3,7 @@
  * Accessibility, navigation, cookie preference handling,
  * backend connectivity, request access form submission,
  * thank-you order recording, dashboard order loading,
- * and paid-access gating.
+ * paid-access gating, and intake onboarding routing.
  */
 
 (function () {
@@ -38,27 +38,72 @@
     'digital-legacy-portrait': {
       slug: 'digital-legacy-portrait',
       name: 'Digital Legacy Portrait',
-      price_label: '$399'
+      price_label: '$399',
+      summary: 'Portrait-focused onboarding with uploads, consent, and NFT/share preparation.',
+      steps: [
+        'Household / buyer setup',
+        'Upload collection',
+        'Consent and visibility',
+        'Review and submit'
+      ]
     },
     'starter-family-tree': {
       slug: 'starter-family-tree',
       name: 'Starter Family Tree',
-      price_label: '$799'
+      price_label: '$799',
+      summary: 'Small family onboarding with household setup, family map, and first lineage structure.',
+      steps: [
+        'Household setup',
+        'Family map',
+        'Uploads',
+        'Consent',
+        'Review and submit'
+      ]
     },
     'heirloom-legacy-tree': {
       slug: 'heirloom-legacy-tree',
       name: 'Heirloom Legacy Tree',
-      price_label: '$1,500'
+      price_label: '$1,500',
+      summary: 'Multi-generation onboarding with deeper family mapping, narrative, and verification preparation.',
+      steps: [
+        'Household setup',
+        'Family map',
+        'Relationships',
+        'Uploads',
+        'Consent',
+        'Verification and narrative',
+        'Review and submit'
+      ]
     },
     'legacy-plus': {
       slug: 'legacy-plus',
       name: 'Legacy Plus',
-      price_label: '$3,200'
+      price_label: '$3,200',
+      summary: 'Expanded archive onboarding for larger families with broader scope and deeper preparation.',
+      steps: [
+        'Household setup',
+        'Family map',
+        'Relationships',
+        'Uploads',
+        'Consent',
+        'Verification and narrative',
+        'Expanded archive review',
+        'Review and submit'
+      ]
     },
     'family-estate-concierge': {
       slug: 'family-estate-concierge',
       name: 'Family Estate Concierge',
-      price_label: '$6,500–$12,000'
+      price_label: '$6,500–$12,000',
+      summary: 'White-glove onboarding for advanced household and branch-based legacy projects.',
+      steps: [
+        'Household setup',
+        'Family branch planning',
+        'Uploads and archive intake',
+        'Consent and privacy review',
+        'Verification and narrative planning',
+        'Concierge review and submit'
+      ]
     }
   };
 
@@ -430,7 +475,9 @@
     return PACKAGE_CATALOG[slug] || {
       slug: slug,
       name: slug.replace(/-/g, ' '),
-      price_label: 'Package selected'
+      price_label: 'Package selected',
+      summary: 'Package-aware onboarding is being prepared for this order.',
+      steps: ['Household setup', 'Review and submit']
     };
   }
 
@@ -500,13 +547,13 @@
     const ordersList = doc.querySelector('[data-orders-list]');
     const ordersStatus = doc.querySelector('[data-orders-status]');
 
-    if (!ordersList || !ordersStatus) return;
+    if (!ordersList || !ordersStatus) return [];
 
     if (!Array.isArray(orders) || !orders.length) {
       ordersStatus.textContent = 'No purchases have been recorded yet.';
       ordersList.innerHTML = '';
       setPaidAccessState(false, []);
-      return;
+      return [];
     }
 
     ordersStatus.textContent = 'Your purchases are recorded below.';
@@ -530,11 +577,13 @@
         </div>
       `;
     }).join('');
+
+    return orders;
   }
 
   async function loadDashboardOrders() {
     const dashboard = doc.querySelector('[data-dashboard]');
-    if (!dashboard) return;
+    if (!dashboard) return [];
 
     const ordersStatus = doc.querySelector('[data-orders-status]');
     if (ordersStatus) {
@@ -544,13 +593,14 @@
     try {
       const response = await apiRequest('/orders/my-orders', { method: 'GET' });
       const orders = Array.isArray(response) ? response : (response.orders || []);
-      renderOrders(orders);
+      return renderOrders(orders);
     } catch (error) {
       if (ordersStatus) {
         ordersStatus.textContent = 'Orders are not available yet. The account is ready, but the order API still needs to be connected.';
       }
       setPaidAccessState(false, []);
       console.error('Dashboard orders load failed:', error);
+      return [];
     }
   }
 
@@ -608,6 +658,406 @@
     }
   }
 
+  async function setupIntakeWelcome() {
+    const intakePage = doc.querySelector('[data-intake-welcome]');
+    if (!intakePage) return;
+
+    const statusNode = doc.querySelector('[data-intake-status]');
+    const packageNameNode = doc.querySelector('[data-package-name]');
+    const packageSummaryNode = doc.querySelector('[data-package-summary]');
+    const packagePathNode = doc.querySelector('[data-package-path]');
+    const startButton = doc.querySelector('[data-intake-start]');
+    const token = getToken();
+
+    if (!token) {
+      if (statusNode) {
+        statusNode.textContent = 'Please sign in to continue your intake.';
+      }
+      if (startButton) {
+        startButton.setAttribute('href', 'signin.html');
+        startButton.textContent = 'Sign In';
+      }
+      return;
+    }
+
+    try {
+      const response = await apiRequest('/orders/my-orders', { method: 'GET' });
+      const orders = Array.isArray(response) ? response : (response.orders || []);
+      const firstOrder = Array.isArray(orders) && orders.length ? orders[0] : null;
+
+      if (!firstOrder) {
+        if (statusNode) {
+          statusNode.textContent = 'No paid package was found for this account. Purchase a package to begin intake.';
+        }
+        if (packageNameNode) {
+          packageNameNode.textContent = 'No active package found';
+        }
+        if (packageSummaryNode) {
+          packageSummaryNode.textContent = 'Your account does not yet have an unlocked onboarding path.';
+        }
+        if (packagePathNode) {
+          packagePathNode.innerHTML = `
+            <div>
+              <div class="card-number">!</div>
+              <h3>Purchase required</h3>
+              <p class="card-copy">
+                Buy a package first so Tomb of Light can unlock your guided onboarding flow.
+              </p>
+            </div>
+          `;
+        }
+        if (startButton) {
+          startButton.setAttribute('href', 'index.html#pricing');
+          startButton.textContent = 'View Packages';
+        }
+        return;
+      }
+
+      const pkg = PACKAGE_CATALOG[firstOrder.package_slug] || {
+        name: firstOrder.package_name || 'Purchased Package',
+        price_label: firstOrder.price_label || '',
+        summary: 'Your package-specific onboarding is being prepared.',
+        steps: ['Household setup', 'Review and submit']
+      };
+
+      if (statusNode) {
+        statusNode.textContent = 'Your paid onboarding path is unlocked and ready.';
+      }
+
+      if (packageNameNode) {
+        packageNameNode.textContent = `${pkg.name}${pkg.price_label ? ` — ${pkg.price_label}` : ''}`;
+      }
+
+      if (packageSummaryNode) {
+        packageSummaryNode.textContent = pkg.summary;
+      }
+
+      if (packagePathNode) {
+        packagePathNode.innerHTML = pkg.steps.map(function (step, index) {
+          const labels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+          return `
+            <div>
+              <div class="card-number">${labels[index] || index + 1}</div>
+              <h3>${step}</h3>
+              <p class="card-copy">
+                This step is part of your purchased Tomb of Light onboarding path.
+              </p>
+            </div>
+          `;
+        }).join('');
+      }
+
+      if (startButton) {
+        startButton.setAttribute('href', 'intake-household.html');
+        startButton.textContent = 'Start Intake';
+      }
+    } catch (error) {
+      console.error('Intake welcome setup failed:', error);
+
+      if (statusNode) {
+        statusNode.textContent = 'We could not load your intake path right now. Please try again.';
+      }
+
+      if (packageNameNode) {
+        packageNameNode.textContent = 'Intake unavailable';
+      }
+
+      if (packageSummaryNode) {
+        packageSummaryNode.textContent = 'Your package details could not be loaded from the platform.';
+      }
+    }
+  }
+
+  function setLocalIntakeData(key, value) {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch (error) {
+      console.error('[TOL intake] failed to save local intake data:', error);
+    }
+  }
+
+  function getLocalIntakeData(key) {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function setupIntakeHousehold() {
+    const householdPage = doc.querySelector('[data-intake-household]');
+    if (!householdPage) return;
+
+    const form = doc.querySelector('[data-household-form]');
+    const statusNode = doc.querySelector('[data-household-form-status]');
+    const submitBtn = doc.querySelector('[data-household-submit-btn]');
+
+    if (!form) return;
+
+    const saved = getLocalIntakeData('tol_intake_household');
+    if (saved) {
+      Object.keys(saved).forEach(function (key) {
+        const field = form.elements[key];
+        if (field) {
+          field.value = saved[key] || '';
+        }
+      });
+    }
+
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
+
+      if (statusNode) {
+        statusNode.style.display = 'none';
+        statusNode.textContent = '';
+      }
+
+      if (typeof form.reportValidity === 'function' && !form.reportValidity()) {
+        return;
+      }
+
+      const formData = new FormData(form);
+
+      const payload = {
+        household_name: String(formData.get('household_name') || '').trim(),
+        primary_contact_name: String(formData.get('primary_contact_name') || '').trim(),
+        primary_contact_email: String(formData.get('primary_contact_email') || '').trim(),
+        primary_contact_phone: String(formData.get('primary_contact_phone') || '').trim(),
+        co_owner_name: String(formData.get('co_owner_name') || '').trim(),
+        household_role: String(formData.get('household_role') || '').trim(),
+        project_scope: String(formData.get('project_scope') || '').trim(),
+        special_notes: String(formData.get('special_notes') || '').trim()
+      };
+
+      setLocalIntakeData('tol_intake_household', payload);
+
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Saved';
+      }
+
+      if (statusNode) {
+        statusNode.style.display = 'block';
+        statusNode.textContent = 'Household setup saved locally. You can continue to the Family Map step.';
+        statusNode.dataset.state = 'success';
+        statusNode.style.color = '#cfe8cf';
+      }
+
+      setTimeout(function () {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Save Household Setup';
+        }
+      }, 800);
+    });
+  }
+
+  function setupIntakeFamilyMap() {
+    const familyMapPage = doc.querySelector('[data-intake-family-map]');
+    if (!familyMapPage) return;
+
+    const form = doc.querySelector('[data-family-map-form]');
+    const statusNode = doc.querySelector('[data-family-map-form-status]');
+    const submitBtn = doc.querySelector('[data-family-map-submit-btn]');
+
+    if (!form) return;
+
+    const saved = getLocalIntakeData('tol_intake_family_map');
+    if (saved) {
+      Object.keys(saved).forEach(function (key) {
+        const field = form.elements[key];
+        if (field) {
+          field.value = saved[key] || '';
+        }
+      });
+    }
+
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
+
+      if (statusNode) {
+        statusNode.style.display = 'none';
+        statusNode.textContent = '';
+      }
+
+      if (typeof form.reportValidity === 'function' && !form.reportValidity()) {
+        return;
+      }
+
+      const formData = new FormData(form);
+
+      const payload = {
+        family_branch_name: String(formData.get('family_branch_name') || '').trim(),
+        people_in_scope: String(formData.get('people_in_scope') || '').trim(),
+        parent_one: String(formData.get('parent_one') || '').trim(),
+        parent_two: String(formData.get('parent_two') || '').trim(),
+        spouse_partner: String(formData.get('spouse_partner') || '').trim(),
+        children_names: String(formData.get('children_names') || '').trim(),
+        family_structure_summary: String(formData.get('family_structure_summary') || '').trim(),
+        branch_notes: String(formData.get('branch_notes') || '').trim()
+      };
+
+      setLocalIntakeData('tol_intake_family_map', payload);
+
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Saved';
+      }
+
+      if (statusNode) {
+        statusNode.style.display = 'block';
+        statusNode.textContent = 'Family map saved locally. You can continue to the Review step.';
+        statusNode.dataset.state = 'success';
+        statusNode.style.color = '#cfe8cf';
+      }
+
+      setTimeout(function () {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Save Family Map';
+        }
+      }, 800);
+    });
+  }
+
+  function setupIntakeReview() {
+    const reviewPage = doc.querySelector('[data-intake-review]');
+    if (!reviewPage) return;
+
+    const householdSummaryNode = doc.querySelector('[data-review-household-summary]');
+    const familyMapSummaryNode = doc.querySelector('[data-review-family-map-summary]');
+    const form = doc.querySelector('[data-intake-review-form]');
+    const statusNode = doc.querySelector('[data-intake-review-form-status]');
+    const submitBtn = doc.querySelector('[data-intake-review-submit-btn]');
+
+    const household = getLocalIntakeData('tol_intake_household');
+    const familyMap = getLocalIntakeData('tol_intake_family_map');
+    const savedReview = getLocalIntakeData('tol_intake_review');
+
+    if (householdSummaryNode) {
+      if (household) {
+        householdSummaryNode.innerHTML = `
+          <div>
+            <div class="card-number">1</div>
+            <h3>${household.household_name || 'Household not named'}</h3>
+            <p class="card-copy"><strong>Primary Contact:</strong> ${household.primary_contact_name || '—'}</p>
+            <p class="card-copy"><strong>Email:</strong> ${household.primary_contact_email || '—'}</p>
+            <p class="card-copy"><strong>Phone:</strong> ${household.primary_contact_phone || '—'}</p>
+            <p class="card-copy"><strong>Co-Owner / Spouse:</strong> ${household.co_owner_name || '—'}</p>
+            <p class="card-copy"><strong>Role:</strong> ${household.household_role || '—'}</p>
+          </div>
+          <div>
+            <div class="card-number">2</div>
+            <h3>Project Scope</h3>
+            <p class="card-copy">${household.project_scope || '—'}</p>
+            <p class="card-copy"><strong>Special Notes:</strong> ${household.special_notes || 'None provided'}</p>
+          </div>
+        `;
+      } else {
+        householdSummaryNode.innerHTML = `
+          <div>
+            <div class="card-number">1</div>
+            <h3>No household data saved</h3>
+            <p class="card-copy">Complete the Household Setup step before reviewing your intake.</p>
+          </div>
+        `;
+      }
+    }
+
+    if (familyMapSummaryNode) {
+      if (familyMap) {
+        familyMapSummaryNode.innerHTML = `
+          <div>
+            <div class="card-number">3</div>
+            <h3>${familyMap.family_branch_name || 'Unnamed branch'}</h3>
+            <p class="card-copy"><strong>People in Scope:</strong> ${familyMap.people_in_scope || '—'}</p>
+            <p class="card-copy"><strong>Parent One:</strong> ${familyMap.parent_one || '—'}</p>
+            <p class="card-copy"><strong>Parent Two:</strong> ${familyMap.parent_two || '—'}</p>
+            <p class="card-copy"><strong>Spouse / Partner:</strong> ${familyMap.spouse_partner || '—'}</p>
+            <p class="card-copy"><strong>Children:</strong> ${familyMap.children_names || '—'}</p>
+          </div>
+          <div>
+            <div class="card-number">4</div>
+            <h3>Structure Notes</h3>
+            <p class="card-copy"><strong>Summary:</strong> ${familyMap.family_structure_summary || '—'}</p>
+            <p class="card-copy"><strong>Branch Notes:</strong> ${familyMap.branch_notes || 'None provided'}</p>
+          </div>
+        `;
+      } else {
+        familyMapSummaryNode.innerHTML = `
+          <div>
+            <div class="card-number">2</div>
+            <h3>No family map saved</h3>
+            <p class="card-copy">Complete the Family Map step before reviewing your intake.</p>
+          </div>
+        `;
+      }
+    }
+
+    if (!form) return;
+
+    if (savedReview) {
+      if (form.elements.final_intake_notes) {
+        form.elements.final_intake_notes.value = savedReview.final_intake_notes || '';
+      }
+      if (form.elements.confirm_accuracy) {
+        form.elements.confirm_accuracy.checked = !!savedReview.confirm_accuracy;
+      }
+    }
+
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
+
+      if (statusNode) {
+        statusNode.style.display = 'none';
+        statusNode.textContent = '';
+      }
+
+      if (!household || !familyMap) {
+        if (statusNode) {
+          statusNode.style.display = 'block';
+          statusNode.textContent = 'Complete the Household and Family Map steps before saving the review step.';
+          statusNode.dataset.state = 'error';
+          statusNode.style.color = '#ffb3b3';
+        }
+        return;
+      }
+
+      if (typeof form.reportValidity === 'function' && !form.reportValidity()) {
+        return;
+      }
+
+      const formData = new FormData(form);
+
+      const payload = {
+        final_intake_notes: String(formData.get('final_intake_notes') || '').trim(),
+        confirm_accuracy: form.elements.confirm_accuracy.checked
+      };
+
+      setLocalIntakeData('tol_intake_review', payload);
+
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Saved';
+      }
+
+      if (statusNode) {
+        statusNode.style.display = 'block';
+        statusNode.textContent = 'Review step saved locally. Your intake checkpoint is now preserved.';
+        statusNode.dataset.state = 'success';
+        statusNode.style.color = '#cfe8cf';
+      }
+
+      setTimeout(function () {
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Save Review Step';
+        }
+      }, 800);
+    });
+  }
+
   function init() {
     setupMobileMenu();
     setupCookiePreferences();
@@ -616,6 +1066,10 @@
     checkBackendHealth();
     recordCheckoutOrder();
     loadDashboardOrders();
+    setupIntakeWelcome();
+    setupIntakeHousehold();
+    setupIntakeFamilyMap();
+    setupIntakeReview();
 
     console.log('[TOL] API_BASE_URL:', API_BASE_URL);
   }
