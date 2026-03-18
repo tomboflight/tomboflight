@@ -33,6 +33,7 @@ from app.routes.link_requests import router as link_requests_router
 from app.routes.match_candidates import router as match_candidates_router
 from app.routes.match_generation import router as match_generation_router
 from app.routes.narrative_records import router as narrative_records_router
+from app.routes.orders import router as orders_router
 from app.routes.projects import router as projects_router
 from app.routes.relationships import router as relationships_router
 from app.routes.tree import router as tree_router
@@ -83,6 +84,7 @@ app.include_router(household_links_router)
 app.include_router(relationships_router)
 app.include_router(db_bootstrap_router)
 app.include_router(graph_integrity_router)
+app.include_router(orders_router)
 
 # Identity System
 app.include_router(canonical_persons_router)
@@ -170,6 +172,9 @@ def root():
             "/lineage-query/tree/{member_id}",
             "/lineage-query/family-graph/{family_id}",
             "/lineage-query/neighbors/{member_id}",
+            "/orders/record-checkout",
+            "/orders/my-orders",
+            "/orders/health",
             "/audit-logs",
             "/docs",
         ],
