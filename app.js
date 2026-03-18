@@ -1,7 +1,8 @@
 /**
  * Tomb of Light - Main Application Script
  * Accessibility, navigation, cookie preference handling,
- * backend connectivity, and request access form submission
+ * backend connectivity, request access form submission,
+ * thank-you order recording, and dashboard order loading
  */
 
 (function () {
@@ -10,18 +11,9 @@
   const doc = document;
   const body = doc.body;
 
-  /**
-   * API base URL auto-switch:
-   * - Local dev (127.0.0.1 / localhost): use local FastAPI
-   * - Live site: use Render API
-   */
-  const isLocal =
-    window.location.hostname === '127.0.0.1' ||
-    window.location.hostname === 'localhost';
-
-  const API_BASE_URL = isLocal
-    ? 'http://127.0.0.1:8000'
-    : 'https://tomboflight-api.onrender.com';
+  const API_BASE_URL =
+    (window.TOL_CONFIG && window.TOL_CONFIG.API_BASE_URL) ||
+    'http://127.0.0.1:8000';
 
   const menuToggle = doc.querySelector('.menu-toggle, .nav-toggle');
   const siteNav = doc.querySelector('#site-nav, .site-nav');
@@ -39,6 +31,85 @@
 
   const COOKIE_NAME = 'tol_cookie_preference';
   const COOKIE_EXPIRY_DAYS = 365;
+  const TOKEN_KEY = 'tol_access_token';
+
+  const PACKAGE_CATALOG = {
+    'digital-legacy-portrait': {
+      slug: 'digital-legacy-portrait',
+      name: 'Digital Legacy Portrait',
+      price_label: '$399'
+    },
+    'starter-family-tree': {
+      slug: 'starter-family-tree',
+      name: 'Starter Family Tree',
+      price_label: '$799'
+    },
+    'heirloom-legacy-tree': {
+      slug: 'heirloom-legacy-tree',
+      name: 'Heirloom Legacy Tree',
+      price_label: '$1,500'
+    },
+    'legacy-plus': {
+      slug: 'legacy-plus',
+      name: 'Legacy Plus',
+      price_label: '$3,200'
+    },
+    'family-estate-concierge': {
+      slug: 'family-estate-concierge',
+      name: 'Family Estate Concierge',
+      price_label: '$6,500–$12,000'
+    }
+  };
+
+  function getToken() {
+    return localStorage.getItem(TOKEN_KEY);
+  }
+
+  function getAuthHeaders(extraHeaders = {}) {
+    const token = getToken();
+    const headers = {
+      Accept: 'application/json',
+      ...extraHeaders
+    };
+
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    return headers;
+  }
+
+  async function apiRequest(path, options = {}) {
+    const headers = getAuthHeaders(options.headers || {});
+
+    if (!(options.body instanceof FormData) && !headers['Content-Type']) {
+      headers['Content-Type'] = 'application/json';
+    }
+
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      ...options,
+      headers
+    });
+
+    const contentType = response.headers.get('content-type') || '';
+    let data = null;
+
+    if (contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      const text = await response.text();
+      data = text ? { detail: text } : null;
+    }
+
+    if (!response.ok) {
+      const message =
+        (data && (data.detail || data.message || data.error)) ||
+        `Request failed with status ${response.status}`;
+      throw new Error(message);
+    }
+
+    return data;
+  }
 
   function closeMenu() {
     if (!menuToggle || !siteHeader) return;
@@ -351,14 +422,135 @@
     requestAccessForm.addEventListener('submit', submitRequestAccessForm);
   }
 
+  function getPackageFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const slug = params.get('package');
+    if (!slug) return null;
+    return PACKAGE_CATALOG[slug] || {
+      slug: slug,
+      name: slug.replace(/-/g, ' '),
+      price_label: 'Package selected'
+    };
+  }
+
+  function renderOrders(orders) {
+    const ordersList = doc.querySelector('[data-orders-list]');
+    const ordersStatus = doc.querySelector('[data-orders-status]');
+
+    if (!ordersList || !ordersStatus) return;
+
+    if (!Array.isArray(orders) || !orders.length) {
+      ordersStatus.textContent = 'No purchases have been recorded yet.';
+      ordersList.innerHTML = '';
+      return;
+    }
+
+    ordersStatus.textContent = 'Your purchases are recorded below.';
+
+    ordersList.innerHTML = orders.map(function (order, index) {
+      const packageName = order.package_name || order.package_slug || 'Package';
+      const priceLabel = order.price_label || 'Package recorded';
+      const status = order.status || 'received';
+      const createdAt = order.created_at
+        ? new Date(order.created_at).toLocaleString()
+        : 'Just now';
+
+      return `
+        <div>
+          <div class="card-number">${index + 1}</div>
+          <h3>${packageName}</h3>
+          <p class="card-copy"><strong>Status:</strong> ${status}</p>
+          <p class="card-copy"><strong>Price:</strong> ${priceLabel}</p>
+          <p class="card-copy"><strong>Recorded:</strong> ${createdAt}</p>
+        </div>
+      `;
+    }).join('');
+  }
+
+  async function loadDashboardOrders() {
+    const dashboard = doc.querySelector('[data-dashboard]');
+    if (!dashboard) return;
+
+    const ordersStatus = doc.querySelector('[data-orders-status]');
+    if (ordersStatus) {
+      ordersStatus.textContent = 'Loading your purchases...';
+    }
+
+    try {
+      const response = await apiRequest('/orders/my-orders', { method: 'GET' });
+      const orders = Array.isArray(response) ? response : (response.orders || []);
+      renderOrders(orders);
+    } catch (error) {
+      if (ordersStatus) {
+        ordersStatus.textContent = 'Orders are not available yet. The account is ready, but the order API still needs to be connected.';
+      }
+      console.error('Dashboard orders load failed:', error);
+    }
+  }
+
+  async function recordCheckoutOrder() {
+    const thankYouPage = doc.querySelector('[data-thank-you-page]');
+    if (!thankYouPage) return;
+
+    const packageNode = doc.querySelector('[data-thank-you-package]');
+    const orderStatusNode = doc.querySelector('[data-thank-you-order-status]');
+    const token = getToken();
+    const selectedPackage = getPackageFromUrl();
+
+    if (!selectedPackage) {
+      if (packageNode) {
+        packageNode.textContent = 'We could not detect the selected package from the return URL.';
+      }
+      if (orderStatusNode) {
+        orderStatusNode.textContent = 'Order recording is waiting for a valid package redirect.';
+      }
+      return;
+    }
+
+    if (packageNode) {
+      packageNode.textContent = `${selectedPackage.name} (${selectedPackage.price_label})`;
+    }
+
+    if (!token) {
+      if (orderStatusNode) {
+        orderStatusNode.textContent = 'Please sign in before purchase so your order can be attached to your account.';
+      }
+      return;
+    }
+
+    try {
+      const response = await apiRequest('/orders/record-checkout', {
+        method: 'POST',
+        body: JSON.stringify({
+          package_slug: selectedPackage.slug,
+          package_name: selectedPackage.name,
+          price_label: selectedPackage.price_label,
+          source: 'stripe_payment_link',
+          order_status: 'paid'
+        })
+      });
+
+      const orderId = response.order_id || response.id || 'recorded';
+      if (orderStatusNode) {
+        orderStatusNode.textContent = `Your order has been recorded to your account successfully. Reference: ${orderId}`;
+      }
+    } catch (error) {
+      if (orderStatusNode) {
+        orderStatusNode.textContent = `Your payment page returned successfully, but the order record could not be saved yet: ${error.message}`;
+      }
+      console.error('Order record failed:', error);
+    }
+  }
+
   function init() {
     setupMobileMenu();
     setupCookiePreferences();
     setupMailtoForms();
     setupRequestAccessForm();
     checkBackendHealth();
+    recordCheckoutOrder();
+    loadDashboardOrders();
 
-    // helpful debug
     console.log('[TOL] API_BASE_URL:', API_BASE_URL);
   }
 
