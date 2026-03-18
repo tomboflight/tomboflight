@@ -7,7 +7,9 @@
     host === 'localhost' ||
     host === '::1';
 
- window.TOL_CONFIG = {
-  API_BASE_URL: 'http://127.0.0.1:8000'
-};
+  window.TOL_CONFIG = {
+    API_BASE_URL: isLocal
+      ? 'http://127.0.0.1:8000'
+      : 'https://tomboflight-api.onrender.com'
+  };
 })();
