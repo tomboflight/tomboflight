@@ -2,13 +2,10 @@
   'use strict';
 
   const API_BASE_URL =
-    (window.TOL_CONFIG && window.TOL_CONFIG.API_BASE_URL) ||
-    'http://127.0.0.1:8000';
+    (window.TOL_CONFIG && window.TOL_CONFIG.API_BASE_URL) || '';
 
   const TOKEN_KEY = 'tol_access_token';
   const USER_KEY = 'tol_user';
-
-  // Change this only if your real file is named differently.
   const POST_LOGIN_REDIRECT = 'dashboard.html';
 
   function saveToken(token) {
@@ -45,7 +42,20 @@
     clearUser();
   }
 
+  function isLocalApp() {
+    const host = window.location.hostname;
+    return host === '127.0.0.1' || host === 'localhost' || host === '::1';
+  }
+
   async function apiRequest(path, options = {}) {
+    if (!API_BASE_URL) {
+      throw new Error(
+        isLocalApp()
+          ? 'API base URL is missing. Check config.js and make sure the backend is running at http://127.0.0.1:8000.'
+          : 'Sign-in is currently available only in the local app environment until the live API is deployed.'
+      );
+    }
+
     const token = getToken();
 
     const headers = {

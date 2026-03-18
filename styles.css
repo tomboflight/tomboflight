@@ -343,8 +343,8 @@ a {
 
 .hero-shell {
   display: grid;
-  grid-template-columns: minmax(0, 1.04fr) minmax(0, 0.96fr);
-  gap: 26px;
+  grid-template-columns: minmax(0, 0.88fr) minmax(0, 1.12fr);
+  gap: 22px;
   align-items: stretch;
 }
 
@@ -385,7 +385,7 @@ a {
 }
 
 .hero-copy-premium {
-  padding: 42px;
+  padding: 36px;
   min-height: 100%;
 }
 
@@ -397,10 +397,10 @@ a {
 .hero-copy h1,
 .page-hero h1 {
   margin: 0 0 18px;
-  font-size: clamp(2.9rem, 5vw, 5rem);
+  font-size: clamp(2.8rem, 4.6vw, 4.8rem);
   line-height: 1.02;
   letter-spacing: -0.06em;
-  max-width: 11.5ch;
+  max-width: 10.2ch;
 }
 
 .hero-gold {
@@ -512,7 +512,7 @@ a {
 
 .hero-demo-embed {
   width: 100%;
-  min-height: 420px;
+  min-height: 460px;
   overflow: hidden;
   border-radius: 26px;
   border: 1px solid var(--border-soft);
@@ -523,12 +523,15 @@ a {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 26px;
+  padding: 14px;
 }
 
 .hero-demo-stage {
-  width: min(100%, 1120px);
-  aspect-ratio: 16 / 9;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  min-height: 430px;
+  aspect-ratio: auto;
   border-radius: 22px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -542,6 +545,14 @@ a {
   border: 0;
   display: block;
   background: #02050b;
+}
+
+.hero-demo-stage iframe,
+.hero-demo-stage img,
+.hero-demo-stage .viewer-preview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .hero-visual-main p {
@@ -1436,7 +1447,8 @@ textarea {
 
   .hero-demo-stage {
     width: 100%;
-    aspect-ratio: 16 / 10;
+    min-height: 280px;
+    aspect-ratio: auto;
   }
 
   .btn {
