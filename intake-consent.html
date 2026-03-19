@@ -23,8 +23,9 @@
             <a href="intake-welcome.html">Intake Welcome</a>
             <a href="intake-household.html">Household Setup</a>
             <a href="intake-family-map.html">Family Map</a>
-            <a href="intake-review.html">Review</a>
             <a href="intake-uploads.html">Uploads</a>
+            <a href="intake-consent.html">Consent</a>
+            <a href="intake-review.html">Review</a>
           </nav>
 
           <div class="header-actions">
@@ -42,8 +43,8 @@
               <span class="eyebrow">Step 5 of 5</span>
               <h1>Consent</h1>
               <p class="card-copy">
-                Confirm consent and set visibility preferences for how your
-                lineage record is stored and accessed.
+                Confirm visibility preferences and authorize Tomb of Light to
+                store and process your lineage onboarding data.
               </p>
             </div>
           </div>
@@ -81,21 +82,19 @@
                     style="margin-top: 0.35rem"
                   />
                   <span>
-                    I authorize Tomb of Light to securely
-                    <strong>store</strong> the submitted lineage data and
-                    uploaded assets according to the Privacy Policy and Terms of
-                    Service.
+                    I authorize Tomb of Light to securely <strong>store</strong>
+                    the submitted lineage data and uploaded assets according to
+                    the Privacy Policy and Terms of Service.
                   </span>
                 </label>
 
                 <label>
                   Visibility Preference
-                  <select name="visibility_preference">
+                  <select name="visibility_preference" required>
+                    <option value="">Select one</option>
                     <option value="private">Private (recommended)</option>
                     <option value="family">Family-only</option>
-                    <option value="public">
-                      Public (certificate/shareable only)
-                    </option>
+                    <option value="public">Public (certificate-only)</option>
                   </select>
                 </label>
 
@@ -142,16 +141,18 @@
                 </div>
                 <div>
                   <div class="card-number">2</div>
-                  <h3>Compliance</h3>
+                  <h3>Consent</h3>
                   <p class="card-copy">
-                    Confirms consent for processing and storage.
+                    Confirms Tomb of Light can store and process your intake
+                    data.
                   </p>
                 </div>
                 <div>
                   <div class="card-number">3</div>
-                  <h3>Access Control</h3>
+                  <h3>Compliance</h3>
                   <p class="card-copy">
-                    Controls who can view what as your legacy expands.
+                    Creates a clear permission checkpoint before production
+                    stages.
                   </p>
                 </div>
               </div>
