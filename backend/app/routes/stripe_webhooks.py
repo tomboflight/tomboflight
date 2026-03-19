@@ -5,19 +5,27 @@ Endpoint:
   POST /webhooks/stripe
 
 Env vars required (Render + local .env):
-  STRIPE_SECRET_KEY=sk_live_...
+  STRIPE_SECRET_KEY=sk_live_... (or sk_test_...)
   STRIPE_WEBHOOK_SECRET=whsec_...
 
 Notes:
-- This route verifies the Stripe signature and ACKs valid events.
-- Next step: connect event types to your Orders system automatically.
+- Verifies Stripe signature.
+- ACKs valid events.
+- Next step: connect checkout.session.completed to your Orders pipeline.
 """
 
 import os
 from typing import Any, Dict, Optional
 
 import stripe
-from fastapi import APIRouter, Request, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
+
+try:
+    # Preferred import (helps editors/type-checkers)
+    from stripe.error import SignatureVerificationError # type: ignore
+except Exception:  # pragma: no cover
+    SignatureVerificationError = Exception  # type: ignore
+
 
 router = APIRouter(prefix="/webhooks", tags=["Stripe Webhooks"])
 
@@ -40,12 +48,10 @@ async def stripe_webhook(request: Request) -> Dict[str, Any]:
             detail="Missing Stripe-Signature header",
         )
 
-    # Stripe config
-    # (API key not required for signature verification, but safe to set for future usage)
+    # Stripe config (API key not needed just to verify signature, but we set it for later usage)
     stripe.api_key = _get_env("STRIPE_SECRET_KEY")
     endpoint_secret = _get_env("STRIPE_WEBHOOK_SECRET")
 
-    # Verify signature + parse event
     try:
         event = stripe.Webhook.construct_event(
             payload=payload_bytes,
@@ -53,21 +59,13 @@ async def stripe_webhook(request: Request) -> Dict[str, Any]:
             secret=endpoint_secret,
         )
     except ValueError:
-        # Invalid JSON
         raise HTTPException(status_code=400, detail="Invalid payload")
-    except getattr(stripe.error, "SignatureVerificationError", Exception): # type: ignore
-        # Invalid signature
+    except SignatureVerificationError:
         raise HTTPException(status_code=400, detail="Invalid Stripe signature")
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Webhook error: {str(e)}")
 
     event_type = event.get("type", "unknown")
 
-    # For now we ACK everything valid.
-    # Later: route these to your Orders pipeline automatically.
-    # Examples:
-    # - checkout.session.completed
-    # - payment_intent.succeeded
-    # - charge.succeeded
-    #
+    # For now: ACK everything valid
     return {"received": True, "type": event_type}

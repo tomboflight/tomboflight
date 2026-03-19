@@ -41,7 +41,7 @@ from app.routes.tree import router as tree_router
 from app.routes.users import router as users_router
 from app.routes.verification_records import router as verification_records_router
 
-# Stripe Webhooks
+# ✅ Stripe Webhooks router
 from app.routes.stripe_webhooks import router as stripe_webhooks_router
 
 
@@ -74,10 +74,8 @@ app.add_middleware(
 # ----------------------------
 app.include_router(health_router)
 app.include_router(auth_router)
-
 app.include_router(intake_router)
 app.include_router(intake_submissions_router)
-
 app.include_router(projects_router)
 app.include_router(families_router)
 app.include_router(family_graph_router)
@@ -91,11 +89,9 @@ app.include_router(household_links_router)
 app.include_router(relationships_router)
 app.include_router(db_bootstrap_router)
 app.include_router(graph_integrity_router)
-
-# Orders
 app.include_router(orders_router)
 
-# Stripe Webhooks (public endpoint Stripe calls)
+# ✅ Stripe Webhooks (THIS makes it show in Swagger)
 app.include_router(stripe_webhooks_router)
 
 # ----------------------------
@@ -142,17 +138,20 @@ def root():
         "app_name": settings.app_name,
         "version": settings.app_version,
         "environment": settings.environment,
-        "key_routes": [
+        "routes": [
             "/health",
             "/auth/signup",
             "/auth/login",
             "/auth/me",
-            "/orders/my-orders",
-            "/orders/record-checkout",
+            "/intake",
             "/intake-submissions",
             "/intake-submissions/my-latest",
             "/intake-submissions/my-list?limit=10",
             "/webhooks/stripe",
+            "/orders/record-checkout",
+            "/orders/my-orders",
+            "/orders/health",
+            "/audit-logs",
             "/docs",
         ],
     }
