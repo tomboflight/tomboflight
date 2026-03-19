@@ -2,6 +2,7 @@
  * Tomb of Light - Main Application Script
  * Dashboard: orders + intake status + intake history
  * Intake: local draft steps (household, family map, uploads, consent)
+ * Review: submits combined payload to backend /intake-submissions
  */
 
 (function () {
@@ -17,6 +18,12 @@
   const TOKEN_KEY = "tol_access_token";
   const CURRENT_ORDER_CACHE_KEY = "tol_current_order";
   const LATEST_INTAKE_CACHE_KEY = "tol_latest_intake_submission";
+
+  // Local draft keys
+  const DRAFT_HOUSEHOLD_KEY = "tol_intake_household";
+  const DRAFT_FAMILY_MAP_KEY = "tol_intake_family_map";
+  const DRAFT_UPLOADS_KEY = "tol_intake_uploads";
+  const DRAFT_CONSENT_KEY = "tol_intake_consent";
 
   const menuToggle = doc.querySelector(".menu-toggle, .nav-toggle");
   const siteNav = doc.querySelector("#site-nav, .site-nav");
@@ -237,6 +244,26 @@
     }
   }
 
+  // Prime order cache for intake pages (so Review always has package_slug/name)
+  async function primeCurrentOrderCache() {
+    const token = getToken();
+    if (!token) return null;
+
+    const cached = getCurrentOrderCache();
+    if (cached && (cached.package_slug || cached.package_name)) return cached;
+
+    try {
+      const response = await apiRequest("/orders/my-orders", { method: "GET" });
+      const orders = Array.isArray(response) ? response : response.orders || [];
+      const first = Array.isArray(orders) && orders.length ? orders[0] : null;
+      if (first) setCurrentOrderCache(first);
+      return first || null;
+    } catch (error) {
+      console.error("[TOL intake] could not prime current order cache:", error);
+      return null;
+    }
+  }
+
   // ---- Local intake draft storage
   function setLocalIntakeData(key, value) {
     try {
@@ -418,7 +445,7 @@
       ? new Date(submission.created_at).toLocaleString()
       : "—";
     nextStepNode.textContent =
-      "Your intake is now ready for the next onboarding stage (uploads/consent) and production review.";
+      "Your intake is now ready for the next onboarding stage and production review.";
     lockNoteNode.textContent =
       "This intake is submitted. Use review for reference; edits should be handled in the next stage.";
     openActionNode.textContent = "View Intake";
@@ -505,7 +532,7 @@
     const submitBtn = doc.querySelector("[data-intake-uploads-submit-btn]");
     if (!form) return;
 
-    const saved = getLocalIntakeData("tol_intake_uploads");
+    const saved = getLocalIntakeData(DRAFT_UPLOADS_KEY);
     if (saved) {
       Object.keys(saved).forEach(function (key) {
         const field = form.elements[key];
@@ -533,7 +560,7 @@
         quality_notes: String(fd.get("quality_notes") || "").trim(),
       };
 
-      setLocalIntakeData("tol_intake_uploads", payload);
+      setLocalIntakeData(DRAFT_UPLOADS_KEY, payload);
 
       if (submitBtn) {
         submitBtn.disabled = true;
@@ -567,7 +594,7 @@
     const submitBtn = doc.querySelector("[data-intake-consent-submit-btn]");
     if (!form) return;
 
-    const saved = getLocalIntakeData("tol_intake_consent");
+    const saved = getLocalIntakeData(DRAFT_CONSENT_KEY);
     if (saved) {
       Object.keys(saved).forEach(function (key) {
         const field = form.elements[key];
@@ -593,16 +620,17 @@
         return;
 
       const fd = new FormData(form);
+
       const payload = {
-        consent_process: fd.get("consent_process") === "on",
-        consent_store: fd.get("consent_store") === "on",
+        consent_process: Boolean(fd.get("consent_process")),
+        consent_store: Boolean(fd.get("consent_store")),
         visibility_preference: String(
-          fd.get("visibility_preference") || "private",
+          fd.get("visibility_preference") || "",
         ).trim(),
         consent_notes: String(fd.get("consent_notes") || "").trim(),
       };
 
-      setLocalIntakeData("tol_intake_consent", payload);
+      setLocalIntakeData(DRAFT_CONSENT_KEY, payload);
 
       if (submitBtn) {
         submitBtn.disabled = true;
@@ -626,18 +654,193 @@
     });
   }
 
+  // ---- Review page: render summaries + submit payload to backend
+  function renderSummaryCards(node, title, items) {
+    if (!node) return;
+    const keys = Object.keys(items || {});
+    if (!keys.length) {
+      node.innerHTML = `
+        <div>
+          <div class="card-number">—</div>
+          <h3>${title} not saved yet</h3>
+          <p class="card-copy">Go back and complete this step to include it in your submission.</p>
+        </div>
+      `;
+      return;
+    }
+
+    node.innerHTML = keys
+      .map(function (key, index) {
+        const label = key.replace(/_/g, " ");
+        const value = items[key];
+
+        const formatted =
+          typeof value === "boolean"
+            ? value
+              ? "Yes"
+              : "No"
+            : String(value || "—");
+
+        return `
+        <div>
+          <div class="card-number">${index + 1}</div>
+          <h3>${label}</h3>
+          <p class="card-copy">${formatted}</p>
+        </div>
+      `;
+      })
+      .join("");
+  }
+
+  async function setupIntakeReview() {
+    const page = doc.querySelector("[data-intake-review]");
+    if (!page) return;
+
+    const statusLine = doc.querySelector("[data-intake-review-status]");
+    const householdNode = doc.querySelector("[data-review-household-summary]");
+    const familyMapNode = doc.querySelector("[data-review-family-map-summary]");
+    const uploadsNode = doc.querySelector("[data-review-uploads-summary]");
+    const consentNode = doc.querySelector("[data-review-consent-summary]");
+
+    const form = doc.querySelector("[data-intake-review-form]");
+    const formStatus = doc.querySelector("[data-intake-review-form-status]");
+    const submitBtn = doc.querySelector("[data-intake-review-submit-btn]");
+
+    // render summaries from local draft
+    const household = getLocalIntakeData(DRAFT_HOUSEHOLD_KEY) || {};
+    const familyMap = getLocalIntakeData(DRAFT_FAMILY_MAP_KEY) || {};
+    const uploads = getLocalIntakeData(DRAFT_UPLOADS_KEY) || {};
+    const consent = getLocalIntakeData(DRAFT_CONSENT_KEY) || {};
+
+    renderSummaryCards(householdNode, "Household", household);
+    renderSummaryCards(familyMapNode, "Family Map", familyMap);
+    renderSummaryCards(uploadsNode, "Uploads", uploads);
+    renderSummaryCards(consentNode, "Consent", consent);
+
+    if (!form) return;
+
+    form.addEventListener("submit", async function (event) {
+      event.preventDefault();
+
+      if (formStatus) {
+        formStatus.style.display = "none";
+        formStatus.textContent = "";
+      }
+
+      if (typeof form.reportValidity === "function" && !form.reportValidity())
+        return;
+
+      const token = getToken();
+      if (!token) {
+        if (formStatus) {
+          formStatus.style.display = "block";
+          formStatus.textContent =
+            "Please sign in again before submitting intake.";
+          formStatus.dataset.state = "error";
+          formStatus.style.color = "#ffb3b3";
+        }
+        return;
+      }
+
+      // Ensure we have package info
+      const order = (await primeCurrentOrderCache()) || getCurrentOrderCache();
+
+      if (!order || (!order.package_slug && !order.package_name)) {
+        if (formStatus) {
+          formStatus.style.display = "block";
+          formStatus.textContent =
+            "No package was found for this intake. Return to your dashboard and refresh your order data.";
+          formStatus.dataset.state = "error";
+          formStatus.style.color = "#ffb3b3";
+        }
+        return;
+      }
+
+      const fd = new FormData(form);
+      const reviewPayload = {
+        final_intake_notes: String(fd.get("final_intake_notes") || "").trim(),
+        confirm_accuracy: Boolean(fd.get("confirm_accuracy")),
+      };
+
+      const payload = {
+        package_slug: order.package_slug || order.package_slug || "",
+        package_name:
+          order.package_name ||
+          (order.package_slug
+            ? PACKAGE_CATALOG[order.package_slug]?.name || order.package_slug
+            : "Package"),
+        household: household || {},
+        family_map: familyMap || {},
+        uploads: uploads || {},
+        consent: consent || {},
+        review: reviewPayload,
+      };
+
+      try {
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.textContent = "Submitting...";
+        }
+
+        const created = await apiRequest("/intake-submissions", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+
+        cacheLatestIntake(created);
+
+        if (statusLine) {
+          statusLine.textContent =
+            "Intake submitted successfully. Your submission is now stored with your account.";
+        }
+
+        if (formStatus) {
+          formStatus.style.display = "block";
+          formStatus.textContent = `Intake submitted successfully. Submission ID: ${created.id || "saved"}`;
+          formStatus.dataset.state = "success";
+          formStatus.style.color = "#cfe8cf";
+        }
+
+        if (submitBtn) {
+          submitBtn.textContent = "Submitted";
+        }
+      } catch (error) {
+        console.error("[TOL intake] submit failed:", error);
+
+        if (formStatus) {
+          formStatus.style.display = "block";
+          formStatus.textContent =
+            error.message || "Submission failed. Please try again.";
+          formStatus.dataset.state = "error";
+          formStatus.style.color = "#ffb3b3";
+        }
+
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.textContent = "Submit Intake Review";
+        }
+      }
+    });
+  }
+
   // ---- Init
   function init() {
     setupMobileMenu();
     setupCookiePreferences();
 
+    // Dashboard-only calls
     loadDashboardOrders().then(function () {
       loadDashboardIntakeStatus();
       loadDashboardIntakeHistory();
     });
 
+    // Intake step setups
     setupIntakeUploads();
     setupIntakeConsent();
+    setupIntakeReview();
+
+    // Prime order cache on any intake page (safe to call even if dashboard isn't present)
+    primeCurrentOrderCache();
 
     console.log("[TOL] API_BASE_URL:", API_BASE_URL);
   }

@@ -3,6 +3,7 @@ annotated-types==0.7.0
 anyio==4.12.1
 bcrypt==4.0.1
 certifi==2026.2.25
+charset-normalizer==3.4.6
 click==8.3.1
 dnspython==2.8.0
 ecdsa==0.19.1
@@ -19,9 +20,12 @@ pymongo==4.16.0
 python-dotenv==1.2.2
 python-jose==3.5.0
 python-multipart==0.0.22
+requests==2.32.5
 rsa==4.9.1
 six==1.17.0
 starlette==0.52.1
+stripe==14.4.1
 typing-inspection==0.4.2
 typing_extensions==4.15.0
+urllib3==2.6.3
 uvicorn==0.41.0

@@ -1,162 +1,207 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Review &amp; Submit | Tomb of Light</title>
-  <meta
-    name="description"
-    content="Review your Tomb of Light intake details before submission."
-  />
-  <link rel="stylesheet" href="styles.css" />
-</head>
-<body>
-  <div class="page-wrap">
-    <header class="site-header">
-      <div class="container site-header-inner">
-        <a class="brand" href="index.html" aria-label="Tomb of Light home">
-          <span>Tomb of Light<span class="brand-symbol">™</span></span>
-        </a>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Review &amp; Submit | Tomb of Light</title>
+    <meta
+      name="description"
+      content="Review your Tomb of Light intake details before submission."
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="page-wrap">
+      <header class="site-header">
+        <div class="container site-header-inner">
+          <a class="brand" href="index.html" aria-label="Tomb of Light home">
+            <span>Tomb of Light<span class="brand-symbol">™</span></span>
+          </a>
 
-        <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
-          <a href="dashboard.html">Dashboard</a>
-          <a href="intake-welcome.html">Intake Welcome</a>
-          <a href="intake-household.html">Household Setup</a>
-          <a href="intake-family-map.html">Family Map</a>
-        </nav>
+          <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
+            <a href="dashboard.html">Dashboard</a>
+            <a href="intake-welcome.html">Intake Welcome</a>
+            <a href="intake-household.html">Household Setup</a>
+            <a href="intake-family-map.html">Family Map</a>
+            <a href="intake-uploads.html">Uploads</a>
+            <a href="intake-consent.html">Consent</a>
+          </nav>
 
-        <div class="header-actions">
-          <a class="btn btn-secondary" href="intake-family-map.html">Back to Family Map</a>
+          <div class="header-actions">
+            <a class="btn btn-secondary" href="intake-consent.html"
+              >Back to Consent</a
+            >
+          </div>
         </div>
-      </div>
-    </header>
+      </header>
 
-    <main data-intake-review>
-      <section class="page-hero">
+      <main data-intake-review>
+        <section class="page-hero">
+          <div class="container">
+            <div class="page-hero-panel">
+              <span class="eyebrow">Step 5 of 5</span>
+              <h1>Review &amp; Submit</h1>
+              <p data-intake-review-status>
+                Review your household, family map, uploads, and consent details
+                before submitting.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section class="page-sections">
+          <div class="container form-shell">
+            <div class="form-panel">
+              <span class="eyebrow">Household Summary</span>
+              <div class="grid-3" data-review-household-summary>
+                <div>
+                  <div class="card-number">1</div>
+                  <h3>Loading household details</h3>
+                  <p class="card-copy">
+                    Your saved household information will appear here.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Family Map Summary</span>
+              <div class="grid-3" data-review-family-map-summary>
+                <div>
+                  <div class="card-number">2</div>
+                  <h3>Loading family map</h3>
+                  <p class="card-copy">
+                    Your saved family structure information will appear here.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Uploads Summary</span>
+              <div class="grid-3" data-review-uploads-summary>
+                <div>
+                  <div class="card-number">3</div>
+                  <h3>Loading upload plan</h3>
+                  <p class="card-copy">
+                    Your upload planning details will appear here.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Consent Summary</span>
+              <div class="grid-3" data-review-consent-summary>
+                <div>
+                  <div class="card-number">4</div>
+                  <h3>Loading consent</h3>
+                  <p class="card-copy">
+                    Your consent preferences will appear here.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Submission Confirmation</span>
+
+              <form class="form-grid" data-intake-review-form novalidate>
+                <label>
+                  Final Intake Notes
+                  <textarea
+                    name="final_intake_notes"
+                    rows="5"
+                    placeholder="Optional final notes before Tomb of Light moves into the next onboarding stage."
+                  ></textarea>
+                </label>
+
+                <label
+                  style="display: flex; gap: 0.75rem; align-items: flex-start"
+                >
+                  <input
+                    type="checkbox"
+                    name="confirm_accuracy"
+                    required
+                    style="margin-top: 0.35rem"
+                  />
+                  <span>
+                    I confirm that the household, family map, uploads, and
+                    consent details entered so far are accurate enough to move
+                    into the next Tomb of Light onboarding stage.
+                  </span>
+                </label>
+
+                <div
+                  class="helper"
+                  data-intake-review-form-status
+                  aria-live="polite"
+                  style="display: none"
+                ></div>
+
+                <div class="inline-actions" style="margin-top: 1.5rem">
+                  <button
+                    class="btn btn-primary"
+                    type="submit"
+                    data-intake-review-submit-btn
+                  >
+                    Submit Intake Review
+                  </button>
+                  <a class="btn btn-secondary" href="dashboard.html">
+                    Return to Dashboard
+                  </a>
+                </div>
+              </form>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">What Happens Next</span>
+              <div class="grid-3">
+                <div>
+                  <div class="card-number">1</div>
+                  <h3>Intake Submitted</h3>
+                  <p class="card-copy">
+                    Your onboarding intake is submitted to the Tomb of Light
+                    platform and stored with your account.
+                  </p>
+                </div>
+
+                <div>
+                  <div class="card-number">2</div>
+                  <h3>Production Review</h3>
+                  <p class="card-copy">
+                    Your submission becomes a checkpoint for review,
+                    verification, and production planning.
+                  </p>
+                </div>
+
+                <div>
+                  <div class="card-number">3</div>
+                  <h3>Next Stage</h3>
+                  <p class="card-copy">
+                    The next stage can connect real uploads + file processing,
+                    consent enforcement, and build execution.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer">
         <div class="container">
-          <div class="page-hero-panel">
-            <span class="eyebrow">Step 3 of 5</span>
-            <h1>Review &amp; Submit</h1>
-            <p data-intake-review-status>
-              Review your household and family structure details before moving forward.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <section class="page-sections">
-        <div class="container form-shell">
-          <div class="form-panel">
-            <span class="eyebrow">Household Summary</span>
-            <div class="grid-3" data-review-household-summary>
-              <div>
-                <div class="card-number">1</div>
-                <h3>Loading household details</h3>
-                <p class="card-copy">Your saved household information will appear here.</p>
-              </div>
-            </div>
-          </div>
-
-          <div class="form-panel">
-            <span class="eyebrow">Family Map Summary</span>
-            <div class="grid-3" data-review-family-map-summary>
-              <div>
-                <div class="card-number">2</div>
-                <h3>Loading family map</h3>
-                <p class="card-copy">Your saved family structure information will appear here.</p>
-              </div>
-            </div>
-          </div>
-
-          <div class="form-panel">
-            <span class="eyebrow">Submission Confirmation</span>
-
-            <form class="form-grid" data-intake-review-form novalidate>
-              <label>
-                Final Intake Notes
-                <textarea
-                  name="final_intake_notes"
-                  rows="5"
-                  placeholder="Optional final notes before Tomb of Light moves into the next onboarding stage."
-                ></textarea>
-              </label>
-
-              <label style="display: flex; gap: 0.75rem; align-items: flex-start;">
-                <input
-                  type="checkbox"
-                  name="confirm_accuracy"
-                  required
-                  style="margin-top: 0.35rem;"
-                />
-                <span>
-                  I confirm that the household and family map details entered so far are accurate
-                  enough to move into the next Tomb of Light onboarding stage.
-                </span>
-              </label>
-
-              <div
-                class="helper"
-                data-intake-review-form-status
-                aria-live="polite"
-                style="display: none;"
-              ></div>
-
-              <div class="inline-actions" style="margin-top: 1.5rem;">
-                <button class="btn btn-primary" type="submit" data-intake-review-submit-btn>
-                  Submit Intake Review
-                </button>
-                <a class="btn btn-secondary" href="dashboard.html">
-                  Return to Dashboard
-                </a>
-              </div>
-            </form>
-          </div>
-
-          <div class="form-panel">
-            <span class="eyebrow">What Happens Next</span>
-            <div class="grid-3">
-              <div>
-                <div class="card-number">1</div>
-                <h3>Intake Submitted</h3>
-                <p class="card-copy">
-                  Your onboarding review is submitted to the Tomb of Light platform and stored with your account.
-                </p>
-              </div>
-
-              <div>
-                <div class="card-number">2</div>
-                <h3>Next Intake Layers</h3>
-                <p class="card-copy">
-                  Uploads, consent, and deeper project stages can be added after this review checkpoint.
-                </p>
-              </div>
-
-              <div>
-                <div class="card-number">3</div>
-                <h3>Production Readiness</h3>
-                <p class="card-copy">
-                  This review step confirms the family branch is mapped correctly before the next production stage.
-                </p>
-              </div>
+          <div class="footer-card">
+            <div class="footer-bottom">
+              <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
             </div>
           </div>
         </div>
-      </section>
-    </main>
+      </footer>
+    </div>
 
-    <footer class="footer">
-      <div class="container">
-        <div class="footer-card">
-          <div class="footer-bottom">
-            <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
-          </div>
-        </div>
-      </div>
-    </footer>
-  </div>
-
-  <script src="config.js"></script>
-  <script src="app.js"></script>
-  <script src="auth.js"></script>
-</body>
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+    <script src="auth.js"></script>
+  </body>
 </html>

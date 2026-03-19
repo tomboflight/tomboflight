@@ -41,6 +41,9 @@ from app.routes.tree import router as tree_router
 from app.routes.users import router as users_router
 from app.routes.verification_records import router as verification_records_router
 
+# ✅ Stripe Webhooks router
+from app.routes.stripe_webhooks import router as stripe_webhooks_router
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -87,6 +90,9 @@ app.include_router(relationships_router)
 app.include_router(db_bootstrap_router)
 app.include_router(graph_integrity_router)
 app.include_router(orders_router)
+
+# ✅ Stripe Webhooks (THIS makes it show in Swagger)
+app.include_router(stripe_webhooks_router)
 
 # ----------------------------
 # Identity System
@@ -138,71 +144,13 @@ def root():
             "/auth/login",
             "/auth/me",
             "/intake",
-
-            # Intake Submissions
             "/intake-submissions",
             "/intake-submissions/my-latest",
             "/intake-submissions/my-list?limit=10",
-
-            "/projects",
-            "/families",
-            "/families/{family_id}/graph",
-            "/users",
-            "/family-members",
-            "/family-members-index",
-            "/lineage-nodes",
-            "/tree/{family_id}",
-            "/tree/{family_id}/verified",
-            "/tree/{family_id}/narrative",
-            "/tree/{family_id}/private",
-            "/family-networks",
-            "/households",
-            "/household-links",
-            "/relationships",
-            "/relationships/family/{family_id}",
-            "/relationships/member/{member_id}",
-            "/relationships/{relationship_id}",
-            "/db-bootstrap/",
-            "/graph-integrity/{family_id}",
-
-            # Identity
-            "/canonical-persons",
-            "/match-candidates",
-            "/match-generation/preview",
-            "/match-generation/scan",
-            "/identity-links",
-            "/identity-anchor/create",
-            "/identity-anchor/{person_id}",
-
-            # Records
-            "/verification-records",
-            "/narrative-records",
-            "/link-requests",
-
-            # Intelligence / lineage
-            "/consistency/report",
-            "/lineage/{family_id}",
-            "/lineage-proof",
-            "/lineage-certificate/{family_id}",
-            "/issued-certificates/issue/{family_id}",
-            "/issued-certificates",
-            "/issued-certificates/by-certificate-id/{certificate_id}",
-            "/issued-certificates/{record_id}",
-            "/certificate-versions/family/{family_id}",
-            "/certificate-versions/family/{family_id}/latest",
-            "/certificate-versions/ensure-indexes",
-            "/lineage-query/ancestors/{member_id}",
-            "/lineage-query/descendants/{member_id}",
-            "/lineage-query/tree/{member_id}",
-            "/lineage-query/family-graph/{family_id}",
-            "/lineage-query/neighbors/{member_id}",
-
-            # Orders
+            "/webhooks/stripe",
             "/orders/record-checkout",
             "/orders/my-orders",
             "/orders/health",
-
-            # Audit + docs
             "/audit-logs",
             "/docs",
         ],
