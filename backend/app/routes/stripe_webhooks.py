@@ -8,21 +8,28 @@ Env vars required (Render + local .env):
   STRIPE_SECRET_KEY=sk_live_... (or sk_test_...)
   STRIPE_WEBHOOK_SECRET=whsec_...
 
-Notes:
-- Verifies Stripe signature.
-- ACKs valid events.
-- Next step: connect checkout.session.completed to your Orders pipeline.
+Behavior:
+- Verifies Stripe signature
+- Saves the Stripe event (idempotent) into stripe_events
+- Creates/updates an Order in MongoDB for:
+    - checkout.session.completed
+    - payment_intent.succeeded (backup)
 """
 
 import os
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 import stripe
 from fastapi import APIRouter, HTTPException, Request, status
 
+from app.database import get_database
+
+# ✅ This MUST exist in app/services/order_service.py
+from app.services.order_service import upsert_order_from_stripe_event
+
 try:
-    # Preferred import (helps editors/type-checkers)
-    from stripe.error import SignatureVerificationError # type: ignore
+    from stripe.error import SignatureVerificationError  # type: ignore
 except Exception:  # pragma: no cover
     SignatureVerificationError = Exception  # type: ignore
 
@@ -48,10 +55,10 @@ async def stripe_webhook(request: Request) -> Dict[str, Any]:
             detail="Missing Stripe-Signature header",
         )
 
-    # Stripe config (API key not needed just to verify signature, but we set it for later usage)
     stripe.api_key = _get_env("STRIPE_SECRET_KEY")
     endpoint_secret = _get_env("STRIPE_WEBHOOK_SECRET")
 
+    # Verify signature + parse event
     try:
         event = stripe.Webhook.construct_event(
             payload=payload_bytes,
@@ -65,7 +72,49 @@ async def stripe_webhook(request: Request) -> Dict[str, Any]:
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Webhook error: {str(e)}")
 
-    event_type = event.get("type", "unknown")
+    db = get_database()
+    events_col = db.get_collection("stripe_events")
 
-    # For now: ACK everything valid
-    return {"received": True, "type": event_type}
+    event_id = event.get("id")
+    event_type = event.get("type", "unknown")
+    now = datetime.now(timezone.utc)
+
+    # Idempotent event storage (prevents duplicates on retries/resends)
+    if event_id:
+        existing = events_col.find_one({"event_id": event_id})
+        if not existing:
+            events_col.insert_one(
+                {
+                    "event_id": event_id,
+                    "type": event_type,
+                    "livemode": bool(event.get("livemode", False)),
+                    "created": event.get("created"),  # unix timestamp from Stripe
+                    "received_at": now,
+                    "raw": event,  # keep full event for audit/debug
+                }
+            )
+
+    # === Turn Stripe events into Orders ===
+    order_result: Dict[str, Any] = {}
+    order_upserted = False
+
+    if event_type in {"checkout.session.completed", "payment_intent.succeeded"}:
+        try:
+            order_result = upsert_order_from_stripe_event(event)
+            order_upserted = True
+        except Exception as e:
+            # IMPORTANT: Stripe expects a 2xx ACK for valid webhooks.
+            # We log failure but still ACK so Stripe doesn't keep retrying forever.
+            events_col.update_one(
+                {"event_id": event_id} if event_id else {"_id": None},
+                {"$set": {"order_upsert_error": str(e), "order_upsert_failed_at": now}},
+                upsert=bool(event_id),
+            )
+
+    return {
+        "received": True,
+        "type": event_type,
+        "order_upserted": order_upserted,
+        "order_id": order_result.get("order_id"),
+        "order_meta": order_result,
+    }
