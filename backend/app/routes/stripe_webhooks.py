@@ -11,7 +11,7 @@ Env vars required (Render + local .env):
 Behavior:
 - Verifies Stripe signature
 - Saves the Stripe event (idempotent) into stripe_events
-- Creates/updates an Order in MongoDB for:
+- Creates an Order (idempotent) when possible for:
     - checkout.session.completed
     - payment_intent.succeeded (backup)
 """
@@ -24,8 +24,6 @@ import stripe
 from fastapi import APIRouter, HTTPException, Request, status
 
 from app.database import get_database
-
-# ✅ This MUST exist in app/services/order_service.py
 from app.services.order_service import upsert_order_from_stripe_event
 
 try:
@@ -73,13 +71,13 @@ async def stripe_webhook(request: Request) -> Dict[str, Any]:
         raise HTTPException(status_code=400, detail=f"Webhook error: {str(e)}")
 
     db = get_database()
-    events_col = db.get_collection("stripe_events")
+    events_col = db["stripe_events"]
 
     event_id = event.get("id")
     event_type = event.get("type", "unknown")
     now = datetime.now(timezone.utc)
 
-    # Idempotent event storage (prevents duplicates on retries/resends)
+    # Idempotent event storage
     if event_id:
         existing = events_col.find_one({"event_id": event_id})
         if not existing:
@@ -88,33 +86,23 @@ async def stripe_webhook(request: Request) -> Dict[str, Any]:
                     "event_id": event_id,
                     "type": event_type,
                     "livemode": bool(event.get("livemode", False)),
-                    "created": event.get("created"),  # unix timestamp from Stripe
+                    "created": event.get("created"),
                     "received_at": now,
-                    "raw": event,  # keep full event for audit/debug
+                    "raw": event,
                 }
             )
 
-    # === Turn Stripe events into Orders ===
-    order_result: Dict[str, Any] = {}
-    order_upserted = False
+    order_result: Dict[str, Any] = {"order_id": None}
 
     if event_type in {"checkout.session.completed", "payment_intent.succeeded"}:
         try:
             order_result = upsert_order_from_stripe_event(event)
-            order_upserted = True
         except Exception as e:
-            # IMPORTANT: Stripe expects a 2xx ACK for valid webhooks.
-            # We log failure but still ACK so Stripe doesn't keep retrying forever.
-            events_col.update_one(
-                {"event_id": event_id} if event_id else {"_id": None},
-                {"$set": {"order_upsert_error": str(e), "order_upsert_failed_at": now}},
-                upsert=bool(event_id),
-            )
+            # IMPORTANT: Still ACK Stripe to avoid retries.
+            order_result = {"order_id": None, "error": str(e), "type": event_type}
 
     return {
         "received": True,
         "type": event_type,
-        "order_upserted": order_upserted,
-        "order_id": order_result.get("order_id"),
-        "order_meta": order_result,
+        "order": order_result,
     }
