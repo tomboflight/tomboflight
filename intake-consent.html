@@ -1,153 +1,187 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Consent | Tomb of Light</title>
-  <meta
-    name="description"
-    content="Consent and privacy settings for Tomb of Light onboarding."
-  />
-  <link rel="stylesheet" href="styles.css" />
-</head>
-<body>
-  <div class="page-wrap">
-    <header class="site-header">
-      <div class="container site-header-inner">
-        <a class="brand" href="index.html" aria-label="Tomb of Light home">
-          <span>Tomb of Light<span class="brand-symbol">™</span></span>
-        </a>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Consent | Tomb of Light</title>
+    <meta
+      name="description"
+      content="Consent and privacy preferences for Tomb of Light onboarding."
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="page-wrap">
+      <header class="site-header">
+        <div class="container site-header-inner">
+          <a class="brand" href="index.html" aria-label="Tomb of Light home">
+            <span>Tomb of Light<span class="brand-symbol">™</span></span>
+          </a>
 
-        <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
-          <a href="dashboard.html">Dashboard</a>
-          <a href="intake-welcome.html">Intake Welcome</a>
-          <a href="intake-household.html">Household Setup</a>
-          <a href="intake-family-map.html">Family Map</a>
-          <a href="intake-review.html">Review</a>
-          <a href="intake-uploads.html">Uploads</a>
-        </nav>
+          <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
+            <a href="dashboard.html">Dashboard</a>
+            <a href="intake-welcome.html">Intake Welcome</a>
+            <a href="intake-household.html">Household Setup</a>
+            <a href="intake-family-map.html">Family Map</a>
+            <a href="intake-review.html">Review</a>
+            <a href="intake-uploads.html">Uploads</a>
+          </nav>
 
-        <div class="header-actions">
-          <a class="btn btn-secondary" href="intake-uploads.html">Back to Uploads</a>
+          <div class="header-actions">
+            <a class="btn btn-secondary" href="intake-uploads.html"
+              >Back to Uploads</a
+            >
+          </div>
         </div>
-      </div>
-    </header>
+      </header>
 
-    <main data-intake-consent>
-      <section class="page-hero">
+      <main data-intake-consent>
+        <section class="page-hero">
+          <div class="container">
+            <div class="page-hero-panel">
+              <span class="eyebrow">Step 5 of 5</span>
+              <h1>Consent</h1>
+              <p class="card-copy">
+                Confirm consent and set visibility preferences for how your
+                lineage record is stored and accessed.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section class="page-sections">
+          <div class="container form-shell">
+            <div class="form-panel">
+              <span class="eyebrow">Consent</span>
+
+              <form class="form-grid" data-intake-consent-form novalidate>
+                <label
+                  style="display: flex; gap: 0.75rem; align-items: flex-start"
+                >
+                  <input
+                    type="checkbox"
+                    name="consent_process"
+                    required
+                    style="margin-top: 0.35rem"
+                  />
+                  <span>
+                    I authorize Tomb of Light to <strong>process</strong> the
+                    information submitted for the purpose of building my digital
+                    lineage record.
+                  </span>
+                </label>
+
+                <label
+                  style="display: flex; gap: 0.75rem; align-items: flex-start"
+                >
+                  <input
+                    type="checkbox"
+                    name="consent_store"
+                    required
+                    style="margin-top: 0.35rem"
+                  />
+                  <span>
+                    I authorize Tomb of Light to securely
+                    <strong>store</strong> the submitted lineage data and
+                    uploaded assets according to the Privacy Policy and Terms of
+                    Service.
+                  </span>
+                </label>
+
+                <label>
+                  Visibility Preference
+                  <select name="visibility_preference">
+                    <option value="private">Private (recommended)</option>
+                    <option value="family">Family-only</option>
+                    <option value="public">
+                      Public (certificate/shareable only)
+                    </option>
+                  </select>
+                </label>
+
+                <label>
+                  Notes (optional)
+                  <textarea
+                    name="consent_notes"
+                    rows="4"
+                    placeholder="Optional notes about consent scope, privacy preferences, or special restrictions."
+                  ></textarea>
+                </label>
+
+                <div
+                  class="helper"
+                  data-intake-consent-form-status
+                  aria-live="polite"
+                  style="display: none"
+                ></div>
+
+                <div class="inline-actions" style="margin-top: 1.5rem">
+                  <button
+                    class="btn btn-primary"
+                    type="submit"
+                    data-intake-consent-submit-btn
+                  >
+                    Save Consent
+                  </button>
+                  <a class="btn btn-secondary" href="intake-review.html"
+                    >Go to Review</a
+                  >
+                </div>
+              </form>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Why This Step Matters</span>
+              <div class="grid-3">
+                <div>
+                  <div class="card-number">1</div>
+                  <h3>Privacy</h3>
+                  <p class="card-copy">
+                    Sets visibility rules for records and certificates.
+                  </p>
+                </div>
+                <div>
+                  <div class="card-number">2</div>
+                  <h3>Compliance</h3>
+                  <p class="card-copy">
+                    Confirms consent for processing and storage.
+                  </p>
+                </div>
+                <div>
+                  <div class="card-number">3</div>
+                  <h3>Access Control</h3>
+                  <p class="card-copy">
+                    Controls who can view what as your legacy expands.
+                  </p>
+                </div>
+              </div>
+
+              <div class="inline-actions" style="margin-top: 1.25rem">
+                <a class="btn btn-secondary" href="intake-welcome.html"
+                  >Back to Welcome</a
+                >
+                <a class="btn btn-secondary" href="dashboard.html"
+                  >Return to Dashboard</a
+                >
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer">
         <div class="container">
-          <div class="page-hero-panel">
-            <span class="eyebrow">Step 5 of 5</span>
-            <h1>Consent &amp; Privacy</h1>
-            <p class="card-copy">
-              Confirm permissions so Tomb of Light can build and preserve your lineage responsibly.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <section class="page-sections">
-        <div class="container form-shell">
-          <div class="form-panel">
-            <span class="eyebrow">Consent</span>
-
-            <form class="form-grid" data-intake-consent-form novalidate>
-              <label style="display:flex; gap:0.75rem; align-items:flex-start;">
-                <input type="checkbox" name="consent_to_process" required style="margin-top:0.35rem;" />
-                <span>
-                  I authorize Tomb of Light to process the information submitted for the purpose of building my
-                  digital lineage record.
-                </span>
-              </label>
-
-              <label style="display:flex; gap:0.75rem; align-items:flex-start;">
-                <input type="checkbox" name="consent_to_store" required style="margin-top:0.35rem;" />
-                <span>
-                  I authorize Tomb of Light to securely store the submitted lineage data and uploaded assets
-                  according to the Privacy Policy and Terms of Service.
-                </span>
-              </label>
-
-              <label>
-                Visibility Preference
-                <select name="visibility_preference" required>
-                  <option value="">Select one</option>
-                  <option value="private">Private (recommended)</option>
-                  <option value="family_only">Family-only access</option>
-                  <option value="public_certificate_only">Public certificate only (no private data)</option>
-                </select>
-              </label>
-
-              <label>
-                Notes (optional)
-                <textarea
-                  name="consent_notes"
-                  rows="4"
-                  placeholder="Optional notes about consent scope, privacy preferences, or special restrictions."
-                ></textarea>
-              </label>
-
-              <div
-                class="helper"
-                data-intake-consent-form-status
-                aria-live="polite"
-                style="display:none;"
-              ></div>
-
-              <div class="inline-actions" style="margin-top: 1.5rem;">
-                <button class="btn btn-primary" type="submit" data-intake-consent-submit-btn>
-                  Save Consent
-                </button>
-                <a class="btn btn-secondary" href="intake-review.html">
-                  Go to Review
-                </a>
-              </div>
-            </form>
-          </div>
-
-          <div class="form-panel">
-            <span class="eyebrow">Why This Step Matters</span>
-            <div class="grid-3">
-              <div>
-                <div class="card-number">1</div>
-                <h3>Privacy</h3>
-                <p class="card-copy">Sets visibility rules for records and certificates.</p>
-              </div>
-              <div>
-                <div class="card-number">2</div>
-                <h3>Compliance</h3>
-                <p class="card-copy">Captures consent needed to process and store sensitive lineage data.</p>
-              </div>
-              <div>
-                <div class="card-number">3</div>
-                <h3>Trust</h3>
-                <p class="card-copy">Confirms the platform can preserve your legacy responsibly.</p>
-              </div>
-            </div>
-
-            <div class="inline-actions" style="margin-top: 1.25rem;">
-              <a class="btn btn-secondary" href="intake-welcome.html">Back to Welcome</a>
-              <a class="btn btn-secondary" href="dashboard.html">Return to Dashboard</a>
+          <div class="footer-card">
+            <div class="footer-bottom">
+              <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
             </div>
           </div>
-
         </div>
-      </section>
-    </main>
+      </footer>
+    </div>
 
-    <footer class="footer">
-      <div class="container">
-        <div class="footer-card">
-          <div class="footer-bottom">
-            <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
-          </div>
-        </div>
-      </div>
-    </footer>
-  </div>
-
-  <script src="config.js"></script>
-  <script src="app.js"></script>
-  <script src="auth.js"></script>
-</body>
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+    <script src="auth.js"></script>
+  </body>
 </html>
