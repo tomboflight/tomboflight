@@ -58,7 +58,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins_list,
@@ -67,8 +66,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
+# ----------------------------
 # Core Routes
+# ----------------------------
 app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(intake_router)
@@ -88,21 +88,29 @@ app.include_router(db_bootstrap_router)
 app.include_router(graph_integrity_router)
 app.include_router(orders_router)
 
+# ----------------------------
 # Identity System
+# ----------------------------
 app.include_router(canonical_persons_router)
 app.include_router(match_candidates_router)
 app.include_router(identity_links_router)
 app.include_router(match_generation_router)
 app.include_router(identity_anchor_router)
 
+# ----------------------------
 # Records
+# ----------------------------
 app.include_router(verification_records_router)
 app.include_router(narrative_records_router)
 
+# ----------------------------
 # Linking + Requests
+# ----------------------------
 app.include_router(link_requests_router)
 
+# ----------------------------
 # Intelligence
+# ----------------------------
 app.include_router(consistency_router)
 app.include_router(lineage_graph_router)
 app.include_router(lineage_proof_router)
@@ -111,7 +119,9 @@ app.include_router(issued_certificates_router)
 app.include_router(certificate_versions_router)
 app.include_router(lineage_query_router)
 
+# ----------------------------
 # Audit
+# ----------------------------
 app.include_router(audit_logs_router)
 
 
@@ -128,9 +138,12 @@ def root():
             "/auth/login",
             "/auth/me",
             "/intake",
+
+            # Intake Submissions
             "/intake-submissions",
             "/intake-submissions/my-latest",
-            "/intake-submissions/{submission_id}",
+            "/intake-submissions/my-list?limit=10",
+
             "/projects",
             "/families",
             "/families/{family_id}/graph",
@@ -151,6 +164,8 @@ def root():
             "/relationships/{relationship_id}",
             "/db-bootstrap/",
             "/graph-integrity/{family_id}",
+
+            # Identity
             "/canonical-persons",
             "/match-candidates",
             "/match-generation/preview",
@@ -158,9 +173,13 @@ def root():
             "/identity-links",
             "/identity-anchor/create",
             "/identity-anchor/{person_id}",
+
+            # Records
             "/verification-records",
             "/narrative-records",
             "/link-requests",
+
+            # Intelligence / lineage
             "/consistency/report",
             "/lineage/{family_id}",
             "/lineage-proof",
@@ -177,9 +196,13 @@ def root():
             "/lineage-query/tree/{member_id}",
             "/lineage-query/family-graph/{family_id}",
             "/lineage-query/neighbors/{member_id}",
+
+            # Orders
             "/orders/record-checkout",
             "/orders/my-orders",
             "/orders/health",
+
+            # Audit + docs
             "/audit-logs",
             "/docs",
         ],

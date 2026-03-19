@@ -1,98 +1,117 @@
-from datetime import UTC, datetime
-from typing import Any
+# app/services/intake_submission_service.py
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Optional, Any
 
 from bson import ObjectId
+from pymongo.collection import Collection
 
 from app.database import get_database
 
-COLLECTION_NAME = "intake_submissions"
+COLLECTION = "intake_submissions"
 
 
-def _require_db():
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _oid(value: str) -> ObjectId:
+    return ObjectId(value)
+
+
+def _serialize(doc: dict[str, Any]) -> dict[str, Any]:
+    """Mongo -> JSON-safe"""
+    out = dict(doc)
+    out["id"] = str(out.pop("_id"))
+    # normalize common ids
+    if "user_id" in out and isinstance(out["user_id"], ObjectId):
+        out["user_id"] = str(out["user_id"])
+    return out
+
+
+def create_intake_submission(
+    *,
+    user_id: str,
+    email: str,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    """
+    Create a submitted intake record.
+
+    payload expected keys:
+      - package_slug (str)
+      - package_name (str)
+      - household (dict)
+      - family_map (dict)
+      - review (dict)
+      - uploads (dict) OPTIONAL
+      - consent (dict) OPTIONAL
+    """
     db = get_database()
-    if db is None:
-        raise RuntimeError("Database is not connected.")
-    return db
+    col: Collection = db[COLLECTION]
 
+    now = _now()
 
-def serialize_intake_submission(record: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "id": str(record["_id"]),
-        "user_id": str(record["user_id"]),
-        "email": record.get("email", ""),
-        "package_slug": record.get("package_slug", ""),
-        "package_name": record.get("package_name", ""),
-        "status": record.get("status", "submitted"),
-        "household": record.get("household", {}),
-        "family_map": record.get("family_map", {}),
-        "review": record.get("review", {}),
-        "created_at": record.get("created_at"),
-        "updated_at": record.get("updated_at"),
-    }
-
-
-def create_intake_submission(*, current_user: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
-    db = _require_db()
-    now = datetime.now(UTC)
-
-    user_id = current_user.get("_id")
-    if user_id is None:
-        raise RuntimeError("Current user is missing _id.")
-
-    document = {
-        "user_id": str(user_id),
-        "email": current_user.get("email", ""),
-        "package_slug": payload.get("package_slug", ""),
-        "package_name": payload.get("package_name", ""),
+    record: dict[str, Any] = {
+        "user_id": _oid(user_id),
+        "email": email,
+        "package_slug": payload["package_slug"],
+        "package_name": payload["package_name"],
         "status": "submitted",
-        "household": payload.get("household", {}),
-        "family_map": payload.get("family_map", {}),
-        "review": payload.get("review", {}),
+        "household": payload["household"],
+        "family_map": payload["family_map"],
+        # ✅ NEW: optional steps stored if provided
+        "uploads": payload.get("uploads", {}) or {},
+        "consent": payload.get("consent", {}) or {},
+        "review": payload["review"],
         "created_at": now,
         "updated_at": now,
     }
 
-    result = db[COLLECTION_NAME].insert_one(document)
-    created = db[COLLECTION_NAME].find_one({"_id": result.inserted_id})
-    if created is None:
-        raise RuntimeError("Failed to create intake submission.")
-    return serialize_intake_submission(created)
+    result = col.insert_one(record)
+
+    saved = col.find_one({"_id": result.inserted_id})
+    if not saved:
+        # This should basically never happen, but it makes type-checkers happy
+        # and gives a real error if Mongo ever fails to return the record.
+        raise RuntimeError("Failed to fetch saved intake submission after insert.")
+
+    return _serialize(saved)
 
 
-def get_latest_intake_submission_for_user(user_id: str) -> dict[str, Any] | None:
-    db = _require_db()
+def get_latest_for_user(user_id: str) -> Optional[dict[str, Any]]:
+    db = get_database()
+    col: Collection = db[COLLECTION]
 
-    record = db[COLLECTION_NAME].find_one(
-        {"user_id": user_id},
+    doc = col.find_one(
+        {"user_id": _oid(user_id)},
         sort=[("created_at", -1)],
     )
-    if record is None:
-        return None
-    return serialize_intake_submission(record)
+    return _serialize(doc) if doc else None
 
 
-def list_intake_submissions_for_user(user_id: str, limit: int = 25) -> list[dict[str, Any]]:
-    db = _require_db()
+def list_for_user(user_id: str, limit: int = 10) -> list[dict[str, Any]]:
+    db = get_database()
+    col: Collection = db[COLLECTION]
 
     cursor = (
-        db[COLLECTION_NAME]
-        .find({"user_id": user_id})
+        col.find({"user_id": _oid(user_id)})
         .sort("created_at", -1)
-        .limit(max(1, min(limit, 100)))
+        .limit(int(limit))
     )
+    return [_serialize(d) for d in cursor]
 
-    return [serialize_intake_submission(doc) for doc in cursor]
 
+def get_by_id(submission_id: str) -> Optional[dict[str, Any]]:
+    db = get_database()
+    col: Collection = db[COLLECTION]
 
-def get_intake_submission_by_id_for_user(*, submission_id: str, user_id: str) -> dict[str, Any] | None:
-    db = _require_db()
-
-    if not ObjectId.is_valid(submission_id):
+    try:
+        oid = _oid(submission_id)
+    except Exception:
         return None
 
-    record = db[COLLECTION_NAME].find_one(
-        {"_id": ObjectId(submission_id), "user_id": user_id}
-    )
-    if record is None:
-        return None
-    return serialize_intake_submission(record)
+    doc = col.find_one({"_id": oid})
+    return _serialize(doc) if doc else None
