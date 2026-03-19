@@ -83,12 +83,6 @@ body {
   background: transparent;
 }
 
-/* SAFETY TEXT COLOR ENFORCEMENT */
-.viewer-preview-stage,
-.viewer-preview-stage * {
-  color: var(--text-main);
-}
-
 /* GOLD ACCENTS (OPTIONAL BUT MATCHES BRAND) */
 .viewer-preview-stage .eyebrow,
 .viewer-preview-stage .meta,
