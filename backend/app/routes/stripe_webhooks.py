@@ -8,21 +8,26 @@ Env vars required (Render + local .env):
   STRIPE_SECRET_KEY=sk_live_... (or sk_test_...)
   STRIPE_WEBHOOK_SECRET=whsec_...
 
-Notes:
-- Verifies Stripe signature.
-- ACKs valid events.
-- Next step: connect checkout.session.completed to your Orders pipeline.
+Behavior:
+- Verifies Stripe signature
+- Saves the Stripe event (idempotent) into stripe_events
+- Creates an Order (idempotent) when possible for:
+    - checkout.session.completed
+    - payment_intent.succeeded (backup)
 """
 
 import os
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 import stripe
 from fastapi import APIRouter, HTTPException, Request, status
 
+from app.database import get_database
+from app.services.order_service import upsert_order_from_stripe_event
+
 try:
-    # Preferred import (helps editors/type-checkers)
-    from stripe.error import SignatureVerificationError # type: ignore
+    from stripe.error import SignatureVerificationError  # type: ignore
 except Exception:  # pragma: no cover
     SignatureVerificationError = Exception  # type: ignore
 
@@ -48,10 +53,10 @@ async def stripe_webhook(request: Request) -> Dict[str, Any]:
             detail="Missing Stripe-Signature header",
         )
 
-    # Stripe config (API key not needed just to verify signature, but we set it for later usage)
     stripe.api_key = _get_env("STRIPE_SECRET_KEY")
     endpoint_secret = _get_env("STRIPE_WEBHOOK_SECRET")
 
+    # Verify signature + parse event
     try:
         event = stripe.Webhook.construct_event(
             payload=payload_bytes,
@@ -65,7 +70,39 @@ async def stripe_webhook(request: Request) -> Dict[str, Any]:
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Webhook error: {str(e)}")
 
-    event_type = event.get("type", "unknown")
+    db = get_database()
+    events_col = db["stripe_events"]
 
-    # For now: ACK everything valid
-    return {"received": True, "type": event_type}
+    event_id = event.get("id")
+    event_type = event.get("type", "unknown")
+    now = datetime.now(timezone.utc)
+
+    # Idempotent event storage
+    if event_id:
+        existing = events_col.find_one({"event_id": event_id})
+        if not existing:
+            events_col.insert_one(
+                {
+                    "event_id": event_id,
+                    "type": event_type,
+                    "livemode": bool(event.get("livemode", False)),
+                    "created": event.get("created"),
+                    "received_at": now,
+                    "raw": event,
+                }
+            )
+
+    order_result: Dict[str, Any] = {"order_id": None}
+
+    if event_type in {"checkout.session.completed", "payment_intent.succeeded"}:
+        try:
+            order_result = upsert_order_from_stripe_event(event)
+        except Exception as e:
+            # IMPORTANT: Still ACK Stripe to avoid retries.
+            order_result = {"order_id": None, "error": str(e), "type": event_type}
+
+    return {
+        "received": True,
+        "type": event_type,
+        "order": order_result,
+    }
