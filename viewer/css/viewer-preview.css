@@ -19,6 +19,7 @@ body {
   height: 100%;
   background: var(--bg-dark);
   color: var(--text-main);
+  overflow: hidden;
 }
 
 .viewer-preview-body {
@@ -33,8 +34,10 @@ body {
   height: 100vh;
   padding: 0;
   background: var(--bg-dark);
+  overflow: hidden;
 }
 
+/* The frame container */
 .viewer-preview-stage {
   width: 100%;
   height: 100%;
@@ -43,9 +46,13 @@ body {
   border: 1px solid var(--border-soft);
   background: linear-gradient(180deg, rgba(10, 16, 28, 0.95), rgba(6, 10, 18, 0.98));
   position: relative;
+
+  /* Prevent scroll chaining + touch gestures from bubbling */
+  overscroll-behavior: contain;
+  touch-action: none;
 }
 
-/* overlay BEHIND the iframe */
+/* overlay (visual only) */
 .viewer-preview-stage::before {
   content: "";
   position: absolute;
@@ -55,7 +62,7 @@ body {
   z-index: 0;
 }
 
-/* iframe ABOVE the overlay */
+/* iframe above overlay */
 .viewer-preview-stage iframe {
   width: 100%;
   height: 100%;
@@ -64,4 +71,7 @@ body {
   position: relative;
   z-index: 1;
   background: transparent;
+
+  /* KEY: preview should not be clickable/scrollable */
+  pointer-events: none;
 }
