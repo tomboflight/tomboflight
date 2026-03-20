@@ -545,10 +545,6 @@ a {
     rgba(6, 10, 18, 0.92)
   );
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
-
-  /* ✅ PROTOTYPE SAFETY (added) */
-  color: var(--text);
-  background: #02050b;
 }
 
 .hero-demo-stage iframe {
@@ -557,10 +553,6 @@ a {
   border: 0;
   display: block;
   background: #02050b;
-
-  /* ✅ PROTOTYPE SAFETY (added) */
-  isolation: isolate;
-  transform: translateZ(0);
 }
 
 .hero-visual-main p {
