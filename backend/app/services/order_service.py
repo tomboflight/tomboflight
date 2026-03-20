@@ -1,9 +1,10 @@
 from datetime import UTC, datetime
-from typing import Any, cast, Optional
+from typing import Any, Optional, cast
 
 from bson import ObjectId
 from pymongo.collection import Collection
 from pymongo.database import Database
+from pymongo.errors import OperationFailure
 
 from app.database import get_database
 
@@ -69,23 +70,61 @@ def create_order_for_user(user: dict[str, Any], payload: Any) -> dict[str, Any]:
 
 def get_orders_for_user(user: dict[str, Any]) -> list[dict[str, Any]]:
     orders = _get_orders_collection()
-
-    docs = list(
-        orders.find({"user_id": ObjectId(user["_id"])}).sort("created_at", -1)
-    )
-
+    docs = list(orders.find({"user_id": ObjectId(user["_id"])}).sort("created_at", -1))
     return [_serialize_order(doc) for doc in docs]
 
 
+# ----------------------------
+# Indexes (safe + non-crashing)
+# ----------------------------
 def ensure_order_indexes() -> None:
+    """
+    Create indexes safely with explicit names and avoid index-name conflicts.
+
+    Your DB already has:
+      stripe_session_id_1 (unique + sparse)
+
+    If an index already exists, we skip it rather than crashing the app.
+    """
     orders = _get_orders_collection()
-    orders.create_index("user_id")
-    orders.create_index("email")
-    orders.create_index("package_slug")
-    orders.create_index("created_at")
-    # For webhook idempotency:
-    orders.create_index("stripe_session_id")
-    orders.create_index("stripe_payment_link_id")
+    existing = orders.index_information()
+
+    def _ensure_index(
+        keys: list[tuple[str, int]],
+        *,
+        name: str,
+        unique: bool = False,
+        sparse: bool = False,
+    ) -> None:
+        # If the index name already exists, do not attempt to recreate it.
+        if name in existing:
+            return
+
+        try:
+            orders.create_index(keys, name=name, unique=unique, sparse=sparse)
+        except OperationFailure:
+            # If something else created it between reads, ignore.
+            return
+
+    _ensure_index([("user_id", 1)], name="user_id_1")
+    _ensure_index([("email", 1)], name="email_1")
+    _ensure_index([("package_slug", 1)], name="package_slug_1")
+    _ensure_index([("created_at", -1)], name="created_at_-1")
+
+    # Webhook idempotency / Stripe linkage
+    # Match the DB's existing index behavior: UNIQUE + SPARSE
+    _ensure_index(
+        [("stripe_session_id", 1)],
+        name="stripe_session_id_1",
+        unique=True,
+        sparse=True,
+    )
+    _ensure_index(
+        [("stripe_payment_link_id", 1)],
+        name="stripe_payment_link_id_1",
+        unique=False,
+        sparse=True,
+    )
 
 
 # ----------------------------
@@ -102,7 +141,7 @@ def _get_email_from_event(event: dict[str, Any]) -> Optional[str]:
     if not email:
         email = data.get("customer_email")
 
-    # payment_intent.succeeded (rarely used here, but support it)
+    # payment_intent.succeeded fallback (rare)
     if not email:
         charges = (((data.get("charges") or {}).get("data")) or [])
         if charges:
@@ -131,8 +170,10 @@ def _get_package_fields_from_event(event: dict[str, Any]) -> tuple[str, str, str
 def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
     """
     Creates an Order IF we can match Stripe's email to an existing user record.
-    Idempotent by stripe_session_id (for checkout.session.completed).
-    Returns: {"order_id": "..."} or {"order_id": None, "reason": "..."}
+    Idempotent by stripe_session_id for checkout.session.completed.
+
+    Returns:
+      {"order_id": "...", ...} or {"order_id": None, "reason": "..."}
     """
     event_type = event.get("type", "")
     data = (event.get("data") or {}).get("object") or {}
@@ -144,8 +185,12 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
     users = _get_users_collection()
     user = users.find_one({"email": email})
     if not user:
-        # Don’t create dangling orders yet.
-        return {"order_id": None, "reason": "no_matching_user", "email": email, "type": event_type}
+        return {
+            "order_id": None,
+            "reason": "no_matching_user",
+            "email": email,
+            "type": event_type,
+        }
 
     orders = _get_orders_collection()
 
@@ -156,7 +201,7 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
         stripe_session_id = data.get("id")
         stripe_payment_link_id = data.get("payment_link")
     elif event_type == "payment_intent.succeeded":
-        # This is a backup event; can’t always map cleanly to a session
+        # backup event; may not map cleanly to a session
         stripe_session_id = data.get("id")
         stripe_payment_link_id = data.get("payment_link")
 
