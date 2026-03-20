@@ -163,10 +163,12 @@ a { color: inherit; text-decoration: none; }
     linear-gradient(180deg, rgba(3, 7, 15, 0.96), rgba(2, 5, 11, 1));
   aspect-ratio: 16 / 10;
   min-height: 0;
+
   display: flex;
   align-items: center;
   justify-content: center;
-  touch-action: none; /* enables custom pinch */
+
+  touch-action: none; /* enables custom wheel/pinch handlers */
 }
 
 .viewer-stage-glow {
@@ -180,47 +182,45 @@ a { color: inherit; text-decoration: none; }
   pointer-events: none;
 }
 
+/* ✅ NEW: add padding + base scale control so portraits aren't “too zoomed in” */
 .slideshow {
   position: relative;
   z-index: 1;
   width: 100%;
   height: 100%;
   overflow: hidden;
+
   display: flex;
   align-items: center;
   justify-content: center;
+
+  padding: 18px;          /* creates breathing room */
+  --baseScale: 0.92;      /* default “zoomed out” look */
 }
 
 .slideshow img {
   width: 100%;
   height: 100%;
+  max-width: 100%;
+  max-height: 100%;
   object-fit: contain;
   object-position: center;
+
+  /* ✅ Zoom logic: baseScale × zoomScale */
+  --zoomScale: 1;
+  transform: scale(calc(var(--baseScale) * var(--zoomScale)));
   transform-origin: center;
+
   will-change: transform, opacity;
-  transition: opacity 0.25s ease;
+  transition: transform 220ms ease, opacity 0.25s ease;
+
   user-select: none;
   -webkit-user-drag: none;
 }
 
-/* Eye hint rings: only show when holding C */
-.eye-hint {
-  position: absolute;
-  width: 42px;
-  height: 42px;
-  border-radius: 999px;
-  border: 1px solid rgba(214, 176, 102, 0.35);
-  box-shadow: 0 0 0 4px rgba(214, 176, 102, 0.08);
-  opacity: 0;
-  pointer-events: none;
-  transform: translate(-50%, -50%);
-  z-index: 4;
-}
-
-.show-eyes .eye-hint { opacity: 0.85; }
-
-/* If you want: place these using JS later. For now, hide if not used */
-.eye-hint { display: none; }
+/* Zoom classes now only adjust zoomScale (no stuck transforms) */
+.zoom-in  { --zoomScale: 1.08; }
+.zoom-out { --zoomScale: 0.68; }
 
 .viewer-line {
   width: 100%;
@@ -279,7 +279,7 @@ a { color: inherit; text-decoration: none; }
   pointer-events: none;
 }
 
-/* Branch options */
+/* FIX: display:flex so gap/wrap/justify work */
 .branch-options {
   position: absolute;
   bottom: 34px;
@@ -316,12 +316,22 @@ a { color: inherit; text-decoration: none; }
   letter-spacing: -0.02em;
 }
 
-/* EMBED MODE (homepage preview) — watch-only by default */
-.embed-mode .viewer-page { max-width: 100%; padding: 12px; }
+/* -----------------------
+   EMBED MODE (homepage preview) — WATCH ONLY
+   ----------------------- */
+.embed-mode .viewer-page {
+  max-width: 100%;
+  padding: 12px;
+}
+
+/* In preview we want the portrait slightly larger than full viewer */
+.embed-mode .slideshow { --baseScale: 0.98; padding: 12px; }
+
 .embed-mode #backLink { display: none !important; }
 .embed-mode #viewerHeader { display: none !important; }
 .embed-mode #sidePanel { display: none !important; }
 .embed-mode #controls { display: none !important; }
+
 .embed-mode .viewer-main { grid-template-columns: 1fr; }
 .embed-mode .viewer-stage-panel { padding: 14px; }
 .embed-mode .viewer-line { display: none; }
@@ -346,6 +356,9 @@ a { color: inherit; text-decoration: none; }
 
   .viewer-stage-top { flex-direction: column; align-items: flex-start; }
   .viewer-status { white-space: normal; }
+
+  .viewer-stage-shell,
+  .slideshow { aspect-ratio: 16 / 10; min-height: 0; height: auto; }
 
   .branch-options {
     bottom: 18px;
