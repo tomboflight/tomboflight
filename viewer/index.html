@@ -11,7 +11,6 @@
     <header class="viewer-header" id="viewerHeader">
       <div class="viewer-brand-wrap">
         <a href="../index.html" class="back-link" id="backLink">← Back to Tomb of Light</a>
-
         <div class="viewer-brand">
           Tomb of Light<span class="brand-symbol">™</span>
         </div>
@@ -27,28 +26,29 @@
       </div>
     </header>
 
-    <main class="viewer-main" id="viewerMain">
+    <main class="viewer-main">
       <section class="viewer-stage-panel">
         <div class="viewer-stage-top">
           <div>
-            <span class="panel-kicker">Lineage Viewer</span>
+            <span class="panel-kicker">Cinematic Viewer</span>
             <h2 id="viewerTitle">Malik Moreland</h2>
           </div>
 
           <div class="viewer-status" id="viewerStatus">Anchor Portrait</div>
         </div>
 
-        <div class="viewer-stage-shell" id="stageShell">
+        <div class="viewer-stage-shell" id="viewerStage">
           <div class="viewer-stage-glow"></div>
 
           <div class="slideshow" id="slideshow">
             <img id="viewerImage" src="images/malik.jpg" alt="Malik Moreland" />
-            <!-- Eye hint rings (optional visual cue) -->
-            <div class="eye-hint eye-left" id="eyeLeft" aria-hidden="true"></div>
-            <div class="eye-hint eye-right" id="eyeRight" aria-hidden="true"></div>
           </div>
 
           <div id="narrationDisplay" class="narration-text"></div>
+
+          <!-- optional eye hints (positioned by JS) -->
+          <div class="eye-hint" id="eyeHintLeft" aria-hidden="true"></div>
+          <div class="eye-hint" id="eyeHintRight" aria-hidden="true"></div>
 
           <div class="branch-options" id="branchOptions">
             <button type="button" onclick="selectBranch('julian')">Julian</button>
@@ -88,13 +88,19 @@
     </main>
   </div>
 
-  <!-- Embed mode: if URL has ?embed=1, add class (CSS handles hiding) -->
+  <!-- Embed mode -->
   <script>
     (function () {
       const params = new URLSearchParams(window.location.search);
       if (params.get("embed") === "1") document.body.classList.add("embed-mode");
     })();
   </script>
+
+  <!-- MediaPipe FaceMesh (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
 
   <script src="js/script.js"></script>
 </body>

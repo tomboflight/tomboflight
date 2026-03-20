@@ -1,4 +1,8 @@
+/* Tomb of Light Viewer — FaceMesh eye targeting + smooth zoom */
+
 const viewerImage = document.getElementById("viewerImage");
+const viewerStage = document.getElementById("viewerStage");
+const slideshow = document.getElementById("slideshow");
 const branchOptions = document.getElementById("branchOptions");
 const viewerTitle = document.getElementById("viewerTitle");
 const viewerStatus = document.getElementById("viewerStatus");
@@ -7,11 +11,12 @@ const currentDescription = document.getElementById("currentDescription");
 const narrationDisplay = document.getElementById("narrationDisplay");
 const narrationToggleBtn = document.getElementById("narrationToggleBtn");
 
-const stageShell = document.getElementById("stageShell");
-const slideshow = document.getElementById("slideshow");
-const eyeLeftEl = document.getElementById("eyeLeft");
-const eyeRightEl = document.getElementById("eyeRight");
+const eyeHintLeft = document.getElementById("eyeHintLeft");
+const eyeHintRight = document.getElementById("eyeHintRight");
 
+// ---------------------
+// State machine
+// ---------------------
 const states = {
   malik: {
     image: "images/malik.jpg",
@@ -19,10 +24,9 @@ const states = {
     status: "Anchor Portrait",
     node: "Malik Moreland",
     description: "Starting at the anchor portrait for the Genesis family line.",
-    narration:
-      "This is Malik Moreland, the anchor portrait of the Genesis family line. From here, the Moreland lineage unfolds across generations.",
-    // normalized eye centers (x,y) relative to image box
-    eyes: { left: [0.44, 0.40], right: [0.56, 0.40] }
+    narration: "This is Malik Moreland, the anchor portrait of the Genesis family line. From here, the Moreland lineage unfolds across generations.",
+    parents: "parents",
+    descendants: "malik_descendants"
   },
   parents: {
     image: "images/parents.jpg",
@@ -30,9 +34,10 @@ const states = {
     status: "Parent Structure",
     node: "Parent Layer",
     description: "Choose a family branch from the shared parent structure.",
-    narration:
-      "Elias and Clara Moreland represent the foundational parent structure. From this layer, three distinct family branches emerge.",
-    eyes: { left: [0.40, 0.38], right: [0.60, 0.38] }
+    narration: "Elias and Clara Moreland represent the foundational parent structure. From this layer, three distinct family branches emerge.",
+    parents: "malik",
+    descendants: "malik",
+    showBranches: true
   },
   malik_descendants: {
     image: "images/malik_descendants.jpg",
@@ -40,9 +45,9 @@ const states = {
     status: "Descendant Layer",
     node: "Malik Descendants",
     description: "Malik's line expands into the next generation.",
-    narration:
-      "Malik's descendants extend his lineage forward, connecting to the next generation of the Moreland family tree.",
-    eyes: { left: [0.44, 0.38], right: [0.56, 0.38] }
+    narration: "Malik's descendants extend his lineage forward, connecting to the next generation of the Moreland family tree.",
+    parents: "malik",
+    descendants: "imani"
   },
   imani: {
     image: "images/imani.jpg",
@@ -50,9 +55,9 @@ const states = {
     status: "Next Generation Anchor",
     node: "Imani Moreland",
     description: "Imani becomes the next generation anchor portrait.",
-    narration:
-      "Imani Moreland carries the anchor role for the next generation, continuing the Moreland lineage into new chapters.",
-    eyes: { left: [0.45, 0.40], right: [0.57, 0.40] }
+    narration: "Imani Moreland carries the anchor role for the next generation, continuing the Moreland lineage into new chapters.",
+    parents: "malik_descendants",
+    descendants: "imani_descendants"
   },
   imani_descendants: {
     image: "images/imani_descendants.jpg",
@@ -60,9 +65,9 @@ const states = {
     status: "Future Legacy Layer",
     node: "Imani Descendants",
     description: "Imani's descendants extend the family line forward.",
-    narration:
-      "Imani's descendants reach further into the future, extending the Moreland family legacy forward in time.",
-    eyes: { left: [0.45, 0.38], right: [0.57, 0.38] }
+    narration: "Imani's descendants reach further into the future, extending the Moreland family legacy forward in time.",
+    parents: "imani",
+    descendants: "imani"
   },
   julian: {
     image: "images/julian.jpg",
@@ -70,9 +75,9 @@ const states = {
     status: "Sibling Branch",
     node: "Julian Moreland",
     description: "Julian is a sibling branch with no descendant layer.",
-    narration:
-      "Julian Moreland is a sibling branch. His path connects back through the shared parent structure without a descendant layer.",
-    eyes: { left: [0.44, 0.40], right: [0.56, 0.40] }
+    narration: "Julian Moreland is a sibling branch. His path connects back through the shared parent structure without a descendant layer.",
+    parents: "parents",
+    descendants: "parents"
   },
   selah: {
     image: "images/selah.jpg",
@@ -80,9 +85,9 @@ const states = {
     status: "Sibling Branch",
     node: "Selah Carter",
     description: "Selah is a sibling branch with her own descendants.",
-    narration:
-      "Selah Carter branches from the parent structure with her own distinct lineage and family tree.",
-    eyes: { left: [0.44, 0.40], right: [0.56, 0.40] }
+    narration: "Selah Carter branches from the parent structure with her own distinct lineage and family tree.",
+    parents: "parents",
+    descendants: "selah_descendants"
   },
   selah_descendants: {
     image: "images/selah_descendants.jpg",
@@ -90,64 +95,38 @@ const states = {
     status: "Descendant Layer",
     node: "Selah Descendants",
     description: "Selah's line expands into her descendant branch.",
-    narration:
-      "Selah's descendants form her unique branch, expanding the family line outward from the Moreland parent structure.",
-    eyes: { left: [0.44, 0.38], right: [0.56, 0.38] }
+    narration: "Selah's descendants form her unique branch, expanding the family line outward from the Moreland parent structure.",
+    parents: "selah",
+    descendants: "selah"
   }
 };
 
-const stateOrder = [
-  "malik",
-  "parents",
-  "malik_descendants",
-  "imani",
-  "imani_descendants",
-  "julian",
-  "selah",
-  "selah_descendants"
-];
+const stateOrder = ["malik","parents","malik_descendants","imani","imani_descendants","julian","selah","selah_descendants"];
 
+let state = "malik";
+
+// ---------------------
+// Narration mode (no fighting user)
+// ---------------------
 const NARRATION_DISPLAY_DURATION_MS = 4500;
 const AUTO_ADVANCE_INTERVAL_MS = 5000;
 
-// gesture thresholds
-const ZOOM_IN_TRIGGER = 1.35;
-const ZOOM_OUT_TRIGGER = 0.80;
-
-// zoom behavior
-const ZOOM_MIN = 0.6;
-const ZOOM_MAX = 2.4;
-
-let state = "malik";
 let isPlaying = true;
 let narrationInterval = null;
 let narrationFadeTimeout = null;
+let userInteractingUntil = 0;
 
-// transform state (applied to the IMG)
-let scale = 1;
-let panX = 0;
-let panY = 0;
+function nowMs(){ return Date.now(); }
 
-// pointer tracking for pinch
-const pointers = new Map();
-let lastPinchDist = null;
-
-// prevent double-trigger spam
-let transitionLock = false;
-
-function clamp(v, min, max) {
-  return Math.max(min, Math.min(max, v));
+function pauseAutoAdvanceFor(ms){
+  userInteractingUntil = Math.max(userInteractingUntil, nowMs() + ms);
 }
 
-function showNarration(text) {
+function showNarration(text){
   if (!narrationDisplay) return;
+  if (narrationFadeTimeout) clearTimeout(narrationFadeTimeout);
 
-  if (narrationFadeTimeout) {
-    clearTimeout(narrationFadeTimeout);
-    narrationFadeTimeout = null;
-  }
-
-  if (!isPlaying || !text) {
+  if (!isPlaying || !text){
     narrationDisplay.style.opacity = "0";
     return;
   }
@@ -160,33 +139,33 @@ function showNarration(text) {
   }, NARRATION_DISPLAY_DURATION_MS);
 }
 
-function startNarrationAutoAdvance() {
+function startNarrationAutoAdvance(){
   if (narrationInterval) clearInterval(narrationInterval);
+
   narrationInterval = setInterval(() => {
+    if (!isPlaying) return;
+    if (nowMs() < userInteractingUntil) return;
+
     const currentIndex = stateOrder.indexOf(state);
     const nextIndex = (currentIndex + 1) % stateOrder.length;
-    applyState(stateOrder[nextIndex], { soft: true });
+    applyState(stateOrder[nextIndex], { cinematic: true });
   }, AUTO_ADVANCE_INTERVAL_MS);
 }
 
-function stopNarrationAutoAdvance() {
-  if (narrationInterval) {
-    clearInterval(narrationInterval);
-    narrationInterval = null;
-  }
-  if (narrationFadeTimeout) {
-    clearTimeout(narrationFadeTimeout);
-    narrationFadeTimeout = null;
-  }
+function stopNarrationAutoAdvance(){
+  if (narrationInterval) clearInterval(narrationInterval);
+  narrationInterval = null;
+  if (narrationFadeTimeout) clearTimeout(narrationFadeTimeout);
+  narrationFadeTimeout = null;
   if (narrationDisplay) narrationDisplay.style.opacity = "0";
 }
 
-function toggleNarration() {
+function toggleNarration(){
   isPlaying = !isPlaying;
-  if (narrationToggleBtn) {
+  if (narrationToggleBtn){
     narrationToggleBtn.textContent = isPlaying ? "Narration: ON" : "Narration: OFF";
   }
-  if (isPlaying) {
+  if (isPlaying){
     showNarration(states[state].narration);
     startNarrationAutoAdvance();
   } else {
@@ -194,257 +173,347 @@ function toggleNarration() {
   }
 }
 
-function setImageTransform() {
+// ---------------------
+// Smooth zoom engine (continuous)
+// ---------------------
+let scale = 1;
+let targetScale = 1;
+let tx = 0;
+let ty = 0;
+let targetTx = 0;
+let targetTy = 0;
+
+const MIN_SCALE = 1;
+const MAX_SCALE = 2.2;
+const SMOOTHING = 0.18;
+
+function clamp(v, min, max){ return Math.min(max, Math.max(min, v)); }
+
+function applyTransform(){
   if (!viewerImage) return;
-  viewerImage.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+  scale += (targetScale - scale) * SMOOTHING;
+  tx += (targetTx - tx) * SMOOTHING;
+  ty += (targetTy - ty) * SMOOTHING;
+
+  viewerImage.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+  requestAnimationFrame(applyTransform);
 }
 
-function resetTransform() {
-  scale = 1;
-  panX = 0;
-  panY = 0;
-  setImageTransform();
+function resetTransform(){
+  scale = 1; targetScale = 1;
+  tx = 0; ty = 0;
+  targetTx = 0; targetTy = 0;
 }
 
-function positionEyeHints() {
-  if (!slideshow || !eyeLeftEl || !eyeRightEl) return;
-  const eyes = (states[state] && states[state].eyes) || null;
-  if (!eyes) return;
+// Convert normalized (0..1) coords to transform offsets so the point becomes centered
+function focusOnPoint(nx, ny, zoom){
+  if (!viewerStage) return;
 
-  const rect = slideshow.getBoundingClientRect();
-  const [lx, ly] = eyes.left;
-  const [rx, ry] = eyes.right;
+  const rect = viewerStage.getBoundingClientRect();
+  const cx = rect.width / 2;
+  const cy = rect.height / 2;
 
-  eyeLeftEl.style.left = `${lx * rect.width}px`;
-  eyeLeftEl.style.top = `${ly * rect.height}px`;
-  eyeRightEl.style.left = `${rx * rect.width}px`;
-  eyeRightEl.style.top = `${ry * rect.height}px`;
+  // point in stage pixels
+  const px = nx * rect.width;
+  const py = ny * rect.height;
+
+  const z = clamp(zoom, MIN_SCALE, MAX_SCALE);
+  targetScale = z;
+
+  // When scaling around center, translation should bring px/py to center.
+  // translate = center - point
+  targetTx = (cx - px) * z;
+  targetTy = (cy - py) * z;
 }
 
-function applyState(nextState, opts = { soft: false }) {
+function zoomBy(delta, anchorX, anchorY){
+  // anchorX/Y are in stage pixels
+  if (!viewerStage) return;
+  const rect = viewerStage.getBoundingClientRect();
+
+  const nx = clamp(anchorX / rect.width, 0, 1);
+  const ny = clamp(anchorY / rect.height, 0, 1);
+
+  const next = clamp(targetScale + delta, MIN_SCALE, MAX_SCALE);
+  focusOnPoint(nx, ny, next);
+}
+
+function zoomIn(){
+  pauseAutoAdvanceFor(3000);
+  const cfg = states[state];
+  const next = cfg?.descendants || state;
+  applyState(next, { cinematic: true, direction: "in" });
+}
+
+function zoomOut(){
+  pauseAutoAdvanceFor(3000);
+  const cfg = states[state];
+  const next = cfg?.parents || state;
+  applyState(next, { cinematic: true, direction: "out" });
+}
+
+function resetViewer(){
+  pauseAutoAdvanceFor(3000);
+  resetTransform();
+  applyState("malik", { cinematic: false });
+  if (isPlaying) startNarrationAutoAdvance();
+}
+
+// ---------------------
+// Eye detection (FaceMesh)
+// ---------------------
+// Fallback eye points per image (normalized).
+// Fill these once and it becomes perfect forever.
+const EYE_FALLBACK = {
+  "images/malik.jpg": { left: {x:0.42,y:0.40}, right:{x:0.58,y:0.40} },
+  "images/imani.jpg": { left: {x:0.44,y:0.41}, right:{x:0.56,y:0.41} },
+  "images/selah.jpg": { left: {x:0.44,y:0.41}, right:{x:0.56,y:0.41} },
+  "images/julian.jpg": { left: {x:0.44,y:0.41}, right:{x:0.56,y:0.41} }
+};
+
+let lastEye = null; // {left:{x,y}, right:{x,y}} normalized
+
+function setEyeHints(eyes){
+  if (!eyes) {
+    if (eyeHintLeft) eyeHintLeft.style.opacity = "0";
+    if (eyeHintRight) eyeHintRight.style.opacity = "0";
+    return;
+  }
+  if (!viewerStage) return;
+  const rect = viewerStage.getBoundingClientRect();
+
+  if (eyeHintLeft && eyes.left){
+    eyeHintLeft.style.left = `${eyes.left.x * rect.width}px`;
+    eyeHintLeft.style.top = `${eyes.left.y * rect.height}px`;
+  }
+  if (eyeHintRight && eyes.right){
+    eyeHintRight.style.left = `${eyes.right.x * rect.width}px`;
+    eyeHintRight.style.top = `${eyes.right.y * rect.height}px`;
+  }
+}
+
+function dist(a,b){ const dx=a.x-b.x, dy=a.y-b.y; return Math.sqrt(dx*dx+dy*dy); }
+
+async function detectEyesFromImage(imgEl){
+  // If FaceMesh isn't available, fall back.
+  if (!window.FaceMesh) return null;
+
+  // Use fallback if embed-mode or performance concern? (you can keep it on)
+  return new Promise((resolve) => {
+    const mesh = new FaceMesh({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+    });
+
+    mesh.setOptions({
+      maxNumFaces: 1,
+      refineLandmarks: true,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5
+    });
+
+    mesh.onResults((results) => {
+      try{
+        const faces = results.multiFaceLandmarks || [];
+        if (!faces.length) return resolve(null);
+
+        const lm = faces[0];
+
+        // Approx eye centers using a few landmark indices
+        // Left eye region (viewer’s left): 33 (outer), 133 (inner)
+        // Right eye region: 263 (outer), 362 (inner)
+        const leftOuter = lm[33], leftInner = lm[133];
+        const rightOuter = lm[263], rightInner = lm[362];
+
+        if (!leftOuter || !leftInner || !rightOuter || !rightInner) return resolve(null);
+
+        const left = { x: (leftOuter.x + leftInner.x)/2, y: (leftOuter.y + leftInner.y)/2 };
+        const right = { x: (rightOuter.x + rightInner.x)/2, y: (rightOuter.y + rightInner.y)/2 };
+
+        resolve({ left, right });
+      } catch(e){
+        resolve(null);
+      }
+    });
+
+    // Send the still image through FaceMesh
+    mesh.send({ image: imgEl });
+  });
+}
+
+async function resolveEyesForCurrentImage(){
+  if (!viewerImage) return null;
+
+  const src = viewerImage.getAttribute("src") || "";
+  const fallback = EYE_FALLBACK[src] || null;
+
+  // Always try mesh first; fallback if none.
+  const detected = await detectEyesFromImage(viewerImage);
+  const eyes = detected || fallback;
+
+  lastEye = eyes;
+  setEyeHints(eyes);
+  return eyes;
+}
+
+// ---------------------
+// Click/tap eye logic
+// ---------------------
+function whichEyeHit(eyes, clientX, clientY){
+  if (!viewerStage || !eyes) return null;
+  const rect = viewerStage.getBoundingClientRect();
+  const p = { x: (clientX - rect.left)/rect.width, y: (clientY - rect.top)/rect.height };
+
+  const dl = dist(p, eyes.left);
+  const dr = dist(p, eyes.right);
+
+  // within radius threshold
+  const TH = 0.08; // tune
+  if (dl < TH && dl < dr) return "left";
+  if (dr < TH && dr < dl) return "right";
+  return null;
+}
+
+function onTapOrClick(e){
+  pauseAutoAdvanceFor(4000);
+  if (!lastEye) return;
+
+  const eye = whichEyeHit(lastEye, e.clientX, e.clientY);
+  if (eye === "left"){
+    // left eye => parents
+    focusOnPoint(lastEye.left.x, lastEye.left.y, 1.9);
+    setTimeout(() => zoomOut(), 260);
+  } else if (eye === "right"){
+    // right eye => descendants
+    focusOnPoint(lastEye.right.x, lastEye.right.y, 1.9);
+    setTimeout(() => zoomIn(), 260);
+  }
+}
+
+// ---------------------
+// Input: wheel + pinch
+// ---------------------
+function setupWheelZoom(){
+  if (!viewerStage) return;
+  viewerStage.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    pauseAutoAdvanceFor(2500);
+
+    const delta = e.deltaY > 0 ? -0.08 : 0.08;
+    const rect = viewerStage.getBoundingClientRect();
+    zoomBy(delta, e.clientX - rect.left, e.clientY - rect.top);
+  }, { passive: false });
+}
+
+let pinchStartDist = 0;
+let pinchStartScale = 1;
+
+function getTouchDist(t1, t2){
+  const dx = t1.clientX - t2.clientX;
+  const dy = t1.clientY - t2.clientY;
+  return Math.sqrt(dx*dx + dy*dy);
+}
+
+function setupPinchZoom(){
+  if (!viewerStage) return;
+
+  viewerStage.addEventListener("touchstart", (e) => {
+    if (e.touches.length === 2){
+      pauseAutoAdvanceFor(3000);
+      pinchStartDist = getTouchDist(e.touches[0], e.touches[1]);
+      pinchStartScale = targetScale;
+    }
+  }, { passive: true });
+
+  viewerStage.addEventListener("touchmove", (e) => {
+    if (e.touches.length === 2){
+      e.preventDefault();
+      pauseAutoAdvanceFor(3000);
+
+      const distNow = getTouchDist(e.touches[0], e.touches[1]);
+      const ratio = distNow / (pinchStartDist || distNow);
+
+      const next = clamp(pinchStartScale * ratio, MIN_SCALE, MAX_SCALE);
+
+      // anchor at midpoint
+      const midX = (e.touches[0].clientX + e.touches[1].clientX)/2;
+      const midY = (e.touches[0].clientY + e.touches[1].clientY)/2;
+
+      if (viewerStage){
+        const rect = viewerStage.getBoundingClientRect();
+        const ax = midX - rect.left;
+        const ay = midY - rect.top;
+
+        const nx = clamp(ax / rect.width, 0, 1);
+        const ny = clamp(ay / rect.height, 0, 1);
+        focusOnPoint(nx, ny, next);
+      }
+    }
+  }, { passive: false });
+}
+
+// ---------------------
+// Apply state
+// ---------------------
+async function applyState(nextState, opts = {}){
   const config = states[nextState];
-  if (!config || !viewerImage) return;
+  if (!config) return;
 
   state = nextState;
-  transitionLock = true;
 
-  // fade just a touch for cinematic change
-  viewerImage.style.opacity = opts.soft ? "0.55" : "0.35";
+  if (viewerImage) viewerImage.style.opacity = "0.35";
 
-  setTimeout(() => {
-    viewerImage.src = config.image;
-    viewerImage.alt = config.node;
+  // stop fighting transforms during swap
+  resetTransform();
+
+  setTimeout(async () => {
+    if (viewerImage){
+      viewerImage.src = config.image;
+      viewerImage.alt = config.node;
+      viewerImage.style.opacity = "1";
+    }
 
     if (viewerTitle) viewerTitle.textContent = config.title;
     if (viewerStatus) viewerStatus.textContent = config.status;
     if (currentNode) currentNode.textContent = config.node;
     if (currentDescription) currentDescription.textContent = config.description;
 
-    resetTransform();
-    positionEyeHints();
-
-    viewerImage.style.opacity = "1";
-    showNarration(config.narration);
-
-    // parents shows branch selector
-    if (branchOptions) {
-      branchOptions.style.display = nextState === "parents" ? "flex" : "none";
+    if (branchOptions){
+      branchOptions.style.display = config.showBranches ? "flex" : "none";
     }
 
+    showNarration(config.narration);
+
+    // wait a tick so image is ready, then detect eyes
     setTimeout(() => {
-      transitionLock = false;
-    }, 200);
+      resolveEyesForCurrentImage();
+    }, 250);
+
   }, 160);
 }
 
-/**
- * Decide which eye the user interacted with.
- * Returns "left" or "right".
- */
-function nearestEye(clientX, clientY) {
-  if (!slideshow) return "right";
-
-  const eyes = (states[state] && states[state].eyes) || null;
-  if (!eyes) return "right";
-
-  const rect = slideshow.getBoundingClientRect();
-  const left = { x: rect.left + eyes.left[0] * rect.width, y: rect.top + eyes.left[1] * rect.height };
-  const right = { x: rect.left + eyes.right[0] * rect.width, y: rect.top + eyes.right[1] * rect.height };
-
-  const dl = (clientX - left.x) ** 2 + (clientY - left.y) ** 2;
-  const dr = (clientX - right.x) ** 2 + (clientY - right.y) ** 2;
-
-  return dl <= dr ? "left" : "right";
+function selectBranch(branch){
+  pauseAutoAdvanceFor(3000);
+  if (branch === "julian") applyState("julian", { cinematic: true });
+  if (branch === "malik") applyState("malik", { cinematic: true });
+  if (branch === "selah") applyState("selah", { cinematic: true });
 }
 
-/**
- * Main cinematic rule:
- * left eye  => zoom OUT (to parents)
- * right eye => zoom IN  (to descendants)
- */
-function eyePortalAction(whichEye) {
-  if (transitionLock) return;
+// ---------------------
+// Init
+// ---------------------
+function init(){
+  if (branchOptions) branchOptions.style.display = "none";
 
-  if (whichEye === "left") {
-    zoomOut();
-  } else {
-    zoomIn();
-  }
-}
+  setupWheelZoom();
+  setupPinchZoom();
 
-function zoomIn() {
-  if (transitionLock) return;
-
-  if (state === "malik") return applyState("malik_descendants");
-  if (state === "malik_descendants") return applyState("imani");
-  if (state === "imani") return applyState("imani_descendants");
-  if (state === "selah") return applyState("selah_descendants");
-  if (state === "parents") {
-    if (branchOptions) branchOptions.style.display = "flex";
-    return;
-  }
-}
-
-function zoomOut() {
-  if (transitionLock) return;
-
-  if (state === "malik") return applyState("parents");
-  if (state === "malik_descendants") return applyState("malik");
-  if (state === "imani") return applyState("malik_descendants");
-  if (state === "imani_descendants") return applyState("imani");
-  if (state === "julian") return applyState("parents");
-  if (state === "selah") return applyState("parents");
-  if (state === "selah_descendants") return applyState("selah");
-  if (state === "parents") return applyState("malik");
-}
-
-function selectBranch(branch) {
-  if (transitionLock) return;
-  if (branch === "julian") return applyState("julian");
-  if (branch === "malik") return applyState("malik");
-  if (branch === "selah") return applyState("selah");
-}
-
-function resetViewer() {
-  resetTransform();
-  applyState("malik");
-  if (isPlaying) startNarrationAutoAdvance();
-}
-
-/* ---------------------------
-   Gesture Layer (wheel + pinch + drag)
-   --------------------------- */
-function handleWheel(e) {
-  if (!stageShell || transitionLock) return;
-  e.preventDefault();
-
-  const delta = -e.deltaY;
-  const zoomFactor = delta > 0 ? 1.07 : 0.93;
-
-  scale = clamp(scale * zoomFactor, ZOOM_MIN, ZOOM_MAX);
-  setImageTransform();
-
-  // trigger cinematic transitions
-  if (scale >= ZOOM_IN_TRIGGER) {
-    resetTransform();
-    eyePortalAction("right");
-  } else if (scale <= ZOOM_OUT_TRIGGER) {
-    resetTransform();
-    eyePortalAction("left");
-  }
-}
-
-function onPointerDown(e) {
-  if (!stageShell) return;
-  stageShell.setPointerCapture(e.pointerId);
-  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-
-  // single-pointer tap near eyes (mobile + desktop)
-  // if user clicks/taps without moving much, we treat as portal click
-  e._tapStart = { x: e.clientX, y: e.clientY, t: Date.now() };
-}
-
-function onPointerMove(e) {
-  if (!pointers.has(e.pointerId)) return;
-  const prev = pointers.get(e.pointerId);
-  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-
-  // two-finger pinch
-  if (pointers.size === 2) {
-    const pts = Array.from(pointers.values());
-    const dx = pts[0].x - pts[1].x;
-    const dy = pts[0].y - pts[1].y;
-    const dist = Math.hypot(dx, dy);
-
-    if (lastPinchDist != null) {
-      const ratio = dist / lastPinchDist;
-      scale = clamp(scale * ratio, ZOOM_MIN, ZOOM_MAX);
-      setImageTransform();
-
-      if (scale >= ZOOM_IN_TRIGGER) {
-        lastPinchDist = null;
-        resetTransform();
-        eyePortalAction("right");
-        return;
-      }
-      if (scale <= ZOOM_OUT_TRIGGER) {
-        lastPinchDist = null;
-        resetTransform();
-        eyePortalAction("left");
-        return;
-      }
-    }
-
-    lastPinchDist = dist;
-    return;
+  if (viewerStage){
+    viewerStage.addEventListener("click", onTapOrClick);
   }
 
-  // one-finger drag pan (optional, feels better on mobile)
-  if (pointers.size === 1 && prev) {
-    const dx = e.clientX - prev.x;
-    const dy = e.clientY - prev.y;
-    panX += dx;
-    panY += dy;
-
-    // clamp pan slightly so it doesn’t fly away
-    panX = clamp(panX, -220, 220);
-    panY = clamp(panY, -180, 180);
-
-    setImageTransform();
-  }
+  applyTransform();            // start render loop
+  applyState("malik");         // initial
+  startNarrationAutoAdvance(); // narration
 }
 
-function onPointerUp(e) {
-  const start = e._tapStart;
-  pointers.delete(e.pointerId);
-
-  if (pointers.size < 2) lastPinchDist = null;
-
-  // tap detection (short press + small movement)
-  if (start && slideshow) {
-    const dt = Date.now() - start.t;
-    const dx = Math.abs(e.clientX - start.x);
-    const dy = Math.abs(e.clientY - start.y);
-    if (dt < 350 && dx < 10 && dy < 10) {
-      const which = nearestEye(e.clientX, e.clientY);
-      eyePortalAction(which);
-    }
-  }
-}
-
-/* ---------------------------
-   Init
-   --------------------------- */
-if (stageShell) {
-  stageShell.addEventListener("wheel", handleWheel, { passive: false });
-  stageShell.addEventListener("pointerdown", onPointerDown);
-  stageShell.addEventListener("pointermove", onPointerMove);
-  stageShell.addEventListener("pointerup", onPointerUp);
-  stageShell.addEventListener("pointercancel", onPointerUp);
-}
-
-window.addEventListener("resize", () => positionEyeHints());
-
-applyState("malik");
-positionEyeHints();
-startNarrationAutoAdvance();
+init();
