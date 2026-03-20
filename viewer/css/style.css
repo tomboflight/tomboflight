@@ -152,6 +152,7 @@ a { color: inherit; text-decoration: none; }
   white-space: nowrap;
 }
 
+/* IMPORTANT: stage is interaction surface */
 .viewer-stage-shell {
   position: relative;
   border-radius: 26px;
@@ -165,6 +166,7 @@ a { color: inherit; text-decoration: none; }
   display: flex;
   align-items: center;
   justify-content: center;
+  touch-action: none; /* enables custom pinch */
 }
 
 .viewer-stage-glow {
@@ -195,12 +197,30 @@ a { color: inherit; text-decoration: none; }
   object-fit: contain;
   object-position: center;
   transform-origin: center;
-  will-change: transform;
+  will-change: transform, opacity;
   transition: opacity 0.25s ease;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
-.zoom-in { transform: scale(1.08); }
-.zoom-out { transform: scale(0.68); }
+/* Eye hint rings: only show when holding C */
+.eye-hint {
+  position: absolute;
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  border: 1px solid rgba(214, 176, 102, 0.35);
+  box-shadow: 0 0 0 4px rgba(214, 176, 102, 0.08);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  z-index: 4;
+}
+
+.show-eyes .eye-hint { opacity: 0.85; }
+
+/* If you want: place these using JS later. For now, hide if not used */
+.eye-hint { display: none; }
 
 .viewer-line {
   width: 100%;
@@ -259,7 +279,7 @@ a { color: inherit; text-decoration: none; }
   pointer-events: none;
 }
 
-/* FIX: display:flex so gap/wrap/justify work */
+/* Branch options */
 .branch-options {
   position: absolute;
   bottom: 34px;
@@ -296,25 +316,15 @@ a { color: inherit; text-decoration: none; }
   letter-spacing: -0.02em;
 }
 
-/* -----------------------
-   EMBED MODE (homepage preview) — WATCH ONLY
-   ----------------------- */
-.embed-mode .viewer-page {
-  max-width: 100%;
-  padding: 12px;
-}
-
+/* EMBED MODE (homepage preview) — watch-only by default */
+.embed-mode .viewer-page { max-width: 100%; padding: 12px; }
 .embed-mode #backLink { display: none !important; }
 .embed-mode #viewerHeader { display: none !important; }
 .embed-mode #sidePanel { display: none !important; }
 .embed-mode #controls { display: none !important; }
-
-/* Stage becomes the only focus */
 .embed-mode .viewer-main { grid-template-columns: 1fr; }
 .embed-mode .viewer-stage-panel { padding: 14px; }
 .embed-mode .viewer-line { display: none; }
-
-/* Also ensure branch picker never appears in preview */
 .embed-mode #branchOptions { display: none !important; }
 
 @media (max-width: 1180px) {
@@ -336,9 +346,6 @@ a { color: inherit; text-decoration: none; }
 
   .viewer-stage-top { flex-direction: column; align-items: flex-start; }
   .viewer-status { white-space: normal; }
-
-  .viewer-stage-shell,
-  .slideshow { aspect-ratio: 16 / 10; min-height: 0; height: auto; }
 
   .branch-options {
     bottom: 18px;

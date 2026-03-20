@@ -10,6 +10,7 @@
   <div class="viewer-page">
     <header class="viewer-header" id="viewerHeader">
       <div class="viewer-brand-wrap">
+        <!-- Shown in full viewer, hidden in embed-mode -->
         <a href="../index.html" class="back-link" id="backLink">← Back to Tomb of Light</a>
 
         <div class="viewer-brand">
@@ -24,27 +25,36 @@
           Navigate through generations of the Moreland lineage and explore
           family branches through the Tomb of Light viewer.
         </p>
+
+        <p class="viewer-instructions" id="viewerInstructions">
+          Hold <strong>C</strong>, then click <strong>Left Eye</strong> (Parents) or <strong>Right Eye</strong> (Descendants).
+          Use scroll/pinch to zoom. (Full viewer only)
+        </p>
       </div>
     </header>
 
     <main class="viewer-main">
-      <section class="viewer-stage-panel" id="viewerStagePanel">
+      <section class="viewer-stage-panel">
         <div class="viewer-stage-top">
           <div>
-            <span class="panel-kicker">Lineage Viewer</span>
+            <span class="panel-kicker">Cinematic Viewer</span>
             <h2 id="viewerTitle">Malik Moreland</h2>
           </div>
 
-          <div class="viewer-status" id="viewerStatus">
-            Anchor Portrait
-          </div>
+          <div class="viewer-status" id="viewerStatus">Anchor Portrait</div>
         </div>
 
-        <div class="viewer-stage-shell" id="viewerStageShell">
+        <div class="viewer-stage-shell" id="viewerStage">
           <div class="viewer-stage-glow"></div>
 
           <div class="slideshow">
-            <img id="viewerImage" src="images/malik.jpg" alt="Malik Moreland" />
+            <div class="slideshow-inner" id="slideshowInner">
+              <img id="viewerImage" src="images/malik.jpg" alt="Malik Moreland" />
+            </div>
+
+            <!-- Eye hints (positioned by JS) -->
+            <div class="eye-hint" id="eyeLeft" aria-hidden="true"></div>
+            <div class="eye-hint" id="eyeRight" aria-hidden="true"></div>
           </div>
 
           <div id="narrationDisplay" class="narration-text"></div>
@@ -70,9 +80,7 @@
         <div class="side-card">
           <span class="panel-kicker">Current Node</span>
           <h3 id="currentNode">Malik Moreland</h3>
-          <p id="currentDescription">
-            Starting at the anchor portrait for the Genesis family line.
-          </p>
+          <p id="currentDescription">Starting at the anchor portrait for the Genesis family line.</p>
         </div>
 
         <div class="side-card">
@@ -89,15 +97,11 @@
     </main>
   </div>
 
-  <!-- Embed mode flag: watch-only when ?embed=1 OR when inside an iframe -->
+  <!-- Embed-mode flag (iframe preview) -->
   <script>
     (function () {
       const params = new URLSearchParams(window.location.search);
-      const embedParam = params.get("embed") === "1";
-      const isEmbedded = window.self !== window.top;
-      if (embedParam || isEmbedded) {
-        document.body.classList.add("embed-mode");
-      }
+      if (params.get("embed") === "1") document.body.classList.add("embed-mode");
     })();
   </script>
 
