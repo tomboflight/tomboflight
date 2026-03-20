@@ -14,7 +14,8 @@ const states = {
     status: "Anchor Portrait",
     node: "Malik Moreland",
     description: "Starting at the anchor portrait for the Genesis family line.",
-    narration: "This is Malik Moreland, the anchor portrait of the Genesis family line. From here, the Moreland lineage unfolds across generations."
+    narration:
+      "This is Malik Moreland, the anchor portrait of the Genesis family line. From here, the Moreland lineage unfolds across generations."
   },
   parents: {
     image: "images/parents.jpg",
@@ -22,7 +23,8 @@ const states = {
     status: "Parent Structure",
     node: "Parent Layer",
     description: "Choose a family branch from the shared parent structure.",
-    narration: "Elias and Clara Moreland represent the foundational parent structure. From this layer, three distinct family branches emerge."
+    narration:
+      "Elias and Clara Moreland represent the foundational parent structure. From this layer, three distinct family branches emerge."
   },
   malik_descendants: {
     image: "images/malik_descendants.jpg",
@@ -30,7 +32,8 @@ const states = {
     status: "Descendant Layer",
     node: "Malik Descendants",
     description: "Malik's line expands into the next generation.",
-    narration: "Malik's descendants extend his lineage forward, connecting to the next generation of the Moreland family tree."
+    narration:
+      "Malik's descendants extend his lineage forward, connecting to the next generation of the Moreland family tree."
   },
   imani: {
     image: "images/imani.jpg",
@@ -38,7 +41,8 @@ const states = {
     status: "Next Generation Anchor",
     node: "Imani Moreland",
     description: "Imani becomes the next generation anchor portrait.",
-    narration: "Imani Moreland carries the anchor role for the next generation, continuing the Moreland lineage into new chapters."
+    narration:
+      "Imani Moreland carries the anchor role for the next generation, continuing the Moreland lineage into new chapters."
   },
   imani_descendants: {
     image: "images/imani_descendants.jpg",
@@ -46,7 +50,8 @@ const states = {
     status: "Future Legacy Layer",
     node: "Imani Descendants",
     description: "Imani's descendants extend the family line forward.",
-    narration: "Imani's descendants reach further into the future, extending the Moreland family legacy forward in time."
+    narration:
+      "Imani's descendants reach further into the future, extending the Moreland family legacy forward in time."
   },
   julian: {
     image: "images/julian.jpg",
@@ -54,7 +59,8 @@ const states = {
     status: "Sibling Branch",
     node: "Julian Moreland",
     description: "Julian is a sibling branch with no descendant layer.",
-    narration: "Julian Moreland is a sibling branch. His path connects back through the shared parent structure without a descendant layer."
+    narration:
+      "Julian Moreland is a sibling branch. His path connects back through the shared parent structure without a descendant layer."
   },
   selah: {
     image: "images/selah.jpg",
@@ -62,7 +68,8 @@ const states = {
     status: "Sibling Branch",
     node: "Selah Carter",
     description: "Selah is a sibling branch with her own descendants.",
-    narration: "Selah Carter branches from the parent structure with her own distinct lineage and family tree."
+    narration:
+      "Selah Carter branches from the parent structure with her own distinct lineage and family tree."
   },
   selah_descendants: {
     image: "images/selah_descendants.jpg",
@@ -70,13 +77,20 @@ const states = {
     status: "Descendant Layer",
     node: "Selah Descendants",
     description: "Selah's line expands into her descendant branch.",
-    narration: "Selah's descendants form her unique branch, expanding the family line outward from the Moreland parent structure."
+    narration:
+      "Selah's descendants form her unique branch, expanding the family line outward from the Moreland parent structure."
   }
 };
 
 const stateOrder = [
-  "malik", "parents", "malik_descendants", "imani",
-  "imani_descendants", "julian", "selah", "selah_descendants"
+  "malik",
+  "parents",
+  "malik_descendants",
+  "imani",
+  "imani_descendants",
+  "julian",
+  "selah",
+  "selah_descendants"
 ];
 
 const NARRATION_DISPLAY_DURATION_MS = 4500;
@@ -88,16 +102,21 @@ let narrationInterval = null;
 let narrationFadeTimeout = null;
 
 function showNarration(text) {
+  if (!narrationDisplay) return;
+
   if (narrationFadeTimeout) {
     clearTimeout(narrationFadeTimeout);
     narrationFadeTimeout = null;
   }
+
   if (!isPlaying || !text) {
     narrationDisplay.style.opacity = "0";
     return;
   }
+
   narrationDisplay.textContent = text;
   narrationDisplay.style.opacity = "1";
+
   narrationFadeTimeout = setTimeout(() => {
     narrationDisplay.style.opacity = "0";
   }, NARRATION_DISPLAY_DURATION_MS);
@@ -105,6 +124,7 @@ function showNarration(text) {
 
 function startNarrationAutoAdvance() {
   if (narrationInterval) clearInterval(narrationInterval);
+
   narrationInterval = setInterval(() => {
     const currentIndex = stateOrder.indexOf(state);
     const nextIndex = (currentIndex + 1) % stateOrder.length;
@@ -117,16 +137,22 @@ function stopNarrationAutoAdvance() {
     clearInterval(narrationInterval);
     narrationInterval = null;
   }
+
   if (narrationFadeTimeout) {
     clearTimeout(narrationFadeTimeout);
     narrationFadeTimeout = null;
   }
-  narrationDisplay.style.opacity = "0";
+
+  if (narrationDisplay) narrationDisplay.style.opacity = "0";
 }
 
 function toggleNarration() {
   isPlaying = !isPlaying;
-  narrationToggleBtn.textContent = isPlaying ? "Narration: ON" : "Narration: OFF";
+
+  if (narrationToggleBtn) {
+    narrationToggleBtn.textContent = isPlaying ? "Narration: ON" : "Narration: OFF";
+  }
+
   if (isPlaying) {
     showNarration(states[state].narration);
     startNarrationAutoAdvance();
@@ -140,30 +166,33 @@ function applyState(nextState) {
   if (!config) return;
 
   state = nextState;
-  viewerImage.style.opacity = "0.35";
+
+  if (viewerImage) viewerImage.style.opacity = "0.35";
 
   setTimeout(() => {
-    viewerImage.src = config.image;
-    viewerImage.alt = config.node;
-    viewerTitle.textContent = config.title;
-    viewerStatus.textContent = config.status;
-    currentNode.textContent = config.node;
-    currentDescription.textContent = config.description;
+    if (viewerImage) {
+      viewerImage.src = config.image;
+      viewerImage.alt = config.node;
+      viewerImage.classList.remove("zoom-in", "zoom-out");
+      viewerImage.style.opacity = "1";
+    }
 
-    viewerImage.classList.remove("zoom-in", "zoom-out");
-    viewerImage.style.opacity = "1";
+    if (viewerTitle) viewerTitle.textContent = config.title;
+    if (viewerStatus) viewerStatus.textContent = config.status;
+    if (currentNode) currentNode.textContent = config.node;
+    if (currentDescription) currentDescription.textContent = config.description;
 
     showNarration(config.narration);
   }, 160);
 
-  if (nextState === "parents") {
-    branchOptions.style.display = "flex";
-  } else {
-    branchOptions.style.display = "none";
+  if (branchOptions) {
+    branchOptions.style.display = nextState === "parents" ? "flex" : "none";
   }
 }
 
 function animateZoom(className) {
+  if (!viewerImage) return;
+
   viewerImage.classList.remove("zoom-in", "zoom-out");
   void viewerImage.offsetWidth;
   viewerImage.classList.add(className);
@@ -187,7 +216,7 @@ function zoomIn() {
     animateZoom("zoom-in");
     applyState("selah_descendants");
   } else if (state === "parents") {
-    branchOptions.style.display = "flex";
+    if (branchOptions) branchOptions.style.display = "flex";
   }
 }
 
@@ -233,7 +262,7 @@ function selectBranch(branch) {
 }
 
 function resetViewer() {
-  viewerImage.classList.remove("zoom-in", "zoom-out");
+  if (viewerImage) viewerImage.classList.remove("zoom-in", "zoom-out");
   applyState("malik");
   if (isPlaying) startNarrationAutoAdvance();
 }

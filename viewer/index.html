@@ -10,7 +10,9 @@
   <div class="viewer-page">
     <header class="viewer-header">
       <div class="viewer-brand-wrap">
-        <a href="../index.html" class="back-link">← Back to Tomb of Light</a>
+        <!-- ✅ Shown in full viewer, auto-hidden when embedded in iframe -->
+        <a href="../index.html" class="back-link" id="backLink">← Back to Tomb of Light</a>
+
         <div class="viewer-brand">
           Tomb of Light<span class="brand-symbol">™</span>
         </div>
@@ -88,12 +90,13 @@
     </main>
   </div>
 
-  <!-- Embed mode flag: if URL has ?embed=1 we add a class so CSS can hide header/side panel -->
+  <!-- ✅ Option A: Auto-hide Back link when viewer is embedded in an iframe -->
   <script>
     (function () {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get("embed") === "1") {
-        document.body.classList.add("embed-mode");
+      const isEmbedded = window.self !== window.top;
+      if (isEmbedded) {
+        const back = document.getElementById("backLink");
+        if (back) back.style.display = "none";
       }
     })();
   </script>
