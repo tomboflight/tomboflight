@@ -88,6 +88,16 @@
     </main>
   </div>
 
+  <!-- Embed mode flag: if URL has ?embed=1 we add a class so CSS can hide header/side panel -->
+  <script>
+    (function () {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("embed") === "1") {
+        document.body.classList.add("embed-mode");
+      }
+    })();
+  </script>
+
   <script src="js/script.js"></script>
 </body>
 </html>
