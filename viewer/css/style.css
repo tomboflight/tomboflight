@@ -1,5 +1,3 @@
-/* viewer/css/style.css (FULL UPDATED) */
-
 :root {
   --bg: #03060d;
   --bg-soft: #07101d;
@@ -23,9 +21,7 @@
   min-width: 0;
 }
 
-html {
-  scroll-behavior: smooth;
-}
+html { scroll-behavior: smooth; }
 
 body {
   margin: 0;
@@ -39,10 +35,7 @@ body {
   line-height: 1.6;
 }
 
-a {
-  color: inherit;
-  text-decoration: none;
-}
+a { color: inherit; text-decoration: none; }
 
 .viewer-page {
   width: 100%;
@@ -85,10 +78,7 @@ a {
   font-weight: 700;
   transition: color var(--transition);
 }
-
-.back-link:hover {
-  color: var(--text);
-}
+.back-link:hover { color: var(--text); }
 
 .viewer-brand {
   font-size: clamp(2rem, 4vw, 3.1rem);
@@ -97,14 +87,9 @@ a {
   letter-spacing: -0.055em;
 }
 
-.brand-symbol {
-  font-size: 0.46em;
-  vertical-align: super;
-}
+.brand-symbol { font-size: 0.46em; vertical-align: super; }
 
-.viewer-header-copy {
-  padding: 24px 28px;
-}
+.viewer-header-copy { padding: 24px 28px; }
 
 .viewer-kicker,
 .panel-kicker {
@@ -139,9 +124,7 @@ a {
   align-items: start;
 }
 
-.viewer-stage-panel {
-  padding: 24px;
-}
+.viewer-stage-panel { padding: 24px; }
 
 .viewer-stage-top {
   display: flex;
@@ -182,6 +165,7 @@ a {
   display: flex;
   align-items: center;
   justify-content: center;
+  touch-action: none; /* IMPORTANT for pinch/drag on mobile */
 }
 
 .viewer-stage-glow {
@@ -199,7 +183,6 @@ a {
   position: relative;
   z-index: 1;
   width: 100%;
-  max-width: 100%;
   height: 100%;
   overflow: hidden;
   display: flex;
@@ -212,17 +195,25 @@ a {
   height: 100%;
   object-fit: contain;
   object-position: center;
-  transition: transform 1.8s ease, opacity 0.45s ease;
   transform-origin: center;
+  will-change: transform;
+  transition: opacity 0.25s ease;
 }
 
-.zoom-in {
-  transform: scale(1.08);
+/* Optional small “eye rings” */
+.eye-hint {
+  position: absolute;
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  border: 1px solid rgba(214, 176, 102, 0.35);
+  box-shadow: 0 0 0 4px rgba(214, 176, 102, 0.08);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
 }
-
-.zoom-out {
-  transform: scale(0.68);
-}
+.viewer-stage-shell:hover .eye-hint { opacity: 0.7; }
+.embed-mode .eye-hint { opacity: 0; } /* keep preview clean */
 
 .viewer-line {
   width: 100%;
@@ -250,11 +241,7 @@ a {
   font-size: 0.98rem;
   font-weight: 700;
   cursor: pointer;
-  transition:
-    transform var(--transition),
-    border-color var(--transition),
-    background var(--transition),
-    box-shadow var(--transition);
+  transition: transform var(--transition), border-color var(--transition), background var(--transition), box-shadow var(--transition);
 }
 
 .controls button:hover,
@@ -285,7 +272,7 @@ a {
   pointer-events: none;
 }
 
-/* ✅ FIX: add display:flex so gap/wrap/justify work */
+/* ✅ FIX: display:flex so gap/wrap/justify work */
 .branch-options {
   position: absolute;
   bottom: 34px;
@@ -306,33 +293,12 @@ a {
   box-shadow: var(--shadow);
 }
 
-.viewer-side-panel {
-  display: grid;
-  gap: 20px;
-}
+.viewer-side-panel { display: grid; gap: 20px; }
+.viewer-side-panel .side-card { padding: 24px; }
+.viewer-side-panel h3 { margin: 0 0 8px; font-size: 1.4rem; line-height: 1.05; letter-spacing: -0.04em; }
+.viewer-side-panel p { margin: 0; color: var(--muted); }
 
-.viewer-side-panel .side-card {
-  padding: 24px;
-}
-
-.viewer-side-panel h3 {
-  margin: 0 0 8px;
-  font-size: 1.4rem;
-  line-height: 1.05;
-  letter-spacing: -0.04em;
-}
-
-.viewer-side-panel p {
-  margin: 0;
-  color: var(--muted);
-}
-
-.path-list {
-  display: grid;
-  gap: 12px;
-  margin-top: 4px;
-}
-
+.path-list { display: grid; gap: 12px; margin-top: 4px; }
 .path-item {
   padding: 14px 16px;
   border-radius: 18px;
@@ -343,21 +309,29 @@ a {
   letter-spacing: -0.02em;
 }
 
+/* -----------------------
+   EMBED MODE (homepage preview)
+   ----------------------- */
+.embed-mode .viewer-page {
+  max-width: 100%;
+  padding: 12px;
+}
+.embed-mode #backLink { display: none; }
+.embed-mode #viewerHeader { display: none; }   /* hide header inside preview */
+.embed-mode #sidePanel { display: none; }      /* hide right panel inside preview */
+.embed-mode #controls { display: none; }       /* optional: preview is “watch-only” */
+.embed-mode .viewer-main { grid-template-columns: 1fr; }
+.embed-mode .viewer-stage-panel { padding: 14px; }
+.embed-mode .viewer-line { display: none; }
+
 @media (max-width: 1180px) {
   .viewer-header,
-  .viewer-main {
-    grid-template-columns: 1fr;
-  }
-
-  .viewer-header-copy h1 {
-    max-width: none;
-  }
+  .viewer-main { grid-template-columns: 1fr; }
+  .viewer-header-copy h1 { max-width: none; }
 }
 
 @media (max-width: 760px) {
-  .viewer-page {
-    padding: 14px 12px 24px;
-  }
+  .viewer-page { padding: 14px 12px 24px; }
 
   .viewer-brand-wrap,
   .viewer-header-copy,
@@ -367,21 +341,11 @@ a {
     padding: 20px;
   }
 
-  .viewer-stage-top {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .viewer-status {
-    white-space: normal;
-  }
+  .viewer-stage-top { flex-direction: column; align-items: flex-start; }
+  .viewer-status { white-space: normal; }
 
   .viewer-stage-shell,
-  .slideshow {
-    aspect-ratio: 16 / 10;
-    min-height: 0;
-    height: auto;
-  }
+  .slideshow { aspect-ratio: 16 / 10; min-height: 0; height: auto; }
 
   .branch-options {
     bottom: 18px;
@@ -389,11 +353,6 @@ a {
     border-radius: 24px;
   }
 
-  .controls {
-    flex-direction: column;
-  }
-
-  .controls button {
-    width: 100%;
-  }
+  .controls { flex-direction: column; }
+  .controls button { width: 100%; }
 }
