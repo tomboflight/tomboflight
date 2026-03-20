@@ -4,14 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Tomb of Light | Genesis Prototype</title>
-  <link rel="stylesheet" href="css/style.css" />
-</head>
 
+  <!-- Cache-bust so production actually updates -->
+  <link rel="stylesheet" href="css/style.css?v=20260320a" />
+</head>
 <body>
   <div class="viewer-page">
     <header class="viewer-header" id="viewerHeader">
       <div class="viewer-brand-wrap">
-        <!-- Shown in full viewer, hidden in embed-mode -->
         <a href="../index.html" class="back-link" id="backLink">← Back to Tomb of Light</a>
 
         <div class="viewer-brand">
@@ -28,8 +28,8 @@
         </p>
 
         <p class="viewer-instructions" id="viewerInstructions">
-          Hold <strong>C</strong>, then click <strong>Left Eye</strong> (Parents) or
-          <strong>Right Eye</strong> (Descendants). Use scroll/pinch to zoom. (Full viewer only)
+          Hold <strong>C</strong>, then click <strong>Left Eye</strong> (Parents) or <strong>Right Eye</strong> (Descendants).
+          Use scroll / pinch to zoom. (Full viewer only)
         </p>
       </div>
     </header>
@@ -48,8 +48,11 @@
         <div class="viewer-stage-shell" id="viewerStage">
           <div class="viewer-stage-glow"></div>
 
-          <div class="slideshow" id="slideshow">
-            <img id="viewerImage" src="images/malik.jpg" alt="Malik Moreland" />
+          <div class="slideshow">
+            <!-- ✅ REQUIRED: this is what we transform (scale + pan) -->
+            <div class="slideshow-inner" id="slideshowInner">
+              <img id="viewerImage" src="images/malik.jpg" alt="Malik Moreland" />
+            </div>
 
             <!-- Eye hints (positioned by JS) -->
             <div class="eye-hint" id="eyeLeft" aria-hidden="true"></div>
@@ -79,9 +82,7 @@
         <div class="side-card">
           <span class="panel-kicker">Current Node</span>
           <h3 id="currentNode">Malik Moreland</h3>
-          <p id="currentDescription">
-            Starting at the anchor portrait for the Genesis family line.
-          </p>
+          <p id="currentDescription">Starting at the anchor portrait for the Genesis family line.</p>
         </div>
 
         <div class="side-card">
@@ -98,7 +99,7 @@
     </main>
   </div>
 
-  <!-- Embed-mode flag (homepage iframe preview) -->
+  <!-- Embed-mode flag (iframe preview) -->
   <script>
     (function () {
       const params = new URLSearchParams(window.location.search);
@@ -106,6 +107,7 @@
     })();
   </script>
 
-  <script src="js/script.js"></script>
+  <!-- Cache-bust -->
+  <script src="js/script.js?v=20260320a"></script>
 </body>
 </html>

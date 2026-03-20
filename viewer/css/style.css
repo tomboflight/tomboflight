@@ -1,4 +1,14 @@
-/* viewer/css/style.css — FULL REWRITE (cinematic viewer + stable image fit + watch-only embed preview) */
+Absolutely — here is the full, corrected viewer/css/style.css you can copy + paste.
+
+✅ Fixes included:
+	•	No more enlarged/cropped portraits (stable object-fit: contain)
+	•	Zoom/pinch are supported by JS safely (touch-action: none on stage)
+	•	Eye hints are clickable in full viewer, but hidden in embed-mode
+	•	Uses body.show-eyes + .eye-hint (matches your current CSS approach)
+	•	Keeps homepage preview watch-only (hides header/side/controls/branch/line)
+
+⸻
+
 
 :root {
   --bg: #03060d;
@@ -6,23 +16,15 @@
   --panel: rgba(10, 16, 28, 0.84);
   --panel-2: rgba(7, 12, 22, 0.94);
   --panel-3: rgba(255, 255, 255, 0.025);
-
   --border: rgba(255, 255, 255, 0.1);
   --border-soft: rgba(255, 255, 255, 0.06);
-
   --text: #f4f7fb;
   --muted: #b9c4d4;
   --muted-2: #8d9aae;
   --gold: #d6b066;
-
   --shadow: 0 24px 70px rgba(0, 0, 0, 0.44);
   --transition: 220ms ease;
-
-  --radius-lg: 30px;
-  --radius-md: 26px;
-  --radius-sm: 16px;
-
-  --container: 1280px;
+  --radius: 26px;
 }
 
 *,
@@ -44,7 +46,8 @@ body {
     radial-gradient(circle at top left, rgba(21, 48, 108, 0.12), transparent 28%),
     radial-gradient(circle at top right, rgba(7, 20, 58, 0.14), transparent 30%),
     linear-gradient(180deg, #010309 0%, #04070e 44%, #02050b 100%);
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
   line-height: 1.6;
 }
 
@@ -54,12 +57,12 @@ a {
 }
 
 /* -----------------------
-   PAGE LAYOUT
+   LAYOUT
 ----------------------- */
 
 .viewer-page {
   width: 100%;
-  max-width: var(--container);
+  max-width: 1280px;
   margin: 0 auto;
   padding: 20px 20px 32px;
 }
@@ -75,9 +78,13 @@ a {
 .viewer-header-copy,
 .viewer-stage-panel,
 .viewer-side-panel .side-card {
-  background: linear-gradient(180deg, rgba(10, 16, 28, 0.82), rgba(6, 10, 18, 0.92));
+  background: linear-gradient(
+    180deg,
+    rgba(10, 16, 28, 0.82),
+    rgba(6, 10, 18, 0.92)
+  );
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border-radius: 30px;
   box-shadow: var(--shadow);
   backdrop-filter: blur(12px);
 }
@@ -98,6 +105,7 @@ a {
   font-weight: 700;
   transition: color var(--transition);
 }
+
 .back-link:hover {
   color: var(--text);
 }
@@ -144,6 +152,12 @@ a {
   font-size: 1.04rem;
 }
 
+.viewer-instructions {
+  margin-top: 14px;
+  color: var(--muted-2);
+  font-size: 0.98rem;
+}
+
 .viewer-main {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.65fr);
@@ -156,7 +170,7 @@ a {
 }
 
 /* -----------------------
-   STAGE TOP BAR
+   STAGE TOP
 ----------------------- */
 
 .viewer-stage-top {
@@ -186,27 +200,24 @@ a {
 }
 
 /* -----------------------
-   VIEWER STAGE (IMAGE)
+   STAGE (interaction surface)
 ----------------------- */
 
 .viewer-stage-shell {
   position: relative;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius);
   overflow: hidden;
   border: 1px solid var(--border-soft);
-
   background:
     radial-gradient(circle at center, rgba(214, 176, 102, 0.06), transparent 55%),
     linear-gradient(180deg, rgba(3, 7, 15, 0.96), rgba(2, 5, 11, 1));
-
   aspect-ratio: 16 / 10;
   min-height: 0;
-
   display: flex;
   align-items: center;
   justify-content: center;
 
-  /* FULL VIEWER interaction surface */
+  /* IMPORTANT: lets JS handle pinch/wheel without page scroll */
   touch-action: none;
 }
 
@@ -226,100 +237,60 @@ a {
   z-index: 1;
   width: 100%;
   height: 100%;
-  overflow: hidden;
-
+  overflow: hidden; /* critical so zoom doesn't show outside */
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-/* KEY: This keeps images from “looking zoomed” by default */
-.slideshow img {
+/* ✅ Transform wrapper (not the img) for stable zoom/pinch */
+.slideshow-inner {
   width: 100%;
   height: 100%;
+  will-change: transform;
+  transform: translate3d(0, 0, 0) scale(1);
+  transform-origin: center;
+}
 
+/* ✅ Stable portrait fit: prevents “enlarged/cropped” */
+#viewerImage {
+  width: 100%;
+  height: 100%;
+  display: block;
   object-fit: contain;
   object-position: center;
-
-  /* transforms are only applied by JS for smooth zoom */
-  transform-origin: center center;
-  transform: translate3d(0, 0, 0) scale(1);
-
-  /* reduce shake/jitter */
-  will-change: transform, opacity;
-  backface-visibility: hidden;
-
-  transition: opacity 0.25s ease;
   user-select: none;
   -webkit-user-drag: none;
+  transition: opacity 0.25s ease;
 }
 
-/* Optional hint rings (if you add them in HTML later) */
+/* -----------------------
+   EYE HINTS
+----------------------- */
+
 .eye-hint {
   position: absolute;
-  width: 42px;
-  height: 42px;
+  width: 44px;
+  height: 44px;
   border-radius: 999px;
-  border: 1px solid rgba(214, 176, 102, 0.35);
-  box-shadow: 0 0 0 4px rgba(214, 176, 102, 0.08);
+  border: 1px solid rgba(214, 176, 102, 0.38);
+  box-shadow: 0 0 0 4px rgba(214, 176, 102, 0.1);
   opacity: 0;
-  pointer-events: none;
   transform: translate(-50%, -50%);
-}
-.viewer-stage-shell:hover .eye-hint {
-  opacity: 0.7;
-}
 
-/* -----------------------
-   NARRATION OVERLAY
------------------------ */
-
-.narration-text {
-  position: absolute;
-  bottom: 24px;
-  left: 24px;
-  right: 24px;
-  z-index: 6;
-
-  padding: 16px 20px;
-  border-radius: var(--radius-sm);
-
-  background: rgba(3, 6, 13, 0.82);
-  border: 1px solid rgba(214, 176, 102, 0.18);
-  backdrop-filter: blur(8px);
-
-  color: var(--text);
-  font-size: 0.96rem;
-  line-height: 1.6;
-  text-align: center;
-
-  opacity: 0;
-  transition: opacity 0.6s ease;
-  pointer-events: none;
+  /* clickable in full viewer */
+  pointer-events: auto;
+  cursor: pointer;
 }
 
-/* -----------------------
-   BRANCH OPTIONS (PARENTS ONLY)
------------------------ */
+/* JS toggles body.show-eyes while C is held */
+body.show-eyes .eye-hint {
+  opacity: 0.8;
+}
 
-.branch-options {
-  position: absolute;
-  bottom: 34px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 5;
-
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-  justify-content: center;
-
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: rgba(4, 8, 15, 0.82);
-  backdrop-filter: blur(12px);
-  box-shadow: var(--shadow);
+/* keep preview clean */
+.embed-mode .eye-hint {
+  display: none !important;
 }
 
 /* -----------------------
@@ -351,15 +322,12 @@ a {
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.04);
   color: var(--text);
-
   min-height: 52px;
   padding: 0 22px;
   border-radius: 999px;
-
   font-size: 0.98rem;
   font-weight: 700;
   cursor: pointer;
-
   transition:
     transform var(--transition),
     border-color var(--transition),
@@ -373,6 +341,52 @@ a {
   border-color: rgba(214, 176, 102, 0.42);
   background: rgba(214, 176, 102, 0.08);
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+}
+
+/* -----------------------
+   NARRATION
+----------------------- */
+
+.narration-text {
+  position: absolute;
+  bottom: 24px;
+  left: 24px;
+  right: 24px;
+  z-index: 6;
+  padding: 16px 20px;
+  border-radius: 16px;
+  background: rgba(3, 6, 13, 0.82);
+  border: 1px solid rgba(214, 176, 102, 0.18);
+  backdrop-filter: blur(8px);
+  color: var(--text);
+  font-size: 0.96rem;
+  line-height: 1.6;
+  text-align: center;
+  opacity: 0;
+  transition: opacity 0.6s ease;
+  pointer-events: none;
+}
+
+/* -----------------------
+   BRANCH PICKER
+----------------------- */
+
+.branch-options {
+  position: absolute;
+  bottom: 34px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(4, 8, 15, 0.82);
+  backdrop-filter: blur(12px);
+  box-shadow: var(--shadow);
 }
 
 /* -----------------------
@@ -417,30 +431,21 @@ a {
 }
 
 /* -----------------------
-   EMBED MODE (homepage preview) — WATCH ONLY
-   - hides header/side panel/controls
-   - forces normal browser gestures (no custom pinch)
-   - keeps image stable and not enlarged
+   EMBED MODE (watch-only homepage preview)
 ----------------------- */
+
+.embed-mode #backLink,
+.embed-mode #viewerHeader,
+.embed-mode #sidePanel,
+.embed-mode #controls,
+.embed-mode #branchOptions,
+.embed-mode .viewer-line {
+  display: none !important;
+}
 
 .embed-mode .viewer-page {
   max-width: 100%;
-  padding: 12px;
-}
-
-.embed-mode #backLink {
-  display: none !important;
-}
-
-/* If your header has id="viewerHeader" and side panel id="sidePanel", these hide them */
-.embed-mode #viewerHeader {
-  display: none !important;
-}
-.embed-mode #sidePanel {
-  display: none !important;
-}
-.embed-mode #controls {
-  display: none !important;
+  padding: 0;
 }
 
 .embed-mode .viewer-main {
@@ -448,25 +453,11 @@ a {
 }
 
 .embed-mode .viewer-stage-panel {
-  padding: 14px;
+  padding: 0;
 }
 
-.embed-mode .viewer-line {
-  display: none !important;
-}
-
-.embed-mode #branchOptions {
-  display: none !important;
-}
-
-/* CRITICAL: in embed preview, do NOT block native gestures */
 .embed-mode .viewer-stage-shell {
-  touch-action: auto !important;
-}
-
-/* Keep preview clean */
-.embed-mode .eye-hint {
-  opacity: 0 !important;
+  border-radius: 22px;
 }
 
 /* -----------------------
