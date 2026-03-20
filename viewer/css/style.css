@@ -1,3 +1,5 @@
+/* viewer/css/style.css (FULL UPDATED) */
+
 :root {
   --bg: #03060d;
   --bg-soft: #07101d;
@@ -214,8 +216,13 @@ a {
   transform-origin: center;
 }
 
-.zoom-in { transform: scale(1.08); }
-.zoom-out { transform: scale(0.68); }
+.zoom-in {
+  transform: scale(1.08);
+}
+
+.zoom-out {
+  transform: scale(0.68);
+}
 
 .viewer-line {
   width: 100%;
@@ -243,7 +250,11 @@ a {
   font-size: 0.98rem;
   font-weight: 700;
   cursor: pointer;
-  transition: transform var(--transition), border-color var(--transition), background var(--transition), box-shadow var(--transition);
+  transition:
+    transform var(--transition),
+    border-color var(--transition),
+    background var(--transition),
+    box-shadow var(--transition);
 }
 
 .controls button:hover,
@@ -274,7 +285,7 @@ a {
   pointer-events: none;
 }
 
-/* ✅ FIX */
+/* ✅ FIX: add display:flex so gap/wrap/justify work */
 .branch-options {
   position: absolute;
   bottom: 34px;
@@ -282,7 +293,7 @@ a {
   transform: translateX(-50%);
   z-index: 5;
 
-  display: flex;            /* <-- needed */
+  display: flex;
   gap: 12px;
   flex-wrap: wrap;
   justify-content: center;
