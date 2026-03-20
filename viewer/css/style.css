@@ -1,4 +1,3 @@
-cat > css/style.css <<'EOF'
 :root {
   --bg: #03060d;
   --bg-soft: #07101d;
@@ -289,15 +288,19 @@ a {
   pointer-events: none;
 }
 
+/* ✅ FIX: add display:flex so gap/wrap/justify work */
 .branch-options {
   position: absolute;
   bottom: 34px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 5;
+
+  display: flex; /* <-- THIS is the correction */
   gap: 12px;
   flex-wrap: wrap;
   justify-content: center;
+
   padding: 12px 14px;
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -397,4 +400,3 @@ a {
     width: 100%;
   }
 }
-EOF
