@@ -5,9 +5,25 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Tomb of Light | Genesis Prototype</title>
 
-  <!-- Cache-bust so production actually updates -->
-  <link rel="stylesheet" href="css/style.css?v=20260320a" />
+  <!-- Cache-bust styles so updates always show -->
+  <link rel="stylesheet" href="css/style.css?v=20260320-2" />
+
+  <!-- Add embed-mode ASAP to prevent flicker -->
+  <script>
+    (function () {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const isEmbedParam = params.get("embed") === "1";
+        const isInIframe = window.self !== window.top;
+        if (isEmbedParam || isInIframe) document.documentElement.classList.add("embed-mode");
+      } catch (e) {
+        // If cross-origin iframe blocks window.top access, treat as embed
+        document.documentElement.classList.add("embed-mode");
+      }
+    })();
+  </script>
 </head>
+
 <body>
   <div class="viewer-page">
     <header class="viewer-header" id="viewerHeader">
@@ -28,8 +44,8 @@
         </p>
 
         <p class="viewer-instructions" id="viewerInstructions">
-          Hold <strong>C</strong>, then click <strong>Left Eye</strong> (Parents) or <strong>Right Eye</strong> (Descendants).
-          Use scroll / pinch to zoom. (Full viewer only)
+          Hold <strong>C</strong>, then click <strong>Left Eye</strong> (Parents) or
+          <strong>Right Eye</strong> (Descendants). Use scroll/pinch to zoom. (Full viewer only)
         </p>
       </div>
     </header>
@@ -48,13 +64,9 @@
         <div class="viewer-stage-shell" id="viewerStage">
           <div class="viewer-stage-glow"></div>
 
-          <div class="slideshow">
-            <!-- ✅ REQUIRED: this is what we transform (scale + pan) -->
-            <div class="slideshow-inner" id="slideshowInner">
-              <img id="viewerImage" src="images/malik.jpg" alt="Malik Moreland" />
-            </div>
+          <div class="slideshow" id="slideshow">
+            <img id="viewerImage" src="images/malik.jpg" alt="Malik Moreland" />
 
-            <!-- Eye hints (positioned by JS) -->
             <div class="eye-hint" id="eyeLeft" aria-hidden="true"></div>
             <div class="eye-hint" id="eyeRight" aria-hidden="true"></div>
           </div>
@@ -82,7 +94,9 @@
         <div class="side-card">
           <span class="panel-kicker">Current Node</span>
           <h3 id="currentNode">Malik Moreland</h3>
-          <p id="currentDescription">Starting at the anchor portrait for the Genesis family line.</p>
+          <p id="currentDescription">
+            Starting at the anchor portrait for the Genesis family line.
+          </p>
         </div>
 
         <div class="side-card">
@@ -99,15 +113,7 @@
     </main>
   </div>
 
-  <!-- Embed-mode flag (iframe preview) -->
-  <script>
-    (function () {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get("embed") === "1") document.body.classList.add("embed-mode");
-    })();
-  </script>
-
-  <!-- Cache-bust -->
-  <script src="js/script.js?v=20260320a"></script>
+  <!-- Cache-bust script too (critical if “C+click” changes weren’t showing) -->
+  <script src="js/script.js?v=20260320-2"></script>
 </body>
 </html>
