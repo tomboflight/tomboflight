@@ -8,9 +8,8 @@
 </head>
 <body>
   <div class="viewer-page">
-    <header class="viewer-header">
+    <header class="viewer-header" id="viewerHeader">
       <div class="viewer-brand-wrap">
-        <!-- ✅ Shown in full viewer, auto-hidden when embedded in an iframe -->
         <a href="../index.html" class="back-link" id="backLink">← Back to Tomb of Light</a>
 
         <div class="viewer-brand">
@@ -28,7 +27,7 @@
       </div>
     </header>
 
-    <main class="viewer-main">
+    <main class="viewer-main" id="viewerMain">
       <section class="viewer-stage-panel">
         <div class="viewer-stage-top">
           <div>
@@ -36,16 +35,17 @@
             <h2 id="viewerTitle">Malik Moreland</h2>
           </div>
 
-          <div class="viewer-status" id="viewerStatus">
-            Anchor Portrait
-          </div>
+          <div class="viewer-status" id="viewerStatus">Anchor Portrait</div>
         </div>
 
-        <div class="viewer-stage-shell">
+        <div class="viewer-stage-shell" id="stageShell">
           <div class="viewer-stage-glow"></div>
 
-          <div class="slideshow">
+          <div class="slideshow" id="slideshow">
             <img id="viewerImage" src="images/malik.jpg" alt="Malik Moreland" />
+            <!-- Eye hint rings (optional visual cue) -->
+            <div class="eye-hint eye-left" id="eyeLeft" aria-hidden="true"></div>
+            <div class="eye-hint eye-right" id="eyeRight" aria-hidden="true"></div>
           </div>
 
           <div id="narrationDisplay" class="narration-text"></div>
@@ -59,7 +59,7 @@
 
         <div class="viewer-line"></div>
 
-        <div class="controls">
+        <div class="controls" id="controls">
           <button type="button" onclick="zoomOut()">Zoom Out</button>
           <button type="button" onclick="zoomIn()">Zoom In</button>
           <button type="button" onclick="resetViewer()">Reset</button>
@@ -67,13 +67,11 @@
         </div>
       </section>
 
-      <aside class="viewer-side-panel">
+      <aside class="viewer-side-panel" id="sidePanel">
         <div class="side-card">
           <span class="panel-kicker">Current Node</span>
           <h3 id="currentNode">Malik Moreland</h3>
-          <p id="currentDescription">
-            Starting at the anchor portrait for the Genesis family line.
-          </p>
+          <p id="currentDescription">Starting at the anchor portrait for the Genesis family line.</p>
         </div>
 
         <div class="side-card">
@@ -90,26 +88,13 @@
     </main>
   </div>
 
-  <!-- ✅ Hide Back link when embedded in an iframe -->
+  <!-- Embed mode: if URL has ?embed=1, add class (CSS handles hiding) -->
   <script>
     (function () {
-      try {
-        const isEmbedded = window.self !== window.top;
-        if (isEmbedded) {
-          const back = document.getElementById("backLink");
-          if (back) back.style.display = "none";
-        }
-      } catch (_) {
-        // Cross-origin iframe protections can throw; default to hiding.
-        const back = document.getElementById("backLink");
-        if (back) back.style.display = "none";
-      }
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("embed") === "1") document.body.classList.add("embed-mode");
     })();
   </script>
-
-  <!-- ✅ MediaPipe FaceMesh (required for eye auto-detect in script.js) -->
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
 
   <script src="js/script.js"></script>
 </body>
