@@ -1,12 +1,7 @@
-/* viewer/js/script.js
-   Tomb of Light — Cinematic Viewer Controls (Option 1: Explicit eye zones)
-   - Scroll/trackpad wheel zoom
-   - Pinch zoom (mobile)
-   - Click left/right eye hotspots (optional hold "C" to reveal)
-   - Prevents shake by using a single transform pipeline
-*/
+// viewer/js/script.js
 
 const viewerImage = document.getElementById("viewerImage");
+const branchOptions = document.getElementById("branchOptions");
 const viewerTitle = document.getElementById("viewerTitle");
 const viewerStatus = document.getElementById("viewerStatus");
 const currentNode = document.getElementById("currentNode");
@@ -14,20 +9,11 @@ const currentDescription = document.getElementById("currentDescription");
 const narrationDisplay = document.getElementById("narrationDisplay");
 const narrationToggleBtn = document.getElementById("narrationToggleBtn");
 
-const branchOptions = document.getElementById("branchOptions"); // shown on parents state in full viewer
-const stageShell = document.querySelector(".viewer-stage-shell");
-
-// EMBED MODE rules:
-// - If you want homepage preview to be interactive, set WATCH_ONLY_EMBED = false
 const EMBED_MODE =
   new URLSearchParams(window.location.search).get("embed") === "1" ||
   window.self !== window.top;
 
-const WATCH_ONLY_EMBED = true; // <-- change to false if you want preview interactive
-
-// ---------------------------
-// States
-// ---------------------------
+// --- STATES ---
 const states = {
   malik: {
     image: "images/malik.jpg",
@@ -36,18 +22,8 @@ const states = {
     node: "Malik Moreland",
     description: "Starting at the anchor portrait for the Genesis family line.",
     narration:
-      "This is Malik Moreland, the anchor portrait of the Genesis family line. From here, the Moreland lineage unfolds across generations.",
-    // Eye zones are normalized coordinates relative to the image box (0..1)
-    eyes: {
-      left: { x: 0.46, y: 0.22 },  // Malik left eye
-      right: { x: 0.54, y: 0.22 }  // Malik right eye
-    },
-    nav: {
-      leftEye: "parents",           // left eye -> parents
-      rightEye: "malik_descendants" // right eye -> descendants
-    }
+      "This is Malik Moreland, the anchor portrait of the Genesis family line. From here, the Moreland lineage unfolds across generations."
   },
-
   parents: {
     image: "images/parents.jpg",
     title: "Elias & Clara Moreland",
@@ -55,19 +31,8 @@ const states = {
     node: "Parent Layer",
     description: "Choose a family branch from the shared parent structure.",
     narration:
-      "Elias and Clara Moreland represent the foundational parent structure. From this layer, three distinct family branches emerge.",
-    // Parents image is special: you can use face regions for sibling selection later.
-    // For now, eye clicks return to Malik by default.
-    eyes: {
-      left: { x: 0.46, y: 0.22 },
-      right: { x: 0.54, y: 0.22 }
-    },
-    nav: {
-      leftEye: "malik",
-      rightEye: "malik"
-    }
+      "Elias and Clara Moreland represent the foundational parent structure. From this layer, three distinct family branches emerge."
   },
-
   malik_descendants: {
     image: "images/malik_descendants.jpg",
     title: "Malik Descendants",
@@ -75,17 +40,8 @@ const states = {
     node: "Malik Descendants",
     description: "Malik's line expands into the next generation.",
     narration:
-      "Malik's descendants extend his lineage forward, connecting to the next generation of the Moreland family tree.",
-    eyes: {
-      left: { x: 0.42, y: 0.26 },
-      right: { x: 0.58, y: 0.26 }
-    },
-    nav: {
-      leftEye: "malik",
-      rightEye: "imani"
-    }
+      "Malik's descendants extend his lineage forward, connecting to the next generation of the Moreland family tree."
   },
-
   imani: {
     image: "images/imani.jpg",
     title: "Imani Moreland",
@@ -93,17 +49,8 @@ const states = {
     node: "Imani Moreland",
     description: "Imani becomes the next generation anchor portrait.",
     narration:
-      "Imani Moreland carries the anchor role for the next generation, continuing the Moreland lineage into new chapters.",
-    eyes: {
-      left: { x: 0.46, y: 0.22 },
-      right: { x: 0.54, y: 0.22 }
-    },
-    nav: {
-      leftEye: "malik_descendants",
-      rightEye: "imani_descendants"
-    }
+      "Imani Moreland carries the anchor role for the next generation, continuing the Moreland lineage into new chapters."
   },
-
   imani_descendants: {
     image: "images/imani_descendants.jpg",
     title: "Imani Descendants",
@@ -111,17 +58,8 @@ const states = {
     node: "Imani Descendants",
     description: "Imani's descendants extend the family line forward.",
     narration:
-      "Imani's descendants reach further into the future, extending the Moreland family legacy forward in time.",
-    eyes: {
-      left: { x: 0.46, y: 0.22 },
-      right: { x: 0.54, y: 0.22 }
-    },
-    nav: {
-      leftEye: "imani",
-      rightEye: "imani"
-    }
+      "Imani's descendants reach further into the future, extending the Moreland family legacy forward in time."
   },
-
   julian: {
     image: "images/julian.jpg",
     title: "Julian Moreland",
@@ -129,17 +67,8 @@ const states = {
     node: "Julian Moreland",
     description: "Julian is a sibling branch with no descendant layer.",
     narration:
-      "Julian Moreland is a sibling branch. His path connects back through the shared parent structure without a descendant layer.",
-    eyes: {
-      left: { x: 0.46, y: 0.22 },
-      right: { x: 0.54, y: 0.22 }
-    },
-    nav: {
-      leftEye: "parents",
-      rightEye: "parents"
-    }
+      "Julian Moreland is a sibling branch. His path connects back through the shared parent structure without a descendant layer."
   },
-
   selah: {
     image: "images/selah.jpg",
     title: "Selah Carter",
@@ -147,17 +76,8 @@ const states = {
     node: "Selah Carter",
     description: "Selah is a sibling branch with her own descendants.",
     narration:
-      "Selah Carter branches from the parent structure with her own distinct lineage and family tree.",
-    eyes: {
-      left: { x: 0.46, y: 0.22 },
-      right: { x: 0.54, y: 0.22 }
-    },
-    nav: {
-      leftEye: "parents",
-      rightEye: "selah_descendants"
-    }
+      "Selah Carter branches from the parent structure with her own distinct lineage and family tree."
   },
-
   selah_descendants: {
     image: "images/selah_descendants.jpg",
     title: "Selah Descendants",
@@ -165,19 +85,10 @@ const states = {
     node: "Selah Descendants",
     description: "Selah's line expands into her descendant branch.",
     narration:
-      "Selah's descendants form her unique branch, expanding the family line outward from the Moreland parent structure.",
-    eyes: {
-      left: { x: 0.46, y: 0.22 },
-      right: { x: 0.54, y: 0.22 }
-    },
-    nav: {
-      leftEye: "selah",
-      rightEye: "selah"
-    }
+      "Selah's descendants form her unique branch, expanding the family line outward from the Moreland parent structure."
   }
 };
 
-// The narration autoplay order (unchanged)
 const stateOrder = [
   "malik",
   "parents",
@@ -189,92 +100,52 @@ const stateOrder = [
   "selah_descendants"
 ];
 
-// ---------------------------
-// Cinematic Transform Engine (NO SHAKE)
-// ---------------------------
-let state = "malik";
-let isPlaying = true;
-
+// --- Narration settings ---
 const NARRATION_DISPLAY_DURATION_MS = 4500;
 const AUTO_ADVANCE_INTERVAL_MS = 5000;
 
+let state = "malik";
+let isPlaying = true;
 let narrationInterval = null;
 let narrationFadeTimeout = null;
+
+// --- Transition + zoom control ---
 let transitionLock = false;
+let scale = 1; // current zoom scale for full viewer
+const SCALE_MIN = 0.65;
+const SCALE_MAX = 1.25;
 
-// Single transform pipeline
-let zoom = 1; // 1..3
-let tx = 0;   // px
-let ty = 0;   // px
+// Smooth wheel handling (prevents trackpad bursts from shaking)
+let pendingWheelDelta = 0;
+let wheelRaf = null;
 
-const ZOOM_MIN = 1;
-const ZOOM_MAX = 3;
-const ZOOM_STEP = 0.18;
-const ZOOM_THRESHOLD_IN = 1.35;
-const ZOOM_THRESHOLD_OUT = 0.95;
-
-// Eye overlay (optional)
-let showEyes = false;
-
-// Helpers
 function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
 }
 
-function getImageRect() {
-  if (!viewerImage) return null;
-  return viewerImage.getBoundingClientRect();
-}
-
-function applyTransform() {
+function setImageScale(nextScale) {
+  scale = clamp(nextScale, SCALE_MIN, SCALE_MAX);
   if (!viewerImage) return;
-  viewerImage.style.transform = `translate3d(${tx}px, ${ty}px, 0) scale(${zoom})`;
+
+  // IMPORTANT: keep origin stable to avoid “jitter”
+  viewerImage.style.transformOrigin = "center center";
+  viewerImage.style.transform = `translate3d(0,0,0) scale(${scale})`;
 }
 
-function resetTransform() {
-  zoom = 1;
-  tx = 0;
-  ty = 0;
-  applyTransform();
-}
-
-function focusOnNormalizedPoint(nx, ny, targetZoom = 2.2) {
-  const rect = getImageRect();
-  if (!rect) return;
-
-  zoom = clamp(targetZoom, ZOOM_MIN, ZOOM_MAX);
-
-  // Convert normalized point inside the image rect into pixel coords
-  const px = rect.left + rect.width * nx;
-  const py = rect.top + rect.height * ny;
-
-  // Center that point in the stage
-  const stageRect = stageShell ? stageShell.getBoundingClientRect() : rect;
-  const cx = stageRect.left + stageRect.width / 2;
-  const cy = stageRect.top + stageRect.height / 2;
-
-  // Translate image so point moves toward center
-  // Since we scale the image, translate amount should be scaled too
-  tx += (cx - px);
-  ty += (cy - py);
-
-  // damp translation to avoid extreme jump
-  tx = clamp(tx, -rect.width * 0.4, rect.width * 0.4);
-  ty = clamp(ty, -rect.height * 0.4, rect.height * 0.4);
-
-  applyTransform();
+function resetScale() {
+  scale = 1;
+  if (!viewerImage) return;
+  viewerImage.style.transformOrigin = "center center";
+  viewerImage.style.transform = "translate3d(0,0,0) scale(1)";
 }
 
 // ---------------------------
-// Narration
+// Narration display
 // ---------------------------
 function showNarration(text) {
   if (!narrationDisplay) return;
 
-  if (narrationFadeTimeout) {
-    clearTimeout(narrationFadeTimeout);
-    narrationFadeTimeout = null;
-  }
+  if (narrationFadeTimeout) clearTimeout(narrationFadeTimeout);
 
   if (!isPlaying || !text) {
     narrationDisplay.style.opacity = "0";
@@ -291,29 +162,30 @@ function showNarration(text) {
 
 function startNarrationAutoAdvance() {
   if (narrationInterval) clearInterval(narrationInterval);
+
   narrationInterval = setInterval(() => {
+    if (transitionLock) return;
     const currentIndex = stateOrder.indexOf(state);
     const nextIndex = (currentIndex + 1) % stateOrder.length;
-    applyState(stateOrder[nextIndex], { cinematic: false }); // narration is "watch mode"
+    applyState(stateOrder[nextIndex]);
   }, AUTO_ADVANCE_INTERVAL_MS);
 }
 
 function stopNarrationAutoAdvance() {
-  if (narrationInterval) {
-    clearInterval(narrationInterval);
-    narrationInterval = null;
-  }
-  if (narrationFadeTimeout) {
-    clearTimeout(narrationFadeTimeout);
-    narrationFadeTimeout = null;
-  }
+  if (narrationInterval) clearInterval(narrationInterval);
+  narrationInterval = null;
+
+  if (narrationFadeTimeout) clearTimeout(narrationFadeTimeout);
+  narrationFadeTimeout = null;
+
   if (narrationDisplay) narrationDisplay.style.opacity = "0";
 }
 
 function toggleNarration() {
-  if (EMBED_MODE && WATCH_ONLY_EMBED) return;
+  if (EMBED_MODE) return; // watch-only
 
   isPlaying = !isPlaying;
+
   if (narrationToggleBtn) {
     narrationToggleBtn.textContent = isPlaying ? "Narration: ON" : "Narration: OFF";
   }
@@ -329,7 +201,7 @@ function toggleNarration() {
 // ---------------------------
 // State transitions
 // ---------------------------
-function applyState(nextState, opts = { cinematic: true }) {
+function applyState(nextState) {
   const config = states[nextState];
   if (!config) return;
   if (transitionLock) return;
@@ -337,15 +209,22 @@ function applyState(nextState, opts = { cinematic: true }) {
   transitionLock = true;
   state = nextState;
 
-  // Fade out image
-  if (viewerImage) viewerImage.style.opacity = "0.15";
+  // Always reset zoom when switching portraits (prevents “stuck zoom”)
+  if (!EMBED_MODE) resetScale();
+
+  if (viewerImage) viewerImage.style.opacity = "0.25";
 
   setTimeout(() => {
     if (viewerImage) {
       viewerImage.src = config.image;
       viewerImage.alt = config.node;
       viewerImage.style.opacity = "1";
-      resetTransform();
+
+      // In embed preview, ALWAYS force scale=1
+      if (EMBED_MODE) {
+        viewerImage.style.transform = "translate3d(0,0,0) scale(1)";
+        viewerImage.style.transformOrigin = "center center";
+      }
     }
 
     if (viewerTitle) viewerTitle.textContent = config.title;
@@ -355,210 +234,115 @@ function applyState(nextState, opts = { cinematic: true }) {
 
     showNarration(config.narration);
 
-    // Parent branch buttons only in full viewer
     if (branchOptions) {
-      if (!EMBED_MODE || !WATCH_ONLY_EMBED) {
-        branchOptions.style.display = nextState === "parents" ? "flex" : "none";
-      } else {
-        branchOptions.style.display = "none";
-      }
+      if (!EMBED_MODE && nextState === "parents") branchOptions.style.display = "flex";
+      else branchOptions.style.display = "none";
     }
 
-    // Unlock
     setTimeout(() => {
       transitionLock = false;
-    }, 180);
+    }, 140);
   }, 180);
 }
 
 // ---------------------------
-// Eye click navigation (Option 1)
+// Button-based zoom (kept)
 // ---------------------------
-function getEyeHitSide(clientX, clientY) {
-  const rect = getImageRect();
-  if (!rect) return null;
-
-  const xNorm = (clientX - rect.left) / rect.width;
-  const yNorm = (clientY - rect.top) / rect.height;
-
-  // Simple split by centerline for "left vs right" eye choice
-  if (xNorm < 0 || xNorm > 1 || yNorm < 0 || yNorm > 1) return null;
-  return xNorm < 0.5 ? "left" : "right";
-}
-
-function handleEyeClick(clientX, clientY) {
-  const cfg = states[state];
-  if (!cfg || !cfg.nav) return;
-
-  const side = getEyeHitSide(clientX, clientY);
-  if (!side) return;
-
-  // Cinematic focus first
-  const eye = cfg.eyes?.[side];
-  if (eye) focusOnNormalizedPoint(eye.x, eye.y, 2.2);
-
-  // Then transition to next state
-  const next = side === "left" ? cfg.nav.leftEye : cfg.nav.rightEye;
-  if (next) {
-    setTimeout(() => applyState(next, { cinematic: true }), 260);
-  }
-}
-
-// ---------------------------
-// Scroll + pinch zoom (cross-device)
-// ---------------------------
-function zoomBy(delta, anchorX, anchorY) {
-  const rect = getImageRect();
-  if (!rect) return;
-
-  // Normalize anchor
-  const nx = (anchorX - rect.left) / rect.width;
-  const ny = (anchorY - rect.top) / rect.height;
-
-  const prevZoom = zoom;
-  zoom = clamp(zoom + delta, ZOOM_MIN, ZOOM_MAX);
-
-  // Adjust translation to keep anchor stable
-  // Basic approach: scale translation relative to zoom change
-  const scale = zoom / prevZoom;
-  tx *= scale;
-  ty *= scale;
-
-  applyTransform();
-
-  // If user zooms far enough, trigger state transitions (only full viewer or interactive embed)
-  if (EMBED_MODE && WATCH_ONLY_EMBED) return;
-
-  if (zoom >= ZOOM_THRESHOLD_IN) {
-    // treat as zoom-in intent => go right-eye path (descendants)
-    const cfg = states[state];
-    const next = cfg?.nav?.rightEye;
-    if (next) {
-      resetTransform();
-      applyState(next, { cinematic: true });
-    }
-  } else if (zoom <= ZOOM_THRESHOLD_OUT) {
-    // treat as zoom-out intent => go left-eye path (parents)
-    const cfg = states[state];
-    const next = cfg?.nav?.leftEye;
-    if (next) {
-      resetTransform();
-      applyState(next, { cinematic: true });
-    }
-  }
-}
-
-let pinchStartDist = null;
-
-function distance(t1, t2) {
-  const dx = t1.clientX - t2.clientX;
-  const dy = t1.clientY - t2.clientY;
-  return Math.sqrt(dx * dx + dy * dy);
-}
-
-// ---------------------------
-// Event wiring
-// ---------------------------
-function bindEvents() {
-  if (!stageShell) return;
-
-  // Wheel / trackpad
-  stageShell.addEventListener(
-    "wheel",
-    (e) => {
-      e.preventDefault();
-      if (transitionLock) return;
-
-      const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
-      zoomBy(delta, e.clientX, e.clientY);
-    },
-    { passive: false }
-  );
-
-  // Click eye navigation
-  stageShell.addEventListener("click", (e) => {
-    if (transitionLock) return;
-    if (EMBED_MODE && WATCH_ONLY_EMBED) return;
-    // If holding C, we allow eye click; if not holding C, still allow.
-    handleEyeClick(e.clientX, e.clientY);
-  });
-
-  // Touch pinch
-  stageShell.addEventListener(
-    "touchstart",
-    (e) => {
-      if (transitionLock) return;
-      if (e.touches.length === 2) {
-        pinchStartDist = distance(e.touches[0], e.touches[1]);
-      }
-    },
-    { passive: true }
-  );
-
-  stageShell.addEventListener(
-    "touchmove",
-    (e) => {
-      if (transitionLock) return;
-      if (e.touches.length === 2 && pinchStartDist) {
-        e.preventDefault();
-        const d = distance(e.touches[0], e.touches[1]);
-        const diff = d - pinchStartDist;
-        pinchStartDist = d;
-
-        const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-        const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-
-        const delta = diff > 0 ? ZOOM_STEP * 0.6 : -ZOOM_STEP * 0.6;
-        zoomBy(delta, centerX, centerY);
-      }
-    },
-    { passive: false }
-  );
-
-  stageShell.addEventListener(
-    "touchend",
-    () => {
-      pinchStartDist = null;
-    },
-    { passive: true }
-  );
-
-  // Hold C to show eye hints (optional – uses CSS .show-eyes)
-  window.addEventListener("keydown", (e) => {
-    if (e.key.toLowerCase() === "c") {
-      showEyes = true;
-      document.body.classList.add("show-eyes");
-    }
-  });
-
-  window.addEventListener("keyup", (e) => {
-    if (e.key.toLowerCase() === "c") {
-      showEyes = false;
-      document.body.classList.remove("show-eyes");
-    }
-  });
-}
-
-// Branch buttons (only used on parents)
-window.selectBranch = function selectBranch(branch) {
-  if (EMBED_MODE && WATCH_ONLY_EMBED) return;
+function zoomIn() {
+  if (EMBED_MODE) return;
   if (transitionLock) return;
 
-  if (branch === "julian") applyState("julian");
-  if (branch === "malik") applyState("malik");
-  if (branch === "selah") applyState("selah");
-};
+  if (state === "malik") return applyState("malik_descendants");
+  if (state === "malik_descendants") return applyState("imani");
+  if (state === "imani") return applyState("imani_descendants");
+  if (state === "selah") return applyState("selah_descendants");
+  if (state === "parents") {
+    if (branchOptions) branchOptions.style.display = "flex";
+  }
+}
 
-window.toggleNarration = toggleNarration;
+function zoomOut() {
+  if (EMBED_MODE) return;
+  if (transitionLock) return;
 
-window.resetViewer = function resetViewer() {
-  if (EMBED_MODE && WATCH_ONLY_EMBED) return;
-  resetTransform();
+  if (state === "malik") return applyState("parents");
+  if (state === "malik_descendants") return applyState("malik");
+  if (state === "imani") return applyState("malik_descendants");
+  if (state === "imani_descendants") return applyState("imani");
+  if (state === "julian") return applyState("parents");
+  if (state === "selah") return applyState("parents");
+  if (state === "selah_descendants") return applyState("selah");
+  if (state === "parents") return applyState("malik");
+}
+
+function selectBranch(branch) {
+  if (EMBED_MODE) return;
+  if (transitionLock) return;
+
+  if (branch === "julian") return applyState("julian");
+  if (branch === "malik") return applyState("malik");
+  if (branch === "selah") return applyState("selah");
+}
+
+function resetViewer() {
+  if (EMBED_MODE) return;
+  if (transitionLock) return;
+
+  resetScale();
   applyState("malik");
   if (isPlaying) startNarrationAutoAdvance();
-};
+}
+
+// Expose for inline onclick handlers
+window.zoomIn = zoomIn;
+window.zoomOut = zoomOut;
+window.resetViewer = resetViewer;
+window.toggleNarration = toggleNarration;
+window.selectBranch = selectBranch;
+
+// ---------------------------
+// Smooth wheel zoom (FULL VIEWER ONLY)
+// ---------------------------
+function onWheel(e) {
+  if (EMBED_MODE) return;
+  if (transitionLock) return;
+
+  // Prevent page scroll inside the stage interaction
+  e.preventDefault();
+
+  // Trackpads produce small deltas fast — accumulate & apply in rAF
+  pendingWheelDelta += e.deltaY;
+
+  if (!wheelRaf) {
+    wheelRaf = requestAnimationFrame(() => {
+      // Normalize: scrolling up should zoom in slightly, down zoom out slightly
+      const delta = pendingWheelDelta;
+      pendingWheelDelta = 0;
+      wheelRaf = null;
+
+      // If user is wheel-zooming a lot, allow scaling but not “state change”
+      // Holding SHIFT does state navigation (optional)
+      if (e.shiftKey) {
+        if (delta > 0) zoomOut();
+        else zoomIn();
+        return;
+      }
+
+      const zoomSpeed = 0.0012; // tuned for trackpads
+      const next = scale * (1 - delta * zoomSpeed);
+      setImageScale(next);
+    });
+  }
+}
+
+// Attach wheel only if full viewer
+if (!EMBED_MODE) {
+  const stage = document.querySelector(".viewer-stage-shell");
+  if (stage) {
+    stage.addEventListener("wheel", onWheel, { passive: false });
+  }
+}
 
 // Boot
 applyState("malik");
-bindEvents();
-startNarrationAutoAdvance();
+if (!EMBED_MODE) startNarrationAutoAdvance();
