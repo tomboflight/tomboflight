@@ -7,9 +7,16 @@ const currentDescription = document.getElementById("currentDescription");
 const narrationDisplay = document.getElementById("narrationDisplay");
 const narrationToggleBtn = document.getElementById("narrationToggleBtn");
 
+// Safer embed detection (works for ?embed=1 and iframe embeds)
 const EMBED_MODE =
   new URLSearchParams(window.location.search).get("embed") === "1" ||
-  window.self !== window.top;
+  (() => {
+    try {
+      return window.self !== window.top;
+    } catch {
+      return true;
+    }
+  })();
 
 const states = {
   malik: {
@@ -131,6 +138,9 @@ function startNarrationAutoAdvance() {
   if (narrationInterval) clearInterval(narrationInterval);
 
   narrationInterval = setInterval(() => {
+    // Don’t advance if the tab isn’t visible (prevents “jump/shake” on return)
+    if (document.hidden) return;
+
     const currentIndex = stateOrder.indexOf(state);
     const nextIndex = (currentIndex + 1) % stateOrder.length;
     applyState(stateOrder[nextIndex]);
@@ -176,7 +186,6 @@ function applyState(nextState) {
   transitionLock = true;
   state = nextState;
 
-  // Simple crossfade (no zoom transforms in embed-mode)
   if (viewerImage) viewerImage.style.opacity = "0.25";
 
   setTimeout(() => {
@@ -194,16 +203,14 @@ function applyState(nextState) {
 
     showNarration(config.narration);
 
-    // Branch buttons only make sense on full viewer
     if (branchOptions) {
       if (!EMBED_MODE && nextState === "parents") branchOptions.style.display = "flex";
       else branchOptions.style.display = "none";
     }
 
-    // Unlock after paint
     setTimeout(() => {
       transitionLock = false;
-    }, 120);
+    }, 140);
   }, 160);
 }
 
@@ -292,6 +299,12 @@ function resetViewer() {
   applyState("malik");
   if (isPlaying) startNarrationAutoAdvance();
 }
+
+// Pause/resume auto-advance when tab visibility changes (extra stability)
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) return;
+  if (isPlaying && !EMBED_MODE) startNarrationAutoAdvance();
+});
 
 // Boot
 applyState("malik");
