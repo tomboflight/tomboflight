@@ -10,7 +10,7 @@
   <div class="viewer-page">
     <header class="viewer-header">
       <div class="viewer-brand-wrap">
-        <!-- ✅ Shown in full viewer, auto-hidden when embedded in iframe -->
+        <!-- ✅ Shown in full viewer, auto-hidden when embedded in an iframe -->
         <a href="../index.html" class="back-link" id="backLink">← Back to Tomb of Light</a>
 
         <div class="viewer-brand">
@@ -90,16 +90,26 @@
     </main>
   </div>
 
-  <!-- ✅ Option A: Auto-hide Back link when viewer is embedded in an iframe -->
+  <!-- ✅ Hide Back link when embedded in an iframe -->
   <script>
     (function () {
-      const isEmbedded = window.self !== window.top;
-      if (isEmbedded) {
+      try {
+        const isEmbedded = window.self !== window.top;
+        if (isEmbedded) {
+          const back = document.getElementById("backLink");
+          if (back) back.style.display = "none";
+        }
+      } catch (_) {
+        // Cross-origin iframe protections can throw; default to hiding.
         const back = document.getElementById("backLink");
         if (back) back.style.display = "none";
       }
     })();
   </script>
+
+  <!-- ✅ MediaPipe FaceMesh (required for eye auto-detect in script.js) -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
 
   <script src="js/script.js"></script>
 </body>
