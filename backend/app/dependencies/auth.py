@@ -7,6 +7,24 @@ from app.services.auth_service import get_user_by_email
 bearer_scheme = HTTPBearer()
 
 
+def _normalize_user(user: dict, payload: dict) -> dict:
+    normalized_user = dict(user)
+
+    raw_id = (
+        normalized_user.get("id")
+        or normalized_user.get("_id")
+        or payload.get("user_id")
+    )
+
+    if raw_id is not None:
+        normalized_user["id"] = str(raw_id)
+
+    if "user_id" not in normalized_user and raw_id is not None:
+        normalized_user["user_id"] = str(raw_id)
+
+    return normalized_user
+
+
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
 ) -> dict:
@@ -33,13 +51,15 @@ def get_current_user(
             detail="User not found.",
         )
 
-    if user.get("status") != "active":
+    normalized_user = _normalize_user(user, payload)
+
+    if normalized_user.get("status") != "active":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User is inactive.",
         )
 
-    return user
+    return normalized_user
 
 
 def require_admin(current_user: dict = Depends(get_current_user)) -> dict:

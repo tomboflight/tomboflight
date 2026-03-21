@@ -1,15 +1,14 @@
 (function () {
-  'use strict';
+  "use strict";
+
+  const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
 
   const host = window.location.hostname;
-  const isLocal =
-    host === '127.0.0.1' ||
-    host === 'localhost' ||
-    host === '::1';
+  const isLocal = LOCAL_HOSTS.has(host);
 
   window.TOL_CONFIG = {
     API_BASE_URL: isLocal
-      ? 'http://127.0.0.1:8000'
-      : 'https://tomboflight-api.onrender.com'
+      ? "http://127.0.0.1:8000"
+      : "https://tomboflight-api.onrender.com",
   };
 })();
