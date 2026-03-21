@@ -1,6 +1,8 @@
+import re
 from datetime import UTC, datetime
 from typing import Any, Optional, cast
 
+import stripe
 from bson import ObjectId
 from pymongo.collection import Collection
 from pymongo.database import Database
@@ -40,7 +42,7 @@ def create_order_for_user(user: dict[str, Any], payload: Any) -> dict[str, Any]:
 
     existing = orders.find_one(
         {
-            "user_id": ObjectId(user["_id"]),
+            "user_id": ObjectId(str(user["_id"])),
             "package_slug": payload.package_slug,
             "status": payload.order_status,
         },
@@ -51,7 +53,7 @@ def create_order_for_user(user: dict[str, Any], payload: Any) -> dict[str, Any]:
         return _serialize_order(existing)
 
     order_doc = {
-        "user_id": ObjectId(user["_id"]),
+        "user_id": ObjectId(str(user["_id"])),
         "email": user["email"],
         "package_slug": payload.package_slug,
         "package_name": payload.package_name,
@@ -70,22 +72,13 @@ def create_order_for_user(user: dict[str, Any], payload: Any) -> dict[str, Any]:
 
 def get_orders_for_user(user: dict[str, Any]) -> list[dict[str, Any]]:
     orders = _get_orders_collection()
-    docs = list(orders.find({"user_id": ObjectId(user["_id"])}).sort("created_at", -1))
+    docs = list(
+        orders.find({"user_id": ObjectId(str(user["_id"]))}).sort("created_at", -1)
+    )
     return [_serialize_order(doc) for doc in docs]
 
 
-# ----------------------------
-# Indexes (safe + non-crashing)
-# ----------------------------
 def ensure_order_indexes() -> None:
-    """
-    Create indexes safely with explicit names and avoid index-name conflicts.
-
-    Your DB already has:
-      stripe_session_id_1 (unique + sparse)
-
-    If an index already exists, we skip it rather than crashing the app.
-    """
     orders = _get_orders_collection()
     existing = orders.index_information()
 
@@ -96,23 +89,18 @@ def ensure_order_indexes() -> None:
         unique: bool = False,
         sparse: bool = False,
     ) -> None:
-        # If the index name already exists, do not attempt to recreate it.
         if name in existing:
             return
 
         try:
             orders.create_index(keys, name=name, unique=unique, sparse=sparse)
         except OperationFailure:
-            # If something else created it between reads, ignore.
             return
 
     _ensure_index([("user_id", 1)], name="user_id_1")
     _ensure_index([("email", 1)], name="email_1")
     _ensure_index([("package_slug", 1)], name="package_slug_1")
     _ensure_index([("created_at", -1)], name="created_at_-1")
-
-    # Webhook idempotency / Stripe linkage
-    # Match the DB's existing index behavior: UNIQUE + SPARSE
     _ensure_index(
         [("stripe_session_id", 1)],
         name="stripe_session_id_1",
@@ -127,105 +115,194 @@ def ensure_order_indexes() -> None:
     )
 
 
-# ----------------------------
-# Stripe -> Order upsert
-# ----------------------------
-def _get_email_from_event(event: dict[str, Any]) -> Optional[str]:
-    data = (event.get("data") or {}).get("object") or {}
+def _normalize_email(value: Optional[str]) -> Optional[str]:
+    if not value:
+        return None
+    return value.strip().lower()
 
-    # checkout.session.completed
-    customer_details = data.get("customer_details") or {}
+
+def _get_user_by_email(email: str) -> Optional[dict[str, Any]]:
+    users = _get_users_collection()
+
+    exact = users.find_one({"email": email})
+    if exact:
+        return exact
+
+    return users.find_one(
+        {
+            "email": {
+                "$regex": f"^{re.escape(email)}$",
+                "$options": "i",
+            }
+        }
+    )
+
+
+def _event_object(event: dict[str, Any]) -> dict[str, Any]:
+    return ((event.get("data") or {}).get("object") or {}) if isinstance(event, dict) else {}
+
+
+def _retrieve_checkout_session(session_id: str) -> dict[str, Any]:
+    session = stripe.checkout.Session.retrieve(
+        session_id,
+        expand=["line_items.data.price.product"],
+    )
+
+    if hasattr(session, "to_dict_recursive"):
+        return session.to_dict_recursive()
+
+    return dict(session)
+
+
+def _extract_email_from_session(session: dict[str, Any]) -> Optional[str]:
+    customer_details = session.get("customer_details") or {}
     email = customer_details.get("email")
 
-    # fallback: customer_email sometimes exists on session
     if not email:
-        email = data.get("customer_email")
+        email = session.get("customer_email")
 
-    # payment_intent.succeeded fallback (rare)
-    if not email:
-        charges = (((data.get("charges") or {}).get("data")) or [])
-        if charges:
-            billing = charges[0].get("billing_details") or {}
-            email = billing.get("email")
-
-    return email
+    return _normalize_email(email)
 
 
-def _get_package_fields_from_event(event: dict[str, Any]) -> tuple[str, str, str]:
-    """
-    Returns: (package_slug, package_name, price_label)
-    We expect you to put these in Stripe metadata later.
-    For now, safe fallbacks.
-    """
-    data = (event.get("data") or {}).get("object") or {}
-    metadata = data.get("metadata") or {}
+def _extract_product_name_from_session(session: dict[str, Any]) -> Optional[str]:
+    line_items = ((session.get("line_items") or {}).get("data")) or []
+    if not line_items:
+        return None
 
-    package_slug = metadata.get("package_slug") or metadata.get("package") or "unknown"
-    package_name = metadata.get("package_name") or "Tomb of Light Package"
-    price_label = metadata.get("price_label") or "paid"
+    first_item = line_items[0] or {}
 
-    return package_slug, package_name, price_label
+    description = first_item.get("description")
+    if description:
+        return str(description).strip()
+
+    price_obj = first_item.get("price") or {}
+    product_obj = price_obj.get("product") or {}
+
+    product_name = product_obj.get("name")
+    if product_name:
+        return str(product_name).strip()
+
+    return None
+
+
+def _infer_package_fields(
+    session: dict[str, Any],
+) -> tuple[str, str, str]:
+    metadata = session.get("metadata") or {}
+
+    package_slug = metadata.get("package_slug") or metadata.get("package")
+    package_name = metadata.get("package_name")
+    price_label = metadata.get("price_label")
+
+    if package_slug and package_name and price_label:
+        return str(package_slug), str(package_name), str(price_label)
+
+    product_name = _extract_product_name_from_session(session)
+    amount_subtotal = session.get("amount_subtotal")
+
+    if isinstance(product_name, str):
+        name_lower = product_name.lower()
+
+        if "legacy plus" in name_lower:
+            return "legacy-plus", "Legacy Plus", "$3,200"
+        if "heirloom" in name_lower:
+            return "heirloom-legacy-tree", "Heirloom Legacy Tree", "$1,500"
+        if "starter" in name_lower:
+            return "starter-family-tree", "Starter Family Tree", "$799"
+        if "portrait" in name_lower:
+            return "digital-legacy-portrait", "Digital Legacy Portrait", "$399"
+
+    if amount_subtotal == 320000:
+        return "legacy-plus", "Legacy Plus", "$3,200"
+    if amount_subtotal == 150000:
+        return "heirloom-legacy-tree", "Heirloom Legacy Tree", "$1,500"
+    if amount_subtotal == 79900:
+        return "starter-family-tree", "Starter Family Tree", "$799"
+    if amount_subtotal == 39900:
+        return "digital-legacy-portrait", "Digital Legacy Portrait", "$399"
+
+    return "unknown", "Tomb of Light Package", "paid"
 
 
 def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
-    """
-    Creates an Order IF we can match Stripe's email to an existing user record.
-    Idempotent by stripe_session_id for checkout.session.completed.
-
-    Returns:
-      {"order_id": "...", ...} or {"order_id": None, "reason": "..."}
-    """
     event_type = event.get("type", "")
-    data = (event.get("data") or {}).get("object") or {}
+    data = _event_object(event)
 
-    email = _get_email_from_event(event)
+    if event_type != "checkout.session.completed":
+        return {
+            "order_id": None,
+            "ignored": True,
+            "reason": "event_type_not_used_for_order_creation",
+            "type": event_type,
+        }
+
+    session_id = data.get("id")
+    if not session_id:
+        return {"order_id": None, "reason": "no_session_id", "type": event_type}
+
+    try:
+        session = _retrieve_checkout_session(session_id)
+    except Exception as e:
+        return {
+            "order_id": None,
+            "reason": "session_retrieve_failed",
+            "type": event_type,
+            "session_id": session_id,
+            "error": str(e),
+        }
+
+    email = _extract_email_from_session(session)
     if not email:
-        return {"order_id": None, "reason": "no_email_in_event", "type": event_type}
+        return {
+            "order_id": None,
+            "reason": "no_email_in_checkout_session",
+            "type": event_type,
+            "session_id": session_id,
+        }
 
-    users = _get_users_collection()
-    user = users.find_one({"email": email})
+    user = _get_user_by_email(email)
     if not user:
         return {
             "order_id": None,
             "reason": "no_matching_user",
-            "email": email,
             "type": event_type,
+            "session_id": session_id,
+            "email": email,
         }
 
     orders = _get_orders_collection()
 
-    stripe_session_id: Optional[str] = None
-    stripe_payment_link_id: Optional[str] = None
-
-    if event_type == "checkout.session.completed":
-        stripe_session_id = data.get("id")
-        stripe_payment_link_id = data.get("payment_link")
-    elif event_type == "payment_intent.succeeded":
-        # backup event; may not map cleanly to a session
-        stripe_session_id = data.get("id")
-        stripe_payment_link_id = data.get("payment_link")
-
-    if not stripe_session_id:
-        return {"order_id": None, "reason": "no_session_id", "email": email, "type": event_type}
-
-    existing = orders.find_one({"stripe_session_id": stripe_session_id})
+    existing = orders.find_one({"stripe_session_id": session_id})
     if existing:
-        return {"order_id": str(existing["_id"]), "existing": True, "type": event_type}
+        return {
+            "order_id": str(existing["_id"]),
+            "existing": True,
+            "type": event_type,
+            "session_id": session_id,
+        }
 
-    package_slug, package_name, price_label = _get_package_fields_from_event(event)
+    package_slug, package_name, price_label = _infer_package_fields(session)
 
     order_doc = {
-        "user_id": ObjectId(user["_id"]),
+        "user_id": ObjectId(str(user["_id"])),
         "email": email,
         "package_slug": package_slug,
         "package_name": package_name,
         "price_label": price_label,
         "source": "stripe_webhook",
         "status": "paid",
-        "stripe_session_id": stripe_session_id,
-        "stripe_payment_link_id": stripe_payment_link_id,
+        "stripe_session_id": session_id,
+        "stripe_payment_link_id": session.get("payment_link"),
         "created_at": datetime.now(UTC),
     }
 
     result = orders.insert_one(order_doc)
-    return {"order_id": str(result.inserted_id), "existing": False, "type": event_type}
+
+    return {
+        "order_id": str(result.inserted_id),
+        "existing": False,
+        "type": event_type,
+        "session_id": session_id,
+        "email": email,
+        "package_slug": package_slug,
+    }
