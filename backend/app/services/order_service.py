@@ -72,11 +72,9 @@ def create_order_for_user(user: dict[str, Any], payload: Any) -> dict[str, Any]:
 
 def get_orders_for_user(user: dict[str, Any]) -> list[dict[str, Any]]:
     orders = _get_orders_collection()
-
     docs = list(
         orders.find({"user_id": ObjectId(str(user["_id"]))}).sort("created_at", -1)
     )
-
     return [_serialize_order(doc) for doc in docs]
 
 
