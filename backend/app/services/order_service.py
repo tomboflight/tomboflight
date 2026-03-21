@@ -79,6 +79,9 @@ def get_orders_for_user(user: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def ensure_order_indexes() -> None:
+    """
+    Create indexes safely with explicit names and avoid index-name conflicts.
+    """
     orders = _get_orders_collection()
     existing = orders.index_information()
 
@@ -185,9 +188,7 @@ def _extract_product_name_from_session(session: dict[str, Any]) -> Optional[str]
     return None
 
 
-def _infer_package_fields(
-    session: dict[str, Any],
-) -> tuple[str, str, str]:
+def _infer_package_fields(session: dict[str, Any]) -> tuple[str, str, str]:
     metadata = session.get("metadata") or {}
 
     package_slug = metadata.get("package_slug") or metadata.get("package")
@@ -224,7 +225,32 @@ def _infer_package_fields(
     return "unknown", "Tomb of Light Package", "paid"
 
 
+def _get_email_from_event(event: dict[str, Any]) -> Optional[str]:
+    data = _event_object(event)
+
+    customer_details = data.get("customer_details") or {}
+    email = customer_details.get("email")
+
+    if not email:
+        email = data.get("customer_email")
+
+    if not email:
+        charges = (((data.get("charges") or {}).get("data")) or [])
+        if charges:
+            billing = charges[0].get("billing_details") or {}
+            email = billing.get("email")
+
+    return _normalize_email(email)
+
+
 def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
+    """
+    Creates an Order IF we can match Stripe's email to an existing user record.
+    Uses checkout.session.completed as the primary order creation event.
+
+    Returns:
+      {"order_id": "...", ...} or {"order_id": None, "reason": "..."}
+    """
     event_type = event.get("type", "")
     data = _event_object(event)
 
@@ -252,6 +278,9 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
         }
 
     email = _extract_email_from_session(session)
+    if not email:
+        email = _get_email_from_event(event)
+
     if not email:
         return {
             "order_id": None,

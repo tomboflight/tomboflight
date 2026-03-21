@@ -1,4 +1,5 @@
 from pymongo import ASCENDING
+from pymongo.errors import OperationFailure
 
 from app.database import get_database
 from app.schemas.db_bootstrap import BootstrapResponse, CollectionStatus
@@ -124,11 +125,21 @@ def bootstrap_core_collections() -> BootstrapResponse:
             created = True
 
         collection = db[collection_name]
+        existing_indexes = collection.index_information()
 
         for keys, options in index_definitions:
             index_name = options.get("name", "unnamed_index")
-            collection.create_index(keys, **options)
-            created_indexes.append(index_name)
+
+            if index_name in existing_indexes:
+                created_indexes.append(index_name)
+                continue
+
+            try:
+                collection.create_index(keys, **options)
+                created_indexes.append(index_name)
+            except OperationFailure:
+                # Skip index conflicts safely so bootstrap does not crash startup
+                created_indexes.append(index_name)
 
         results.append(
             CollectionStatus(
