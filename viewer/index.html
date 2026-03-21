@@ -4,13 +4,32 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Tomb of Light | Genesis Prototype</title>
-  <link rel="stylesheet" href="css/style.css" />
+
+  <!-- Cache-bust styles so updates always show -->
+  <link rel="stylesheet" href="css/style.css?v=20260320-2" />
+
+  <!-- Add embed-mode ASAP to prevent flicker -->
+  <script>
+    (function () {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const isEmbedParam = params.get("embed") === "1";
+        const isInIframe = window.self !== window.top;
+        if (isEmbedParam || isInIframe) document.documentElement.classList.add("embed-mode");
+      } catch (e) {
+        // If cross-origin iframe blocks window.top access, treat as embed
+        document.documentElement.classList.add("embed-mode");
+      }
+    })();
+  </script>
 </head>
+
 <body>
   <div class="viewer-page">
-    <header class="viewer-header">
+    <header class="viewer-header" id="viewerHeader">
       <div class="viewer-brand-wrap">
-        <a href="../index.html" class="back-link">← Back to Tomb of Light</a>
+        <a href="../index.html" class="back-link" id="backLink">← Back to Tomb of Light</a>
+
         <div class="viewer-brand">
           Tomb of Light<span class="brand-symbol">™</span>
         </div>
@@ -23,6 +42,11 @@
           Navigate through generations of the Moreland lineage and explore
           family branches through the Tomb of Light viewer.
         </p>
+
+        <p class="viewer-instructions" id="viewerInstructions">
+          Hold <strong>C</strong>, then click <strong>Left Eye</strong> (Parents) or
+          <strong>Right Eye</strong> (Descendants). Use scroll/pinch to zoom. (Full viewer only)
+        </p>
       </div>
     </header>
 
@@ -30,20 +54,21 @@
       <section class="viewer-stage-panel">
         <div class="viewer-stage-top">
           <div>
-            <span class="panel-kicker">Lineage Viewer</span>
+            <span class="panel-kicker">Cinematic Viewer</span>
             <h2 id="viewerTitle">Malik Moreland</h2>
           </div>
 
-          <div class="viewer-status" id="viewerStatus">
-            Anchor Portrait
-          </div>
+          <div class="viewer-status" id="viewerStatus">Anchor Portrait</div>
         </div>
 
-        <div class="viewer-stage-shell">
+        <div class="viewer-stage-shell" id="viewerStage">
           <div class="viewer-stage-glow"></div>
 
-          <div class="slideshow">
+          <div class="slideshow" id="slideshow">
             <img id="viewerImage" src="images/malik.jpg" alt="Malik Moreland" />
+
+            <div class="eye-hint" id="eyeLeft" aria-hidden="true"></div>
+            <div class="eye-hint" id="eyeRight" aria-hidden="true"></div>
           </div>
 
           <div id="narrationDisplay" class="narration-text"></div>
@@ -57,7 +82,7 @@
 
         <div class="viewer-line"></div>
 
-        <div class="controls">
+        <div class="controls" id="controls">
           <button type="button" onclick="zoomOut()">Zoom Out</button>
           <button type="button" onclick="zoomIn()">Zoom In</button>
           <button type="button" onclick="resetViewer()">Reset</button>
@@ -65,7 +90,7 @@
         </div>
       </section>
 
-      <aside class="viewer-side-panel">
+      <aside class="viewer-side-panel" id="sidePanel">
         <div class="side-card">
           <span class="panel-kicker">Current Node</span>
           <h3 id="currentNode">Malik Moreland</h3>
@@ -88,6 +113,7 @@
     </main>
   </div>
 
-  <script src="js/script.js"></script>
+  <!-- Cache-bust script too (critical if “C+click” changes weren’t showing) -->
+  <script src="js/script.js?v=20260320-2"></script>
 </body>
 </html>

@@ -1,18 +1,28 @@
-cat > css/style.css <<'EOF'
+/* Tomb of Light — Viewer Styles (clean CSS only) */
+
 :root {
   --bg: #03060d;
   --bg-soft: #07101d;
   --panel: rgba(10, 16, 28, 0.84);
   --panel-2: rgba(7, 12, 22, 0.94);
   --panel-3: rgba(255, 255, 255, 0.025);
+
   --border: rgba(255, 255, 255, 0.1);
   --border-soft: rgba(255, 255, 255, 0.06);
+
   --text: #f4f7fb;
   --muted: #b9c4d4;
   --muted-2: #8d9aae;
   --gold: #d6b066;
+
   --shadow: 0 24px 70px rgba(0, 0, 0, 0.44);
   --transition: 220ms ease;
+
+  --radius-lg: 30px;
+  --radius-md: 26px;
+  --radius-sm: 16px;
+
+  --container: 1280px;
 }
 
 *,
@@ -26,15 +36,15 @@ html {
   scroll-behavior: smooth;
 }
 
+/* HARD GUARD: prevent black text if something else overrides */
+html,
 body {
   margin: 0;
   min-height: 100vh;
-  color: var(--text);
-  background:
-    radial-gradient(circle at top left, rgba(21, 48, 108, 0.12), transparent 28%),
-    radial-gradient(circle at top right, rgba(7, 20, 58, 0.14), transparent 30%),
-    linear-gradient(180deg, #010309 0%, #04070e 44%, #02050b 100%);
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: var(--text) !important;
+  background: var(--bg) !important;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
   line-height: 1.6;
 }
 
@@ -43,9 +53,18 @@ a {
   text-decoration: none;
 }
 
+/* Ensure viewer subtree inherits correct color */
+.viewer-page {
+  color: var(--text);
+}
+
+/* -----------------------
+   PAGE LAYOUT
+----------------------- */
+
 .viewer-page {
   width: 100%;
-  max-width: 1280px;
+  max-width: var(--container);
   margin: 0 auto;
   padding: 20px 20px 32px;
 }
@@ -63,7 +82,7 @@ a {
 .viewer-side-panel .side-card {
   background: linear-gradient(180deg, rgba(10, 16, 28, 0.82), rgba(6, 10, 18, 0.92));
   border: 1px solid var(--border);
-  border-radius: 30px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow);
   backdrop-filter: blur(12px);
 }
@@ -94,6 +113,7 @@ a {
   font-weight: 800;
   line-height: 1;
   letter-spacing: -0.055em;
+  color: var(--text);
 }
 
 .brand-symbol {
@@ -122,6 +142,7 @@ a {
   line-height: 0.96;
   letter-spacing: -0.06em;
   max-width: 12ch;
+  color: var(--text);
 }
 
 .viewer-header-copy p {
@@ -129,6 +150,12 @@ a {
   max-width: 62ch;
   color: var(--muted);
   font-size: 1.04rem;
+}
+
+.viewer-instructions {
+  margin-top: 14px;
+  color: var(--muted-2);
+  font-size: 0.98rem;
 }
 
 .viewer-main {
@@ -141,6 +168,10 @@ a {
 .viewer-stage-panel {
   padding: 24px;
 }
+
+/* -----------------------
+   STAGE TOP BAR
+----------------------- */
 
 .viewer-stage-top {
   display: flex;
@@ -155,6 +186,7 @@ a {
   font-size: clamp(1.6rem, 2.5vw, 2.4rem);
   line-height: 1.02;
   letter-spacing: -0.05em;
+  color: var(--text);
 }
 
 .viewer-status {
@@ -168,9 +200,13 @@ a {
   white-space: nowrap;
 }
 
+/* -----------------------
+   VIEWER STAGE (IMAGE)
+----------------------- */
+
 .viewer-stage-shell {
   position: relative;
-  border-radius: 26px;
+  border-radius: var(--radius-md);
   overflow: hidden;
   border: 1px solid var(--border-soft);
   background:
@@ -181,6 +217,7 @@ a {
   display: flex;
   align-items: center;
   justify-content: center;
+  touch-action: none;
 }
 
 .viewer-stage-glow {
@@ -198,7 +235,6 @@ a {
   position: relative;
   z-index: 1;
   width: 100%;
-  max-width: 100%;
   height: 100%;
   overflow: hidden;
   display: flex;
@@ -206,33 +242,93 @@ a {
   justify-content: center;
 }
 
-.slideshow img {
+/* optional wrapper (safe even if not used) */
+.slideshow-inner {
   width: 100%;
   height: 100%;
-  object-fit: contain;
-  object-position: center;
-  transition: transform 1.8s ease, opacity 0.45s ease;
+  will-change: transform;
+  transform: translate3d(0, 0, 0) scale(1);
   transform-origin: center;
 }
 
-.zoom-in {
-  transform: scale(1.08);
+#viewerImage {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+  object-position: center;
+  user-select: none;
+  -webkit-user-drag: none;
+  transition: opacity 0.25s ease;
 }
 
-.zoom-out {
-  transform: scale(0.68);
+.eye-hint {
+  position: absolute;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  border: 1px solid rgba(214, 176, 102, 0.38);
+  box-shadow: 0 0 0 4px rgba(214, 176, 102, 0.10);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
 }
+
+body.show-eyes .eye-hint {
+  opacity: 0.85;
+}
+
+.embed-mode .eye-hint {
+  opacity: 0 !important;
+}
+
+.narration-text {
+  position: absolute;
+  bottom: 24px;
+  left: 24px;
+  right: 24px;
+  z-index: 6;
+  padding: 16px 20px;
+  border-radius: var(--radius-sm);
+  background: rgba(3, 6, 13, 0.82);
+  border: 1px solid rgba(214, 176, 102, 0.18);
+  backdrop-filter: blur(8px);
+  color: var(--text);
+  font-size: 0.96rem;
+  line-height: 1.6;
+  text-align: center;
+  opacity: 0;
+  transition: opacity 0.6s ease;
+  pointer-events: none;
+}
+
+.branch-options {
+  position: absolute;
+  bottom: 34px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(4, 8, 15, 0.82);
+  backdrop-filter: blur(12px);
+  box-shadow: var(--shadow);
+}
+
+/* -----------------------
+   CONTROLS
+----------------------- */
 
 .viewer-line {
   width: 100%;
   height: 1px;
   margin: 24px 0 22px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(214, 176, 102, 0.72),
-    transparent
-  );
+  background: linear-gradient(90deg, transparent, rgba(214, 176, 102, 0.72), transparent);
 }
 
 .controls {
@@ -269,42 +365,9 @@ a {
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
 }
 
-.narration-text {
-  position: absolute;
-  bottom: 24px;
-  left: 24px;
-  right: 24px;
-  z-index: 6;
-  padding: 16px 20px;
-  border-radius: 16px;
-  background: rgba(3, 6, 13, 0.82);
-  border: 1px solid rgba(214, 176, 102, 0.18);
-  backdrop-filter: blur(8px);
-  color: var(--text);
-  font-size: 0.96rem;
-  line-height: 1.6;
-  text-align: center;
-  opacity: 0;
-  transition: opacity 0.6s ease;
-  pointer-events: none;
-}
-
-.branch-options {
-  position: absolute;
-  bottom: 34px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 5;
-  gap: 12px;
-  flex-wrap: wrap;
-  justify-content: center;
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: rgba(4, 8, 15, 0.82);
-  backdrop-filter: blur(12px);
-  box-shadow: var(--shadow);
-}
+/* -----------------------
+   SIDE PANEL
+----------------------- */
 
 .viewer-side-panel {
   display: grid;
@@ -320,6 +383,7 @@ a {
   font-size: 1.4rem;
   line-height: 1.05;
   letter-spacing: -0.04em;
+  color: var(--text);
 }
 
 .viewer-side-panel p {
@@ -342,6 +406,40 @@ a {
   font-weight: 700;
   letter-spacing: -0.02em;
 }
+
+/* -----------------------
+   EMBED MODE (watch-only)
+----------------------- */
+
+.embed-mode #backLink,
+.embed-mode #viewerHeader,
+.embed-mode #sidePanel,
+.embed-mode #controls,
+.embed-mode #branchOptions,
+.embed-mode .viewer-line {
+  display: none !important;
+}
+
+.embed-mode .viewer-page {
+  max-width: 100%;
+  padding: 0;
+}
+
+.embed-mode .viewer-main {
+  grid-template-columns: 1fr;
+}
+
+.embed-mode .viewer-stage-panel {
+  padding: 0;
+}
+
+.embed-mode .viewer-stage-shell {
+  border-radius: 22px;
+}
+
+/* -----------------------
+   RESPONSIVE
+----------------------- */
 
 @media (max-width: 1180px) {
   .viewer-header,
@@ -397,4 +495,3 @@ a {
     width: 100%;
   }
 }
-EOF

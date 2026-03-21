@@ -3,26 +3,15 @@ Stripe Webhooks — Tomb of Light
 
 Endpoint:
   POST /webhooks/stripe
-
-Env vars required (Render + local .env):
-  STRIPE_SECRET_KEY=sk_live_... (or sk_test_...)
-  STRIPE_WEBHOOK_SECRET=whsec_...
-
-Behavior:
-- Verifies Stripe signature
-- Saves the Stripe event (idempotent) into stripe_events
-- Creates an Order (idempotent) when possible for:
-    - checkout.session.completed
-    - payment_intent.succeeded (backup)
 """
 
-import os
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 import stripe
 from fastapi import APIRouter, HTTPException, Request, status
 
+from app.config import settings
 from app.database import get_database
 from app.services.order_service import upsert_order_from_stripe_event
 
@@ -35,10 +24,10 @@ except Exception:  # pragma: no cover
 router = APIRouter(prefix="/webhooks", tags=["Stripe Webhooks"])
 
 
-def _get_env(name: str) -> str:
-    value = (os.getenv(name) or "").strip()
+def _require_setting(value: str, name: str) -> str:
+    value = (value or "").strip()
     if not value:
-        raise RuntimeError(f"Missing required env var: {name}")
+        raise RuntimeError(f"Missing required setting: {name}")
     return value
 
 
@@ -53,10 +42,11 @@ async def stripe_webhook(request: Request) -> Dict[str, Any]:
             detail="Missing Stripe-Signature header",
         )
 
-    stripe.api_key = _get_env("STRIPE_SECRET_KEY")
-    endpoint_secret = _get_env("STRIPE_WEBHOOK_SECRET")
+    stripe.api_key = _require_setting(settings.stripe_secret_key, "stripe_secret_key")
+    endpoint_secret = _require_setting(
+        settings.stripe_webhook_secret, "stripe_webhook_secret"
+    )
 
-    # Verify signature + parse event
     try:
         event = stripe.Webhook.construct_event(
             payload=payload_bytes,
@@ -77,7 +67,6 @@ async def stripe_webhook(request: Request) -> Dict[str, Any]:
     event_type = event.get("type", "unknown")
     now = datetime.now(timezone.utc)
 
-    # Idempotent event storage
     if event_id:
         existing = events_col.find_one({"event_id": event_id})
         if not existing:
@@ -98,8 +87,16 @@ async def stripe_webhook(request: Request) -> Dict[str, Any]:
         try:
             order_result = upsert_order_from_stripe_event(event)
         except Exception as e:
-            # IMPORTANT: Still ACK Stripe to avoid retries.
             order_result = {"order_id": None, "error": str(e), "type": event_type}
+
+    print(
+        "[stripe_webhook]",
+        {
+            "event_id": event_id,
+            "event_type": event_type,
+            "order_result": order_result,
+        },
+    )
 
     return {
         "received": True,
