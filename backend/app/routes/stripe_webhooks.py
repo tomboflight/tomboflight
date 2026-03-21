@@ -89,6 +89,15 @@ async def stripe_webhook(request: Request) -> Dict[str, Any]:
         except Exception as e:
             order_result = {"order_id": None, "error": str(e), "type": event_type}
 
+    print(
+        "[stripe_webhook]",
+        {
+            "event_id": event_id,
+            "event_type": event_type,
+            "order_result": order_result,
+        },
+    )
+
     return {
         "received": True,
         "type": event_type,
