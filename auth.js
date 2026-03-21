@@ -18,6 +18,53 @@
     );
   }
 
+  function getErrorMessage(error) {
+    if (!error) return "Unknown error";
+    if (typeof error === "string") return error;
+    if (error.message) return String(error.message);
+    return String(error);
+  }
+
+  function isAuthFailure(error) {
+    const message = getErrorMessage(error).toLowerCase();
+
+    return (
+      message.includes("invalid or expired token") ||
+      message.includes("invalid token") ||
+      message.includes("invalid token payload") ||
+      message.includes("user not found") ||
+      message.includes("inactive") ||
+      message.includes("unauthorized") ||
+      message.includes("forbidden") ||
+      message.includes("401") ||
+      message.includes("403") ||
+      message.includes("not authenticated")
+    );
+  }
+
+  function sleep(ms) {
+    return new Promise(function (resolve) {
+      setTimeout(resolve, ms);
+    });
+  }
+
+  async function withRetry(fn, attempts = 2, delayMs = 300) {
+    let lastError;
+
+    for (let i = 0; i < attempts; i += 1) {
+      try {
+        return await fn();
+      } catch (error) {
+        lastError = error;
+        if (i < attempts - 1) {
+          await sleep(delayMs);
+        }
+      }
+    }
+
+    throw lastError;
+  }
+
   function toArray(payload) {
     if (Array.isArray(payload)) return payload;
     if (Array.isArray(payload?.items)) return payload.items;
@@ -32,7 +79,10 @@
       orders.find(function (order) {
         const status = String(order?.status || "").toLowerCase();
         return (
-          status === "paid" || status === "complete" || status === "succeeded"
+          status === "paid" ||
+          status === "complete" ||
+          status === "completed" ||
+          status === "succeeded"
         );
       }) || null
     );
@@ -134,7 +184,10 @@
         method: "GET",
       });
     } catch (error) {
-      if ((error.message || "").includes("404")) return null;
+      const message = getErrorMessage(error).toLowerCase();
+      if (message.includes("404") || message.includes("not found")) {
+        return null;
+      }
       throw error;
     }
   }
@@ -149,7 +202,10 @@
       );
       return toArray(payload);
     } catch (error) {
-      if ((error.message || "").includes("404")) return [];
+      const message = getErrorMessage(error).toLowerCase();
+      if (message.includes("404") || message.includes("not found")) {
+        return [];
+      }
       throw error;
     }
   }
@@ -340,7 +396,7 @@
     });
   }
 
-  async function setupSignupForm() {
+  function setupSignupForm() {
     const form = document.querySelector("[data-signup-form]");
     if (!form) return;
 
@@ -408,7 +464,11 @@
         await handleLogin(email, password);
         redirectAfterLogin();
       } catch (error) {
-        app.setStatus(statusNode, error.message || "Signup failed.", "error");
+        app.setStatus(
+          statusNode,
+          getErrorMessage(error) || "Signup failed.",
+          "error",
+        );
       } finally {
         if (submitBtn) {
           submitBtn.disabled = false;
@@ -458,7 +518,11 @@
         app.setStatus(statusNode, "Sign-in successful.", "success");
         redirectAfterLogin();
       } catch (error) {
-        app.setStatus(statusNode, error.message || "Login failed.", "error");
+        app.setStatus(
+          statusNode,
+          getErrorMessage(error) || "Login failed.",
+          "error",
+        );
       } finally {
         if (submitBtn) {
           submitBtn.disabled = false;
@@ -489,10 +553,18 @@
     const savedUser = app.getSavedUser();
     if (savedUser) {
       populateUserFields(savedUser, refs);
+      if (authRequired) authRequired.style.display = "block";
     }
 
     try {
-      const me = await app.fetchCurrentUser();
+      const me = await withRetry(
+        function () {
+          return app.fetchCurrentUser();
+        },
+        2,
+        300,
+      );
+
       populateUserFields(me, refs);
 
       if (authRequired) authRequired.style.display = "block";
@@ -502,34 +574,149 @@
         "You are signed in and connected to the Tomb of Light platform.",
         "success",
       );
-
-      const orders = await fetchOrders();
-      renderOrders(orders);
-
-      const paidOrder = getPaidOrder(orders);
-      updateAccessState(paidOrder);
-
-      if (!paidOrder) {
-        renderNoIntakeBecauseNoPurchase();
+    } catch (error) {
+      if (isAuthFailure(error)) {
+        app.clearSession();
+        app.setStatus(
+          statusNode,
+          "Your session is not valid. Please sign in again.",
+          "error",
+        );
+        setTimeout(function () {
+          window.location.href = "signin.html";
+        }, 1200);
         return;
       }
 
+      console.error("Dashboard auth verification failed:", error);
+
+      if (!savedUser) {
+        app.setStatus(
+          statusNode,
+          "We could not verify your session right now. Please refresh and try again.",
+          "error",
+        );
+        return;
+      }
+
+      app.setStatus(
+        statusNode,
+        "You appear signed in. Live account verification is temporarily unavailable.",
+        "error",
+      );
+    }
+
+    let paidOrder = null;
+
+    try {
+      const orders = await withRetry(
+        function () {
+          return fetchOrders();
+        },
+        2,
+        300,
+      );
+
+      renderOrders(orders);
+      paidOrder = getPaidOrder(orders);
+      updateAccessState(paidOrder);
+    } catch (error) {
+      console.error("Dashboard orders load failed:", error);
+
+      if (isAuthFailure(error)) {
+        app.clearSession();
+        app.setStatus(
+          statusNode,
+          "Your session expired while loading orders. Please sign in again.",
+          "error",
+        );
+        setTimeout(function () {
+          window.location.href = "signin.html";
+        }, 1200);
+        return;
+      }
+
+      app.setStatus(
+        statusNode,
+        "You are signed in, but your order data could not be loaded yet.",
+        "error",
+      );
+      return;
+    }
+
+    if (!paidOrder) {
+      renderNoIntakeBecauseNoPurchase();
+      return;
+    }
+
+    try {
       const [latest, history] = await Promise.all([
-        fetchLatestIntake(),
-        fetchIntakeHistory(),
+        withRetry(
+          function () {
+            return fetchLatestIntake();
+          },
+          2,
+          300,
+        ),
+        withRetry(
+          function () {
+            return fetchIntakeHistory();
+          },
+          2,
+          300,
+        ),
       ]);
 
       renderIntake(latest, history, paidOrder);
-    } catch (error) {
-      app.clearSession();
+
       app.setStatus(
         statusNode,
-        "Your session is not valid. Please sign in again.",
-        "error",
+        `Your package is active: ${paidOrder.package_name || paidOrder.package_slug || "Paid Package"}.`,
+        "success",
       );
-      setTimeout(function () {
-        window.location.href = "signin.html";
-      }, 1200);
+    } catch (error) {
+      console.error("Dashboard intake load failed:", error);
+
+      if (isAuthFailure(error)) {
+        app.clearSession();
+        app.setStatus(
+          statusNode,
+          "Your session expired while loading intake data. Please sign in again.",
+          "error",
+        );
+        setTimeout(function () {
+          window.location.href = "signin.html";
+        }, 1200);
+        return;
+      }
+
+      const intakeStatus = document.querySelector("[data-intake-card-status]");
+      const intakeHistoryStatus = document.querySelector(
+        "[data-intake-history-status]",
+      );
+      const currentPackage = document.querySelector(
+        "[data-intake-current-package]",
+      );
+
+      if (intakeStatus) {
+        intakeStatus.textContent =
+          "Your package is active, but intake data could not be loaded yet.";
+      }
+
+      if (intakeHistoryStatus) {
+        intakeHistoryStatus.textContent =
+          "Intake history is temporarily unavailable.";
+      }
+
+      if (currentPackage && paidOrder?.package_name) {
+        currentPackage.textContent = paidOrder.package_name;
+      }
+
+      app.setStatus(
+        statusNode,
+        `Your package is active: ${paidOrder.package_name || paidOrder.package_slug || "Paid Package"}. Some dashboard sections are still loading.`,
+        "success",
+      );
     }
   }
 
@@ -546,18 +733,34 @@
 
     if (!intakePages.has(page)) return;
 
-    const user = await app.requireSession("signin.html");
-    if (!user) return;
+    const token = app.getToken();
+    if (!token) {
+      window.location.href = "signin.html";
+      return;
+    }
 
     try {
-      const orders = await fetchOrders();
+      const orders = await withRetry(
+        function () {
+          return fetchOrders();
+        },
+        2,
+        300,
+      );
+
       const paidOrder = getPaidOrder(orders);
 
       if (!paidOrder) {
         window.location.href = "dashboard.html?purchase_required=1";
       }
     } catch (error) {
-      window.location.href = "dashboard.html?purchase_required=1";
+      if (isAuthFailure(error)) {
+        app.clearSession();
+        window.location.href = "signin.html";
+        return;
+      }
+
+      console.error("Purchase gate check failed:", error);
     }
   }
 
@@ -579,13 +782,22 @@
       return;
     }
 
-    app
-      .fetchCurrentUser()
+    withRetry(
+      function () {
+        return app.fetchCurrentUser();
+      },
+      2,
+      300,
+    )
       .then(function () {
         redirectAfterLogin();
       })
-      .catch(function () {
-        app.clearSession();
+      .catch(function (error) {
+        if (isAuthFailure(error)) {
+          app.clearSession();
+        } else {
+          console.error("Auth page protection check failed:", error);
+        }
       });
   }
 
