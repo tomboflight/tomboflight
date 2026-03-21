@@ -48,7 +48,15 @@
           </nav>
 
           <div class="header-actions">
-            <a class="btn btn-primary" href="signup.html">Create Account</a>
+            <a
+              class="btn btn-primary"
+              href="signup.html"
+              data-auth-cta
+              data-logged-in-href="dashboard.html"
+              data-logged-in-label="Dashboard"
+            >
+              Create Account
+            </a>
           </div>
         </div>
       </header>
@@ -188,9 +196,9 @@
             </div>
 
             <div class="inline-actions architecture-actions">
-              <a class="btn btn-secondary" href="platform.html"
-                >Explore the Platform</a
-              >
+              <a class="btn btn-secondary" href="platform.html">
+                Explore the Platform
+              </a>
             </div>
           </div>
         </section>
@@ -279,7 +287,8 @@
                 <div class="inline-actions">
                   <a
                     class="btn btn-primary"
-                    href="https://buy.stripe.com/28EeVdeMK4g74mW3d3bEA01"
+                    href="#pricing"
+                    data-payment-link="digital-legacy-portrait"
                     target="_blank"
                     rel="noopener noreferrer"
                     aria-label="Begin Legacy - opens payment page in new window"
@@ -311,7 +320,8 @@
                 <div class="inline-actions">
                   <a
                     class="btn btn-primary"
-                    href="https://buy.stripe.com/5kQdR99sq3c32eOdRHbEA02"
+                    href="#pricing"
+                    data-payment-link="starter-family-tree"
                     target="_blank"
                     rel="noopener noreferrer"
                     aria-label="Start My Tree - opens payment page in new window"
@@ -346,7 +356,8 @@
                 <div class="inline-actions">
                   <a
                     class="btn btn-primary"
-                    href="https://buy.stripe.com/7sY6oHbAybIzf1A6pfbEA00"
+                    href="#pricing"
+                    data-payment-link="heirloom-legacy-tree"
                     target="_blank"
                     rel="noopener noreferrer"
                     aria-label="Build My Legacy - opens payment page in new window"
@@ -381,7 +392,8 @@
                 <div class="inline-actions">
                   <a
                     class="btn btn-primary"
-                    href="https://buy.stripe.com/9B6aEX7ki8wndXwaFvbEA03"
+                    href="#pricing"
+                    data-payment-link="legacy-plus"
                     target="_blank"
                     rel="noopener noreferrer"
                     aria-label="Create My Dynasty - opens payment page in new window"
@@ -411,7 +423,13 @@
                   <li>Dedicated production support</li>
                 </ul>
                 <div class="inline-actions">
-                  <a class="btn btn-secondary" href="signup.html">
+                  <a
+                    class="btn btn-secondary"
+                    href="signup.html"
+                    data-auth-cta
+                    data-logged-in-href="dashboard.html"
+                    data-logged-in-label="Dashboard"
+                  >
                     Create Account
                   </a>
                 </div>
@@ -515,10 +533,18 @@
               </p>
 
               <div class="cta-actions">
-                <a class="btn btn-primary" href="signup.html">Create Account</a>
-                <a class="btn btn-secondary" href="platform.html"
-                  >Explore the Platform</a
+                <a
+                  class="btn btn-primary"
+                  href="signup.html"
+                  data-auth-cta
+                  data-logged-in-href="dashboard.html"
+                  data-logged-in-label="Dashboard"
                 >
+                  Create Account
+                </a>
+                <a class="btn btn-secondary" href="platform.html">
+                  Explore the Platform
+                </a>
               </div>
             </div>
           </div>
@@ -557,10 +583,9 @@
 
             <div class="footer-bottom">
               <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
-              <span
-                >Tomb of Light technology and platform design are
-                proprietary.</span
-              >
+              <span>
+                Tomb of Light technology and platform design are proprietary.
+              </span>
             </div>
           </div>
         </div>
@@ -586,9 +611,9 @@
           <button class="btn btn-secondary" type="button" data-cookie-decline>
             Decline
           </button>
-          <a class="btn btn-ghost" href="privacy-choices.html"
-            >Privacy Choices</a
-          >
+          <a class="btn btn-ghost" href="privacy-choices.html">
+            Privacy Choices
+          </a>
         </div>
       </div>
     </div>
