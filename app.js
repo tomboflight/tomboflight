@@ -1,851 +1,337 @@
-/**
- * Tomb of Light - Main Application Script
- * Dashboard: orders + intake status + intake history
- * Intake: local draft steps (household, family map, uploads, consent)
- * Review: submits combined payload to backend /intake-submissions
- */
-
 (function () {
   "use strict";
 
-  const doc = document;
-  const body = doc.body;
+  const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
 
-  const API_BASE_URL =
-    (window.TOL_CONFIG && window.TOL_CONFIG.API_BASE_URL) ||
-    "http://127.0.0.1:8000";
+  const DEFAULT_LOCAL_API_BASE_URL = "http://127.0.0.1:8000";
+  const DEFAULT_LIVE_API_BASE_URL = "https://tomboflight-api.onrender.com";
 
   const TOKEN_KEY = "tol_access_token";
-  const CURRENT_ORDER_CACHE_KEY = "tol_current_order";
-  const LATEST_INTAKE_CACHE_KEY = "tol_latest_intake_submission";
+  const USER_KEY = "tol_user";
+  const COOKIE_CHOICE_KEY = "tol_cookie_choice";
 
-  // Local draft keys
-  const DRAFT_HOUSEHOLD_KEY = "tol_intake_household";
-  const DRAFT_FAMILY_MAP_KEY = "tol_intake_family_map";
-  const DRAFT_UPLOADS_KEY = "tol_intake_uploads";
-  const DRAFT_CONSENT_KEY = "tol_intake_consent";
+  function isLocalApp() {
+    return LOCAL_HOSTS.has(window.location.hostname);
+  }
 
-  const menuToggle = doc.querySelector(".menu-toggle, .nav-toggle");
-  const siteNav = doc.querySelector("#site-nav, .site-nav");
-  const siteHeader = doc.querySelector(".site-header");
+  function getApiBaseUrl() {
+    const configured =
+      window.TOL_CONFIG && typeof window.TOL_CONFIG.API_BASE_URL === "string"
+        ? window.TOL_CONFIG.API_BASE_URL.trim()
+        : "";
 
-  const cookieBanner = doc.querySelector("[data-cookie-banner]");
-  const cookieStatuses = Array.from(
-    doc.querySelectorAll("[data-cookie-status]"),
-  );
-  const acceptBtn = doc.querySelector("[data-cookie-accept]");
-  const declineBtn = doc.querySelector("[data-cookie-decline]");
-  const COOKIE_NAME = "tol_cookie_preference";
-  const COOKIE_EXPIRY_DAYS = 365;
+    if (configured) {
+      return configured;
+    }
 
-  const PACKAGE_CATALOG = {
-    "digital-legacy-portrait": { name: "Digital Legacy Portrait" },
-    "starter-family-tree": { name: "Starter Family Tree" },
-    "heirloom-legacy-tree": { name: "Heirloom Legacy Tree" },
-    "legacy-plus": { name: "Legacy Plus" },
-    "family-estate-concierge": { name: "Family Estate Concierge" },
-  };
+    return isLocalApp()
+      ? DEFAULT_LOCAL_API_BASE_URL
+      : DEFAULT_LIVE_API_BASE_URL;
+  }
+
+  function saveToken(token) {
+    if (typeof token === "string" && token.trim()) {
+      localStorage.setItem(TOKEN_KEY, token);
+    }
+  }
 
   function getToken() {
     return localStorage.getItem(TOKEN_KEY);
   }
 
-  function getAuthHeaders(extraHeaders = {}) {
-    const token = getToken();
-    const headers = { Accept: "application/json", ...extraHeaders };
-    if (token) headers.Authorization = `Bearer ${token}`;
-    return headers;
+  function clearToken() {
+    localStorage.removeItem(TOKEN_KEY);
+  }
+
+  function saveUser(user) {
+    localStorage.setItem(USER_KEY, JSON.stringify(user || {}));
+  }
+
+  function getSavedUser() {
+    try {
+      const raw = localStorage.getItem(USER_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function clearUser() {
+    localStorage.removeItem(USER_KEY);
+  }
+
+  function clearSession() {
+    clearToken();
+    clearUser();
+  }
+
+  function parseApiError(data, response) {
+    return (
+      (data &&
+        (data.detail ||
+          data.message ||
+          data.error ||
+          (Array.isArray(data.errors) && data.errors.join(", ")))) ||
+      `Request failed with status ${response.status}`
+    );
   }
 
   async function apiRequest(path, options = {}) {
-    const headers = getAuthHeaders(options.headers || {});
+    const apiBaseUrl = getApiBaseUrl();
+    const token = getToken();
+
+    const headers = {
+      Accept: "application/json",
+      ...(options.headers || {}),
+    };
+
     if (!(options.body instanceof FormData) && !headers["Content-Type"]) {
       headers["Content-Type"] = "application/json";
     }
 
-    const response = await fetch(`${API_BASE_URL}${path}`, {
-      ...options,
-      headers,
-    });
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    let response;
+
+    try {
+      response = await fetch(`${apiBaseUrl}${path}`, {
+        ...options,
+        headers,
+      });
+    } catch (networkError) {
+      throw new Error(
+        `Network error calling API.\n\n` +
+          `API_BASE_URL: ${apiBaseUrl}\n` +
+          `Page origin: ${window.location.origin}\n\n` +
+          `Local frontend should usually run on http://127.0.0.1:5500\n` +
+          `Local backend should usually run on http://127.0.0.1:8000`,
+      );
+    }
 
     const contentType = response.headers.get("content-type") || "";
     let data = null;
 
     try {
-      if (contentType.includes("application/json"))
+      if (contentType.includes("application/json")) {
         data = await response.json();
-      else {
+      } else {
         const text = await response.text();
         data = text ? { detail: text } : null;
       }
-    } catch (_) {
+    } catch (error) {
       data = null;
     }
 
     if (!response.ok) {
-      const message =
-        (data && (data.detail || data.message || data.error)) ||
-        `Request failed with status ${response.status}`;
-      throw new Error(message);
+      throw new Error(parseApiError(data, response));
     }
 
     return data;
   }
 
-  // ---- Menu
-  function closeMenu() {
-    if (!menuToggle || !siteHeader) return;
-    menuToggle.setAttribute("aria-expanded", "false");
-    siteHeader.classList.remove("open");
-    body.classList.remove("menu-open");
+  async function fetchCurrentUser() {
+    const user = await apiRequest("/auth/me", { method: "GET" });
+    saveUser(user);
+    return user;
   }
 
-  function openMenu() {
-    if (!menuToggle || !siteHeader) return;
-    menuToggle.setAttribute("aria-expanded", "true");
-    siteHeader.classList.add("open");
-    body.classList.add("menu-open");
-  }
+  async function requireSession(redirectTo = "signin.html") {
+    const token = getToken();
 
-  function setupMobileMenu() {
-    if (!menuToggle || !siteNav || !siteHeader) return;
-    if (!siteNav.id) siteNav.id = "site-nav";
-    if (!menuToggle.hasAttribute("aria-controls"))
-      menuToggle.setAttribute("aria-controls", siteNav.id);
-    if (!menuToggle.hasAttribute("aria-expanded"))
-      menuToggle.setAttribute("aria-expanded", "false");
-
-    menuToggle.addEventListener("click", function () {
-      const isExpanded = menuToggle.getAttribute("aria-expanded") === "true";
-      isExpanded ? closeMenu() : openMenu();
-    });
-
-    siteNav.addEventListener("click", function (event) {
-      const clickedLink = event.target.closest("a");
-      if (clickedLink) closeMenu();
-    });
-
-    doc.addEventListener("keydown", function (event) {
-      if (
-        event.key === "Escape" &&
-        menuToggle.getAttribute("aria-expanded") === "true"
-      ) {
-        closeMenu();
-        menuToggle.focus();
+    if (!token) {
+      if (redirectTo) {
+        window.location.href = redirectTo;
       }
-    });
-
-    window.addEventListener("resize", function () {
-      if (window.innerWidth > 860) closeMenu();
-    });
-  }
-
-  // ---- Cookies
-  function setCookie(name, value, days) {
-    const expiryDate = new Date();
-    expiryDate.setTime(expiryDate.getTime() + days * 24 * 60 * 60 * 1000);
-    document.cookie = `${name}=${value};expires=${expiryDate.toUTCString()};path=/;SameSite=Strict`;
-  }
-
-  function getCookie(name) {
-    const cookieName = `${name}=`;
-    const cookies = decodeURIComponent(document.cookie).split(";");
-    for (let cookie of cookies) {
-      cookie = cookie.trim();
-      if (cookie.indexOf(cookieName) === 0)
-        return cookie.substring(cookieName.length);
+      return null;
     }
-    return null;
+
+    try {
+      return await fetchCurrentUser();
+    } catch (error) {
+      clearSession();
+      if (redirectTo) {
+        window.location.href = redirectTo;
+      }
+      return null;
+    }
   }
 
-  function updateCookieStatus(preference) {
-    if (!cookieStatuses.length) return;
-    let message = "Your cookie preference has not been set yet.";
-    if (preference === "true") message = "Analytics cookies are enabled.";
-    if (preference === "false") message = "Analytics cookies are disabled.";
-    cookieStatuses.forEach((n) => (n.textContent = message));
-  }
+  function setStatus(node, message, type) {
+    if (!node) return;
 
-  function showCookieBanner() {
-    if (!cookieBanner) return;
-    cookieBanner.classList.add("visible");
-    cookieBanner.removeAttribute("aria-hidden");
-  }
+    node.style.display = "block";
+    node.textContent = message;
+    node.dataset.state = type || "info";
 
-  function hideCookieBanner() {
-    if (!cookieBanner) return;
-    cookieBanner.classList.remove("visible");
-    cookieBanner.setAttribute("aria-hidden", "true");
-  }
-
-  function setupCookiePreferences() {
-    const savedPreference = getCookie(COOKIE_NAME);
-    if (savedPreference === "true" || savedPreference === "false") {
-      updateCookieStatus(savedPreference);
-      hideCookieBanner();
+    if (type === "error") {
+      node.style.color = "#ffb3b3";
+    } else if (type === "success") {
+      node.style.color = "#cfe8cf";
     } else {
-      updateCookieStatus(null);
-      showCookieBanner();
+      node.style.color = "#d6e6ff";
+    }
+  }
+
+  function clearStatus(node) {
+    if (!node) return;
+    node.style.display = "none";
+    node.textContent = "";
+    node.dataset.state = "";
+  }
+
+  function getCookieChoice() {
+    const value = localStorage.getItem(COOKIE_CHOICE_KEY);
+    return value === "accepted" || value === "declined" ? value : null;
+  }
+
+  function saveCookieChoice(choice) {
+    localStorage.setItem(COOKIE_CHOICE_KEY, choice);
+    document.documentElement.dataset.cookieChoice = choice;
+  }
+
+  function updateCookieStatus() {
+    const statusNodes = document.querySelectorAll("[data-cookie-status]");
+    if (!statusNodes.length) return;
+
+    const choice = getCookieChoice();
+    let message = "Your cookie preference has not been set yet.";
+
+    if (choice === "accepted") {
+      message = "You accepted optional analytics cookies.";
+    } else if (choice === "declined") {
+      message =
+        "You declined optional analytics cookies. Only essential site technologies are in use.";
+    }
+
+    statusNodes.forEach(function (node) {
+      node.textContent = message;
+    });
+  }
+
+  function setupCookieBanner() {
+    const banner = document.querySelector("[data-cookie-banner]");
+    if (!banner) return;
+
+    const acceptBtn = banner.querySelector("[data-cookie-accept]");
+    const declineBtn = banner.querySelector("[data-cookie-decline]");
+
+    function applyChoice(choice) {
+      saveCookieChoice(choice);
+      updateCookieStatus();
+      banner.classList.remove("visible");
+    }
+
+    const existingChoice = getCookieChoice();
+    if (!existingChoice) {
+      banner.classList.add("visible");
+    } else {
+      banner.classList.remove("visible");
+      updateCookieStatus();
     }
 
     if (acceptBtn) {
-      acceptBtn.addEventListener("click", function (event) {
-        event.preventDefault();
-        setCookie(COOKIE_NAME, "true", COOKIE_EXPIRY_DAYS);
-        updateCookieStatus("true");
-        hideCookieBanner();
+      acceptBtn.addEventListener("click", function () {
+        applyChoice("accepted");
       });
     }
 
     if (declineBtn) {
-      declineBtn.addEventListener("click", function (event) {
-        event.preventDefault();
-        setCookie(COOKIE_NAME, "false", COOKIE_EXPIRY_DAYS);
-        updateCookieStatus("false");
-        hideCookieBanner();
+      declineBtn.addEventListener("click", function () {
+        applyChoice("declined");
       });
     }
   }
 
-  // ---- Cache helpers
-  function setCurrentOrderCache(order) {
-    try {
-      localStorage.setItem(
-        CURRENT_ORDER_CACHE_KEY,
-        JSON.stringify(order || null),
-      );
-    } catch (_) {}
-  }
+  function setupMobileMenu() {
+    const header = document.querySelector(".site-header");
+    const toggle = document.querySelector(".menu-toggle");
 
-  function getCurrentOrderCache() {
-    try {
-      const raw = localStorage.getItem(CURRENT_ORDER_CACHE_KEY);
-      return raw ? JSON.parse(raw) : null;
-    } catch (_) {
-      return null;
+    if (!header || !toggle) return;
+
+    function closeMenu() {
+      header.classList.remove("open");
+      document.body.classList.remove("menu-open");
+      toggle.setAttribute("aria-expanded", "false");
     }
-  }
 
-  function cacheLatestIntake(submission) {
-    try {
-      localStorage.setItem(
-        LATEST_INTAKE_CACHE_KEY,
-        JSON.stringify(submission || null),
-      );
-    } catch (_) {}
-  }
-
-  function getCachedLatestIntake() {
-    try {
-      const raw = localStorage.getItem(LATEST_INTAKE_CACHE_KEY);
-      return raw ? JSON.parse(raw) : null;
-    } catch (_) {
-      return null;
+    function openMenu() {
+      header.classList.add("open");
+      document.body.classList.add("menu-open");
+      toggle.setAttribute("aria-expanded", "true");
     }
-  }
 
-  // Prime order cache for intake pages (so Review always has package_slug/name)
-  async function primeCurrentOrderCache() {
-    const token = getToken();
-    if (!token) return null;
-
-    const cached = getCurrentOrderCache();
-    if (cached && (cached.package_slug || cached.package_name)) return cached;
-
-    try {
-      const response = await apiRequest("/orders/my-orders", { method: "GET" });
-      const orders = Array.isArray(response) ? response : response.orders || [];
-      const first = Array.isArray(orders) && orders.length ? orders[0] : null;
-      if (first) setCurrentOrderCache(first);
-      return first || null;
-    } catch (error) {
-      console.error("[TOL intake] could not prime current order cache:", error);
-      return null;
-    }
-  }
-
-  // ---- Local intake draft storage
-  function setLocalIntakeData(key, value) {
-    try {
-      localStorage.setItem(key, JSON.stringify(value));
-    } catch (_) {}
-  }
-
-  function getLocalIntakeData(key) {
-    try {
-      const raw = localStorage.getItem(key);
-      return raw ? JSON.parse(raw) : null;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  // ---- Orders UI
-  function setPaidAccessState(hasPaidOrder, orders) {
-    const accessStatus = doc.querySelector("[data-access-status]");
-    const paidActions = Array.from(doc.querySelectorAll("[data-paid-action]"));
-    const upgradeActions = Array.from(
-      doc.querySelectorAll("[data-upgrade-action]"),
-    );
-
-    function setNode(node, enabled) {
-      if (!node) return;
-      if (enabled) {
-        node.classList.remove("is-disabled");
-        node.removeAttribute("aria-disabled");
-        node.removeAttribute("title");
-        node.style.pointerEvents = "";
-        node.style.opacity = "";
-        if (node.dataset.originalHref)
-          node.setAttribute("href", node.dataset.originalHref);
-        return;
+    toggle.addEventListener("click", function () {
+      const isOpen = header.classList.contains("open");
+      if (isOpen) {
+        closeMenu();
+      } else {
+        openMenu();
       }
-      if (node.tagName.toLowerCase() === "a" && !node.dataset.originalHref) {
-        node.dataset.originalHref = node.getAttribute("href") || "";
-      }
-      node.classList.add("is-disabled");
-      node.setAttribute("aria-disabled", "true");
-      node.setAttribute("title", "Purchase a package to unlock this feature");
-      node.style.pointerEvents = "none";
-      node.style.opacity = "0.55";
-    }
+    });
 
-    if (hasPaidOrder) {
-      if (accessStatus) {
-        const first = orders && orders.length ? orders[0] : null;
-        const packageName =
-          first?.package_name || first?.package_slug || "your package";
-        accessStatus.textContent = `Access unlocked. Your account has an active purchase record for ${packageName}.`;
-      }
-      paidActions.forEach((n) => setNode(n, true));
-      upgradeActions.forEach((n) => (n.textContent = "View Packages"));
-      return;
-    }
-
-    if (accessStatus)
-      accessStatus.textContent =
-        "Purchase required. Buy a Tomb of Light package to unlock platform tools.";
-    paidActions.forEach((n) => setNode(n, false));
-    upgradeActions.forEach((n) => (n.textContent = "Unlock Access"));
-  }
-
-  function renderOrders(orders) {
-    const ordersList = doc.querySelector("[data-orders-list]");
-    const ordersStatus = doc.querySelector("[data-orders-status]");
-    if (!ordersList || !ordersStatus) return;
-
-    if (!Array.isArray(orders) || !orders.length) {
-      ordersStatus.textContent = "No purchases have been recorded yet.";
-      ordersList.innerHTML = "";
-      setPaidAccessState(false, []);
-      setCurrentOrderCache(null);
-      return;
-    }
-
-    ordersStatus.textContent = "Your purchases are recorded below.";
-    setPaidAccessState(true, orders);
-    setCurrentOrderCache(orders[0]);
-
-    ordersList.innerHTML = orders
-      .map(function (order, index) {
-        const packageName =
-          order.package_name || order.package_slug || "Package";
-        const priceLabel = order.price_label || "";
-        const status = order.status || "received";
-        const createdAt = order.created_at
-          ? new Date(order.created_at).toLocaleString()
-          : "Just now";
-
-        return `
-        <div>
-          <div class="card-number">${index + 1}</div>
-          <h3>${packageName}</h3>
-          <p class="card-copy"><strong>Status:</strong> ${status}</p>
-          <p class="card-copy"><strong>Price:</strong> ${priceLabel}</p>
-          <p class="card-copy"><strong>Recorded:</strong> ${createdAt}</p>
-        </div>
-      `;
-      })
-      .join("");
-  }
-
-  async function loadDashboardOrders() {
-    const dashboard = doc.querySelector("[data-dashboard]");
-    if (!dashboard) return [];
-
-    const ordersStatus = doc.querySelector("[data-orders-status]");
-    if (ordersStatus) ordersStatus.textContent = "Loading your purchases...";
-
-    try {
-      const response = await apiRequest("/orders/my-orders", { method: "GET" });
-      const orders = Array.isArray(response) ? response : response.orders || [];
-      renderOrders(orders);
-      return orders;
-    } catch (_) {
-      if (ordersStatus)
-        ordersStatus.textContent = "Orders unavailable right now.";
-      setPaidAccessState(false, []);
-      return [];
-    }
-  }
-
-  // ---- Intake Status UI
-  function updateDashboardIntakeCard(submission) {
-    const cardStatus = doc.querySelector("[data-intake-card-status]");
-    const currentPackageNode = doc.querySelector(
-      "[data-intake-current-package]",
-    );
-    const statusBadgeNode = doc.querySelector("[data-intake-status-badge]");
-    const submissionIdNode = doc.querySelector("[data-intake-submission-id]");
-    const submittedAtNode = doc.querySelector("[data-intake-submitted-at]");
-    const nextStepNode = doc.querySelector("[data-intake-next-step]");
-    const lockNoteNode = doc.querySelector("[data-intake-lock-note]");
-    const openActionNode = doc.querySelector("[data-intake-open-action]");
-
-    if (
-      !cardStatus ||
-      !currentPackageNode ||
-      !statusBadgeNode ||
-      !submissionIdNode ||
-      !submittedAtNode ||
-      !nextStepNode ||
-      !lockNoteNode ||
-      !openActionNode
-    )
-      return;
-
-    const order = getCurrentOrderCache();
-    const packageName =
-      submission?.package_name ||
-      order?.package_name ||
-      (order?.package_slug
-        ? PACKAGE_CATALOG[order.package_slug]?.name || order.package_slug
-        : "No package detected");
-
-    currentPackageNode.textContent = packageName;
-
-    if (!submission) {
-      cardStatus.textContent = "No intake submission found yet.";
-      statusBadgeNode.textContent = "Not submitted";
-      submissionIdNode.textContent = "—";
-      submittedAtNode.textContent = "—";
-      nextStepNode.textContent =
-        "Open your intake flow and submit the review step.";
-      lockNoteNode.textContent =
-        "Editing is open because no final submission exists yet.";
-      openActionNode.textContent = "Open Intake";
-      openActionNode.setAttribute("href", "intake-welcome.html");
-      return;
-    }
-
-    cardStatus.textContent = "Your latest intake submission is recorded.";
-    statusBadgeNode.textContent = submission.status || "submitted";
-    submissionIdNode.textContent = submission.id || "—";
-    submittedAtNode.textContent = submission.created_at
-      ? new Date(submission.created_at).toLocaleString()
-      : "—";
-    nextStepNode.textContent =
-      "Your intake is now ready for the next onboarding stage and production review.";
-    lockNoteNode.textContent =
-      "This intake is submitted. Use review for reference; edits should be handled in the next stage.";
-    openActionNode.textContent = "View Intake";
-    openActionNode.setAttribute("href", "intake-review.html");
-  }
-
-  async function loadDashboardIntakeStatus() {
-    const dashboard = doc.querySelector("[data-dashboard]");
-    if (!dashboard) return;
-
-    try {
-      const submission = await apiRequest("/intake-submissions/my-latest", {
-        method: "GET",
+    header
+      .querySelectorAll(".site-nav a, .header-actions a")
+      .forEach(function (link) {
+        link.addEventListener("click", closeMenu);
       });
-      cacheLatestIntake(submission);
-      updateDashboardIntakeCard(submission);
-    } catch (_) {
-      const cached = getCachedLatestIntake();
-      updateDashboardIntakeCard(cached);
-    }
-  }
 
-  // ---- Intake History UI
-  function renderIntakeHistory(items) {
-    const statusNode = doc.querySelector("[data-intake-history-status]");
-    const listNode = doc.querySelector("[data-intake-history-list]");
-    if (!statusNode || !listNode) return;
-
-    if (!Array.isArray(items) || items.length === 0) {
-      statusNode.textContent = "No intake submissions found yet.";
-      listNode.innerHTML = "";
-      return;
-    }
-
-    statusNode.textContent = "Your intake submission history is listed below.";
-    listNode.innerHTML = items
-      .map(function (item, index) {
-        const pkg = item.package_name || item.package_slug || "Package";
-        const status = item.status || "submitted";
-        const createdAt = item.created_at
-          ? new Date(item.created_at).toLocaleString()
-          : "—";
-        const id = item.id || "—";
-
-        return `
-        <div>
-          <div class="card-number">${index + 1}</div>
-          <h3>${pkg}</h3>
-          <p class="card-copy"><strong>Status:</strong> ${status}</p>
-          <p class="card-copy"><strong>Submitted:</strong> ${createdAt}</p>
-          <p class="card-copy"><strong>ID:</strong> ${id}</p>
-        </div>
-      `;
-      })
-      .join("");
-  }
-
-  async function loadDashboardIntakeHistory() {
-    const dashboard = doc.querySelector("[data-dashboard]");
-    if (!dashboard) return;
-
-    const statusNode = doc.querySelector("[data-intake-history-status]");
-    if (statusNode) statusNode.textContent = "Loading your intake history...";
-
-    try {
-      const list = await apiRequest("/intake-submissions/my-list?limit=10", {
-        method: "GET",
-      });
-      renderIntakeHistory(list);
-    } catch (_) {
-      if (statusNode)
-        statusNode.textContent = "Intake history unavailable right now.";
-      renderIntakeHistory([]);
-    }
-  }
-
-  // ---- Intake Uploads (Step 4)
-  function setupIntakeUploads() {
-    const page = doc.querySelector("[data-intake-uploads]");
-    if (!page) return;
-
-    const form = doc.querySelector("[data-intake-uploads-form]");
-    const statusNode = doc.querySelector("[data-intake-uploads-form-status]");
-    const submitBtn = doc.querySelector("[data-intake-uploads-submit-btn]");
-    if (!form) return;
-
-    const saved = getLocalIntakeData(DRAFT_UPLOADS_KEY);
-    if (saved) {
-      Object.keys(saved).forEach(function (key) {
-        const field = form.elements[key];
-        if (field) field.value = saved[key] || "";
-      });
-    }
-
-    form.addEventListener("submit", function (event) {
-      event.preventDefault();
-
-      if (statusNode) {
-        statusNode.style.display = "none";
-        statusNode.textContent = "";
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape") {
+        closeMenu();
       }
+    });
 
-      if (typeof form.reportValidity === "function" && !form.reportValidity())
-        return;
-
-      const fd = new FormData(form);
-      const payload = {
-        approx_upload_count: String(fd.get("approx_upload_count") || "").trim(),
-        primary_asset_type: String(fd.get("primary_asset_type") || "").trim(),
-        key_portraits: String(fd.get("key_portraits") || "").trim(),
-        supporting_records: String(fd.get("supporting_records") || "").trim(),
-        quality_notes: String(fd.get("quality_notes") || "").trim(),
-      };
-
-      setLocalIntakeData(DRAFT_UPLOADS_KEY, payload);
-
-      if (submitBtn) {
-        submitBtn.disabled = true;
-        submitBtn.textContent = "Saved";
+    window.addEventListener("resize", function () {
+      if (window.innerWidth > 860) {
+        closeMenu();
       }
-
-      if (statusNode) {
-        statusNode.style.display = "block";
-        statusNode.textContent =
-          "Upload plan saved locally. Continue to Consent.";
-        statusNode.dataset.state = "success";
-        statusNode.style.color = "#cfe8cf";
-      }
-
-      setTimeout(function () {
-        if (submitBtn) {
-          submitBtn.disabled = false;
-          submitBtn.textContent = "Save Upload Plan";
-        }
-      }, 900);
     });
   }
 
-  // ---- Intake Consent (Step 5)
-  function setupIntakeConsent() {
-    const page = doc.querySelector("[data-intake-consent]");
-    if (!page) return;
+  function markActiveNavLink() {
+    const currentPage =
+      window.location.pathname.split("/").pop() || "index.html";
 
-    const form = doc.querySelector("[data-intake-consent-form]");
-    const statusNode = doc.querySelector("[data-intake-consent-form-status]");
-    const submitBtn = doc.querySelector("[data-intake-consent-submit-btn]");
-    if (!form) return;
-
-    const saved = getLocalIntakeData(DRAFT_CONSENT_KEY);
-    if (saved) {
-      Object.keys(saved).forEach(function (key) {
-        const field = form.elements[key];
-        if (!field) return;
-
-        if (field.type === "checkbox") {
-          field.checked = Boolean(saved[key]);
-        } else {
-          field.value = saved[key] || "";
-        }
-      });
-    }
-
-    form.addEventListener("submit", function (event) {
-      event.preventDefault();
-
-      if (statusNode) {
-        statusNode.style.display = "none";
-        statusNode.textContent = "";
-      }
-
-      if (typeof form.reportValidity === "function" && !form.reportValidity())
-        return;
-
-      const fd = new FormData(form);
-
-      const payload = {
-        consent_process: Boolean(fd.get("consent_process")),
-        consent_store: Boolean(fd.get("consent_store")),
-        visibility_preference: String(
-          fd.get("visibility_preference") || "",
-        ).trim(),
-        consent_notes: String(fd.get("consent_notes") || "").trim(),
-      };
-
-      setLocalIntakeData(DRAFT_CONSENT_KEY, payload);
-
-      if (submitBtn) {
-        submitBtn.disabled = true;
-        submitBtn.textContent = "Saved";
-      }
-
-      if (statusNode) {
-        statusNode.style.display = "block";
-        statusNode.textContent =
-          "Consent saved locally. You can proceed to Review.";
-        statusNode.dataset.state = "success";
-        statusNode.style.color = "#cfe8cf";
-      }
-
-      setTimeout(function () {
-        if (submitBtn) {
-          submitBtn.disabled = false;
-          submitBtn.textContent = "Save Consent";
-        }
-      }, 900);
-    });
-  }
-
-  // ---- Review page: render summaries + submit payload to backend
-  function renderSummaryCards(node, title, items) {
-    if (!node) return;
-    const keys = Object.keys(items || {});
-    if (!keys.length) {
-      node.innerHTML = `
-        <div>
-          <div class="card-number">—</div>
-          <h3>${title} not saved yet</h3>
-          <p class="card-copy">Go back and complete this step to include it in your submission.</p>
-        </div>
-      `;
-      return;
-    }
-
-    node.innerHTML = keys
-      .map(function (key, index) {
-        const label = key.replace(/_/g, " ");
-        const value = items[key];
-
-        const formatted =
-          typeof value === "boolean"
-            ? value
-              ? "Yes"
-              : "No"
-            : String(value || "—");
-
-        return `
-        <div>
-          <div class="card-number">${index + 1}</div>
-          <h3>${label}</h3>
-          <p class="card-copy">${formatted}</p>
-        </div>
-      `;
-      })
-      .join("");
-  }
-
-  async function setupIntakeReview() {
-    const page = doc.querySelector("[data-intake-review]");
-    if (!page) return;
-
-    const statusLine = doc.querySelector("[data-intake-review-status]");
-    const householdNode = doc.querySelector("[data-review-household-summary]");
-    const familyMapNode = doc.querySelector("[data-review-family-map-summary]");
-    const uploadsNode = doc.querySelector("[data-review-uploads-summary]");
-    const consentNode = doc.querySelector("[data-review-consent-summary]");
-
-    const form = doc.querySelector("[data-intake-review-form]");
-    const formStatus = doc.querySelector("[data-intake-review-form-status]");
-    const submitBtn = doc.querySelector("[data-intake-review-submit-btn]");
-
-    // render summaries from local draft
-    const household = getLocalIntakeData(DRAFT_HOUSEHOLD_KEY) || {};
-    const familyMap = getLocalIntakeData(DRAFT_FAMILY_MAP_KEY) || {};
-    const uploads = getLocalIntakeData(DRAFT_UPLOADS_KEY) || {};
-    const consent = getLocalIntakeData(DRAFT_CONSENT_KEY) || {};
-
-    renderSummaryCards(householdNode, "Household", household);
-    renderSummaryCards(familyMapNode, "Family Map", familyMap);
-    renderSummaryCards(uploadsNode, "Uploads", uploads);
-    renderSummaryCards(consentNode, "Consent", consent);
-
-    if (!form) return;
-
-    form.addEventListener("submit", async function (event) {
-      event.preventDefault();
-
-      if (formStatus) {
-        formStatus.style.display = "none";
-        formStatus.textContent = "";
-      }
-
-      if (typeof form.reportValidity === "function" && !form.reportValidity())
-        return;
-
-      const token = getToken();
-      if (!token) {
-        if (formStatus) {
-          formStatus.style.display = "block";
-          formStatus.textContent =
-            "Please sign in again before submitting intake.";
-          formStatus.dataset.state = "error";
-          formStatus.style.color = "#ffb3b3";
-        }
-        return;
-      }
-
-      // Ensure we have package info
-      const order = (await primeCurrentOrderCache()) || getCurrentOrderCache();
-
-      if (!order || (!order.package_slug && !order.package_name)) {
-        if (formStatus) {
-          formStatus.style.display = "block";
-          formStatus.textContent =
-            "No package was found for this intake. Return to your dashboard and refresh your order data.";
-          formStatus.dataset.state = "error";
-          formStatus.style.color = "#ffb3b3";
-        }
-        return;
-      }
-
-      const fd = new FormData(form);
-      const reviewPayload = {
-        final_intake_notes: String(fd.get("final_intake_notes") || "").trim(),
-        confirm_accuracy: Boolean(fd.get("confirm_accuracy")),
-      };
-
-      const payload = {
-        package_slug: order.package_slug || order.package_slug || "",
-        package_name:
-          order.package_name ||
-          (order.package_slug
-            ? PACKAGE_CATALOG[order.package_slug]?.name || order.package_slug
-            : "Package"),
-        household: household || {},
-        family_map: familyMap || {},
-        uploads: uploads || {},
-        consent: consent || {},
-        review: reviewPayload,
-      };
-
+    document.querySelectorAll(".site-nav a[href]").forEach(function (link) {
       try {
-        if (submitBtn) {
-          submitBtn.disabled = true;
-          submitBtn.textContent = "Submitting...";
-        }
+        const url = new URL(link.getAttribute("href"), window.location.href);
+        const linkPage = url.pathname.split("/").pop() || "index.html";
 
-        const created = await apiRequest("/intake-submissions", {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
-
-        cacheLatestIntake(created);
-
-        if (statusLine) {
-          statusLine.textContent =
-            "Intake submitted successfully. Your submission is now stored with your account.";
-        }
-
-        if (formStatus) {
-          formStatus.style.display = "block";
-          formStatus.textContent = `Intake submitted successfully. Submission ID: ${created.id || "saved"}`;
-          formStatus.dataset.state = "success";
-          formStatus.style.color = "#cfe8cf";
-        }
-
-        if (submitBtn) {
-          submitBtn.textContent = "Submitted";
+        if (linkPage === currentPage) {
+          link.classList.add("active");
         }
       } catch (error) {
-        console.error("[TOL intake] submit failed:", error);
-
-        if (formStatus) {
-          formStatus.style.display = "block";
-          formStatus.textContent =
-            error.message || "Submission failed. Please try again.";
-          formStatus.dataset.state = "error";
-          formStatus.style.color = "#ffb3b3";
-        }
-
-        if (submitBtn) {
-          submitBtn.disabled = false;
-          submitBtn.textContent = "Submit Intake Review";
-        }
+        // ignore malformed hrefs
       }
     });
   }
 
-  // ---- Init
-  function init() {
+  document.addEventListener("DOMContentLoaded", function () {
     setupMobileMenu();
-    setupCookiePreferences();
+    markActiveNavLink();
+    updateCookieStatus();
+    setupCookieBanner();
+  });
 
-    // Dashboard-only calls
-    loadDashboardOrders().then(function () {
-      loadDashboardIntakeStatus();
-      loadDashboardIntakeHistory();
-    });
+  const sharedApi = {
+    isLocalApp,
+    getApiBaseUrl,
+    saveToken,
+    getToken,
+    clearToken,
+    saveUser,
+    getSavedUser,
+    clearUser,
+    clearSession,
+    apiRequest,
+    fetchCurrentUser,
+    requireSession,
+    setStatus,
+    clearStatus,
+  };
 
-    // Intake step setups
-    setupIntakeUploads();
-    setupIntakeConsent();
-    setupIntakeReview();
-
-    // Prime order cache on any intake page (safe to call even if dashboard isn't present)
-    primeCurrentOrderCache();
-
-    console.log("[TOL] API_BASE_URL:", API_BASE_URL);
-  }
-
-  if (doc.readyState === "loading")
-    doc.addEventListener("DOMContentLoaded", init);
-  else init();
+  window.TOLApp = sharedApi;
+  window.TOLAuth = sharedApi;
 })();
