@@ -29,6 +29,10 @@
       : DEFAULT_LIVE_API_BASE_URL;
   }
 
+  function getPaymentLinks() {
+    return (window.TOL_CONFIG && window.TOL_CONFIG.PAYMENT_LINKS) || {};
+  }
+
   function saveToken(token) {
     if (typeof token === "string" && token.trim()) {
       localStorage.setItem(TOKEN_KEY, token);
@@ -308,16 +312,51 @@
     });
   }
 
+  function applyPaymentLinks() {
+    const paymentLinks = getPaymentLinks();
+
+    document.querySelectorAll("[data-payment-link]").forEach(function (link) {
+      const slug = link.dataset.paymentLink;
+      const resolved = paymentLinks[slug];
+
+      if (resolved) {
+        link.href = resolved;
+      }
+    });
+  }
+
+  async function syncPublicAuthCtas() {
+    const ctas = document.querySelectorAll("[data-auth-cta]");
+    if (!ctas.length) return;
+
+    const token = getToken();
+    if (!token) return;
+
+    try {
+      await fetchCurrentUser();
+
+      ctas.forEach(function (cta) {
+        cta.textContent = cta.dataset.loggedInLabel || "Dashboard";
+        cta.setAttribute("href", cta.dataset.loggedInHref || "dashboard.html");
+      });
+    } catch (error) {
+      clearSession();
+    }
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     setupMobileMenu();
     markActiveNavLink();
     updateCookieStatus();
     setupCookieBanner();
+    applyPaymentLinks();
+    syncPublicAuthCtas();
   });
 
   const sharedApi = {
     isLocalApp,
     getApiBaseUrl,
+    getPaymentLinks,
     saveToken,
     getToken,
     clearToken,
