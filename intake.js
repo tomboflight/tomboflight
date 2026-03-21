@@ -489,7 +489,7 @@
           submitBtn.textContent = "Submitting Intake...";
         }
 
-        const response = await app.apiRequest("/intake-submissions/", {
+        const response = await app.apiRequest("/intake-submissions", {
           method: "POST",
           body: JSON.stringify(submissionPayload),
         });
