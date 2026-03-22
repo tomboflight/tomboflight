@@ -34,13 +34,19 @@ def _current_user_email(user: dict[str, Any]) -> str:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authenticated user email is missing.",
         )
-    return str(raw_email)
+    return str(raw_email).strip().lower()
 
 
 @router.post(
     "/intake-submissions",
     response_model=IntakeSubmissionResponse,
     status_code=status.HTTP_201_CREATED,
+)
+@router.post(
+    "/intake-submissions/",
+    response_model=IntakeSubmissionResponse,
+    status_code=status.HTTP_201_CREATED,
+    include_in_schema=False,
 )
 def create_submission(
     payload: IntakeSubmissionCreate,
@@ -58,6 +64,11 @@ def create_submission(
     "/intake-submissions/my-latest",
     response_model=IntakeSubmissionResponse,
 )
+@router.get(
+    "/intake-submissions/my-latest/",
+    response_model=IntakeSubmissionResponse,
+    include_in_schema=False,
+)
 def my_latest(user: dict[str, Any] = Depends(get_current_user)):
     doc = get_latest_for_user(_current_user_id(user))
     if not doc:
@@ -71,6 +82,11 @@ def my_latest(user: dict[str, Any] = Depends(get_current_user)):
 @router.get(
     "/intake-submissions/my-list",
     response_model=list[IntakeSubmissionListItem],
+)
+@router.get(
+    "/intake-submissions/my-list/",
+    response_model=list[IntakeSubmissionListItem],
+    include_in_schema=False,
 )
 def my_list(
     limit: int = Query(10, ge=1, le=50),
