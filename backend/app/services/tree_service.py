@@ -1,4 +1,15 @@
+from typing import Any
+
+from bson import ObjectId
+
 from app.database import get_database
+
+
+def _family_id_candidates(family_id: str) -> list[Any]:
+    values: list[Any] = [family_id]
+    if ObjectId.is_valid(family_id):
+        values.append(ObjectId(family_id))
+    return values
 
 
 def _serialize_member(member: dict) -> dict:
@@ -38,6 +49,7 @@ def _serialize_node(node: dict) -> dict:
 def _serialize_relationship(rel: dict) -> dict:
     return {
         "id": str(rel["_id"]),
+        "family_id": rel.get("family_id"),
         "source_member_id": rel.get("source_member_id"),
         "target_member_id": rel.get("target_member_id"),
         "relationship_type": rel.get("relationship_type"),
@@ -63,6 +75,52 @@ def _build_edges(relationships: list[dict]) -> list[dict]:
     return edges
 
 
+def _find_family(db, family_id: str):
+    if ObjectId.is_valid(family_id):
+        family = db.families.find_one({"_id": ObjectId(family_id)})
+        if family is not None:
+            return family
+
+    family = db.families.find_one({"family_id": family_id})
+    if family is not None:
+        return family
+
+    family = db.families.find_one({"family_name": family_id})
+    return family
+
+
+def _find_members(db, family_id: str) -> list[dict]:
+    candidates = _family_id_candidates(family_id)
+    return list(db.family_members.find({"family_id": {"$in": candidates}}))
+
+
+def _find_nodes(db, family_id: str) -> list[dict]:
+    candidates = _family_id_candidates(family_id)
+    return list(db.lineage_nodes.find({"family_id": {"$in": candidates}}))
+
+
+def _find_relationships(db, family_id: str, member_ids: set[str]) -> list[dict]:
+    candidates = _family_id_candidates(family_id)
+
+    relationships = list(db.relationships.find({"family_id": {"$in": candidates}}))
+    if relationships:
+        return relationships
+
+    if not member_ids:
+        return []
+
+    return list(
+        db.relationships.find(
+            {
+                "$or": [
+                    {"source_member_id": {"$in": list(member_ids)}},
+                    {"target_member_id": {"$in": list(member_ids)}},
+                ]
+            }
+        )
+    )
+
+
 def get_family_tree(family_id: str) -> dict:
     db = get_database()
     if db is None:
@@ -76,19 +134,20 @@ def get_family_tree(family_id: str) -> dict:
             "edges": [],
         }
 
-    family = db.families.find_one({"_id": family_id})
-    if family is None:
-        family = db.families.find_one({"family_name": family_id})
-
-    members = list(db.family_members.find({"family_id": family_id}))
-    nodes = list(db.lineage_nodes.find({"family_id": family_id}))
-    relationships = list(db.relationships.find())
+    family = _find_family(db, family_id)
+    members = _find_members(db, family_id)
+    nodes = _find_nodes(db, family_id)
 
     member_ids = {str(member["_id"]) for member in members}
+    relationships = _find_relationships(db, family_id, member_ids)
+
     filtered_relationships = [
         rel
         for rel in relationships
-        if rel.get("source_member_id") in member_ids or rel.get("target_member_id") in member_ids
+        if (
+            rel.get("source_member_id") in member_ids
+            or rel.get("target_member_id") in member_ids
+        )
     ]
 
     return {
@@ -115,19 +174,20 @@ def get_filtered_family_tree(family_id: str, mode: str) -> dict:
             "edges": [],
         }
 
-    family = db.families.find_one({"_id": family_id})
-    if family is None:
-        family = db.families.find_one({"family_name": family_id})
-
-    members = list(db.family_members.find({"family_id": family_id}))
-    nodes = list(db.lineage_nodes.find({"family_id": family_id}))
-    relationships = list(db.relationships.find())
+    family = _find_family(db, family_id)
+    members = _find_members(db, family_id)
+    nodes = _find_nodes(db, family_id)
 
     member_ids = {str(member["_id"]) for member in members}
+    relationships = _find_relationships(db, family_id, member_ids)
+
     relationships = [
         rel
         for rel in relationships
-        if rel.get("source_member_id") in member_ids or rel.get("target_member_id") in member_ids
+        if (
+            rel.get("source_member_id") in member_ids
+            or rel.get("target_member_id") in member_ids
+        )
     ]
 
     if mode == "verified":
