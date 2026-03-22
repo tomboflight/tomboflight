@@ -30,19 +30,75 @@ def _oid(value: str) -> ObjectId:
     return ObjectId(value)
 
 
-def _serialize(doc: dict[str, Any]) -> dict[str, Any]:
+def _collection() -> Collection:
+    db = get_database()
+    return db[COLLECTION]
+
+
+def _coerce_datetime(value: Any) -> Optional[datetime]:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except Exception:
+            return None
+    return None
+
+
+def _normalize_submission_document(doc: dict[str, Any]) -> dict[str, Any]:
     out = dict(doc)
+
+    status = str(out.get("status") or "submitted").strip().lower()
+    out["status"] = status
+
+    out["review_locked"] = bool(
+        out.get("review_locked")
+        if out.get("review_locked") is not None
+        else status in LOCKED_STATUSES
+    )
+
+    out["household"] = out.get("household") or {}
+    out["family_map"] = out.get("family_map") or {}
+    out["uploads"] = out.get("uploads") or {}
+    out["consent"] = out.get("consent") or {}
+    out["review"] = out.get("review") or {}
+
+    out["submitted_at"] = _coerce_datetime(
+        out.get("submitted_at") or out.get("created_at")
+    )
+    out["review_started_at"] = _coerce_datetime(out.get("review_started_at"))
+    out["reviewed_at"] = _coerce_datetime(out.get("reviewed_at"))
+    out["provisioned_at"] = _coerce_datetime(out.get("provisioned_at"))
+
+    out["reviewed_by"] = out.get("reviewed_by")
+    out["review_notes"] = out.get("review_notes") or ""
+    out["approval_notes"] = out.get("approval_notes") or ""
+    out["rejection_reason"] = out.get("rejection_reason") or ""
+
+    out["family_root_id"] = out.get("family_root_id")
+    out["household_id"] = out.get("household_id")
+    out["project_id"] = out.get("project_id")
+    out["provisioned_by"] = out.get("provisioned_by")
+    out["production_notes"] = out.get("production_notes") or ""
+
+    out["created_at"] = _coerce_datetime(out.get("created_at")) or _now()
+    out["updated_at"] = _coerce_datetime(out.get("updated_at")) or out["created_at"]
+
+    return out
+
+
+def _serialize(doc: dict[str, Any]) -> dict[str, Any]:
+    out = _normalize_submission_document(doc)
+
     out["id"] = str(out.pop("_id"))
 
     if "user_id" in out and isinstance(out["user_id"], ObjectId):
         out["user_id"] = str(out["user_id"])
 
     return out
-
-
-def _collection() -> Collection:
-    db = get_database()
-    return db[COLLECTION]
 
 
 def create_intake_submission(
@@ -59,10 +115,12 @@ def create_intake_submission(
         sort=[("created_at", -1)],
     )
 
-    if latest and str(latest.get("status", "")).lower() in LOCKED_STATUSES:
-        raise ValueError(
-            "An intake submission is already submitted or under review for this account."
-        )
+    if latest:
+        latest_normalized = _normalize_submission_document(latest)
+        if str(latest_normalized.get("status", "")).lower() in LOCKED_STATUSES:
+            raise ValueError(
+                "An intake submission is already submitted or under review for this account."
+            )
 
     status = str(payload.get("status") or "submitted").strip().lower()
     review_locked = status in LOCKED_STATUSES
@@ -190,19 +248,15 @@ def update_status(
     if status_normalized == "submitted":
         update_doc["submitted_at"] = now
         update_doc["review_locked"] = True
-
     elif status_normalized == "in_review":
         update_doc["review_started_at"] = now
         update_doc["review_locked"] = True
-
     elif status_normalized == "approved":
         update_doc["reviewed_at"] = now
         update_doc["review_locked"] = True
-
     elif status_normalized == "rejected":
         update_doc["reviewed_at"] = now
         update_doc["review_locked"] = False
-
     elif status_normalized in PIPELINE_STATUSES:
         update_doc["review_locked"] = True
 
