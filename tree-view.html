@@ -1,337 +1,363 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Family Tree | Tomb of Light</title>
-  <meta
-    name="description"
-    content="Visual family tree renderer for Tomb of Light lineage data."
-  />
-  <link rel="stylesheet" href="styles.css" />
-  <style>
-    .tree-shell {
-      overflow-x: auto;
-      overflow-y: hidden;
-      padding: 1rem 0;
-      border-radius: 20px;
-    }
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Family Tree | Tomb of Light</title>
+    <meta
+      name="description"
+      content="Visual family tree renderer for Tomb of Light lineage data."
+    />
+    <link rel="stylesheet" href="styles.css" />
+    <style>
+      .tree-shell {
+        overflow-x: auto;
+        overflow-y: hidden;
+        padding: 1rem 0;
+        border-radius: 20px;
+      }
 
-    .tree-layout {
-      display: grid;
-      grid-template-columns: minmax(720px, 1fr) 360px;
-      gap: 1.25rem;
-      align-items: start;
-    }
-
-    .tree-wrapper {
-      position: relative;
-      min-height: 720px;
-      margin-top: 1rem;
-    }
-
-    .tree-lines {
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-    }
-
-    .tree-line {
-      fill: none;
-      stroke-width: 3;
-      opacity: 0.92;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-    }
-
-    .tree-line.parent-child {
-      stroke: rgba(214, 176, 102, 0.95);
-    }
-
-    .tree-line.spouse {
-      stroke: rgba(255, 255, 255, 0.48);
-      stroke-dasharray: 8 7;
-    }
-
-    .tree-node {
-      position: absolute;
-      width: 190px;
-      min-height: 104px;
-      padding: 16px 18px;
-      border-radius: 20px;
-      background: rgba(10, 16, 28, 0.97);
-      border: 1px solid rgba(214, 176, 102, 0.18);
-      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
-      backdrop-filter: blur(10px);
-    }
-
-    .tree-node-button {
-      text-align: left;
-      cursor: pointer;
-      transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
-    }
-
-    .tree-node-button:hover {
-      transform: translateY(-2px);
-      border-color: rgba(214, 176, 102, 0.45);
-      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.34);
-    }
-
-    .tree-node-button.is-active {
-      border-color: rgba(214, 176, 102, 0.82);
-      box-shadow: 0 0 0 1px rgba(214, 176, 102, 0.35), 0 16px 36px rgba(0, 0, 0, 0.4);
-    }
-
-    .tree-node-name {
-      font-weight: 700;
-      font-size: 1.08rem;
-      line-height: 1.25;
-      margin-bottom: 0.55rem;
-      color: #f4f7fb;
-    }
-
-    .tree-node-meta {
-      font-size: 0.92rem;
-      color: #b4becc;
-      margin-top: 0.22rem;
-    }
-
-    .tree-generation-label {
-      position: absolute;
-      width: 120px;
-      text-transform: uppercase;
-      letter-spacing: 0.18em;
-      font-size: 0.78rem;
-      font-weight: 700;
-      color: #d6b066;
-      opacity: 0.95;
-    }
-
-    .tree-empty {
-      padding: 1rem 0;
-      color: #b4becc;
-    }
-
-    .lineage-profile-shell {
-      position: sticky;
-      top: 1rem;
-    }
-
-    .lineage-profile-card {
-      background: rgba(10, 16, 28, 0.96);
-      border: 1px solid rgba(214, 176, 102, 0.18);
-      border-radius: 22px;
-      padding: 1.25rem;
-      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22);
-    }
-
-    .lineage-profile-header h3 {
-      margin: 0.4rem 0 0.2rem;
-      font-size: 1.35rem;
-    }
-
-    .lineage-profile-badge {
-      display: inline-block;
-      padding: 0.28rem 0.58rem;
-      border-radius: 999px;
-      background: rgba(214, 176, 102, 0.14);
-      color: #d6b066;
-      font-size: 0.76rem;
-      font-weight: 700;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-    }
-
-    .lineage-profile-subtext {
-      color: #b4becc;
-      margin: 0 0 1rem;
-    }
-
-    .lineage-profile-grid {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 0.7rem;
-      margin-bottom: 1rem;
-    }
-
-    .lineage-profile-item {
-      display: flex;
-      flex-direction: column;
-      gap: 0.15rem;
-      padding: 0.7rem 0.8rem;
-      border-radius: 14px;
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid rgba(255, 255, 255, 0.05);
-    }
-
-    .lineage-label {
-      font-size: 0.78rem;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: #d6b066;
-    }
-
-    .lineage-value {
-      color: #f4f7fb;
-      word-break: break-word;
-    }
-
-    .lineage-id {
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: 0.9rem;
-    }
-
-    .lineage-section {
-      margin-top: 1rem;
-    }
-
-    .lineage-section h4 {
-      margin: 0 0 0.45rem;
-      font-size: 0.98rem;
-      color: #f4f7fb;
-    }
-
-    .lineage-section p {
-      margin: 0;
-      color: #b4becc;
-    }
-
-    .lineage-list {
-      list-style: none;
-      padding: 0;
-      margin: 0;
-      display: grid;
-      gap: 0.5rem;
-    }
-
-    .lineage-list-item {
-      display: flex;
-      justify-content: space-between;
-      gap: 0.8rem;
-      padding: 0.62rem 0.72rem;
-      border-radius: 12px;
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid rgba(255, 255, 255, 0.05);
-      color: #b4becc;
-    }
-
-    .lineage-list-item strong {
-      color: #f4f7fb;
-    }
-
-    .lineage-empty {
-      color: #8d9aae;
-    }
-
-    @media (max-width: 1180px) {
       .tree-layout {
-        grid-template-columns: 1fr;
+        display: grid;
+        grid-template-columns: minmax(720px, 1fr) 360px;
+        gap: 1.25rem;
+        align-items: start;
+      }
+
+      .tree-wrapper {
+        position: relative;
+        min-height: 720px;
+        margin-top: 1rem;
+      }
+
+      .tree-lines {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+      }
+
+      .tree-line {
+        fill: none;
+        stroke-width: 3;
+        opacity: 0.92;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .tree-line.parent-child {
+        stroke: rgba(214, 176, 102, 0.95);
+      }
+
+      .tree-line.spouse {
+        stroke: rgba(255, 255, 255, 0.48);
+        stroke-dasharray: 8 7;
+      }
+
+      .tree-node {
+        position: absolute;
+        width: 190px;
+        min-height: 104px;
+        padding: 16px 18px;
+        border-radius: 20px;
+        background: rgba(10, 16, 28, 0.97);
+        border: 1px solid rgba(214, 176, 102, 0.18);
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+        backdrop-filter: blur(10px);
+      }
+
+      .tree-node-button {
+        text-align: left;
+        cursor: pointer;
+        transition:
+          transform 0.18s ease,
+          border-color 0.18s ease,
+          box-shadow 0.18s ease;
+      }
+
+      .tree-node-button:hover {
+        transform: translateY(-2px);
+        border-color: rgba(214, 176, 102, 0.45);
+        box-shadow: 0 14px 34px rgba(0, 0, 0, 0.34);
+      }
+
+      .tree-node-button.is-active {
+        border-color: rgba(214, 176, 102, 0.82);
+        box-shadow:
+          0 0 0 1px rgba(214, 176, 102, 0.35),
+          0 16px 36px rgba(0, 0, 0, 0.4);
+      }
+
+      .tree-node-name {
+        font-weight: 700;
+        font-size: 1.08rem;
+        line-height: 1.25;
+        margin-bottom: 0.55rem;
+        color: #f4f7fb;
+      }
+
+      .tree-node-meta {
+        font-size: 0.92rem;
+        color: #b4becc;
+        margin-top: 0.22rem;
+      }
+
+      .tree-generation-label {
+        position: absolute;
+        width: 120px;
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+        font-size: 0.78rem;
+        font-weight: 700;
+        color: #d6b066;
+        opacity: 0.95;
+      }
+
+      .tree-empty {
+        padding: 1rem 0;
+        color: #b4becc;
       }
 
       .lineage-profile-shell {
-        position: static;
+        position: sticky;
+        top: 1rem;
       }
-    }
-  </style>
-</head>
-<body>
-  <div class="page-wrap">
-    <header class="site-header">
-      <div class="container site-header-inner">
-        <a class="brand" href="index.html" aria-label="Tomb of Light home">
-          <span>Tomb of Light<span class="brand-symbol">™</span></span>
-        </a>
 
-        <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
-          <a href="platform.html">Platform</a>
-          <a href="how-it-works.html">How It Works</a>
-          <a href="security.html">Security</a>
-          <a href="faq.html">FAQ</a>
-        </nav>
+      .lineage-profile-card {
+        background: rgba(10, 16, 28, 0.96);
+        border: 1px solid rgba(214, 176, 102, 0.18);
+        border-radius: 22px;
+        padding: 1.25rem;
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22);
+      }
 
-        <div class="header-actions">
-          <a class="btn btn-secondary" href="dashboard.html">Dashboard</a>
-          <button class="btn btn-secondary" type="button" data-logout-btn>Log Out</button>
-        </div>
-      </div>
-    </header>
+      .lineage-profile-header h3 {
+        margin: 0.4rem 0 0.2rem;
+        font-size: 1.35rem;
+      }
 
-    <main data-dashboard data-tree-view-page>
-      <section class="page-hero">
-        <div class="container">
-          <div class="page-hero-panel">
-            <span class="eyebrow">Visual Lineage Renderer</span>
-            <h1>Family Tree View</h1>
-            <p>
-              Render the Tomb of Light lineage graph as a visual multi-generation family map.
-            </p>
+      .lineage-profile-badge {
+        display: inline-block;
+        padding: 0.28rem 0.58rem;
+        border-radius: 999px;
+        background: rgba(214, 176, 102, 0.14);
+        color: #d6b066;
+        font-size: 0.76rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .lineage-profile-subtext {
+        color: #b4becc;
+        margin: 0 0 1rem;
+      }
+
+      .lineage-profile-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 0.7rem;
+        margin-bottom: 1rem;
+      }
+
+      .lineage-profile-item {
+        display: flex;
+        flex-direction: column;
+        gap: 0.15rem;
+        padding: 0.7rem 0.8rem;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+      }
+
+      .lineage-label {
+        font-size: 0.78rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #d6b066;
+      }
+
+      .lineage-value {
+        color: #f4f7fb;
+        word-break: break-word;
+      }
+
+      .lineage-id {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.9rem;
+      }
+
+      .lineage-section {
+        margin-top: 1rem;
+      }
+
+      .lineage-section h4 {
+        margin: 0 0 0.45rem;
+        font-size: 0.98rem;
+        color: #f4f7fb;
+      }
+
+      .lineage-section p {
+        margin: 0;
+        color: #b4becc;
+      }
+
+      .lineage-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        display: grid;
+        gap: 0.5rem;
+      }
+
+      .lineage-list-item {
+        display: flex;
+        justify-content: space-between;
+        gap: 0.8rem;
+        padding: 0.62rem 0.72rem;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        color: #b4becc;
+      }
+
+      .lineage-list-item strong {
+        color: #f4f7fb;
+      }
+
+      .lineage-empty {
+        color: #8d9aae;
+      }
+
+      @media (max-width: 1180px) {
+        .tree-layout {
+          grid-template-columns: 1fr;
+        }
+
+        .lineage-profile-shell {
+          position: static;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page-wrap">
+      <header class="site-header">
+        <div class="container site-header-inner">
+          <a class="brand" href="index.html" aria-label="Tomb of Light home">
+            <span>Tomb of Light<span class="brand-symbol">™</span></span>
+          </a>
+
+          <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
+            <a href="platform.html">Platform</a>
+            <a href="how-it-works.html">How It Works</a>
+            <a href="security.html">Security</a>
+            <a href="faq.html">FAQ</a>
+          </nav>
+
+          <div class="header-actions">
+            <a class="btn btn-secondary" href="dashboard.html">Dashboard</a>
+            <button class="btn btn-secondary" type="button" data-logout-btn>
+              Log Out
+            </button>
           </div>
         </div>
-      </section>
+      </header>
 
-      <section class="page-sections">
-        <div class="container form-shell" data-auth-required style="display: none;">
-          <div class="form-panel">
-            <div class="form-grid">
-              <label>
-                Select Family
-                <select data-tree-family-select>
-                  <option value="">Select a family</option>
-                </select>
-              </label>
-
-              <div
-                class="helper"
-                data-tree-status
-                aria-live="polite"
-                style="display: none;"
-              ></div>
-
-              <div class="inline-actions">
-                <button class="btn btn-primary" type="button" data-load-tree-btn>
-                  Load Visual Tree
-                </button>
-                <a class="btn btn-secondary" href="family-graph.html">Back to Graph Viewer</a>
-              </div>
+      <main data-dashboard data-tree-view-page>
+        <section class="page-hero">
+          <div class="container">
+            <div class="page-hero-panel">
+              <span class="eyebrow">Visual Lineage Renderer</span>
+              <h1>Family Tree View</h1>
+              <p>
+                Render the Tomb of Light lineage graph as a visual
+                multi-generation family map.
+              </p>
             </div>
           </div>
+        </section>
 
-          <div class="tree-layout">
+        <section class="page-sections">
+          <div
+            class="container form-shell"
+            data-auth-required
+            style="display: none"
+          >
             <div class="form-panel">
-              <span class="eyebrow">Rendered Family Tree</span>
-              <div class="tree-shell">
-                <div data-tree-canvas></div>
-              </div>
-            </div>
+              <div class="form-grid">
+                <label>
+                  Select Family
+                  <select data-tree-family-select>
+                    <option value="">Select a family</option>
+                  </select>
+                </label>
 
-            <div class="lineage-profile-shell">
-              <div class="form-panel">
-                <span class="eyebrow">Lineage Profile</span>
-                <div data-tree-detail-empty class="helper" style="margin-top: 1rem;">
-                  Select a person in the tree to view their lineage profile, family links, and identity record.
+                <div
+                  class="helper"
+                  data-tree-status
+                  aria-live="polite"
+                  style="display: none"
+                ></div>
+
+                <div class="inline-actions">
+                  <button
+                    class="btn btn-primary"
+                    type="button"
+                    data-load-tree-btn
+                  >
+                    Load Visual Tree
+                  </button>
+                  <a class="btn btn-secondary" href="family-graph.html"
+                    >Back to Graph Viewer</a
+                  >
                 </div>
-                <div data-tree-detail style="display: none; margin-top: 1rem;"></div>
+              </div>
+            </div>
+
+            <div class="tree-layout">
+              <div class="form-panel">
+                <span class="eyebrow">Rendered Family Tree</span>
+                <div class="tree-shell">
+                  <div data-tree-canvas></div>
+                </div>
+              </div>
+
+              <div class="lineage-profile-shell">
+                <div class="form-panel">
+                  <span class="eyebrow">Lineage Profile</span>
+                  <div
+                    data-tree-detail-empty
+                    class="helper"
+                    style="margin-top: 1rem"
+                  >
+                    Select a person in the tree to view their lineage profile,
+                    family links, and identity record.
+                  </div>
+                  <div
+                    data-tree-detail
+                    style="display: none; margin-top: 1rem"
+                  ></div>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </section>
-    </main>
+        </section>
+      </main>
 
-    <footer class="footer">
-      <div class="container">
-        <div class="footer-card">
-          <div class="footer-bottom">
-            <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
+      <footer class="footer">
+        <div class="container">
+          <div class="footer-card">
+            <div class="footer-bottom">
+              <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
+            </div>
           </div>
         </div>
-      </div>
-    </footer>
-  </div>
+      </footer>
+    </div>
 
-  <script src="config.js"></script>
-  <script src="app.js"></script>
-  <script src="auth.js"></script>
-  <script src="tree-view.js"></script>
-</body>
+    <script src="config.js?v=20260322-4"></script>
+    <script src="app.js?v=20260322-4"></script>
+    <script src="auth.js?v=20260322-4"></script>
+    <script src="tree-view.js?v=20260322-4"></script>
+  </body>
 </html>
