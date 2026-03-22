@@ -10,8 +10,16 @@ from app.database import get_database
 
 COLLECTION = "intake_submissions"
 
-LOCKED_STATUSES = {"submitted", "in_review", "approved"}
-REVIEWABLE_STATUSES = {"submitted", "in_review", "approved", "rejected"}
+PIPELINE_STATUSES = {
+    "build_ready",
+    "in_production",
+    "qa_review",
+    "client_review",
+    "delivered",
+    "archived",
+}
+LOCKED_STATUSES = {"submitted", "in_review", "approved"} | PIPELINE_STATUSES
+REVIEWABLE_STATUSES = {"submitted", "in_review", "approved", "rejected"} | PIPELINE_STATUSES
 
 
 def _now() -> datetime:
@@ -43,14 +51,6 @@ def create_intake_submission(
     email: str,
     payload: dict[str, Any],
 ) -> dict[str, Any]:
-    """
-    Create a submitted intake record.
-
-    Rules:
-    - one active locked submission at a time per user
-    - allowed to submit again only when no locked submission exists
-      or after rejection flow is handled manually
-    """
     col = _collection()
     now = _now()
 
@@ -86,6 +86,12 @@ def create_intake_submission(
         "review_notes": "",
         "approval_notes": "",
         "rejection_reason": "",
+        "family_root_id": None,
+        "household_id": None,
+        "project_id": None,
+        "provisioned_at": None,
+        "provisioned_by": None,
+        "production_notes": "",
         "created_at": now,
         "updated_at": now,
     }
@@ -181,7 +187,11 @@ def update_status(
         "rejection_reason": rejection_reason or "",
     }
 
-    if status_normalized == "in_review":
+    if status_normalized == "submitted":
+        update_doc["submitted_at"] = now
+        update_doc["review_locked"] = True
+
+    elif status_normalized == "in_review":
         update_doc["review_started_at"] = now
         update_doc["review_locked"] = True
 
@@ -193,8 +203,7 @@ def update_status(
         update_doc["reviewed_at"] = now
         update_doc["review_locked"] = False
 
-    elif status_normalized == "submitted":
-        update_doc["submitted_at"] = now
+    elif status_normalized in PIPELINE_STATUSES:
         update_doc["review_locked"] = True
 
     col.update_one({"_id": oid}, {"$set": update_doc})

@@ -9,6 +9,7 @@ from app.schemas.intake_submission import (
     IntakeSubmissionResponse,
     IntakeSubmissionStatusUpdate,
 )
+from app.services.intake_pipeline_service import provision_build_from_submission
 from app.services.intake_submission_service import (
     get_by_id,
     list_all,
@@ -25,6 +26,12 @@ class IntakeAdminNotesPayload(BaseModel):
     review_notes: str = Field(default="")
     approval_notes: str = Field(default="")
     rejection_reason: str = Field(default="")
+
+
+class IntakeProvisionBuildPayload(BaseModel):
+    family_name_override: str = Field(default="")
+    project_name_override: str = Field(default="")
+    production_notes: str = Field(default="")
 
 
 def _reviewed_by(current_admin: dict[str, Any]) -> str:
@@ -140,6 +147,27 @@ def reject_admin_intake_submission(
             review_notes=payload.review_notes,
             approval_notes="",
             rejection_reason=payload.rejection_reason,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post("/{submission_id}/provision-build", response_model=IntakeSubmissionResponse)
+def provision_admin_intake_build(
+    submission_id: str,
+    payload: IntakeProvisionBuildPayload,
+    current_admin: dict[str, Any] = Depends(require_admin),
+):
+    try:
+        return provision_build_from_submission(
+            submission_id=submission_id,
+            provisioned_by=_reviewed_by(current_admin),
+            family_name_override=payload.family_name_override,
+            project_name_override=payload.project_name_override,
+            production_notes=payload.production_notes,
         )
     except ValueError as exc:
         raise HTTPException(

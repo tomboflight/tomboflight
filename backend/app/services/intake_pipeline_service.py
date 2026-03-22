@@ -1,0 +1,233 @@
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Any
+
+from bson import ObjectId
+
+from app.database import get_database
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _oid(value: str) -> ObjectId:
+    return ObjectId(value)
+
+
+def _serialize_submission(doc: dict[str, Any]) -> dict[str, Any]:
+    out = dict(doc)
+    out["id"] = str(out.pop("_id"))
+    if "user_id" in out and isinstance(out["user_id"], ObjectId):
+        out["user_id"] = str(out["user_id"])
+    return out
+
+
+def _normalize_visibility(value: str | None) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized in {"private"}:
+        return "private"
+    if normalized in {"family", "family-only", "family_only"}:
+        return "family_only"
+    if normalized in {"public", "certificate-only", "certificate_only"}:
+        return "certificate_only"
+    return "private"
+
+
+def provision_build_from_submission(
+    *,
+    submission_id: str,
+    provisioned_by: str,
+    family_name_override: str = "",
+    project_name_override: str = "",
+    production_notes: str = "",
+) -> dict[str, Any]:
+    db = get_database()
+
+    submissions = db["intake_submissions"]
+    families = db["families"]
+    households = db["households"]
+    projects = db["projects"]
+
+    submission = submissions.find_one({"_id": _oid(submission_id)})
+    if not submission:
+        raise ValueError("Intake submission not found.")
+
+    status = str(submission.get("status", "")).strip().lower()
+    allowed_statuses = {
+        "approved",
+        "build_ready",
+        "in_production",
+        "qa_review",
+        "client_review",
+        "delivered",
+        "archived",
+    }
+    if status not in allowed_statuses:
+        raise ValueError("Submission must be approved before provisioning a build.")
+
+    existing_family_root_id = str(submission.get("family_root_id") or "").strip()
+    existing_household_id = str(submission.get("household_id") or "").strip()
+    existing_project_id = str(submission.get("project_id") or "").strip()
+
+    household = submission.get("household") or {}
+    family_map = submission.get("family_map") or {}
+    consent = submission.get("consent") or {}
+    review = submission.get("review") or {}
+
+    owner_user_id = submission.get("user_id")
+    owner_user_id_str = str(owner_user_id) if owner_user_id is not None else ""
+    owner_email = str(submission.get("email") or "").strip().lower()
+
+    family_name = (
+        family_name_override.strip()
+        or str(household.get("household_name") or "").strip()
+        or str(family_map.get("family_branch_name") or "").strip()
+        or "Tomb of Light Family"
+    )
+
+    created_by = (
+        str(household.get("primary_contact_name") or "").strip()
+        or owner_email
+        or "Unknown"
+    )
+
+    family_description = (
+        str(family_map.get("family_structure_summary") or "").strip()
+        or str(household.get("project_scope") or "").strip()
+        or str(review.get("final_intake_notes") or "").strip()
+        or None
+    )
+
+    visibility = _normalize_visibility(consent.get("visibility_preference"))
+
+    family_doc = None
+    if existing_family_root_id and ObjectId.is_valid(existing_family_root_id):
+        family_doc = families.find_one({"_id": ObjectId(existing_family_root_id)})
+
+    if family_doc is None:
+        family_doc = families.find_one(
+            {
+                "$or": [
+                    {"intake_submission_id": submission_id},
+                    {
+                        "owner_user_id": owner_user_id_str,
+                        "family_name": family_name,
+                    },
+                ]
+            }
+        )
+
+    if family_doc is None:
+        family_payload = {
+            "family_name": family_name,
+            "created_by": created_by,
+            "description": family_description,
+            "owner_user_id": owner_user_id_str,
+            "owner_email": owner_email,
+            "visibility": visibility,
+            "shared_with_user_ids": [],
+            "shared_with_emails": [],
+            "package_slug": submission.get("package_slug"),
+            "package_name": submission.get("package_name"),
+            "source": "approved_intake",
+            "intake_submission_id": submission_id,
+            "created_at": _now(),
+        }
+        family_result = families.insert_one(family_payload)
+        family_payload["_id"] = family_result.inserted_id
+        family_doc = family_payload
+
+    family_root_id = str(family_doc["_id"])
+
+    household_doc = None
+    if existing_household_id and ObjectId.is_valid(existing_household_id):
+        household_doc = households.find_one({"_id": ObjectId(existing_household_id)})
+
+    if household_doc is None:
+        household_doc = households.find_one({"intake_submission_id": submission_id})
+
+    if household_doc is None:
+        household_payload = {
+            "family_id": family_root_id,
+            "intake_submission_id": submission_id,
+            "owner_user_id": owner_user_id_str,
+            "owner_email": owner_email,
+            "household_name": household.get("household_name"),
+            "primary_contact_name": household.get("primary_contact_name"),
+            "primary_contact_email": household.get("primary_contact_email"),
+            "primary_contact_phone": household.get("primary_contact_phone"),
+            "co_owner_name": household.get("co_owner_name"),
+            "household_role": household.get("household_role"),
+            "project_scope": household.get("project_scope"),
+            "special_notes": household.get("special_notes"),
+            "status": "build_ready",
+            "source": "approved_intake",
+            "created_at": _now(),
+            "updated_at": _now(),
+        }
+        household_result = households.insert_one(household_payload)
+        household_payload["_id"] = household_result.inserted_id
+        household_doc = household_payload
+
+    household_id = str(household_doc["_id"])
+
+    project_doc = None
+    if existing_project_id and ObjectId.is_valid(existing_project_id):
+        project_doc = projects.find_one({"_id": ObjectId(existing_project_id)})
+
+    if project_doc is None:
+        project_doc = projects.find_one({"intake_submission_id": submission_id})
+
+    project_name = (
+        project_name_override.strip()
+        or f"{family_name} Production Build"
+    )
+
+    if project_doc is None:
+        project_payload = {
+            "name": project_name,
+            "family_id": family_root_id,
+            "household_id": household_id,
+            "owner_user_id": owner_user_id_str,
+            "owner_email": owner_email,
+            "package_slug": submission.get("package_slug"),
+            "package_name": submission.get("package_name"),
+            "status": "build_ready",
+            "phase": "intake_approved",
+            "source": "approved_intake",
+            "intake_submission_id": submission_id,
+            "created_by": provisioned_by,
+            "notes": production_notes or "",
+            "created_at": _now(),
+            "updated_at": _now(),
+        }
+        project_result = projects.insert_one(project_payload)
+        project_payload["_id"] = project_result.inserted_id
+        project_doc = project_payload
+
+    project_id = str(project_doc["_id"])
+
+    submissions.update_one(
+        {"_id": _oid(submission_id)},
+        {
+            "$set": {
+                "status": "build_ready",
+                "review_locked": True,
+                "family_root_id": family_root_id,
+                "household_id": household_id,
+                "project_id": project_id,
+                "provisioned_at": _now(),
+                "provisioned_by": provisioned_by,
+                "production_notes": production_notes or "",
+                "updated_at": _now(),
+            }
+        },
+    )
+
+    saved = submissions.find_one({"_id": _oid(submission_id)})
+    if not saved:
+        raise RuntimeError("Failed to fetch provisioned intake submission.")
+
+    return _serialize_submission(saved)
