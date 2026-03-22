@@ -3,8 +3,10 @@
 
   const app = window.TOLApp || window.TOLAuth;
   const DRAFT_KEY = "tol_intake_draft_v1";
+  const LATEST_SUBMISSION_CACHE_KEY = "tol_latest_intake_submission_v1";
+  const LOCKED_STATUSES = new Set(["submitted", "in_review", "approved"]);
 
-  if (!app) {
+  if (!app || typeof app.apiRequest !== "function") {
     console.error("intake.js requires app.js/auth.js to be loaded first.");
     return;
   }
@@ -29,6 +31,10 @@
     localStorage.setItem(DRAFT_KEY, JSON.stringify(nextDraft || {}));
   }
 
+  function clearDraft() {
+    localStorage.removeItem(DRAFT_KEY);
+  }
+
   function mergeDraft(sectionKey, values) {
     const draft = loadDraft();
     draft[sectionKey] = {
@@ -39,8 +45,91 @@
     return draft;
   }
 
+  function cacheLatestSubmission(submission) {
+    try {
+      if (!submission) {
+        localStorage.removeItem(LATEST_SUBMISSION_CACHE_KEY);
+        return;
+      }
+      localStorage.setItem(
+        LATEST_SUBMISSION_CACHE_KEY,
+        JSON.stringify(submission),
+      );
+    } catch (error) {
+      // ignore cache failures
+    }
+  }
+
+  function getCachedLatestSubmission() {
+    try {
+      const raw = localStorage.getItem(LATEST_SUBMISSION_CACHE_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function normalizeStatus(status) {
+    return String(status || "")
+      .trim()
+      .toLowerCase();
+  }
+
+  function isLockedStatus(status) {
+    return LOCKED_STATUSES.has(normalizeStatus(status));
+  }
+
+  function humanizeStatus(status) {
+    const normalized = normalizeStatus(status);
+    if (!normalized) return "Unknown";
+
+    return normalized
+      .split("_")
+      .map(function (part) {
+        return part.charAt(0).toUpperCase() + part.slice(1);
+      })
+      .join(" ");
+  }
+
+  function statusMessage(status) {
+    const normalized = normalizeStatus(status);
+
+    if (normalized === "submitted") {
+      return "Your intake has been submitted and is waiting for review.";
+    }
+    if (normalized === "in_review") {
+      return "Your intake is currently under review.";
+    }
+    if (normalized === "approved") {
+      return "Your intake has been approved.";
+    }
+    if (normalized === "rejected") {
+      return "Your intake was rejected and can be edited and resubmitted.";
+    }
+    return "";
+  }
+
+  function reviewNextStep(status) {
+    const normalized = normalizeStatus(status);
+
+    if (normalized === "submitted") {
+      return "Waiting for review to begin.";
+    }
+    if (normalized === "in_review") {
+      return "Reviewer is evaluating your intake details.";
+    }
+    if (normalized === "approved") {
+      return "Proceed to family build, members, relationships, and production setup.";
+    }
+    if (normalized === "rejected") {
+      return "Review the feedback, update your intake, and resubmit.";
+    }
+    return "Complete your intake and submit it for review.";
+  }
+
   function setStatus(node, message, type) {
     if (!node) return;
+
     node.style.display = "block";
     node.textContent = message;
     node.dataset.state = type || "info";
@@ -101,20 +190,6 @@
     return data;
   }
 
-  function getPaidOrder(orders) {
-    return (
-      orders.find(function (order) {
-        const status = String(order?.status || "").toLowerCase();
-        return (
-          status === "paid" ||
-          status === "complete" ||
-          status === "completed" ||
-          status === "succeeded"
-        );
-      }) || null
-    );
-  }
-
   async function fetchPaidOrder() {
     const payload = await app.apiRequest("/orders/my-orders", {
       method: "GET",
@@ -126,7 +201,68 @@
         : Array.isArray(payload?.data)
           ? payload.data
           : [];
-    return getPaidOrder(orders);
+
+    return (
+      orders.find(function (order) {
+        const status = String(order?.status || "").toLowerCase();
+        return ["paid", "complete", "completed", "succeeded"].includes(status);
+      }) || null
+    );
+  }
+
+  async function getLatestSubmission() {
+    try {
+      const latest = await app.apiRequest("/intake-submissions/my-latest", {
+        method: "GET",
+      });
+      cacheLatestSubmission(latest);
+      return latest;
+    } catch (error) {
+      const message = getErrorMessage(error).toLowerCase();
+      if (message.includes("no intake submissions found")) {
+        cacheLatestSubmission(null);
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  async function getSubmissionList(limit) {
+    try {
+      return await app.apiRequest(
+        `/intake-submissions/my-list?limit=${limit || 10}`,
+        {
+          method: "GET",
+        },
+      );
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function lockFormForReview(form, statusNode, latestSubmission) {
+    if (!form || !latestSubmission) return;
+
+    const status = normalizeStatus(latestSubmission.status);
+    if (!isLockedStatus(status)) return;
+
+    form.querySelectorAll("input, textarea, select").forEach(function (field) {
+      if (field.type === "checkbox") {
+        field.disabled = true;
+      } else {
+        field.readOnly = true;
+        field.disabled = true;
+      }
+    });
+
+    form.querySelectorAll('button[type="submit"]').forEach(function (button) {
+      button.disabled = true;
+      button.textContent = humanizeStatus(status);
+    });
+
+    if (statusNode) {
+      setStatus(statusNode, statusMessage(status), "info");
+    }
   }
 
   function formatReviewBlock(title, lines, number) {
@@ -149,9 +285,11 @@
     const packageName = document.querySelector("[data-package-name]");
     const packageSummary = document.querySelector("[data-package-summary]");
     const packagePath = document.querySelector("[data-package-path]");
+    const intakeStart = document.querySelector("[data-intake-start]");
 
     try {
       const paidOrder = await fetchPaidOrder();
+      const latestSubmission = await getLatestSubmission();
       const draft = loadDraft();
 
       if (paidOrder) {
@@ -168,10 +306,6 @@
           packageSummary.textContent = `Your package is active and ready for onboarding. Current unlocked package: ${paidOrder.package_name || "Active Package"}.`;
         }
 
-        if (intakeStatus) {
-          intakeStatus.textContent = `Your package is active: ${paidOrder.package_name || "Active Package"}. Begin your household onboarding below.`;
-        }
-
         if (packagePath) {
           packagePath.innerHTML = `
             ${formatReviewBlock("Household Setup", ["Confirm household ownership and household details."], "A")}
@@ -180,6 +314,35 @@
             ${formatReviewBlock("Consent", ["Confirm privacy, processing, and storage permissions."], "D")}
             ${formatReviewBlock("Review & Submit", ["Review the saved onboarding data before final submission."], "E")}
           `;
+        }
+
+        if (latestSubmission && isLockedStatus(latestSubmission.status)) {
+          if (intakeStatus) {
+            intakeStatus.textContent = statusMessage(latestSubmission.status);
+          }
+          if (packageSummary) {
+            packageSummary.textContent = `Your latest intake is currently ${humanizeStatus(latestSubmission.status).toLowerCase()}. ${reviewNextStep(latestSubmission.status)}`;
+          }
+          if (intakeStart) {
+            intakeStart.textContent = "View Submitted Intake";
+            intakeStart.setAttribute("href", "intake-review.html");
+          }
+        } else if (
+          latestSubmission &&
+          normalizeStatus(latestSubmission.status) === "rejected"
+        ) {
+          if (intakeStatus) {
+            intakeStatus.textContent =
+              "Your intake was rejected. You may update it and resubmit.";
+          }
+          if (intakeStart) {
+            intakeStart.textContent = "Resume Intake";
+            intakeStart.setAttribute("href", "intake-household.html");
+          }
+        } else {
+          if (intakeStatus) {
+            intakeStatus.textContent = `Your package is active: ${paidOrder.package_name || "Active Package"}. Begin your household onboarding below.`;
+          }
         }
       } else {
         if (packageName) packageName.textContent = "No active package detected";
@@ -190,6 +353,10 @@
         if (intakeStatus) {
           intakeStatus.textContent =
             "Purchase is required before onboarding can continue.";
+        }
+        if (intakeStart) {
+          intakeStart.classList.add("disabled");
+          intakeStart.setAttribute("href", "dashboard.html");
         }
       }
     } catch (error) {
@@ -214,7 +381,7 @@
     const draft = loadDraft();
     hydrateForm(form, draft.household || {});
 
-    const savedUser = app.getSavedUser();
+    const savedUser = app.getSavedUser ? app.getSavedUser() : null;
     if (savedUser) {
       const current = formToObject(form);
 
@@ -228,6 +395,14 @@
         if (field) field.value = savedUser.email || "";
       }
     }
+
+    getLatestSubmission()
+      .then(function (latestSubmission) {
+        if (latestSubmission) {
+          lockFormForReview(form, statusNode, latestSubmission);
+        }
+      })
+      .catch(function () {});
 
     form.addEventListener("submit", function (event) {
       event.preventDefault();
@@ -266,6 +441,14 @@
 
     const draft = loadDraft();
     hydrateForm(form, draft.family_map || {});
+
+    getLatestSubmission()
+      .then(function (latestSubmission) {
+        if (latestSubmission) {
+          lockFormForReview(form, statusNode, latestSubmission);
+        }
+      })
+      .catch(function () {});
 
     form.addEventListener("submit", function (event) {
       event.preventDefault();
@@ -308,6 +491,14 @@
     const draft = loadDraft();
     hydrateForm(form, draft.uploads || {});
 
+    getLatestSubmission()
+      .then(function (latestSubmission) {
+        if (latestSubmission) {
+          lockFormForReview(form, statusNode, latestSubmission);
+        }
+      })
+      .catch(function () {});
+
     form.addEventListener("submit", function (event) {
       event.preventDefault();
       clearStatus(statusNode);
@@ -339,6 +530,14 @@
 
     const draft = loadDraft();
     hydrateForm(form, draft.consent || {});
+
+    getLatestSubmission()
+      .then(function (latestSubmission) {
+        if (latestSubmission) {
+          lockFormForReview(form, statusNode, latestSubmission);
+        }
+      })
+      .catch(function () {});
 
     form.addEventListener("submit", function (event) {
       event.preventDefault();
@@ -440,16 +639,78 @@
       "[data-intake-review-status]",
     );
     const submitBtn = document.querySelector("[data-intake-review-submit-btn]");
+    const notesField = form
+      ? form.querySelector('[name="final_intake_notes"]')
+      : null;
+    const confirmField = form
+      ? form.querySelector('[name="confirm_accuracy"]')
+      : null;
 
     if (!form) return;
 
     renderReviewSummaryBlocks();
+
+    getLatestSubmission()
+      .then(function (latestSubmission) {
+        if (!latestSubmission) return;
+
+        const normalized = normalizeStatus(latestSubmission.status);
+
+        if (reviewHeadline) {
+          reviewHeadline.textContent =
+            statusMessage(normalized) || reviewHeadline.textContent;
+        }
+
+        if (isLockedStatus(normalized)) {
+          if (notesField) {
+            notesField.readOnly = true;
+            notesField.disabled = true;
+          }
+
+          if (confirmField) {
+            confirmField.disabled = true;
+          }
+
+          if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.textContent = humanizeStatus(normalized);
+          }
+
+          setStatus(
+            statusNode,
+            `${statusMessage(normalized)} ${reviewNextStep(normalized)}`,
+            "info",
+          );
+        }
+
+        if (normalized === "rejected") {
+          setStatus(
+            statusNode,
+            "This intake was rejected. You may update your intake and submit again after making changes.",
+            "error",
+          );
+        }
+      })
+      .catch(function () {});
 
     form.addEventListener("submit", async function (event) {
       event.preventDefault();
       clearStatus(statusNode);
 
       if (typeof form.reportValidity === "function" && !form.reportValidity()) {
+        return;
+      }
+
+      const latestSubmission = await getLatestSubmission().catch(function () {
+        return getCachedLatestSubmission();
+      });
+
+      if (latestSubmission && isLockedStatus(latestSubmission.status)) {
+        setStatus(
+          statusNode,
+          `${statusMessage(latestSubmission.status)} ${reviewNextStep(latestSubmission.status)}`,
+          "info",
+        );
         return;
       }
 
@@ -494,12 +755,15 @@
           body: JSON.stringify(submissionPayload),
         });
 
-        saveDraft({
+        cacheLatestSubmission(response);
+
+        const nextDraft = {
           ...draft,
           submitted: true,
-          submission_id:
-            response?.id || response?.submission_id || response?._id || null,
-        });
+          submission_id: response?.id || null,
+          latest_status: response?.status || "submitted",
+        };
+        saveDraft(nextDraft);
 
         if (reviewHeadline) {
           reviewHeadline.textContent =
@@ -517,7 +781,6 @@
           `Submission failed: ${getErrorMessage(error)}`,
           "error",
         );
-      } finally {
         if (submitBtn) {
           submitBtn.disabled = false;
           submitBtn.textContent = "Submit Intake Review";
