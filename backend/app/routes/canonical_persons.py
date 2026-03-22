@@ -1,8 +1,8 @@
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.database import get_database
-from app.dependencies.auth import get_current_user, require_admin
+from app.dependencies.auth import require_admin
 from app.schemas.canonical_person import (
     CanonicalPersonCreate,
     CanonicalPersonResponse,
@@ -17,12 +17,23 @@ router = APIRouter(prefix="/canonical-persons", tags=["Canonical Persons"])
 
 
 def serialize_member(member: dict) -> dict:
-    member["_id"] = str(member["_id"])
-    return member
+    return {
+        "id": str(member.get("_id")),
+        "family_id": member.get("family_id"),
+        "first_name": member.get("first_name"),
+        "last_name": member.get("last_name"),
+        "birth_year": member.get("birth_year"),
+        "generation": member.get("generation"),
+        "father_id": member.get("father_id"),
+        "mother_id": member.get("mother_id"),
+        "spouse_id": member.get("spouse_id"),
+        "bio": member.get("bio"),
+        "created_at": member.get("created_at"),
+    }
 
 
 @router.get("/", response_model=list[CanonicalPersonResponse])
-def get_canonical_persons(current_user: dict = Depends(get_current_user)):
+def get_canonical_persons(current_user: dict = Depends(require_admin)):
     persons = list_canonical_persons()
     return [build_canonical_person_response(person) for person in persons]
 
@@ -30,18 +41,27 @@ def get_canonical_persons(current_user: dict = Depends(get_current_user)):
 @router.get("/{canonical_person_id}", response_model=CanonicalPersonResponse)
 def get_canonical_person(
     canonical_person_id: str,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_admin),
 ):
     db = get_database()
     if db is None:
-        raise HTTPException(status_code=500, detail="Database is not connected.")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database is not connected.",
+        )
 
     if not ObjectId.is_valid(canonical_person_id):
-        raise HTTPException(status_code=400, detail="Invalid canonical person id.")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid canonical person id.",
+        )
 
     person = db.canonical_persons.find_one({"_id": ObjectId(canonical_person_id)})
     if not person:
-        raise HTTPException(status_code=404, detail="Canonical person not found.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Canonical person not found.",
+        )
 
     return build_canonical_person_response(person)
 
@@ -49,18 +69,27 @@ def get_canonical_person(
 @router.get("/{canonical_person_id}/members")
 def get_canonical_person_members(
     canonical_person_id: str,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_admin),
 ):
     db = get_database()
     if db is None:
-        raise HTTPException(status_code=500, detail="Database is not connected.")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database is not connected.",
+        )
 
     if not ObjectId.is_valid(canonical_person_id):
-        raise HTTPException(status_code=400, detail="Invalid canonical person id.")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid canonical person id.",
+        )
 
     canonical_person = db.canonical_persons.find_one({"_id": ObjectId(canonical_person_id)})
     if not canonical_person:
-        raise HTTPException(status_code=404, detail="Canonical person not found.")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Canonical person not found.",
+        )
 
     identity_links = list(
         db.identity_links.find({"canonical_person_id": canonical_person_id})
@@ -84,7 +113,7 @@ def get_canonical_person_members(
     }
 
 
-@router.post("/", response_model=CanonicalPersonResponse)
+@router.post("/", response_model=CanonicalPersonResponse, status_code=status.HTTP_201_CREATED)
 def create_canonical_person_route(
     payload: CanonicalPersonCreate,
     current_user: dict = Depends(require_admin),
