@@ -44,6 +44,7 @@ def _reviewed_by(current_admin: dict[str, Any]) -> str:
     ).strip()
 
 
+@router.get("", response_model=list[IntakeSubmissionListItem], include_in_schema=False)
 @router.get("/", response_model=list[IntakeSubmissionListItem])
 def list_admin_intake_submissions(
     status_filter: Optional[str] = Query(default=None, alias="status"),
