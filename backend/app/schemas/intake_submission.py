@@ -52,12 +52,16 @@ class IntakeSubmissionCreate(BaseModel):
 
     household: IntakeHouseholdPayload
     family_map: IntakeFamilyMapPayload
-
-    # ✅ NEW
     uploads: IntakeUploadsPayload
     consent: IntakeConsentPayload
-
     review: IntakeReviewPayload
+
+
+class IntakeSubmissionStatusUpdate(BaseModel):
+    status: str = Field(..., min_length=1)
+    review_notes: str = Field(default="")
+    approval_notes: str = Field(default="")
+    rejection_reason: str = Field(default="")
 
 
 class IntakeSubmissionResponse(BaseModel):
@@ -67,15 +71,21 @@ class IntakeSubmissionResponse(BaseModel):
     package_slug: str
     package_name: str
     status: str
+    review_locked: bool
 
     household: dict[str, Any]
     family_map: dict[str, Any]
-
-    # ✅ NEW
     uploads: dict[str, Any]
     consent: dict[str, Any]
-
     review: dict[str, Any]
+
+    submitted_at: Optional[datetime] = None
+    review_started_at: Optional[datetime] = None
+    reviewed_at: Optional[datetime] = None
+    reviewed_by: Optional[str] = None
+    review_notes: Optional[str] = None
+    approval_notes: Optional[str] = None
+    rejection_reason: Optional[str] = None
 
     created_at: datetime
     updated_at: datetime
@@ -83,7 +93,13 @@ class IntakeSubmissionResponse(BaseModel):
 
 class IntakeSubmissionListItem(BaseModel):
     id: str
+    user_id: str
+    email: str
     package_slug: str
     package_name: str
     status: str
+    review_locked: bool
+    submitted_at: Optional[datetime] = None
+    reviewed_at: Optional[datetime] = None
+    reviewed_by: Optional[str] = None
     created_at: datetime
