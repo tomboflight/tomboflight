@@ -1,21 +1,85 @@
-from fastapi import APIRouter
+from datetime import UTC, datetime
+from typing import Any
 
-from app.schemas.intake import IntakeCreate, IntakeResponse, build_intake_response
-from app.services.intake_service import (
+from fastapi import APIRouter, Depends, HTTPException, status
+
+from app.dependencies.auth import get_current_user
+from app.schemas.intake import IntakeCreate
+from app.services.intake_submission_service import (
     create_intake_submission,
-    list_intake_submissions,
+    get_latest_for_user,
+    list_for_user,
 )
 
 router = APIRouter(prefix="/intake", tags=["Intake"])
 
 
-@router.get("/", response_model=list[IntakeResponse])
-def get_intake_submissions():
-    submissions = list_intake_submissions()
-    return [build_intake_response(item) for item in submissions]
+def _current_user_id(user: dict[str, Any]) -> str:
+    raw_id = user.get("id") or user.get("_id") or user.get("user_id")
+    if raw_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authenticated user id is missing.",
+        )
+    return str(raw_id)
 
 
-@router.post("/request-access", response_model=IntakeResponse)
-def request_access(payload: IntakeCreate):
-    submission = create_intake_submission(payload)
-    return build_intake_response(submission)
+def _current_user_email(user: dict[str, Any]) -> str:
+    raw_email = user.get("email")
+    if not raw_email:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authenticated user email is missing.",
+        )
+    return str(raw_email).strip().lower()
+
+
+@router.get("/")
+def get_intake_submissions(current_user: dict[str, Any] = Depends(get_current_user)):
+    """
+    Backward-compatible intake listing route.
+    Returns only the current user's intake submissions.
+    """
+    return list_for_user(_current_user_id(current_user), limit=50)
+
+
+@router.get("/latest")
+def get_latest_intake_submission(
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    """
+    Backward-compatible latest intake route.
+    """
+    doc = get_latest_for_user(_current_user_id(current_user))
+    if not doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No intake submissions found.",
+        )
+    return doc
+
+
+@router.post("/request-access", status_code=status.HTTP_201_CREATED)
+def request_access(
+    payload: IntakeCreate,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    """
+    Backward-compatible access request route.
+    Stores old intake request data inside the newer intake_submissions structure.
+    """
+    compatibility_payload = {
+        "package_name": "Legacy Access Request",
+        "package_slug": "legacy-access-request",
+        "status": "submitted",
+        "source": "legacy-intake-route",
+        "submitted_at": datetime.now(UTC).isoformat(),
+        "legacy_request": payload.model_dump(),
+    }
+
+    saved = create_intake_submission(
+        user_id=_current_user_id(current_user),
+        email=_current_user_email(current_user),
+        payload=compatibility_payload,
+    )
+    return saved
