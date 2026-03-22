@@ -1,100 +1,123 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Lineage Certificate | Tomb of Light</title>
-  <meta
-    name="description"
-    content="Generate and view executive lineage certificates for Tomb of Light family records."
-  />
-  <link rel="stylesheet" href="styles.css" />
-</head>
-<body>
-  <div class="page-wrap">
-    <header class="site-header">
-      <div class="container site-header-inner">
-        <a class="brand" href="index.html" aria-label="Tomb of Light home">
-          <span>Tomb of Light<span class="brand-symbol">™</span></span>
-        </a>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lineage Certificate | Tomb of Light</title>
+    <meta
+      name="description"
+      content="Generate and view executive lineage certificates for Tomb of Light family records."
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="page-wrap">
+      <header class="site-header">
+        <div class="container site-header-inner">
+          <a class="brand" href="index.html" aria-label="Tomb of Light home">
+            <span>Tomb of Light<span class="brand-symbol">™</span></span>
+          </a>
 
-        <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
-          <a href="platform.html">Platform</a>
-          <a href="how-it-works.html">How It Works</a>
-          <a href="security.html">Security</a>
-          <a href="faq.html">FAQ</a>
-        </nav>
+          <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
+            <a href="platform.html">Platform</a>
+            <a href="how-it-works.html">How It Works</a>
+            <a href="security.html">Security</a>
+            <a href="faq.html">FAQ</a>
+          </nav>
 
-        <div class="header-actions">
-          <a class="btn btn-secondary" href="dashboard.html">Dashboard</a>
-          <button class="btn btn-secondary" type="button" data-logout-btn>Log Out</button>
-        </div>
-      </div>
-    </header>
-
-    <main data-dashboard data-lineage-certificate-page>
-      <section class="page-hero">
-        <div class="container">
-          <div class="page-hero-panel">
-            <span class="eyebrow">Verification Layer</span>
-            <h1>Lineage Certificate</h1>
-            <p>
-              Generate an official one-page executive lineage certificate for a Tomb of Light family structure.
-            </p>
+          <div class="header-actions">
+            <a class="btn btn-secondary" href="dashboard.html">Dashboard</a>
+            <button class="btn btn-secondary" type="button" data-logout-btn>
+              Log Out
+            </button>
           </div>
         </div>
-      </section>
+      </header>
 
-      <section class="page-sections">
-        <div class="container form-shell" data-auth-required style="display: none;">
-          <div class="tol-certificate-shell">
-            <div class="form-panel">
-              <div class="form-grid">
-                <label>
-                  Select Family
-                  <select data-certificate-family-select>
-                    <option value="">Select a family</option>
-                  </select>
-                </label>
+      <main data-dashboard data-lineage-certificate-page>
+        <section class="page-hero">
+          <div class="container">
+            <div class="page-hero-panel">
+              <span class="eyebrow">Verification Layer</span>
+              <h1>Lineage Certificate</h1>
+              <p>
+                Generate an official one-page executive lineage certificate for
+                a Tomb of Light family structure.
+              </p>
+            </div>
+          </div>
+        </section>
 
-                <div class="helper" data-certificate-status aria-live="polite" style="display:none;"></div>
+        <section class="page-sections">
+          <div
+            class="container form-shell"
+            data-auth-required
+            style="display: none"
+          >
+            <div class="tol-certificate-shell">
+              <div class="form-panel">
+                <div class="form-grid">
+                  <label>
+                    Select Family
+                    <select data-certificate-family-select>
+                      <option value="">Select a family</option>
+                    </select>
+                  </label>
 
-                <div class="inline-actions">
-                  <button class="btn btn-primary" type="button" data-load-certificate-btn>
-                    Generate Certificate
-                  </button>
-                  <a class="btn btn-secondary" href="tree-view.html">Back to Family Tree</a>
+                  <div
+                    class="helper"
+                    data-certificate-status
+                    aria-live="polite"
+                    style="display: none"
+                  ></div>
+
+                  <div class="inline-actions">
+                    <button
+                      class="btn btn-primary"
+                      type="button"
+                      data-load-certificate-btn
+                    >
+                      Generate Certificate
+                    </button>
+                    <a class="btn btn-secondary" href="tree-view.html"
+                      >Back to Family Tree</a
+                    >
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div class="form-panel">
-              <div data-certificate-empty class="helper">
-                Select a family and generate the executive lineage certificate.
+              <div class="form-panel">
+                <div data-certificate-empty class="helper">
+                  Select a family and generate the executive lineage
+                  certificate.
+                </div>
+
+                <!-- JS will inject the certificate paper here -->
+                <div
+                  data-certificate-output
+                  class="tol-certificate-output"
+                  style="display: none"
+                ></div>
               </div>
+            </div>
+          </div>
+        </section>
+      </main>
 
-              <!-- JS will inject the certificate paper here -->
-              <div data-certificate-output class="tol-certificate-output" style="display:none;"></div>
+      <footer class="footer">
+        <div class="container">
+          <div class="footer-card">
+            <div class="footer-bottom">
+              <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
             </div>
           </div>
         </div>
-      </section>
-    </main>
+      </footer>
+    </div>
 
-    <footer class="footer">
-      <div class="container">
-        <div class="footer-card">
-          <div class="footer-bottom">
-            <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
-          </div>
-        </div>
-      </div>
-    </footer>
-  </div>
-
-  <script src="config.js"></script>
-  <script src="app.js"></script>
-  <script src="auth.js"></script>
-  <script src="lineage-certificate.js"></script>
-</body>
+    <script src="config.js?v=20260322-5"></script>
+    <script src="app.js?v=20260322-5"></script>
+    <script src="auth.js?v=20260322-5"></script>
+    <script src="lineage-certificate.js?v=20260322-5"></script>
+  </body>
 </html>
