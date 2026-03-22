@@ -7,6 +7,7 @@ from app.config import settings
 from app.database import close_mongo_connection, connect_to_mongo, get_database
 
 from app.routes.audit_logs import router as audit_logs_router
+from app.routes.admin_intake_submissions import router as admin_intake_submissions_router
 from app.routes.auth import router as auth_router
 from app.routes.canonical_persons import router as canonical_persons_router
 from app.routes.certificate_versions import router as certificate_versions_router
@@ -76,6 +77,7 @@ app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(intake_router)
 app.include_router(intake_submissions_router)
+app.include_router(admin_intake_submissions_router)
 app.include_router(projects_router)
 app.include_router(families_router)
 app.include_router(family_graph_router)
