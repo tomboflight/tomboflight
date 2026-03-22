@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Intake Review | Tomb of Light</title>
+    <meta
+      name="description"
+      content="Admin review detail page for Tomb of Light intake submissions."
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="page-wrap">
+      <header class="site-header">
+        <div class="container site-header-inner">
+          <a class="brand" href="index.html" aria-label="Tomb of Light home">
+            <span>Tomb of Light<span class="brand-symbol">™</span></span>
+          </a>
+
+          <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
+            <a href="dashboard.html">Dashboard</a>
+            <a href="admin-intake-queue.html">Admin Intake Queue</a>
+            <a href="faq.html">FAQ</a>
+          </nav>
+
+          <div class="header-actions">
+            <a class="btn btn-secondary" href="admin-intake-queue.html"
+              >Back to Queue</a
+            >
+          </div>
+        </div>
+      </header>
+
+      <main data-admin-review-page>
+        <section class="page-hero">
+          <div class="container">
+            <div class="page-hero-panel">
+              <span class="eyebrow">Admin Review Detail</span>
+              <h1>Review Intake Submission</h1>
+              <p data-admin-review-page-status>Loading submission details...</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="page-sections">
+          <div class="container form-shell">
+            <div class="form-panel">
+              <span class="eyebrow">Submission Overview</span>
+              <div class="grid-3" data-admin-review-meta>
+                <div>
+                  <div class="card-number">1</div>
+                  <h3>Loading</h3>
+                  <p class="card-copy">Submission overview is loading.</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Review Timeline</span>
+              <div class="grid-3" data-admin-review-timeline>
+                <div>
+                  <div class="card-number">2</div>
+                  <h3>Loading</h3>
+                  <p class="card-copy">Review timeline is loading.</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Household</span>
+              <div class="grid-3" data-admin-review-household></div>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Family Map</span>
+              <div class="grid-3" data-admin-review-family-map></div>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Uploads</span>
+              <div class="grid-3" data-admin-review-uploads></div>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Consent</span>
+              <div class="grid-3" data-admin-review-consent></div>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Reviewer Actions</span>
+
+              <form class="form-grid" data-admin-review-form novalidate>
+                <label>
+                  Reviewer Notes
+                  <textarea
+                    name="review_notes"
+                    rows="5"
+                    placeholder="Internal review notes for this submission."
+                  ></textarea>
+                </label>
+
+                <label>
+                  Approval Notes
+                  <textarea
+                    name="approval_notes"
+                    rows="4"
+                    placeholder="Optional approval notes or next-step instructions."
+                  ></textarea>
+                </label>
+
+                <label>
+                  Rejection Reason
+                  <textarea
+                    name="rejection_reason"
+                    rows="4"
+                    placeholder="Required when rejecting a submission."
+                  ></textarea>
+                </label>
+
+                <div
+                  class="helper"
+                  data-admin-review-action-status
+                  aria-live="polite"
+                  style="display: none"
+                ></div>
+
+                <div class="inline-actions" style="margin-top: 1.5rem">
+                  <button
+                    class="btn btn-secondary"
+                    type="button"
+                    data-admin-mark-review
+                  >
+                    Mark In Review
+                  </button>
+
+                  <button
+                    class="btn btn-primary"
+                    type="button"
+                    data-admin-approve
+                  >
+                    Approve
+                  </button>
+
+                  <button
+                    class="btn btn-secondary"
+                    type="button"
+                    data-admin-reject
+                  >
+                    Reject
+                  </button>
+
+                  <button
+                    class="btn btn-secondary"
+                    type="button"
+                    data-admin-refresh-detail
+                  >
+                    Refresh
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <div class="container">
+          <div class="footer-card">
+            <div class="footer-bottom">
+              <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
+            </div>
+          </div>
+        </div>
+      </footer>
+    </div>
+
+    <script src="config.js?v=20260322-2"></script>
+    <script src="app.js?v=20260322-2"></script>
+    <script src="auth.js?v=20260322-2"></script>
+    <script src="admin-intake.js?v=20260322-2"></script>
+  </body>
+</html>

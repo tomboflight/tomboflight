@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Intake Queue | Tomb of Light</title>
+    <meta
+      name="description"
+      content="Admin review queue for Tomb of Light intake submissions."
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="page-wrap">
+      <header class="site-header">
+        <div class="container site-header-inner">
+          <a class="brand" href="index.html" aria-label="Tomb of Light home">
+            <span>Tomb of Light<span class="brand-symbol">™</span></span>
+          </a>
+
+          <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
+            <a href="dashboard.html">Dashboard</a>
+            <a href="admin-intake-queue.html" aria-current="page"
+              >Admin Intake Queue</a
+            >
+            <a href="faq.html">FAQ</a>
+          </nav>
+
+          <div class="header-actions">
+            <a class="btn btn-secondary" href="dashboard.html"
+              >Back to Dashboard</a
+            >
+          </div>
+        </div>
+      </header>
+
+      <main data-admin-queue-page>
+        <section class="page-hero">
+          <div class="container">
+            <div class="page-hero-panel">
+              <span class="eyebrow">Admin Review Layer</span>
+              <h1>Intake Submission Queue</h1>
+              <p data-admin-queue-status>
+                Loading intake submissions for review...
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section class="page-sections">
+          <div class="container form-shell">
+            <div class="form-panel">
+              <span class="eyebrow">Queue Filters</span>
+
+              <div class="form-grid two-col">
+                <label>
+                  Submission Status
+                  <select data-admin-queue-filter>
+                    <option value="all">All</option>
+                    <option value="submitted">Submitted</option>
+                    <option value="in_review">In Review</option>
+                    <option value="approved">Approved</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
+                </label>
+
+                <label>
+                  Refresh Queue
+                  <button
+                    class="btn btn-secondary"
+                    type="button"
+                    data-admin-queue-refresh
+                    style="margin-top: 0.45rem"
+                  >
+                    Refresh
+                  </button>
+                </label>
+              </div>
+
+              <div
+                class="helper"
+                data-admin-queue-action-status
+                aria-live="polite"
+                style="display: none"
+              ></div>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Queue Summary</span>
+              <div class="grid-3" data-admin-queue-summary>
+                <div>
+                  <div class="card-number">1</div>
+                  <h3>Loading</h3>
+                  <p class="card-copy">Queue summary is loading now.</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Submission Records</span>
+              <div class="grid-3" data-admin-queue-list></div>
+
+              <div
+                class="helper"
+                data-admin-queue-empty
+                aria-live="polite"
+                style="display: none; margin-top: 1rem"
+              >
+                No intake submissions match the current filter.
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <div class="container">
+          <div class="footer-card">
+            <div class="footer-bottom">
+              <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
+            </div>
+          </div>
+        </div>
+      </footer>
+    </div>
+
+    <script src="config.js?v=20260322-2"></script>
+    <script src="app.js?v=20260322-2"></script>
+    <script src="auth.js?v=20260322-2"></script>
+    <script src="admin-intake.js?v=20260322-2"></script>
+  </body>
+</html>
