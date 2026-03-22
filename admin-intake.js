@@ -25,6 +25,12 @@
       .toLowerCase();
   }
 
+  function normalizeRole(role) {
+    return String(role || "")
+      .trim()
+      .toLowerCase();
+  }
+
   function humanizeStatus(status) {
     const normalized = normalizeStatus(status);
     if (!normalized) return "Unknown";
@@ -79,7 +85,7 @@
   }
 
   function ensureAdminAccess(me) {
-    const role = normalizeStatus(me && me.role);
+    const role = normalizeRole(me && me.role);
     if (
       !["admin", "super_admin", "platform_admin", "operations_admin"].includes(
         role,
@@ -99,6 +105,21 @@
     const me = await app.apiRequest("/auth/me", { method: "GET" });
     ensureAdminAccess(me);
     return me;
+  }
+
+  async function apiRequestWithFallback(paths, options) {
+    let lastError = null;
+
+    for (const path of paths) {
+      try {
+        return await app.apiRequest(path, options);
+      } catch (error) {
+        lastError = error;
+        console.error(`API request failed for ${path}`, error);
+      }
+    }
+
+    throw lastError || new Error("All API request attempts failed.");
   }
 
   function renderSummaryCards(submissions) {
@@ -181,11 +202,13 @@
     const statusNode = document.querySelector("[data-admin-queue-status]");
     try {
       clearStatus(document.querySelector("[data-admin-queue-action-status]"));
-      allSubmissions = await app.apiRequest(
-        "/admin/intake-submissions?limit=100",
-        {
-          method: "GET",
-        },
+
+      allSubmissions = await apiRequestWithFallback(
+        [
+          "/admin/intake-submissions?limit=100",
+          "/admin/intake-submissions/?limit=100",
+        ],
+        { method: "GET" },
       );
 
       if (!Array.isArray(allSubmissions)) {
@@ -199,9 +222,12 @@
         statusNode.textContent = `Loaded ${allSubmissions.length} intake submission(s) for admin review.`;
       }
     } catch (error) {
+      console.error("Admin queue load failed:", error);
+
       if (statusNode) {
         statusNode.textContent = "Intake queue could not be loaded.";
       }
+
       setStatus(
         document.querySelector("[data-admin-queue-action-status]"),
         error.message || "Unable to load intake submissions.",
@@ -369,12 +395,19 @@
 
     try {
       clearStatus(statusNode);
-      const submission = await app.apiRequest(
-        `/admin/intake-submissions/${encodeURIComponent(submissionId)}`,
+
+      const submission = await apiRequestWithFallback(
+        [
+          `/admin/intake-submissions/${encodeURIComponent(submissionId)}`,
+          `/admin/intake-submissions/${encodeURIComponent(submissionId)}/`,
+        ],
         { method: "GET" },
       );
+
       renderDetail(submission);
     } catch (error) {
+      console.error("Admin intake detail load failed:", error);
+
       setStatus(
         statusNode,
         error.message || "Unable to load the intake submission.",
@@ -467,6 +500,7 @@
 
       setStatus(statusNode, label, "success");
     } catch (error) {
+      console.error("Admin action failed:", error);
       setStatus(statusNode, error.message || "Admin action failed.", "error");
     }
   }
@@ -494,6 +528,8 @@
         });
       }
     } catch (error) {
+      console.error("Admin queue page setup failed:", error);
+
       const node = document.querySelector("[data-admin-queue-action-status]");
       setStatus(node, error.message || "Admin access is required.", "error");
       const hero = document.querySelector("[data-admin-queue-status]");
@@ -546,6 +582,8 @@
         runAdminAction("provision");
       });
     } catch (error) {
+      console.error("Admin review page setup failed:", error);
+
       const node = document.querySelector("[data-admin-review-action-status]");
       setStatus(node, error.message || "Admin access is required.", "error");
       const hero = document.querySelector("[data-admin-review-page-status]");
