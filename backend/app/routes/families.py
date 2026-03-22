@@ -68,6 +68,7 @@ def _family_is_visible_to_user(
     return False
 
 
+@router.get("", response_model=list[FamilyResponse], include_in_schema=False)
 @router.get("/", response_model=list[FamilyResponse])
 def get_families(user: dict[str, Any] = Depends(get_current_user)):
     db = get_database()
@@ -94,6 +95,7 @@ def get_families(user: dict[str, Any] = Depends(get_current_user)):
     return visible_families
 
 
+@router.post("", response_model=FamilyResponse, status_code=status.HTTP_201_CREATED, include_in_schema=False)
 @router.post("/", response_model=FamilyResponse, status_code=status.HTTP_201_CREATED)
 def create_family_route(
     payload: FamilyCreate,
