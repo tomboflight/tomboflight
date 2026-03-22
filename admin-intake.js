@@ -80,7 +80,11 @@
 
   function ensureAdminAccess(me) {
     const role = normalizeStatus(me && me.role);
-    if (role !== "admin") {
+    if (
+      !["admin", "super_admin", "platform_admin", "operations_admin"].includes(
+        role,
+      )
+    ) {
       throw new Error("Admin access is required to use this page.");
     }
   }
@@ -107,6 +111,8 @@
       in_review: 0,
       approved: 0,
       rejected: 0,
+      build_ready: 0,
+      in_production: 0,
     };
 
     submissions.forEach(function (item) {
@@ -117,31 +123,12 @@
     });
 
     node.innerHTML = `
-      <div>
-        <div class="card-number">A</div>
-        <h3>All</h3>
-        <p class="card-copy">${counts.all} submission(s)</p>
-      </div>
-      <div>
-        <div class="card-number">B</div>
-        <h3>Submitted</h3>
-        <p class="card-copy">${counts.submitted} waiting for review</p>
-      </div>
-      <div>
-        <div class="card-number">C</div>
-        <h3>In Review</h3>
-        <p class="card-copy">${counts.in_review} currently open</p>
-      </div>
-      <div>
-        <div class="card-number">D</div>
-        <h3>Approved</h3>
-        <p class="card-copy">${counts.approved} approved</p>
-      </div>
-      <div>
-        <div class="card-number">E</div>
-        <h3>Rejected</h3>
-        <p class="card-copy">${counts.rejected} rejected</p>
-      </div>
+      <div><div class="card-number">A</div><h3>All</h3><p class="card-copy">${counts.all} submission(s)</p></div>
+      <div><div class="card-number">B</div><h3>Submitted</h3><p class="card-copy">${counts.submitted} waiting</p></div>
+      <div><div class="card-number">C</div><h3>In Review</h3><p class="card-copy">${counts.in_review} active</p></div>
+      <div><div class="card-number">D</div><h3>Approved</h3><p class="card-copy">${counts.approved} approved</p></div>
+      <div><div class="card-number">E</div><h3>Build Ready</h3><p class="card-copy">${counts.build_ready} provisioned</p></div>
+      <div><div class="card-number">F</div><h3>Rejected</h3><p class="card-copy">${counts.rejected} rejected</p></div>
     `;
   }
 
@@ -177,6 +164,8 @@
             ${valueLine("Created", formatDate(item.created_at))}
             ${valueLine("Submitted", formatDate(item.submitted_at))}
             ${valueLine("Reviewed By", item.reviewed_by || "—")}
+            ${valueLine("Family Root", item.family_root_id || "—")}
+            ${valueLine("Project ID", item.project_id || "—")}
             <div class="inline-actions" style="margin-top: 1rem;">
               <a class="btn btn-primary" href="admin-intake-review.html?submission_id=${encodeURIComponent(item.id)}">
                 Open Review
@@ -232,8 +221,28 @@
     `;
   }
 
+  function ensureProvisionButton() {
+    const form = document.querySelector("[data-admin-review-form]");
+    if (!form) return;
+
+    const actionsRow = form.querySelector(".inline-actions");
+    if (!actionsRow) return;
+
+    if (actionsRow.querySelector("[data-admin-provision-build]")) return;
+
+    const button = document.createElement("button");
+    button.className = "btn btn-primary";
+    button.type = "button";
+    button.setAttribute("data-admin-provision-build", "true");
+    button.textContent = "Provision Build";
+
+    actionsRow.insertBefore(button, actionsRow.lastElementChild);
+  }
+
   function renderDetail(submission) {
     currentSubmission = submission;
+
+    ensureProvisionButton();
 
     const pageStatus = document.querySelector(
       "[data-admin-review-page-status]",
@@ -264,15 +273,21 @@
         `Email: ${submission.email || "—"}`,
         `Package: ${submission.package_name || submission.package_slug || "—"}`,
         `Review Locked: ${submission.review_locked ? "Yes" : "No"}`,
+        `Family Root ID: ${submission.family_root_id || "—"}`,
+        `Household ID: ${submission.household_id || "—"}`,
+        `Project ID: ${submission.project_id || "—"}`,
       ],
     );
 
-    renderReviewBlock(timelineNode, "Review Timeline", "2", [
+    renderReviewBlock(timelineNode, "Review Timeline and Pipeline", "2", [
       `Created: ${formatDate(submission.created_at)}`,
       `Submitted: ${formatDate(submission.submitted_at)}`,
       `Review Started: ${formatDate(submission.review_started_at)}`,
       `Reviewed: ${formatDate(submission.reviewed_at)}`,
       `Reviewed By: ${submission.reviewed_by || "—"}`,
+      `Provisioned: ${formatDate(submission.provisioned_at)}`,
+      `Provisioned By: ${submission.provisioned_by || "—"}`,
+      `Production Notes: ${submission.production_notes || "—"}`,
     ]);
 
     const household = submission.household || {};
@@ -375,14 +390,23 @@
         review_notes: "",
         approval_notes: "",
         rejection_reason: "",
+        family_name_override: "",
+        project_name_override: "",
+        production_notes: "",
       };
     }
 
+    const approvalNotes =
+      form.querySelector('[name="approval_notes"]').value || "";
+
     return {
       review_notes: form.querySelector('[name="review_notes"]').value || "",
-      approval_notes: form.querySelector('[name="approval_notes"]').value || "",
+      approval_notes: approvalNotes,
       rejection_reason:
         form.querySelector('[name="rejection_reason"]').value || "",
+      family_name_override: "",
+      project_name_override: "",
+      production_notes: approvalNotes,
     };
   }
 
@@ -411,27 +435,39 @@
       in_review: `/admin/intake-submissions/${encodeURIComponent(submissionId)}/in-review`,
       approve: `/admin/intake-submissions/${encodeURIComponent(submissionId)}/approve`,
       reject: `/admin/intake-submissions/${encodeURIComponent(submissionId)}/reject`,
+      provision: `/admin/intake-submissions/${encodeURIComponent(submissionId)}/provision-build`,
     };
 
+    const requestBody =
+      action === "provision"
+        ? {
+            family_name_override: payload.family_name_override,
+            project_name_override: payload.project_name_override,
+            production_notes: payload.production_notes,
+          }
+        : {
+            review_notes: payload.review_notes,
+            approval_notes: payload.approval_notes,
+            rejection_reason: payload.rejection_reason,
+          };
+
     try {
-      setStatus(statusNode, "Submitting admin review action...", "info");
+      setStatus(statusNode, "Submitting admin action...", "info");
       const result = await app.apiRequest(pathMap[action], {
         method: "POST",
-        body: JSON.stringify(payload),
+        body: JSON.stringify(requestBody),
       });
 
       renderDetail(result);
-      setStatus(
-        statusNode,
-        `Submission updated to ${humanizeStatus(result.status)}.`,
-        "success",
-      );
+
+      const label =
+        action === "provision"
+          ? "Build provisioned successfully."
+          : `Submission updated to ${humanizeStatus(result.status)}.`;
+
+      setStatus(statusNode, label, "success");
     } catch (error) {
-      setStatus(
-        statusNode,
-        error.message || "Admin review action failed.",
-        "error",
-      );
+      setStatus(statusNode, error.message || "Admin action failed.", "error");
     }
   }
 
@@ -503,6 +539,12 @@
           loadReviewDetail();
         });
       }
+
+      document.addEventListener("click", function (event) {
+        const button = event.target.closest("[data-admin-provision-build]");
+        if (!button) return;
+        runAdminAction("provision");
+      });
     } catch (error) {
       const node = document.querySelector("[data-admin-review-action-status]");
       setStatus(node, error.message || "Admin access is required.", "error");

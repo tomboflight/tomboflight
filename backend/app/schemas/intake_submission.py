@@ -87,6 +87,13 @@ class IntakeSubmissionResponse(BaseModel):
     approval_notes: Optional[str] = None
     rejection_reason: Optional[str] = None
 
+    family_root_id: Optional[str] = None
+    household_id: Optional[str] = None
+    project_id: Optional[str] = None
+    provisioned_at: Optional[datetime] = None
+    provisioned_by: Optional[str] = None
+    production_notes: Optional[str] = None
+
     created_at: datetime
     updated_at: datetime
 
@@ -102,4 +109,6 @@ class IntakeSubmissionListItem(BaseModel):
     submitted_at: Optional[datetime] = None
     reviewed_at: Optional[datetime] = None
     reviewed_by: Optional[str] = None
+    family_root_id: Optional[str] = None
+    project_id: Optional[str] = None
     created_at: datetime
