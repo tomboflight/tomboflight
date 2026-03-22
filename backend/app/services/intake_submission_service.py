@@ -48,11 +48,43 @@ def _coerce_datetime(value: Any) -> Optional[datetime]:
     return None
 
 
+def _to_string(value: Any, default: str = "") -> str:
+    if value is None:
+        return default
+    return str(value).strip()
+
+
 def _normalize_submission_document(doc: dict[str, Any]) -> dict[str, Any]:
     out = dict(doc)
 
-    status = str(out.get("status") or "submitted").strip().lower()
+    status = _to_string(out.get("status"), "submitted").lower()
     out["status"] = status
+
+    raw_user_id = out.get("user_id")
+    if isinstance(raw_user_id, ObjectId):
+        out["user_id"] = str(raw_user_id)
+    elif raw_user_id is None:
+        out["user_id"] = ""
+    else:
+        out["user_id"] = str(raw_user_id)
+
+    out["email"] = _to_string(out.get("email")).lower()
+
+    package_slug = _to_string(
+        out.get("package_slug")
+        or out.get("package_interest")
+        or out.get("package")
+        or "unknown"
+    )
+    package_name = _to_string(
+        out.get("package_name")
+        or out.get("package_slug")
+        or out.get("package_interest")
+        or "Unknown Package"
+    )
+
+    out["package_slug"] = package_slug
+    out["package_name"] = package_name
 
     out["review_locked"] = bool(
         out.get("review_locked")
@@ -73,16 +105,21 @@ def _normalize_submission_document(doc: dict[str, Any]) -> dict[str, Any]:
     out["reviewed_at"] = _coerce_datetime(out.get("reviewed_at"))
     out["provisioned_at"] = _coerce_datetime(out.get("provisioned_at"))
 
-    out["reviewed_by"] = out.get("reviewed_by")
-    out["review_notes"] = out.get("review_notes") or ""
-    out["approval_notes"] = out.get("approval_notes") or ""
-    out["rejection_reason"] = out.get("rejection_reason") or ""
+    out["reviewed_by"] = _to_string(out.get("reviewed_by")) or None
+    out["review_notes"] = _to_string(out.get("review_notes"))
+    out["approval_notes"] = _to_string(out.get("approval_notes"))
+    out["rejection_reason"] = _to_string(out.get("rejection_reason"))
 
-    out["family_root_id"] = out.get("family_root_id")
-    out["household_id"] = out.get("household_id")
-    out["project_id"] = out.get("project_id")
-    out["provisioned_by"] = out.get("provisioned_by")
-    out["production_notes"] = out.get("production_notes") or ""
+    family_root_id = out.get("family_root_id")
+    household_id = out.get("household_id")
+    project_id = out.get("project_id")
+    provisioned_by = out.get("provisioned_by")
+
+    out["family_root_id"] = _to_string(family_root_id) or None
+    out["household_id"] = _to_string(household_id) or None
+    out["project_id"] = _to_string(project_id) or None
+    out["provisioned_by"] = _to_string(provisioned_by) or None
+    out["production_notes"] = _to_string(out.get("production_notes"))
 
     out["created_at"] = _coerce_datetime(out.get("created_at")) or _now()
     out["updated_at"] = _coerce_datetime(out.get("updated_at")) or out["created_at"]
@@ -93,10 +130,8 @@ def _normalize_submission_document(doc: dict[str, Any]) -> dict[str, Any]:
 def _serialize(doc: dict[str, Any]) -> dict[str, Any]:
     out = _normalize_submission_document(doc)
 
-    out["id"] = str(out.pop("_id"))
-
-    if "user_id" in out and isinstance(out["user_id"], ObjectId):
-        out["user_id"] = str(out["user_id"])
+    raw_id = out.pop("_id", "")
+    out["id"] = str(raw_id) if raw_id is not None else ""
 
     return out
 
@@ -207,7 +242,16 @@ def list_all(limit: int = 50, status: Optional[str] = None) -> list[dict[str, An
         .sort("created_at", -1)
         .limit(int(limit))
     )
-    return [_serialize(d) for d in cursor]
+
+    results: list[dict[str, Any]] = []
+    for doc in cursor:
+        try:
+            results.append(_serialize(doc))
+        except Exception:
+            # Skip malformed legacy rows instead of crashing the admin queue
+            continue
+
+    return results
 
 
 def update_status(
