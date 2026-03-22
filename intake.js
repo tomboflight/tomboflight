@@ -4,7 +4,18 @@
   const app = window.TOLApp || window.TOLAuth;
   const DRAFT_KEY = "tol_intake_draft_v1";
   const LATEST_SUBMISSION_CACHE_KEY = "tol_latest_intake_submission_v1";
-  const LOCKED_STATUSES = new Set(["submitted", "in_review", "approved"]);
+
+  const LOCKED_STATUSES = new Set([
+    "submitted",
+    "in_review",
+    "approved",
+    "build_ready",
+    "in_production",
+    "qa_review",
+    "client_review",
+    "delivered",
+    "archived",
+  ]);
 
   if (!app || typeof app.apiRequest !== "function") {
     console.error("intake.js requires app.js/auth.js to be loaded first.");
@@ -103,6 +114,24 @@
     if (normalized === "approved") {
       return "Your intake has been approved.";
     }
+    if (normalized === "build_ready") {
+      return "Your intake has been approved and provisioned for production.";
+    }
+    if (normalized === "in_production") {
+      return "Your intake has moved into production.";
+    }
+    if (normalized === "qa_review") {
+      return "Your project is in internal quality review.";
+    }
+    if (normalized === "client_review") {
+      return "Your project is prepared for client review.";
+    }
+    if (normalized === "delivered") {
+      return "Your project has been delivered.";
+    }
+    if (normalized === "archived") {
+      return "Your project has been archived.";
+    }
     if (normalized === "rejected") {
       return "Your intake was rejected and can be edited and resubmitted.";
     }
@@ -119,7 +148,25 @@
       return "Reviewer is evaluating your intake details.";
     }
     if (normalized === "approved") {
-      return "Proceed to family build, members, relationships, and production setup.";
+      return "Approved and waiting for production provisioning.";
+    }
+    if (normalized === "build_ready") {
+      return "Production records have been created and the build is ready to move forward.";
+    }
+    if (normalized === "in_production") {
+      return "Your lineage build is actively being produced.";
+    }
+    if (normalized === "qa_review") {
+      return "Your project is being checked in internal quality review.";
+    }
+    if (normalized === "client_review") {
+      return "Your project is ready for your review.";
+    }
+    if (normalized === "delivered") {
+      return "Your project has been delivered.";
+    }
+    if (normalized === "archived") {
+      return "Your project has been archived.";
     }
     if (normalized === "rejected") {
       return "Review the feedback, update your intake, and resubmit.";
@@ -227,19 +274,6 @@
     }
   }
 
-  async function getSubmissionList(limit) {
-    try {
-      return await app.apiRequest(
-        `/intake-submissions/my-list?limit=${limit || 10}`,
-        {
-          method: "GET",
-        },
-      );
-    } catch (error) {
-      return [];
-    }
-  }
-
   function lockFormForReview(form, statusNode, latestSubmission) {
     if (!form || !latestSubmission) return;
 
@@ -261,7 +295,11 @@
     });
 
     if (statusNode) {
-      setStatus(statusNode, statusMessage(status), "info");
+      setStatus(
+        statusNode,
+        `${statusMessage(status)} ${reviewNextStep(status)}`,
+        "info",
+      );
     }
   }
 
@@ -321,7 +359,7 @@
             intakeStatus.textContent = statusMessage(latestSubmission.status);
           }
           if (packageSummary) {
-            packageSummary.textContent = `Your latest intake is currently ${humanizeStatus(latestSubmission.status).toLowerCase()}. ${reviewNextStep(latestSubmission.status)}`;
+            packageSummary.textContent = `${statusMessage(latestSubmission.status)} ${reviewNextStep(latestSubmission.status)}`;
           }
           if (intakeStart) {
             intakeStart.textContent = "View Submitted Intake";
