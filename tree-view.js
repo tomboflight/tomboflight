@@ -1,6 +1,67 @@
 (function () {
   "use strict";
 
+  const ANCESTRY_TYPES = new Set([
+    "parent_child",
+    "adoptive_parent_child",
+    "step_parent_child",
+  ]);
+
+  const PRIMARY_ANCESTRY_TYPES = new Set([
+    "parent_child",
+    "adoptive_parent_child",
+  ]);
+
+  const SECONDARY_ANCESTRY_TYPES = new Set(["step_parent_child"]);
+
+  const TREE_VIEW_STATE = {
+    scale: 1,
+    minScale: 0.42,
+    maxScale: 1.9,
+    step: 0.1,
+    viewport: null,
+    sceneSizer: null,
+    stage: null,
+    wrapperWidth: 0,
+    wrapperHeight: 0,
+    zoomLabel: null,
+  };
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  function showStatus(node, message, type) {
+    if (!node) return;
+
+    node.style.display = "block";
+    node.textContent = message;
+    node.style.color =
+      type === "error" ? "#ffb3b3" : type === "success" ? "#cfe8cf" : "#d6e6ff";
+  }
+
+  function hideStatus(node) {
+    if (!node) return;
+    node.style.display = "none";
+    node.textContent = "";
+  }
+
+  function clearDetailPanel(detailPanel, detailEmpty) {
+    if (detailPanel) {
+      detailPanel.style.display = "none";
+      detailPanel.innerHTML = "";
+    }
+
+    if (detailEmpty) {
+      detailEmpty.style.display = "block";
+    }
+  }
+
   async function setupTreeViewPage() {
     if (!window.TOLAuth) return;
 
@@ -86,6 +147,10 @@
         selectNode.appendChild(option);
       });
 
+      if (families.length === 1) {
+        selectNode.value = families[0].id;
+      }
+
       hideStatus(statusNode);
     } catch (error) {
       selectNode.innerHTML = '<option value="">No families available</option>';
@@ -120,7 +185,7 @@
       renderStructuredTree(graph, canvas, detailPanel, detailEmpty);
       showStatus(
         statusNode,
-        "Visual family tree loaded successfully.",
+        "Visual family tree loaded successfully. Use the zoom controls for larger families.",
         "success",
       );
     } catch (error) {
@@ -130,8 +195,10 @@
   }
 
   function renderStructuredTree(graph, canvas, detailPanel, detailEmpty) {
-    const members = graph.members || [];
-    const relationships = graph.relationships || [];
+    const members = Array.isArray(graph.members) ? graph.members : [];
+    const relationships = Array.isArray(graph.relationships)
+      ? graph.relationships
+      : [];
 
     if (!members.length) {
       canvas.innerHTML =
@@ -171,24 +238,8 @@
     const rightPadding = 110;
     const topPadding = 70;
 
-    const width = 1500;
-    const height = topPadding * 2 + sortedRows.length * rowGap + 160;
-
-    const wrapper = document.createElement("div");
-    wrapper.className = "tree-wrapper";
-    wrapper.style.width = `${width}px`;
-    wrapper.style.height = `${height}px`;
-
-    const svgNS = "http://www.w3.org/2000/svg";
-    const svg = document.createElementNS(svgNS, "svg");
-    svg.setAttribute("class", "tree-lines");
-    svg.setAttribute("width", width);
-    svg.setAttribute("height", height);
-    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-
-    const positions = new Map();
-    const placedIds = new Set();
     const rows = [];
+    const placedIds = new Set();
 
     sortedRows.forEach((rowIndex, visualRowIndex) => {
       const rowMembers = generationGroups.get(rowIndex) || [];
@@ -223,6 +274,96 @@
       rows.push({ rowIndex, visualRowIndex, items: rowItems });
     });
 
+    const maxRowWidth = rows.reduce((maxWidth, row) => {
+      const width = row.items.reduce((sum, item, index) => {
+        const itemWidth =
+          item.type === "couple" ? nodeWidth * 2 + coupleGap : nodeWidth;
+        return sum + itemWidth + (index > 0 ? itemGap : 0);
+      }, 0);
+      return Math.max(maxWidth, width);
+    }, 0);
+
+    const width = Math.max(1500, leftPadding + maxRowWidth + rightPadding);
+    const height = Math.max(
+      760,
+      topPadding * 2 + sortedRows.length * rowGap + 180,
+    );
+
+    const shell = document.createElement("div");
+    shell.style.display = "grid";
+    shell.style.gap = "0.9rem";
+
+    const toolbar = document.createElement("div");
+    toolbar.className = "tree-toolbar";
+
+    const zoomOutBtn = document.createElement("button");
+    zoomOutBtn.type = "button";
+    zoomOutBtn.className = "btn btn-secondary";
+    zoomOutBtn.textContent = "Zoom Out";
+
+    const zoomInBtn = document.createElement("button");
+    zoomInBtn.type = "button";
+    zoomInBtn.className = "btn btn-secondary";
+    zoomInBtn.textContent = "Zoom In";
+
+    const zoomResetBtn = document.createElement("button");
+    zoomResetBtn.type = "button";
+    zoomResetBtn.className = "btn btn-secondary";
+    zoomResetBtn.textContent = "Reset";
+
+    const zoomFitBtn = document.createElement("button");
+    zoomFitBtn.type = "button";
+    zoomFitBtn.className = "btn btn-primary";
+    zoomFitBtn.textContent = "Fit to View";
+
+    const viewFamiliesBtn = document.createElement("a");
+    viewFamiliesBtn.className = "btn btn-secondary";
+    viewFamiliesBtn.href = "dashboard.html";
+    viewFamiliesBtn.textContent = "View Families";
+
+    const zoomLabel = document.createElement("span");
+    zoomLabel.className = "tree-zoom-label";
+    zoomLabel.textContent = "100%";
+
+    toolbar.appendChild(zoomOutBtn);
+    toolbar.appendChild(zoomInBtn);
+    toolbar.appendChild(zoomResetBtn);
+    toolbar.appendChild(zoomFitBtn);
+    toolbar.appendChild(viewFamiliesBtn);
+    toolbar.appendChild(zoomLabel);
+
+    const viewport = document.createElement("div");
+    viewport.className = "tree-viewport";
+
+    const sceneSizer = document.createElement("div");
+    sceneSizer.style.position = "relative";
+    sceneSizer.style.width = `${width}px`;
+    sceneSizer.style.height = `${height}px`;
+
+    const stage = document.createElement("div");
+    stage.style.position = "absolute";
+    stage.style.left = "0";
+    stage.style.top = "0";
+    stage.style.transformOrigin = "top left";
+
+    const wrapper = document.createElement("div");
+    wrapper.className = "tree-wrapper";
+    wrapper.style.width = `${width}px`;
+    wrapper.style.height = `${height}px`;
+
+    const svgNS = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(svgNS, "svg");
+    svg.setAttribute("class", "tree-lines");
+    svg.setAttribute("width", width);
+    svg.setAttribute("height", height);
+    svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+
+    const positions = new Map();
+
+    const primaryRelationships = relationships.filter((rel) =>
+      PRIMARY_ANCESTRY_TYPES.has(rel.relationship_type),
+    );
+
     rows.forEach((row) => {
       const y = topPadding + row.visualRowIndex * rowGap;
 
@@ -234,7 +375,12 @@
       wrapper.appendChild(label);
 
       const enrichedItems = row.items.map((item) => {
-        const anchorX = getItemAnchorX(item, positions, relationships, pairMap);
+        const anchorX = getItemAnchorX(
+          item,
+          positions,
+          primaryRelationships,
+          pairMap,
+        );
         const widthValue =
           item.type === "couple" ? nodeWidth * 2 + coupleGap : nodeWidth;
 
@@ -342,9 +488,7 @@
       });
     });
 
-    const childLinks = relationships.filter(
-      (rel) => rel.relationship_type === "parent_child",
-    );
+    const childLinks = primaryRelationships;
     const spouseLinks = relationships.filter(
       (rel) => rel.relationship_type === "spouse",
     );
@@ -460,8 +604,131 @@
       );
     });
 
+    const stepParentLinks = relationships.filter((rel) =>
+      SECONDARY_ANCESTRY_TYPES.has(rel.relationship_type),
+    );
+
+    stepParentLinks.forEach((rel) => {
+      const parentPos = positions.get(rel.source_member_id);
+      const childPos = positions.get(rel.target_member_id);
+      if (!parentPos || !childPos) return;
+
+      const dashed = makeCurvedLine(
+        svgNS,
+        parentPos.centerX,
+        parentPos.bottomY,
+        childPos.centerX,
+        childPos.topY,
+        "tree-line parent-child",
+      );
+      dashed.style.strokeDasharray = "8 8";
+      dashed.style.opacity = "0.7";
+      svg.appendChild(dashed);
+    });
+
     wrapper.appendChild(svg);
-    canvas.appendChild(wrapper);
+    stage.appendChild(wrapper);
+    sceneSizer.appendChild(stage);
+    viewport.appendChild(sceneSizer);
+    shell.appendChild(toolbar);
+    shell.appendChild(viewport);
+    canvas.appendChild(shell);
+
+    initializeZoomView({
+      viewport,
+      sceneSizer,
+      stage,
+      wrapperWidth: width,
+      wrapperHeight: height,
+      zoomLabel,
+      zoomOutBtn,
+      zoomInBtn,
+      zoomResetBtn,
+      zoomFitBtn,
+    });
+  }
+
+  function initializeZoomView(config) {
+    TREE_VIEW_STATE.viewport = config.viewport;
+    TREE_VIEW_STATE.sceneSizer = config.sceneSizer;
+    TREE_VIEW_STATE.stage = config.stage;
+    TREE_VIEW_STATE.wrapperWidth = config.wrapperWidth;
+    TREE_VIEW_STATE.wrapperHeight = config.wrapperHeight;
+    TREE_VIEW_STATE.zoomLabel = config.zoomLabel;
+
+    config.zoomOutBtn.addEventListener("click", function () {
+      applyTreeScale(TREE_VIEW_STATE.scale - TREE_VIEW_STATE.step);
+    });
+
+    config.zoomInBtn.addEventListener("click", function () {
+      applyTreeScale(TREE_VIEW_STATE.scale + TREE_VIEW_STATE.step);
+    });
+
+    config.zoomResetBtn.addEventListener("click", function () {
+      applyTreeScale(1);
+    });
+
+    config.zoomFitBtn.addEventListener("click", function () {
+      applyTreeScale(getFitScale());
+    });
+
+    config.viewport.addEventListener(
+      "wheel",
+      function (event) {
+        if (!(event.ctrlKey || event.metaKey)) return;
+        event.preventDefault();
+
+        const direction = event.deltaY > 0 ? -1 : 1;
+        applyTreeScale(
+          TREE_VIEW_STATE.scale + direction * TREE_VIEW_STATE.step,
+        );
+      },
+      { passive: false },
+    );
+
+    requestAnimationFrame(function () {
+      applyTreeScale(getFitScale());
+    });
+  }
+
+  function getFitScale() {
+    if (!TREE_VIEW_STATE.viewport || !TREE_VIEW_STATE.wrapperWidth) return 1;
+
+    const availableWidth = Math.max(
+      320,
+      TREE_VIEW_STATE.viewport.clientWidth - 24,
+    );
+    const fitScale = availableWidth / TREE_VIEW_STATE.wrapperWidth;
+
+    return clampScale(Math.min(1, fitScale));
+  }
+
+  function clampScale(value) {
+    return Math.max(
+      TREE_VIEW_STATE.minScale,
+      Math.min(TREE_VIEW_STATE.maxScale, value),
+    );
+  }
+
+  function applyTreeScale(nextScale) {
+    if (
+      !TREE_VIEW_STATE.stage ||
+      !TREE_VIEW_STATE.sceneSizer ||
+      !TREE_VIEW_STATE.wrapperWidth ||
+      !TREE_VIEW_STATE.wrapperHeight
+    ) {
+      return;
+    }
+
+    TREE_VIEW_STATE.scale = clampScale(nextScale);
+
+    TREE_VIEW_STATE.stage.style.transform = `scale(${TREE_VIEW_STATE.scale})`;
+    TREE_VIEW_STATE.sceneSizer.style.width = `${TREE_VIEW_STATE.wrapperWidth * TREE_VIEW_STATE.scale}px`;
+    TREE_VIEW_STATE.sceneSizer.style.height = `${TREE_VIEW_STATE.wrapperHeight * TREE_VIEW_STATE.scale}px`;
+
+    if (TREE_VIEW_STATE.zoomLabel) {
+      TREE_VIEW_STATE.zoomLabel.textContent = `${Math.round(TREE_VIEW_STATE.scale * 100)}%`;
+    }
   }
 
   function placeMemberNode(
@@ -532,31 +799,40 @@
           (rel.source_member_id === member.id ||
             rel.target_member_id === member.id),
       )
-      .map((rel) =>
-        rel.source_member_id === member.id
-          ? rel.target_member_id
-          : rel.source_member_id,
-      )
-      .map((id) => memberMap.get(id))
-      .filter(Boolean);
+      .map((rel) => ({
+        person:
+          memberMap.get(
+            rel.source_member_id === member.id
+              ? rel.target_member_id
+              : rel.source_member_id,
+          ) || null,
+        relationship_type: "spouse",
+      }))
+      .filter((entry) => entry.person);
 
     const parents = relationships
       .filter(
         (rel) =>
-          rel.relationship_type === "parent_child" &&
+          ANCESTRY_TYPES.has(rel.relationship_type) &&
           rel.target_member_id === member.id,
       )
-      .map((rel) => memberMap.get(rel.source_member_id))
-      .filter(Boolean);
+      .map((rel) => ({
+        person: memberMap.get(rel.source_member_id) || null,
+        relationship_type: rel.relationship_type,
+      }))
+      .filter((entry) => entry.person);
 
     const children = relationships
       .filter(
         (rel) =>
-          rel.relationship_type === "parent_child" &&
+          ANCESTRY_TYPES.has(rel.relationship_type) &&
           rel.source_member_id === member.id,
       )
-      .map((rel) => memberMap.get(rel.target_member_id))
-      .filter(Boolean);
+      .map((rel) => ({
+        person: memberMap.get(rel.target_member_id) || null,
+        relationship_type: rel.relationship_type,
+      }))
+      .filter((entry) => entry.person);
 
     detailPanel.innerHTML = `
       <div class="lineage-profile-card">
@@ -608,22 +884,30 @@
     `;
   }
 
-  function renderPeopleList(people) {
-    if (!people || !people.length) {
+  function renderPeopleList(entries) {
+    if (!entries || !entries.length) {
       return '<p class="lineage-empty">None recorded.</p>';
     }
 
     return `
       <ul class="lineage-list">
-        ${people
-          .map(
-            (person) => `
-          <li class="lineage-list-item">
-            <strong>${escapeHtml(person.display_name || `${person.first_name || ""} ${person.last_name || ""}`.trim())}</strong>
-            <span>${escapeHtml(person.birth_year ? String(person.birth_year) : "Unknown")}</span>
-          </li>
-        `,
-          )
+        ${entries
+          .map((entry) => {
+            const person = entry.person;
+            const relType = String(entry.relationship_type || "").replaceAll(
+              "_",
+              " ",
+            );
+            return `
+              <li class="lineage-list-item">
+                <div>
+                  <strong>${escapeHtml(person.display_name || `${person.first_name || ""} ${person.last_name || ""}`.trim())}</strong>
+                  <div style="font-size:0.82rem; opacity:0.8;">${escapeHtml(relType)}</div>
+                </div>
+                <span>${escapeHtml(person.birth_year ? String(person.birth_year) : "Unknown")}</span>
+              </li>
+            `;
+          })
           .join("")}
       </ul>
     `;
@@ -647,7 +931,7 @@
     memberIds.forEach((memberId) => {
       const parentLinks = relationships.filter(
         (rel) =>
-          rel.relationship_type === "parent_child" &&
+          PRIMARY_ANCESTRY_TYPES.has(rel.relationship_type) &&
           rel.target_member_id === memberId,
       );
 
@@ -849,30 +1133,6 @@
     path.setAttribute("d", d);
     path.setAttribute("class", className);
     return path;
-  }
-
-  function showStatus(node, message, type) {
-    if (!node) return;
-
-    node.style.display = "block";
-    node.textContent = message;
-    node.style.color =
-      type === "error" ? "#ffb3b3" : type === "success" ? "#cfe8cf" : "#d6e6ff";
-  }
-
-  function hideStatus(node) {
-    if (!node) return;
-    node.style.display = "none";
-    node.textContent = "";
-  }
-
-  function escapeHtml(value) {
-    return String(value)
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#039;");
   }
 
   document.addEventListener("DOMContentLoaded", function () {
