@@ -18,18 +18,17 @@
             <span>Tomb of Light<span class="brand-symbol">™</span></span>
           </a>
 
-          <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
+          <nav class="site-nav" id="site-nav" aria-label="Portal navigation">
             <a href="dashboard.html">Dashboard</a>
-            <a href="intake-welcome.html">Intake Welcome</a>
-            <a href="intake-household.html">Household Setup</a>
-            <a href="intake-family-map.html">Family Map</a>
-            <a href="intake-uploads.html">Uploads</a>
-            <a href="intake-consent.html">Consent</a>
+            <a href="intake-welcome.html">Intake</a>
+            <a href="tree-view.html">Family Tree</a>
+            <a href="lineage-certificate.html">Lineage Certificate</a>
+            <a href="faq.html">Help</a>
           </nav>
 
           <div class="header-actions">
-            <a class="btn btn-secondary" href="intake-consent.html"
-              >Back to Consent</a
+            <a class="btn btn-secondary" href="dashboard.html"
+              >Return to Dashboard</a
             >
           </div>
         </div>
@@ -103,11 +102,47 @@
               </div>
             </div>
 
-            <div class="form-panel">
+            <div
+              class="form-panel"
+              data-intake-review-locked-panel
+              style="display: none"
+            >
+              <span class="eyebrow">Current Submission State</span>
+              <h2 data-intake-review-locked-title>Submission Locked</h2>
+              <p class="card-copy" data-intake-review-locked-copy>
+                Your intake is currently locked.
+              </p>
+
+              <div
+                class="helper"
+                data-intake-review-form-status
+                aria-live="polite"
+                style="display: none; margin-top: 1rem"
+              ></div>
+
+              <div class="inline-actions" style="margin-top: 1.5rem">
+                <a
+                  class="btn btn-primary"
+                  href="dashboard.html"
+                  data-intake-review-primary-action
+                >
+                  Go to Dashboard
+                </a>
+                <a
+                  class="btn btn-secondary"
+                  href="tree-view.html"
+                  data-intake-review-secondary-action
+                >
+                  Open Family Tree
+                </a>
+              </div>
+            </div>
+
+            <div class="form-panel" data-intake-review-form-shell>
               <span class="eyebrow">Submission Confirmation</span>
 
               <form class="form-grid" data-intake-review-form novalidate>
-                <label>
+                <label data-intake-review-notes-label>
                   Final Intake Notes
                   <textarea
                     name="final_intake_notes"
@@ -117,6 +152,7 @@
                 </label>
 
                 <label
+                  data-intake-review-confirm-label
                   style="display: flex; gap: 0.75rem; align-items: flex-start"
                 >
                   <input
@@ -134,7 +170,7 @@
 
                 <div
                   class="helper"
-                  data-intake-review-form-status
+                  data-intake-review-form-status-inline
                   aria-live="polite"
                   style="display: none"
                 ></div>
@@ -179,8 +215,8 @@
                   <div class="card-number">3</div>
                   <h3>Next Stage</h3>
                   <p class="card-copy">
-                    The next stage can connect real uploads + file processing,
-                    consent enforcement, and build execution.
+                    The next stage connects your approved intake to the family
+                    build, records, and production workflow.
                   </p>
                 </div>
               </div>
@@ -200,9 +236,9 @@
       </footer>
     </div>
 
-    <script src="config.js?v=20260322-9"></script>
-    <script src="app.js?v=20260322-9"></script>
-    <script src="auth.js?v=20260322-9"></script>
-    <script src="intake.js?v=20260322-9"></script>
+    <script src="config.js?v=20260322-10"></script>
+    <script src="app.js?v=20260322-10"></script>
+    <script src="auth.js?v=20260322-10"></script>
+    <script src="intake.js?v=20260322-10"></script>
   </body>
 </html>

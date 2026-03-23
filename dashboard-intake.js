@@ -13,16 +13,21 @@
       .toLowerCase();
   }
 
-  function humanizeStatus(status) {
-    const normalized = normalizeStatus(status);
-    if (!normalized) return "Unknown";
+  function normalizeRole(role) {
+    return String(role || "")
+      .trim()
+      .toLowerCase();
+  }
 
-    return normalized
-      .split("_")
-      .map(function (part) {
-        return part.charAt(0).toUpperCase() + part.slice(1);
-      })
-      .join(" ");
+  function isInternalRole(role) {
+    return [
+      "admin",
+      "super_admin",
+      "platform_admin",
+      "operations_admin",
+      "finance_admin",
+      "marketing_admin",
+    ].includes(normalizeRole(role));
   }
 
   function formatDate(value) {
@@ -43,7 +48,7 @@
     return `
       <div class="family-record-card">
         <div class="card-number">${index + 1}</div>
-        <h3>${humanizeStatus(item.status || "unknown")}</h3>
+        <h3>${String(item.status || "unknown").replaceAll("_", " ")}</h3>
         <p class="card-copy"><strong>Package:</strong> ${item.package_name || item.package_slug || "—"}</p>
         <p class="card-copy"><strong>Created:</strong> ${formatDate(item.created_at)}</p>
         <p class="card-copy"><strong>Submission ID:</strong> ${item.id || "—"}</p>
@@ -51,6 +56,10 @@
         <p class="card-copy"><strong>Project ID:</strong> ${item.project_id || "—"}</p>
       </div>
     `;
+  }
+
+  async function getCurrentUser() {
+    return await app.apiRequest("/auth/me", { method: "GET" });
   }
 
   async function getLatestSubmission() {
@@ -79,6 +88,33 @@
     }
   }
 
+  async function getPaidOrder() {
+    try {
+      const payload = await app.apiRequest("/orders/my-orders", {
+        method: "GET",
+      });
+
+      const orders = Array.isArray(payload)
+        ? payload
+        : Array.isArray(payload?.orders)
+          ? payload.orders
+          : Array.isArray(payload?.data)
+            ? payload.data
+            : [];
+
+      return (
+        orders.find(function (order) {
+          const status = String(order?.status || "").toLowerCase();
+          return ["paid", "complete", "completed", "succeeded"].includes(
+            status,
+          );
+        }) || null
+      );
+    } catch (error) {
+      return null;
+    }
+  }
+
   function nextStepForStatus(status) {
     const normalized = normalizeStatus(status);
 
@@ -86,11 +122,11 @@
     if (normalized === "in_review")
       return "Reviewer is evaluating your intake.";
     if (normalized === "approved")
-      return "Approved. Waiting for internal build provisioning.";
+      return "Approved and waiting for production provisioning.";
     if (normalized === "build_ready")
-      return "Your approved intake has been provisioned for production.";
+      return "Production records are created. Next step is building members and relationships.";
     if (normalized === "in_production")
-      return "Your legacy build is currently in production.";
+      return "Your lineage build is currently in production.";
     if (normalized === "qa_review")
       return "Your project is in internal quality review.";
     if (normalized === "client_review")
@@ -102,9 +138,31 @@
     return "Complete your intake and submit it for review.";
   }
 
+  function setHero(textValue) {
+    const statusNode = document.querySelector("[data-dashboard-status]");
+    if (statusNode) {
+      statusNode.textContent = textValue;
+    }
+  }
+
   async function setupDashboardIntake() {
     const dashboard = document.querySelector("[data-dashboard]");
     if (!dashboard) return;
+
+    let me = null;
+
+    try {
+      me = await getCurrentUser();
+    } catch (error) {
+      return;
+    }
+
+    if (isInternalRole(me && me.role)) {
+      setHero(
+        "You are signed in to the Tomb of Light internal operations portal.",
+      );
+      return;
+    }
 
     const intakeCardStatus = document.querySelector(
       "[data-intake-card-status]",
@@ -122,35 +180,85 @@
       "[data-intake-history-status]",
     );
     const historyList = document.querySelector("[data-intake-history-list]");
+    const accessStatus = document.querySelector("[data-access-status]");
+    const workspaceCopy = document.querySelector(
+      "[data-dashboard-workspace-copy]",
+    );
 
     try {
       const latest = await getLatestSubmission();
+      const paidOrder = await getPaidOrder();
+
+      if (paidOrder) {
+        text(
+          accessStatus,
+          `Access unlocked through ${paidOrder.package_name || paidOrder.package_slug || "your active package"}.`,
+        );
+        setHero(
+          `Your package is active: ${paidOrder.package_name || "Active Package"}.`,
+        );
+      } else {
+        text(
+          accessStatus,
+          "Purchase required before family build tools unlock.",
+        );
+        setHero(
+          "Your customer workspace is connected, but no paid package is active yet.",
+        );
+      }
+
+      if (
+        workspaceCopy &&
+        latest &&
+        normalizeStatus(latest.status) === "build_ready"
+      ) {
+        text(
+          workspaceCopy,
+          "Your intake has been approved and provisioned. This workspace now moves from onboarding into the real family build stage.",
+        );
+      }
 
       if (!latest) {
         text(intakeCardStatus, "No intake submission found yet.");
-        text(currentPackage, "No package detected");
+        text(currentPackage, paidOrder?.package_name || "No package detected");
         text(statusBadge, "Not submitted");
         text(submissionId, "—");
         text(submittedAt, "—");
-        text(nextStep, "Open your intake flow and submit the review step.");
+        text(
+          nextStep,
+          paidOrder
+            ? "Open your intake flow and submit the review step."
+            : "Purchase a package first to unlock intake.",
+        );
         text(
           lockNote,
-          "Editing is open because no final submission exists yet.",
+          paidOrder
+            ? "Editing is open because no final submission exists yet."
+            : "Intake is locked until a paid package exists.",
         );
 
         if (openAction) {
-          openAction.textContent = "Open Intake";
-          openAction.setAttribute("href", "intake-welcome.html");
+          openAction.textContent = paidOrder ? "Open Intake" : "View Packages";
+          openAction.setAttribute(
+            "href",
+            paidOrder ? "intake-welcome.html" : "index.html#pricing",
+          );
         }
       } else {
         const status = normalizeStatus(latest.status);
 
         text(
           intakeCardStatus,
-          `Latest intake status: ${humanizeStatus(status)}.`,
+          `Your most recent intake submission is shown below.`,
         );
-        text(currentPackage, latest.package_name || latest.package_slug || "—");
-        text(statusBadge, humanizeStatus(status));
+        text(
+          currentPackage,
+          latest.package_name ||
+            latest.package_slug ||
+            paidOrder?.package_name ||
+            "—",
+        );
+        text(statusBadge, status);
         text(submissionId, latest.id || "—");
         text(submittedAt, formatDate(latest.submitted_at || latest.created_at));
         text(nextStep, nextStepForStatus(status));
@@ -168,7 +276,7 @@
           text(
             lockNote,
             latest.review_locked
-              ? "Editing is currently locked."
+              ? "Editing is locked after final submission."
               : "Editing is currently open.",
           );
           if (openAction) {
@@ -184,7 +292,7 @@
         text(historyStatus, "No intake submissions found yet.");
         if (historyList) historyList.innerHTML = "";
       } else {
-        text(historyStatus, "Your intake history is listed below.");
+        text(historyStatus, "Your recent intake submissions are listed below.");
         if (historyList) {
           historyList.innerHTML = history.map(renderHistoryItem).join("");
         }
