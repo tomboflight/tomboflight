@@ -68,6 +68,13 @@ def _family_is_visible_to_user(
     return False
 
 
+def _safe_build_family_response(family: dict[str, Any]) -> FamilyResponse | None:
+    try:
+        return build_family_response(family)
+    except Exception:
+        return None
+
+
 @router.get("", response_model=list[FamilyResponse], include_in_schema=False)
 @router.get("/", response_model=list[FamilyResponse])
 def get_families(user: dict[str, Any] = Depends(get_current_user)):
@@ -79,23 +86,34 @@ def get_families(user: dict[str, Any] = Depends(get_current_user)):
 
     docs = list(families_collection.find().sort("created_at", -1))
 
-    if _is_admin(user):
-        return [build_family_response(family) for family in docs]
+    results: list[FamilyResponse] = []
 
-    visible_families = [
-        build_family_response(family)
-        for family in docs
+    if _is_admin(user):
+        for family in docs:
+            built = _safe_build_family_response(family)
+            if built is not None:
+                results.append(built)
+        return results
+
+    for family in docs:
         if _family_is_visible_to_user(
             family=family,
             current_user_id=current_user_id,
             current_user_email=current_user_email,
-        )
-    ]
+        ):
+            built = _safe_build_family_response(family)
+            if built is not None:
+                results.append(built)
 
-    return visible_families
+    return results
 
 
-@router.post("", response_model=FamilyResponse, status_code=status.HTTP_201_CREATED, include_in_schema=False)
+@router.post(
+    "",
+    response_model=FamilyResponse,
+    status_code=status.HTTP_201_CREATED,
+    include_in_schema=False,
+)
 @router.post("/", response_model=FamilyResponse, status_code=status.HTTP_201_CREATED)
 def create_family_route(
     payload: FamilyCreate,
