@@ -11,15 +11,14 @@
     <link rel="stylesheet" href="styles.css" />
     <style>
       .tree-shell {
-        overflow-x: auto;
-        overflow-y: hidden;
-        padding: 1rem 0;
+        overflow: visible;
+        padding: 0;
         border-radius: 20px;
       }
 
       .tree-layout {
         display: grid;
-        grid-template-columns: minmax(720px, 1fr) 360px;
+        grid-template-columns: minmax(760px, 1fr) 380px;
         gap: 1.25rem;
         align-items: start;
       }
@@ -27,7 +26,7 @@
       .tree-wrapper {
         position: relative;
         min-height: 720px;
-        margin-top: 1rem;
+        margin-top: 0;
       }
 
       .tree-lines {
@@ -115,6 +114,33 @@
       .tree-empty {
         padding: 1rem 0;
         color: #b4becc;
+      }
+
+      .tree-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.75rem;
+      }
+
+      .tree-zoom-label {
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        color: #d6e6ff;
+        min-width: 56px;
+        text-align: right;
+      }
+
+      .tree-viewport {
+        position: relative;
+        overflow: auto;
+        width: 100%;
+        max-width: 100%;
+        min-height: 760px;
+        border-radius: 20px;
+        padding: 0.75rem;
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px solid rgba(255, 255, 255, 0.05);
       }
 
       .lineage-profile-shell {
@@ -228,6 +254,13 @@
         color: #8d9aae;
       }
 
+      .tree-action-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        margin-top: 1rem;
+      }
+
       @media (max-width: 1180px) {
         .tree-layout {
           grid-template-columns: 1fr;
@@ -235,6 +268,25 @@
 
         .lineage-profile-shell {
           position: static;
+        }
+      }
+
+      @media (max-width: 700px) {
+        .tree-action-row,
+        .tree-toolbar {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .tree-action-row .btn,
+        .tree-toolbar .btn {
+          width: 100%;
+          justify-content: center;
+        }
+
+        .tree-zoom-label {
+          text-align: left;
+          min-width: 0;
         }
       }
     </style>
@@ -247,11 +299,12 @@
             <span>Tomb of Light<span class="brand-symbol">™</span></span>
           </a>
 
-          <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
-            <a href="platform.html">Platform</a>
-            <a href="how-it-works.html">How It Works</a>
-            <a href="security.html">Security</a>
-            <a href="faq.html">FAQ</a>
+          <nav class="site-nav" id="site-nav" aria-label="Portal navigation">
+            <a href="dashboard.html">Dashboard</a>
+            <a href="intake-review.html">My Intake</a>
+            <a href="tree-view.html">Family Tree</a>
+            <a href="lineage-certificate.html">Lineage Certificate</a>
+            <a href="faq.html">Help</a>
           </nav>
 
           <div class="header-actions">
@@ -270,8 +323,9 @@
               <span class="eyebrow">Visual Lineage Renderer</span>
               <h1>Family Tree View</h1>
               <p>
-                Render the Tomb of Light lineage graph as a visual
-                multi-generation family map.
+                Render the Tomb of Light lineage graph as a scalable, growing
+                multi-generation family map designed for expanding digital
+                lineage.
               </p>
             </div>
           </div>
@@ -299,7 +353,7 @@
                   style="display: none"
                 ></div>
 
-                <div class="inline-actions">
+                <div class="tree-action-row">
                   <button
                     class="btn btn-primary"
                     type="button"
@@ -307,9 +361,12 @@
                   >
                     Load Visual Tree
                   </button>
-                  <a class="btn btn-secondary" href="family-graph.html"
-                    >Back to Graph Viewer</a
-                  >
+                  <a class="btn btn-secondary" href="dashboard.html">
+                    View Families
+                  </a>
+                  <a class="btn btn-secondary" href="lineage-certificate.html">
+                    View Certificate
+                  </a>
                 </div>
               </div>
             </div>
@@ -355,9 +412,9 @@
       </footer>
     </div>
 
-    <script src="config.js?v=20260322-5"></script>
-    <script src="app.js?v=20260322-5"></script>
-    <script src="auth.js?v=20260322-5"></script>
-    <script src="tree-view.js?v=20260322-5"></script>
+    <script src="config.js?v=20260323-4"></script>
+    <script src="app.js?v=20260323-4"></script>
+    <script src="auth.js?v=20260323-4"></script>
+    <script src="tree-view.js?v=20260323-4"></script>
   </body>
 </html>
