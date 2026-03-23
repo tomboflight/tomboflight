@@ -15,7 +15,7 @@ class FamilyResponse(BaseModel):
     family_name: str
     created_by: str
     description: str | None = None
-    created_at: str
+    created_at: datetime
     owner_user_id: str | None = None
     owner_email: str | None = None
     visibility: str | None = None
@@ -27,14 +27,17 @@ def _to_string(value: Any, default: str = "") -> str:
     return str(value).strip()
 
 
-def _to_datetime_string(value: Any) -> str:
+def _to_datetime(value: Any) -> datetime:
     if isinstance(value, datetime):
-        return value.isoformat()
+        return value
 
-    if value is None:
-        return datetime.now(UTC).isoformat()
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except Exception:
+            return datetime.now(UTC)
 
-    return str(value)
+    return datetime.now(UTC)
 
 
 def build_family_response(data: dict[str, Any]) -> FamilyResponse:
@@ -55,7 +58,7 @@ def build_family_response(data: dict[str, Any]) -> FamilyResponse:
         family_name=family_name,
         created_by=created_by,
         description=data.get("description"),
-        created_at=_to_datetime_string(data.get("created_at")),
+        created_at=_to_datetime(data.get("created_at")),
         owner_user_id=_to_string(data.get("owner_user_id")) or None,
         owner_email=_to_string(data.get("owner_email")).lower() or None,
         visibility=_to_string(data.get("visibility")) or None,
