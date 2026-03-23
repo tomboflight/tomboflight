@@ -23,18 +23,6 @@
     ].includes(normalizeRole(role));
   }
 
-  function getRoleTitle(role) {
-    const normalized = normalizeRole(role);
-
-    if (normalized === "super_admin") return "Super Admin Control";
-    if (normalized === "platform_admin") return "Platform Admin Control";
-    if (normalized === "operations_admin") return "Operations Admin Control";
-    if (normalized === "finance_admin") return "Finance Admin Control";
-    if (normalized === "marketing_admin") return "Marketing Admin Control";
-    if (normalized === "admin") return "Admin Control";
-    return "Internal Control";
-  }
-
   function escapeHtml(value) {
     return String(value ?? "")
       .replaceAll("&", "&amp;")
@@ -48,11 +36,11 @@
     const action =
       href && buttonText
         ? `<div class="inline-actions" style="margin-top: 1rem;">
-           <a class="btn btn-primary" href="${escapeHtml(href)}">${escapeHtml(buttonText)}</a>
-         </div>`
+             <a class="btn btn-primary" href="${escapeHtml(href)}">${escapeHtml(buttonText)}</a>
+           </div>`
         : `<div class="inline-actions" style="margin-top: 1rem;">
-           <span class="btn btn-secondary" aria-disabled="true">Coming Next</span>
-         </div>`;
+             <span class="btn btn-secondary" aria-disabled="true">Coming Next</span>
+           </div>`;
 
     return `
       <div class="family-record-card">
@@ -64,69 +52,74 @@
     `;
   }
 
-  function getRoleCards(role) {
-    const normalized = normalizeRole(role);
+  function getInternalRoleKey(me) {
+    const accessTier = normalizeRole(me && me.access_tier);
+    const departmentRole = normalizeRole(me && me.department_role);
+    const role = normalizeRole(me && me.role);
 
-    if (normalized === "super_admin" || normalized === "admin") {
+    return accessTier || departmentRole || role;
+  }
+
+  function getRoleTitle(me) {
+    const roleKey = getInternalRoleKey(me);
+
+    if (roleKey === "root_admin") return "Company Root Control";
+    if (roleKey === "super_admin") return "Executive Control";
+    if (roleKey === "operations_admin" || roleKey === "operations")
+      return "Operations Control";
+    if (roleKey === "finance_admin" || roleKey === "finance")
+      return "Finance Control";
+    if (roleKey === "marketing_admin" || roleKey === "marketing")
+      return "Marketing Control";
+    if (roleKey === "platform_admin" || roleKey === "executive_technology")
+      return "Platform Control";
+    return "Internal Control";
+  }
+
+  function getRoleCards(me) {
+    const roleKey = getInternalRoleKey(me);
+
+    if (["root_admin", "super_admin", "admin"].includes(roleKey)) {
       return [
         card(
           "A",
           "Intake Queue",
-          "Review submitted intake records, mark them in review, approve, reject, and control onboarding flow.",
+          "Review submitted intake records, move them through approval, and provision build records.",
           "admin-intake-queue.html",
           "Open Intake Queue",
         ),
         card(
           "B",
           "Operations Pipeline",
-          "Track approved submissions, production readiness, verification flow, and delivery progression.",
+          "Track approved submissions, build readiness, verification flow, and delivery progression.",
           "",
           "",
         ),
         card(
           "C",
           "Finance Oversight",
-          "View package status, customer payment truth, operational finance checkpoints, and reporting visibility.",
+          "View package, payment, and operational finance checkpoints in the internal workspace.",
           "",
           "",
         ),
         card(
           "D",
           "Platform Control",
-          "Use system-level oversight for workflow governance, audit review, and high-trust administrative control.",
+          "Use system-level oversight for workflow governance, audit review, and environment control.",
           "",
           "",
         ),
         card(
           "E",
           "Marketing Intelligence",
-          "Review top-level demand, conversion, and funnel activity without exposing protected family records.",
+          "Review demand, conversion, and growth metrics without exposing protected customer lineage data.",
           "",
           "",
         ),
       ];
     }
 
-    if (normalized === "platform_admin") {
-      return [
-        card(
-          "A",
-          "Intake Queue",
-          "Access internal onboarding review workflow and troubleshoot intake state transitions.",
-          "admin-intake-queue.html",
-          "Open Intake Queue",
-        ),
-        card(
-          "B",
-          "Platform Tools",
-          "Platform health, operational debugging, and system-level workflow support.",
-          "",
-          "",
-        ),
-      ];
-    }
-
-    if (normalized === "operations_admin") {
+    if (roleKey === "operations_admin" || roleKey === "operations") {
       return [
         card(
           "A",
@@ -138,14 +131,14 @@
         card(
           "B",
           "Operations Review",
-          "Prepare verified submissions for the family build, relationship setup, and delivery workflow.",
+          "Prepare approved submissions for family build, relationship setup, and delivery workflow.",
           "",
           "",
         ),
       ];
     }
 
-    if (normalized === "finance_admin") {
+    if (roleKey === "finance_admin" || roleKey === "finance") {
       return [
         card(
           "A",
@@ -164,19 +157,38 @@
       ];
     }
 
-    if (normalized === "marketing_admin") {
+    if (roleKey === "marketing_admin" || roleKey === "marketing") {
       return [
         card(
           "A",
           "Marketing Intelligence",
-          "View conversion-level business insights and campaign-facing reporting without exposing private customer lineage records.",
+          "View conversion-level business insight and campaign-facing reporting without exposing private customer lineage records.",
           "",
           "",
         ),
         card(
           "B",
           "Growth Oversight",
-          "Prepare future campaign, funnel, and acquisition visibility inside a controlled admin environment.",
+          "Prepare future campaign, funnel, and acquisition visibility inside a controlled internal environment.",
+          "",
+          "",
+        ),
+      ];
+    }
+
+    if (roleKey === "platform_admin" || roleKey === "executive_technology") {
+      return [
+        card(
+          "A",
+          "Intake Queue",
+          "Access internal onboarding review workflow and troubleshoot intake state transitions.",
+          "admin-intake-queue.html",
+          "Open Intake Queue",
+        ),
+        card(
+          "B",
+          "Platform Tools",
+          "Platform health, operational debugging, and system-level workflow support.",
           "",
           "",
         ),
@@ -186,9 +198,30 @@
     return [];
   }
 
+  function hideCustomerPanels() {
+    document
+      .querySelectorAll("[data-dashboard-customer-only]")
+      .forEach(function (node) {
+        node.style.display = "none";
+      });
+  }
+
+  function updateHeroForInternal() {
+    const eyebrow = document.querySelector("[data-dashboard-hero-eyebrow]");
+    const title = document.querySelector("[data-dashboard-hero-title]");
+    const status = document.querySelector("[data-dashboard-status]");
+
+    if (eyebrow) eyebrow.textContent = "Internal Operations";
+    if (title) title.textContent = "Admin Workspace";
+    if (status) {
+      status.textContent =
+        "You are signed in to the Tomb of Light internal operations portal.";
+    }
+  }
+
   function injectAdminPanel(me) {
-    const authRequired = document.querySelector("[data-auth-required]");
-    if (!authRequired) return;
+    const anchor = document.querySelector("[data-admin-portal-anchor]");
+    if (!anchor) return;
     if (document.querySelector("[data-admin-tools-panel]")) return;
 
     const role = normalizeRole(me && me.role);
@@ -198,19 +231,19 @@
     panel.className = "form-panel";
     panel.setAttribute("data-admin-tools-panel", "true");
 
-    const cards = getRoleCards(role).join("");
+    const cards = getRoleCards(me).join("");
 
     panel.innerHTML = `
-      <span class="eyebrow">${escapeHtml(getRoleTitle(role))}</span>
+      <span class="eyebrow">${escapeHtml(getRoleTitle(me))}</span>
       <p class="card-copy" style="margin-bottom: 1.25rem;">
-        This internal control layer is visible only to authorized Tomb of Light operational roles.
+        This internal workspace is reserved for authorized Tomb of Light operational roles and is separate from the public marketing experience.
       </p>
       <div class="grid-3">
         ${cards}
       </div>
     `;
 
-    authRequired.prepend(panel);
+    anchor.prepend(panel);
   }
 
   async function setupAdminDashboardTools() {
@@ -219,9 +252,14 @@
 
     try {
       const me = await app.apiRequest("/auth/me", { method: "GET" });
-      injectAdminPanel(me);
+
+      if (isInternalRole(me && me.role)) {
+        hideCustomerPanels();
+        updateHeroForInternal();
+        injectAdminPanel(me);
+      }
     } catch (error) {
-      // session handling already exists elsewhere
+      console.error("Failed to load internal dashboard layer:", error);
     }
   }
 

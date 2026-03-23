@@ -42,10 +42,6 @@
     localStorage.setItem(DRAFT_KEY, JSON.stringify(nextDraft || {}));
   }
 
-  function clearDraft() {
-    localStorage.removeItem(DRAFT_KEY);
-  }
-
   function mergeDraft(sectionKey, values) {
     const draft = loadDraft();
     draft[sectionKey] = {
@@ -274,6 +270,74 @@
     }
   }
 
+  function renderSummaryCard(node, title, number, lines) {
+    if (!node) return;
+    node.innerHTML = `
+      <div>
+        <div class="card-number">${escapeHtml(number)}</div>
+        <h3>${escapeHtml(title)}</h3>
+        <p class="card-copy">${lines.map(escapeHtml).join("<br />")}</p>
+      </div>
+    `;
+  }
+
+  function renderReviewSummaryBlocks(source) {
+    const page = document.querySelector("[data-intake-review]");
+    if (!page) return;
+
+    const draft = loadDraft();
+    const data = source || draft;
+
+    const household = data.household || draft.household || {};
+    const familyMap = data.family_map || draft.family_map || {};
+    const uploads = data.uploads || draft.uploads || {};
+    const consent = data.consent || draft.consent || {};
+
+    const householdNode = document.querySelector(
+      "[data-review-household-summary]",
+    );
+    const familyMapNode = document.querySelector(
+      "[data-review-family-map-summary]",
+    );
+    const uploadsNode = document.querySelector("[data-review-uploads-summary]");
+    const consentNode = document.querySelector("[data-review-consent-summary]");
+
+    renderSummaryCard(
+      householdNode,
+      household.household_name || "Household Setup",
+      "1",
+      [
+        `Primary Contact: ${household.primary_contact_name || "—"}`,
+        `Email: ${household.primary_contact_email || "—"}`,
+        `Role: ${household.household_role || "—"}`,
+      ],
+    );
+
+    renderSummaryCard(
+      familyMapNode,
+      familyMap.family_branch_name || "Family Map",
+      "2",
+      [
+        `People in Scope: ${familyMap.people_in_scope || "—"}`,
+        `Parent One: ${familyMap.parent_one || "—"}`,
+        `Parent Two: ${familyMap.parent_two || "—"}`,
+        `Children: ${familyMap.children_names || "—"}`,
+      ],
+    );
+
+    renderSummaryCard(uploadsNode, "Uploads", "3", [
+      `Approx. Uploads: ${uploads.approx_upload_count || "—"}`,
+      `Primary Asset Type: ${uploads.primary_asset_type || "—"}`,
+      `Key Portraits: ${uploads.key_portraits || "—"}`,
+    ]);
+
+    renderSummaryCard(consentNode, "Consent", "4", [
+      `Process Consent: ${consent.consent_process ? "Yes" : "No"}`,
+      `Store Consent: ${consent.consent_store ? "Yes" : "No"}`,
+      `Visibility: ${consent.visibility_preference || "—"}`,
+    ]);
+  }
+
   function lockFormForReview(form, statusNode, latestSubmission) {
     if (!form || !latestSubmission) return;
 
@@ -303,16 +367,79 @@
     }
   }
 
-  function formatReviewBlock(title, lines, number) {
-    const safeLines = (lines || []).filter(Boolean);
+  function setupLockedReviewState(latestSubmission) {
+    const normalized = normalizeStatus(latestSubmission.status);
 
-    return `
-      <div>
-        <div class="card-number">${escapeHtml(number)}</div>
-        <h3>${escapeHtml(title)}</h3>
-        <p class="card-copy">${safeLines.map(escapeHtml).join("<br />")}</p>
-      </div>
-    `;
+    const formShell = document.querySelector("[data-intake-review-form-shell]");
+    const lockedPanel = document.querySelector(
+      "[data-intake-review-locked-panel]",
+    );
+    const lockedTitle = document.querySelector(
+      "[data-intake-review-locked-title]",
+    );
+    const lockedCopy = document.querySelector(
+      "[data-intake-review-locked-copy]",
+    );
+    const primaryAction = document.querySelector(
+      "[data-intake-review-primary-action]",
+    );
+    const secondaryAction = document.querySelector(
+      "[data-intake-review-secondary-action]",
+    );
+    const inlineStatus = document.querySelector(
+      "[data-intake-review-form-status-inline]",
+    );
+
+    if (formShell) formShell.style.display = "none";
+    if (lockedPanel) lockedPanel.style.display = "block";
+
+    if (lockedTitle) {
+      lockedTitle.textContent = humanizeStatus(normalized);
+    }
+
+    if (lockedCopy) {
+      lockedCopy.textContent = `${statusMessage(normalized)} ${reviewNextStep(normalized)}`;
+    }
+
+    if (inlineStatus) {
+      clearStatus(inlineStatus);
+    }
+
+    if (primaryAction) {
+      if (normalized === "build_ready") {
+        primaryAction.textContent = "Go to Dashboard";
+        primaryAction.setAttribute("href", "dashboard.html");
+      } else {
+        primaryAction.textContent = "Return to Dashboard";
+        primaryAction.setAttribute("href", "dashboard.html");
+      }
+    }
+
+    if (secondaryAction) {
+      if (
+        normalized === "build_ready" ||
+        normalized === "in_production" ||
+        normalized === "qa_review" ||
+        normalized === "client_review" ||
+        normalized === "delivered"
+      ) {
+        secondaryAction.style.display = "inline-flex";
+        secondaryAction.textContent = "Open Family Tree";
+        secondaryAction.setAttribute("href", "tree-view.html");
+      } else {
+        secondaryAction.style.display = "none";
+      }
+    }
+  }
+
+  function setupEditableReviewState() {
+    const formShell = document.querySelector("[data-intake-review-form-shell]");
+    const lockedPanel = document.querySelector(
+      "[data-intake-review-locked-panel]",
+    );
+
+    if (formShell) formShell.style.display = "block";
+    if (lockedPanel) lockedPanel.style.display = "none";
   }
 
   async function setupIntakeWelcome() {
@@ -346,11 +473,31 @@
 
         if (packagePath) {
           packagePath.innerHTML = `
-            ${formatReviewBlock("Household Setup", ["Confirm household ownership and household details."], "A")}
-            ${formatReviewBlock("Family Map", ["Outline parents, spouse, children, and branch structure."], "B")}
-            ${formatReviewBlock("Uploads", ["Plan photos, records, and supporting files for this build."], "C")}
-            ${formatReviewBlock("Consent", ["Confirm privacy, processing, and storage permissions."], "D")}
-            ${formatReviewBlock("Review & Submit", ["Review the saved onboarding data before final submission."], "E")}
+            <div>
+              <div class="card-number">A</div>
+              <h3>Household Setup</h3>
+              <p class="card-copy">Confirm household ownership and household details.</p>
+            </div>
+            <div>
+              <div class="card-number">B</div>
+              <h3>Family Map</h3>
+              <p class="card-copy">Outline parents, spouse, children, and branch structure.</p>
+            </div>
+            <div>
+              <div class="card-number">C</div>
+              <h3>Uploads</h3>
+              <p class="card-copy">Plan photos, records, and supporting files for this build.</p>
+            </div>
+            <div>
+              <div class="card-number">D</div>
+              <h3>Consent</h3>
+              <p class="card-copy">Confirm privacy, processing, and storage permissions.</p>
+            </div>
+            <div>
+              <div class="card-number">E</div>
+              <h3>Review &amp; Submit</h3>
+              <p class="card-copy">Review the saved onboarding data before final submission.</p>
+            </div>
           `;
         }
 
@@ -596,82 +743,20 @@
     });
   }
 
-  function renderReviewSummaryBlocks() {
-    const page = document.querySelector("[data-intake-review]");
-    if (!page) return;
-
-    const draft = loadDraft();
-
-    const householdNode = document.querySelector(
-      "[data-review-household-summary]",
-    );
-    const familyMapNode = document.querySelector(
-      "[data-review-family-map-summary]",
-    );
-    const uploadsNode = document.querySelector("[data-review-uploads-summary]");
-    const consentNode = document.querySelector("[data-review-consent-summary]");
-
-    if (householdNode) {
-      const h = draft.household || {};
-      householdNode.innerHTML = formatReviewBlock(
-        h.household_name || "Household Setup",
-        [
-          `Primary Contact: ${h.primary_contact_name || "—"}`,
-          `Email: ${h.primary_contact_email || "—"}`,
-          `Role: ${h.household_role || "—"}`,
-        ],
-        "1",
-      );
-    }
-
-    if (familyMapNode) {
-      const f = draft.family_map || {};
-      familyMapNode.innerHTML = formatReviewBlock(
-        f.family_branch_name || "Family Map",
-        [
-          `People in Scope: ${f.people_in_scope || "—"}`,
-          `Parent One: ${f.parent_one || "—"}`,
-          `Parent Two: ${f.parent_two || "—"}`,
-          `Children: ${f.children_names || "—"}`,
-        ],
-        "2",
-      );
-    }
-
-    if (uploadsNode) {
-      const u = draft.uploads || {};
-      uploadsNode.innerHTML = formatReviewBlock(
-        "Uploads",
-        [
-          `Approx. Uploads: ${u.approx_upload_count || "—"}`,
-          `Primary Asset Type: ${u.primary_asset_type || "—"}`,
-          `Key Portraits: ${u.key_portraits || "—"}`,
-        ],
-        "3",
-      );
-    }
-
-    if (consentNode) {
-      const c = draft.consent || {};
-      consentNode.innerHTML = formatReviewBlock(
-        "Consent",
-        [
-          `Process Consent: ${c.consent_process ? "Yes" : "No"}`,
-          `Store Consent: ${c.consent_store ? "Yes" : "No"}`,
-          `Visibility: ${c.visibility_preference || "—"}`,
-        ],
-        "4",
-      );
-    }
-  }
-
   function setupReviewForm() {
     const page = document.querySelector("[data-intake-review]");
     if (!page) return;
 
     const form = document.querySelector("[data-intake-review-form]");
-    const statusNode = document.querySelector(
+    const formShell = document.querySelector("[data-intake-review-form-shell]");
+    const lockedPanel = document.querySelector(
+      "[data-intake-review-locked-panel]",
+    );
+    const lockedStatusNode = document.querySelector(
       "[data-intake-review-form-status]",
+    );
+    const inlineStatusNode = document.querySelector(
+      "[data-intake-review-form-status-inline]",
     );
     const reviewHeadline = document.querySelector(
       "[data-intake-review-status]",
@@ -686,54 +771,52 @@
 
     if (!form) return;
 
+    const draft = loadDraft();
     renderReviewSummaryBlocks();
+
+    if (notesField && draft.review && draft.review.final_intake_notes) {
+      notesField.value = draft.review.final_intake_notes;
+    }
+
+    if (confirmField && draft.review) {
+      confirmField.checked = Boolean(draft.review.confirm_accuracy);
+    }
 
     getLatestSubmission()
       .then(function (latestSubmission) {
-        if (!latestSubmission) return;
+        if (latestSubmission) {
+          renderReviewSummaryBlocks(latestSubmission);
 
-        const normalized = normalizeStatus(latestSubmission.status);
+          const normalized = normalizeStatus(latestSubmission.status);
 
-        if (reviewHeadline) {
-          reviewHeadline.textContent =
-            statusMessage(normalized) || reviewHeadline.textContent;
-        }
-
-        if (isLockedStatus(normalized)) {
-          if (notesField) {
-            notesField.readOnly = true;
-            notesField.disabled = true;
+          if (reviewHeadline) {
+            reviewHeadline.textContent =
+              statusMessage(normalized) || reviewHeadline.textContent;
           }
 
-          if (confirmField) {
-            confirmField.disabled = true;
+          if (isLockedStatus(normalized)) {
+            setupLockedReviewState(latestSubmission);
+            if (lockedStatusNode) {
+              setStatus(
+                lockedStatusNode,
+                `${statusMessage(normalized)} ${reviewNextStep(normalized)}`,
+                "info",
+              );
+            }
+            return;
           }
-
-          if (submitBtn) {
-            submitBtn.disabled = true;
-            submitBtn.textContent = humanizeStatus(normalized);
-          }
-
-          setStatus(
-            statusNode,
-            `${statusMessage(normalized)} ${reviewNextStep(normalized)}`,
-            "info",
-          );
         }
 
-        if (normalized === "rejected") {
-          setStatus(
-            statusNode,
-            "This intake was rejected. You may update your intake and submit again after making changes.",
-            "error",
-          );
-        }
+        setupEditableReviewState();
       })
-      .catch(function () {});
+      .catch(function () {
+        setupEditableReviewState();
+      });
 
     form.addEventListener("submit", async function (event) {
       event.preventDefault();
-      clearStatus(statusNode);
+      clearStatus(inlineStatusNode);
+      clearStatus(lockedStatusNode);
 
       if (typeof form.reportValidity === "function" && !form.reportValidity()) {
         return;
@@ -744,8 +827,9 @@
       });
 
       if (latestSubmission && isLockedStatus(latestSubmission.status)) {
+        setupLockedReviewState(latestSubmission);
         setStatus(
-          statusNode,
+          lockedStatusNode,
           `${statusMessage(latestSubmission.status)} ${reviewNextStep(latestSubmission.status)}`,
           "info",
         );
@@ -756,7 +840,7 @@
 
       if (!draft.household || !draft.family_map) {
         setStatus(
-          statusNode,
+          inlineStatusNode,
           "Household Setup and Family Map must be saved before submission.",
           "error",
         );
@@ -808,14 +892,18 @@
             "Your intake review has been submitted successfully.";
         }
 
-        setStatus(statusNode, "Intake submitted successfully.", "success");
+        setStatus(
+          inlineStatusNode,
+          "Intake submitted successfully.",
+          "success",
+        );
 
         setTimeout(function () {
           window.location.href = "dashboard.html";
         }, 1200);
       } catch (error) {
         setStatus(
-          statusNode,
+          inlineStatusNode,
           `Submission failed: ${getErrorMessage(error)}`,
           "error",
         );
