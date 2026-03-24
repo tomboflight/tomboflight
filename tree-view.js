@@ -62,6 +62,51 @@
     }
   }
 
+  function getDisplayName(member) {
+    return (
+      member?.display_name ||
+      `${member?.first_name || ""} ${member?.last_name || ""}`.trim() ||
+      "Unknown"
+    );
+  }
+
+  function getBirthYear(member) {
+    return member?.birth_year ? String(member.birth_year) : "Unknown";
+  }
+
+  function getVerificationLabel(member) {
+    if (member?.verification_status) {
+      return String(member.verification_status).replaceAll("_", " ");
+    }
+    return member?.is_verified ? "verified" : "not verified";
+  }
+
+  function formatRelationshipLabel(relationshipType, context) {
+    const rel = String(relationshipType || "")
+      .trim()
+      .toLowerCase();
+
+    if (context === "parents") {
+      if (rel === "parent_child") return "biological parent";
+      if (rel === "step_parent_child") return "step-parent";
+      if (rel === "adoptive_parent_child") return "adoptive parent";
+      return rel.replaceAll("_", " ");
+    }
+
+    if (context === "children") {
+      if (rel === "parent_child") return "biological child";
+      if (rel === "step_parent_child") return "step-child";
+      if (rel === "adoptive_parent_child") return "adopted child";
+      return rel.replaceAll("_", " ");
+    }
+
+    if (context === "spouses") {
+      return "spouse";
+    }
+
+    return rel.replaceAll("_", " ");
+  }
+
   async function setupTreeViewPage() {
     if (!window.TOLAuth) return;
 
@@ -749,10 +794,8 @@
     card.style.left = `${x}px`;
     card.style.top = `${y}px`;
 
-    const name =
-      member.display_name ||
-      `${member.first_name || ""} ${member.last_name || ""}`.trim();
-    const birth = member.birth_year ? String(member.birth_year) : "Unknown";
+    const name = getDisplayName(member);
+    const birth = getBirthYear(member);
 
     card.innerHTML = `
       <div class="tree-node-name">${escapeHtml(name)}</div>
@@ -838,14 +881,14 @@
       <div class="lineage-profile-card">
         <div class="lineage-profile-header">
           <div class="lineage-profile-badge">Profile</div>
-          <h3>${escapeHtml(member.display_name || `${member.first_name || ""} ${member.last_name || ""}`.trim())}</h3>
+          <h3>${escapeHtml(getDisplayName(member))}</h3>
           <p class="lineage-profile-subtext">Lineage identity record</p>
         </div>
 
         <div class="lineage-profile-grid">
           <div class="lineage-profile-item">
             <span class="lineage-label">Birth Year</span>
-            <span class="lineage-value">${escapeHtml(member.birth_year ? String(member.birth_year) : "Unknown")}</span>
+            <span class="lineage-value">${escapeHtml(getBirthYear(member))}</span>
           </div>
           <div class="lineage-profile-item">
             <span class="lineage-label">Generation</span>
@@ -859,6 +902,10 @@
             <span class="lineage-label">Family ID</span>
             <span class="lineage-value lineage-id">${escapeHtml(member.family_id || "")}</span>
           </div>
+          <div class="lineage-profile-item">
+            <span class="lineage-label">Verification</span>
+            <span class="lineage-value">${escapeHtml(getVerificationLabel(member))}</span>
+          </div>
         </div>
 
         <div class="lineage-section">
@@ -868,23 +915,23 @@
 
         <div class="lineage-section">
           <h4>Parents</h4>
-          ${renderPeopleList(parents)}
+          ${renderPeopleList(parents, "parents")}
         </div>
 
         <div class="lineage-section">
           <h4>Spouses</h4>
-          ${renderPeopleList(spouses)}
+          ${renderPeopleList(spouses, "spouses")}
         </div>
 
         <div class="lineage-section">
           <h4>Children</h4>
-          ${renderPeopleList(children)}
+          ${renderPeopleList(children, "children")}
         </div>
       </div>
     `;
   }
 
-  function renderPeopleList(entries) {
+  function renderPeopleList(entries, context) {
     if (!entries || !entries.length) {
       return '<p class="lineage-empty">None recorded.</p>';
     }
@@ -894,34 +941,24 @@
         ${entries
           .map((entry) => {
             const person = entry.person;
-            const relType = String(entry.relationship_type || "").replaceAll(
-              "_",
-              " ",
+            const relType = formatRelationshipLabel(
+              entry.relationship_type,
+              context,
             );
+
             return `
               <li class="lineage-list-item">
                 <div>
-                  <strong>${escapeHtml(person.display_name || `${person.first_name || ""} ${person.last_name || ""}`.trim())}</strong>
+                  <strong>${escapeHtml(getDisplayName(person))}</strong>
                   <div style="font-size:0.82rem; opacity:0.8;">${escapeHtml(relType)}</div>
                 </div>
-                <span>${escapeHtml(person.birth_year ? String(person.birth_year) : "Unknown")}</span>
+                <span>${escapeHtml(getBirthYear(person))}</span>
               </li>
             `;
           })
           .join("")}
       </ul>
     `;
-  }
-
-  function clearDetailPanel(detailPanel, detailEmpty) {
-    if (detailPanel) {
-      detailPanel.style.display = "none";
-      detailPanel.innerHTML = "";
-    }
-
-    if (detailEmpty) {
-      detailEmpty.style.display = "block";
-    }
   }
 
   function getItemAnchorX(item, positions, relationships, pairMap) {
@@ -978,11 +1015,7 @@
   }
 
   function getItemSortName(item) {
-    return item.members
-      .map((member) =>
-        `${member.first_name || ""} ${member.last_name || ""}`.trim(),
-      )
-      .join(" ");
+    return item.members.map((member) => getDisplayName(member)).join(" ");
   }
 
   function buildMemberRowMap(members, relationships) {
@@ -1083,8 +1116,8 @@
   }
 
   function orderCouple(a, b) {
-    const aName = `${a.first_name || ""} ${a.last_name || ""}`.trim();
-    const bName = `${b.first_name || ""} ${b.last_name || ""}`.trim();
+    const aName = getDisplayName(a);
+    const bName = getDisplayName(b);
     return aName.localeCompare(bName) <= 0 ? [a, b] : [b, a];
   }
 
