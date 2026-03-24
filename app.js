@@ -9,6 +9,7 @@
   const TOKEN_KEY = "tol_access_token";
   const USER_KEY = "tol_user";
   const COOKIE_CHOICE_KEY = "tol_cookie_choice";
+  const COOKIE_SESSION_MARKER = "__cookie_session__";
 
   function isLocalApp() {
     return LOCAL_HOSTS.has(window.location.hostname);
@@ -33,9 +34,14 @@
     return (window.TOL_CONFIG && window.TOL_CONFIG.PAYMENT_LINKS) || {};
   }
 
+  function isCookieSessionMarker(value) {
+    return value === COOKIE_SESSION_MARKER;
+  }
+
   function saveToken(token) {
     if (typeof token === "string" && token.trim()) {
-      localStorage.setItem(TOKEN_KEY, token);
+      // Store only a non-sensitive session marker for the frontend.
+      localStorage.setItem(TOKEN_KEY, COOKIE_SESSION_MARKER);
     }
   }
 
@@ -93,7 +99,7 @@
       headers["Content-Type"] = "application/json";
     }
 
-    if (token) {
+    if (token && !isCookieSessionMarker(token)) {
       headers.Authorization = `Bearer ${token}`;
     }
 
@@ -103,6 +109,7 @@
       response = await fetch(`${apiBaseUrl}${path}`, {
         ...options,
         headers,
+        credentials: "include",
       });
     } catch (networkError) {
       throw new Error(
@@ -139,6 +146,16 @@
     const user = await apiRequest("/auth/me", { method: "GET" });
     saveUser(user);
     return user;
+  }
+
+  async function logoutUser() {
+    try {
+      await apiRequest("/auth/logout", {
+        method: "POST",
+      });
+    } finally {
+      clearSession();
+    }
   }
 
   async function requireSession(redirectTo = "signin.html") {
@@ -276,7 +293,9 @@
     });
 
     header
-      .querySelectorAll(".site-nav a, .header-actions a")
+      .querySelectorAll(
+        ".site-nav a, .header-actions a, .header-actions button",
+      )
       .forEach(function (link) {
         link.addEventListener("click", closeMenu);
       });
@@ -366,6 +385,7 @@
     clearSession,
     apiRequest,
     fetchCurrentUser,
+    logoutUser,
     requireSession,
     setStatus,
     clearStatus,
