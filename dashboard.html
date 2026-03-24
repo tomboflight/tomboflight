@@ -15,6 +15,15 @@
             <span>Tomb of Light<span class="brand-symbol">™</span></span>
           </a>
 
+          <button
+            class="menu-toggle"
+            type="button"
+            aria-label="Toggle navigation"
+            aria-expanded="false"
+          >
+            Menu
+          </button>
+
           <nav class="site-nav" id="site-nav" aria-label="Portal navigation">
             <a href="dashboard.html">Dashboard</a>
             <a href="intake-review.html">My Intake</a>
@@ -32,9 +41,9 @@
       </header>
 
       <main data-dashboard>
-        <section class="page-hero">
+        <section class="page-hero dashboard-hero">
           <div class="container">
-            <div class="page-hero-panel">
+            <div class="page-hero-panel dashboard-hero-panel">
               <span class="eyebrow" data-dashboard-hero-eyebrow>
                 Portal Access
               </span>
@@ -50,6 +59,79 @@
             data-auth-required
             style="display: none"
           >
+            <div
+              class="form-panel dashboard-presence-panel"
+              data-dashboard-customer-only
+            >
+              <div class="dashboard-presence-top">
+                <span class="eyebrow">Live Build Status</span>
+                <span class="presence-badge">Digital Lineage Active</span>
+              </div>
+
+              <h2 class="dashboard-presence-title">
+                Your lineage workspace is live and connected.
+              </h2>
+
+              <p class="dashboard-presence-copy">
+                Tomb of Light is now reading from your real family, household,
+                project, family tree, and certificate records. This portal is
+                designed to grow as your family grows.
+              </p>
+
+              <div class="workspace-stage-strip">
+                <div class="workspace-stage-node is-live">
+                  <span class="workspace-stage-dot"></span>
+                  <div>
+                    <strong>Family Root</strong>
+                    <small>Connected</small>
+                  </div>
+                </div>
+
+                <div class="workspace-stage-node is-live">
+                  <span class="workspace-stage-dot"></span>
+                  <div>
+                    <strong>Production Build</strong>
+                    <small>Build Ready</small>
+                  </div>
+                </div>
+
+                <div class="workspace-stage-node is-live">
+                  <span class="workspace-stage-dot"></span>
+                  <div>
+                    <strong>Living Outputs</strong>
+                    <small>Tree + Certificate Live</small>
+                  </div>
+                </div>
+              </div>
+
+              <div class="inline-actions" style="margin-top: 1.5rem">
+                <a
+                  class="btn btn-primary"
+                  href="tree-view.html"
+                  data-dashboard-workspace-primary-action
+                  data-paid-action
+                >
+                  Continue Family Build
+                </a>
+                <a
+                  class="btn btn-secondary"
+                  href="tree-view.html"
+                  data-dashboard-workspace-tree-action
+                  data-paid-action
+                >
+                  Family Tree
+                </a>
+                <a
+                  class="btn btn-secondary"
+                  href="lineage-certificate.html"
+                  data-dashboard-workspace-certificate-action
+                  data-paid-action
+                >
+                  View Lineage Certificate
+                </a>
+              </div>
+            </div>
+
             <div class="form-panel">
               <span class="eyebrow">Account Profile</span>
               <div class="grid-3">
@@ -308,10 +390,10 @@
       </footer>
     </div>
 
-    <script src="config.js?v=20260324-1"></script>
-    <script src="app.js?v=20260324-1"></script>
-    <script src="auth.js?v=20260324-1"></script>
-    <script src="dashboard-intake.js?v=20260324-1"></script>
-    <script src="dashboard-admin.js?v=20260324-1"></script>
+    <script src="config.js?v=20260324-2"></script>
+    <script src="app.js?v=20260324-2"></script>
+    <script src="auth.js?v=20260324-2"></script>
+    <script src="dashboard-intake.js?v=20260324-2"></script>
+    <script src="dashboard-admin.js?v=20260324-2"></script>
   </body>
 </html>
