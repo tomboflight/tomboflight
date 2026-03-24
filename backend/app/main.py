@@ -1,13 +1,15 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database import close_mongo_connection, connect_to_mongo, get_database
 
+from app.routes.admin_intake_submissions import (
+    router as admin_intake_submissions_router,
+)
 from app.routes.audit_logs import router as audit_logs_router
-from app.routes.admin_intake_submissions import router as admin_intake_submissions_router
 from app.routes.auth import router as auth_router
 from app.routes.canonical_persons import router as canonical_persons_router
 from app.routes.certificate_versions import router as certificate_versions_router
@@ -38,12 +40,38 @@ from app.routes.narrative_records import router as narrative_records_router
 from app.routes.orders import router as orders_router
 from app.routes.projects import router as projects_router
 from app.routes.relationships import router as relationships_router
+from app.routes.stripe_webhooks import router as stripe_webhooks_router
 from app.routes.tree import router as tree_router
 from app.routes.users import router as users_router
 from app.routes.verification_records import router as verification_records_router
 
-# ✅ Stripe Webhooks router
-from app.routes.stripe_webhooks import router as stripe_webhooks_router
+
+def _resolve_allowed_origins() -> list[str]:
+    configured = getattr(settings, "allowed_origins_list", []) or []
+
+    cleaned: list[str] = []
+    for origin in configured:
+        value = str(origin).strip().rstrip("/")
+        if not value or value == "*":
+            continue
+        cleaned.append(value)
+
+    if cleaned:
+        return list(dict.fromkeys(cleaned))
+
+    return [
+        "https://tomboflight.com",
+        "https://www.tomboflight.com",
+        "http://127.0.0.1:5500",
+        "http://localhost:5500",
+    ]
+
+
+def _is_secure_request(request: Request) -> bool:
+    forwarded_proto = request.headers.get("x-forwarded-proto", "")
+    if forwarded_proto.lower() == "https":
+        return True
+    return request.url.scheme == "https"
 
 
 @asynccontextmanager
@@ -64,11 +92,32 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.allowed_origins_list,
+    allow_origins=_resolve_allowed_origins(),
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "Origin"],
 )
+
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = (
+        "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+    )
+    response.headers["Cache-Control"] = "no-store"
+
+    if _is_secure_request(request):
+        response.headers["Strict-Transport-Security"] = (
+            "max-age=31536000; includeSubDomains; preload"
+        )
+
+    return response
+
 
 # ----------------------------
 # Core Routes
@@ -93,7 +142,7 @@ app.include_router(db_bootstrap_router)
 app.include_router(graph_integrity_router)
 app.include_router(orders_router)
 
-# ✅ Stripe Webhooks (THIS makes it show in Swagger)
+# Stripe Webhooks
 app.include_router(stripe_webhooks_router)
 
 # ----------------------------
@@ -140,10 +189,12 @@ def root():
         "app_name": settings.app_name,
         "version": settings.app_version,
         "environment": settings.environment,
+        "allowed_origins": _resolve_allowed_origins(),
         "routes": [
             "/health",
             "/auth/signup",
             "/auth/login",
+            "/auth/logout",
             "/auth/me",
             "/intake",
             "/intake-submissions",

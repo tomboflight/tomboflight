@@ -151,6 +151,7 @@
       throw new Error("Login succeeded but no access token was returned.");
     }
 
+    // This no longer stores the raw JWT. It stores only a session marker.
     app.saveToken(token);
 
     const me = await app.fetchCurrentUser();
@@ -766,8 +767,13 @@
 
   function bindLogoutButtons() {
     document.querySelectorAll("[data-logout-btn]").forEach(function (button) {
-      button.addEventListener("click", function () {
-        app.clearSession();
+      button.addEventListener("click", async function () {
+        try {
+          await app.logoutUser();
+        } catch (error) {
+          console.error("Logout request failed:", error);
+          app.clearSession();
+        }
         window.location.href = "signin.html";
       });
     });
