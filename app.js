@@ -93,7 +93,7 @@
       headers["Content-Type"] = "application/json";
     }
 
-    if (token) {
+    if (token && !headers.Authorization) {
       headers.Authorization = `Bearer ${token}`;
     }
 
@@ -147,6 +147,8 @@
       await apiRequest("/auth/logout", {
         method: "POST",
       });
+    } catch (error) {
+      // ignore logout errors and still clear local session
     } finally {
       clearSession();
     }

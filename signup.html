@@ -1,181 +1,200 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Create Account | Tomb of Light</title>
-  <meta
-    name="description"
-    content="Create your Tomb of Light account and begin building your digital legacy."
-  />
-  <link rel="stylesheet" href="styles.css" />
-</head>
-<body>
-  <div class="page-wrap">
-    <header class="site-header">
-      <div class="container site-header-inner">
-        <a class="brand" href="index.html" aria-label="Tomb of Light home">
-          <span>Tomb of Light<span class="brand-symbol">™</span></span>
-        </a>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Create Account | Tomb of Light</title>
+    <meta
+      name="description"
+      content="Create your Tomb of Light account and begin building your digital legacy."
+    />
+    <link rel="stylesheet" href="styles.css?v=20260324-5" />
+  </head>
+  <body>
+    <a href="#main-content" class="skip-to-content">Skip to main content</a>
 
-        <button
-          class="menu-toggle"
-          type="button"
-          aria-label="Toggle navigation menu"
-          aria-expanded="false"
-          aria-controls="site-nav"
-        >
-          Menu
-        </button>
+    <div class="site-watermark" aria-hidden="true"></div>
 
-        <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
-          <a href="platform.html">Platform</a>
-          <a href="how-it-works.html">How It Works</a>
-          <a href="security.html">Security</a>
-          <a href="faq.html">FAQ</a>
-        </nav>
+    <div class="page-wrap">
+      <header class="site-header" role="banner">
+        <div class="container site-header-inner">
+          <a class="brand" href="index.html" aria-label="Tomb of Light home">
+            <span>Tomb of Light<span class="brand-symbol">™</span></span>
+          </a>
 
-        <div class="header-actions">
-          <a class="btn btn-secondary" href="signin.html">Sign In</a>
-        </div>
-      </div>
-    </header>
+          <button
+            class="menu-toggle"
+            type="button"
+            aria-label="Toggle navigation menu"
+            aria-expanded="false"
+            aria-controls="site-nav"
+          >
+            Menu
+          </button>
 
-    <main>
-      <section class="page-hero">
-        <div class="container">
-          <div class="page-hero-panel">
-            <span class="eyebrow">Open Access</span>
-            <h1>Create Your Account</h1>
-            <p>
-              Open your Tomb of Light account and begin building your family’s digital legacy.
-            </p>
+          <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
+            <a href="platform.html">Platform</a>
+            <a href="how-it-works.html">How It Works</a>
+            <a href="security.html">Security</a>
+            <a href="faq.html">FAQ</a>
+          </nav>
+
+          <div class="header-actions">
+            <a class="btn btn-secondary" href="signin.html">Sign In</a>
           </div>
         </div>
-      </section>
+      </header>
 
-      <section class="page-sections">
-        <div class="container form-shell">
-          <div class="form-panel">
-            <form class="form-grid" data-signup-form novalidate>
-              <div class="form-grid two-col">
-                <label>
-                  Full Name
-                  <input
-                    type="text"
-                    name="full_name"
-                    placeholder="Your full name"
-                    autocomplete="name"
-                    required
-                  />
-                </label>
-
-                <label>
-                  Email Address
-                  <input
-                    type="email"
-                    name="email"
-                    placeholder="you@example.com"
-                    autocomplete="email"
-                    required
-                  />
-                </label>
-              </div>
-
-              <div class="form-grid two-col">
-                <label>
-                  Password
-                  <input
-                    type="password"
-                    name="password"
-                    placeholder="Create a password"
-                    autocomplete="new-password"
-                    minlength="8"
-                    required
-                  />
-                </label>
-
-                <label>
-                  Confirm Password
-                  <input
-                    type="password"
-                    name="confirm_password"
-                    placeholder="Confirm your password"
-                    autocomplete="new-password"
-                    minlength="8"
-                    required
-                  />
-                </label>
-              </div>
-
-              <div class="helper">
-                By creating an account, you are entering the Tomb of Light platform and can begin building your private legacy record.
-              </div>
-
-              <div
-                class="helper"
-                data-signup-status
-                aria-live="polite"
-                style="display: none;"
-              ></div>
-
-              <div class="inline-actions">
-                <button class="btn btn-primary" type="submit" data-submit-btn>
-                  Create Account
-                </button>
-                <a class="btn btn-secondary" href="signin.html">Already have an account?</a>
-              </div>
-            </form>
-          </div>
-
-          <div class="form-panel">
-            <span class="eyebrow">What Happens Next?</span>
-            <div class="grid-3">
-              <div>
-                <div class="card-number">1</div>
-                <h3>Create your account</h3>
-                <p class="card-copy">Start with your identity and secure access to the platform.</p>
-              </div>
-
-              <div>
-                <div class="card-number">2</div>
-                <h3>Enter your family data</h3>
-                <p class="card-copy">Add members, relationships, and future generations over time.</p>
-              </div>
-
-              <div>
-                <div class="card-number">3</div>
-                <h3>Build your living legacy</h3>
-                <p class="card-copy">Prepare the foundation for your family’s visual lineage experience.</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-    </main>
-
-    <footer class="footer">
-      <div class="container">
-        <div class="footer-card">
-          <div class="footer-top">
-            <div>
-              <div class="footer-brand">Tomb of Light<span class="brand-symbol">™</span></div>
-              <p class="footer-copy">
-                A private, cinematic platform for preserving and exploring family lineage across generations.
+      <main id="main-content" role="main">
+        <section class="page-hero">
+          <div class="container">
+            <div class="page-hero-panel">
+              <span class="eyebrow">Open Access</span>
+              <h1>Create Your Account</h1>
+              <p>
+                Open your Tomb of Light account and begin building your family’s
+                digital legacy.
               </p>
             </div>
           </div>
+        </section>
 
-          <div class="footer-bottom">
-            <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
+        <section class="page-sections">
+          <div class="container form-shell">
+            <div class="form-panel">
+              <form class="form-grid" data-signup-form novalidate>
+                <div class="form-grid two-col">
+                  <label>
+                    Full Name
+                    <input
+                      type="text"
+                      name="full_name"
+                      placeholder="Your full name"
+                      autocomplete="name"
+                      required
+                    />
+                  </label>
+
+                  <label>
+                    Email Address
+                    <input
+                      type="email"
+                      name="email"
+                      placeholder="you@example.com"
+                      autocomplete="email"
+                      required
+                    />
+                  </label>
+                </div>
+
+                <div class="form-grid two-col">
+                  <label>
+                    Password
+                    <input
+                      type="password"
+                      name="password"
+                      placeholder="Create a password"
+                      autocomplete="new-password"
+                      minlength="8"
+                      required
+                    />
+                  </label>
+
+                  <label>
+                    Confirm Password
+                    <input
+                      type="password"
+                      name="confirm_password"
+                      placeholder="Confirm your password"
+                      autocomplete="new-password"
+                      minlength="8"
+                      required
+                    />
+                  </label>
+                </div>
+
+                <div class="helper">
+                  By creating an account, you are entering the Tomb of Light
+                  platform and can begin building your private legacy record.
+                </div>
+
+                <div
+                  class="helper"
+                  data-signup-status
+                  aria-live="polite"
+                  style="display: none"
+                ></div>
+
+                <div class="inline-actions">
+                  <button class="btn btn-primary" type="submit" data-submit-btn>
+                    Create Account
+                  </button>
+                  <a class="btn btn-secondary" href="signin.html">
+                    Already have an account?
+                  </a>
+                </div>
+              </form>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">What Happens Next?</span>
+              <div class="grid-3">
+                <div>
+                  <div class="card-number">1</div>
+                  <h3>Create your account</h3>
+                  <p class="card-copy">
+                    Start with your identity and secure access to the platform.
+                  </p>
+                </div>
+
+                <div>
+                  <div class="card-number">2</div>
+                  <h3>Enter your family data</h3>
+                  <p class="card-copy">
+                    Add members, relationships, and future generations over
+                    time.
+                  </p>
+                </div>
+
+                <div>
+                  <div class="card-number">3</div>
+                  <h3>Build your living legacy</h3>
+                  <p class="card-copy">
+                    Prepare the foundation for your family’s visual lineage
+                    experience.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer" role="contentinfo">
+        <div class="container">
+          <div class="footer-card">
+            <div class="footer-top">
+              <div>
+                <div class="footer-brand">
+                  Tomb of Light<span class="brand-symbol">™</span>
+                </div>
+                <p class="footer-copy">
+                  A private, cinematic platform for preserving and exploring
+                  family lineage across generations.
+                </p>
+              </div>
+            </div>
+
+            <div class="footer-bottom">
+              <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
+            </div>
           </div>
         </div>
-      </div>
-    </footer>
-  </div>
+      </footer>
+    </div>
 
-  <script src="config.js"></script>
-  <script src="app.js"></script>
-  <script src="auth.js"></script>
-</body>
+    <script src="config.js?v=20260324-5"></script>
+    <script src="app.js?v=20260324-5"></script>
+    <script src="auth.js?v=20260324-5"></script>
+  </body>
 </html>
