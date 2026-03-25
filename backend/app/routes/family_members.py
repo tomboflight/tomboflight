@@ -38,7 +38,32 @@ def _current_user_display_name(user: dict[str, Any]) -> str:
 
 
 def _is_admin(user: dict[str, Any]) -> bool:
-    return str(user.get("role", "")).strip().lower() == "admin"
+    role = str(user.get("role", "")).strip().lower()
+    access_tier = str(user.get("access_tier", "")).strip().lower()
+    department_role = str(user.get("department_role", "")).strip().lower()
+
+    return role in {
+        "admin",
+        "super_admin",
+        "root_admin",
+        "platform_admin",
+        "operations_admin",
+        "finance_admin",
+        "marketing_admin",
+    } or access_tier in {
+        "super_admin",
+        "root_admin",
+        "platform_admin",
+        "operations_admin",
+        "finance_admin",
+        "marketing_admin",
+        "executive_technology",
+    } or department_role in {
+        "operations",
+        "finance",
+        "marketing",
+        "executive_technology",
+    }
 
 
 def _family_is_visible_to_user(
@@ -73,7 +98,6 @@ def _family_is_visible_to_user(
     if current_user_email in shared_with_emails:
         return True
 
-    # Backward-compatible fallback for older family records
     if not owner_user_id and not owner_email:
         created_by = str(family.get("created_by") or "").strip()
         if created_by and (
@@ -157,7 +181,16 @@ def _serialize_member(member: dict[str, Any]) -> dict[str, Any]:
         "spouse_id": member.get("spouse_id"),
         "bio": member.get("bio"),
         "created_at": member.get("created_at"),
+        "is_verified": member.get("is_verified"),
+        "verification_status": member.get("verification_status"),
     }
+
+
+def _display_name(member: dict[str, Any]) -> str:
+    first_name = str(member.get("first_name") or "").strip()
+    last_name = str(member.get("last_name") or "").strip()
+    joined = f"{first_name} {last_name}".strip()
+    return joined or "Unknown Member"
 
 
 @router.get("-index")
@@ -282,4 +315,55 @@ def update_family_member(
         "message": "Family member updated successfully.",
         "family_member_id": member_id,
         "match_candidates_created": created_candidates,
+    }
+
+
+@router.delete("/{member_id}")
+def delete_family_member(
+    member_id: str,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    db = get_database()
+    if db is None:
+        raise HTTPException(status_code=500, detail="Database is not connected.")
+
+    existing, _family = _require_family_access_for_member(member_id, current_user)
+
+    relationship_count = db.relationships.count_documents(
+        {
+            "$or": [
+                {"source_member_id": member_id},
+                {"target_member_id": member_id},
+            ]
+        }
+    )
+
+    if relationship_count > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Cannot delete member while {relationship_count} relationship(s) still reference this record. "
+                "Delete those relationships first."
+            ),
+        )
+
+    user_id = _current_user_id(current_user)
+
+    db.family_members.delete_one({"_id": ObjectId(member_id)})
+
+    create_audit_log(
+        action="family_member_deleted",
+        actor_user_id=user_id,
+        entity_type="family_member",
+        entity_id=member_id,
+        details={
+            "family_id": str(existing.get("family_id") or ""),
+            "display_name": _display_name(existing),
+        },
+    )
+
+    return {
+        "status": "deleted",
+        "family_member_id": member_id,
+        "display_name": _display_name(existing),
     }

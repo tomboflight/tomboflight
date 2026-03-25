@@ -8,7 +8,7 @@
       name="description"
       content="Admin family build manager for Tomb of Light."
     />
-    <link rel="stylesheet" href="styles.css?v=20260325-2" />
+    <link rel="stylesheet" href="styles.css?v=20260325-3" />
   </head>
   <body>
     <div class="page-wrap">
@@ -31,16 +31,16 @@
           <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
             <a href="dashboard.html">Dashboard</a>
             <a href="admin-intake-queue.html">Admin Intake Queue</a>
-            <a href="admin-family-manager.html" aria-current="page"
-              >Family Manager</a
-            >
+            <a href="admin-family-manager.html" aria-current="page">
+              Family Manager
+            </a>
             <a href="faq.html">FAQ</a>
           </nav>
 
           <div class="header-actions">
-            <a class="btn btn-secondary" href="dashboard.html"
-              >Back to Dashboard</a
-            >
+            <a class="btn btn-secondary" href="dashboard.html">
+              Back to Dashboard
+            </a>
           </div>
         </div>
       </header>
@@ -103,6 +103,10 @@
 
             <div class="form-panel">
               <span class="eyebrow">Current Members</span>
+              <p class="helper" style="margin-bottom: 1rem">
+                Delete relationships tied to a member before deleting that
+                member.
+              </p>
               <div class="grid-3" data-admin-family-members-list></div>
               <div
                 class="helper"
@@ -115,6 +119,10 @@
 
             <div class="form-panel">
               <span class="eyebrow">Current Relationships</span>
+              <p class="helper" style="margin-bottom: 1rem">
+                Relationship delete controls appear on each relationship card
+                after the family is loaded.
+              </p>
               <div class="grid-3" data-admin-family-relationships-list></div>
               <div
                 class="helper"
@@ -282,9 +290,9 @@
       </footer>
     </div>
 
-    <script src="config.js?v=20260325-2"></script>
-    <script src="app.js?v=20260325-2"></script>
-    <script src="auth.js?v=20260325-2"></script>
-    <script src="admin-family-manager.js?v=20260325-2"></script>
+    <script src="config.js?v=20260325-3"></script>
+    <script src="app.js?v=20260325-3"></script>
+    <script src="auth.js?v=20260325-3"></script>
+    <script src="admin-family-manager.js?v=20260325-3"></script>
   </body>
 </html>

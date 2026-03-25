@@ -245,6 +245,16 @@
             <p class="card-copy"><strong>Verified:</strong> ${verified ? "Yes" : "No"}</p>
             <p class="card-copy"><strong>Member ID:</strong> ${escapeHtml(member.id || "—")}</p>
             <p class="card-copy"><strong>Bio:</strong> ${escapeHtml(member.bio || "—")}</p>
+            <div class="inline-actions" style="margin-top: 1rem;">
+              <button
+                class="btn btn-secondary"
+                type="button"
+                data-delete-member-id="${escapeHtml(member.id || "")}"
+                data-delete-member-name="${escapeHtml(getDisplayName(member))}"
+              >
+                Delete Member
+              </button>
+            </div>
           </div>
         `;
       })
@@ -291,6 +301,15 @@
             <p class="card-copy"><strong>Target:</strong> ${escapeHtml(target ? getDisplayName(target) : relationship.target_member_id || "—")}</p>
             <p class="card-copy"><strong>Relationship ID:</strong> ${escapeHtml(relationship.id || relationship._id || "—")}</p>
             <p class="card-copy"><strong>Notes:</strong> ${escapeHtml(relationship.notes || "—")}</p>
+            <div class="inline-actions" style="margin-top: 1rem;">
+              <button
+                class="btn btn-secondary"
+                type="button"
+                data-delete-relationship-id="${escapeHtml(relationship.id || relationship._id || "")}"
+              >
+                Delete Relationship
+              </button>
+            </div>
           </div>
         `;
       })
@@ -535,6 +554,77 @@
     }
   }
 
+  async function deleteRelationship(relationshipId) {
+    const actionNode = document.querySelector(
+      "[data-admin-family-action-status]",
+    );
+
+    if (!relationshipId) {
+      setStatus(actionNode, "Missing relationship id.", "error");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Delete this relationship? This action cannot be undone.",
+    );
+    if (!confirmed) return;
+
+    try {
+      setStatus(actionNode, "Deleting relationship...", "info");
+
+      await app.apiRequest(
+        `/relationships/${encodeURIComponent(relationshipId)}`,
+        {
+          method: "DELETE",
+        },
+      );
+
+      await loadFamilyGraph();
+      setStatus(actionNode, "Relationship deleted successfully.", "success");
+    } catch (error) {
+      console.error("Delete relationship failed:", error);
+      setStatus(
+        actionNode,
+        error.message || "Unable to delete relationship.",
+        "error",
+      );
+    }
+  }
+
+  async function deleteMember(memberId, memberName) {
+    const actionNode = document.querySelector(
+      "[data-admin-family-action-status]",
+    );
+
+    if (!memberId) {
+      setStatus(actionNode, "Missing member id.", "error");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Delete ${memberName || "this member"}?\n\nIf relationships still point to this member, delete those relationships first.`,
+    );
+    if (!confirmed) return;
+
+    try {
+      setStatus(actionNode, "Deleting family member...", "info");
+
+      await app.apiRequest(`/family-members/${encodeURIComponent(memberId)}`, {
+        method: "DELETE",
+      });
+
+      await loadFamilyGraph();
+      setStatus(actionNode, "Family member deleted successfully.", "success");
+    } catch (error) {
+      console.error("Delete member failed:", error);
+      setStatus(
+        actionNode,
+        error.message || "Unable to delete family member.",
+        "error",
+      );
+    }
+  }
+
   async function setupAdminFamilyManagerPage() {
     const page = document.querySelector("[data-admin-family-manager-page]");
     if (!page) return;
@@ -562,6 +652,26 @@
       if (relationshipForm) {
         relationshipForm.addEventListener("submit", handleCreateRelationship);
       }
+
+      document.addEventListener("click", function (event) {
+        const relationshipButton = event.target.closest(
+          "[data-delete-relationship-id]",
+        );
+        if (relationshipButton) {
+          deleteRelationship(
+            relationshipButton.getAttribute("data-delete-relationship-id"),
+          );
+          return;
+        }
+
+        const memberButton = event.target.closest("[data-delete-member-id]");
+        if (memberButton) {
+          deleteMember(
+            memberButton.getAttribute("data-delete-member-id"),
+            memberButton.getAttribute("data-delete-member-name"),
+          );
+        }
+      });
 
       const selectNode = document.querySelector("[data-admin-family-select]");
       if (selectNode && selectNode.value) {
