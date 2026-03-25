@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Family Manager | Tomb of Light</title>
+    <meta
+      name="description"
+      content="Admin family build manager for Tomb of Light."
+    />
+    <link rel="stylesheet" href="styles.css?v=20260325-2" />
+  </head>
+  <body>
+    <div class="page-wrap">
+      <header class="site-header">
+        <div class="container site-header-inner">
+          <a class="brand" href="index.html" aria-label="Tomb of Light home">
+            <span>Tomb of Light<span class="brand-symbol">™</span></span>
+          </a>
+
+          <button
+            class="menu-toggle"
+            type="button"
+            aria-label="Toggle navigation menu"
+            aria-expanded="false"
+            aria-controls="site-nav"
+          >
+            Menu
+          </button>
+
+          <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
+            <a href="dashboard.html">Dashboard</a>
+            <a href="admin-intake-queue.html">Admin Intake Queue</a>
+            <a href="admin-family-manager.html" aria-current="page"
+              >Family Manager</a
+            >
+            <a href="faq.html">FAQ</a>
+          </nav>
+
+          <div class="header-actions">
+            <a class="btn btn-secondary" href="dashboard.html"
+              >Back to Dashboard</a
+            >
+          </div>
+        </div>
+      </header>
+
+      <main data-admin-family-manager-page>
+        <section class="page-hero">
+          <div class="container">
+            <div class="page-hero-panel">
+              <span class="eyebrow">Admin Family Build</span>
+              <h1>Family Manager</h1>
+              <p data-admin-family-status>Loading family build tools...</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="page-sections">
+          <div class="container form-shell">
+            <div class="form-panel">
+              <span class="eyebrow">Select Family Build</span>
+
+              <div class="form-grid two-col">
+                <label>
+                  Provisioned Family
+                  <select data-admin-family-select>
+                    <option value="">Loading family builds...</option>
+                  </select>
+                </label>
+
+                <label>
+                  Load Selected Family
+                  <button
+                    class="btn btn-primary"
+                    type="button"
+                    data-admin-family-load
+                    style="margin-top: 0.45rem"
+                  >
+                    Load Family
+                  </button>
+                </label>
+              </div>
+
+              <div
+                class="helper"
+                data-admin-family-action-status
+                aria-live="polite"
+                style="display: none"
+              ></div>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Family Overview</span>
+              <div class="grid-3" data-admin-family-summary>
+                <div>
+                  <div class="card-number">1</div>
+                  <h3>Loading</h3>
+                  <p class="card-copy">Family summary is loading.</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Current Members</span>
+              <div class="grid-3" data-admin-family-members-list></div>
+              <div
+                class="helper"
+                data-admin-family-members-empty
+                style="display: none; margin-top: 1rem"
+              >
+                No members found for this family.
+              </div>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Current Relationships</span>
+              <div class="grid-3" data-admin-family-relationships-list></div>
+              <div
+                class="helper"
+                data-admin-family-relationships-empty
+                style="display: none; margin-top: 1rem"
+              >
+                No relationships found for this family.
+              </div>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Add Family Member</span>
+
+              <form class="form-grid" data-admin-member-form novalidate>
+                <div class="form-grid two-col">
+                  <label>
+                    First Name
+                    <input
+                      type="text"
+                      name="first_name"
+                      placeholder="First name"
+                      required
+                    />
+                  </label>
+
+                  <label>
+                    Last Name
+                    <input
+                      type="text"
+                      name="last_name"
+                      placeholder="Last name"
+                      required
+                    />
+                  </label>
+                </div>
+
+                <div class="form-grid two-col">
+                  <label>
+                    Birth Year
+                    <input
+                      type="number"
+                      name="birth_year"
+                      placeholder="1993"
+                      min="1800"
+                      max="2100"
+                    />
+                  </label>
+
+                  <label>
+                    Generation
+                    <input
+                      type="number"
+                      name="generation"
+                      placeholder="1"
+                      min="0"
+                      max="50"
+                      required
+                    />
+                  </label>
+                </div>
+
+                <label>
+                  Bio
+                  <textarea
+                    name="bio"
+                    rows="4"
+                    placeholder="Brief lineage description for this member."
+                  ></textarea>
+                </label>
+
+                <div class="inline-actions" style="margin-top: 1rem">
+                  <button
+                    class="btn btn-primary"
+                    type="submit"
+                    data-admin-member-submit
+                  >
+                    Add Member
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Add Relationship</span>
+
+              <form class="form-grid" data-admin-relationship-form novalidate>
+                <div class="form-grid two-col">
+                  <label>
+                    Source Member
+                    <select
+                      name="source_member_id"
+                      data-admin-source-member
+                      required
+                    >
+                      <option value="">Select source member</option>
+                    </select>
+                  </label>
+
+                  <label>
+                    Target Member
+                    <select
+                      name="target_member_id"
+                      data-admin-target-member
+                      required
+                    >
+                      <option value="">Select target member</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div class="form-grid two-col">
+                  <label>
+                    Relationship Type
+                    <select name="relationship_type" required>
+                      <option value="">Select relationship type</option>
+                      <option value="spouse">spouse</option>
+                      <option value="parent_child">parent_child</option>
+                      <option value="step_parent_child">
+                        step_parent_child
+                      </option>
+                      <option value="adoptive_parent_child">
+                        adoptive_parent_child
+                      </option>
+                    </select>
+                  </label>
+
+                  <label>
+                    Notes
+                    <input
+                      type="text"
+                      name="notes"
+                      placeholder="Optional relationship notes"
+                    />
+                  </label>
+                </div>
+
+                <div class="helper">
+                  For parent-child relationships, source = parent and target =
+                  child.
+                </div>
+
+                <div class="inline-actions" style="margin-top: 1rem">
+                  <button
+                    class="btn btn-primary"
+                    type="submit"
+                    data-admin-relationship-submit
+                  >
+                    Add Relationship
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <div class="container">
+          <div class="footer-card">
+            <div class="footer-bottom">
+              <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
+            </div>
+          </div>
+        </div>
+      </footer>
+    </div>
+
+    <script src="config.js?v=20260325-2"></script>
+    <script src="app.js?v=20260325-2"></script>
+    <script src="auth.js?v=20260325-2"></script>
+    <script src="admin-family-manager.js?v=20260325-2"></script>
+  </body>
+</html>
