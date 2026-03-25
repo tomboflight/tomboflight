@@ -7,6 +7,20 @@
     return;
   }
 
+  const INTERNAL_ROLE_KEYS = new Set([
+    "admin",
+    "super_admin",
+    "root_admin",
+    "platform_admin",
+    "operations_admin",
+    "finance_admin",
+    "marketing_admin",
+    "executive_technology",
+    "operations",
+    "finance",
+    "marketing",
+  ]);
+
   let allSubmissions = [];
   let currentSubmission = null;
 
@@ -19,16 +33,14 @@
       .replaceAll("'", "&#039;");
   }
 
-  function normalizeStatus(status) {
-    return String(status || "")
+  function normalizeValue(value) {
+    return String(value || "")
       .trim()
       .toLowerCase();
   }
 
-  function normalizeRole(role) {
-    return String(role || "")
-      .trim()
-      .toLowerCase();
+  function normalizeStatus(status) {
+    return normalizeValue(status);
   }
 
   function humanizeStatus(status) {
@@ -85,12 +97,17 @@
   }
 
   function ensureAdminAccess(me) {
-    const role = normalizeRole(me && me.role);
-    if (
-      !["admin", "super_admin", "platform_admin", "operations_admin"].includes(
-        role,
-      )
-    ) {
+    const values = [
+      normalizeValue(me && me.role),
+      normalizeValue(me && me.access_tier),
+      normalizeValue(me && me.department_role),
+    ];
+
+    const hasAccess = values.some(function (value) {
+      return INTERNAL_ROLE_KEYS.has(value);
+    });
+
+    if (!hasAccess) {
       throw new Error("Admin access is required to use this page.");
     }
   }
@@ -131,8 +148,8 @@
       submitted: 0,
       in_review: 0,
       approved: 0,
-      rejected: 0,
       build_ready: 0,
+      rejected: 0,
       in_production: 0,
     };
 
@@ -200,8 +217,12 @@
 
   async function loadQueue() {
     const statusNode = document.querySelector("[data-admin-queue-status]");
+    const actionNode = document.querySelector(
+      "[data-admin-queue-action-status]",
+    );
+
     try {
-      clearStatus(document.querySelector("[data-admin-queue-action-status]"));
+      clearStatus(actionNode);
 
       allSubmissions = await apiRequestWithFallback(
         [
@@ -229,7 +250,7 @@
       }
 
       setStatus(
-        document.querySelector("[data-admin-queue-action-status]"),
+        actionNode,
         error.message || "Unable to load intake submissions.",
         "error",
       );
@@ -238,37 +259,18 @@
 
   function renderReviewBlock(node, title, number, lines) {
     if (!node) return;
+
     node.innerHTML = `
       <div>
         <div class="card-number">${escapeHtml(number)}</div>
         <h3>${escapeHtml(title)}</h3>
-        <p class="card-copy">${lines.map(escapeHtml).join("<br />")}</p>
+        <p class="card-copy">${(lines || []).map(escapeHtml).join("<br />")}</p>
       </div>
     `;
   }
 
-  function ensureProvisionButton() {
-    const form = document.querySelector("[data-admin-review-form]");
-    if (!form) return;
-
-    const actionsRow = form.querySelector(".inline-actions");
-    if (!actionsRow) return;
-
-    if (actionsRow.querySelector("[data-admin-provision-build]")) return;
-
-    const button = document.createElement("button");
-    button.className = "btn btn-primary";
-    button.type = "button";
-    button.setAttribute("data-admin-provision-build", "true");
-    button.textContent = "Provision Build";
-
-    actionsRow.insertBefore(button, actionsRow.lastElementChild);
-  }
-
   function renderDetail(submission) {
     currentSubmission = submission;
-
-    ensureProvisionButton();
 
     const pageStatus = document.querySelector(
       "[data-admin-review-page-status]",
@@ -373,12 +375,14 @@
 
     const form = document.querySelector("[data-admin-review-form]");
     if (form) {
-      form.querySelector('[name="review_notes"]').value =
-        submission.review_notes || "";
-      form.querySelector('[name="approval_notes"]').value =
-        submission.approval_notes || "";
-      form.querySelector('[name="rejection_reason"]').value =
-        submission.rejection_reason || "";
+      const reviewNotes = form.querySelector('[name="review_notes"]');
+      const approvalNotes = form.querySelector('[name="approval_notes"]');
+      const rejectionReason = form.querySelector('[name="rejection_reason"]');
+
+      if (reviewNotes) reviewNotes.value = submission.review_notes || "";
+      if (approvalNotes) approvalNotes.value = submission.approval_notes || "";
+      if (rejectionReason)
+        rejectionReason.value = submission.rejection_reason || "";
     }
   }
 
@@ -407,7 +411,6 @@
       renderDetail(submission);
     } catch (error) {
       console.error("Admin intake detail load failed:", error);
-
       setStatus(
         statusNode,
         error.message || "Unable to load the intake submission.",
@@ -429,18 +432,34 @@
       };
     }
 
+    const reviewNotes =
+      (form.querySelector('[name="review_notes"]') || {}).value || "";
     const approvalNotes =
-      form.querySelector('[name="approval_notes"]').value || "";
+      (form.querySelector('[name="approval_notes"]') || {}).value || "";
+    const rejectionReason =
+      (form.querySelector('[name="rejection_reason"]') || {}).value || "";
 
     return {
-      review_notes: form.querySelector('[name="review_notes"]').value || "",
+      review_notes: reviewNotes,
       approval_notes: approvalNotes,
-      rejection_reason:
-        form.querySelector('[name="rejection_reason"]').value || "",
+      rejection_reason: rejectionReason,
       family_name_override: "",
       project_name_override: "",
       production_notes: approvalNotes,
     };
+  }
+
+  function setReviewButtonsDisabled(disabled) {
+    [
+      "[data-admin-mark-review]",
+      "[data-admin-approve]",
+      "[data-admin-reject]",
+      "[data-admin-provision-build]",
+      "[data-admin-refresh-detail]",
+    ].forEach(function (selector) {
+      const button = document.querySelector(selector);
+      if (button) button.disabled = disabled;
+    });
   }
 
   async function runAdminAction(action) {
@@ -485,7 +504,9 @@
           };
 
     try {
+      setReviewButtonsDisabled(true);
       setStatus(statusNode, "Submitting admin action...", "info");
+
       const result = await app.apiRequest(pathMap[action], {
         method: "POST",
         body: JSON.stringify(requestBody),
@@ -502,6 +523,8 @@
     } catch (error) {
       console.error("Admin action failed:", error);
       setStatus(statusNode, error.message || "Admin action failed.", "error");
+    } finally {
+      setReviewButtonsDisabled(false);
     }
   }
 
@@ -532,6 +555,7 @@
 
       const node = document.querySelector("[data-admin-queue-action-status]");
       setStatus(node, error.message || "Admin access is required.", "error");
+
       const hero = document.querySelector("[data-admin-queue-status]");
       if (hero) {
         hero.textContent = "Admin access could not be confirmed.";
@@ -550,6 +574,9 @@
       const reviewBtn = document.querySelector("[data-admin-mark-review]");
       const approveBtn = document.querySelector("[data-admin-approve]");
       const rejectBtn = document.querySelector("[data-admin-reject]");
+      const provisionBtn = document.querySelector(
+        "[data-admin-provision-build]",
+      );
       const refreshBtn = document.querySelector("[data-admin-refresh-detail]");
 
       if (reviewBtn) {
@@ -570,22 +597,23 @@
         });
       }
 
+      if (provisionBtn) {
+        provisionBtn.addEventListener("click", function () {
+          runAdminAction("provision");
+        });
+      }
+
       if (refreshBtn) {
         refreshBtn.addEventListener("click", function () {
           loadReviewDetail();
         });
       }
-
-      document.addEventListener("click", function (event) {
-        const button = event.target.closest("[data-admin-provision-build]");
-        if (!button) return;
-        runAdminAction("provision");
-      });
     } catch (error) {
       console.error("Admin review page setup failed:", error);
 
       const node = document.querySelector("[data-admin-review-action-status]");
       setStatus(node, error.message || "Admin access is required.", "error");
+
       const hero = document.querySelector("[data-admin-review-page-status]");
       if (hero) {
         hero.textContent = "Admin access could not be confirmed.";

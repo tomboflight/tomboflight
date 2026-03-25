@@ -8,7 +8,7 @@
       name="description"
       content="Admin review detail page for Tomb of Light intake submissions."
     />
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=20260324-6" />
   </head>
   <body>
     <div class="page-wrap">
@@ -17,6 +17,16 @@
           <a class="brand" href="index.html" aria-label="Tomb of Light home">
             <span>Tomb of Light<span class="brand-symbol">™</span></span>
           </a>
+
+          <button
+            class="menu-toggle"
+            type="button"
+            aria-label="Toggle navigation menu"
+            aria-expanded="false"
+            aria-controls="site-nav"
+          >
+            Menu
+          </button>
 
           <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
             <a href="dashboard.html">Dashboard</a>
@@ -151,6 +161,14 @@
                   </button>
 
                   <button
+                    class="btn btn-primary"
+                    type="button"
+                    data-admin-provision-build
+                  >
+                    Provision Build
+                  </button>
+
+                  <button
                     class="btn btn-secondary"
                     type="button"
                     data-admin-refresh-detail
@@ -175,9 +193,9 @@
       </footer>
     </div>
 
-    <script src="config.js?v=20260322-7"></script>
-    <script src="app.js?v=20260322-7"></script>
-    <script src="auth.js?v=20260322-7"></script>
-    <script src="admin-intake.js?v=20260322-7"></script>
+    <script src="config.js?v=20260324-6"></script>
+    <script src="app.js?v=20260324-6"></script>
+    <script src="auth.js?v=20260324-6"></script>
+    <script src="admin-intake.js?v=20260324-6"></script>
   </body>
 </html>
