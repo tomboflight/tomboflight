@@ -6,21 +6,24 @@
     return;
   }
 
-  function normalizeRole(role) {
-    return String(role || "")
+  const INTERNAL_ROLE_KEYS = new Set([
+    "admin",
+    "super_admin",
+    "root_admin",
+    "platform_admin",
+    "operations_admin",
+    "finance_admin",
+    "marketing_admin",
+    "executive_technology",
+    "operations",
+    "finance",
+    "marketing",
+  ]);
+
+  function normalizeValue(value) {
+    return String(value || "")
       .trim()
       .toLowerCase();
-  }
-
-  function isInternalRole(role) {
-    return [
-      "admin",
-      "super_admin",
-      "platform_admin",
-      "operations_admin",
-      "finance_admin",
-      "marketing_admin",
-    ].includes(normalizeRole(role));
   }
 
   function escapeHtml(value) {
@@ -30,6 +33,24 @@
       .replaceAll(">", "&gt;")
       .replaceAll('"', "&quot;")
       .replaceAll("'", "&#039;");
+  }
+
+  function getInternalRoleKey(me) {
+    const role = normalizeValue(me && me.role);
+    const accessTier = normalizeValue(me && me.access_tier);
+    const departmentRole = normalizeValue(me && me.department_role);
+
+    return accessTier || departmentRole || role;
+  }
+
+  function isInternalRole(me) {
+    const role = normalizeValue(me && me.role);
+    const accessTier = normalizeValue(me && me.access_tier);
+    const departmentRole = normalizeValue(me && me.department_role);
+
+    return [role, accessTier, departmentRole].some(function (value) {
+      return INTERNAL_ROLE_KEYS.has(value);
+    });
   }
 
   function card(number, title, copy, href, buttonText) {
@@ -52,27 +73,23 @@
     `;
   }
 
-  function getInternalRoleKey(me) {
-    const accessTier = normalizeRole(me && me.access_tier);
-    const departmentRole = normalizeRole(me && me.department_role);
-    const role = normalizeRole(me && me.role);
-
-    return accessTier || departmentRole || role;
-  }
-
   function getRoleTitle(me) {
     const roleKey = getInternalRoleKey(me);
 
     if (roleKey === "root_admin") return "Company Root Control";
     if (roleKey === "super_admin") return "Executive Control";
-    if (roleKey === "operations_admin" || roleKey === "operations")
+    if (roleKey === "operations_admin" || roleKey === "operations") {
       return "Operations Control";
-    if (roleKey === "finance_admin" || roleKey === "finance")
+    }
+    if (roleKey === "finance_admin" || roleKey === "finance") {
       return "Finance Control";
-    if (roleKey === "marketing_admin" || roleKey === "marketing")
+    }
+    if (roleKey === "marketing_admin" || roleKey === "marketing") {
       return "Marketing Control";
-    if (roleKey === "platform_admin" || roleKey === "executive_technology")
+    }
+    if (roleKey === "platform_admin" || roleKey === "executive_technology") {
       return "Platform Control";
+    }
     return "Internal Control";
   }
 
@@ -138,6 +155,25 @@
       ];
     }
 
+    if (roleKey === "platform_admin" || roleKey === "executive_technology") {
+      return [
+        card(
+          "A",
+          "Intake Queue",
+          "Access internal onboarding review workflow and troubleshoot intake state transitions.",
+          "admin-intake-queue.html",
+          "Open Intake Queue",
+        ),
+        card(
+          "B",
+          "Platform Tools",
+          "Platform health, operational debugging, and system-level workflow support.",
+          "",
+          "",
+        ),
+      ];
+    }
+
     if (roleKey === "finance_admin" || roleKey === "finance") {
       return [
         card(
@@ -176,25 +212,6 @@
       ];
     }
 
-    if (roleKey === "platform_admin" || roleKey === "executive_technology") {
-      return [
-        card(
-          "A",
-          "Intake Queue",
-          "Access internal onboarding review workflow and troubleshoot intake state transitions.",
-          "admin-intake-queue.html",
-          "Open Intake Queue",
-        ),
-        card(
-          "B",
-          "Platform Tools",
-          "Platform health, operational debugging, and system-level workflow support.",
-          "",
-          "",
-        ),
-      ];
-    }
-
     return [];
   }
 
@@ -224,8 +241,7 @@
     if (!anchor) return;
     if (document.querySelector("[data-admin-tools-panel]")) return;
 
-    const role = normalizeRole(me && me.role);
-    if (!isInternalRole(role)) return;
+    if (!isInternalRole(me)) return;
 
     const panel = document.createElement("div");
     panel.className = "form-panel";
@@ -236,7 +252,7 @@
     panel.innerHTML = `
       <span class="eyebrow">${escapeHtml(getRoleTitle(me))}</span>
       <p class="card-copy" style="margin-bottom: 1.25rem;">
-        This internal workspace is reserved for authorized Tomb of Light operational roles and is separate from the public marketing experience.
+        This internal workspace is reserved for authorized Tomb of Light operational roles and is separate from the public customer workspace.
       </p>
       <div class="grid-3">
         ${cards}
@@ -253,7 +269,7 @@
     try {
       const me = await app.apiRequest("/auth/me", { method: "GET" });
 
-      if (isInternalRole(me && me.role)) {
+      if (isInternalRole(me)) {
         hideCustomerPanels();
         updateHeroForInternal();
         injectAdminPanel(me);

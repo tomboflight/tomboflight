@@ -8,7 +8,7 @@
       name="description"
       content="Admin review queue for Tomb of Light intake submissions."
     />
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=20260324-6" />
   </head>
   <body>
     <div class="page-wrap">
@@ -17,6 +17,16 @@
           <a class="brand" href="index.html" aria-label="Tomb of Light home">
             <span>Tomb of Light<span class="brand-symbol">™</span></span>
           </a>
+
+          <button
+            class="menu-toggle"
+            type="button"
+            aria-label="Toggle navigation menu"
+            aria-expanded="false"
+            aria-controls="site-nav"
+          >
+            Menu
+          </button>
 
           <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
             <a href="dashboard.html">Dashboard</a>
@@ -60,7 +70,9 @@
                     <option value="submitted">Submitted</option>
                     <option value="in_review">In Review</option>
                     <option value="approved">Approved</option>
+                    <option value="build_ready">Build Ready</option>
                     <option value="rejected">Rejected</option>
+                    <option value="in_production">In Production</option>
                   </select>
                 </label>
 
@@ -124,9 +136,9 @@
       </footer>
     </div>
 
-    <script src="config.js?v=20260322-7"></script>
-    <script src="app.js?v=20260322-7"></script>
-    <script src="auth.js?v=20260322-7"></script>
-    <script src="admin-intake.js?v=20260322-7"></script>
+    <script src="config.js?v=20260324-6"></script>
+    <script src="app.js?v=20260324-6"></script>
+    <script src="auth.js?v=20260324-6"></script>
+    <script src="admin-intake.js?v=20260324-6"></script>
   </body>
 </html>

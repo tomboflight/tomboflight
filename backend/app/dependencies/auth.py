@@ -8,13 +8,18 @@ from app.services.auth_service import get_user_by_email
 
 COOKIE_NAME = "tol_access_token"
 
-ADMIN_ROLES = {
+INTERNAL_ADMIN_KEYS = {
     "admin",
     "super_admin",
+    "root_admin",
     "platform_admin",
     "operations_admin",
     "finance_admin",
     "marketing_admin",
+    "executive_technology",
+    "operations",
+    "finance",
+    "marketing",
 }
 
 ALLOWED_COOKIE_AUTH_ORIGINS = {
@@ -25,6 +30,10 @@ ALLOWED_COOKIE_AUTH_ORIGINS = {
 }
 
 bearer_scheme = HTTPBearer(auto_error=False)
+
+
+def _normalize_value(value) -> str:
+    return str(value or "").strip().lower()
 
 
 def _normalize_user(user: dict, payload: dict) -> dict:
@@ -43,10 +52,6 @@ def _normalize_user(user: dict, payload: dict) -> dict:
         normalized_user["user_id"] = str(raw_id)
 
     return normalized_user
-
-
-def _normalize_role(role: str | None) -> str:
-    return str(role or "").strip().lower()
 
 
 def _extract_request_origin(request: Request) -> str:
@@ -93,6 +98,15 @@ def _get_token_from_request(
     return None, None
 
 
+def _has_internal_admin_access(user: dict) -> bool:
+    values = {
+        _normalize_value(user.get("role")),
+        _normalize_value(user.get("access_tier")),
+        _normalize_value(user.get("department_role")),
+    }
+    return any(value in INTERNAL_ADMIN_KEYS for value in values if value)
+
+
 def get_current_user(
     request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
@@ -132,7 +146,8 @@ def get_current_user(
 
     normalized_user = _normalize_user(user, payload)
 
-    if normalized_user.get("status") != "active":
+    status_value = _normalize_value(normalized_user.get("status"))
+    if status_value not in {"", "active"}:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User is inactive.",
@@ -142,7 +157,7 @@ def get_current_user(
 
 
 def require_admin(current_user: dict = Depends(get_current_user)) -> dict:
-    if _normalize_role(current_user.get("role")) not in ADMIN_ROLES:
+    if not _has_internal_admin_access(current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required.",
