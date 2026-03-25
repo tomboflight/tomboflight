@@ -1,119 +1,278 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Tomb of Light | Genesis Prototype</title>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tomb of Light | Genesis Prototype</title>
 
-  <!-- Cache-bust styles so updates always show -->
-  <link rel="stylesheet" href="css/style.css?v=20260320-2" />
+    <link rel="stylesheet" href="css/style.css?v=20260325-1" />
 
-  <!-- Add embed-mode ASAP to prevent flicker -->
-  <script>
-    (function () {
-      try {
-        const params = new URLSearchParams(window.location.search);
-        const isEmbedParam = params.get("embed") === "1";
-        const isInIframe = window.self !== window.top;
-        if (isEmbedParam || isInIframe) document.documentElement.classList.add("embed-mode");
-      } catch (e) {
-        // If cross-origin iframe blocks window.top access, treat as embed
-        document.documentElement.classList.add("embed-mode");
+    <script>
+      (function () {
+        try {
+          const params = new URLSearchParams(window.location.search);
+          const isEmbedParam = params.get("embed") === "1";
+          const isPreviewParam = params.get("preview") === "1";
+          const isInIframe = window.self !== window.top;
+
+          if (isEmbedParam || isPreviewParam || isInIframe) {
+            document.documentElement.classList.add("embed-mode");
+          }
+
+          if (isPreviewParam) {
+            document.documentElement.classList.add("preview-mode");
+          }
+        } catch (e) {
+          document.documentElement.classList.add("embed-mode");
+        }
+      })();
+    </script>
+
+    <style>
+      html,
+      body {
+        min-height: 100%;
       }
-    })();
-  </script>
-</head>
 
-<body>
-  <div class="viewer-page">
-    <header class="viewer-header" id="viewerHeader">
-      <div class="viewer-brand-wrap">
-        <a href="../index.html" class="back-link" id="backLink">← Back to Tomb of Light</a>
+      html.embed-mode,
+      html.embed-mode body {
+        height: 100%;
+        overflow: hidden;
+        background: transparent !important;
+      }
 
-        <div class="viewer-brand">
-          Tomb of Light<span class="brand-symbol">™</span>
-        </div>
-      </div>
+      html.embed-mode .viewer-page {
+        min-height: 100vh;
+        padding: 0;
+        background: transparent;
+      }
 
-      <div class="viewer-header-copy">
-        <span class="viewer-kicker">Genesis Prototype</span>
-        <h1>Interactive Family Lineage</h1>
-        <p>
-          Navigate through generations of the Moreland lineage and explore
-          family branches through the Tomb of Light viewer.
-        </p>
+      html.embed-mode .viewer-header,
+      html.embed-mode .viewer-side-panel,
+      html.embed-mode .controls,
+      html.embed-mode .viewer-line,
+      html.embed-mode #backLink,
+      html.embed-mode #viewerInstructions,
+      html.embed-mode #narrationDisplay,
+      html.embed-mode #branchOptions {
+        display: none !important;
+      }
 
-        <p class="viewer-instructions" id="viewerInstructions">
-          Hold <strong>C</strong>, then click <strong>Left Eye</strong> (Parents) or
-          <strong>Right Eye</strong> (Descendants). Use scroll/pinch to zoom. (Full viewer only)
-        </p>
-      </div>
-    </header>
+      html.embed-mode .viewer-main {
+        min-height: 100vh;
+        height: 100vh;
+        display: flex;
+        align-items: stretch;
+        justify-content: center;
+        padding: 18px;
+        margin: 0;
+      }
 
-    <main class="viewer-main">
-      <section class="viewer-stage-panel">
-        <div class="viewer-stage-top">
-          <div>
-            <span class="panel-kicker">Cinematic Viewer</span>
-            <h2 id="viewerTitle">Malik Moreland</h2>
+      html.embed-mode .viewer-stage-panel {
+        width: 100%;
+        max-width: 560px;
+        height: calc(100vh - 36px);
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+        padding: 18px;
+        margin: 0 auto;
+        border-radius: 30px;
+        box-sizing: border-box;
+      }
+
+      html.embed-mode .viewer-stage-top {
+        flex: 0 0 auto;
+        margin-bottom: 14px;
+      }
+
+      html.embed-mode .viewer-stage-top h2 {
+        margin: 0 0 8px;
+        line-height: 1.05;
+      }
+
+      html.embed-mode .viewer-stage-shell {
+        flex: 1 1 auto;
+        min-height: 0;
+        height: auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        border-radius: 28px;
+      }
+
+      html.embed-mode .viewer-stage-glow {
+        opacity: 0.5;
+      }
+
+      html.embed-mode .slideshow {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        border-radius: 24px;
+      }
+
+      html.embed-mode #viewerImage {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        object-position: center center;
+        display: block;
+      }
+
+      html.embed-mode .eye-hint {
+        display: none !important;
+      }
+
+      html.preview-mode .viewer-stage-top {
+        margin-bottom: 12px;
+      }
+
+      html.preview-mode .viewer-status {
+        opacity: 0.92;
+      }
+
+      @media (max-width: 900px) {
+        html.embed-mode .viewer-main {
+          padding: 12px;
+        }
+
+        html.embed-mode .viewer-stage-panel {
+          height: calc(100vh - 24px);
+          padding: 14px;
+        }
+      }
+
+      @media (max-width: 640px) {
+        html.embed-mode .viewer-stage-panel {
+          border-radius: 24px;
+        }
+
+        html.embed-mode .viewer-stage-shell,
+        html.embed-mode .slideshow {
+          border-radius: 20px;
+        }
+
+        html.embed-mode .viewer-stage-top h2 {
+          font-size: clamp(1.6rem, 5vw, 2.2rem);
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="viewer-page">
+      <header class="viewer-header" id="viewerHeader">
+        <div class="viewer-brand-wrap">
+          <a href="../index.html" class="back-link" id="backLink"
+            >← Back to Tomb of Light</a
+          >
+
+          <div class="viewer-brand">
+            Tomb of Light<span class="brand-symbol">™</span>
           </div>
-
-          <div class="viewer-status" id="viewerStatus">Anchor Portrait</div>
         </div>
 
-        <div class="viewer-stage-shell" id="viewerStage">
-          <div class="viewer-stage-glow"></div>
+        <div class="viewer-header-copy">
+          <span class="viewer-kicker">Genesis Prototype</span>
+          <h1>Interactive Family Lineage</h1>
+          <p>
+            Navigate through generations of the Moreland lineage and explore
+            family branches through the Tomb of Light viewer.
+          </p>
 
-          <div class="slideshow" id="slideshow">
-            <img id="viewerImage" src="images/malik.jpg" alt="Malik Moreland" />
-
-            <div class="eye-hint" id="eyeLeft" aria-hidden="true"></div>
-            <div class="eye-hint" id="eyeRight" aria-hidden="true"></div>
-          </div>
-
-          <div id="narrationDisplay" class="narration-text"></div>
-
-          <div class="branch-options" id="branchOptions">
-            <button type="button" onclick="selectBranch('julian')">Julian</button>
-            <button type="button" onclick="selectBranch('malik')">Malik</button>
-            <button type="button" onclick="selectBranch('selah')">Selah</button>
-          </div>
-        </div>
-
-        <div class="viewer-line"></div>
-
-        <div class="controls" id="controls">
-          <button type="button" onclick="zoomOut()">Zoom Out</button>
-          <button type="button" onclick="zoomIn()">Zoom In</button>
-          <button type="button" onclick="resetViewer()">Reset</button>
-          <button type="button" id="narrationToggleBtn" onclick="toggleNarration()">Narration: ON</button>
-        </div>
-      </section>
-
-      <aside class="viewer-side-panel" id="sidePanel">
-        <div class="side-card">
-          <span class="panel-kicker">Current Node</span>
-          <h3 id="currentNode">Malik Moreland</h3>
-          <p id="currentDescription">
-            Starting at the anchor portrait for the Genesis family line.
+          <p class="viewer-instructions" id="viewerInstructions">
+            Hold <strong>C</strong>, then click
+            <strong>Left Eye</strong> (Parents) or
+            <strong>Right Eye</strong> (Descendants). Use scroll/pinch to zoom.
+            (Full viewer only)
           </p>
         </div>
+      </header>
 
-        <div class="side-card">
-          <span class="panel-kicker">Lineage Flow</span>
-          <div class="path-list">
-            <div class="path-item">Malik → Parents</div>
-            <div class="path-item">Malik → Descendants</div>
-            <div class="path-item">Imani → Descendants</div>
-            <div class="path-item">Selah → Descendants</div>
-            <div class="path-item">Julian → Parents</div>
+      <main class="viewer-main">
+        <section class="viewer-stage-panel">
+          <div class="viewer-stage-top">
+            <div>
+              <span class="panel-kicker">Cinematic Viewer</span>
+              <h2 id="viewerTitle">Malik Moreland</h2>
+            </div>
+
+            <div class="viewer-status" id="viewerStatus">Anchor Portrait</div>
           </div>
-        </div>
-      </aside>
-    </main>
-  </div>
 
-  <!-- Cache-bust script too (critical if “C+click” changes weren’t showing) -->
-  <script src="js/script.js?v=20260320-2"></script>
-</body>
+          <div class="viewer-stage-shell" id="viewerStage">
+            <div class="viewer-stage-glow"></div>
+
+            <div class="slideshow" id="slideshow">
+              <img
+                id="viewerImage"
+                src="images/malik.jpg"
+                alt="Malik Moreland"
+              />
+
+              <div class="eye-hint" id="eyeLeft" aria-hidden="true"></div>
+              <div class="eye-hint" id="eyeRight" aria-hidden="true"></div>
+            </div>
+
+            <div id="narrationDisplay" class="narration-text"></div>
+
+            <div class="branch-options" id="branchOptions">
+              <button type="button" onclick="selectBranch('julian')">
+                Julian
+              </button>
+              <button type="button" onclick="selectBranch('malik')">
+                Malik
+              </button>
+              <button type="button" onclick="selectBranch('selah')">
+                Selah
+              </button>
+            </div>
+          </div>
+
+          <div class="viewer-line"></div>
+
+          <div class="controls" id="controls">
+            <button type="button" onclick="zoomOut()">Zoom Out</button>
+            <button type="button" onclick="zoomIn()">Zoom In</button>
+            <button type="button" onclick="resetViewer()">Reset</button>
+            <button
+              type="button"
+              id="narrationToggleBtn"
+              onclick="toggleNarration()"
+            >
+              Narration: ON
+            </button>
+          </div>
+        </section>
+
+        <aside class="viewer-side-panel" id="sidePanel">
+          <div class="side-card">
+            <span class="panel-kicker">Current Node</span>
+            <h3 id="currentNode">Malik Moreland</h3>
+            <p id="currentDescription">
+              Starting at the anchor portrait for the Genesis family line.
+            </p>
+          </div>
+
+          <div class="side-card">
+            <span class="panel-kicker">Lineage Flow</span>
+            <div class="path-list">
+              <div class="path-item">Malik → Parents</div>
+              <div class="path-item">Malik → Descendants</div>
+              <div class="path-item">Imani → Descendants</div>
+              <div class="path-item">Selah → Descendants</div>
+              <div class="path-item">Julian → Parents</div>
+            </div>
+          </div>
+        </aside>
+      </main>
+    </div>
+
+    <script src="js/script.js?v=20260325-1"></script>
+  </body>
 </html>
