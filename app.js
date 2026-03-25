@@ -9,7 +9,6 @@
   const TOKEN_KEY = "tol_access_token";
   const USER_KEY = "tol_user";
   const COOKIE_CHOICE_KEY = "tol_cookie_choice";
-  const COOKIE_SESSION_MARKER = "__cookie_session__";
 
   function isLocalApp() {
     return LOCAL_HOSTS.has(window.location.hostname);
@@ -34,14 +33,9 @@
     return (window.TOL_CONFIG && window.TOL_CONFIG.PAYMENT_LINKS) || {};
   }
 
-  function isCookieSessionMarker(value) {
-    return value === COOKIE_SESSION_MARKER;
-  }
-
   function saveToken(token) {
     if (typeof token === "string" && token.trim()) {
-      // Store only a non-sensitive session marker for the frontend.
-      localStorage.setItem(TOKEN_KEY, COOKIE_SESSION_MARKER);
+      localStorage.setItem(TOKEN_KEY, token);
     }
   }
 
@@ -99,7 +93,7 @@
       headers["Content-Type"] = "application/json";
     }
 
-    if (token && !isCookieSessionMarker(token)) {
+    if (token) {
       headers.Authorization = `Bearer ${token}`;
     }
 
