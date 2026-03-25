@@ -107,15 +107,15 @@
         ),
         card(
           "B",
-          "Operations Pipeline",
-          "Track approved submissions, build readiness, verification flow, and delivery progression.",
-          "",
-          "",
+          "Family Manager",
+          "Load provisioned family roots, add members, and create lineage relationships without Mongo or Swagger.",
+          "admin-family-manager.html",
+          "Open Family Manager",
         ),
         card(
           "C",
-          "Finance Oversight",
-          "View package, payment, and operational finance checkpoints in the internal workspace.",
+          "Operations Pipeline",
+          "Track approved submissions, build readiness, verification flow, and delivery progression.",
           "",
           "",
         ),
@@ -147,10 +147,10 @@
         ),
         card(
           "B",
-          "Operations Review",
-          "Prepare approved submissions for family build, relationship setup, and delivery workflow.",
-          "",
-          "",
+          "Family Manager",
+          "Prepare provisioned family builds by adding members and wiring relationships in the live platform.",
+          "admin-family-manager.html",
+          "Open Family Manager",
         ),
       ];
     }
@@ -166,6 +166,13 @@
         ),
         card(
           "B",
+          "Family Manager",
+          "Operate the live family build layer by loading provisioned families and managing lineage records.",
+          "admin-family-manager.html",
+          "Open Family Manager",
+        ),
+        card(
+          "C",
           "Platform Tools",
           "Platform health, operational debugging, and system-level workflow support.",
           "",
