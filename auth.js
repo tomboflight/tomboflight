@@ -139,6 +139,17 @@
     }
   }
 
+  async function fetchCurrentUserWithToken(token) {
+    const user = await app.apiRequest("/auth/me", {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    app.saveUser(user);
+    return user;
+  }
+
   async function handleLogin(email, password) {
     const loginData = await app.apiRequest("/auth/login", {
       method: "POST",
@@ -151,10 +162,9 @@
       throw new Error("Login succeeded but no access token was returned.");
     }
 
-    // This no longer stores the raw JWT. It stores only a session marker.
     app.saveToken(token);
 
-    const me = await app.fetchCurrentUser();
+    const me = await fetchCurrentUserWithToken(token);
     app.saveUser(me);
 
     return { loginData, me };
@@ -291,18 +301,22 @@
       "[data-intake-history-list]",
     );
 
-    if (intakeStatus)
+    if (intakeStatus) {
       intakeStatus.textContent = "Purchase required before intake opens.";
+    }
     if (currentPackage) currentPackage.textContent = "No package detected";
     if (submissionStatus) submissionStatus.textContent = "Not submitted";
     if (submissionId) submissionId.textContent = "—";
     if (submittedAt) submittedAt.textContent = "—";
-    if (nextStep)
+    if (nextStep) {
       nextStep.textContent = "Purchase a package first to unlock intake.";
-    if (lockNote)
+    }
+    if (lockNote) {
       lockNote.textContent = "Intake is locked until a paid order exists.";
-    if (intakeHistoryStatus)
+    }
+    if (intakeHistoryStatus) {
       intakeHistoryStatus.textContent = "No intake submissions found yet.";
+    }
     if (intakeHistoryList) intakeHistoryList.innerHTML = "";
   }
 
@@ -326,20 +340,24 @@
     );
 
     if (!latest) {
-      if (intakeStatus)
+      if (intakeStatus) {
         intakeStatus.textContent = "No intake submission found yet.";
-      if (currentPackage)
+      }
+      if (currentPackage) {
         currentPackage.textContent =
           paidOrder?.package_name || "Paid package detected";
+      }
       if (submissionStatus) submissionStatus.textContent = "Not submitted";
       if (submissionId) submissionId.textContent = "—";
       if (submittedAt) submittedAt.textContent = "—";
-      if (nextStep)
+      if (nextStep) {
         nextStep.textContent =
           "Open your intake flow and submit the review step.";
-      if (lockNote)
+      }
+      if (lockNote) {
         lockNote.textContent =
           "Editing is open because no final submission exists yet.";
+      }
     } else {
       const latestStatus =
         latest.status || latest.submission_status || "submitted";
@@ -347,29 +365,35 @@
         String(latestStatus).toLowerCase() === "submitted" ||
         String(latestStatus).toLowerCase() === "final";
 
-      if (intakeStatus)
+      if (intakeStatus) {
         intakeStatus.textContent =
           "Your most recent intake submission is shown below.";
-      if (currentPackage)
+      }
+      if (currentPackage) {
         currentPackage.textContent =
           latest.package_name ||
           paidOrder?.package_name ||
           "Paid package detected";
+      }
       if (submissionStatus) submissionStatus.textContent = latestStatus;
-      if (submissionId)
+      if (submissionId) {
         submissionId.textContent = latest.id || latest._id || "—";
-      if (submittedAt)
+      }
+      if (submittedAt) {
         submittedAt.textContent = formatDate(
           latest.submitted_at || latest.created_at,
         );
-      if (nextStep)
+      }
+      if (nextStep) {
         nextStep.textContent = locked
           ? "Your submission is on file for review."
           : "Continue and finalize your intake.";
-      if (lockNote)
+      }
+      if (lockNote) {
         lockNote.textContent = locked
           ? "Editing is locked after final submission."
           : "Editing is still open until final submission.";
+      }
     }
 
     if (!intakeHistoryStatus || !intakeHistoryList) return;
@@ -769,11 +793,15 @@
     document.querySelectorAll("[data-logout-btn]").forEach(function (button) {
       button.addEventListener("click", async function () {
         try {
-          await app.logoutUser();
+          if (app.logoutUser) {
+            await app.logoutUser();
+          } else {
+            app.clearSession();
+          }
         } catch (error) {
-          console.error("Logout request failed:", error);
           app.clearSession();
         }
+
         window.location.href = "signin.html";
       });
     });
