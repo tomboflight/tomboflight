@@ -8,6 +8,20 @@ from app.dependencies.auth import get_current_user
 
 router = APIRouter(prefix="/families", tags=["Family Graph"])
 
+INTERNAL_ADMIN_KEYS = {
+    "admin",
+    "super_admin",
+    "root_admin",
+    "platform_admin",
+    "operations_admin",
+    "finance_admin",
+    "marketing_admin",
+    "executive_technology",
+    "operations",
+    "finance",
+    "marketing",
+}
+
 
 def _current_user_id(user: dict[str, Any]) -> str:
     raw_id = user.get("id") or user.get("_id") or user.get("user_id")
@@ -34,8 +48,17 @@ def _current_user_display_name(user: dict[str, Any]) -> str:
     return str(raw_name).strip()
 
 
+def _normalize_value(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
 def _is_admin(user: dict[str, Any]) -> bool:
-    return str(user.get("role", "")).strip().lower() == "admin"
+    values = {
+        _normalize_value(user.get("role")),
+        _normalize_value(user.get("access_tier")),
+        _normalize_value(user.get("department_role")),
+    }
+    return any(value in INTERNAL_ADMIN_KEYS for value in values if value)
 
 
 def _family_is_visible_to_user(
@@ -70,8 +93,7 @@ def _family_is_visible_to_user(
     if current_user_email in shared_with_emails:
         return True
 
-    # Temporary backward-compatible fallback for older family records
-    # that were created before owner metadata was added.
+    # Backward-compatible fallback for older family records
     if not owner_user_id and not owner_email:
         created_by = str(family.get("created_by") or "").strip()
         if created_by and (
@@ -118,13 +140,17 @@ def get_family_graph(
 
     members = []
     for member in members_cursor:
+        first_name = member.get("first_name")
+        last_name = member.get("last_name")
+        display_name = f"{first_name or ''} {last_name or ''}".strip()
+
         members.append(
             {
                 "id": str(member.get("_id")),
                 "family_id": member.get("family_id"),
-                "first_name": member.get("first_name"),
-                "last_name": member.get("last_name"),
-                "display_name": f"{member.get('first_name', '')} {member.get('last_name', '')}".strip(),
+                "first_name": first_name,
+                "last_name": last_name,
+                "display_name": display_name,
                 "birth_year": member.get("birth_year"),
                 "generation": member.get("generation"),
                 "father_id": member.get("father_id"),
@@ -132,6 +158,15 @@ def get_family_graph(
                 "spouse_id": member.get("spouse_id"),
                 "bio": member.get("bio"),
                 "created_at": member.get("created_at"),
+                "updated_at": member.get("updated_at"),
+                "created_by": member.get("created_by"),
+                "updated_by": member.get("updated_by"),
+                "is_verified": bool(member.get("is_verified", False)),
+                "verification_status": member.get("verification_status"),
+                "verification_method": member.get("verification_method"),
+                "verified_by": member.get("verified_by"),
+                "verified_at": member.get("verified_at"),
+                "verification_notes": member.get("verification_notes"),
             }
         )
 
@@ -156,12 +191,17 @@ def get_family_graph(
         if isinstance(member.get("generation"), int)
     ]
 
+    verified_member_count = sum(
+        1 for member in members if member.get("is_verified") is True
+    )
+
     summary = {
         "family_id": str(family.get("_id")),
         "family_name": family.get("family_name"),
         "member_count": len(members),
         "relationship_count": len(relationships),
         "generation_count": (max(generation_values) + 1) if generation_values else 0,
+        "verified_member_count": verified_member_count,
     }
 
     return {
