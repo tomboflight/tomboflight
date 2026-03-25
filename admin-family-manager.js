@@ -146,6 +146,75 @@
     });
   }
 
+  function parseEvidenceFiles(value) {
+    return String(value || "")
+      .split(/[\n,]+/)
+      .map(function (item) {
+        return item.trim();
+      })
+      .filter(Boolean);
+  }
+
+  function getVerificationPayload(member, actionType) {
+    const displayName = getDisplayName(member);
+
+    const defaultType =
+      actionType === "verify"
+        ? member.verification_method || "birth_certificate"
+        : member.verification_method || "admin_review";
+
+    const verificationType = window.prompt(
+      `Verification type for ${displayName}?`,
+      defaultType,
+    );
+    if (verificationType === null) return null;
+
+    const verificationMethod = window.prompt(
+      `Verification method for ${displayName}?`,
+      member.verification_method || "admin_review",
+    );
+    if (verificationMethod === null) return null;
+
+    const reviewNotes = window.prompt(
+      `Internal review notes for ${displayName}?`,
+      member.verification_notes || "",
+    );
+    if (reviewNotes === null) return null;
+
+    const evidenceSummary = window.prompt(
+      `Evidence summary for ${displayName}?`,
+      "",
+    );
+    if (evidenceSummary === null) return null;
+
+    const evidenceFilesRaw = window.prompt(
+      `Evidence file references for ${displayName}? (comma separated or line separated)`,
+      "",
+    );
+    if (evidenceFilesRaw === null) return null;
+
+    return {
+      verification_type: String(verificationType || "").trim(),
+      verification_method: String(verificationMethod || "").trim(),
+      review_notes: String(reviewNotes || "").trim(),
+      evidence_summary: String(evidenceSummary || "").trim(),
+      evidence_files: parseEvidenceFiles(evidenceFilesRaw),
+    };
+  }
+
+  function getClearVerificationPayload(member) {
+    const displayName = getDisplayName(member);
+    const reviewNotes = window.prompt(
+      `Reason for clearing verification on ${displayName}?`,
+      member.verification_notes || "",
+    );
+    if (reviewNotes === null) return null;
+
+    return {
+      review_notes: String(reviewNotes || "").trim(),
+    };
+  }
+
   function renderFamilyBuildOptions() {
     const selectNode = document.querySelector("[data-admin-family-select]");
     if (!selectNode) return;
@@ -243,9 +312,48 @@
             <p class="card-copy"><strong>Generation:</strong> ${escapeHtml(member.generation ?? "—")}</p>
             <p class="card-copy"><strong>Birth Year:</strong> ${escapeHtml(member.birth_year ?? "—")}</p>
             <p class="card-copy"><strong>Verified:</strong> ${verified ? "Yes" : "No"}</p>
+            <p class="card-copy"><strong>Verification Status:</strong> ${escapeHtml(member.verification_status || "unverified")}</p>
+            <p class="card-copy"><strong>Verification Method:</strong> ${escapeHtml(member.verification_method || "—")}</p>
+            <p class="card-copy"><strong>Verified By:</strong> ${escapeHtml(member.verified_by || "—")}</p>
+            <p class="card-copy"><strong>Verified At:</strong> ${escapeHtml(formatDate(member.verified_at))}</p>
             <p class="card-copy"><strong>Member ID:</strong> ${escapeHtml(member.id || "—")}</p>
             <p class="card-copy"><strong>Bio:</strong> ${escapeHtml(member.bio || "—")}</p>
-            <div class="inline-actions" style="margin-top: 1rem;">
+
+            <div class="inline-actions" style="margin-top: 1rem">
+              <button
+                class="btn btn-primary"
+                type="button"
+                data-verify-member-id="${escapeHtml(member.id || "")}"
+              >
+                Verify
+              </button>
+
+              <button
+                class="btn btn-secondary"
+                type="button"
+                data-pending-member-id="${escapeHtml(member.id || "")}"
+              >
+                Mark Pending
+              </button>
+
+              <button
+                class="btn btn-secondary"
+                type="button"
+                data-reject-member-id="${escapeHtml(member.id || "")}"
+              >
+                Reject
+              </button>
+
+              <button
+                class="btn btn-secondary"
+                type="button"
+                data-clear-verification-member-id="${escapeHtml(member.id || "")}"
+              >
+                Clear Verification
+              </button>
+            </div>
+
+            <div class="inline-actions" style="margin-top: 1rem">
               <button
                 class="btn btn-secondary"
                 type="button"
@@ -625,6 +733,85 @@
     }
   }
 
+  async function runVerificationAction(memberId, actionType) {
+    const actionNode = document.querySelector(
+      "[data-admin-family-action-status]",
+    );
+
+    const member = (currentGraph.members || []).find(function (item) {
+      return String(item.id) === String(memberId);
+    });
+
+    if (!member) {
+      setStatus(actionNode, "Unable to locate selected member.", "error");
+      return;
+    }
+
+    const displayName = getDisplayName(member);
+
+    let path = "";
+    let payload = null;
+
+    if (actionType === "verify") {
+      payload = getVerificationPayload(member, actionType);
+      if (!payload) return;
+      path = `/verification-records/member/${encodeURIComponent(memberId)}/verify`;
+    } else if (actionType === "pending") {
+      payload = getVerificationPayload(member, actionType);
+      if (!payload) return;
+      path = `/verification-records/member/${encodeURIComponent(memberId)}/pending`;
+    } else if (actionType === "reject") {
+      payload = getVerificationPayload(member, actionType);
+      if (!payload) return;
+      path = `/verification-records/member/${encodeURIComponent(memberId)}/reject`;
+    } else if (actionType === "clear") {
+      payload = getClearVerificationPayload(member);
+      if (!payload) return;
+      path = `/verification-records/member/${encodeURIComponent(memberId)}/clear`;
+    } else {
+      setStatus(actionNode, "Unsupported verification action.", "error");
+      return;
+    }
+
+    try {
+      const actionLabel =
+        actionType === "verify"
+          ? "Verifying member..."
+          : actionType === "pending"
+            ? "Marking member pending..."
+            : actionType === "reject"
+              ? "Rejecting verification..."
+              : "Clearing verification...";
+
+      setStatus(actionNode, actionLabel, "info");
+
+      await app.apiRequest(path, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+
+      await loadFamilyGraph();
+
+      const doneLabel =
+        actionType === "verify"
+          ? `${displayName} verified successfully.`
+          : actionType === "pending"
+            ? `${displayName} marked pending verification.`
+            : actionType === "reject"
+              ? `${displayName} verification rejected.`
+              : `${displayName} verification cleared.`;
+
+      setStatus(actionNode, doneLabel, "success");
+    } catch (error) {
+      console.error("Verification action failed:", error);
+      setStatus(
+        actionNode,
+        error.message || "Unable to update verification state.",
+        "error",
+      );
+    }
+  }
+
   async function setupAdminFamilyManagerPage() {
     const page = document.querySelector("[data-admin-family-manager-page]");
     if (!page) return;
@@ -669,6 +856,44 @@
           deleteMember(
             memberButton.getAttribute("data-delete-member-id"),
             memberButton.getAttribute("data-delete-member-name"),
+          );
+          return;
+        }
+
+        const verifyButton = event.target.closest("[data-verify-member-id]");
+        if (verifyButton) {
+          runVerificationAction(
+            verifyButton.getAttribute("data-verify-member-id"),
+            "verify",
+          );
+          return;
+        }
+
+        const pendingButton = event.target.closest("[data-pending-member-id]");
+        if (pendingButton) {
+          runVerificationAction(
+            pendingButton.getAttribute("data-pending-member-id"),
+            "pending",
+          );
+          return;
+        }
+
+        const rejectButton = event.target.closest("[data-reject-member-id]");
+        if (rejectButton) {
+          runVerificationAction(
+            rejectButton.getAttribute("data-reject-member-id"),
+            "reject",
+          );
+          return;
+        }
+
+        const clearButton = event.target.closest(
+          "[data-clear-verification-member-id]",
+        );
+        if (clearButton) {
+          runVerificationAction(
+            clearButton.getAttribute("data-clear-verification-member-id"),
+            "clear",
           );
         }
       });
