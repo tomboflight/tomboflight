@@ -159,6 +159,8 @@ a {
   z-index: 1;
 }
 
+/* Header */
+
 .site-header {
   position: sticky;
   top: 0;
@@ -173,7 +175,8 @@ a {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
+  gap: 18px;
+  flex-wrap: nowrap;
 }
 
 .brand {
@@ -184,6 +187,7 @@ a {
   font-weight: 800;
   letter-spacing: -0.045em;
   white-space: nowrap;
+  flex: 0 0 auto;
 }
 
 .brand:focus {
@@ -200,16 +204,21 @@ a {
 .site-nav {
   display: flex;
   align-items: center;
-  gap: 30px;
+  justify-content: center;
+  gap: 24px;
+  flex: 1 1 auto;
+  min-width: 0;
   margin-left: auto;
 }
 
 .site-nav a {
   color: var(--muted);
-  font-weight: 600;
-  transition: color var(--transition);
+  font-weight: 700;
+  letter-spacing: -0.01em;
   position: relative;
   text-decoration: none;
+  white-space: nowrap;
+  transition: color var(--transition);
 }
 
 .site-nav a:hover,
@@ -227,6 +236,7 @@ a {
   display: flex;
   align-items: center;
   gap: 14px;
+  flex: 0 0 auto;
   flex-wrap: wrap;
 }
 
@@ -239,7 +249,7 @@ a {
   border-radius: 14px;
   padding: 10px 14px;
   cursor: pointer;
-  font-weight: 600;
+  font-weight: 700;
   transition: all var(--transition);
 }
 
@@ -257,6 +267,8 @@ a {
   background: rgba(255, 255, 255, 0.1);
   border-color: var(--border);
 }
+
+/* Buttons */
 
 .btn {
   display: inline-flex;
@@ -338,6 +350,8 @@ a {
   outline-offset: 2px;
   border-radius: 4px;
 }
+
+/* Hero / shared sections */
 
 .hero {
   padding: 48px 0 28px;
