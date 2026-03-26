@@ -424,23 +424,115 @@
       .join("");
   }
 
-  function populateRelationshipMemberSelects(graph) {
-    const sourceSelect = document.querySelector("[data-admin-source-member]");
-    const targetSelect = document.querySelector("[data-admin-target-member]");
-    if (!sourceSelect || !targetSelect) return;
-
-    const members = sortMembers(
-      Array.isArray(graph.members) ? graph.members : [],
+  function renderMemberUploads(records) {
+    const listNode = document.querySelector("[data-admin-member-uploads-list]");
+    const emptyNode = document.querySelector(
+      "[data-admin-member-uploads-empty]",
     );
+    if (!listNode) return;
 
-    const options = members
+    if (!Array.isArray(records) || !records.length) {
+      listNode.innerHTML = "";
+      if (emptyNode) emptyNode.style.display = "block";
+      return;
+    }
+
+    if (emptyNode) emptyNode.style.display = "none";
+
+    listNode.innerHTML = records
+      .map(function (upload, index) {
+        return `
+          <div class="family-record-card">
+            <div class="card-number">${index + 1}</div>
+            <h3>${escapeHtml(upload.original_filename || "Uploaded File")}</h3>
+            <p class="card-copy"><strong>Category:</strong> ${escapeHtml(upload.category || "—")}</p>
+            <p class="card-copy"><strong>Verification Type:</strong> ${escapeHtml(upload.verification_type || "—")}</p>
+            <p class="card-copy"><strong>Evidence Kind:</strong> ${escapeHtml(upload.evidence_kind || "—")}</p>
+            <p class="card-copy"><strong>Content Type:</strong> ${escapeHtml(upload.content_type || "—")}</p>
+            <p class="card-copy"><strong>Size:</strong> ${escapeHtml(upload.size_bytes ?? "—")}</p>
+            <p class="card-copy"><strong>Uploaded By:</strong> ${escapeHtml(upload.uploaded_by || "—")}</p>
+            <p class="card-copy"><strong>Created:</strong> ${escapeHtml(formatDate(upload.created_at))}</p>
+            <p class="card-copy"><strong>Upload ID:</strong> ${escapeHtml(upload.id || "—")}</p>
+
+            <div class="inline-actions" style="margin-top: 1rem">
+              <button
+                class="btn btn-secondary"
+                type="button"
+                data-download-upload-id="${escapeHtml(upload.id || "")}"
+                data-download-upload-name="${escapeHtml(upload.original_filename || "download")}"
+              >
+                Download
+              </button>
+
+              <button
+                class="btn btn-secondary"
+                type="button"
+                data-delete-upload-id="${escapeHtml(upload.id || "")}"
+              >
+                Delete Upload
+              </button>
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+  }
+
+  function setSelectOptions(selectNode, members, placeholder) {
+    if (!selectNode) return;
+
+    const currentValue = String(selectNode.value || "").trim();
+    const options = sortMembers(members || [])
       .map(function (member) {
         return `<option value="${escapeHtml(member.id)}">${escapeHtml(getDisplayName(member))} — Gen ${escapeHtml(member.generation ?? "—")}</option>`;
       })
       .join("");
 
-    sourceSelect.innerHTML = `<option value="">Select source member</option>${options}`;
-    targetSelect.innerHTML = `<option value="">Select target member</option>${options}`;
+    selectNode.innerHTML = `<option value="">${escapeHtml(placeholder)}</option>${options}`;
+
+    if (
+      currentValue &&
+      (members || []).some(function (member) {
+        return String(member.id) === currentValue;
+      })
+    ) {
+      selectNode.value = currentValue;
+    }
+  }
+
+  function populateRelationshipMemberSelects(graph) {
+    const members = Array.isArray(graph.members) ? graph.members : [];
+
+    setSelectOptions(
+      document.querySelector("[data-admin-source-member]"),
+      members,
+      "Select source member",
+    );
+    setSelectOptions(
+      document.querySelector("[data-admin-target-member]"),
+      members,
+      "Select target member",
+    );
+  }
+
+  function populateUploadMemberSelects(graph) {
+    const members = Array.isArray(graph.members) ? graph.members : [];
+
+    setSelectOptions(
+      document.querySelector("[data-admin-photo-member]"),
+      members,
+      "Select member",
+    );
+    setSelectOptions(
+      document.querySelector("[data-admin-evidence-member]"),
+      members,
+      "Select member",
+    );
+    setSelectOptions(
+      document.querySelector("[data-admin-uploads-member]"),
+      members,
+      "Select member",
+    );
   }
 
   async function loadFamilyBuildOptions() {
@@ -524,6 +616,7 @@
       renderMembers(currentGraph);
       renderRelationships(currentGraph);
       populateRelationshipMemberSelects(currentGraph);
+      populateUploadMemberSelects(currentGraph);
 
       if (statusNode) {
         statusNode.textContent = `Family build ${familyId} loaded successfully.`;
@@ -535,6 +628,47 @@
       setStatus(
         actionNode,
         error.message || "Unable to load family graph.",
+        "error",
+      );
+    }
+  }
+
+  async function loadMemberUploads() {
+    const actionNode = document.querySelector(
+      "[data-admin-family-action-status]",
+    );
+    const memberSelect = document.querySelector("[data-admin-uploads-member]");
+    const categorySelect = document.querySelector(
+      "[data-admin-upload-category-filter]",
+    );
+
+    const memberId = String(memberSelect ? memberSelect.value : "").trim();
+    const category = String(categorySelect ? categorySelect.value : "").trim();
+
+    if (!memberId) {
+      setStatus(actionNode, "Select a member before loading uploads.", "error");
+      return;
+    }
+
+    try {
+      setStatus(actionNode, "Loading member uploads...", "info");
+
+      const query = category ? `?category=${encodeURIComponent(category)}` : "";
+
+      const payload = await app.apiRequest(
+        `/uploads/member/${encodeURIComponent(memberId)}${query}`,
+        { method: "GET" },
+      );
+
+      renderMemberUploads(
+        Array.isArray(payload.uploads) ? payload.uploads : [],
+      );
+      setStatus(actionNode, "Member uploads loaded successfully.", "success");
+    } catch (error) {
+      console.error("Load member uploads failed:", error);
+      setStatus(
+        actionNode,
+        error.message || "Unable to load member uploads.",
         "error",
       );
     }
@@ -662,6 +796,117 @@
     }
   }
 
+  async function handleUploadMemberPhoto(event) {
+    event.preventDefault();
+
+    const form = event.currentTarget;
+    const actionNode = document.querySelector(
+      "[data-admin-family-action-status]",
+    );
+
+    if (!currentFamilyId) {
+      setStatus(actionNode, "Load a family before uploading a photo.", "error");
+      return;
+    }
+
+    const memberId = String(form.member_id.value || "").trim();
+    const fileInput = form.querySelector('input[name="photo_file"]');
+    const file = fileInput && fileInput.files ? fileInput.files[0] : null;
+
+    if (!memberId || !file) {
+      setStatus(actionNode, "Member and photo file are required.", "error");
+      return;
+    }
+
+    const body = new FormData();
+    body.append("family_id", currentFamilyId);
+    body.append("member_id", memberId);
+    body.append("file", file);
+
+    try {
+      setStatus(actionNode, "Uploading member photo...", "info");
+
+      await app.apiRequest("/uploads/member-photo", {
+        method: "POST",
+        body,
+      });
+
+      form.reset();
+      await loadFamilyGraph();
+      setStatus(actionNode, "Member photo uploaded successfully.", "success");
+    } catch (error) {
+      console.error("Member photo upload failed:", error);
+      setStatus(
+        actionNode,
+        error.message || "Unable to upload member photo.",
+        "error",
+      );
+    }
+  }
+
+  async function handleUploadVerificationEvidence(event) {
+    event.preventDefault();
+
+    const form = event.currentTarget;
+    const actionNode = document.querySelector(
+      "[data-admin-family-action-status]",
+    );
+
+    if (!currentFamilyId) {
+      setStatus(
+        actionNode,
+        "Load a family before uploading verification evidence.",
+        "error",
+      );
+      return;
+    }
+
+    const memberId = String(form.member_id.value || "").trim();
+    const verificationType = String(form.verification_type.value || "").trim();
+    const evidenceKind = String(form.evidence_kind.value || "").trim();
+    const fileInput = form.querySelector('input[name="evidence_file"]');
+    const file = fileInput && fileInput.files ? fileInput.files[0] : null;
+
+    if (!memberId || !verificationType || !evidenceKind || !file) {
+      setStatus(
+        actionNode,
+        "Member, verification type, evidence kind, and file are required.",
+        "error",
+      );
+      return;
+    }
+
+    const body = new FormData();
+    body.append("family_id", currentFamilyId);
+    body.append("member_id", memberId);
+    body.append("verification_type", verificationType);
+    body.append("evidence_kind", evidenceKind);
+    body.append("file", file);
+
+    try {
+      setStatus(actionNode, "Uploading verification evidence...", "info");
+
+      await app.apiRequest("/uploads/verification-evidence", {
+        method: "POST",
+        body,
+      });
+
+      form.reset();
+      setStatus(
+        actionNode,
+        "Verification evidence uploaded successfully.",
+        "success",
+      );
+    } catch (error) {
+      console.error("Verification evidence upload failed:", error);
+      setStatus(
+        actionNode,
+        error.message || "Unable to upload verification evidence.",
+        "error",
+      );
+    }
+  }
+
   async function deleteRelationship(relationshipId) {
     const actionNode = document.querySelector(
       "[data-admin-family-action-status]",
@@ -728,6 +973,92 @@
       setStatus(
         actionNode,
         error.message || "Unable to delete family member.",
+        "error",
+      );
+    }
+  }
+
+  async function downloadUpload(uploadId, originalFilename) {
+    const actionNode = document.querySelector(
+      "[data-admin-family-action-status]",
+    );
+
+    if (!uploadId) {
+      setStatus(actionNode, "Missing upload id.", "error");
+      return;
+    }
+
+    try {
+      setStatus(actionNode, "Downloading file...", "info");
+
+      const token = app.getToken ? app.getToken() : "";
+      const apiBaseUrl =
+        typeof app.getApiBaseUrl === "function" ? app.getApiBaseUrl() : "";
+
+      const response = await fetch(
+        `${apiBaseUrl}/uploads/${encodeURIComponent(uploadId)}/download`,
+        {
+          method: "GET",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        },
+      );
+
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || "Unable to download upload.");
+      }
+
+      const blob = await response.blob();
+      const objectUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = originalFilename || "download";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(objectUrl);
+
+      setStatus(actionNode, "Download started.", "success");
+    } catch (error) {
+      console.error("Download upload failed:", error);
+      setStatus(
+        actionNode,
+        error.message || "Unable to download upload.",
+        "error",
+      );
+    }
+  }
+
+  async function deleteUpload(uploadId) {
+    const actionNode = document.querySelector(
+      "[data-admin-family-action-status]",
+    );
+
+    if (!uploadId) {
+      setStatus(actionNode, "Missing upload id.", "error");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Delete this uploaded file? This action cannot be undone.",
+    );
+    if (!confirmed) return;
+
+    try {
+      setStatus(actionNode, "Deleting upload...", "info");
+
+      await app.apiRequest(`/uploads/${encodeURIComponent(uploadId)}`, {
+        method: "DELETE",
+      });
+
+      await loadMemberUploads();
+      await loadFamilyGraph();
+      setStatus(actionNode, "Upload deleted successfully.", "success");
+    } catch (error) {
+      console.error("Delete upload failed:", error);
+      setStatus(
+        actionNode,
+        error.message || "Unable to delete upload.",
         "error",
       );
     }
@@ -825,6 +1156,11 @@
       const relationshipForm = document.querySelector(
         "[data-admin-relationship-form]",
       );
+      const photoForm = document.querySelector("[data-admin-photo-form]");
+      const evidenceForm = document.querySelector("[data-admin-evidence-form]");
+      const loadUploadsButton = document.querySelector(
+        "[data-admin-load-member-uploads]",
+      );
 
       if (loadButton) {
         loadButton.addEventListener("click", function () {
@@ -838,6 +1174,23 @@
 
       if (relationshipForm) {
         relationshipForm.addEventListener("submit", handleCreateRelationship);
+      }
+
+      if (photoForm) {
+        photoForm.addEventListener("submit", handleUploadMemberPhoto);
+      }
+
+      if (evidenceForm) {
+        evidenceForm.addEventListener(
+          "submit",
+          handleUploadVerificationEvidence,
+        );
+      }
+
+      if (loadUploadsButton) {
+        loadUploadsButton.addEventListener("click", function () {
+          loadMemberUploads();
+        });
       }
 
       document.addEventListener("click", function (event) {
@@ -894,6 +1247,27 @@
           runVerificationAction(
             clearButton.getAttribute("data-clear-verification-member-id"),
             "clear",
+          );
+          return;
+        }
+
+        const downloadButton = event.target.closest(
+          "[data-download-upload-id]",
+        );
+        if (downloadButton) {
+          downloadUpload(
+            downloadButton.getAttribute("data-download-upload-id"),
+            downloadButton.getAttribute("data-download-upload-name"),
+          );
+          return;
+        }
+
+        const deleteUploadButton = event.target.closest(
+          "[data-delete-upload-id]",
+        );
+        if (deleteUploadButton) {
+          deleteUpload(
+            deleteUploadButton.getAttribute("data-delete-upload-id"),
           );
         }
       });
