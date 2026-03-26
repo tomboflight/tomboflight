@@ -4,6 +4,7 @@
   const app = window.TOLApp || window.TOLAuth;
   const DRAFT_KEY = "tol_intake_draft_v1";
   const LATEST_SUBMISSION_CACHE_KEY = "tol_latest_intake_submission_v1";
+  const POLICY_VERSION = "2026-03-26";
 
   const LOCKED_STATUSES = new Set([
     "submitted",
@@ -47,6 +48,13 @@
     draft[sectionKey] = {
       ...(draft[sectionKey] || {}),
       ...(values || {}),
+      _saved_at: new Date().toISOString(),
+      _policy_version: POLICY_VERSION,
+    };
+    draft._draft_meta = {
+      ...(draft._draft_meta || {}),
+      last_updated_at: new Date().toISOString(),
+      policy_version: POLICY_VERSION,
     };
     saveDraft(draft);
     return draft;
@@ -233,6 +241,21 @@
     return data;
   }
 
+  function validateRequiredForm(form, statusNode) {
+    if (!form) return false;
+
+    if (typeof form.reportValidity === "function" && !form.reportValidity()) {
+      setStatus(
+        statusNode,
+        "Please complete all required fields and confirmations before continuing.",
+        "error",
+      );
+      return false;
+    }
+
+    return true;
+  }
+
   async function fetchPaidOrder() {
     const payload = await app.apiRequest("/orders/my-orders", {
       method: "GET",
@@ -329,11 +352,15 @@
       `Approx. Uploads: ${uploads.approx_upload_count || "—"}`,
       `Primary Asset Type: ${uploads.primary_asset_type || "—"}`,
       `Key Portraits: ${uploads.key_portraits || "—"}`,
+      `Rights Confirmed: ${uploads.uploads_rights_confirmed ? "Yes" : "No"}`,
+      `Data Minimization Confirmed: ${uploads.uploads_minimization_confirmed ? "Yes" : "No"}`,
     ]);
 
     renderSummaryCard(consentNode, "Consent", "4", [
       `Process Consent: ${consent.consent_process ? "Yes" : "No"}`,
       `Store Consent: ${consent.consent_store ? "Yes" : "No"}`,
+      `Authority Confirmed: ${consent.consent_authority ? "Yes" : "No"}`,
+      `Review Disclaimer Acknowledged: ${consent.consent_review_disclaimer ? "Yes" : "No"}`,
       `Visibility: ${consent.visibility_preference || "—"}`,
     ]);
   }
@@ -491,7 +518,7 @@
             <div>
               <div class="card-number">D</div>
               <h3>Consent</h3>
-              <p class="card-copy">Confirm privacy, processing, and storage permissions.</p>
+              <p class="card-copy">Confirm privacy, processing, storage, and authority permissions.</p>
             </div>
             <div>
               <div class="card-number">E</div>
@@ -593,7 +620,7 @@
       event.preventDefault();
       clearStatus(statusNode);
 
-      if (typeof form.reportValidity === "function" && !form.reportValidity()) {
+      if (!validateRequiredForm(form, statusNode)) {
         return;
       }
 
@@ -639,7 +666,7 @@
       event.preventDefault();
       clearStatus(statusNode);
 
-      if (typeof form.reportValidity === "function" && !form.reportValidity()) {
+      if (!validateRequiredForm(form, statusNode)) {
         return;
       }
 
@@ -688,6 +715,10 @@
       event.preventDefault();
       clearStatus(statusNode);
 
+      if (!validateRequiredForm(form, statusNode)) {
+        return;
+      }
+
       const values = formToObject(form);
       mergeDraft("uploads", values);
 
@@ -728,7 +759,7 @@
       event.preventDefault();
       clearStatus(statusNode);
 
-      if (typeof form.reportValidity === "function" && !form.reportValidity()) {
+      if (!validateRequiredForm(form, statusNode)) {
         return;
       }
 
@@ -748,10 +779,6 @@
     if (!page) return;
 
     const form = document.querySelector("[data-intake-review-form]");
-    const formShell = document.querySelector("[data-intake-review-form-shell]");
-    const lockedPanel = document.querySelector(
-      "[data-intake-review-locked-panel]",
-    );
     const lockedStatusNode = document.querySelector(
       "[data-intake-review-form-status]",
     );
@@ -818,7 +845,7 @@
       clearStatus(inlineStatusNode);
       clearStatus(lockedStatusNode);
 
-      if (typeof form.reportValidity === "function" && !form.reportValidity()) {
+      if (!validateRequiredForm(form, inlineStatusNode)) {
         return;
       }
 
@@ -838,10 +865,42 @@
 
       const draft = loadDraft();
 
-      if (!draft.household || !draft.family_map) {
+      if (
+        !draft.household ||
+        !draft.family_map ||
+        !draft.uploads ||
+        !draft.consent
+      ) {
         setStatus(
           inlineStatusNode,
-          "Household Setup and Family Map must be saved before submission.",
+          "Household Setup, Family Map, Uploads, and Consent must all be saved before submission.",
+          "error",
+        );
+        return;
+      }
+
+      if (
+        !draft.uploads.uploads_rights_confirmed ||
+        !draft.uploads.uploads_minimization_confirmed
+      ) {
+        setStatus(
+          inlineStatusNode,
+          "Upload planning confirmations must be completed before submission.",
+          "error",
+        );
+        return;
+      }
+
+      if (
+        !draft.consent.consent_process ||
+        !draft.consent.consent_store ||
+        !draft.consent.consent_authority ||
+        !draft.consent.consent_review_disclaimer ||
+        !draft.consent.visibility_preference
+      ) {
+        setStatus(
+          inlineStatusNode,
+          "Consent confirmations must be completed before submission.",
           "error",
         );
         return;
@@ -863,6 +922,7 @@
         },
         status: "submitted",
         source: "web",
+        policy_version: POLICY_VERSION,
         submitted_at: new Date().toISOString(),
       };
 

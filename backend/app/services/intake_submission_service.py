@@ -21,6 +21,9 @@ PIPELINE_STATUSES = {
 LOCKED_STATUSES = {"submitted", "in_review", "approved"} | PIPELINE_STATUSES
 REVIEWABLE_STATUSES = {"submitted", "in_review", "approved", "rejected"} | PIPELINE_STATUSES
 
+ALLOWED_VISIBILITY_PREFERENCES = {"private", "family", "public"}
+ALLOWED_PRIMARY_ASSET_TYPES = {"", "photos", "videos", "documents", "mixed"}
+
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
@@ -52,6 +55,71 @@ def _to_string(value: Any, default: str = "") -> str:
     if value is None:
         return default
     return str(value).strip()
+
+
+def _clean_section(section: Any) -> dict[str, Any]:
+    if not isinstance(section, dict):
+        return {}
+
+    cleaned: dict[str, Any] = {}
+    for key, value in section.items():
+        if isinstance(value, str):
+            cleaned[key] = value.strip()
+        else:
+            cleaned[key] = value
+    return cleaned
+
+
+def _validate_payload(payload: dict[str, Any]) -> None:
+    household = _clean_section(payload.get("household"))
+    family_map = _clean_section(payload.get("family_map"))
+    uploads = _clean_section(payload.get("uploads"))
+    consent = _clean_section(payload.get("consent"))
+    review = _clean_section(payload.get("review"))
+
+    errors: list[str] = []
+
+    if not _to_string(payload.get("package_slug")):
+        errors.append("package_slug is required.")
+    if not _to_string(payload.get("package_name")):
+        errors.append("package_name is required.")
+
+    if not _to_string(household.get("household_name")):
+        errors.append("household.household_name is required.")
+    if not _to_string(household.get("primary_contact_name")):
+        errors.append("household.primary_contact_name is required.")
+    if not _to_string(household.get("primary_contact_email")):
+        errors.append("household.primary_contact_email is required.")
+
+    if not _to_string(family_map.get("family_branch_name")):
+        errors.append("family_map.family_branch_name is required.")
+
+    if _to_string(uploads.get("primary_asset_type")) not in ALLOWED_PRIMARY_ASSET_TYPES:
+        errors.append("uploads.primary_asset_type is invalid.")
+
+    if not bool(uploads.get("uploads_rights_confirmed")):
+        errors.append("Upload rights confirmation is required.")
+    if not bool(uploads.get("uploads_minimization_confirmed")):
+        errors.append("Upload minimization confirmation is required.")
+
+    if not bool(consent.get("consent_process")):
+        errors.append("Consent to process is required.")
+    if not bool(consent.get("consent_store")):
+        errors.append("Consent to store is required.")
+    if not bool(consent.get("consent_authority")):
+        errors.append("Authority confirmation is required.")
+    if not bool(consent.get("consent_review_disclaimer")):
+        errors.append("Review disclaimer acknowledgment is required.")
+
+    visibility_preference = _to_string(consent.get("visibility_preference"), "private").lower()
+    if visibility_preference not in ALLOWED_VISIBILITY_PREFERENCES:
+        errors.append("consent.visibility_preference is invalid.")
+
+    if not bool(review.get("confirm_accuracy")):
+        errors.append("You must confirm the intake is accurate before submission.")
+
+    if errors:
+        raise ValueError(" ".join(errors))
 
 
 def _normalize_submission_document(doc: dict[str, Any]) -> dict[str, Any]:
@@ -98,6 +166,11 @@ def _normalize_submission_document(doc: dict[str, Any]) -> dict[str, Any]:
     out["consent"] = out.get("consent") or {}
     out["review"] = out.get("review") or {}
 
+    out["policy_version"] = _to_string(out.get("policy_version")) or None
+    out["submission_source"] = _to_string(out.get("submission_source")) or None
+
+    out["submitted_client_at"] = _coerce_datetime(out.get("submitted_client_at"))
+    out["consent_recorded_at"] = _coerce_datetime(out.get("consent_recorded_at"))
     out["submitted_at"] = _coerce_datetime(
         out.get("submitted_at") or out.get("created_at")
     )
@@ -157,22 +230,38 @@ def create_intake_submission(
                 "An intake submission is already submitted or under review for this account."
             )
 
-    status = str(payload.get("status") or "submitted").strip().lower()
-    review_locked = status in LOCKED_STATUSES
+    _validate_payload(payload)
+
+    household = _clean_section(payload.get("household"))
+    household["primary_contact_email"] = _to_string(
+        household.get("primary_contact_email")
+    ).lower()
+
+    family_map = _clean_section(payload.get("family_map"))
+    uploads = _clean_section(payload.get("uploads"))
+    consent = _clean_section(payload.get("consent"))
+    consent["visibility_preference"] = _to_string(
+        consent.get("visibility_preference"), "private"
+    ).lower()
+    review = _clean_section(payload.get("review"))
 
     record: dict[str, Any] = {
         "user_id": _oid(user_id),
         "email": str(email).strip().lower(),
-        "package_slug": payload["package_slug"],
-        "package_name": payload["package_name"],
-        "status": status,
-        "review_locked": review_locked,
-        "household": payload["household"],
-        "family_map": payload["family_map"],
-        "uploads": payload.get("uploads", {}) or {},
-        "consent": payload.get("consent", {}) or {},
-        "review": payload["review"],
-        "submitted_at": now if status == "submitted" else None,
+        "package_slug": _to_string(payload["package_slug"]),
+        "package_name": _to_string(payload["package_name"]),
+        "status": "submitted",
+        "review_locked": True,
+        "household": household,
+        "family_map": family_map,
+        "uploads": uploads,
+        "consent": consent,
+        "review": review,
+        "policy_version": _to_string(payload.get("policy_version"), "2026-03-26"),
+        "submission_source": _to_string(payload.get("source"), "web"),
+        "submitted_client_at": _coerce_datetime(payload.get("submitted_at")),
+        "consent_recorded_at": now,
+        "submitted_at": now,
         "review_started_at": None,
         "reviewed_at": None,
         "reviewed_by": None,
@@ -237,18 +326,13 @@ def list_all(limit: int = 50, status: Optional[str] = None) -> list[dict[str, An
     if status:
         query["status"] = str(status).strip().lower()
 
-    cursor = (
-        col.find(query)
-        .sort("created_at", -1)
-        .limit(int(limit))
-    )
+    cursor = col.find(query).sort("created_at", -1).limit(int(limit))
 
     results: list[dict[str, Any]] = []
     for doc in cursor:
         try:
             results.append(_serialize(doc))
         except Exception:
-            # Skip malformed legacy rows instead of crashing the admin queue
             continue
 
     return results

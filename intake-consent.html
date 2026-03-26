@@ -8,9 +8,13 @@
       name="description"
       content="Consent and privacy preferences for Tomb of Light onboarding."
     />
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=20260326-3" />
   </head>
   <body>
+    <a href="#main-content" class="skip-to-content">Skip to main content</a>
+
+    <div class="site-watermark" aria-hidden="true"></div>
+
     <div class="page-wrap">
       <header class="site-header">
         <div class="container site-header-inner">
@@ -18,25 +22,35 @@
             <span>Tomb of Light<span class="brand-symbol">™</span></span>
           </a>
 
+          <button
+            class="menu-toggle"
+            type="button"
+            aria-label="Toggle navigation"
+            aria-expanded="false"
+            aria-controls="site-nav"
+          >
+            Menu
+          </button>
+
           <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
             <a href="dashboard.html">Dashboard</a>
             <a href="intake-welcome.html">Intake Welcome</a>
             <a href="intake-household.html">Household Setup</a>
             <a href="intake-family-map.html">Family Map</a>
             <a href="intake-uploads.html">Uploads</a>
-            <a href="intake-consent.html">Consent</a>
+            <a href="intake-consent.html" aria-current="page">Consent</a>
             <a href="intake-review.html">Review</a>
           </nav>
 
           <div class="header-actions">
-            <a class="btn btn-secondary" href="intake-uploads.html"
-              >Back to Uploads</a
-            >
+            <a class="btn btn-secondary" href="intake-uploads.html">
+              Back to Uploads
+            </a>
           </div>
         </div>
       </header>
 
-      <main data-intake-consent>
+      <main id="main-content" data-intake-consent>
         <section class="page-hero">
           <div class="container">
             <div class="page-hero-panel">
@@ -44,7 +58,8 @@
               <h1>Consent</h1>
               <p class="card-copy">
                 Confirm visibility preferences and authorize Tomb of Light to
-                store and process your lineage onboarding data.
+                store and process your lineage onboarding data in accordance
+                with the Privacy Policy and Terms of Service.
               </p>
             </div>
           </div>
@@ -54,6 +69,11 @@
           <div class="container form-shell">
             <div class="form-panel">
               <span class="eyebrow">Consent</span>
+
+              <div class="notice">
+                This step is your permission checkpoint before final review.
+                Please confirm only what you are authorized to approve.
+              </div>
 
               <form class="form-grid" data-intake-consent-form novalidate>
                 <label
@@ -68,7 +88,7 @@
                   <span>
                     I authorize Tomb of Light to <strong>process</strong> the
                     information submitted for the purpose of building my digital
-                    lineage record.
+                    lineage record and related platform workflow.
                   </span>
                 </label>
 
@@ -83,8 +103,42 @@
                   />
                   <span>
                     I authorize Tomb of Light to securely <strong>store</strong>
-                    the submitted lineage data and uploaded assets according to
-                    the Privacy Policy and Terms of Service.
+                    submitted lineage data and uploaded assets according to the
+                    Privacy Policy, Terms of Service, security controls, and
+                    lawful record-handling needs.
+                  </span>
+                </label>
+
+                <label
+                  style="display: flex; gap: 0.75rem; align-items: flex-start"
+                >
+                  <input
+                    type="checkbox"
+                    name="consent_authority"
+                    required
+                    style="margin-top: 0.35rem"
+                  />
+                  <span>
+                    I confirm that I have the lawful right and authority to
+                    submit the information involved in this intake and, where
+                    required, permission from the living individual involved or
+                    from the parent or legal guardian of a minor.
+                  </span>
+                </label>
+
+                <label
+                  style="display: flex; gap: 0.75rem; align-items: flex-start"
+                >
+                  <input
+                    type="checkbox"
+                    name="consent_review_disclaimer"
+                    required
+                    style="margin-top: 0.35rem"
+                  />
+                  <span>
+                    I acknowledge that Tomb of Light’s internal review, intake
+                    status, or verification workflow is not a legal
+                    determination, court finding, or government certification.
                   </span>
                 </label>
 
@@ -106,6 +160,12 @@
                     placeholder="Optional notes about consent scope, privacy preferences, or special restrictions."
                   ></textarea>
                 </label>
+
+                <div class="helper">
+                  Public visibility should be used carefully. Do not choose a
+                  more open setting unless you understand the scope of that
+                  choice.
+                </div>
 
                 <div
                   class="helper"
@@ -144,7 +204,7 @@
                   <h3>Consent</h3>
                   <p class="card-copy">
                     Confirms Tomb of Light can store and process your intake
-                    data.
+                    data for the agreed purpose.
                   </p>
                 </div>
                 <div>
@@ -152,9 +212,15 @@
                   <h3>Compliance</h3>
                   <p class="card-copy">
                     Creates a clear permission checkpoint before production
-                    stages.
+                    stages and final intake submission.
                   </p>
                 </div>
+              </div>
+
+              <div class="small-link-row" style="margin-top: 1.25rem">
+                <a href="privacy.html">Privacy Policy</a>
+                <a href="terms.html">Terms of Service</a>
+                <a href="data-request.html">Data Requests</a>
               </div>
 
               <div class="inline-actions" style="margin-top: 1.25rem">
@@ -173,17 +239,70 @@
       <footer class="footer">
         <div class="container">
           <div class="footer-card">
+            <div class="footer-top">
+              <div>
+                <div class="footer-brand">
+                  Tomb of Light<span class="brand-symbol">™</span>
+                </div>
+                <p class="footer-copy">
+                  A private, cinematic platform for preserving and exploring
+                  family lineage across generations.
+                </p>
+                <div class="cookie-status" data-cookie-status>
+                  Your cookie preference has not been set yet.
+                </div>
+              </div>
+
+              <div class="footer-links">
+                <a href="privacy.html">Privacy Policy</a>
+                <a href="terms.html">Terms</a>
+                <a href="cookie-policy.html">Cookie Policy</a>
+                <a href="data-request.html">Data Requests</a>
+                <a href="security.html">Security</a>
+              </div>
+            </div>
+
             <div class="footer-bottom">
               <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
+              <span
+                >Tomb of Light technology and platform design are
+                proprietary.</span
+              >
             </div>
           </div>
         </div>
       </footer>
     </div>
 
-    <script src="config.js?v=20260322-10"></script>
-    <script src="app.js?v=20260322-10"></script>
-    <script src="auth.js?v=20260322-10"></script>
-    <script src="intake.js?v=20260322-10"></script>
+    <div
+      class="cookie-banner"
+      data-cookie-banner
+      role="contentinfo"
+      aria-label="Cookie preferences"
+    >
+      <div class="cookie-inner">
+        <div class="cookie-copy">
+          We use essential site technologies and may use optional analytics
+          tools only where permitted. You can accept or decline optional
+          analytics cookies and review your choices at any time.
+        </div>
+        <div class="cookie-actions">
+          <button class="btn btn-primary" type="button" data-cookie-accept>
+            Accept
+          </button>
+          <button class="btn btn-secondary" type="button" data-cookie-decline>
+            Decline
+          </button>
+          <a class="btn btn-ghost" href="privacy-choices.html"
+            >Privacy Choices</a
+          >
+        </div>
+      </div>
+    </div>
+
+    <script src="config.js?v=20260326-3"></script>
+    <script src="app.js?v=20260326-3"></script>
+    <script src="auth.js?v=20260326-3"></script>
+    <script src="intake.js?v=20260326-3"></script>
   </body>
 </html>

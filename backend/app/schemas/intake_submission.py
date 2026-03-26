@@ -3,6 +3,8 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
+INTAKE_POLICY_VERSION_DEFAULT = "2026-03-26"
+
 
 class IntakeHouseholdPayload(BaseModel):
     household_name: str = Field(..., min_length=1)
@@ -32,11 +34,15 @@ class IntakeUploadsPayload(BaseModel):
     key_portraits: str = Field(default="")
     supporting_records: str = Field(default="")
     quality_notes: str = Field(default="")
+    uploads_rights_confirmed: bool = Field(default=False)
+    uploads_minimization_confirmed: bool = Field(default=False)
 
 
 class IntakeConsentPayload(BaseModel):
     consent_process: bool = Field(default=False)
     consent_store: bool = Field(default=False)
+    consent_authority: bool = Field(default=False)
+    consent_review_disclaimer: bool = Field(default=False)
     visibility_preference: str = Field(default="private")
     consent_notes: str = Field(default="")
 
@@ -55,6 +61,14 @@ class IntakeSubmissionCreate(BaseModel):
     uploads: IntakeUploadsPayload
     consent: IntakeConsentPayload
     review: IntakeReviewPayload
+
+    source: str = Field(default="web")
+    policy_version: str = Field(
+        default=INTAKE_POLICY_VERSION_DEFAULT,
+        min_length=1,
+        max_length=32,
+    )
+    submitted_at: Optional[datetime] = None
 
 
 class IntakeSubmissionStatusUpdate(BaseModel):
@@ -78,6 +92,11 @@ class IntakeSubmissionResponse(BaseModel):
     uploads: dict[str, Any]
     consent: dict[str, Any]
     review: dict[str, Any]
+
+    policy_version: Optional[str] = None
+    submission_source: Optional[str] = None
+    submitted_client_at: Optional[datetime] = None
+    consent_recorded_at: Optional[datetime] = None
 
     submitted_at: Optional[datetime] = None
     review_started_at: Optional[datetime] = None
@@ -106,6 +125,8 @@ class IntakeSubmissionListItem(BaseModel):
     package_name: str
     status: str
     review_locked: bool
+    policy_version: Optional[str] = None
+    submission_source: Optional[str] = None
     submitted_at: Optional[datetime] = None
     reviewed_at: Optional[datetime] = None
     reviewed_by: Optional[str] = None

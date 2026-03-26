@@ -3,6 +3,7 @@
 
   const app = window.TOLApp || window.TOLAuth;
   const POST_LOGIN_REDIRECT = "dashboard.html";
+  const SIGNUP_POLICY_VERSION = "2026-03-26";
 
   if (!app) {
     console.error("auth.js requires app.js to be loaded first.");
@@ -446,6 +447,10 @@
         formData.get("confirm_password") || "",
       ).trim();
 
+      const termsAccepted = Boolean(formData.get("terms_accepted"));
+      const privacyAccepted = Boolean(formData.get("privacy_accepted"));
+      const eligibilityAttested = Boolean(formData.get("eligibility_attested"));
+
       if (!fullName || !email || !password || !confirmPassword) {
         app.setStatus(
           statusNode,
@@ -469,6 +474,15 @@
         return;
       }
 
+      if (!termsAccepted || !privacyAccepted || !eligibilityAttested) {
+        app.setStatus(
+          statusNode,
+          "You must accept the Terms, Privacy Policy, and eligibility confirmation before creating an account.",
+          "error",
+        );
+        return;
+      }
+
       if (submitBtn) {
         submitBtn.disabled = true;
         submitBtn.textContent = "Creating Account...";
@@ -477,7 +491,15 @@
       try {
         await app.apiRequest("/auth/signup", {
           method: "POST",
-          body: JSON.stringify({ full_name: fullName, email, password }),
+          body: JSON.stringify({
+            full_name: fullName,
+            email,
+            password,
+            terms_accepted: termsAccepted,
+            privacy_accepted: privacyAccepted,
+            eligibility_attested: eligibilityAttested,
+            policy_version: SIGNUP_POLICY_VERSION,
+          }),
         });
 
         app.setStatus(

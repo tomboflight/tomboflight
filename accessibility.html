@@ -1,171 +1,225 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Accessibility | Tomb of Light</title>
-  <meta
-    name="description"
-    content="Learn about Tomb of Light’s accessibility commitment and ongoing efforts to improve website usability and inclusive access."
-  />
-  <link rel="stylesheet" href="styles.css" />
-</head>
-<body>
-  <div class="page-wrap">
-    <header class="site-header">
-      <div class="container site-header-inner">
-        <a class="brand" href="index.html" aria-label="Tomb of Light home">
-          <span>Tomb of Light<span class="brand-symbol">™</span></span>
-        </a>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Accessibility | Tomb of Light</title>
+    <meta
+      name="description"
+      content="Learn about Tomb of Light’s accessibility commitment and ongoing efforts to improve website usability and inclusive access."
+    />
+    <link rel="stylesheet" href="styles.css?v=20260326-1" />
+  </head>
+  <body>
+    <a href="#main-content" class="skip-to-content">Skip to main content</a>
 
-        <button class="menu-toggle" type="button" aria-label="Toggle navigation">
-          Menu
-        </button>
+    <div class="site-watermark" aria-hidden="true"></div>
 
-        <nav class="site-nav" aria-label="Primary navigation">
-          <a href="how-it-works.html">How It Works</a>
-          <a href="security.html">Security</a>
-          <a href="compliance.html">Compliance</a>
-          <a href="faq.html">FAQ</a>
-        </nav>
+    <div class="page-wrap">
+      <header class="site-header">
+        <div class="container site-header-inner">
+          <a class="brand" href="index.html" aria-label="Tomb of Light home">
+            <span>Tomb of Light<span class="brand-symbol">™</span></span>
+          </a>
 
-        <div class="header-actions">
-          <a class="btn btn-primary" href="signup.html">Request Access</a>
-        </div>
-      </div>
-    </header>
+          <button
+            class="menu-toggle"
+            type="button"
+            aria-label="Toggle navigation"
+            aria-expanded="false"
+            aria-controls="site-nav"
+          >
+            Menu
+          </button>
 
-    <main>
-      <section class="page-hero">
-        <div class="container">
-          <div class="page-hero-panel">
-            <span class="eyebrow">Inclusive Access</span>
-            <h1>Accessibility</h1>
-            <p>
-              Tomb of Light is committed to improving website usability and
-              inclusive access over time so more people can navigate and use the
-              public site effectively.
-            </p>
+          <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
+            <a href="platform.html">Platform</a>
+            <a href="how-it-works.html">How It Works</a>
+            <a href="security.html">Security</a>
+            <a href="compliance.html">Compliance</a>
+            <a href="faq.html">FAQ</a>
+          </nav>
+
+          <div class="header-actions">
+            <a class="btn btn-primary" href="signup.html">Create Account</a>
           </div>
         </div>
-      </section>
+      </header>
 
-      <section class="page-sections">
-        <div class="container">
-          <div class="page-stack">
-            <article class="section-card">
-              <span class="eyebrow">Commitment</span>
-              <p class="card-copy">
-                Tomb of Light aims to make the public website more accessible to
-                users with a wide range of needs, technologies, and assistive tools.
+      <main id="main-content" role="main">
+        <section class="page-hero">
+          <div class="container">
+            <div class="page-hero-panel">
+              <span class="eyebrow">Inclusive Access</span>
+              <h1>Accessibility</h1>
+              <p>
+                Tomb of Light is committed to improving website usability and
+                inclusive access over time so more people can navigate and use
+                the public site effectively.
               </p>
-            </article>
+            </div>
+          </div>
+        </section>
 
-            <article class="section-card">
-              <span class="eyebrow">Ongoing Improvements</span>
-              <div class="grid-3">
-                <div>
-                  <div class="card-number">1</div>
-                  <h3>Readable structure</h3>
-                  <p class="card-copy">
-                    Improve page structure, headings, and content organization to
-                    support easier navigation and comprehension.
-                  </p>
+        <section class="page-sections">
+          <div class="container">
+            <div class="page-stack">
+              <article class="section-card">
+                <span class="eyebrow">Commitment</span>
+                <h2>
+                  Tomb of Light aims to improve conformance with WCAG 2.2 Level
+                  AA for public-facing content.
+                </h2>
+                <p class="card-copy">
+                  Accessibility is an ongoing effort. Tomb of Light aims to
+                  improve public-facing website content in line with recognized
+                  web accessibility practices, including goals consistent with
+                  WCAG 2.2 Level AA where reasonably feasible.
+                </p>
+              </article>
+
+              <article class="section-card">
+                <span class="eyebrow">Current Priorities</span>
+                <div class="grid-3">
+                  <div>
+                    <div class="card-number">1</div>
+                    <h3>Readable structure</h3>
+                    <p class="card-copy">
+                      Improve headings, landmarks, labels, and content structure
+                      to support clearer navigation and comprehension.
+                    </p>
+                  </div>
+
+                  <div>
+                    <div class="card-number">2</div>
+                    <h3>Keyboard access</h3>
+                    <p class="card-copy">
+                      Continue improving keyboard navigation, focus behavior,
+                      and skip-link access across public website components.
+                    </p>
+                  </div>
+
+                  <div>
+                    <div class="card-number">3</div>
+                    <h3>Compatibility</h3>
+                    <p class="card-copy">
+                      Work toward better compatibility with modern browsers and
+                      assistive technologies where reasonably feasible.
+                    </p>
+                  </div>
                 </div>
+              </article>
 
-                <div>
-                  <div class="card-number">2</div>
-                  <h3>Keyboard access</h3>
-                  <p class="card-copy">
-                    Continue improving keyboard navigation and focus behavior across
-                    public website components.
-                  </p>
+              <article class="section-card">
+                <span class="eyebrow">Need Help?</span>
+                <h2>
+                  Report accessibility barriers so Tomb of Light can review
+                  them.
+                </h2>
+                <p class="card-copy">
+                  If you experience an accessibility barrier on the Tomb of
+                  Light website, please contact
+                  <a
+                    href="mailto:support@tomboflight.com?subject=Accessibility%20Issue"
+                    >support@tomboflight.com</a
+                  >
+                  and include the page or feature involved, a description of the
+                  issue, the assistive technology or browser used if known, and
+                  any screenshots or steps that may help reproduce the issue.
+                </p>
+              </article>
+
+              <article class="section-card">
+                <span class="eyebrow">Third-Party Content</span>
+                <p class="card-copy">
+                  Some third-party tools, integrations, embedded content, or
+                  linked services may have accessibility limitations outside
+                  Tomb of Light’s direct control. Tomb of Light may continue
+                  working to improve accessible alternatives where reasonably
+                  possible.
+                </p>
+              </article>
+
+              <article class="section-card">
+                <span class="eyebrow">Ongoing Review</span>
+                <p class="card-copy">
+                  Accessibility is not a one-time project. Tomb of Light may
+                  continue refining design, content, navigation, and interaction
+                  patterns as the website and platform mature.
+                </p>
+              </article>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <div class="container">
+          <div class="footer-card">
+            <div class="footer-top">
+              <div>
+                <div class="footer-brand">
+                  Tomb of Light<span class="brand-symbol">™</span>
                 </div>
-
-                <div>
-                  <div class="card-number">3</div>
-                  <h3>Compatibility</h3>
-                  <p class="card-copy">
-                    Work toward better compatibility with modern browsers and
-                    assistive technologies where reasonably feasible.
-                  </p>
+                <p class="footer-copy">
+                  A private, cinematic platform for preserving and exploring
+                  family lineage across generations.
+                </p>
+                <div class="cookie-status" data-cookie-status>
+                  Your cookie preference has not been set yet.
                 </div>
               </div>
-            </article>
 
-            <article class="section-card">
-              <span class="eyebrow">Feedback</span>
-              <p class="card-copy">
-                If you experience an accessibility barrier on the Tomb of Light
-                website, you should be able to report the issue through a listed
-                support or compliance contact channel so it can be reviewed.
-              </p>
-            </article>
-
-            <article class="section-card">
-              <span class="eyebrow">Evolving Standard</span>
-              <p class="card-copy">
-                Accessibility is an ongoing effort. Tomb of Light may continue
-                refining design, content, navigation, and interaction patterns as
-                the website and platform mature.
-              </p>
-            </article>
-          </div>
-        </div>
-      </section>
-    </main>
-
-    <footer class="footer">
-      <div class="container">
-        <div class="footer-card">
-          <div class="footer-top">
-            <div>
-              <div class="footer-brand">Tomb of Light<span class="brand-symbol">™</span></div>
-              <p class="footer-copy">
-                A private, cinematic platform for preserving and exploring family
-                lineage across generations.
-              </p>
-              <div class="cookie-status" data-cookie-status>
-                Your cookie preference has not been set yet.
+              <div class="footer-links">
+                <a href="privacy.html">Privacy Policy</a>
+                <a href="terms.html">Terms</a>
+                <a href="cookie-policy.html">Cookie Policy</a>
+                <a href="accessibility.html">Accessibility</a>
+                <a href="data-request.html">Data Requests</a>
+                <a href="privacy-state-notices.html">State Privacy Notices</a>
+                <a href="privacy-choices.html">Privacy Choices</a>
+                <a href="compliance.html">Compliance &amp; Legal</a>
               </div>
             </div>
 
-            <div class="footer-links">
-              <a href="privacy.html">Privacy Policy</a>
-              <a href="terms.html">Terms</a>
-              <a href="cookie-policy.html">Cookie Policy</a>
-              <a href="accessibility.html">Accessibility</a>
-              <a href="data-request.html">Data Requests</a>
-              <a href="privacy-state-notices.html">State Privacy Notices</a>
-              <a href="privacy-choices.html">Privacy Choices</a>
-              <a href="compliance.html">Compliance &amp; Legal</a>
+            <div class="footer-bottom">
+              <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
+              <span
+                >Tomb of Light technology and platform design are
+                proprietary.</span
+              >
             </div>
           </div>
-
-          <div class="footer-bottom">
-            <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
-            <span>Tomb of Light technology and platform design are proprietary.</span>
-          </div>
         </div>
-      </div>
-    </footer>
-  </div>
+      </footer>
+    </div>
 
-  <div class="cookie-banner" data-cookie-banner>
-    <div class="cookie-inner">
-      <div class="cookie-copy">
-        We use essential site technologies and may use optional analytics tools
-        only where permitted. You can accept or decline optional analytics
-        cookies and review your choices at any time.
-      </div>
-      <div class="cookie-actions">
-        <button class="btn btn-primary" type="button" data-cookie-accept>Accept</button>
-        <button class="btn btn-secondary" type="button" data-cookie-decline>Decline</button>
-        <a class="btn btn-ghost" href="privacy-choices.html">Privacy Choices</a>
+    <div
+      class="cookie-banner"
+      data-cookie-banner
+      role="contentinfo"
+      aria-label="Cookie preferences"
+    >
+      <div class="cookie-inner">
+        <div class="cookie-copy">
+          We use essential site technologies and may use optional analytics
+          tools only where permitted. You can accept or decline optional
+          analytics cookies and review your choices at any time.
+        </div>
+        <div class="cookie-actions">
+          <button class="btn btn-primary" type="button" data-cookie-accept>
+            Accept
+          </button>
+          <button class="btn btn-secondary" type="button" data-cookie-decline>
+            Decline
+          </button>
+          <a class="btn btn-ghost" href="privacy-choices.html"
+            >Privacy Choices</a
+          >
+        </div>
       </div>
     </div>
-  </div>
 
-  <script src="app.js"></script>
-</body>
+    <script src="app.js?v=20260326-1"></script>
+  </body>
 </html>
