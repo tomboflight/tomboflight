@@ -1,13 +1,14 @@
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 
 from app.config import settings
 
-ALGORITHM = settings.algorithm
-ACCESS_TOKEN_EXPIRE_MINUTES = settings.access_token_expire_minutes
+SECRET_KEY: str = str(settings.secret_key or "change-me")
+ALGORITHM: str = str(settings.algorithm or "HS256")
+ACCESS_TOKEN_EXPIRE_MINUTES: int = int(settings.access_token_expire_minutes or 60)
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -25,20 +26,21 @@ def create_access_token(data: dict[str, Any]) -> str:
     expire = datetime.now(UTC) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
 
-    return jwt.encode(
+    token = jwt.encode(
         to_encode,
-        settings.secret_key,
-        algorithm=ALGORITHM,
+        SECRET_KEY,
+        algorithm=cast(Any, ALGORITHM),
     )
+    return cast(str, token)
 
 
 def decode_access_token(token: str) -> dict[str, Any] | None:
     try:
         payload = jwt.decode(
             token,
-            settings.secret_key,
-            algorithms=[ALGORITHM],
+            SECRET_KEY,
+            algorithms=cast(Any, [ALGORITHM]),
         )
-        return payload
+        return cast(dict[str, Any], payload)
     except JWTError:
         return None
