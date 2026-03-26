@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Verification Uploads | Tomb of Light</title>
+    <meta
+      name="description"
+      content="Upload verification records and supporting family documents to Tomb of Light."
+    />
+    <link rel="stylesheet" href="styles.css?v=20260325-6" />
+  </head>
+  <body>
+    <div class="page-wrap">
+      <header class="site-header">
+        <div class="container site-header-inner">
+          <a class="brand" href="index.html" aria-label="Tomb of Light home">
+            <span>Tomb of Light<span class="brand-symbol">™</span></span>
+          </a>
+
+          <button
+            class="menu-toggle"
+            type="button"
+            aria-label="Toggle navigation"
+            aria-expanded="false"
+            aria-controls="site-nav"
+          >
+            Menu
+          </button>
+
+          <nav class="site-nav" id="site-nav" aria-label="Portal navigation">
+            <a href="dashboard.html">Dashboard</a>
+            <a href="intake-review.html">My Intake</a>
+            <a href="verification-upload.html" aria-current="page">
+              Verification Uploads
+            </a>
+            <a href="tree-view.html">Family Tree</a>
+            <a href="lineage-certificate.html">Lineage Certificate</a>
+            <a href="faq.html">Help</a>
+          </nav>
+
+          <div class="header-actions">
+            <button class="btn btn-secondary" type="button" data-logout-btn>
+              Log Out
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main data-verification-upload-page>
+        <section class="page-hero">
+          <div class="container">
+            <div class="page-hero-panel">
+              <span class="eyebrow">Verification Records</span>
+              <h1>Upload Family Verification Documents</h1>
+              <p data-verification-page-status>
+                Loading your family verification workspace...
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section class="page-sections">
+          <div class="container form-shell">
+            <div class="form-panel">
+              <span class="eyebrow">Step 1 — Select Family</span>
+
+              <div class="form-grid two-col">
+                <label>
+                  Family Record
+                  <select data-verification-family-select>
+                    <option value="">Loading family records...</option>
+                  </select>
+                </label>
+
+                <label>
+                  Load Family
+                  <button
+                    class="btn btn-primary"
+                    type="button"
+                    data-verification-load-family
+                    style="margin-top: 0.45rem"
+                  >
+                    Load Family
+                  </button>
+                </label>
+              </div>
+
+              <div
+                class="helper"
+                data-verification-action-status
+                aria-live="polite"
+                style="display: none"
+              ></div>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Step 2 — Upload Verification Evidence</span>
+
+              <form class="form-grid" data-verification-upload-form novalidate>
+                <div class="form-grid two-col">
+                  <label>
+                    Family Member
+                    <select
+                      name="member_id"
+                      data-verification-member-select
+                      required
+                    >
+                      <option value="">Select member</option>
+                    </select>
+                  </label>
+
+                  <label>
+                    Verification Type
+                    <select name="verification_type" required>
+                      <option value="">Select verification type</option>
+                      <option value="government_id">government_id</option>
+                      <option value="birth_certificate">
+                        birth_certificate
+                      </option>
+                      <option value="marriage_certificate">
+                        marriage_certificate
+                      </option>
+                      <option value="adoption_record">adoption_record</option>
+                      <option value="death_certificate">
+                        death_certificate
+                      </option>
+                      <option value="obituary">obituary</option>
+                      <option value="supporting_family_record">
+                        supporting_family_record
+                      </option>
+                    </select>
+                  </label>
+                </div>
+
+                <div class="form-grid two-col">
+                  <label>
+                    Evidence Kind
+                    <select name="evidence_kind" required>
+                      <option value="">Select evidence kind</option>
+                      <option value="government_id">government_id</option>
+                      <option value="birth_certificate">
+                        birth_certificate
+                      </option>
+                      <option value="marriage_certificate">
+                        marriage_certificate
+                      </option>
+                      <option value="adoption_record">adoption_record</option>
+                      <option value="death_certificate">
+                        death_certificate
+                      </option>
+                      <option value="obituary">obituary</option>
+                      <option value="supporting_family_record">
+                        supporting_family_record
+                      </option>
+                    </select>
+                  </label>
+
+                  <label>
+                    Evidence File
+                    <input
+                      type="file"
+                      name="evidence_file"
+                      accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp"
+                      required
+                    />
+                  </label>
+                </div>
+
+                <div class="helper">
+                  Upload PDFs or images such as birth certificates, marriage
+                  records, adoption records, death certificates, obituary files,
+                  government IDs, and supporting family documents.
+                </div>
+
+                <div class="inline-actions" style="margin-top: 1rem">
+                  <button
+                    class="btn btn-primary"
+                    type="submit"
+                    data-verification-upload-submit
+                  >
+                    Upload Evidence
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Step 3 — View Uploaded Records</span>
+
+              <div class="form-grid two-col">
+                <label>
+                  Member
+                  <select data-verification-list-member>
+                    <option value="">Select member</option>
+                  </select>
+                </label>
+
+                <label>
+                  Upload Category
+                  <select data-verification-category-filter>
+                    <option value="">All upload categories</option>
+                    <option value="verification_evidence">
+                      verification_evidence
+                    </option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="inline-actions" style="margin-top: 1rem">
+                <button
+                  class="btn btn-secondary"
+                  type="button"
+                  data-verification-load-uploads
+                >
+                  Load Uploaded Records
+                </button>
+              </div>
+
+              <div
+                class="grid-3"
+                data-verification-uploads-list
+                style="margin-top: 1.25rem"
+              ></div>
+
+              <div
+                class="helper"
+                data-verification-uploads-empty
+                style="display: none; margin-top: 1rem"
+              >
+                No uploaded verification records found for this member.
+              </div>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Accepted Record Types</span>
+              <div class="grid-3">
+                <div>
+                  <div class="card-number">1</div>
+                  <h3>Identity Records</h3>
+                  <p class="card-copy">
+                    Government ID, supporting identity records, and household
+                    records when needed.
+                  </p>
+                </div>
+
+                <div>
+                  <div class="card-number">2</div>
+                  <h3>Lineage Records</h3>
+                  <p class="card-copy">
+                    Birth certificates, marriage certificates, adoption records,
+                    death certificates, and obituary records.
+                  </p>
+                </div>
+
+                <div>
+                  <div class="card-number">3</div>
+                  <h3>Supporting Files</h3>
+                  <p class="card-copy">
+                    Additional family documents that help confirm relationships
+                    and preserve a trustworthy lineage record.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <div class="container">
+          <div class="footer-card">
+            <div class="footer-bottom">
+              <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
+            </div>
+          </div>
+        </div>
+      </footer>
+    </div>
+
+    <script src="config.js?v=20260325-6"></script>
+    <script src="app.js?v=20260325-6"></script>
+    <script src="auth.js?v=20260325-6"></script>
+    <script src="verification-upload.js?v=20260325-6"></script>
+  </body>
+</html>
