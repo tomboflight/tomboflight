@@ -42,6 +42,7 @@ from app.routes.projects import router as projects_router
 from app.routes.relationships import router as relationships_router
 from app.routes.stripe_webhooks import router as stripe_webhooks_router
 from app.routes.tree import router as tree_router
+from app.routes.uploads import router as uploads_router
 from app.routes.users import router as users_router
 from app.routes.verification_records import router as verification_records_router
 
@@ -141,6 +142,7 @@ app.include_router(relationships_router)
 app.include_router(db_bootstrap_router)
 app.include_router(graph_integrity_router)
 app.include_router(orders_router)
+app.include_router(uploads_router)
 
 # Stripe Webhooks
 app.include_router(stripe_webhooks_router)
@@ -200,6 +202,11 @@ def root():
             "/intake-submissions",
             "/intake-submissions/my-latest",
             "/intake-submissions/my-list?limit=10",
+            "/uploads/member-photo",
+            "/uploads/verification-evidence",
+            "/uploads/member/{member_id}",
+            "/uploads/family/{family_id}",
+            "/uploads/{upload_id}/download",
             "/webhooks/stripe",
             "/orders/record-checkout",
             "/orders/my-orders",
