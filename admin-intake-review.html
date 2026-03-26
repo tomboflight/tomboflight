@@ -8,7 +8,7 @@
       name="description"
       content="Admin review detail page for Tomb of Light intake submissions."
     />
-    <link rel="stylesheet" href="styles.css?v=20260325-4" />
+    <link rel="stylesheet" href="styles.css?v=20260325-5" />
   </head>
   <body>
     <div class="page-wrap">
@@ -139,7 +139,21 @@
                   style="display: none"
                 ></div>
 
-                <div class="inline-actions" style="margin-top: 1.5rem">
+                <div
+                  class="notice"
+                  data-admin-post-build-notice
+                  style="display: none; margin-top: 0.75rem"
+                >
+                  This intake has already been provisioned into an active family
+                  build. Continue from the build tools below instead of using
+                  review-state actions.
+                </div>
+
+                <div
+                  class="inline-actions"
+                  data-admin-review-actions
+                  style="margin-top: 1.5rem"
+                >
                   <button
                     class="btn btn-secondary"
                     type="button"
@@ -180,6 +194,44 @@
                     Refresh
                   </button>
                 </div>
+
+                <div
+                  class="inline-actions"
+                  data-admin-post-build-actions
+                  style="display: none; margin-top: 1.5rem"
+                >
+                  <a
+                    class="btn btn-primary"
+                    href="admin-family-manager.html"
+                    data-admin-open-family-manager
+                  >
+                    Open Family Manager
+                  </a>
+
+                  <a
+                    class="btn btn-secondary"
+                    href="tree-view.html"
+                    data-admin-open-family-tree
+                  >
+                    Open Family Tree
+                  </a>
+
+                  <a
+                    class="btn btn-secondary"
+                    href="lineage-certificate.html"
+                    data-admin-open-lineage-certificate
+                  >
+                    Open Lineage Certificate
+                  </a>
+
+                  <button
+                    class="btn btn-secondary"
+                    type="button"
+                    data-admin-refresh-detail-post
+                  >
+                    Refresh
+                  </button>
+                </div>
               </form>
             </div>
           </div>
@@ -197,9 +249,9 @@
       </footer>
     </div>
 
-    <script src="config.js?v=20260325-4"></script>
-    <script src="app.js?v=20260325-4"></script>
-    <script src="auth.js?v=20260325-4"></script>
-    <script src="admin-intake.js?v=20260325-4"></script>
+    <script src="config.js?v=20260325-5"></script>
+    <script src="app.js?v=20260325-5"></script>
+    <script src="auth.js?v=20260325-5"></script>
+    <script src="admin-intake.js?v=20260325-5"></script>
   </body>
 </html>

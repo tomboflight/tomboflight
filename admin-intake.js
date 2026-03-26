@@ -139,6 +139,90 @@
     throw lastError || new Error("All API request attempts failed.");
   }
 
+  function isProvisionedSubmission(submission) {
+    if (!submission) return false;
+
+    const statusValue = normalizeStatus(submission.status);
+    return (
+      !!submission.provisioned_at ||
+      !!submission.family_root_id ||
+      !!submission.household_id ||
+      !!submission.project_id ||
+      statusValue === "build_ready" ||
+      statusValue === "in_production"
+    );
+  }
+
+  function updateReviewActionState(submission) {
+    const postBuildNotice = document.querySelector(
+      "[data-admin-post-build-notice]",
+    );
+    const postBuildActions = document.querySelector(
+      "[data-admin-post-build-actions]",
+    );
+
+    const familyManagerLink = document.querySelector(
+      "[data-admin-open-family-manager]",
+    );
+    const familyTreeLink = document.querySelector(
+      "[data-admin-open-family-tree]",
+    );
+    const certificateLink = document.querySelector(
+      "[data-admin-open-lineage-certificate]",
+    );
+
+    const reviewBtn = document.querySelector("[data-admin-mark-review]");
+    const approveBtn = document.querySelector("[data-admin-approve]");
+    const rejectBtn = document.querySelector("[data-admin-reject]");
+    const provisionBtn = document.querySelector("[data-admin-provision-build]");
+
+    const provisioned = isProvisionedSubmission(submission);
+    const statusValue = normalizeStatus(submission && submission.status);
+
+    if (familyManagerLink) {
+      familyManagerLink.href =
+        submission && submission.family_root_id
+          ? `admin-family-manager.html?family_id=${encodeURIComponent(submission.family_root_id)}`
+          : "admin-family-manager.html";
+    }
+
+    if (familyTreeLink) {
+      familyTreeLink.href =
+        submission && submission.family_root_id
+          ? `tree-view.html?family_id=${encodeURIComponent(submission.family_root_id)}`
+          : "tree-view.html";
+    }
+
+    if (certificateLink) {
+      certificateLink.href =
+        submission && submission.family_root_id
+          ? `lineage-certificate.html?family_id=${encodeURIComponent(submission.family_root_id)}`
+          : "lineage-certificate.html";
+    }
+
+    if (provisioned) {
+      if (postBuildNotice) postBuildNotice.style.display = "block";
+      if (postBuildActions) postBuildActions.style.display = "flex";
+
+      if (reviewBtn) reviewBtn.style.display = "none";
+      if (approveBtn) approveBtn.style.display = "none";
+      if (rejectBtn) rejectBtn.style.display = "none";
+      if (provisionBtn) provisionBtn.style.display = "none";
+      return;
+    }
+
+    if (postBuildNotice) postBuildNotice.style.display = "none";
+    if (postBuildActions) postBuildActions.style.display = "none";
+
+    if (reviewBtn) reviewBtn.style.display = "";
+    if (approveBtn) approveBtn.style.display = "";
+    if (rejectBtn) rejectBtn.style.display = "";
+
+    if (provisionBtn) {
+      provisionBtn.style.display = statusValue === "approved" ? "" : "none";
+    }
+  }
+
   function renderSummaryCards(submissions) {
     const node = document.querySelector("[data-admin-queue-summary]");
     if (!node) return;
@@ -286,8 +370,12 @@
     const uploadsNode = document.querySelector("[data-admin-review-uploads]");
     const consentNode = document.querySelector("[data-admin-review-consent]");
 
+    const provisioned = isProvisionedSubmission(submission);
+
     if (pageStatus) {
-      pageStatus.textContent = `Submission ${submission.id} is currently ${humanizeStatus(submission.status)}.`;
+      pageStatus.textContent = provisioned
+        ? `Submission ${submission.id} is currently ${humanizeStatus(submission.status)} and has already been provisioned into a live family build.`
+        : `Submission ${submission.id} is currently ${humanizeStatus(submission.status)}.`;
     }
 
     renderReviewBlock(
@@ -381,9 +469,12 @@
 
       if (reviewNotes) reviewNotes.value = submission.review_notes || "";
       if (approvalNotes) approvalNotes.value = submission.approval_notes || "";
-      if (rejectionReason)
+      if (rejectionReason) {
         rejectionReason.value = submission.rejection_reason || "";
+      }
     }
+
+    updateReviewActionState(submission);
   }
 
   async function loadReviewDetail() {
@@ -456,6 +547,7 @@
       "[data-admin-reject]",
       "[data-admin-provision-build]",
       "[data-admin-refresh-detail]",
+      "[data-admin-refresh-detail-post]",
     ].forEach(function (selector) {
       const button = document.querySelector(selector);
       if (button) button.disabled = disabled;
@@ -472,12 +564,34 @@
       return;
     }
 
+    if (currentSubmission && isProvisionedSubmission(currentSubmission)) {
+      setStatus(
+        statusNode,
+        "This submission is already provisioned. Use Family Manager, Family Tree, or Lineage Certificate instead.",
+        "error",
+      );
+      return;
+    }
+
     const payload = getActionPayload();
 
     if (action === "reject" && !String(payload.rejection_reason || "").trim()) {
       setStatus(
         statusNode,
         "Rejection reason is required before rejecting.",
+        "error",
+      );
+      return;
+    }
+
+    if (
+      action === "provision" &&
+      normalizeStatus(currentSubmission && currentSubmission.status) !==
+        "approved"
+    ) {
+      setStatus(
+        statusNode,
+        "Approve the submission before provisioning the build.",
         "error",
       );
       return;
@@ -578,6 +692,9 @@
         "[data-admin-provision-build]",
       );
       const refreshBtn = document.querySelector("[data-admin-refresh-detail]");
+      const refreshPostBtn = document.querySelector(
+        "[data-admin-refresh-detail-post]",
+      );
 
       if (reviewBtn) {
         reviewBtn.addEventListener("click", function () {
@@ -605,6 +722,12 @@
 
       if (refreshBtn) {
         refreshBtn.addEventListener("click", function () {
+          loadReviewDetail();
+        });
+      }
+
+      if (refreshPostBtn) {
+        refreshPostBtn.addEventListener("click", function () {
           loadReviewDetail();
         });
       }
