@@ -6,9 +6,9 @@
     <title>Verification Uploads | Tomb of Light</title>
     <meta
       name="description"
-      content="Upload verification records and supporting family documents to Tomb of Light."
+      content="Upload verification records, portraits, and supporting family documents to Tomb of Light."
     />
-    <link rel="stylesheet" href="styles.css?v=20260325-6" />
+    <link rel="stylesheet" href="styles.css?v=20260325-7" />
   </head>
   <body>
     <div class="page-wrap">
@@ -95,7 +95,51 @@
             </div>
 
             <div class="form-panel">
-              <span class="eyebrow">Step 2 — Upload Verification Evidence</span>
+              <span class="eyebrow">Step 2 — Upload Member Photo</span>
+
+              <form class="form-grid" data-verification-photo-form novalidate>
+                <div class="form-grid two-col">
+                  <label>
+                    Family Member
+                    <select
+                      name="member_id"
+                      data-verification-photo-member
+                      required
+                    >
+                      <option value="">Select member</option>
+                    </select>
+                  </label>
+
+                  <label>
+                    Photo File
+                    <input
+                      type="file"
+                      name="photo_file"
+                      accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                      required
+                    />
+                  </label>
+                </div>
+
+                <div class="helper">
+                  Upload portrait images for family members. Allowed: JPG, PNG,
+                  and WEBP.
+                </div>
+
+                <div class="inline-actions" style="margin-top: 1rem">
+                  <button
+                    class="btn btn-primary"
+                    type="submit"
+                    data-verification-photo-submit
+                  >
+                    Upload Member Photo
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Step 3 — Upload Verification Evidence</span>
 
               <form class="form-grid" data-verification-upload-form novalidate>
                 <div class="form-grid two-col">
@@ -186,7 +230,7 @@
             </div>
 
             <div class="form-panel">
-              <span class="eyebrow">Step 3 — View Uploaded Records</span>
+              <span class="eyebrow">Step 4 — View Uploaded Records</span>
 
               <div class="form-grid two-col">
                 <label>
@@ -200,6 +244,7 @@
                   Upload Category
                   <select data-verification-category-filter>
                     <option value="">All upload categories</option>
+                    <option value="member_photo">member_photo</option>
                     <option value="verification_evidence">
                       verification_evidence
                     </option>
@@ -228,12 +273,12 @@
                 data-verification-uploads-empty
                 style="display: none; margin-top: 1rem"
               >
-                No uploaded verification records found for this member.
+                No uploaded records found for this member.
               </div>
             </div>
 
             <div class="form-panel">
-              <span class="eyebrow">Accepted Record Types</span>
+              <span class="eyebrow">Accepted Upload Types</span>
               <div class="grid-3">
                 <div>
                   <div class="card-number">1</div>
@@ -255,10 +300,10 @@
 
                 <div>
                   <div class="card-number">3</div>
-                  <h3>Supporting Files</h3>
+                  <h3>Portrait Files</h3>
                   <p class="card-copy">
-                    Additional family documents that help confirm relationships
-                    and preserve a trustworthy lineage record.
+                    Portraits and member photos used to strengthen the family
+                    record and support visual lineage presentation.
                   </p>
                 </div>
               </div>
@@ -278,9 +323,9 @@
       </footer>
     </div>
 
-    <script src="config.js?v=20260325-6"></script>
-    <script src="app.js?v=20260325-6"></script>
-    <script src="auth.js?v=20260325-6"></script>
-    <script src="verification-upload.js?v=20260325-6"></script>
+    <script src="config.js?v=20260325-7"></script>
+    <script src="app.js?v=20260325-7"></script>
+    <script src="auth.js?v=20260325-7"></script>
+    <script src="verification-upload.js?v=20260325-7"></script>
   </body>
 </html>

@@ -105,6 +105,11 @@
       "Select member",
     );
     setSelectOptions(
+      document.querySelector("[data-verification-photo-member]"),
+      members,
+      "Select member",
+    );
+    setSelectOptions(
       document.querySelector("[data-verification-list-member]"),
       members,
       "Select member",
@@ -216,6 +221,68 @@
     }
   }
 
+  async function handlePhotoUploadSubmit(event) {
+    event.preventDefault();
+
+    const form = event.currentTarget;
+    const actionStatus = document.querySelector(
+      "[data-verification-action-status]",
+    );
+
+    if (!currentFamilyId) {
+      setStatus(
+        actionStatus,
+        "Load a family before uploading a member photo.",
+        "error",
+      );
+      return;
+    }
+
+    const memberId = String(form.member_id.value || "").trim();
+    const fileInput = form.querySelector('input[name="photo_file"]');
+    const file = fileInput && fileInput.files ? fileInput.files[0] : null;
+
+    if (!memberId || !file) {
+      setStatus(actionStatus, "Member and photo file are required.", "error");
+      return;
+    }
+
+    const body = new FormData();
+    body.append("family_id", currentFamilyId);
+    body.append("member_id", memberId);
+    body.append("file", file);
+
+    try {
+      setStatus(actionStatus, "Uploading member photo...", "info");
+
+      await app.apiRequest("/uploads/member-photo", {
+        method: "POST",
+        body,
+      });
+
+      form.reset();
+
+      const listMember = document.querySelector(
+        "[data-verification-list-member]",
+      );
+      const categoryFilter = document.querySelector(
+        "[data-verification-category-filter]",
+      );
+      if (listMember) listMember.value = memberId;
+      if (categoryFilter) categoryFilter.value = "member_photo";
+
+      setStatus(actionStatus, "Member photo uploaded successfully.", "success");
+      await loadUploads();
+    } catch (error) {
+      console.error("Photo upload failed:", error);
+      setStatus(
+        actionStatus,
+        error.message || "Unable to upload member photo.",
+        "error",
+      );
+    }
+  }
+
   async function handleUploadSubmit(event) {
     event.preventDefault();
 
@@ -264,11 +331,22 @@
       });
 
       form.reset();
+
+      const listMember = document.querySelector(
+        "[data-verification-list-member]",
+      );
+      const categoryFilter = document.querySelector(
+        "[data-verification-category-filter]",
+      );
+      if (listMember) listMember.value = memberId;
+      if (categoryFilter) categoryFilter.value = "verification_evidence";
+
       setStatus(
         actionStatus,
         "Verification evidence uploaded successfully.",
         "success",
       );
+      await loadUploads();
     } catch (error) {
       console.error("Upload failed:", error);
       setStatus(
@@ -296,9 +374,27 @@
 
     listNode.innerHTML = uploads
       .map(function (upload, index) {
+        const preview = String(upload.content_type || "").startsWith("image/")
+          ? `<div style="margin: 0 0 1rem;">
+                 <img
+                   src="${escapeHtml(
+                     (typeof app.getApiBaseUrl === "function"
+                       ? app.getApiBaseUrl()
+                       : "") +
+                       "/uploads/" +
+                       encodeURIComponent(upload.id || "") +
+                       "/download",
+                   )}"
+                   alt="${escapeHtml(upload.original_filename || "Uploaded image")}"
+                   style="width: 100%; max-height: 220px; object-fit: cover; border-radius: 18px; border: 1px solid rgba(255,255,255,0.08);"
+                 />
+               </div>`
+          : "";
+
         return `
           <div class="family-record-card">
             <div class="card-number">${index + 1}</div>
+            ${preview}
             <h3>${escapeHtml(upload.original_filename || "Uploaded File")}</h3>
             <p class="card-copy"><strong>Category:</strong> ${escapeHtml(upload.category || "—")}</p>
             <p class="card-copy"><strong>Verification Type:</strong> ${escapeHtml(upload.verification_type || "—")}</p>
@@ -394,6 +490,7 @@
         {
           method: "GET",
           headers: token ? { Authorization: `Bearer ${token}` } : {},
+          credentials: "include",
         },
       );
 
@@ -440,6 +537,9 @@
       const loadFamilyButton = document.querySelector(
         "[data-verification-load-family]",
       );
+      const photoForm = document.querySelector(
+        "[data-verification-photo-form]",
+      );
       const uploadForm = document.querySelector(
         "[data-verification-upload-form]",
       );
@@ -451,6 +551,10 @@
         loadFamilyButton.addEventListener("click", function () {
           loadFamilyGraph();
         });
+      }
+
+      if (photoForm) {
+        photoForm.addEventListener("submit", handlePhotoUploadSubmit);
       }
 
       if (uploadForm) {
