@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Dashboard | Tomb of Light</title>
     <meta name="description" content="Your Tomb of Light dashboard." />
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=20260325-6" />
   </head>
   <body>
     <div class="page-wrap">
@@ -20,13 +20,15 @@
             type="button"
             aria-label="Toggle navigation"
             aria-expanded="false"
+            aria-controls="site-nav"
           >
             Menu
           </button>
 
           <nav class="site-nav" id="site-nav" aria-label="Portal navigation">
-            <a href="dashboard.html">Dashboard</a>
+            <a href="dashboard.html" aria-current="page">Dashboard</a>
             <a href="intake-review.html">My Intake</a>
+            <a href="verification-upload.html">Verification Uploads</a>
             <a href="tree-view.html">Family Tree</a>
             <a href="lineage-certificate.html">Lineage Certificate</a>
             <a href="faq.html">Help</a>
@@ -115,11 +117,10 @@
                 </a>
                 <a
                   class="btn btn-secondary"
-                  href="tree-view.html"
-                  data-dashboard-workspace-tree-action
+                  href="verification-upload.html"
                   data-paid-action
                 >
-                  Family Tree
+                  Upload Verification Docs
                 </a>
                 <a
                   class="btn btn-secondary"
@@ -159,7 +160,8 @@
               <span class="eyebrow">Customer Workspace</span>
               <p class="card-copy" data-dashboard-workspace-copy>
                 Your Tomb of Light customer workspace connects package access,
-                onboarding, family structure, and lineage tools in one place.
+                onboarding, family structure, lineage tools, and document-backed
+                verification in one place.
               </p>
 
               <div class="inline-actions" style="margin-top: 1.5rem">
@@ -173,11 +175,10 @@
                 </a>
                 <a
                   class="btn btn-secondary"
-                  href="tree-view.html"
-                  data-dashboard-workspace-tree-action
+                  href="verification-upload.html"
                   data-paid-action
                 >
-                  Family Tree
+                  Verification Uploads
                 </a>
                 <a
                   class="btn btn-secondary"
@@ -207,10 +208,10 @@
                 </a>
                 <a
                   class="btn btn-secondary"
-                  href="tree-view.html"
+                  href="verification-upload.html"
                   data-paid-action
                 >
-                  Open Family Tree
+                  Upload Verification Docs
                 </a>
                 <a
                   class="btn btn-secondary"
@@ -301,10 +302,10 @@
                 </a>
                 <a
                   class="btn btn-secondary"
-                  href="tree-view.html"
-                  data-dashboard-next-family-action
+                  href="verification-upload.html"
+                  data-paid-action
                 >
-                  Open Family Tree
+                  Upload Family Records
                 </a>
               </div>
             </div>
@@ -338,10 +339,10 @@
                 </div>
                 <div>
                   <div class="card-number">3</div>
-                  <h3>Living Lineage Outputs</h3>
+                  <h3>Verification Evidence</h3>
                   <p class="card-copy">
-                    Render your family tree, lineage certificate, and future
-                    production stages from the approved build.
+                    Upload IDs, birth certificates, marriage records, adoption
+                    records, and supporting family documents for review.
                   </p>
                 </div>
               </div>
@@ -369,8 +370,8 @@
                   <div class="card-number">C</div>
                   <h3>Package Access</h3>
                   <p class="card-copy">
-                    Family build tools unlock once a paid package is recorded to
-                    your account.
+                    Family build tools and upload workflows unlock once a paid
+                    package is recorded to your account.
                   </p>
                 </div>
               </div>
@@ -390,10 +391,10 @@
       </footer>
     </div>
 
-    <script src="config.js?v=20260325-2"></script>
-    <script src="app.js?v=20260325-2"></script>
-    <script src="auth.js?v=20260325-2"></script>
-    <script src="dashboard-intake.js?v=20260325-2"></script>
-    <script src="dashboard-admin.js?v=20260325-2"></script>
+    <script src="config.js?v=20260325-6"></script>
+    <script src="app.js?v=20260325-6"></script>
+    <script src="auth.js?v=20260325-6"></script>
+    <script src="dashboard-intake.js?v=20260325-6"></script>
+    <script src="dashboard-admin.js?v=20260325-6"></script>
   </body>
 </html>

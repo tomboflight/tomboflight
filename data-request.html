@@ -1,220 +1,380 @@
-<!DOCTYPE html>
+Paste this as your full data-request.html:
+
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Data Requests | Tomb of Light</title>
-  <meta
-    name="description"
-    content="Submit a privacy or data-related request to Tomb of Light, including access, correction, deletion, or related inquiries."
-  />
-  <link rel="stylesheet" href="styles.css" />
-</head>
-<body>
-  <div class="page-wrap">
-    <header class="site-header">
-      <div class="container site-header-inner">
-        <a class="brand" href="index.html" aria-label="Tomb of Light home">
-          <span>Tomb of Light<span class="brand-symbol">™</span></span>
-        </a>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Data Requests | Tomb of Light</title>
+    <meta
+      name="description"
+      content="Submit a privacy or data-related request to Tomb of Light, including access, correction, deletion, or related inquiries."
+    />
+    <link rel="stylesheet" href="styles.css?v=20260325-7" />
+  </head>
+  <body>
+    <a href="#main-content" class="skip-to-content">Skip to main content</a>
 
-        <button class="menu-toggle" type="button" aria-label="Toggle navigation">
-          Menu
-        </button>
+    <div class="site-watermark" aria-hidden="true"></div>
 
-        <nav class="site-nav" aria-label="Primary navigation">
-          <a href="how-it-works.html">How It Works</a>
-          <a href="security.html">Security</a>
-          <a href="compliance.html">Compliance</a>
-          <a href="faq.html">FAQ</a>
-        </nav>
+    <div class="page-wrap">
+      <header class="site-header" role="banner">
+        <div class="container site-header-inner">
+          <a class="brand" href="index.html" aria-label="Tomb of Light home">
+            <span>Tomb of Light<span class="brand-symbol">™</span></span>
+          </a>
 
-        <div class="header-actions">
-          <a class="btn btn-primary" href="signup.html">Request Access</a>
-        </div>
-      </div>
-    </header>
+          <button
+            class="menu-toggle"
+            type="button"
+            aria-label="Toggle navigation"
+            aria-expanded="false"
+            aria-controls="site-nav"
+          >
+            Menu
+          </button>
 
-    <main>
-      <section class="page-hero">
-        <div class="container">
-          <div class="page-hero-panel">
-            <span class="eyebrow">User Rights</span>
-            <h1>Data Requests</h1>
-            <p>
-              Use this page to request access, correction, deletion, or other
-              information related to how Tomb of Light handles personal information
-              through the public website and related communications.
-            </p>
+          <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
+            <a href="platform.html">Platform</a>
+            <a href="how-it-works.html">How It Works</a>
+            <a href="security.html">Security</a>
+            <a href="compliance.html">Compliance</a>
+            <a href="faq.html">FAQ</a>
+          </nav>
+
+          <div class="header-actions">
+            <a class="btn btn-primary" href="signup.html">Request Access</a>
           </div>
         </div>
-      </section>
+      </header>
 
-      <section class="page-sections">
-        <div class="container form-shell">
-          <div class="form-panel">
-            <div class="notice">
-              Requests may need to be verified before Tomb of Light can respond.
-              Response timing may vary depending on the nature of the request,
-              applicable law, and operational circumstances.
-            </div>
-
-            <form class="form-grid" data-mailto-form data-form-subject="Data request submission">
-              <div class="form-grid two-col">
-                <label>
-                  Full Name
-                  <input type="text" name="full_name" data-label="Full Name" placeholder="Your full name" required />
-                </label>
-
-                <label>
-                  Email Address
-                  <input type="email" name="email" data-label="Email Address" placeholder="you@example.com" required />
-                </label>
-              </div>
-
-              <div class="form-grid two-col">
-                <label>
-                  Request Type
-                  <select name="request_type" data-label="Request Type" required>
-                    <option value="">Select a request type</option>
-                    <option>Access Request</option>
-                    <option>Correction Request</option>
-                    <option>Deletion Request</option>
-                    <option>Privacy Inquiry</option>
-                    <option>Other</option>
-                  </select>
-                </label>
-
-                <label>
-                  Jurisdiction or State
-                  <input type="text" name="jurisdiction" data-label="Jurisdiction or State" placeholder="State or country, if relevant" />
-                </label>
-              </div>
-
-              <label>
-                Details
-                <textarea
-                  name="details"
-                  data-label="Details"
-                  placeholder="Describe your request with enough detail for review."
-                  required
-                ></textarea>
-              </label>
-
-              <label>
-                Verification Information
-                <textarea
-                  name="verification"
-                  data-label="Verification Information"
-                  placeholder="Provide any information that may help verify your request, if appropriate."
-                ></textarea>
-              </label>
-
-              <div class="helper">
-                This opens your email app to send the request to support@tomboflight.com.
-                Do not include sensitive passwords, payment data, or other
-                unnecessary confidential information in this form.
-              </div>
-
-              <div class="inline-actions">
-                <button class="btn btn-primary" type="submit">Submit Request</button>
-                <a class="btn btn-secondary" href="privacy.html">Privacy Policy</a>
-              </div>
-            </form>
-          </div>
-
-          <div class="form-panel">
-            <span class="eyebrow">What to Expect</span>
-            <div class="grid-3">
-              <div>
-                <div class="card-number">1</div>
-                <h3>Submission review</h3>
-                <p class="card-copy">
-                  Tomb of Light may review the request for completeness and determine
-                  whether additional information is needed.
-                </p>
-              </div>
-
-              <div>
-                <div class="card-number">2</div>
-                <h3>Verification</h3>
-                <p class="card-copy">
-                  Identity or authority may need to be confirmed before certain
-                  data-related requests can be processed.
-                </p>
-              </div>
-
-              <div>
-                <div class="card-number">3</div>
-                <h3>Response</h3>
-                <p class="card-copy">
-                  Tomb of Light may respond based on applicable rights, operational
-                  records, and legal or security obligations.
-                </p>
-              </div>
-            </div>
-
-            <div class="small-link-row">
-              <a href="privacy-state-notices.html">State Privacy Notices</a>
-              <a href="privacy-choices.html">Privacy Choices</a>
-              <a href="compliance.html">Compliance &amp; Legal</a>
-            </div>
-          </div>
-        </div>
-      </section>
-    </main>
-
-    <footer class="footer">
-      <div class="container">
-        <div class="footer-card">
-          <div class="footer-top">
-            <div>
-              <div class="footer-brand">Tomb of Light<span class="brand-symbol">™</span></div>
-              <p class="footer-copy">
-                A private, cinematic platform for preserving and exploring family
-                lineage across generations.
+      <main id="main-content" role="main">
+        <section class="page-hero">
+          <div class="container">
+            <div class="page-hero-panel">
+              <span class="eyebrow">User Rights</span>
+              <h1>Data Requests</h1>
+              <p>
+                Use this page to request access, correction, deletion, or other
+                information related to how Tomb of Light handles personal
+                information through the public website and related
+                communications.
               </p>
-              <div class="cookie-status" data-cookie-status>
-                Your cookie preference has not been set yet.
+            </div>
+          </div>
+        </section>
+
+        <section class="page-sections">
+          <div class="container form-shell">
+            <div class="form-panel">
+              <div class="notice">
+                Requests may need to be verified before Tomb of Light can
+                respond. Response timing may vary depending on the nature of the
+                request, applicable law, and operational circumstances.
+              </div>
+
+              <form
+                class="form-grid"
+                data-mailto-form
+                data-form-subject="Data request submission"
+                data-form-recipient="support@tomboflight.com"
+                novalidate
+              >
+                <div class="form-grid two-col">
+                  <label>
+                    Full Name
+                    <input
+                      type="text"
+                      name="full_name"
+                      data-label="Full Name"
+                      placeholder="Your full name"
+                      autocomplete="name"
+                      required
+                    />
+                  </label>
+
+                  <label>
+                    Email Address
+                    <input
+                      type="email"
+                      name="email"
+                      data-label="Email Address"
+                      placeholder="you@example.com"
+                      autocomplete="email"
+                      required
+                    />
+                  </label>
+                </div>
+
+                <div class="form-grid two-col">
+                  <label>
+                    Request Type
+                    <select
+                      name="request_type"
+                      data-label="Request Type"
+                      required
+                    >
+                      <option value="">Select a request type</option>
+                      <option value="Access Request">Access Request</option>
+                      <option value="Correction Request">
+                        Correction Request
+                      </option>
+                      <option value="Deletion Request">Deletion Request</option>
+                      <option value="Privacy Inquiry">Privacy Inquiry</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </label>
+
+                  <label>
+                    Jurisdiction or State
+                    <input
+                      type="text"
+                      name="jurisdiction"
+                      data-label="Jurisdiction or State"
+                      placeholder="State or country, if relevant"
+                    />
+                  </label>
+                </div>
+
+                <label>
+                  Details
+                  <textarea
+                    name="details"
+                    data-label="Details"
+                    placeholder="Describe your request with enough detail for review."
+                    required
+                  ></textarea>
+                </label>
+
+                <label>
+                  Verification Information
+                  <textarea
+                    name="verification"
+                    data-label="Verification Information"
+                    placeholder="Provide any information that may help verify your request, if appropriate."
+                  ></textarea>
+                </label>
+
+                <div
+                  class="helper"
+                  data-mailto-status
+                  aria-live="polite"
+                  style="display: none"
+                ></div>
+
+                <div class="helper">
+                  This form opens your email app to send the request to
+                  support@tomboflight.com. Do not include passwords, payment
+                  card information, or other unnecessary sensitive information.
+                </div>
+
+                <div class="inline-actions">
+                  <button class="btn btn-primary" type="submit">
+                    Submit Request
+                  </button>
+                  <a class="btn btn-secondary" href="privacy.html">
+                    Privacy Policy
+                  </a>
+                </div>
+              </form>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">What to Expect</span>
+              <div class="grid-3">
+                <div>
+                  <div class="card-number">1</div>
+                  <h3>Submission review</h3>
+                  <p class="card-copy">
+                    Tomb of Light may review the request for completeness and
+                    determine whether additional information is needed.
+                  </p>
+                </div>
+
+                <div>
+                  <div class="card-number">2</div>
+                  <h3>Verification</h3>
+                  <p class="card-copy">
+                    Identity or authority may need to be confirmed before
+                    certain data-related requests can be processed.
+                  </p>
+                </div>
+
+                <div>
+                  <div class="card-number">3</div>
+                  <h3>Response</h3>
+                  <p class="card-copy">
+                    Tomb of Light may respond based on applicable rights,
+                    operational records, and legal or security obligations.
+                  </p>
+                </div>
+              </div>
+
+              <div class="small-link-row">
+                <a href="privacy-state-notices.html">State Privacy Notices</a>
+                <a href="privacy-choices.html">Privacy Choices</a>
+                <a href="compliance.html">Compliance &amp; Legal</a>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer" role="contentinfo">
+        <div class="container">
+          <div class="footer-card">
+            <div class="footer-top">
+              <div>
+                <div class="footer-brand">
+                  Tomb of Light<span class="brand-symbol">™</span>
+                </div>
+                <p class="footer-copy">
+                  A private, cinematic platform for preserving and exploring
+                  family lineage across generations.
+                </p>
+                <div class="cookie-status" data-cookie-status>
+                  Your cookie preference has not been set yet.
+                </div>
+              </div>
+
+              <div class="footer-links">
+                <a href="privacy.html">Privacy Policy</a>
+                <a href="terms.html">Terms</a>
+                <a href="cookie-policy.html">Cookie Policy</a>
+                <a href="accessibility.html">Accessibility</a>
+                <a href="data-request.html">Data Requests</a>
+                <a href="privacy-state-notices.html">State Privacy Notices</a>
+                <a href="privacy-choices.html">Privacy Choices</a>
+                <a href="compliance.html">Compliance &amp; Legal</a>
               </div>
             </div>
 
-            <div class="footer-links">
-              <a href="privacy.html">Privacy Policy</a>
-              <a href="terms.html">Terms</a>
-              <a href="cookie-policy.html">Cookie Policy</a>
-              <a href="accessibility.html">Accessibility</a>
-              <a href="data-request.html">Data Requests</a>
-              <a href="privacy-state-notices.html">State Privacy Notices</a>
-              <a href="privacy-choices.html">Privacy Choices</a>
-              <a href="compliance.html">Compliance &amp; Legal</a>
+            <div class="footer-bottom">
+              <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
+              <span
+                >Tomb of Light technology and platform design are
+                proprietary.</span
+              >
             </div>
           </div>
-
-          <div class="footer-bottom">
-            <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
-            <span>Tomb of Light technology and platform design are proprietary.</span>
-          </div>
         </div>
-      </div>
-    </footer>
-  </div>
+      </footer>
+    </div>
 
-  <div class="cookie-banner" data-cookie-banner>
-    <div class="cookie-inner">
-      <div class="cookie-copy">
-        We use essential site technologies and may use optional analytics tools
-        only where permitted. You can accept or decline optional analytics
-        cookies and review your choices at any time.
-      </div>
-      <div class="cookie-actions">
-        <button class="btn btn-primary" type="button" data-cookie-accept>Accept</button>
-        <button class="btn btn-secondary" type="button" data-cookie-decline>Decline</button>
-        <a class="btn btn-ghost" href="privacy-choices.html">Privacy Choices</a>
+    <div
+      class="cookie-banner"
+      data-cookie-banner
+      role="contentinfo"
+      aria-label="Cookie preferences"
+    >
+      <div class="cookie-inner">
+        <div class="cookie-copy">
+          We use essential site technologies and may use optional analytics
+          tools only where permitted. You can accept or decline optional
+          analytics cookies and review your choices at any time.
+        </div>
+        <div class="cookie-actions">
+          <button class="btn btn-primary" type="button" data-cookie-accept>
+            Accept
+          </button>
+          <button class="btn btn-secondary" type="button" data-cookie-decline>
+            Decline
+          </button>
+          <a class="btn btn-ghost" href="privacy-choices.html">
+            Privacy Choices
+          </a>
+        </div>
       </div>
     </div>
-  </div>
 
-  <script src="app.js"></script>
-</body>
+    <script src="app.js?v=20260325-7"></script>
+    <script>
+      (function () {
+        "use strict";
+
+        function setMailtoStatus(node, message, type) {
+          if (!node) return;
+          node.style.display = "block";
+          node.textContent = message;
+          node.style.color =
+            type === "error"
+              ? "#ffb3b3"
+              : type === "success"
+                ? "#cfe8cf"
+                : "#d6e6ff";
+        }
+
+        function buildMailtoBody(form) {
+          const fields = Array.from(
+            form.querySelectorAll("input, select, textarea"),
+          );
+
+          const lines = fields
+            .filter(function (field) {
+              return (
+                field.name &&
+                !field.disabled &&
+                field.type !== "submit" &&
+                field.type !== "button" &&
+                field.type !== "hidden"
+              );
+            })
+            .map(function (field) {
+              const label =
+                field.getAttribute("data-label") ||
+                field.name.replaceAll("_", " ");
+              const value = String(field.value || "").trim() || "—";
+              return label + ": " + value;
+            });
+
+          return lines.join("\n");
+        }
+
+        document
+          .querySelectorAll("[data-mailto-form]")
+          .forEach(function (form) {
+            form.addEventListener("submit", function (event) {
+              event.preventDefault();
+
+              const statusNode = form.querySelector("[data-mailto-status]");
+
+              if (
+                typeof form.reportValidity === "function" &&
+                !form.reportValidity()
+              ) {
+                setMailtoStatus(
+                  statusNode,
+                  "Please complete the required fields before submitting.",
+                  "error",
+                );
+                return;
+              }
+
+              const recipient =
+                form.getAttribute("data-form-recipient") ||
+                "support@tomboflight.com";
+              const subject =
+                form.getAttribute("data-form-subject") || "Form Submission";
+              const body = buildMailtoBody(form);
+
+              const mailtoUrl =
+                "mailto:" +
+                encodeURIComponent(recipient) +
+                "?subject=" +
+                encodeURIComponent(subject) +
+                "&body=" +
+                encodeURIComponent(body);
+
+              setMailtoStatus(
+                statusNode,
+                "Opening your email app now.",
+                "success",
+              );
+
+              window.location.href = mailtoUrl;
+            });
+          });
+      })();
+    </script>
+  </body>
 </html>
