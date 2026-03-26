@@ -8,7 +8,7 @@
       name="description"
       content="Admin family build manager for Tomb of Light."
     />
-    <link rel="stylesheet" href="styles.css?v=20260325-4" />
+    <link rel="stylesheet" href="styles.css?v=20260325-5" />
   </head>
   <body>
     <div class="page-wrap">
@@ -278,6 +278,176 @@
                 </div>
               </form>
             </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Upload Member Photo</span>
+
+              <form class="form-grid" data-admin-photo-form novalidate>
+                <div class="form-grid two-col">
+                  <label>
+                    Member
+                    <select name="member_id" data-admin-photo-member required>
+                      <option value="">Select member</option>
+                    </select>
+                  </label>
+
+                  <label>
+                    Photo File
+                    <input
+                      type="file"
+                      name="photo_file"
+                      accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                      required
+                    />
+                  </label>
+                </div>
+
+                <div class="helper">
+                  Upload portrait images for family members. Allowed: JPG, PNG,
+                  WEBP.
+                </div>
+
+                <div class="inline-actions" style="margin-top: 1rem">
+                  <button
+                    class="btn btn-primary"
+                    type="submit"
+                    data-admin-photo-submit
+                  >
+                    Upload Photo
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Upload Verification Evidence</span>
+
+              <form class="form-grid" data-admin-evidence-form novalidate>
+                <div class="form-grid two-col">
+                  <label>
+                    Member
+                    <select
+                      name="member_id"
+                      data-admin-evidence-member
+                      required
+                    >
+                      <option value="">Select member</option>
+                    </select>
+                  </label>
+
+                  <label>
+                    Verification Type
+                    <select name="verification_type" required>
+                      <option value="">Select verification type</option>
+                      <option value="government_id">government_id</option>
+                      <option value="birth_certificate">
+                        birth_certificate
+                      </option>
+                      <option value="marriage_certificate">
+                        marriage_certificate
+                      </option>
+                      <option value="adoption_record">adoption_record</option>
+                      <option value="supporting_record">
+                        supporting_record
+                      </option>
+                      <option value="founder_review">founder_review</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div class="form-grid two-col">
+                  <label>
+                    Evidence Kind
+                    <select name="evidence_kind" required>
+                      <option value="">Select evidence kind</option>
+                      <option value="government_id">government_id</option>
+                      <option value="birth_certificate">
+                        birth_certificate
+                      </option>
+                      <option value="marriage_certificate">
+                        marriage_certificate
+                      </option>
+                      <option value="adoption_record">adoption_record</option>
+                      <option value="supporting_record">
+                        supporting_record
+                      </option>
+                    </select>
+                  </label>
+
+                  <label>
+                    Evidence File
+                    <input
+                      type="file"
+                      name="evidence_file"
+                      accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp"
+                      required
+                    />
+                  </label>
+                </div>
+
+                <div class="helper">
+                  Upload PDFs or images to support verification review.
+                </div>
+
+                <div class="inline-actions" style="margin-top: 1rem">
+                  <button
+                    class="btn btn-primary"
+                    type="submit"
+                    data-admin-evidence-submit
+                  >
+                    Upload Evidence
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Member Uploads</span>
+
+              <div class="form-grid two-col">
+                <label>
+                  Member
+                  <select data-admin-uploads-member>
+                    <option value="">Select member</option>
+                  </select>
+                </label>
+
+                <label>
+                  Upload Category
+                  <select data-admin-upload-category-filter>
+                    <option value="">All upload categories</option>
+                    <option value="member_photo">member_photo</option>
+                    <option value="verification_evidence">
+                      verification_evidence
+                    </option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="inline-actions" style="margin-top: 1rem">
+                <button
+                  class="btn btn-secondary"
+                  type="button"
+                  data-admin-load-member-uploads
+                >
+                  Load Member Uploads
+                </button>
+              </div>
+
+              <div
+                class="grid-3"
+                data-admin-member-uploads-list
+                style="margin-top: 1.25rem"
+              ></div>
+
+              <div
+                class="helper"
+                data-admin-member-uploads-empty
+                style="display: none; margin-top: 1rem"
+              >
+                No uploads found for this member and filter.
+              </div>
+            </div>
           </div>
         </section>
       </main>
@@ -293,9 +463,9 @@
       </footer>
     </div>
 
-    <script src="config.js?v=20260325-4"></script>
-    <script src="app.js?v=20260325-4"></script>
-    <script src="auth.js?v=20260325-4"></script>
-    <script src="admin-family-manager.js?v=20260325-4"></script>
+    <script src="config.js?v=20260325-5"></script>
+    <script src="app.js?v=20260325-5"></script>
+    <script src="auth.js?v=20260325-5"></script>
+    <script src="admin-family-manager.js?v=20260325-5"></script>
   </body>
 </html>
