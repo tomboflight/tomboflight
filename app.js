@@ -148,7 +148,7 @@
         method: "POST",
       });
     } catch (error) {
-      // ignore logout errors and still clear local session
+      // Ignore logout errors and still clear local session.
     } finally {
       clearSession();
     }
@@ -322,7 +322,7 @@
           link.classList.add("active");
         }
       } catch (error) {
-        // ignore malformed hrefs
+        // Ignore malformed hrefs.
       }
     });
   }
@@ -359,6 +359,21 @@
     }
   }
 
+  function setupSelectPlaceholderState() {
+    document.querySelectorAll("select").forEach(function (select) {
+      function syncPlaceholderState() {
+        if (!select.value) {
+          select.classList.add("placeholder-active");
+        } else {
+          select.classList.remove("placeholder-active");
+        }
+      }
+
+      syncPlaceholderState();
+      select.addEventListener("change", syncPlaceholderState);
+    });
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     setupMobileMenu();
     markActiveNavLink();
@@ -366,6 +381,7 @@
     setupCookieBanner();
     applyPaymentLinks();
     syncPublicAuthCtas();
+    setupSelectPlaceholderState();
   });
 
   const sharedApi = {
