@@ -7,6 +7,19 @@
     return;
   }
 
+  const ALLOWED_PHOTO_TYPES = new Set([
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+  ]);
+
+  const ALLOWED_EVIDENCE_TYPES = new Set([
+    "application/pdf",
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+  ]);
+
   let currentFamilyId = "";
   let currentGraph = { members: [] };
   let families = [];
@@ -146,6 +159,35 @@
     }
   }
 
+  function validateRequiredForm(form, statusNode) {
+    if (!form) return false;
+
+    if (typeof form.reportValidity === "function" && !form.reportValidity()) {
+      setStatus(
+        statusNode,
+        "Please complete all required fields and confirmations before continuing.",
+        "error",
+      );
+      return false;
+    }
+
+    return true;
+  }
+
+  function validateFileType(file, allowedTypes, fallbackExtensions) {
+    if (!file) return false;
+
+    const type = String(file.type || "").toLowerCase();
+    if (type && allowedTypes.has(type)) {
+      return true;
+    }
+
+    const name = String(file.name || "").toLowerCase();
+    return fallbackExtensions.some(function (ext) {
+      return name.endsWith(ext);
+    });
+  }
+
   async function loadFamilies() {
     const pageStatus = document.querySelector(
       "[data-verification-page-status]",
@@ -229,6 +271,10 @@
       "[data-verification-action-status]",
     );
 
+    if (!validateRequiredForm(form, actionStatus)) {
+      return;
+    }
+
     if (!currentFamilyId) {
       setStatus(
         actionStatus,
@@ -244,6 +290,22 @@
 
     if (!memberId || !file) {
       setStatus(actionStatus, "Member and photo file are required.", "error");
+      return;
+    }
+
+    if (
+      !validateFileType(file, ALLOWED_PHOTO_TYPES, [
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".webp",
+      ])
+    ) {
+      setStatus(
+        actionStatus,
+        "Invalid file type. Allowed member photo formats are JPG, PNG, and WEBP.",
+        "error",
+      );
       return;
     }
 
@@ -291,6 +353,10 @@
       "[data-verification-action-status]",
     );
 
+    if (!validateRequiredForm(form, actionStatus)) {
+      return;
+    }
+
     if (!currentFamilyId) {
       setStatus(
         actionStatus,
@@ -310,6 +376,23 @@
       setStatus(
         actionStatus,
         "Member, verification type, evidence kind, and file are required.",
+        "error",
+      );
+      return;
+    }
+
+    if (
+      !validateFileType(file, ALLOWED_EVIDENCE_TYPES, [
+        ".pdf",
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".webp",
+      ])
+    ) {
+      setStatus(
+        actionStatus,
+        "Invalid file type. Allowed evidence formats are PDF, JPG, PNG, and WEBP.",
         "error",
       );
       return;

@@ -41,6 +41,57 @@ INTERNAL_ADMIN_KEYS = {
     "marketing",
 }
 
+PHOTO_ALLOWED_CONTENT_TYPES = {
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+}
+PHOTO_ALLOWED_EXTENSIONS = {
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".webp",
+}
+PHOTO_MAX_BYTES = 10 * 1024 * 1024
+
+EVIDENCE_ALLOWED_CONTENT_TYPES = {
+    "application/pdf",
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+}
+EVIDENCE_ALLOWED_EXTENSIONS = {
+    ".pdf",
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".webp",
+}
+EVIDENCE_MAX_BYTES = 20 * 1024 * 1024
+
+ALLOWED_VERIFICATION_TYPES = {
+    "government_id",
+    "birth_certificate",
+    "marriage_certificate",
+    "adoption_record",
+    "death_certificate",
+    "obituary",
+    "supporting_family_record",
+}
+ALLOWED_EVIDENCE_KINDS = {
+    "government_id",
+    "birth_certificate",
+    "marriage_certificate",
+    "adoption_record",
+    "death_certificate",
+    "obituary",
+    "supporting_family_record",
+}
+ALLOWED_QUERY_CATEGORIES = {
+    "member_photo",
+    "verification_evidence",
+}
+
 
 def _normalize_value(value: Any) -> str:
     return str(value or "").strip()
@@ -206,8 +257,16 @@ def _require_upload_access(
     return upload_record, family
 
 
+def _public_upload_record(record: dict[str, Any]) -> dict[str, Any]:
+    serialized = serialize_upload_record(record)
+    serialized.pop("relative_path", None)
+    serialized.pop("absolute_path", None)
+    serialized.pop("storage_path", None)
+    return serialized
+
+
 def _serialize_uploads(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [serialize_upload_record(record) for record in records]
+    return [_public_upload_record(record) for record in records]
 
 
 def _absolute_upload_path(relative_path: str) -> Path:
@@ -223,6 +282,84 @@ def _absolute_upload_path(relative_path: str) -> Path:
     return candidate
 
 
+def _file_extension(filename: str) -> str:
+    return Path(filename or "").suffix.lower()
+
+
+def _upload_size_bytes(upload: UploadFile) -> int:
+    file_obj = upload.file
+    current_position = file_obj.tell()
+    file_obj.seek(0, 2)
+    size = file_obj.tell()
+    file_obj.seek(current_position)
+    return int(size)
+
+
+def _validate_category_filter(category: Optional[str]) -> Optional[str]:
+    if category is None:
+        return None
+
+    normalized = _normalize_value(category)
+    if not normalized:
+        return None
+
+    if normalized not in ALLOWED_QUERY_CATEGORIES:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid upload category filter.",
+        )
+
+    return normalized
+
+
+def _validate_upload_file(
+    upload: UploadFile,
+    *,
+    allowed_content_types: set[str],
+    allowed_extensions: set[str],
+    max_bytes: int,
+    label: str,
+) -> None:
+    if upload is None:
+        raise HTTPException(status_code=400, detail=f"{label} file is required.")
+
+    filename = _normalize_value(upload.filename)
+    if not filename:
+        raise HTTPException(status_code=400, detail=f"{label} filename is required.")
+
+    if len(filename) > 255:
+        raise HTTPException(status_code=400, detail=f"{label} filename is too long.")
+
+    extension = _file_extension(filename)
+    if extension not in allowed_extensions:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid {label} file extension.",
+        )
+
+    content_type = _normalize_value(upload.content_type).lower()
+    if content_type not in allowed_content_types:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid {label} content type.",
+        )
+
+    size_bytes = _upload_size_bytes(upload)
+    if size_bytes <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{label} file is empty.",
+        )
+
+    if size_bytes > max_bytes:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{label} file exceeds the maximum allowed size.",
+        )
+
+    upload.file.seek(0)
+
+
 @router.post("/member-photo")
 async def upload_member_photo(
     family_id: str = Form(...),
@@ -233,6 +370,14 @@ async def upload_member_photo(
     db = get_database()
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")
+
+    _validate_upload_file(
+        file,
+        allowed_content_types=PHOTO_ALLOWED_CONTENT_TYPES,
+        allowed_extensions=PHOTO_ALLOWED_EXTENSIONS,
+        max_bytes=PHOTO_MAX_BYTES,
+        label="member photo",
+    )
 
     member, _family = _require_member_access(member_id, db, current_user)
     actual_family_id = _normalize_value(member.get("family_id"))
@@ -249,11 +394,12 @@ async def upload_member_photo(
         member_id=member_id,
         upload=file,
         uploaded_by=_actor_label(current_user),
+        uploaded_by_user_id=_current_user_id(current_user),
     )
 
     return {
         "message": "Member photo uploaded successfully.",
-        "upload": upload_record,
+        "upload": _public_upload_record(upload_record),
         "member_id": member_id,
         "family_id": actual_family_id,
     }
@@ -264,13 +410,30 @@ async def upload_verification_evidence(
     family_id: str = Form(...),
     member_id: str = Form(...),
     verification_type: str = Form(...),
-    evidence_kind: str = Form("supporting_record"),
+    evidence_kind: str = Form("supporting_family_record"),
     file: UploadFile = File(...),
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
     db = get_database()
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")
+
+    normalized_verification_type = _normalize_value(verification_type)
+    normalized_evidence_kind = _normalize_value(evidence_kind)
+
+    if normalized_verification_type not in ALLOWED_VERIFICATION_TYPES:
+        raise HTTPException(status_code=400, detail="Invalid verification type.")
+
+    if normalized_evidence_kind not in ALLOWED_EVIDENCE_KINDS:
+        raise HTTPException(status_code=400, detail="Invalid evidence kind.")
+
+    _validate_upload_file(
+        file,
+        allowed_content_types=EVIDENCE_ALLOWED_CONTENT_TYPES,
+        allowed_extensions=EVIDENCE_ALLOWED_EXTENSIONS,
+        max_bytes=EVIDENCE_MAX_BYTES,
+        label="verification evidence",
+    )
 
     member, _family = _require_member_access(member_id, db, current_user)
     actual_family_id = _normalize_value(member.get("family_id"))
@@ -285,15 +448,16 @@ async def upload_verification_evidence(
         db=db,
         family_id=actual_family_id,
         member_id=member_id,
-        verification_type=_normalize_value(verification_type),
-        evidence_kind=_normalize_value(evidence_kind),
+        verification_type=normalized_verification_type,
+        evidence_kind=normalized_evidence_kind,
         upload=file,
         uploaded_by=_actor_label(current_user),
+        uploaded_by_user_id=_current_user_id(current_user),
     )
 
     return {
         "message": "Verification evidence uploaded successfully.",
-        "upload": upload_record,
+        "upload": _public_upload_record(upload_record),
         "member_id": member_id,
         "family_id": actual_family_id,
     }
@@ -311,9 +475,11 @@ def list_member_uploads(
 
     member, _family = _require_member_access(member_id, db, current_user)
 
+    normalized_category = _validate_category_filter(category)
+
     query: dict[str, Any] = {"member_id": str(member.get("_id"))}
-    if category:
-      query["category"] = _normalize_value(category)
+    if normalized_category:
+        query["category"] = normalized_category
 
     records = list(db["uploaded_files"].find(query).sort("created_at", -1))
     return {
@@ -334,10 +500,11 @@ def list_family_uploads(
         raise HTTPException(status_code=500, detail="Database is not connected.")
 
     _require_family_access_by_family_id(family_id, db, current_user)
+    normalized_category = _validate_category_filter(category)
 
     query: dict[str, Any] = {"family_id": family_id}
-    if category:
-      query["category"] = _normalize_value(category)
+    if normalized_category:
+        query["category"] = normalized_category
 
     records = list(db["uploaded_files"].find(query).sort("created_at", -1))
     return {
@@ -366,11 +533,16 @@ def download_upload(
     if not absolute_path.exists():
         raise HTTPException(status_code=404, detail="Upload file not found on disk.")
 
-    return FileResponse(
+    response = FileResponse(
         path=absolute_path,
         media_type=upload_record.get("content_type") or "application/octet-stream",
         filename=upload_record.get("original_filename") or absolute_path.name,
     )
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 @router.delete("/{upload_id}")
@@ -408,6 +580,7 @@ def delete_upload(
                         "photo_content_type": "",
                         "photo_size_bytes": 0,
                         "updated_by": _actor_label(current_user),
+                        "updated_by_user_id": _current_user_id(current_user),
                     }
                 },
             )

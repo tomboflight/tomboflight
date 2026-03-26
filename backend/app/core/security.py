@@ -14,17 +14,29 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def hash_password(password: str) -> str:
+    if not isinstance(password, str) or not password.strip():
+        raise ValueError("Password cannot be empty.")
     return pwd_context.hash(password)
 
 
 def verify_password(password: str, hashed: str) -> bool:
+    if not password or not hashed:
+        return False
     return pwd_context.verify(password, hashed)
 
 
 def create_access_token(data: dict[str, Any]) -> str:
     to_encode = data.copy()
-    expire = datetime.now(UTC) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
+    now = datetime.now(UTC)
+    expire = now + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+
+    to_encode.update(
+        {
+            "iat": now,
+            "nbf": now,
+            "exp": expire,
+        }
+    )
 
     token = jwt.encode(
         to_encode,
@@ -35,12 +47,17 @@ def create_access_token(data: dict[str, Any]) -> str:
 
 
 def decode_access_token(token: str) -> dict[str, Any] | None:
+    if not token or not isinstance(token, str):
+        return None
+
     try:
         payload = jwt.decode(
             token,
             SECRET_KEY,
             algorithms=cast(Any, [ALGORITHM]),
         )
+        if not isinstance(payload, dict):
+            return None
         return cast(dict[str, Any], payload)
     except JWTError:
         return None

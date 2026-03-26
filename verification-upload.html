@@ -8,9 +8,13 @@
       name="description"
       content="Upload verification records, portraits, and supporting family documents to Tomb of Light."
     />
-    <link rel="stylesheet" href="styles.css?v=20260325-7" />
+    <link rel="stylesheet" href="styles.css?v=20260326-2" />
   </head>
   <body>
+    <a href="#main-content" class="skip-to-content">Skip to main content</a>
+
+    <div class="site-watermark" aria-hidden="true"></div>
+
     <div class="page-wrap">
       <header class="site-header">
         <div class="container site-header-inner">
@@ -47,7 +51,7 @@
         </div>
       </header>
 
-      <main data-verification-upload-page>
+      <main id="main-content" data-verification-upload-page>
         <section class="page-hero">
           <div class="container">
             <div class="page-hero-panel">
@@ -62,6 +66,23 @@
 
         <section class="page-sections">
           <div class="container form-shell">
+            <div class="form-panel">
+              <span class="eyebrow">Important Before Uploading</span>
+              <div class="notice">
+                Only upload records and images you have the lawful right to
+                submit. Do not upload Social Security cards, full Social
+                Security numbers, payment card information, or other unnecessary
+                sensitive information unless Tomb of Light specifically requests
+                it for a defined review purpose.
+              </div>
+              <div class="helper" style="margin-top: 1rem">
+                Uploads may be reviewed for workflow management, verification
+                support, fraud prevention, customer support, security,
+                compliance, and service fulfillment. Uploading a file does not
+                guarantee approval, acceptance, or legal validation.
+              </div>
+            </div>
+
             <div class="form-panel">
               <span class="eyebrow">Step 1 — Select Family</span>
 
@@ -123,7 +144,41 @@
 
                 <div class="helper">
                   Upload portrait images for family members. Allowed: JPG, PNG,
-                  and WEBP.
+                  and WEBP. Submit only images you have the lawful right to use
+                  and share.
+                </div>
+
+                <div style="display: grid; gap: 0.85rem; margin-top: 0.85rem">
+                  <label
+                    style="display: flex; gap: 0.65rem; align-items: flex-start"
+                  >
+                    <input
+                      type="checkbox"
+                      required
+                      style="margin-top: 0.2rem"
+                    />
+                    <span>
+                      I confirm that I have the lawful right and authority to
+                      upload this image and, where required, permission from the
+                      living individual involved or from the parent or legal
+                      guardian of a minor.
+                    </span>
+                  </label>
+
+                  <label
+                    style="display: flex; gap: 0.65rem; align-items: flex-start"
+                  >
+                    <input
+                      type="checkbox"
+                      required
+                      style="margin-top: 0.2rem"
+                    />
+                    <span>
+                      I understand that Tomb of Light may review uploaded
+                      materials for workflow, support, security, fraud
+                      prevention, compliance, and service fulfillment.
+                    </span>
+                  </label>
                 </div>
 
                 <div class="inline-actions" style="margin-top: 1rem">
@@ -214,7 +269,60 @@
                 <div class="helper">
                   Upload PDFs or images such as birth certificates, marriage
                   records, adoption records, death certificates, obituary files,
-                  government IDs, and supporting family documents.
+                  government IDs, and supporting family documents. Submit only
+                  the minimum information reasonably necessary for the stated
+                  purpose.
+                </div>
+
+                <div style="display: grid; gap: 0.85rem; margin-top: 0.85rem">
+                  <label
+                    style="display: flex; gap: 0.65rem; align-items: flex-start"
+                  >
+                    <input
+                      type="checkbox"
+                      required
+                      style="margin-top: 0.2rem"
+                    />
+                    <span>
+                      I confirm that I have the lawful right and authority to
+                      upload these materials and, where required, permission
+                      from the living individual involved or from the parent or
+                      legal guardian of a minor.
+                    </span>
+                  </label>
+
+                  <label
+                    style="display: flex; gap: 0.65rem; align-items: flex-start"
+                  >
+                    <input
+                      type="checkbox"
+                      required
+                      style="margin-top: 0.2rem"
+                    />
+                    <span>
+                      I understand that some records may contain sensitive
+                      personal information, and I will submit only the
+                      information reasonably necessary for the stated review
+                      purpose.
+                    </span>
+                  </label>
+
+                  <label
+                    style="display: flex; gap: 0.65rem; align-items: flex-start"
+                  >
+                    <input
+                      type="checkbox"
+                      required
+                      style="margin-top: 0.2rem"
+                    />
+                    <span>
+                      I understand that uploading a file does not guarantee
+                      approval, legal validation, or publication and that Tomb
+                      of Light may review uploaded materials for workflow,
+                      support, security, fraud prevention, compliance, and
+                      service fulfillment.
+                    </span>
+                  </label>
                 </div>
 
                 <div class="inline-actions" style="margin-top: 1rem">
@@ -284,8 +392,8 @@
                   <div class="card-number">1</div>
                   <h3>Identity Records</h3>
                   <p class="card-copy">
-                    Government ID, supporting identity records, and household
-                    records when needed.
+                    Government ID or other supporting identity records only
+                    where reasonably necessary for the stated workflow.
                   </p>
                 </div>
 
@@ -294,7 +402,8 @@
                   <h3>Lineage Records</h3>
                   <p class="card-copy">
                     Birth certificates, marriage certificates, adoption records,
-                    death certificates, and obituary records.
+                    death certificates, obituary records, and supporting family
+                    documents.
                   </p>
                 </div>
 
@@ -302,8 +411,8 @@
                   <div class="card-number">3</div>
                   <h3>Portrait Files</h3>
                   <p class="card-copy">
-                    Portraits and member photos used to strengthen the family
-                    record and support visual lineage presentation.
+                    Portraits and member photos used to support visual lineage
+                    presentation and related family record workflows.
                   </p>
                 </div>
               </div>
@@ -315,17 +424,70 @@
       <footer class="footer">
         <div class="container">
           <div class="footer-card">
+            <div class="footer-top">
+              <div>
+                <div class="footer-brand">
+                  Tomb of Light<span class="brand-symbol">™</span>
+                </div>
+                <p class="footer-copy">
+                  A private, cinematic platform for preserving and exploring
+                  family lineage across generations.
+                </p>
+                <div class="cookie-status" data-cookie-status>
+                  Your cookie preference has not been set yet.
+                </div>
+              </div>
+
+              <div class="footer-links">
+                <a href="privacy.html">Privacy Policy</a>
+                <a href="terms.html">Terms</a>
+                <a href="data-request.html">Data Requests</a>
+                <a href="security.html">Security</a>
+                <a href="faq.html">Help</a>
+              </div>
+            </div>
+
             <div class="footer-bottom">
               <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
+              <span
+                >Tomb of Light technology and platform design are
+                proprietary.</span
+              >
             </div>
           </div>
         </div>
       </footer>
     </div>
 
-    <script src="config.js?v=20260325-7"></script>
-    <script src="app.js?v=20260325-7"></script>
-    <script src="auth.js?v=20260325-7"></script>
-    <script src="verification-upload.js?v=20260325-7"></script>
+    <div
+      class="cookie-banner"
+      data-cookie-banner
+      role="contentinfo"
+      aria-label="Cookie preferences"
+    >
+      <div class="cookie-inner">
+        <div class="cookie-copy">
+          We use essential site technologies and may use optional analytics
+          tools only where permitted. You can accept or decline optional
+          analytics cookies and review your choices at any time.
+        </div>
+        <div class="cookie-actions">
+          <button class="btn btn-primary" type="button" data-cookie-accept>
+            Accept
+          </button>
+          <button class="btn btn-secondary" type="button" data-cookie-decline>
+            Decline
+          </button>
+          <a class="btn btn-ghost" href="privacy-choices.html"
+            >Privacy Choices</a
+          >
+        </div>
+      </div>
+    </div>
+
+    <script src="config.js?v=20260326-2"></script>
+    <script src="app.js?v=20260326-2"></script>
+    <script src="auth.js?v=20260326-2"></script>
+    <script src="verification-upload.js?v=20260326-2"></script>
   </body>
 </html>

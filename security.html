@@ -1,342 +1,369 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-  <title>Security | Tomb of Light</title>
+    <title>Security | Tomb of Light</title>
 
-  <meta
-    name="description"
-    content="Learn how Tomb of Light approaches website security, account protection, private record handling, responsible disclosure, and long-term digital legacy stewardship."
-  />
+    <meta
+      name="description"
+      content="Learn how Tomb of Light approaches website security, account protection, private record handling, responsible disclosure, and long-term digital legacy stewardship."
+    />
 
-  <link rel="icon" href="favicon.ico" sizes="any" />
-  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-  <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+    <link rel="icon" href="favicon.ico" sizes="any" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
 
-  <link rel="stylesheet" href="styles.css" />
-</head>
-<body>
+    <link rel="stylesheet" href="styles.css?v=20260326-1" />
+  </head>
+  <body>
+    <a href="#main-content" class="skip-to-content">Skip to main content</a>
 
-  <a href="#main-content" class="skip-to-content">Skip to main content</a>
+    <div class="site-watermark" aria-hidden="true"></div>
 
-  <div class="site-watermark" aria-hidden="true"></div>
+    <div class="page-wrap">
+      <header class="site-header" role="banner">
+        <div class="container site-header-inner">
+          <a class="brand" href="index.html" aria-label="Tomb of Light home">
+            <span>Tomb of Light<span class="brand-symbol">™</span></span>
+          </a>
 
-  <div class="page-wrap">
-    <header class="site-header" role="banner">
-      <div class="container site-header-inner">
-        <a class="brand" href="index.html" aria-label="Tomb of Light home">
-          <span>Tomb of Light<span class="brand-symbol">™</span></span>
-        </a>
+          <button
+            class="menu-toggle"
+            type="button"
+            aria-label="Toggle navigation menu"
+            aria-expanded="false"
+            aria-controls="site-nav"
+          >
+            Menu
+          </button>
 
-        <button
-          class="menu-toggle"
-          type="button"
-          aria-label="Toggle navigation menu"
-          aria-expanded="false"
-          aria-controls="site-nav">
-          Menu
-        </button>
+          <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
+            <a href="platform.html">Platform</a>
+            <a href="how-it-works.html">How It Works</a>
+            <a href="security.html" class="active" aria-current="page"
+              >Security</a
+            >
+            <a href="compliance.html">Compliance</a>
+            <a href="faq.html">FAQ</a>
+          </nav>
 
-        <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
-          <a href="platform.html">Platform</a>
-          <a href="how-it-works.html">How It Works</a>
-          <a href="security.html" class="active" aria-current="page">Security</a>
-          <a href="compliance.html">Compliance</a>
-          <a href="faq.html">FAQ</a>
-        </nav>
-
-        <div class="header-actions">
-          <a class="btn btn-primary" href="signup.html">Request Early Access</a>
+          <div class="header-actions">
+            <a class="btn btn-primary" href="signup.html">Create Account</a>
+          </div>
         </div>
-      </div>
-    </header>
+      </header>
 
-    <main id="main-content" role="main">
-      <section class="page-hero" aria-labelledby="security-hero-title">
+      <main id="main-content" role="main">
+        <section class="page-hero" aria-labelledby="security-hero-title">
+          <div class="container">
+            <div class="page-hero-panel">
+              <span class="eyebrow">Trust Framework</span>
+              <h1 id="security-hero-title">
+                Security built around privacy, stewardship, and controlled
+                access.
+              </h1>
+              <p>
+                Tomb of Light approaches security as a core part of digital
+                legacy stewardship. This page summarizes general security
+                practices and operating principles for the public website and
+                platform-facing workflows.
+              </p>
+
+              <div class="hero-actions">
+                <a class="btn btn-primary" href="signup.html">Create Account</a>
+                <a class="btn btn-secondary" href="privacy.html"
+                  >Privacy Policy</a
+                >
+              </div>
+
+              <div class="hero-meta" aria-label="Security page highlights">
+                <span class="meta-pill">Account Protection</span>
+                <span class="meta-pill">Controlled Access</span>
+                <span class="meta-pill">Private Records</span>
+                <span class="meta-pill">Responsible Disclosure</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section
+          class="page-sections"
+          aria-labelledby="security-protections-title"
+        >
+          <div class="container">
+            <div class="page-stack">
+              <article class="section-card">
+                <span class="eyebrow">Important Note</span>
+                <h2 id="security-protections-title">
+                  This page is a general summary, not a complete technical
+                  specification.
+                </h2>
+                <p class="card-copy">
+                  Tomb of Light uses administrative, technical, and
+                  organizational safeguards designed to reduce risk, protect
+                  information, and support secure operation of the public
+                  website and platform-facing workflows. Specific controls,
+                  configurations, and vendors may change over time and are not
+                  fully described on this page.
+                </p>
+              </article>
+
+              <article class="section-card">
+                <span class="eyebrow">Website and Platform Protections</span>
+                <h2>
+                  Public-facing protections begin with disciplined fundamentals.
+                </h2>
+
+                <div class="feature-strip">
+                  <article class="policy-card">
+                    <h3>Encrypted Website Sessions</h3>
+                    <p class="card-copy">
+                      Tomb of Light expects public website traffic to be
+                      delivered over encrypted connections to help protect
+                      information in transit.
+                    </p>
+                  </article>
+
+                  <article class="policy-card">
+                    <h3>Controlled Administrative Access</h3>
+                    <p class="card-copy">
+                      Access to internal systems and platform-management
+                      functions is intended to be limited to authorized
+                      personnel or service providers with a legitimate business
+                      purpose.
+                    </p>
+                  </article>
+
+                  <article class="policy-card">
+                    <h3>Security Review Mindset</h3>
+                    <p class="card-copy">
+                      Tomb of Light continues to review workflows, system
+                      exposure, and operating practices to reduce unnecessary
+                      risk and strengthen platform stewardship over time.
+                    </p>
+                  </article>
+                </div>
+              </article>
+
+              <article class="section-card">
+                <span class="eyebrow">Private Family Records</span>
+                <h2>
+                  Private family content is intended for controlled systems, not
+                  casual public exposure.
+                </h2>
+                <p class="card-copy">
+                  Tomb of Light is designed around the principle that private
+                  family history, portraits, lineage records, and related
+                  materials deserve careful handling. Private family content is
+                  not intended for public display by default and may be handled
+                  through protected workflows, access controls, and
+                  account-based experiences where applicable.
+                </p>
+              </article>
+
+              <article class="section-card">
+                <span class="eyebrow">Account Protection</span>
+                <h2>
+                  Access depends on user behavior as well as platform controls.
+                </h2>
+                <div class="feature-strip">
+                  <article class="feature-card feature-card-clean">
+                    <div class="card-number" aria-hidden="true">01</div>
+                    <h3>Password Discipline</h3>
+                    <p class="card-copy">
+                      Users should choose a strong, unique password and keep
+                      credentials confidential.
+                    </p>
+                  </article>
+
+                  <article class="feature-card feature-card-clean">
+                    <div class="card-number" aria-hidden="true">02</div>
+                    <h3>Access Limitation</h3>
+                    <p class="card-copy">
+                      Administrative and operational access should be limited to
+                      people with a legitimate business need.
+                    </p>
+                  </article>
+
+                  <article class="feature-card feature-card-clean">
+                    <div class="card-number" aria-hidden="true">03</div>
+                    <h3>Workflow Review</h3>
+                    <p class="card-copy">
+                      Tomb of Light may review suspicious activity, misuse
+                      reports, and workflow anomalies to protect users and
+                      platform integrity.
+                    </p>
+                  </article>
+                </div>
+              </article>
+
+              <article class="section-card">
+                <span class="eyebrow">Uploads and Sensitive Materials</span>
+                <h2>
+                  Users should submit only what is reasonably necessary for the
+                  stated purpose.
+                </h2>
+                <p class="card-copy">
+                  Verification and family-record workflows may involve sensitive
+                  materials. Tomb of Light asks users not to upload Social
+                  Security cards, full Social Security numbers, payment card
+                  information, or other unnecessary sensitive information unless
+                  specifically requested for a defined workflow.
+                </p>
+              </article>
+
+              <article class="section-card">
+                <span class="eyebrow">Responsible Disclosure</span>
+                <h2>
+                  Report a potential security issue responsibly and directly.
+                </h2>
+                <p class="card-copy">
+                  If you believe you have identified a security issue affecting
+                  the public website or a Tomb of Light workflow, report it
+                  responsibly and do not access, alter, expose, or misuse
+                  information or systems you are not authorized to use.
+                </p>
+
+                <div class="feature-strip">
+                  <article class="policy-card">
+                    <h3>What to Include</h3>
+                    <ul class="policy-list">
+                      <li>A clear description of the issue</li>
+                      <li>The page, feature, or workflow affected</li>
+                      <li>Steps to reproduce, if known</li>
+                      <li>Relevant screenshots or technical context</li>
+                    </ul>
+                  </article>
+
+                  <article class="policy-card">
+                    <h3>Expected Conduct</h3>
+                    <ul class="policy-list">
+                      <li>Do not access data you are not authorized to view</li>
+                      <li>Do not disrupt services or availability</li>
+                      <li>Do not perform destructive testing</li>
+                      <li>Do not expose private information publicly</li>
+                    </ul>
+                  </article>
+
+                  <article class="policy-card">
+                    <h3>How to Contact</h3>
+                    <p class="card-copy">
+                      Send security-related reports to
+                      <a
+                        href="mailto:support@tomboflight.com?subject=Security%20Report"
+                        >support@tomboflight.com</a
+                      >
+                      with the subject line “Security Report.”
+                    </p>
+                  </article>
+                </div>
+              </article>
+
+              <article class="section-card">
+                <span class="eyebrow">Limits</span>
+                <h2>No system can promise absolute security.</h2>
+                <p class="card-copy">
+                  Security is an ongoing discipline, not a one-time claim. No
+                  website, platform, storage system, transmission method, or
+                  account system can be guaranteed to be absolutely secure at
+                  all times.
+                </p>
+              </article>
+
+              <article class="cta-panel cta-panel-premium">
+                <span class="eyebrow">Related Trust Pages</span>
+                <h2>Review the broader trust and governance framework.</h2>
+                <p class="section-lead">
+                  Security is one part of Tomb of Light’s broader approach to
+                  privacy, compliance, user rights, and protected family legacy
+                  stewardship.
+                </p>
+
+                <div class="cta-actions">
+                  <a class="btn btn-secondary" href="compliance.html"
+                    >Compliance</a
+                  >
+                  <a class="btn btn-secondary" href="privacy.html"
+                    >Privacy Policy</a
+                  >
+                  <a class="btn btn-secondary" href="faq.html">FAQ</a>
+                </div>
+              </article>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer" role="contentinfo">
         <div class="container">
-          <div class="page-hero-panel">
-            <span class="eyebrow">Trust Framework</span>
-            <h1 id="security-hero-title">Security built around privacy, stewardship, and responsible access.</h1>
-            <p>
-              Tomb of Light approaches security as a core part of digital legacy stewardship.
-              The platform is designed to support secure website operations, careful account handling,
-              private family record protection, and responsible operational controls over time.
-            </p>
+          <div class="footer-card">
+            <div class="footer-top">
+              <div>
+                <div class="footer-brand">
+                  Tomb of Light<span class="brand-symbol">™</span>
+                </div>
+                <p class="footer-copy">
+                  A private digital legacy platform for preserving and exploring
+                  family lineage across generations.
+                </p>
+                <div class="cookie-status" data-cookie-status>
+                  Your cookie preference has not been set yet.
+                </div>
+              </div>
 
-            <div class="hero-actions">
-              <a class="btn btn-primary" href="signup.html">Request Early Access</a>
-              <a class="btn btn-secondary" href="privacy.html">Privacy Policy</a>
+              <div class="footer-links">
+                <a href="platform.html">Platform</a>
+                <a href="privacy.html">Privacy Policy</a>
+                <a href="terms.html">Terms</a>
+                <a href="cookie-policy.html">Cookie Policy</a>
+                <a href="accessibility.html">Accessibility</a>
+                <a href="data-request.html">Data Requests</a>
+                <a href="privacy-state-notices.html">State Privacy Notices</a>
+                <a href="privacy-choices.html">Privacy Choices</a>
+                <a href="compliance.html">Compliance &amp; Legal</a>
+              </div>
             </div>
 
-            <div class="hero-meta" aria-label="Security page highlights">
-              <span class="meta-pill">Privacy-First Design</span>
-              <span class="meta-pill">Account Protection</span>
-              <span class="meta-pill">Controlled Access</span>
-              <span class="meta-pill">Responsible Disclosure</span>
+            <div class="footer-bottom">
+              <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
+              <span
+                >Tomb of Light technology and platform design are
+                proprietary.</span
+              >
             </div>
           </div>
         </div>
-      </section>
+      </footer>
+    </div>
 
-      <section class="page-sections" aria-labelledby="security-protections-title">
-        <div class="container">
-          <div class="page-stack">
-            <article class="section-card">
-              <span class="eyebrow">Current Website Protections</span>
-              <h2 id="security-protections-title">Public website safeguards begin with disciplined fundamentals.</h2>
-              <p class="card-copy">
-                Tomb of Light is structured to support a modern public-facing website with careful transport protection,
-                controlled deployment practices, and limited operational access.
-              </p>
-
-              <div class="feature-strip">
-                <article class="policy-card">
-                  <h3>Encrypted Connections</h3>
-                  <p class="card-copy">
-                    Website traffic should be served over encrypted connections so information exchanged
-                    between visitors and the site remains protected in transit.
-                  </p>
-                  <ul class="policy-list">
-                    <li>HTTPS delivery expectations</li>
-                    <li>Transport-layer protection in transit</li>
-                    <li>Reduced interception risk</li>
-                  </ul>
-                </article>
-
-                <article class="policy-card">
-                  <h3>Managed Hosting Controls</h3>
-                  <p class="card-copy">
-                    Tomb of Light is intended to rely on managed infrastructure and controlled deployment
-                    practices appropriate for a modern premium platform.
-                  </p>
-                  <ul class="policy-list">
-                    <li>Protected deployment workflow</li>
-                    <li>Environment-aware handling</li>
-                    <li>Operational access kept limited</li>
-                  </ul>
-                </article>
-
-                <article class="policy-card">
-                  <h3>Operational Discipline</h3>
-                  <p class="card-copy">
-                    Security is strengthened by limiting unnecessary exposure, maintaining clear workflows,
-                    and avoiding casual handling of sensitive systems and credentials.
-                  </p>
-                  <ul class="policy-list">
-                    <li>Restricted administrative handling</li>
-                    <li>Controlled operational processes</li>
-                    <li>Ongoing review mindset</li>
-                  </ul>
-                </article>
-              </div>
-            </article>
-
-            <article class="section-card">
-              <span class="eyebrow">Platform Security Direction</span>
-              <h2>Private family content should be handled separately from public-facing layers.</h2>
-              <p class="card-copy">
-                Tomb of Light is built around the principle that private family history deserves careful treatment.
-                Sensitive portraits, stories, records, and identity-rich materials should remain protected in
-                controlled systems rather than being casually exposed through public mechanisms.
-              </p>
-
-              <ul class="section-list">
-                <li>Private family records should remain protected by design.</li>
-                <li>Public-facing layers should avoid unnecessary sensitive exposure.</li>
-                <li>Security decisions should support dignity, privacy, and continuity.</li>
-              </ul>
-            </article>
-
-            <article class="section-card">
-              <span class="eyebrow">Account Protection</span>
-              <h2>Access should be limited, intentional, and role-aware.</h2>
-              <p class="card-copy">
-                Security is not just about infrastructure. It also depends on how access is granted,
-                how credentials are handled, and how administrative responsibility is controlled.
-              </p>
-
-              <div class="feature-strip">
-                <article class="feature-card feature-card-clean">
-                  <div class="card-number" aria-hidden="true">01</div>
-                  <h3>Access Control</h3>
-                  <p class="card-copy">
-                    Administrative and operational access should be limited to authorized personnel
-                    with a real and legitimate business purpose.
-                  </p>
-                </article>
-
-                <article class="feature-card feature-card-clean">
-                  <div class="card-number" aria-hidden="true">02</div>
-                  <h3>Credential Handling</h3>
-                  <p class="card-copy">
-                    Sensitive account credentials should be handled carefully and never treated as casual,
-                    shareable information within normal operations.
-                  </p>
-                </article>
-
-                <article class="feature-card feature-card-clean">
-                  <div class="card-number" aria-hidden="true">03</div>
-                  <h3>Future Hardening</h3>
-                  <p class="card-copy">
-                    As the platform matures, stronger authentication, role-based controls, and additional
-                    verification measures may be layered in over time.
-                  </p>
-                </article>
-              </div>
-            </article>
-
-            <article class="section-card">
-              <span class="eyebrow">Responsible Disclosure</span>
-              <h2>Report a potential security issue responsibly and directly.</h2>
-              <p class="card-copy">
-                If you believe you have identified a security issue affecting the public website,
-                Tomb of Light asks that you report it responsibly and avoid any attempt to access,
-                alter, expose, or misuse private information or platform systems.
-              </p>
-
-              <div class="feature-strip">
-                <article class="policy-card">
-                  <h3>What to Include</h3>
-                  <ul class="policy-list">
-                    <li>A clear description of the issue</li>
-                    <li>The page, feature, or workflow affected</li>
-                    <li>Steps to reproduce, if known</li>
-                    <li>Relevant screenshots or technical context</li>
-                  </ul>
-                </article>
-
-                <article class="policy-card">
-                  <h3>Expected Conduct</h3>
-                  <ul class="policy-list">
-                    <li>Do not access data you are not authorized to view</li>
-                    <li>Do not disrupt services or availability</li>
-                    <li>Do not attempt destructive testing</li>
-                    <li>Do not expose private information publicly</li>
-                  </ul>
-                </article>
-
-                <article class="policy-card">
-                  <h3>How to Contact</h3>
-                  <p class="card-copy">
-                    Security-related communications should be directed through Tomb of Light’s
-                    official support or compliance contact channels, with enough detail provided
-                    to support responsible review.
-                  </p>
-                </article>
-              </div>
-            </article>
-
-            <article class="section-card">
-              <span class="eyebrow">Limits and Evolving Controls</span>
-              <h2>Security is an ongoing discipline, not a one-time claim.</h2>
-              <p class="card-copy">
-                No platform can promise absolute security. Tomb of Light intends to continue improving
-                technical safeguards, operational practices, and protection measures as the platform evolves.
-              </p>
-
-              <div class="trust-grid trust-grid-clean">
-                <article class="trust-card">
-                  <h3>Continuous Improvement</h3>
-                  <p class="card-copy">
-                    Security controls may change as the platform grows and operational maturity increases.
-                  </p>
-                </article>
-
-                <article class="trust-card">
-                  <h3>Access Maturity</h3>
-                  <p class="card-copy">
-                    Additional identity and access safeguards may be added as future workflows expand.
-                  </p>
-                </article>
-
-                <article class="trust-card">
-                  <h3>Policy Updates</h3>
-                  <p class="card-copy">
-                    Public-facing pages may be updated over time to reflect security posture improvements.
-                  </p>
-                </article>
-
-                <article class="trust-card">
-                  <h3>Stewardship Mindset</h3>
-                  <p class="card-copy">
-                    The long-term goal is durable protection aligned with privacy, trust, and family dignity.
-                  </p>
-                </article>
-              </div>
-            </article>
-
-            <article class="cta-panel cta-panel-premium">
-              <span class="eyebrow">Related Trust Pages</span>
-              <h2>Review the broader trust and governance framework.</h2>
-              <p class="section-lead">
-                Security is one part of Tomb of Light’s broader approach to privacy,
-                compliance, user rights, and protected family legacy stewardship.
-              </p>
-
-              <div class="cta-actions">
-                <a class="btn btn-secondary" href="compliance.html">Compliance</a>
-                <a class="btn btn-secondary" href="privacy.html">Privacy Policy</a>
-                <a class="btn btn-secondary" href="faq.html">FAQ</a>
-              </div>
-            </article>
-          </div>
+    <div
+      class="cookie-banner"
+      data-cookie-banner
+      role="contentinfo"
+      aria-label="Cookie preferences"
+    >
+      <div class="cookie-inner">
+        <div class="cookie-copy">
+          We use essential site technologies and may use optional analytics
+          tools only where permitted. You can accept or decline optional
+          analytics cookies and review your choices at any time.
         </div>
-      </section>
-    </main>
-
-    <footer class="footer" role="contentinfo">
-      <div class="container">
-        <div class="footer-card">
-          <div class="footer-top">
-            <div>
-              <div class="footer-brand">Tomb of Light<span class="brand-symbol">™</span></div>
-              <p class="footer-copy">
-                A private digital legacy platform for preserving and exploring family lineage across generations.
-              </p>
-              <div class="cookie-status" data-cookie-status>
-                Your cookie preference has not been set yet.
-              </div>
-            </div>
-
-            <div class="footer-links">
-              <a href="platform.html">Platform</a>
-              <a href="privacy.html">Privacy Policy</a>
-              <a href="terms.html">Terms</a>
-              <a href="cookie-policy.html">Cookie Policy</a>
-              <a href="accessibility.html">Accessibility</a>
-              <a href="data-request.html">Data Requests</a>
-              <a href="privacy-state-notices.html">State Privacy Notices</a>
-              <a href="privacy-choices.html">Privacy Choices</a>
-              <a href="compliance.html">Compliance &amp; Legal</a>
-            </div>
-          </div>
-
-          <div class="footer-bottom">
-            <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
-            <span>Tomb of Light technology and platform design are proprietary.</span>
-          </div>
+        <div class="cookie-actions">
+          <button class="btn btn-primary" type="button" data-cookie-accept>
+            Accept
+          </button>
+          <button class="btn btn-secondary" type="button" data-cookie-decline>
+            Decline
+          </button>
+          <a class="btn btn-ghost" href="privacy-choices.html"
+            >Privacy Choices</a
+          >
         </div>
-      </div>
-    </footer>
-  </div>
-
-  <div class="cookie-banner" data-cookie-banner role="contentinfo" aria-label="Cookie preferences">
-    <div class="cookie-inner">
-      <div class="cookie-copy">
-        We use essential site technologies and may use optional analytics tools
-        only where permitted. You can accept or decline optional analytics
-        cookies and review your choices at any time.
-      </div>
-      <div class="cookie-actions">
-        <button class="btn btn-primary" type="button" data-cookie-accept>Accept</button>
-        <button class="btn btn-secondary" type="button" data-cookie-decline>Decline</button>
-        <a class="btn btn-ghost" href="privacy-choices.html">Privacy Choices</a>
       </div>
     </div>
-  </div>
 
-  <script src="app.js"></script>
-</body>
+    <script src="app.js?v=20260326-1"></script>
+  </body>
 </html>

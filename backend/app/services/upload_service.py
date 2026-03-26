@@ -31,7 +31,16 @@ def _safe_path_token(value: Any) -> str:
 
 
 def _safe_original_filename(filename: str | None) -> str:
-    return Path(str(filename or "upload")).name
+    name = Path(str(filename or "upload")).name
+    name = "".join(ch for ch in name if ch.isprintable() and ch not in {"/", "\\"})
+    name = name.strip() or "upload"
+
+    if len(name) > 255:
+        suffix = Path(name).suffix[:10]
+        stem = Path(name).stem[:200]
+        name = f"{stem}{suffix}"
+
+    return name
 
 
 def _extension_for_upload(filename: str | None, content_type: str) -> str:
@@ -96,10 +105,10 @@ def serialize_upload_record(record: dict[str, Any]) -> dict[str, Any]:
         "verification_type": record.get("verification_type"),
         "original_filename": record.get("original_filename"),
         "stored_filename": record.get("stored_filename"),
-        "relative_path": record.get("relative_path"),
         "content_type": record.get("content_type"),
         "size_bytes": record.get("size_bytes"),
         "uploaded_by": record.get("uploaded_by"),
+        "uploaded_by_user_id": record.get("uploaded_by_user_id"),
         "created_at": record.get("created_at"),
         "download_path": f"/uploads/{record_id}/download" if record_id else "",
     }
@@ -112,6 +121,7 @@ async def store_member_photo_upload(
     member_id: str,
     upload: UploadFile,
     uploaded_by: str,
+    uploaded_by_user_id: str = "",
 ) -> dict[str, Any]:
     content_type = str(upload.content_type or "").strip().lower()
     if content_type not in IMAGE_CONTENT_TYPES:
@@ -127,9 +137,7 @@ async def store_member_photo_upload(
     member_token = _safe_path_token(member_id)
     stored_filename = f"{uuid4().hex}{extension}"
 
-    relative_path = (
-        Path("member_photos") / family_token / member_token / stored_filename
-    )
+    relative_path = Path("member_photos") / family_token / member_token / stored_filename
     absolute_path = _upload_root() / relative_path
 
     size_bytes = await _save_upload_to_disk(
@@ -152,6 +160,7 @@ async def store_member_photo_upload(
         "content_type": content_type,
         "size_bytes": size_bytes,
         "uploaded_by": uploaded_by,
+        "uploaded_by_user_id": uploaded_by_user_id,
         "storage_provider": "local_disk",
         "created_at": now_iso,
         "updated_at": now_iso,
@@ -172,6 +181,7 @@ async def store_member_photo_upload(
                 "photo_size_bytes": size_bytes,
                 "updated_at": now_iso,
                 "updated_by": uploaded_by,
+                "updated_by_user_id": uploaded_by_user_id,
             }
         },
     )
@@ -188,6 +198,7 @@ async def store_verification_evidence_upload(
     evidence_kind: str,
     upload: UploadFile,
     uploaded_by: str,
+    uploaded_by_user_id: str = "",
 ) -> dict[str, Any]:
     content_type = str(upload.content_type or "").strip().lower()
     if content_type not in EVIDENCE_CONTENT_TYPES:
@@ -233,6 +244,7 @@ async def store_verification_evidence_upload(
         "content_type": content_type,
         "size_bytes": size_bytes,
         "uploaded_by": uploaded_by,
+        "uploaded_by_user_id": uploaded_by_user_id,
         "storage_provider": "local_disk",
         "created_at": now_iso,
         "updated_at": now_iso,

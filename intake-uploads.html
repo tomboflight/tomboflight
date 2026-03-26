@@ -8,9 +8,13 @@
       name="description"
       content="Upload preparation and asset intake for Tomb of Light onboarding."
     />
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=20260326-3" />
   </head>
   <body>
+    <a href="#main-content" class="skip-to-content">Skip to main content</a>
+
+    <div class="site-watermark" aria-hidden="true"></div>
+
     <div class="page-wrap">
       <header class="site-header">
         <div class="container site-header-inner">
@@ -18,32 +22,44 @@
             <span>Tomb of Light<span class="brand-symbol">™</span></span>
           </a>
 
+          <button
+            class="menu-toggle"
+            type="button"
+            aria-label="Toggle navigation"
+            aria-expanded="false"
+            aria-controls="site-nav"
+          >
+            Menu
+          </button>
+
           <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
             <a href="dashboard.html">Dashboard</a>
             <a href="intake-welcome.html">Intake Welcome</a>
             <a href="intake-household.html">Household Setup</a>
             <a href="intake-family-map.html">Family Map</a>
+            <a href="intake-uploads.html" aria-current="page">Uploads</a>
             <a href="intake-consent.html">Consent</a>
             <a href="intake-review.html">Review</a>
           </nav>
 
           <div class="header-actions">
-            <a class="btn btn-secondary" href="intake-family-map.html"
-              >Back to Family Map</a
-            >
+            <a class="btn btn-secondary" href="intake-family-map.html">
+              Back to Family Map
+            </a>
           </div>
         </div>
       </header>
 
-      <main data-intake-uploads>
+      <main id="main-content" data-intake-uploads>
         <section class="page-hero">
           <div class="container">
             <div class="page-hero-panel">
               <span class="eyebrow">Step 3 of 5</span>
               <h1>Uploads</h1>
               <p class="card-copy">
-                List the assets you will provide for this package. Upload
-                processing will be connected next.
+                List the assets you expect to provide for this package and
+                identify what still needs to be gathered before final
+                processing.
               </p>
             </div>
           </div>
@@ -53,6 +69,14 @@
           <div class="container form-shell">
             <div class="form-panel">
               <span class="eyebrow">Upload Planning</span>
+
+              <div class="notice">
+                Only provide or later upload materials you have the lawful right
+                to submit. Do not include Social Security cards, full Social
+                Security numbers, payment card information, or other unnecessary
+                sensitive information unless Tomb of Light specifically requests
+                it for a defined workflow.
+              </div>
 
               <form class="form-grid" data-intake-uploads-form novalidate>
                 <div class="form-grid two-col">
@@ -83,7 +107,7 @@
                   <textarea
                     name="key_portraits"
                     rows="5"
-                    placeholder="Example: Larry Robinson portrait, Lanisha Robinson portrait, mother portrait, children portraits, household family group photos, supporting family images."
+                    placeholder="Example: founder portrait, spouse portrait, parent portraits, children portraits, household family group photos, supporting family images."
                   ></textarea>
                 </label>
 
@@ -92,7 +116,7 @@
                   <textarea
                     name="supporting_records"
                     rows="4"
-                    placeholder="Example: birth certificates, marriage records, obituaries, family documents, etc."
+                    placeholder="Example: birth certificates, marriage records, obituaries, adoption records, family documents, etc."
                   ></textarea>
                 </label>
 
@@ -105,6 +129,47 @@
                     placeholder="Example: need scan cleanup, missing one portrait, phone photos need sharpening, etc."
                   ></textarea>
                 </label>
+
+                <div style="display: grid; gap: 0.85rem; margin-top: 0.85rem">
+                  <label
+                    style="display: flex; gap: 0.65rem; align-items: flex-start"
+                  >
+                    <input
+                      type="checkbox"
+                      name="uploads_rights_confirmed"
+                      required
+                      style="margin-top: 0.2rem"
+                    />
+                    <span>
+                      I confirm that I have the lawful right and authority to
+                      provide or later upload these materials and, where
+                      required, permission from the living individual involved
+                      or from the parent or legal guardian of a minor.
+                    </span>
+                  </label>
+
+                  <label
+                    style="display: flex; gap: 0.65rem; align-items: flex-start"
+                  >
+                    <input
+                      type="checkbox"
+                      name="uploads_minimization_confirmed"
+                      required
+                      style="margin-top: 0.2rem"
+                    />
+                    <span>
+                      I understand that I should submit only the information
+                      reasonably necessary for the stated workflow and avoid
+                      unnecessary sensitive data.
+                    </span>
+                  </label>
+                </div>
+
+                <div class="helper">
+                  This step is planning and scope control. Actual upload
+                  acceptance, review, and secure storage rules apply when files
+                  are submitted through the platform upload workflow.
+                </div>
 
                 <div
                   class="helper"
@@ -140,7 +205,8 @@
                   <div class="card-number">1</div>
                   <h3>Scope Control</h3>
                   <p class="card-copy">
-                    Uploads define what’s inside this package boundary.
+                    Upload planning defines what is inside this package
+                    boundary.
                   </p>
                 </div>
                 <div>
@@ -154,9 +220,16 @@
                   <div class="card-number">3</div>
                   <h3>Quality Standards</h3>
                   <p class="card-copy">
-                    We flag missing or low-quality media before the build stage.
+                    Missing or low-quality media can be flagged before the build
+                    stage.
                   </p>
                 </div>
+              </div>
+
+              <div class="small-link-row" style="margin-top: 1.25rem">
+                <a href="privacy.html">Privacy Policy</a>
+                <a href="terms.html">Terms of Service</a>
+                <a href="security.html">Security</a>
               </div>
 
               <div class="inline-actions" style="margin-top: 1.25rem">
@@ -175,17 +248,70 @@
       <footer class="footer">
         <div class="container">
           <div class="footer-card">
+            <div class="footer-top">
+              <div>
+                <div class="footer-brand">
+                  Tomb of Light<span class="brand-symbol">™</span>
+                </div>
+                <p class="footer-copy">
+                  A private, cinematic platform for preserving and exploring
+                  family lineage across generations.
+                </p>
+                <div class="cookie-status" data-cookie-status>
+                  Your cookie preference has not been set yet.
+                </div>
+              </div>
+
+              <div class="footer-links">
+                <a href="privacy.html">Privacy Policy</a>
+                <a href="terms.html">Terms</a>
+                <a href="cookie-policy.html">Cookie Policy</a>
+                <a href="data-request.html">Data Requests</a>
+                <a href="security.html">Security</a>
+              </div>
+            </div>
+
             <div class="footer-bottom">
               <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
+              <span
+                >Tomb of Light technology and platform design are
+                proprietary.</span
+              >
             </div>
           </div>
         </div>
       </footer>
     </div>
 
-    <script src="config.js?v=20260322-10"></script>
-    <script src="app.js?v=20260322-10"></script>
-    <script src="auth.js?v=20260322-10"></script>
-    <script src="intake.js?v=20260322-10"></script>
+    <div
+      class="cookie-banner"
+      data-cookie-banner
+      role="contentinfo"
+      aria-label="Cookie preferences"
+    >
+      <div class="cookie-inner">
+        <div class="cookie-copy">
+          We use essential site technologies and may use optional analytics
+          tools only where permitted. You can accept or decline optional
+          analytics cookies and review your choices at any time.
+        </div>
+        <div class="cookie-actions">
+          <button class="btn btn-primary" type="button" data-cookie-accept>
+            Accept
+          </button>
+          <button class="btn btn-secondary" type="button" data-cookie-decline>
+            Decline
+          </button>
+          <a class="btn btn-ghost" href="privacy-choices.html"
+            >Privacy Choices</a
+          >
+        </div>
+      </div>
+    </div>
+
+    <script src="config.js?v=20260326-3"></script>
+    <script src="app.js?v=20260326-3"></script>
+    <script src="auth.js?v=20260326-3"></script>
+    <script src="intake.js?v=20260326-3"></script>
   </body>
 </html>

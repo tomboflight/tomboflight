@@ -146,6 +146,22 @@ def get_current_user(
 
     normalized_user = _normalize_user(user, payload)
 
+    payload_user_id = _normalize_value(payload.get("user_id"))
+    actual_user_id = _normalize_value(normalized_user.get("id"))
+    if payload_user_id and actual_user_id and payload_user_id != actual_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload.",
+        )
+
+    payload_email = _normalize_value(email)
+    actual_email = _normalize_value(normalized_user.get("email"))
+    if payload_email and actual_email and payload_email != actual_email:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload.",
+        )
+
     status_value = _normalize_value(normalized_user.get("status"))
     if status_value not in {"", "active"}:
         raise HTTPException(
