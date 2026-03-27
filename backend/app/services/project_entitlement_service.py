@@ -46,14 +46,17 @@ def _serialize(document: dict[str, Any] | None) -> dict[str, Any] | None:
 
 def _compute_maintenance_fields(
     maintenance_plan: str,
-    delivered_at: datetime,
-) -> tuple[str, datetime, datetime | None]:
-    plan = str(maintenance_plan or "monthly").strip().lower()
+    delivered_at: datetime | None,
+) -> tuple[str, datetime | None, datetime | None]:
+    plan = str(maintenance_plan or "").strip().lower()
+
+    if plan in {"", "not_started", "pending_delivery", "unselected"} or delivered_at is None:
+        return "not_started", None, None
 
     if plan == "lifetime":
         return "active", delivered_at, None
 
-    if plan == "annual":
+    if plan == "annual" or plan == "yearly":
         return "active", delivered_at, delivered_at + timedelta(days=365)
 
     return "active", delivered_at, delivered_at + timedelta(days=30)
@@ -65,16 +68,15 @@ def upsert_project_entitlement(
     user_id: str,
     package_code: str,
     active_addons: list[str] | None = None,
-    maintenance_plan: str = "monthly",
+    maintenance_plan: str = "not_started",
     delivered_at: datetime | None = None,
     status: str = "active",
 ) -> dict[str, Any] | None:
     collection = _collection()
 
     resolved = resolve_project_entitlements(package_code, active_addons or [])
-    effective_delivered_at = delivered_at or _utcnow()
     maintenance_status, maintenance_started_at, maintenance_renews_at = (
-        _compute_maintenance_fields(maintenance_plan, effective_delivered_at)
+        _compute_maintenance_fields(maintenance_plan, delivered_at)
     )
 
     existing = cast(
@@ -93,7 +95,7 @@ def upsert_project_entitlement(
         "maintenance_status": maintenance_status,
         "maintenance_started_at": maintenance_started_at,
         "maintenance_renews_at": maintenance_renews_at,
-        "delivered_at": effective_delivered_at,
+        "delivered_at": delivered_at,
         "status": status,
         "resolved_entitlements": resolved,
         "updated_at": now,

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, status
 
 from app.dependencies.auth import get_current_user
-from app.schemas.order import OrderCreate, OrderListResponse, OrderResponse
+from app.schemas.order import OrderCreate, OrderResponse
 from app.services.order_service import (
     create_order_for_user,
     ensure_order_indexes,

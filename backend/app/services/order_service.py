@@ -9,6 +9,7 @@ from pymongo.database import Database
 from pymongo.errors import OperationFailure
 
 from app.database import get_database
+from app.services.project_service import create_project_from_paid_order
 
 
 def _get_orders_collection() -> Collection:
@@ -21,16 +22,91 @@ def _get_users_collection() -> Collection:
     return db.get_collection("users")
 
 
+def _normalize(value: Optional[str]) -> str:
+    return str(value or "").strip()
+
+
+def _normalize_email(value: Optional[str]) -> Optional[str]:
+    if not value:
+        return None
+    return value.strip().lower()
+
+
+def _normalize_package_code(value: Optional[str]) -> str:
+    normalized = _normalize(value).lower()
+
+    mapping = {
+        "legacy-snapshot": "legacy_snapshot",
+        "legacy_snapshot": "legacy_snapshot",
+        "legacy-portrait-intro": "legacy_portrait_intro",
+        "legacy_portrait_intro": "legacy_portrait_intro",
+        "digital-legacy-portrait": "digital_legacy_portrait",
+        "digital_legacy_portrait": "digital_legacy_portrait",
+        "starter-family-tree": "household_foundation",
+        "starter_family_tree": "household_foundation",
+        "household-foundation": "household_foundation",
+        "household_foundation": "household_foundation",
+        "heirloom-legacy-tree": "heirloom_legacy_tree",
+        "heirloom_legacy_tree": "heirloom_legacy_tree",
+        "legacy-plus": "legacy_plus",
+        "legacy_plus": "legacy_plus",
+        "family-estate-concierge": "family_estate_concierge",
+        "family_estate_concierge": "family_estate_concierge",
+        "command-structure-network": "command_structure_network",
+        "command_structure_network": "command_structure_network",
+        "extra-upload-pack": "extra_upload_pack",
+        "extra_upload_pack": "extra_upload_pack",
+        "extra-storage": "extra_storage",
+        "extra_storage": "extra_storage",
+        "portrait-polish": "portrait_polish",
+        "portrait_polish": "portrait_polish",
+        "tribute-narration": "tribute_narration",
+        "tribute_narration": "tribute_narration",
+        "extra-mapped-person": "extra_mapped_person",
+        "extra_mapped_person": "extra_mapped_person",
+        "extra-zoom-layer": "extra_zoom_layer",
+        "extra_zoom_layer": "extra_zoom_layer",
+        "additional-narration-minute": "additional_narration_minute",
+        "additional_narration_minute": "additional_narration_minute",
+        "on-site-photo-scanning": "on_site_photo_scanning",
+        "on_site_photo_scanning": "on_site_photo_scanning",
+        "extra-linked-household": "extra_linked_household",
+        "extra_linked_household": "extra_linked_household",
+        "extra-branch": "extra_branch",
+        "extra_branch": "extra_branch",
+        "white-glove-archive-support": "white_glove_archive_support",
+        "white_glove_archive_support": "white_glove_archive_support",
+        "extra-organization-node": "extra_org_node",
+        "extra_org_node": "extra_org_node",
+        "extra-organization-level": "extra_org_level",
+        "extra_org_level": "extra_org_level",
+        "extra-admin-seat": "extra_admin_seat",
+        "extra_admin_seat": "extra_admin_seat",
+        "command-report-add-on": "command_report_addon",
+        "command_report_addon": "command_report_addon",
+    }
+
+    return mapping.get(normalized, normalized or "unknown")
+
+
 def _serialize_order(order: dict[str, Any]) -> dict[str, Any]:
+    package_code = _normalize_package_code(
+        order.get("package_code") or order.get("package_slug")
+    )
+
     return {
         "id": str(order["_id"]),
         "user_id": str(order["user_id"]),
         "email": order["email"],
-        "package_slug": order.get("package_slug", ""),
+        "package_code": package_code,
+        "package_slug": package_code,
         "package_name": order.get("package_name", ""),
         "price_label": order.get("price_label", ""),
+        "item_type": order.get("item_type", "package"),
+        "billing_plan": order.get("billing_plan", "one_time"),
         "source": order.get("source", "stripe"),
         "status": order.get("status", "paid"),
+        "project_id": str(order["project_id"]) if order.get("project_id") else None,
         "stripe_session_id": order.get("stripe_session_id"),
         "stripe_payment_link_id": order.get("stripe_payment_link_id"),
         "created_at": order["created_at"],
@@ -40,10 +116,14 @@ def _serialize_order(order: dict[str, Any]) -> dict[str, Any]:
 def create_order_for_user(user: dict[str, Any], payload: Any) -> dict[str, Any]:
     orders = _get_orders_collection()
 
+    package_code = _normalize_package_code(
+        getattr(payload, "package_code", None) or getattr(payload, "package_slug", None)
+    )
+
     existing = orders.find_one(
         {
             "user_id": ObjectId(str(user["_id"])),
-            "package_slug": payload.package_slug,
+            "package_code": package_code,
             "status": payload.order_status,
         },
         sort=[("created_at", -1)],
@@ -55,18 +135,38 @@ def create_order_for_user(user: dict[str, Any], payload: Any) -> dict[str, Any]:
     order_doc = {
         "user_id": ObjectId(str(user["_id"])),
         "email": user["email"],
-        "package_slug": payload.package_slug,
+        "package_code": package_code,
+        "package_slug": package_code,
         "package_name": payload.package_name,
         "price_label": payload.price_label,
+        "item_type": getattr(payload, "item_type", "package"),
+        "billing_plan": getattr(payload, "billing_plan", "one_time"),
         "source": payload.source,
         "status": payload.order_status,
         "stripe_session_id": payload.stripe_session_id,
         "stripe_payment_link_id": payload.stripe_payment_link_id,
+        "project_id": None,
         "created_at": datetime.now(UTC),
     }
 
     result = orders.insert_one(order_doc)
     order_doc["_id"] = result.inserted_id
+
+    if order_doc["item_type"] == "package":
+        project = create_project_from_paid_order(
+            user=user,
+            package_code=package_code,
+            package_name=payload.package_name,
+            stripe_session_id=payload.stripe_session_id,
+            stripe_payment_link_id=payload.stripe_payment_link_id,
+        )
+        if project:
+            orders.update_one(
+                {"_id": result.inserted_id},
+                {"$set": {"project_id": project.get("_id")}},
+            )
+            order_doc["project_id"] = project.get("_id")
+
     return _serialize_order(order_doc)
 
 
@@ -79,9 +179,6 @@ def get_orders_for_user(user: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def ensure_order_indexes() -> None:
-    """
-    Create indexes safely with explicit names and avoid index-name conflicts.
-    """
     orders = _get_orders_collection()
     existing = orders.index_information()
 
@@ -102,7 +199,10 @@ def ensure_order_indexes() -> None:
 
     _ensure_index([("user_id", 1)], name="user_id_1")
     _ensure_index([("email", 1)], name="email_1")
+    _ensure_index([("package_code", 1)], name="package_code_1")
     _ensure_index([("package_slug", 1)], name="package_slug_1")
+    _ensure_index([("item_type", 1)], name="item_type_1")
+    _ensure_index([("billing_plan", 1)], name="billing_plan_1")
     _ensure_index([("created_at", -1)], name="created_at_-1")
     _ensure_index(
         [("stripe_session_id", 1)],
@@ -116,12 +216,6 @@ def ensure_order_indexes() -> None:
         unique=False,
         sparse=True,
     )
-
-
-def _normalize_email(value: Optional[str]) -> Optional[str]:
-    if not value:
-        return None
-    return value.strip().lower()
 
 
 def _get_user_by_email(email: str) -> Optional[dict[str, Any]]:
@@ -142,7 +236,11 @@ def _get_user_by_email(email: str) -> Optional[dict[str, Any]]:
 
 
 def _event_object(event: dict[str, Any]) -> dict[str, Any]:
-    return ((event.get("data") or {}).get("object") or {}) if isinstance(event, dict) else {}
+    return (
+        ((event.get("data") or {}).get("object") or {})
+        if isinstance(event, dict)
+        else {}
+    )
 
 
 def _retrieve_checkout_session(session_id: str) -> dict[str, Any]:
@@ -188,41 +286,156 @@ def _extract_product_name_from_session(session: dict[str, Any]) -> Optional[str]
     return None
 
 
-def _infer_package_fields(session: dict[str, Any]) -> tuple[str, str, str]:
+def _extract_billing_plan_from_session(session: dict[str, Any]) -> str:
+    line_items = ((session.get("line_items") or {}).get("data")) or []
+    if not line_items:
+        return "one_time"
+
+    first_item = line_items[0] or {}
+    price_obj = first_item.get("price") or {}
+    recurring = price_obj.get("recurring") or {}
+
+    interval = str(recurring.get("interval") or "").strip().lower()
+    if interval == "month":
+        return "monthly"
+    if interval == "year":
+        return "yearly"
+
+    return "one_time"
+
+
+def _format_price_label(amount_subtotal: Any, billing_plan: str) -> str:
+    if not isinstance(amount_subtotal, int):
+        return "paid"
+
+    amount = amount_subtotal / 100
+
+    if billing_plan == "monthly":
+        return f"${amount:,.2f}/month"
+    if billing_plan == "yearly":
+        return f"${amount:,.2f}/year"
+
+    return f"${amount:,.2f}"
+
+
+def _infer_purchase_fields(session: dict[str, Any]) -> tuple[str, str, str, str, str]:
     metadata = session.get("metadata") or {}
 
-    package_slug = metadata.get("package_slug") or metadata.get("package")
-    package_name = metadata.get("package_name")
-    price_label = metadata.get("price_label")
+    raw_code = (
+        metadata.get("package_code")
+        or metadata.get("package_slug")
+        or metadata.get("package")
+    )
+    package_name = _normalize(metadata.get("package_name"))
+    price_label = _normalize(metadata.get("price_label"))
+    item_type = _normalize(metadata.get("item_type") or metadata.get("type")) or "package"
+    billing_plan = _normalize(metadata.get("billing_plan")) or _extract_billing_plan_from_session(session)
 
-    if package_slug and package_name and price_label:
-        return str(package_slug), str(package_name), str(price_label)
+    if raw_code:
+        package_code = _normalize_package_code(raw_code)
+        if package_name and price_label:
+            return item_type, package_code, package_name, price_label, billing_plan
 
-    product_name = _extract_product_name_from_session(session)
+    product_name = _extract_product_name_from_session(session) or ""
+    name_lower = product_name.lower()
     amount_subtotal = session.get("amount_subtotal")
+    inferred_billing_plan = _extract_billing_plan_from_session(session)
 
-    if isinstance(product_name, str):
-        name_lower = product_name.lower()
+    if "maintenance" in name_lower:
+        base_code = "unknown"
+        base_name = "Maintenance"
 
-        if "legacy plus" in name_lower:
-            return "legacy-plus", "Legacy Plus", "$3,200"
-        if "heirloom" in name_lower:
-            return "heirloom-legacy-tree", "Heirloom Legacy Tree", "$1,500"
-        if "starter" in name_lower:
-            return "starter-family-tree", "Starter Family Tree", "$799"
-        if "portrait" in name_lower:
-            return "digital-legacy-portrait", "Digital Legacy Portrait", "$399"
+        if "legacy snapshot" in name_lower:
+            base_code = "legacy_snapshot"
+            base_name = "Legacy Snapshot Maintenance"
+        elif "legacy portrait intro" in name_lower:
+            base_code = "legacy_portrait_intro"
+            base_name = "Legacy Portrait Intro Maintenance"
+        elif "digital legacy portrait" in name_lower:
+            base_code = "digital_legacy_portrait"
+            base_name = "Digital Legacy Portrait Maintenance"
+        elif "household foundation" in name_lower or "starter" in name_lower:
+            base_code = "household_foundation"
+            base_name = "Household Foundation Maintenance"
+        elif "heirloom" in name_lower:
+            base_code = "heirloom_legacy_tree"
+            base_name = "Heirloom Legacy Tree Maintenance"
+        elif "legacy plus" in name_lower:
+            base_code = "legacy_plus"
+            base_name = "Legacy Plus Maintenance"
+        elif "family estate concierge" in name_lower:
+            base_code = "family_estate_concierge"
+            base_name = "Family Estate Concierge Maintenance"
+        elif "command structure network" in name_lower:
+            base_code = "command_structure_network"
+            base_name = "Command Structure Network Maintenance"
 
-    if amount_subtotal == 320000:
-        return "legacy-plus", "Legacy Plus", "$3,200"
-    if amount_subtotal == 150000:
-        return "heirloom-legacy-tree", "Heirloom Legacy Tree", "$1,500"
-    if amount_subtotal == 79900:
-        return "starter-family-tree", "Starter Family Tree", "$799"
-    if amount_subtotal == 39900:
-        return "digital-legacy-portrait", "Digital Legacy Portrait", "$399"
+        suffix = "monthly" if inferred_billing_plan == "monthly" else "yearly" if inferred_billing_plan == "yearly" else "one_time"
+        return (
+            "maintenance",
+            f"{base_code}_{suffix}",
+            base_name,
+            _format_price_label(amount_subtotal, inferred_billing_plan),
+            inferred_billing_plan,
+        )
 
-    return "unknown", "Tomb of Light Package", "paid"
+    add_on_patterns = [
+        ("white-glove archive support", "white_glove_archive_support", "White-Glove Archive Support"),
+        ("command report", "command_report_addon", "Command Report Add-On"),
+        ("extra upload", "extra_upload_pack", "Extra Upload Pack"),
+        ("extra storage", "extra_storage", "Extra Storage"),
+        ("portrait polish", "portrait_polish", "Portrait Polish"),
+        ("tribute narration", "tribute_narration", "Tribute Narration"),
+        ("extra mapped person", "extra_mapped_person", "Extra Mapped Person"),
+        ("extra zoom layer", "extra_zoom_layer", "Extra Zoom Layer"),
+        ("additional narration minute", "additional_narration_minute", "Additional Narration Minute"),
+        ("on-site photo scanning", "on_site_photo_scanning", "On-Site Photo Scanning"),
+        ("extra linked household", "extra_linked_household", "Extra Linked Household"),
+        ("extra branch", "extra_branch", "Extra Branch"),
+        ("extra organization node", "extra_org_node", "Extra Organization Node"),
+        ("extra organization level", "extra_org_level", "Extra Organization Level"),
+        ("extra admin seat", "extra_admin_seat", "Extra Admin Seat"),
+    ]
+
+    for pattern, code, name in add_on_patterns:
+        if pattern in name_lower:
+            return (
+                "addon",
+                code,
+                name,
+                _format_price_label(amount_subtotal, "one_time"),
+                "one_time",
+            )
+
+    package_patterns = [
+        ("family estate concierge", "family_estate_concierge", "Family Estate Concierge"),
+        ("command structure network", "command_structure_network", "Command Structure Network"),
+        ("legacy snapshot", "legacy_snapshot", "Legacy Snapshot"),
+        ("legacy portrait intro", "legacy_portrait_intro", "Legacy Portrait Intro"),
+        ("digital legacy portrait", "digital_legacy_portrait", "Digital Legacy Portrait"),
+        ("household foundation", "household_foundation", "Household Foundation"),
+        ("starter family tree", "household_foundation", "Household Foundation"),
+        ("heirloom legacy tree", "heirloom_legacy_tree", "Heirloom Legacy Tree"),
+        ("legacy plus", "legacy_plus", "Legacy Plus"),
+    ]
+
+    for pattern, code, name in package_patterns:
+        if pattern in name_lower:
+            return (
+                "package",
+                code,
+                name,
+                _format_price_label(amount_subtotal, "one_time"),
+                "one_time",
+            )
+
+    return (
+        "package",
+        _normalize_package_code(raw_code or "unknown"),
+        product_name or "Tomb of Light Purchase",
+        _format_price_label(amount_subtotal, inferred_billing_plan),
+        inferred_billing_plan,
+    )
 
 
 def _get_email_from_event(event: dict[str, Any]) -> Optional[str]:
@@ -244,13 +457,6 @@ def _get_email_from_event(event: dict[str, Any]) -> Optional[str]:
 
 
 def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
-    """
-    Creates an Order IF we can match Stripe's email to an existing user record.
-    Uses checkout.session.completed as the primary order creation event.
-
-    Returns:
-      {"order_id": "...", ...} or {"order_id": None, "reason": "..."}
-    """
     event_type = event.get("type", "")
     data = _event_object(event)
 
@@ -310,22 +516,42 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
             "session_id": session_id,
         }
 
-    package_slug, package_name, price_label = _infer_package_fields(session)
+    item_type, package_code, package_name, price_label, billing_plan = _infer_purchase_fields(session)
 
     order_doc = {
         "user_id": ObjectId(str(user["_id"])),
         "email": email,
-        "package_slug": package_slug,
+        "package_code": package_code,
+        "package_slug": package_code,
         "package_name": package_name,
         "price_label": price_label,
+        "item_type": item_type,
+        "billing_plan": billing_plan,
         "source": "stripe_webhook",
         "status": "paid",
+        "project_id": None,
         "stripe_session_id": session_id,
         "stripe_payment_link_id": session.get("payment_link"),
         "created_at": datetime.now(UTC),
     }
 
     result = orders.insert_one(order_doc)
+    order_doc["_id"] = result.inserted_id
+
+    if item_type == "package":
+        project = create_project_from_paid_order(
+            user=user,
+            package_code=package_code,
+            package_name=package_name,
+            stripe_session_id=session_id,
+            stripe_payment_link_id=session.get("payment_link"),
+        )
+        if project:
+            orders.update_one(
+                {"_id": result.inserted_id},
+                {"$set": {"project_id": project.get("_id")}},
+            )
+            order_doc["project_id"] = project.get("_id")
 
     return {
         "order_id": str(result.inserted_id),
@@ -333,5 +559,8 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
         "type": event_type,
         "session_id": session_id,
         "email": email,
-        "package_slug": package_slug,
+        "package_code": package_code,
+        "item_type": item_type,
+        "billing_plan": billing_plan,
+        "project_id": str(order_doc["project_id"]) if order_doc.get("project_id") else None,
     }
