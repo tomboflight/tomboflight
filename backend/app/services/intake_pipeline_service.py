@@ -5,6 +5,7 @@ from typing import Any
 
 from bson import ObjectId
 
+from app.core.package_catalog import get_package
 from app.database import get_database
 
 
@@ -33,6 +34,31 @@ def _normalize_visibility(value: str | None) -> str:
     if normalized in {"public", "certificate-only", "certificate_only"}:
         return "certificate_only"
     return "private"
+
+
+def _normalize_package_code(value: str | None) -> str:
+    normalized = str(value or "").strip().lower()
+    mapping = {
+        "legacy-snapshot": "legacy_snapshot",
+        "legacy_snapshot": "legacy_snapshot",
+        "legacy-portrait-intro": "legacy_portrait_intro",
+        "legacy_portrait_intro": "legacy_portrait_intro",
+        "digital-legacy-portrait": "digital_legacy_portrait",
+        "digital_legacy_portrait": "digital_legacy_portrait",
+        "starter-family-tree": "household_foundation",
+        "starter_family_tree": "household_foundation",
+        "household-foundation": "household_foundation",
+        "household_foundation": "household_foundation",
+        "heirloom-legacy-tree": "heirloom_legacy_tree",
+        "heirloom_legacy_tree": "heirloom_legacy_tree",
+        "legacy-plus": "legacy_plus",
+        "legacy_plus": "legacy_plus",
+        "family-estate-concierge": "family_estate_concierge",
+        "family_estate_concierge": "family_estate_concierge",
+        "command-structure-network": "command_structure_network",
+        "command_structure_network": "command_structure_network",
+    }
+    return mapping.get(normalized, normalized or "unknown")
 
 
 def provision_build_from_submission(
@@ -79,6 +105,13 @@ def provision_build_from_submission(
     owner_user_id = submission.get("user_id")
     owner_user_id_str = str(owner_user_id) if owner_user_id is not None else ""
     owner_email = str(submission.get("email") or "").strip().lower()
+
+    package_code = _normalize_package_code(
+        submission.get("package_code") or submission.get("package_slug")
+    )
+    package_name = str(submission.get("package_name") or "").strip() or "Tomb of Light Package"
+    package = get_package(package_code) or {}
+    project_lane = str(package.get("package_lane") or "household").strip().lower()
 
     family_name = (
         family_name_override.strip()
@@ -129,8 +162,9 @@ def provision_build_from_submission(
             "visibility": visibility,
             "shared_with_user_ids": [],
             "shared_with_emails": [],
-            "package_slug": submission.get("package_slug"),
-            "package_name": submission.get("package_name"),
+            "package_code": package_code,
+            "package_slug": package_code,
+            "package_name": package_name,
             "source": "approved_intake",
             "intake_submission_id": submission_id,
             "created_at": _now(),
@@ -180,32 +214,43 @@ def provision_build_from_submission(
     if project_doc is None:
         project_doc = projects.find_one({"intake_submission_id": submission_id})
 
-    project_name = (
-        project_name_override.strip()
-        or f"{family_name} Production Build"
-    )
+    project_name = project_name_override.strip() or f"{family_name} Production Build"
+
+    project_payload = {
+        "name": project_name,
+        "project_name": project_name,
+        "project_lane": project_lane,
+        "family_id": family_root_id,
+        "household_id": household_id,
+        "organization_id": None,
+        "owner_user_id": owner_user_id_str,
+        "owner_email": owner_email,
+        "package_code": package_code,
+        "package_slug": package_code,
+        "package_type": package_code,
+        "package_name": package_name,
+        "item_type": "package",
+        "billing_plan": "one_time",
+        "status": "build_ready",
+        "phase": "intake_approved",
+        "source": "approved_intake",
+        "intake_submission_id": submission_id,
+        "created_by": provisioned_by,
+        "notes": production_notes or "",
+        "updated_at": _now(),
+    }
 
     if project_doc is None:
-        project_payload = {
-            "name": project_name,
-            "family_id": family_root_id,
-            "household_id": household_id,
-            "owner_user_id": owner_user_id_str,
-            "owner_email": owner_email,
-            "package_slug": submission.get("package_slug"),
-            "package_name": submission.get("package_name"),
-            "status": "build_ready",
-            "phase": "intake_approved",
-            "source": "approved_intake",
-            "intake_submission_id": submission_id,
-            "created_by": provisioned_by,
-            "notes": production_notes or "",
-            "created_at": _now(),
-            "updated_at": _now(),
-        }
+        project_payload["created_at"] = _now()
         project_result = projects.insert_one(project_payload)
         project_payload["_id"] = project_result.inserted_id
         project_doc = project_payload
+    else:
+        projects.update_one(
+            {"_id": project_doc["_id"]},
+            {"$set": project_payload},
+        )
+        project_doc = projects.find_one({"_id": project_doc["_id"]}) or project_doc
 
     project_id = str(project_doc["_id"])
 
@@ -218,6 +263,9 @@ def provision_build_from_submission(
                 "family_root_id": family_root_id,
                 "household_id": household_id,
                 "project_id": project_id,
+                "package_code": package_code,
+                "package_slug": package_code,
+                "package_name": package_name,
                 "provisioned_at": _now(),
                 "provisioned_by": provisioned_by,
                 "production_notes": production_notes or "",
