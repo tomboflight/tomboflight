@@ -1,129 +1,116 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Thank You | Tomb of Light</title>
-  <meta
-    name="description"
-    content="Thank you for beginning your legacy with Tomb of Light. Your order has been received."
-  />
-  <link rel="stylesheet" href="styles.css" />
-</head>
-<body>
-  <div class="page-wrap">
-    <header class="site-header">
-      <div class="container site-header-inner">
-        <a class="brand" href="index.html" aria-label="Tomb of Light home">
-          <span>Tomb of Light<span class="brand-symbol">™</span></span>
-        </a>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Payment Successful | Tomb of Light</title>
+    <meta
+      name="description"
+      content="Your Tomb of Light payment was successful. Review your next steps and continue into your workspace."
+    />
+    <link rel="stylesheet" href="styles.css?v=20260327-2" />
+  </head>
+  <body>
+    <div class="page-wrap">
+      <header class="site-header">
+        <div class="container site-header-inner">
+          <a class="brand" href="index.html" aria-label="Tomb of Light home">
+            <span>Tomb of Light<span class="brand-symbol">™</span></span>
+          </a>
 
-        <button
-          class="menu-toggle"
-          type="button"
-          aria-expanded="false"
-          aria-controls="site-nav"
-          aria-label="Toggle navigation menu"
-        >
-          Menu
-        </button>
+          <button
+            class="menu-toggle"
+            type="button"
+            aria-label="Toggle navigation"
+            aria-expanded="false"
+            aria-controls="site-nav"
+          >
+            Menu
+          </button>
 
-        <nav id="site-nav" class="site-nav" aria-label="Primary">
-          <a href="index.html">Home</a>
-          <a href="how-it-works.html">How It Works</a>
-          <a href="security.html">Security</a>
-          <a href="compliance.html">Compliance &amp; Legal</a>
-          <a href="faq.html">FAQ</a>
-          <a href="dashboard.html">Dashboard</a>
-        </nav>
-      </div>
-    </header>
+          <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
+            <a href="platform.html">Platform</a>
+            <a href="how-it-works.html">How It Works</a>
+            <a href="security.html">Security</a>
+            <a href="faq.html">FAQ</a>
+          </nav>
 
-    <main data-thank-you-page>
-      <section class="thank-you-hero">
-        <div class="container">
-          <div class="thank-you-card">
-            <p class="eyebrow">Purchase Confirmed</p>
-            <h1>Thank you for beginning your family legacy.</h1>
-            <p class="thank-you-copy">
-              Your order has been received by Tomb of Light. You have taken the first step
-              toward preserving your lineage through a secure digital legacy experience.
-            </p>
-
-            <div class="thank-you-status">
-              <div class="thank-you-status-item">
-                <strong>Selected package</strong>
-                <p data-thank-you-package>
-                  Finalizing your package details...
-                </p>
-              </div>
-
-              <div class="thank-you-status-item">
-                <strong>Order record</strong>
-                <p data-thank-you-order-status>
-                  Recording your order to your account...
-                </p>
-              </div>
-
-              <div class="thank-you-status-item">
-                <strong>What happens next</strong>
-                <p>
-                  After your order is recorded, continue to your dashboard to begin intake,
-                  family structure, and project onboarding.
-                </p>
-              </div>
-            </div>
-
-            <div class="thank-you-actions">
-              <a class="btn-primary" href="dashboard.html">Open Dashboard</a>
-              <a class="btn-secondary" href="how-it-works.html">Review Process</a>
-            </div>
-
-            <p class="thank-you-note">
-              Tomb of Light is building the future of digital inheritance, family continuity,
-              and legacy preservation.
-            </p>
+          <div class="header-actions">
+            <a class="btn btn-primary" href="dashboard.html">Open Dashboard</a>
           </div>
         </div>
-      </section>
-    </main>
+      </header>
 
-    <footer class="site-footer">
-      <div class="container footer-grid">
-        <div>
-          <a class="brand footer-brand" href="index.html">Tomb of Light<span class="brand-symbol">™</span></a>
-          <p class="footer-copy">
-            A private digital lineage platform designed to preserve, navigate, and steward
-            family legacy across generations.
-          </p>
+      <main>
+        <section class="thank-you-hero">
+          <div class="container">
+            <div class="thank-you-card">
+              <span class="eyebrow">Payment Successful</span>
+              <h1>Your Tomb of Light purchase is confirmed.</h1>
+
+              <p class="thank-you-copy">
+                Your payment was received successfully. Tomb of Light will now
+                use the confirmed purchase to activate the correct experience
+                for your account.
+              </p>
+
+              <div class="thank-you-status">
+                <div class="thank-you-status-item">
+                  <strong>Checkout Session</strong>
+                  <p data-thank-you-session-id>Loading…</p>
+                </div>
+
+                <div class="thank-you-status-item">
+                  <strong>Purchase Type</strong>
+                  <p data-thank-you-type>Loading…</p>
+                </div>
+
+                <div class="thank-you-status-item">
+                  <strong>Package / Item Code</strong>
+                  <p data-thank-you-package-code>Loading…</p>
+                </div>
+              </div>
+
+              <div class="thank-you-status">
+                <div class="thank-you-status-item">
+                  <strong>What happens next</strong>
+                  <p data-thank-you-next-step>
+                    Loading your next-step guidance…
+                  </p>
+                </div>
+              </div>
+
+              <div class="thank-you-actions">
+                <a class="btn btn-primary" href="dashboard.html">
+                  Go to Dashboard
+                </a>
+                <a class="btn btn-secondary" href="verification-upload.html">
+                  Upload Family Records
+                </a>
+              </div>
+
+              <p class="thank-you-note">
+                Stripe should send the payment receipt to the email used during
+                checkout. Maintenance subscriptions are separate from package
+                purchase and begin according to your selected billing plan.
+              </p>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <div class="container">
+          <div class="footer-card">
+            <div class="footer-bottom">
+              <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
+            </div>
+          </div>
         </div>
+      </footer>
+    </div>
 
-        <div>
-          <h2>Platform</h2>
-          <ul>
-            <li><a href="how-it-works.html">How It Works</a></li>
-            <li><a href="security.html">Security</a></li>
-            <li><a href="faq.html">FAQ</a></li>
-          </ul>
-        </div>
-
-        <div>
-          <h2>Legal</h2>
-          <ul>
-            <li><a href="privacy.html">Privacy Policy</a></li>
-            <li><a href="terms.html">Terms of Service</a></li>
-            <li><a href="compliance.html">Compliance &amp; Legal</a></li>
-          </ul>
-        </div>
-      </div>
-
-      <div class="container footer-bottom">
-        <p>© 2026 Tomb of Light LLC. All rights reserved.</p>
-      </div>
-    </footer>
-  </div>
-
-  <script src="config.js"></script>
-  <script src="app.js"></script>
-</body>
+    <script src="app.js?v=20260327-2"></script>
+    <script src="thank-you.js?v=20260327-2"></script>
+  </body>
 </html>
