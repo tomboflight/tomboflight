@@ -38,7 +38,9 @@ from app.routes.match_candidates import router as match_candidates_router
 from app.routes.match_generation import router as match_generation_router
 from app.routes.narrative_records import router as narrative_records_router
 from app.routes.orders import router as orders_router
+from app.routes.package_catalog import router as package_catalog_router
 from app.routes.projects import router as projects_router
+from app.routes.project_entitlements import router as project_entitlements_router
 from app.routes.relationships import router as relationships_router
 from app.routes.stripe_webhooks import router as stripe_webhooks_router
 from app.routes.tree import router as tree_router
@@ -129,6 +131,7 @@ app.include_router(intake_router)
 app.include_router(intake_submissions_router)
 app.include_router(admin_intake_submissions_router)
 app.include_router(projects_router)
+app.include_router(project_entitlements_router)
 app.include_router(families_router)
 app.include_router(family_graph_router)
 app.include_router(users_router)
@@ -142,6 +145,7 @@ app.include_router(relationships_router)
 app.include_router(db_bootstrap_router)
 app.include_router(graph_integrity_router)
 app.include_router(orders_router)
+app.include_router(package_catalog_router)
 app.include_router(uploads_router)
 
 # Stripe Webhooks
