@@ -143,6 +143,7 @@
     const panel =
       findPanelByText("Your Build Path") ||
       findPanelByText("Your Family Build Path") ||
+      findPanelByText("Your Build Path") ||
       findPanelByText("Your Portrait Workflow") ||
       findPanelByText("Your Command Build Path") ||
       findPanelByText("Your Network Build Path");
@@ -224,8 +225,8 @@
         primaryActionHref: "verification-upload.html",
         secondaryActionText: "Verification Uploads",
         secondaryActionHref: "verification-upload.html",
-        showTree: false,
-        showCertificate: false,
+        showTree: canBuildFamilyTree,
+        showCertificate: canBuildFamilyTree,
         showVerification: true,
         showLinkKeys: canUseLinkKeys,
         navTree: false,
@@ -285,8 +286,8 @@
         primaryActionHref: "verification-upload.html",
         secondaryActionText: "Upload Structure Records",
         secondaryActionHref: "verification-upload.html",
-        showTree: false,
-        showCertificate: false,
+        showTree: canBuildFamilyTree,
+        showCertificate: canBuildFamilyTree,
         showVerification: true,
         showLinkKeys: canUseLinkKeys,
         navTree: false,
@@ -597,9 +598,36 @@
 
     const upgradeAction = document.querySelector("[data-upgrade-action]");
     if (upgradeAction) {
-      upgradeAction.style.display = "";
-      upgradeAction.textContent = config.upgradeText;
-      upgradeAction.setAttribute("href", config.upgradeHref);
+      const re = context.resolvedEntitlements || {};
+      const upgradeTargets = Array.isArray(re.upgrade_targets)
+        ? re.upgrade_targets
+        : [];
+      const allowedAddons = Array.isArray(re.allowed_addons)
+        ? re.allowed_addons
+        : [];
+      const resolveDisplayName =
+        window.TOLAuthPages &&
+        typeof window.TOLAuthPages.resolvePackageDisplayName === "function"
+          ? window.TOLAuthPages.resolvePackageDisplayName
+          : function (code) {
+              return code || "Package";
+            };
+
+      if (upgradeTargets.length > 0) {
+        const firstName = resolveDisplayName(upgradeTargets[0]);
+        upgradeAction.textContent =
+          upgradeTargets.length === 1
+            ? "Upgrade to " + firstName
+            : "Upgrade to " + firstName + " or higher";
+        upgradeAction.setAttribute("href", "index.html#pricing");
+        upgradeAction.style.display = "";
+      } else if (allowedAddons.length > 0) {
+        upgradeAction.textContent = "View Available Add-Ons";
+        upgradeAction.setAttribute("href", "index.html#pricing");
+        upgradeAction.style.display = "";
+      } else {
+        upgradeAction.style.display = "none";
+      }
     }
 
     const currentPackage = document.querySelector(

@@ -6,7 +6,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from app.dependencies.auth import get_current_user, require_admin
+from app.dependencies.auth import INTERNAL_ADMIN_KEYS, get_current_user, require_admin
 from app.services.project_entitlement_service import (
     get_project_entitlement,
     get_upgrade_quote_for_project,
