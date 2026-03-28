@@ -2,6 +2,7 @@
   "use strict";
 
   const app = window.TOLApp || window.TOLAuth;
+  const authPages = window.TOLAuthPages || {};
 
   if (!app || typeof app.apiRequest !== "function") {
     return;
@@ -19,16 +20,14 @@
     "archived",
   ]);
 
-  function normalizeStatus(status) {
-    return String(status || "")
+  function normalizeValue(value) {
+    return String(value || "")
       .trim()
       .toLowerCase();
   }
 
-  function normalizeRole(role) {
-    return String(role || "")
-      .trim()
-      .toLowerCase();
+  function normalizeStatus(status) {
+    return normalizeValue(status);
   }
 
   function humanizeStatus(status) {
@@ -55,7 +54,8 @@
       "operations_admin",
       "finance_admin",
       "marketing_admin",
-    ].includes(normalizeRole(role));
+      "root_admin",
+    ].includes(normalizeValue(role));
   }
 
   function formatDate(value) {
@@ -70,6 +70,448 @@
   function text(node, value) {
     if (!node) return;
     node.textContent = value;
+  }
+
+  function findPanelByText(textFragment) {
+    return Array.from(document.querySelectorAll(".form-panel")).find(
+      function (panel) {
+        return panel.textContent.includes(textFragment);
+      },
+    );
+  }
+
+  function setPanelStep(panel, index, title, copy) {
+    if (!panel) return;
+
+    const cards = panel.querySelectorAll(".grid-3 > div");
+    const card = cards[index];
+    if (!card) return;
+
+    const h3 = card.querySelector("h3");
+    const p = card.querySelector(".card-copy");
+
+    if (h3) h3.textContent = title;
+    if (p) p.textContent = copy;
+  }
+
+  function applyAction(selector, options) {
+    document.querySelectorAll(selector).forEach(function (node) {
+      if (options.text) node.textContent = options.text;
+
+      if (options.href && node.tagName === "A") {
+        node.setAttribute("href", options.href);
+      }
+
+      if (typeof options.show === "boolean") {
+        node.style.display = options.show ? "" : "none";
+      }
+    });
+  }
+
+  function applyNavVisibility(href, isVisible) {
+    document
+      .querySelectorAll(`.site-nav a[href="${href}"]`)
+      .forEach(function (node) {
+        node.style.display = isVisible ? "" : "none";
+      });
+  }
+
+  function updatePresencePanel(config) {
+    const badge = document.querySelector(".presence-badge");
+    const title = document.querySelector(".dashboard-presence-title");
+    const copy = document.querySelector(".dashboard-presence-copy");
+    const stageNodes = document.querySelectorAll(".workspace-stage-node");
+
+    text(badge, config.presenceBadge);
+    text(title, config.presenceTitle);
+    text(copy, config.presenceCopy);
+
+    stageNodes.forEach(function (node, index) {
+      const strong = node.querySelector("strong");
+      const small = node.querySelector("small");
+      const item = config.stages[index];
+
+      if (!item) return;
+      if (strong) strong.textContent = item.title;
+      if (small) small.textContent = item.subtitle;
+    });
+  }
+
+  function updateBuildPathPanel(config) {
+    const panel =
+      findPanelByText("Your Family Build Path") ||
+      findPanelByText("Your Portrait Workflow") ||
+      findPanelByText("Your Command Build Path") ||
+      findPanelByText("Your Network Build Path");
+
+    if (!panel) return;
+
+    const eyebrow = panel.querySelector(".eyebrow");
+    if (eyebrow) eyebrow.textContent = config.buildPathEyebrow;
+
+    setPanelStep(
+      panel,
+      0,
+      config.buildSteps[0].title,
+      config.buildSteps[0].copy,
+    );
+    setPanelStep(
+      panel,
+      1,
+      config.buildSteps[1].title,
+      config.buildSteps[1].copy,
+    );
+    setPanelStep(
+      panel,
+      2,
+      config.buildSteps[2].title,
+      config.buildSteps[2].copy,
+    );
+  }
+
+  function updatePlatformStatusPanel(config) {
+    const panel = findPanelByText("Platform Status");
+    if (!panel) return;
+
+    setPanelStep(
+      panel,
+      2,
+      config.platformStatusTitle,
+      config.platformStatusCopy,
+    );
+  }
+
+  function getLaneConfig(packageLane) {
+    const lane = normalizeValue(packageLane);
+
+    if (lane === "portrait") {
+      return {
+        lane: "portrait",
+        presenceBadge: "Portrait Lane Active",
+        presenceTitle: "Your portrait workspace is live and connected.",
+        presenceCopy:
+          "Tomb of Light is now reading from your portrait package, uploads, and verification records. This workspace is focused on your personal legacy build.",
+        stages: [
+          { title: "Portrait Record", subtitle: "Connected" },
+          { title: "Verification", subtitle: "Upload Ready" },
+          { title: "Delivery Path", subtitle: "Preparing" },
+        ],
+        workspaceCopy:
+          "Your portrait workspace connects package access, portrait uploads, verification records, and guided delivery in one place.",
+        primaryActionText: "Upload Portrait & Records",
+        primaryActionHref: "verification-upload.html",
+        secondaryActionText: "Verification Uploads",
+        secondaryActionHref: "verification-upload.html",
+        showTree: false,
+        showCertificate: false,
+        showVerification: true,
+        navTree: false,
+        navCertificate: false,
+        buildPathEyebrow: "Your Portrait Workflow",
+        buildSteps: [
+          {
+            title: "Portrait Anchor",
+            copy: "Begin with your portrait, files, and personal legacy materials.",
+          },
+          {
+            title: "Verification Evidence",
+            copy: "Upload IDs and supporting records that help verify the portrait record.",
+          },
+          {
+            title: "Delivery & Upgrade Path",
+            copy: "Receive your portrait package and upgrade to a household package whenever you are ready.",
+          },
+        ],
+        platformStatusTitle: "Entitled Tools",
+        platformStatusCopy:
+          "This portrait lane includes portrait uploads and verification workflows. Household build tools require an upgrade.",
+        upgradeText: "Upgrade to Household Package",
+        upgradeHref: "index.html#pricing",
+      };
+    }
+
+    if (lane === "organization") {
+      return {
+        lane: "organization",
+        presenceBadge: "Organization Lane Active",
+        presenceTitle:
+          "Your command structure workspace is live and connected.",
+        presenceCopy:
+          "Tomb of Light is now reading from your organization package, role structure scope, and supporting record workflow.",
+        stages: [
+          { title: "Organization Root", subtitle: "Connected" },
+          { title: "Structure Build", subtitle: "Configured" },
+          { title: "Command Outputs", subtitle: "Preparing" },
+        ],
+        workspaceCopy:
+          "Your organization workspace connects package access, command structure planning, uploads, and guided record handling in one place.",
+        primaryActionText: "Upload Structure Records",
+        primaryActionHref: "verification-upload.html",
+        secondaryActionText: "Upload Structure Records",
+        secondaryActionHref: "verification-upload.html",
+        showTree: false,
+        showCertificate: false,
+        showVerification: true,
+        navTree: false,
+        navCertificate: false,
+        buildPathEyebrow: "Your Command Build Path",
+        buildSteps: [
+          {
+            title: "Organization Root",
+            copy: "Establish the core organization or command structure anchor.",
+          },
+          {
+            title: "Leadership Structure",
+            copy: "Add leadership roles, officers, or command nodes as the structure expands.",
+          },
+          {
+            title: "Supporting Records",
+            copy: "Upload supporting records and materials tied to the organization build.",
+          },
+        ],
+        platformStatusTitle: "Entitled Tools",
+        platformStatusCopy:
+          "This organization lane includes structure and verification workflows. Expansion options are available if you need more scope.",
+        upgradeText: "View Expansion Options",
+        upgradeHref: "index.html#pricing",
+      };
+    }
+
+    if (lane === "network") {
+      return {
+        lane: "network",
+        presenceBadge: "Network Lane Active",
+        presenceTitle: "Your network workspace is live and connected.",
+        presenceCopy:
+          "Tomb of Light is now reading from your branch network package, household connections, and expanded lineage workflow.",
+        stages: [
+          { title: "Branch Root", subtitle: "Connected" },
+          { title: "Network Build", subtitle: "Build Ready" },
+          { title: "Living Outputs", subtitle: "Tree + Certificate Live" },
+        ],
+        workspaceCopy:
+          "Your network workspace connects package access, linked branches, lineage structure, and verification records in one place.",
+        primaryActionText: "Continue Network Build",
+        primaryActionHref: "tree-view.html",
+        secondaryActionText: "Upload Verification Docs",
+        secondaryActionHref: "verification-upload.html",
+        showTree: true,
+        showCertificate: true,
+        showVerification: true,
+        navTree: true,
+        navCertificate: true,
+        buildPathEyebrow: "Your Network Build Path",
+        buildSteps: [
+          {
+            title: "Branch Root",
+            copy: "Establish the connected household or branch structure that anchors the network.",
+          },
+          {
+            title: "Linked Households",
+            copy: "Add linked households, branches, and connected lineage structures over time.",
+          },
+          {
+            title: "Verification Evidence",
+            copy: "Upload IDs, certificates, and supporting family records for the network build.",
+          },
+        ],
+        platformStatusTitle: "Entitled Tools",
+        platformStatusCopy:
+          "This network lane includes branch, lineage, and verification workflows.",
+        upgradeText: "View Expansion Options",
+        upgradeHref: "index.html#pricing",
+      };
+    }
+
+    return {
+      lane: "household",
+      presenceBadge: "Household Lane Active",
+      presenceTitle: "Your lineage workspace is live and connected.",
+      presenceCopy:
+        "Tomb of Light is now reading from your household package, family structure, project records, and verification workflow. This workspace is designed to grow as your family grows.",
+      stages: [
+        { title: "Family Root", subtitle: "Connected" },
+        { title: "Production Build", subtitle: "Build Ready" },
+        { title: "Living Outputs", subtitle: "Tree + Certificate Live" },
+      ],
+      workspaceCopy:
+        "Your Tomb of Light customer workspace connects package access, onboarding, family structure, lineage tools, and document-backed verification in one place.",
+      primaryActionText: "Continue Family Build",
+      primaryActionHref: "tree-view.html",
+      secondaryActionText: "Upload Verification Docs",
+      secondaryActionHref: "verification-upload.html",
+      showTree: true,
+      showCertificate: true,
+      showVerification: true,
+      navTree: true,
+      navCertificate: true,
+      buildPathEyebrow: "Your Family Build Path",
+      buildSteps: [
+        {
+          title: "Family Root",
+          copy: "Establish the household family record that anchors your lineage build.",
+        },
+        {
+          title: "Members and Relationships",
+          copy: "Add parents, spouses, children, and connected branches over time.",
+        },
+        {
+          title: "Verification Evidence",
+          copy: "Upload IDs, birth certificates, marriage records, adoption records, and supporting family documents for review.",
+        },
+      ],
+      platformStatusTitle: "Entitled Tools",
+      platformStatusCopy:
+        "Family build tools and verification workflows are active for this household lane package.",
+      upgradeText: "View Add-Ons & Upgrades",
+      upgradeHref: "index.html#pricing",
+    };
+  }
+
+  function getLaneAwareIntakeMessages(lane, status) {
+    const normalizedLane = normalizeValue(lane);
+    const normalizedStatus = normalizeStatus(status);
+
+    if (normalizedLane === "portrait") {
+      if (normalizedStatus === "build_ready") {
+        return {
+          cardCopy:
+            "Your portrait package is approved and ready for portrait and verification work.",
+          nextStep: "Upload portrait and supporting verification records.",
+          lockNote:
+            "Editing is locked because this portrait package has already been approved and provisioned.",
+          workspaceCopy:
+            "Your portrait intake has been approved and provisioned. This workspace now moves from onboarding into the portrait record stage.",
+        };
+      }
+
+      return {
+        cardCopy: "Your portrait intake information is shown below.",
+        nextStep: "Upload portrait and supporting verification records.",
+        lockNote: "Intake lock state is based on your current review status.",
+        workspaceCopy:
+          "Your portrait workspace connects package access, portrait uploads, verification records, and guided delivery in one place.",
+      };
+    }
+
+    if (normalizedLane === "organization") {
+      if (normalizedStatus === "build_ready") {
+        return {
+          cardCopy:
+            "Your organization package is approved and ready for structure and record work.",
+          nextStep:
+            "Upload leadership, structure, and supporting records to continue.",
+          lockNote:
+            "Editing is locked because this organization package has already been approved and provisioned.",
+          workspaceCopy:
+            "Your organization intake has been approved and provisioned. This workspace now moves into the command structure stage.",
+        };
+      }
+
+      return {
+        cardCopy: "Your organization intake information is shown below.",
+        nextStep: "Upload structure and supporting records to continue.",
+        lockNote: "Intake lock state is based on your current review status.",
+        workspaceCopy:
+          "Your organization workspace connects package access, command structure planning, uploads, and guided record handling in one place.",
+      };
+    }
+
+    if (normalizedLane === "network" && normalizedStatus === "build_ready") {
+      return {
+        cardCopy:
+          "Your network intake has been approved and provisioned for production.",
+        nextStep:
+          "Production records are created. Next step is building branches and linked households.",
+        lockNote:
+          "Editing is locked because this network project has already been approved and provisioned.",
+        workspaceCopy:
+          "Your network intake has been approved and provisioned. This workspace now moves into connected branch and household build.",
+      };
+    }
+
+    if (normalizedStatus === "build_ready") {
+      return {
+        cardCopy:
+          "Your intake has been approved and provisioned for production.",
+        nextStep:
+          "Production records are created. Next step is building members and relationships.",
+        lockNote:
+          "Editing is locked. This intake has already been approved and provisioned.",
+        workspaceCopy:
+          "Your intake has been approved and provisioned. This workspace now moves from onboarding into the real family build stage.",
+      };
+    }
+
+    return {
+      cardCopy: "Your most recent intake submission is shown below.",
+      nextStep: "Continue and finalize your intake.",
+      lockNote: "Editing is still open until final submission.",
+      workspaceCopy:
+        "Your Tomb of Light customer workspace connects package access, onboarding, family structure, lineage tools, and document-backed verification in one place.",
+    };
+  }
+
+  function updateLaneUi(context, config) {
+    updatePresencePanel(config);
+    updateBuildPathPanel(config);
+    updatePlatformStatusPanel(config);
+
+    applyNavVisibility("tree-view.html", config.navTree);
+    applyNavVisibility("lineage-certificate.html", config.navCertificate);
+
+    applyAction(
+      "[data-dashboard-workspace-primary-action], [data-dashboard-package-primary-action]",
+      {
+        text: config.primaryActionText,
+        href: config.primaryActionHref,
+        show: true,
+      },
+    );
+
+    applyAction(
+      '[href="verification-upload.html"][data-paid-action], [data-dashboard-next-family-action]',
+      {
+        text: config.secondaryActionText,
+        href: config.secondaryActionHref,
+        show: config.showVerification,
+      },
+    );
+
+    applyAction(
+      '[data-dashboard-workspace-tree-action], a[href="tree-view.html"][data-paid-action]',
+      {
+        text: "Open Family Tree",
+        href: "tree-view.html",
+        show: config.showTree,
+      },
+    );
+
+    applyAction(
+      '[data-dashboard-workspace-certificate-action], a[href="lineage-certificate.html"][data-paid-action]',
+      {
+        text: "View Lineage Certificate",
+        href: "lineage-certificate.html",
+        show: config.showCertificate,
+      },
+    );
+
+    const workspaceCopy = document.querySelector(
+      "[data-dashboard-workspace-copy]",
+    );
+    text(workspaceCopy, config.workspaceCopy);
+
+    const upgradeAction = document.querySelector("[data-upgrade-action]");
+    if (upgradeAction) {
+      upgradeAction.style.display = "";
+      upgradeAction.textContent = config.upgradeText;
+      upgradeAction.setAttribute("href", config.upgradeHref);
+    }
+
+    const currentPackage = document.querySelector(
+      "[data-intake-current-package]",
+    );
+    text(currentPackage, context.packageName || "Active Package");
   }
 
   function renderHistoryItem(item, index) {
@@ -100,7 +542,10 @@
         error && error.message ? error.message : error,
       ).toLowerCase();
 
-      if (message.includes("no intake submissions found")) {
+      if (
+        message.includes("no intake submissions found") ||
+        message.includes("404")
+      ) {
         return null;
       }
 
@@ -116,142 +561,6 @@
     } catch (error) {
       return [];
     }
-  }
-
-  async function getPaidOrder() {
-    try {
-      const payload = await app.apiRequest("/orders/my-orders", {
-        method: "GET",
-      });
-
-      const orders = Array.isArray(payload)
-        ? payload
-        : Array.isArray(payload?.orders)
-          ? payload.orders
-          : Array.isArray(payload?.data)
-            ? payload.data
-            : [];
-
-      return (
-        orders.find(function (order) {
-          const status = String(order?.status || "").toLowerCase();
-          return ["paid", "complete", "completed", "succeeded"].includes(
-            status,
-          );
-        }) || null
-      );
-    } catch (error) {
-      return null;
-    }
-  }
-
-  function nextStepForStatus(status) {
-    const normalized = normalizeStatus(status);
-
-    if (normalized === "submitted") return "Waiting for review to begin.";
-    if (normalized === "in_review")
-      return "Reviewer is evaluating your intake.";
-    if (normalized === "approved")
-      return "Approved and waiting for production provisioning.";
-    if (normalized === "build_ready")
-      return "Production records are created. Next step is building members and relationships.";
-    if (normalized === "in_production")
-      return "Your lineage build is currently in production.";
-    if (normalized === "qa_review")
-      return "Your project is in internal quality review.";
-    if (normalized === "client_review")
-      return "Your project is prepared for client review.";
-    if (normalized === "delivered") return "Your project has been delivered.";
-    if (normalized === "archived") return "Your project has been archived.";
-    if (normalized === "rejected")
-      return "Review the feedback, update your intake, and resubmit.";
-    return "Complete your intake and submit it for review.";
-  }
-
-  function workspaceCopyForStatus(status) {
-    const normalized = normalizeStatus(status);
-
-    if (normalized === "build_ready") {
-      return "Your intake has been approved and provisioned. This workspace now moves from onboarding into the real family build stage.";
-    }
-
-    if (normalized === "in_production") {
-      return "Your approved family build is now in production and moving through the Tomb of Light workflow.";
-    }
-
-    if (normalized === "submitted" || normalized === "in_review") {
-      return "Your intake is in the review pipeline. This workspace will update as your build moves forward.";
-    }
-
-    if (normalized === "approved") {
-      return "Your intake is approved and waiting for production provisioning.";
-    }
-
-    if (normalized === "rejected") {
-      return "Your intake needs revision before it can move into production.";
-    }
-
-    return "Your Tomb of Light customer workspace connects package access, onboarding, family structure, and lineage tools in one place.";
-  }
-
-  function lockNoteForStatus(status, reviewLocked) {
-    const normalized = normalizeStatus(status);
-
-    if (normalized === "rejected") {
-      return "Editing is open because the submission was rejected.";
-    }
-
-    if (normalized === "build_ready") {
-      return "Editing is locked. This intake has already been approved and provisioned.";
-    }
-
-    if (
-      normalized === "in_production" ||
-      normalized === "qa_review" ||
-      normalized === "client_review" ||
-      normalized === "delivered" ||
-      normalized === "archived"
-    ) {
-      return "Editing is locked because this project is already in the production workflow.";
-    }
-
-    if (isLockedStatus(normalized)) {
-      return "Editing is locked after final submission.";
-    }
-
-    return reviewLocked
-      ? "Editing is locked after final submission."
-      : "Editing is currently open.";
-  }
-
-  function intakeCardCopyForStatus(status) {
-    const normalized = normalizeStatus(status);
-
-    if (normalized === "build_ready") {
-      return "Your intake has been approved and provisioned for production.";
-    }
-
-    if (normalized === "in_production") {
-      return "Your family build is currently in production.";
-    }
-
-    if (normalized === "submitted") {
-      return "Your intake has been submitted and is waiting for review.";
-    }
-
-    if (normalized === "in_review") {
-      return "Your intake is currently under review.";
-    }
-
-    if (normalized === "approved") {
-      return "Your intake is approved and awaiting production provisioning.";
-    }
-
-    if (normalized === "rejected") {
-      return "Your intake was rejected and can be updated and resubmitted.";
-    }
-
-    return "Your most recent intake submission is shown below.";
   }
 
   function updatePrimaryIntakeAction(status, actionNode) {
@@ -288,29 +597,7 @@
     actionNode.setAttribute("href", "intake-welcome.html");
   }
 
-  function updateSecondaryFamilyAction(status, actionNode) {
-    if (!actionNode) return;
-
-    const normalized = normalizeStatus(status);
-
-    if (
-      normalized === "build_ready" ||
-      normalized === "in_production" ||
-      normalized === "qa_review" ||
-      normalized === "client_review" ||
-      normalized === "delivered" ||
-      normalized === "archived"
-    ) {
-      actionNode.textContent = "Open Family Tree";
-      actionNode.setAttribute("href", "tree-view.html");
-      return;
-    }
-
-    actionNode.textContent = "Open Family Tree";
-    actionNode.setAttribute("href", "tree-view.html");
-  }
-
-  async function setupDashboardIntake() {
+  async function applyDashboardIntake() {
     const dashboard = document.querySelector("[data-dashboard]");
     if (!dashboard) return;
 
@@ -331,6 +618,22 @@
       return;
     }
 
+    const context =
+      window.TOLDashboardContext ||
+      (authPages.getDashboardContext
+        ? await authPages.getDashboardContext(
+            me,
+            authPages.fetchOrders ? await authPages.fetchOrders() : [],
+          )
+        : null);
+
+    if (!context || !context.hasPaidPackage) {
+      return;
+    }
+
+    const config = getLaneConfig(context.packageLane);
+    updateLaneUi(context, config);
+
     const intakeCardStatus = document.querySelector(
       "[data-intake-card-status]",
     );
@@ -347,94 +650,55 @@
       "[data-intake-history-status]",
     );
     const historyList = document.querySelector("[data-intake-history-list]");
-    const accessStatus = document.querySelector("[data-access-status]");
+    const dashboardStatus = document.querySelector("[data-dashboard-status]");
     const workspaceCopy = document.querySelector(
       "[data-dashboard-workspace-copy]",
     );
-    const secondaryFamilyAction = document.querySelector(
-      "[data-dashboard-next-family-action]",
-    );
-    const dashboardStatus = document.querySelector("[data-dashboard-status]");
 
     try {
       const latest = await getLatestSubmission();
-      const paidOrder = await getPaidOrder();
+      const history = await getSubmissionHistory();
 
-      if (paidOrder) {
-        text(
-          accessStatus,
-          `Access unlocked through ${paidOrder.package_name || paidOrder.package_slug || "your active package"}.`,
-        );
-        text(
-          dashboardStatus,
-          `Your package is active: ${paidOrder.package_name || "Active Package"}.`,
-        );
-      } else {
-        text(
-          accessStatus,
-          "Purchase required before family build tools unlock.",
-        );
-        text(
-          dashboardStatus,
-          "Your customer workspace is connected, but no paid package is active yet.",
-        );
-      }
+      text(currentPackage, context.packageName || "Active Package");
 
       if (!latest) {
-        text(
-          workspaceCopy,
-          "Your Tomb of Light customer workspace connects package access, onboarding, family structure, and lineage tools in one place.",
-        );
-        text(intakeCardStatus, "No intake submission found yet.");
-        text(currentPackage, paidOrder?.package_name || "No package detected");
+        text(intakeCardStatus, config.presenceTitle);
         text(statusBadge, "Not submitted");
         text(submissionId, "—");
         text(submittedAt, "—");
         text(
           nextStep,
-          paidOrder
-            ? "Open your intake flow and submit the review step."
-            : "Purchase a package first to unlock intake.",
+          config.lane === "portrait"
+            ? "Upload portrait and supporting records to begin."
+            : config.lane === "organization"
+              ? "Upload organization and supporting records to begin."
+              : "Open your intake flow and submit the review step.",
         );
         text(
           lockNote,
-          paidOrder
-            ? "Editing is open because no final submission exists yet."
-            : "Intake is locked until a paid package exists.",
+          "Editing is open because no final submission exists yet.",
         );
 
         if (openAction) {
-          openAction.textContent = paidOrder ? "Open Intake" : "View Packages";
-          openAction.setAttribute(
-            "href",
-            paidOrder ? "intake-welcome.html" : "index.html#pricing",
-          );
+          openAction.textContent = "Open Intake";
+          openAction.setAttribute("href", "intake-welcome.html");
         }
-
-        updateSecondaryFamilyAction("", secondaryFamilyAction);
       } else {
-        const status = normalizeStatus(latest.status);
-
-        text(workspaceCopy, workspaceCopyForStatus(status));
-        text(intakeCardStatus, intakeCardCopyForStatus(status));
-        text(
-          currentPackage,
-          latest.package_name ||
-            latest.package_slug ||
-            paidOrder?.package_name ||
-            "—",
+        const status = normalizeStatus(
+          latest.status || latest.submission_status,
         );
+        const laneMessages = getLaneAwareIntakeMessages(config.lane, status);
+
+        text(intakeCardStatus, laneMessages.cardCopy);
         text(statusBadge, humanizeStatus(status));
-        text(submissionId, latest.id || "—");
+        text(submissionId, latest.id || latest._id || "—");
         text(submittedAt, formatDate(latest.submitted_at || latest.created_at));
-        text(nextStep, nextStepForStatus(status));
-        text(lockNote, lockNoteForStatus(status, latest.review_locked));
+        text(nextStep, laneMessages.nextStep);
+        text(lockNote, laneMessages.lockNote);
+        text(workspaceCopy, laneMessages.workspaceCopy);
 
         updatePrimaryIntakeAction(status, openAction);
-        updateSecondaryFamilyAction(status, secondaryFamilyAction);
       }
-
-      const history = await getSubmissionHistory();
 
       if (!Array.isArray(history) || history.length === 0) {
         text(historyStatus, "No intake submissions found yet.");
@@ -444,6 +708,10 @@
         if (historyList) {
           historyList.innerHTML = history.map(renderHistoryItem).join("");
         }
+      }
+
+      if (dashboardStatus) {
+        dashboardStatus.textContent = `Your package is active: ${context.packageName || "Active Package"}.`;
       }
     } catch (error) {
       text(intakeCardStatus, "Intake status is temporarily unavailable.");
@@ -455,6 +723,10 @@
   }
 
   document.addEventListener("DOMContentLoaded", function () {
-    setupDashboardIntake();
+    applyDashboardIntake();
+  });
+
+  window.addEventListener("tol:dashboard-context-ready", function () {
+    applyDashboardIntake();
   });
 })();

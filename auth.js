@@ -10,6 +10,12 @@
     return;
   }
 
+  function normalizeValue(value) {
+    return String(value || "")
+      .trim()
+      .toLowerCase();
+  }
+
   function getAccessTokenFromResponse(loginData) {
     return (
       loginData?.access_token ||
@@ -75,15 +81,101 @@
     return [];
   }
 
+  function normalizePackageCode(value) {
+    const normalized = normalizeValue(value);
+
+    const mapping = {
+      "legacy-snapshot": "legacy_snapshot",
+      legacy_snapshot: "legacy_snapshot",
+
+      "legacy-portrait-intro": "legacy_portrait_intro",
+      legacy_portrait_intro: "legacy_portrait_intro",
+
+      "digital-legacy-portrait": "digital_legacy_portrait",
+      digital_legacy_portrait: "digital_legacy_portrait",
+
+      "starter-family-tree": "household_foundation",
+      starter_family_tree: "household_foundation",
+      "household-foundation": "household_foundation",
+      household_foundation: "household_foundation",
+
+      "heirloom-legacy-tree": "heirloom_legacy_tree",
+      heirloom_legacy_tree: "heirloom_legacy_tree",
+
+      "legacy-plus": "legacy_plus",
+      legacy_plus: "legacy_plus",
+
+      "family-estate-concierge": "family_estate_concierge",
+      family_estate_concierge: "family_estate_concierge",
+
+      "command-structure-network": "command_structure_network",
+      command_structure_network: "command_structure_network",
+    };
+
+    return mapping[normalized] || normalized;
+  }
+
+  function stripMaintenanceSuffix(packageCode) {
+    return normalizePackageCode(packageCode)
+      .replace(/_maintenance_monthly$/, "")
+      .replace(/_maintenance_yearly$/, "");
+  }
+
+  function resolvePackageLane(packageCode) {
+    const normalized = stripMaintenanceSuffix(packageCode);
+
+    if (
+      normalized === "legacy_snapshot" ||
+      normalized === "legacy_portrait_intro" ||
+      normalized === "digital_legacy_portrait"
+    ) {
+      return "portrait";
+    }
+
+    if (
+      normalized === "household_foundation" ||
+      normalized === "heirloom_legacy_tree" ||
+      normalized === "legacy_plus"
+    ) {
+      return "household";
+    }
+
+    if (normalized === "family_estate_concierge") {
+      return "network";
+    }
+
+    if (normalized === "command_structure_network") {
+      return "organization";
+    }
+
+    return "unknown";
+  }
+
+  function resolvePackageDisplayName(packageCode) {
+    const normalized = stripMaintenanceSuffix(packageCode);
+
+    const mapping = {
+      legacy_snapshot: "Legacy Snapshot",
+      legacy_portrait_intro: "Legacy Portrait Intro",
+      digital_legacy_portrait: "Digital Legacy Portrait",
+      household_foundation: "Household Foundation",
+      heirloom_legacy_tree: "Heirloom Legacy Tree",
+      legacy_plus: "Legacy Plus",
+      family_estate_concierge: "Family Estate Concierge",
+      command_structure_network: "Command Structure Network",
+    };
+
+    return mapping[normalized] || normalized || "Package";
+  }
+
   function getPaidOrder(orders) {
     return (
       orders.find(function (order) {
-        const status = String(order?.status || "").toLowerCase();
+        const status = normalizeValue(order?.status);
+        const itemType = normalizeValue(order?.item_type || "package");
         return (
-          status === "paid" ||
-          status === "complete" ||
-          status === "completed" ||
-          status === "succeeded"
+          itemType === "package" &&
+          ["paid", "complete", "completed", "succeeded"].includes(status)
         );
       }) || null
     );
@@ -140,6 +232,23 @@
     }
   }
 
+  function setActionHrefAndText(element, href, text) {
+    if (!element) return;
+    if (href) {
+      element.setAttribute("href", href);
+      element.dataset.originalHref = href;
+    }
+    if (text) {
+      element.textContent = text;
+    }
+  }
+
+  function setPaidActionState(enabled) {
+    document.querySelectorAll("[data-paid-action]").forEach(function (element) {
+      setActionEnabled(element, enabled);
+    });
+  }
+
   async function fetchCurrentUserWithToken(token) {
     const user = await app.apiRequest("/auth/me", {
       method: "GET",
@@ -190,36 +299,18 @@
     return toArray(payload);
   }
 
-  async function fetchLatestIntake() {
-    try {
-      return await app.apiRequest("/intake-submissions/my-latest", {
-        method: "GET",
-      });
-    } catch (error) {
-      const message = getErrorMessage(error).toLowerCase();
-      if (message.includes("404") || message.includes("not found")) {
-        return null;
-      }
-      throw error;
-    }
+  async function fetchProjectEntitlements() {
+    const payload = await app.apiRequest("/project-entitlements/my-active", {
+      method: "GET",
+    });
+    return toArray(payload);
   }
 
-  async function fetchIntakeHistory() {
-    try {
-      const payload = await app.apiRequest(
-        "/intake-submissions/my-list?limit=10",
-        {
-          method: "GET",
-        },
-      );
-      return toArray(payload);
-    } catch (error) {
-      const message = getErrorMessage(error).toLowerCase();
-      if (message.includes("404") || message.includes("not found")) {
-        return [];
-      }
-      throw error;
-    }
+  async function fetchProjects() {
+    const payload = await app.apiRequest("/projects/", {
+      method: "GET",
+    });
+    return toArray(payload);
   }
 
   function renderOrders(orders) {
@@ -239,30 +330,156 @@
     orders.forEach(function (order, index) {
       const card = document.createElement("div");
       card.className = "feature-card feature-card-clean";
+
+      const itemType = normalizeValue(order.item_type || "package");
+      const billingPlan = normalizeValue(order.billing_plan || "one_time");
+
+      let metaLine = "";
+      if (itemType === "maintenance") {
+        metaLine = `Billing: ${billingPlan || "maintenance"}`;
+      } else if (itemType === "addon") {
+        metaLine = "Type: Add-On";
+      } else {
+        metaLine = "Type: Package";
+      }
+
       card.innerHTML = `
         <div class="card-number">${index + 1}</div>
-        <h3>${order.package_name || order.package_slug || "Package"}</h3>
+        <h3>${order.package_name || order.package_code || order.package_slug || "Package"}</h3>
         <p class="card-copy">Status: ${order.status || "unknown"}</p>
         <p class="card-copy">Price: ${order.price_label || "—"}</p>
+        <p class="card-copy">${metaLine}</p>
         <p class="card-copy">Created: ${formatDate(order.created_at)}</p>
       `;
       listNode.appendChild(card);
     });
   }
 
-  function updateAccessState(paidOrder) {
+  function getActiveEntitlement(entitlements) {
+    if (!Array.isArray(entitlements) || !entitlements.length) return null;
+
+    return (
+      entitlements.find(function (item) {
+        return normalizeValue(item.status) === "active";
+      }) || entitlements[0]
+    );
+  }
+
+  function getActiveProject(projects, activeEntitlement, paidOrder) {
+    if (!Array.isArray(projects) || !projects.length) return null;
+
+    const entitlementProjectId = activeEntitlement?.project_id;
+    if (entitlementProjectId) {
+      const found = projects.find(function (project) {
+        return (
+          String(project.id || project._id || "") ===
+          String(entitlementProjectId)
+        );
+      });
+      if (found) return found;
+    }
+
+    const paidOrderProjectId = paidOrder?.project_id;
+    if (paidOrderProjectId) {
+      const found = projects.find(function (project) {
+        return (
+          String(project.id || project._id || "") === String(paidOrderProjectId)
+        );
+      });
+      if (found) return found;
+    }
+
+    return projects[0] || null;
+  }
+
+  async function getDashboardContext(user, orders) {
+    let entitlements = [];
+    let projects = [];
+
+    try {
+      const results = await Promise.all([
+        fetchProjectEntitlements().catch(function () {
+          return [];
+        }),
+        fetchProjects().catch(function () {
+          return [];
+        }),
+      ]);
+
+      entitlements = Array.isArray(results[0]) ? results[0] : [];
+      projects = Array.isArray(results[1]) ? results[1] : [];
+    } catch (error) {
+      entitlements = [];
+      projects = [];
+    }
+
+    const paidOrder = getPaidOrder(orders);
+    const activeEntitlement = getActiveEntitlement(entitlements);
+    const activeProject = getActiveProject(
+      projects,
+      activeEntitlement,
+      paidOrder,
+    );
+
+    const packageCode = normalizePackageCode(
+      activeEntitlement?.package_code ||
+        activeProject?.package_code ||
+        activeProject?.package_slug ||
+        paidOrder?.package_code ||
+        paidOrder?.package_slug,
+    );
+
+    const packageLane =
+      normalizeValue(activeEntitlement?.package_lane) ||
+      normalizeValue(activeProject?.project_lane) ||
+      resolvePackageLane(packageCode);
+
+    const packageName =
+      paidOrder?.package_name ||
+      activeProject?.package_name ||
+      resolvePackageDisplayName(packageCode);
+
+    return {
+      user: user || null,
+      orders,
+      paidOrder,
+      entitlements,
+      activeEntitlement,
+      projects,
+      activeProject,
+      packageCode,
+      packageLane,
+      packageName,
+      hasPaidPackage: !!paidOrder,
+    };
+  }
+
+  function publishDashboardContext(context) {
+    window.TOLDashboardContext = context;
+
+    try {
+      window.dispatchEvent(
+        new CustomEvent("tol:dashboard-context-ready", {
+          detail: context,
+        }),
+      );
+    } catch (error) {
+      // no-op
+    }
+  }
+
+  function updateAccessState(context) {
     const accessStatus = document.querySelector("[data-access-status]");
-    const paidActions = document.querySelectorAll("[data-paid-action]");
     const intakeOpenAction = document.querySelector(
       "[data-intake-open-action]",
     );
     const upgradeAction = document.querySelector("[data-upgrade-action]");
 
-    const hasPaidOrder = !!paidOrder;
+    const hasPaidOrder = !!context?.hasPaidPackage;
+    const packageLane = normalizeValue(context?.packageLane);
+    const packageName = context?.packageName || "your package";
 
-    paidActions.forEach(function (element) {
-      setActionEnabled(element, hasPaidOrder);
-    });
+    setPaidActionState(hasPaidOrder);
 
     if (intakeOpenAction) {
       setActionEnabled(intakeOpenAction, hasPaidOrder);
@@ -270,17 +487,71 @@
     }
 
     if (upgradeAction) {
-      upgradeAction.style.display = hasPaidOrder ? "none" : "";
+      upgradeAction.style.display = "";
+
+      if (!hasPaidOrder) {
+        setActionHrefAndText(
+          upgradeAction,
+          "index.html#pricing",
+          "View Packages",
+        );
+      } else if (packageLane === "portrait") {
+        setActionHrefAndText(
+          upgradeAction,
+          "index.html#pricing",
+          "Upgrade to Household Package",
+        );
+      } else if (packageLane === "organization") {
+        setActionHrefAndText(
+          upgradeAction,
+          "index.html#pricing",
+          "View Expansion Options",
+        );
+      } else if (packageLane === "household") {
+        setActionHrefAndText(
+          upgradeAction,
+          "index.html#pricing",
+          "View Add-Ons & Upgrades",
+        );
+      } else if (packageLane === "network") {
+        setActionHrefAndText(
+          upgradeAction,
+          "index.html#pricing",
+          "View Expansion Options",
+        );
+      } else {
+        setActionHrefAndText(
+          upgradeAction,
+          "index.html#pricing",
+          "View Packages",
+        );
+      }
     }
 
     if (!accessStatus) return;
 
-    if (hasPaidOrder) {
-      accessStatus.textContent = `Access unlocked through ${paidOrder.package_name || paidOrder.package_slug || "your paid package"}.`;
-    } else {
+    if (!hasPaidOrder) {
       accessStatus.textContent =
         "Purchase required. Buy a Tomb of Light package to unlock platform tools.";
+      return;
     }
+
+    if (packageLane === "portrait") {
+      accessStatus.textContent = `Access unlocked through ${packageName}. This portrait lane includes uploads and verification workflows. Upgrade to a household package for family build tools.`;
+      return;
+    }
+
+    if (packageLane === "organization") {
+      accessStatus.textContent = `Access unlocked through ${packageName}. This organization lane includes structure and verification workflows. Expansion options are available if you need more scope.`;
+      return;
+    }
+
+    if (packageLane === "network") {
+      accessStatus.textContent = `Access unlocked through ${packageName}. Network and branch workflows are active for this account.`;
+      return;
+    }
+
+    accessStatus.textContent = `Access unlocked through ${packageName}. Family build tools and verification workflows are active.`;
   }
 
   function renderNoIntakeBecauseNoPurchase() {
@@ -313,113 +584,12 @@
       nextStep.textContent = "Purchase a package first to unlock intake.";
     }
     if (lockNote) {
-      lockNote.textContent = "Intake is locked until a paid order exists.";
+      lockNote.textContent = "Intake is locked until a paid package exists.";
     }
     if (intakeHistoryStatus) {
       intakeHistoryStatus.textContent = "No intake submissions found yet.";
     }
     if (intakeHistoryList) intakeHistoryList.innerHTML = "";
-  }
-
-  function renderIntake(latest, history, paidOrder) {
-    const intakeStatus = document.querySelector("[data-intake-card-status]");
-    const currentPackage = document.querySelector(
-      "[data-intake-current-package]",
-    );
-    const submissionStatus = document.querySelector(
-      "[data-intake-status-badge]",
-    );
-    const submissionId = document.querySelector("[data-intake-submission-id]");
-    const submittedAt = document.querySelector("[data-intake-submitted-at]");
-    const nextStep = document.querySelector("[data-intake-next-step]");
-    const lockNote = document.querySelector("[data-intake-lock-note]");
-    const intakeHistoryStatus = document.querySelector(
-      "[data-intake-history-status]",
-    );
-    const intakeHistoryList = document.querySelector(
-      "[data-intake-history-list]",
-    );
-
-    if (!latest) {
-      if (intakeStatus) {
-        intakeStatus.textContent = "No intake submission found yet.";
-      }
-      if (currentPackage) {
-        currentPackage.textContent =
-          paidOrder?.package_name || "Paid package detected";
-      }
-      if (submissionStatus) submissionStatus.textContent = "Not submitted";
-      if (submissionId) submissionId.textContent = "—";
-      if (submittedAt) submittedAt.textContent = "—";
-      if (nextStep) {
-        nextStep.textContent =
-          "Open your intake flow and submit the review step.";
-      }
-      if (lockNote) {
-        lockNote.textContent =
-          "Editing is open because no final submission exists yet.";
-      }
-    } else {
-      const latestStatus =
-        latest.status || latest.submission_status || "submitted";
-      const locked =
-        String(latestStatus).toLowerCase() === "submitted" ||
-        String(latestStatus).toLowerCase() === "final";
-
-      if (intakeStatus) {
-        intakeStatus.textContent =
-          "Your most recent intake submission is shown below.";
-      }
-      if (currentPackage) {
-        currentPackage.textContent =
-          latest.package_name ||
-          paidOrder?.package_name ||
-          "Paid package detected";
-      }
-      if (submissionStatus) submissionStatus.textContent = latestStatus;
-      if (submissionId) {
-        submissionId.textContent = latest.id || latest._id || "—";
-      }
-      if (submittedAt) {
-        submittedAt.textContent = formatDate(
-          latest.submitted_at || latest.created_at,
-        );
-      }
-      if (nextStep) {
-        nextStep.textContent = locked
-          ? "Your submission is on file for review."
-          : "Continue and finalize your intake.";
-      }
-      if (lockNote) {
-        lockNote.textContent = locked
-          ? "Editing is locked after final submission."
-          : "Editing is still open until final submission.";
-      }
-    }
-
-    if (!intakeHistoryStatus || !intakeHistoryList) return;
-
-    intakeHistoryList.innerHTML = "";
-
-    if (!history.length) {
-      intakeHistoryStatus.textContent = "No intake submissions found yet.";
-      return;
-    }
-
-    intakeHistoryStatus.textContent =
-      "Your recent intake submissions are listed below.";
-
-    history.forEach(function (item, index) {
-      const card = document.createElement("div");
-      card.className = "feature-card feature-card-clean";
-      card.innerHTML = `
-        <div class="card-number">${index + 1}</div>
-        <h3>${item.package_name || "Intake Submission"}</h3>
-        <p class="card-copy">Status: ${item.status || item.submission_status || "submitted"}</p>
-        <p class="card-copy">Created: ${formatDate(item.created_at || item.submitted_at)}</p>
-      `;
-      intakeHistoryList.appendChild(card);
-    });
   }
 
   function setupSignupForm() {
@@ -603,8 +773,10 @@
       if (authRequired) authRequired.style.display = "block";
     }
 
+    let me = null;
+
     try {
-      const me = await withRetry(
+      me = await withRetry(
         function () {
           return app.fetchCurrentUser();
         },
@@ -651,9 +823,8 @@
         "You appear signed in. Live account verification is temporarily unavailable.",
         "error",
       );
+      return;
     }
-
-    let paidOrder = null;
 
     try {
       const orders = await withRetry(
@@ -665,16 +836,34 @@
       );
 
       renderOrders(orders);
-      paidOrder = getPaidOrder(orders);
-      updateAccessState(paidOrder);
+
+      const context = await getDashboardContext(me, orders);
+      updateAccessState(context);
+      publishDashboardContext(context);
+
+      if (!context.hasPaidPackage) {
+        renderNoIntakeBecauseNoPurchase();
+        app.setStatus(
+          statusNode,
+          "Your customer workspace is connected, but no paid package is active yet.",
+          "error",
+        );
+        return;
+      }
+
+      app.setStatus(
+        statusNode,
+        `Your package is active: ${context.packageName || "Active Package"}.`,
+        "success",
+      );
     } catch (error) {
-      console.error("Dashboard orders load failed:", error);
+      console.error("Dashboard load failed:", error);
 
       if (isAuthFailure(error)) {
         app.clearSession();
         app.setStatus(
           statusNode,
-          "Your session expired while loading orders. Please sign in again.",
+          "Your session expired while loading dashboard data. Please sign in again.",
           "error",
         );
         setTimeout(function () {
@@ -685,84 +874,8 @@
 
       app.setStatus(
         statusNode,
-        "You are signed in, but your order data could not be loaded yet.",
+        "You are signed in, but your dashboard data could not be loaded yet.",
         "error",
-      );
-      return;
-    }
-
-    if (!paidOrder) {
-      renderNoIntakeBecauseNoPurchase();
-      return;
-    }
-
-    try {
-      const [latest, history] = await Promise.all([
-        withRetry(
-          function () {
-            return fetchLatestIntake();
-          },
-          2,
-          300,
-        ),
-        withRetry(
-          function () {
-            return fetchIntakeHistory();
-          },
-          2,
-          300,
-        ),
-      ]);
-
-      renderIntake(latest, history, paidOrder);
-
-      app.setStatus(
-        statusNode,
-        `Your package is active: ${paidOrder.package_name || paidOrder.package_slug || "Paid Package"}.`,
-        "success",
-      );
-    } catch (error) {
-      console.error("Dashboard intake load failed:", error);
-
-      if (isAuthFailure(error)) {
-        app.clearSession();
-        app.setStatus(
-          statusNode,
-          "Your session expired while loading intake data. Please sign in again.",
-          "error",
-        );
-        setTimeout(function () {
-          window.location.href = "signin.html";
-        }, 1200);
-        return;
-      }
-
-      const intakeStatus = document.querySelector("[data-intake-card-status]");
-      const intakeHistoryStatus = document.querySelector(
-        "[data-intake-history-status]",
-      );
-      const currentPackage = document.querySelector(
-        "[data-intake-current-package]",
-      );
-
-      if (intakeStatus) {
-        intakeStatus.textContent =
-          "Your package is active, but intake data could not be loaded yet.";
-      }
-
-      if (intakeHistoryStatus) {
-        intakeHistoryStatus.textContent =
-          "Intake history is temporarily unavailable.";
-      }
-
-      if (currentPackage && paidOrder?.package_name) {
-        currentPackage.textContent = paidOrder.package_name;
-      }
-
-      app.setStatus(
-        statusNode,
-        `Your package is active: ${paidOrder.package_name || paidOrder.package_slug || "Paid Package"}. Some dashboard sections are still loading.`,
-        "success",
       );
     }
   }
@@ -869,5 +982,13 @@
   window.TOLAuthPages = {
     handleLogin,
     redirectAfterLogin,
+    fetchOrders,
+    fetchProjectEntitlements,
+    fetchProjects,
+    getDashboardContext,
+    normalizePackageCode,
+    resolvePackageLane,
+    resolvePackageDisplayName,
+    getPaidOrder,
   };
 })();
