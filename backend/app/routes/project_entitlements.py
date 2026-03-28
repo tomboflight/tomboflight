@@ -6,7 +6,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from app.dependencies.auth import get_current_user, require_admin
+from app.dependencies.auth import INTERNAL_ADMIN_KEYS, get_current_user, require_admin
 from app.services.project_entitlement_service import (
     get_project_entitlement,
     get_upgrade_quote_for_project,
@@ -35,6 +35,15 @@ def _current_user_id(user: dict[str, Any]) -> str:
             detail="Authenticated user id is missing.",
         )
     return str(raw_id)
+
+
+def _is_admin(user: dict[str, Any]) -> bool:
+    values = {
+        str(user.get("role") or "").strip().lower(),
+        str(user.get("access_tier") or "").strip().lower(),
+        str(user.get("department_role") or "").strip().lower(),
+    }
+    return any(value in INTERNAL_ADMIN_KEYS for value in values if value)
 
 
 @router.post("/apply")
@@ -72,9 +81,8 @@ def get_project_entitlement_route(
         )
 
     current_user_id = _current_user_id(current_user)
-    current_role = str(current_user.get("role") or "").strip().lower()
 
-    if current_role != "admin" and entitlement.get("user_id") != current_user_id:
+    if not _is_admin(current_user) and entitlement.get("user_id") != current_user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to view this project entitlement.",
@@ -107,9 +115,8 @@ def get_project_upgrade_quote_route(
         )
 
     current_user_id = _current_user_id(current_user)
-    current_role = str(current_user.get("role") or "").strip().lower()
 
-    if current_role != "admin" and entitlement.get("user_id") != current_user_id:
+    if not _is_admin(current_user) and entitlement.get("user_id") != current_user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to view this upgrade quote.",
