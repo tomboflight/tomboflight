@@ -227,9 +227,11 @@
         showTree: false,
         showCertificate: false,
         showVerification: true,
+        showLinkKeys: canUseLinkKeys,
         navTree: false,
         navCertificate: false,
         navIntake: false,
+        navLinkKeys: canUseLinkKeys,
         buildPathEyebrow: "Your Portrait Workflow",
         buildSteps: [
           {
@@ -286,9 +288,11 @@
         showTree: false,
         showCertificate: false,
         showVerification: true,
+        showLinkKeys: canUseLinkKeys,
         navTree: false,
         navCertificate: false,
         navIntake: false,
+        navLinkKeys: canUseLinkKeys,
         buildPathEyebrow: "Your Command Build Path",
         buildSteps: [
           {
@@ -344,9 +348,11 @@
         showTree: canBuildFamilyTree,
         showCertificate: canUseCertificate,
         showVerification: true,
+        showLinkKeys: canUseLinkKeys,
         navTree: canBuildFamilyTree,
         navCertificate: canUseCertificate,
         navIntake: canOpenFamilyIntake,
+        navLinkKeys: canUseLinkKeys,
         buildPathEyebrow: "Your Network Build Path",
         buildSteps: [
           {
@@ -401,9 +407,11 @@
       showTree: canBuildFamilyTree,
       showCertificate: canUseCertificate,
       showVerification: true,
+      showLinkKeys: canUseLinkKeys,
       navTree: canBuildFamilyTree,
       navCertificate: canUseCertificate,
       navIntake: canOpenFamilyIntake,
+      navLinkKeys: canUseLinkKeys,
       buildPathEyebrow: "Your Family Build Path",
       buildSteps: [
         {
@@ -538,6 +546,7 @@
     applyNavVisibility("lineage-certificate.html", config.navCertificate);
     applyNavVisibility("intake-review.html", config.navIntake);
     applyNavVisibility("verification-upload.html", config.showVerification);
+    applyNavVisibility("link-keys.html", config.navLinkKeys);
 
     applyAction(
       "[data-dashboard-workspace-primary-action], [data-dashboard-package-primary-action]",
@@ -556,6 +565,12 @@
         show: config.showVerification,
       },
     );
+
+    applyAction("[data-dashboard-link-keys-action]", {
+      text: "Open Link Keys",
+      href: "link-keys.html",
+      show: config.showLinkKeys,
+    });
 
     applyAction(
       '[data-dashboard-workspace-tree-action], a[href="tree-view.html"][data-paid-action]',

@@ -8,7 +8,7 @@
       name="description"
       content="Upload verification records, portraits, and supporting family documents to Tomb of Light."
     />
-    <link rel="stylesheet" href="styles.css?v=20260326-2" />
+    <link rel="stylesheet" href="styles.css?v=20260328-7" />
   </head>
   <body>
     <a href="#main-content" class="skip-to-content">Skip to main content</a>
@@ -34,12 +34,15 @@
 
           <nav class="site-nav" id="site-nav" aria-label="Portal navigation">
             <a href="dashboard.html">Dashboard</a>
-            <a href="intake-review.html">My Intake</a>
+            <a href="intake-review.html" style="display: none">My Intake</a>
             <a href="verification-upload.html" aria-current="page">
               Verification Uploads
             </a>
-            <a href="tree-view.html">Family Tree</a>
-            <a href="lineage-certificate.html">Lineage Certificate</a>
+            <a href="link-keys.html" style="display: none">Link Keys</a>
+            <a href="tree-view.html" style="display: none">Family Tree</a>
+            <a href="lineage-certificate.html" style="display: none">
+              Lineage Certificate
+            </a>
             <a href="faq.html">Help</a>
           </nav>
 
@@ -485,9 +488,87 @@
       </div>
     </div>
 
-    <script src="config.js?v=20260326-2"></script>
-    <script src="app.js?v=20260326-2"></script>
-    <script src="auth.js?v=20260326-2"></script>
-    <script src="verification-upload.js?v=20260326-2"></script>
+    <script src="config.js?v=20260328-7"></script>
+    <script src="app.js?v=20260328-7"></script>
+    <script src="auth.js?v=20260328-7"></script>
+
+    <script>
+      document.addEventListener("DOMContentLoaded", async function () {
+        try {
+          const app = window.TOLApp || window.TOLAuth;
+          const auth = window.TOLAuthPages || {};
+          if (!app || typeof app.apiRequest !== "function") return;
+
+          const token = app.getToken ? app.getToken() : null;
+          if (!token) return;
+
+          const me = await app.apiRequest("/auth/me", { method: "GET" });
+          if (auth.isInternalRole && auth.isInternalRole(me)) {
+            document
+              .querySelectorAll('.site-nav a[href="verification-upload.html"]')
+              .forEach(function (node) {
+                node.style.display = "";
+              });
+            return;
+          }
+
+          const orders = auth.fetchOrders ? await auth.fetchOrders() : [];
+          const context = auth.getDashboardContext
+            ? await auth.getDashboardContext(me, orders)
+            : null;
+
+          const resolved =
+            context?.resolvedEntitlements ||
+            (auth.buildFallbackEntitlements
+              ? auth.buildFallbackEntitlements(
+                  context?.packageCode,
+                  context?.packageLane,
+                )
+              : {});
+
+          const canUpload =
+            !!resolved.can_upload_verification_docs ||
+            !!resolved.can_upload_portraits;
+          const canUseLinkKeys = !!resolved.can_use_link_keys;
+          const canOpenFamilyIntake = !!resolved.can_open_family_intake;
+          const canBuildFamilyTree = !!resolved.can_build_family_tree;
+          const canUseCertificate = !!resolved.can_use_lineage_certificate;
+
+          document
+            .querySelectorAll('.site-nav a[href="intake-review.html"]')
+            .forEach(function (node) {
+              node.style.display = canOpenFamilyIntake ? "" : "none";
+            });
+
+          document
+            .querySelectorAll('.site-nav a[href="verification-upload.html"]')
+            .forEach(function (node) {
+              node.style.display = canUpload ? "" : "none";
+            });
+
+          document
+            .querySelectorAll('.site-nav a[href="link-keys.html"]')
+            .forEach(function (node) {
+              node.style.display = canUseLinkKeys ? "" : "none";
+            });
+
+          document
+            .querySelectorAll('.site-nav a[href="tree-view.html"]')
+            .forEach(function (node) {
+              node.style.display = canBuildFamilyTree ? "" : "none";
+            });
+
+          document
+            .querySelectorAll('.site-nav a[href="lineage-certificate.html"]')
+            .forEach(function (node) {
+              node.style.display = canUseCertificate ? "" : "none";
+            });
+        } catch (error) {
+          console.error("Verification nav entitlement sync failed:", error);
+        }
+      });
+    </script>
+
+    <script src="verification-upload.js?v=20260328-7"></script>
   </body>
 </html>

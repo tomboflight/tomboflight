@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Link Keys | Tomb of Light</title>
+    <meta
+      name="description"
+      content="Generate, share, approve, and manage Tomb of Light link keys for portrait, household, network, and organization workspaces."
+    />
+    <link rel="stylesheet" href="styles.css?v=20260328-7" />
+  </head>
+  <body>
+    <a href="#main-content" class="skip-to-content">Skip to main content</a>
+
+    <div class="site-watermark" aria-hidden="true"></div>
+
+    <div class="page-wrap">
+      <header class="site-header">
+        <div class="container site-header-inner">
+          <a class="brand" href="index.html" aria-label="Tomb of Light home">
+            <span>Tomb of Light<span class="brand-symbol">™</span></span>
+          </a>
+
+          <button
+            class="menu-toggle"
+            type="button"
+            aria-label="Toggle navigation"
+            aria-expanded="false"
+            aria-controls="site-nav"
+          >
+            Menu
+          </button>
+
+          <nav class="site-nav" id="site-nav" aria-label="Portal navigation">
+            <a href="dashboard.html">Dashboard</a>
+            <a href="intake-review.html" style="display: none">My Intake</a>
+            <a href="verification-upload.html" style="display: none"
+              >Verification Uploads</a
+            >
+            <a href="link-keys.html" aria-current="page">Link Keys</a>
+            <a href="tree-view.html" style="display: none">Family Tree</a>
+            <a href="lineage-certificate.html" style="display: none"
+              >Lineage Certificate</a
+            >
+            <a href="faq.html">Help</a>
+          </nav>
+
+          <div class="header-actions">
+            <button class="btn btn-secondary" type="button" data-logout-btn>
+              Log Out
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main id="main-content" data-link-keys-page>
+        <section class="page-hero">
+          <div class="container">
+            <div class="page-hero-panel">
+              <span class="eyebrow">Portrait-Native Linking</span>
+              <h1>Link Keys Workspace</h1>
+              <p data-link-keys-page-status>
+                Loading your linking workspace...
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section class="page-sections">
+          <div class="container form-shell">
+            <div class="form-panel">
+              <span class="eyebrow">Workspace Summary</span>
+              <div class="grid-3">
+                <div>
+                  <div class="card-number">1</div>
+                  <h3>Package</h3>
+                  <p class="card-copy" data-link-package-name>Loading...</p>
+                </div>
+                <div>
+                  <div class="card-number">2</div>
+                  <h3>Lane</h3>
+                  <p class="card-copy" data-link-package-lane>Loading...</p>
+                </div>
+                <div>
+                  <div class="card-number">3</div>
+                  <h3>Project</h3>
+                  <p class="card-copy" data-link-project-name>Loading...</p>
+                </div>
+              </div>
+
+              <div
+                class="helper"
+                data-link-keys-workspace-status
+                style="display: none; margin-top: 1rem"
+                aria-live="polite"
+              ></div>
+            </div>
+
+            <div class="form-panel" data-link-keys-main-panel>
+              <span class="eyebrow">Your Link Key</span>
+              <div class="helper" style="margin-bottom: 1rem">
+                Generate a link key for your current workspace. Share this key
+                with the other person or branch you want to connect.
+              </div>
+
+              <label>
+                Active Link Key
+                <input
+                  type="text"
+                  readonly
+                  value=""
+                  data-link-key-value
+                  placeholder="No active key yet"
+                />
+              </label>
+
+              <div class="inline-actions" style="margin-top: 1rem">
+                <button
+                  class="btn btn-primary"
+                  type="button"
+                  data-link-key-generate
+                >
+                  Generate Link Key
+                </button>
+                <button
+                  class="btn btn-secondary"
+                  type="button"
+                  data-link-key-copy
+                >
+                  Copy Link Key
+                </button>
+                <button
+                  class="btn btn-secondary"
+                  type="button"
+                  data-link-key-revoke
+                >
+                  Revoke Link Key
+                </button>
+              </div>
+
+              <div
+                class="helper"
+                data-link-key-status
+                style="display: none; margin-top: 1rem"
+                aria-live="polite"
+              ></div>
+            </div>
+
+            <div class="form-panel" data-link-request-panel>
+              <span class="eyebrow">Request a Link</span>
+
+              <form class="form-grid" data-link-request-form novalidate>
+                <label>
+                  Target Link Key
+                  <input
+                    type="text"
+                    name="target_key"
+                    maxlength="150"
+                    required
+                    placeholder="Paste the other workspace’s link key"
+                  />
+                </label>
+
+                <label>
+                  Notes
+                  <textarea
+                    name="notes"
+                    rows="4"
+                    maxlength="1000"
+                    placeholder="Optional notes for the link request"
+                  ></textarea>
+                </label>
+
+                <div class="inline-actions" style="margin-top: 1rem">
+                  <button class="btn btn-primary" type="submit">
+                    Send Link Request
+                  </button>
+                </div>
+              </form>
+
+              <div
+                class="helper"
+                data-link-request-status
+                style="display: none; margin-top: 1rem"
+                aria-live="polite"
+              ></div>
+            </div>
+
+            <div class="form-panel" data-link-incoming-panel>
+              <span class="eyebrow">Incoming Requests</span>
+              <div
+                class="grid-3"
+                data-link-incoming-list
+                style="margin-top: 1rem"
+              ></div>
+              <div
+                class="helper"
+                data-link-incoming-empty
+                style="display: none; margin-top: 1rem"
+              >
+                No incoming link requests found.
+              </div>
+            </div>
+
+            <div class="form-panel" data-link-outgoing-panel>
+              <span class="eyebrow">Outgoing Requests</span>
+              <div
+                class="grid-3"
+                data-link-outgoing-list
+                style="margin-top: 1rem"
+              ></div>
+              <div
+                class="helper"
+                data-link-outgoing-empty
+                style="display: none; margin-top: 1rem"
+              >
+                No outgoing link requests found.
+              </div>
+            </div>
+
+            <div class="form-panel" data-link-active-panel>
+              <span class="eyebrow">Active Links</span>
+              <div
+                class="grid-3"
+                data-link-active-list
+                style="margin-top: 1rem"
+              ></div>
+              <div
+                class="helper"
+                data-link-active-empty
+                style="display: none; margin-top: 1rem"
+              >
+                No active links found.
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <div class="container">
+          <div class="footer-card">
+            <div class="footer-bottom">
+              <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
+            </div>
+          </div>
+        </div>
+      </footer>
+    </div>
+
+    <script src="config.js?v=20260328-7"></script>
+    <script src="app.js?v=20260328-7"></script>
+    <script src="auth.js?v=20260328-7"></script>
+    <script src="link-keys.js?v=20260328-7"></script>
+  </body>
+</html>

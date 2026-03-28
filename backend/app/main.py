@@ -33,6 +33,7 @@ from app.routes.lineage_graph import router as lineage_graph_router
 from app.routes.lineage_nodes import router as lineage_nodes_router
 from app.routes.lineage_proof import router as lineage_proof_router
 from app.routes.lineage_query import router as lineage_query_router
+from app.routes.link_keys import router as link_keys_router
 from app.routes.link_requests import router as link_requests_router
 from app.routes.match_candidates import router as match_candidates_router
 from app.routes.match_generation import router as match_generation_router
@@ -169,6 +170,7 @@ app.include_router(narrative_records_router)
 # ----------------------------
 # Linking + Requests
 # ----------------------------
+app.include_router(link_keys_router)
 app.include_router(link_requests_router)
 
 # ----------------------------
@@ -211,6 +213,15 @@ def root():
             "/uploads/member/{member_id}",
             "/uploads/family/{family_id}",
             "/uploads/{upload_id}/download",
+            "/link-keys/my-list",
+            "/link-keys/my-active?project_id={project_id}",
+            "/link-keys/project/{project_id}/generate",
+            "/link-keys/{key_id}/revoke",
+            "/link-requests",
+            "/link-requests/my-list",
+            "/link-requests/{request_id}/approve",
+            "/link-requests/{request_id}/reject",
+            "/link-requests/{request_id}/revoke",
             "/webhooks/stripe",
             "/orders/record-checkout",
             "/orders/my-orders",

@@ -1038,6 +1038,7 @@
     const page = window.location.pathname.split("/").pop() || "";
 
     const uploadPages = new Set(["verification-upload.html"]);
+    const linkKeyPages = new Set(["link-keys.html"]);
     const familyIntakePages = new Set([
       "intake-welcome.html",
       "intake-household.html",
@@ -1051,6 +1052,7 @@
 
     if (
       !uploadPages.has(page) &&
+      !linkKeyPages.has(page) &&
       !familyIntakePages.has(page) &&
       !familyTreePages.has(page) &&
       !certificatePages.has(page)
@@ -1102,6 +1104,11 @@
         )
       ) {
         window.location.href = "dashboard.html?purchase_required=1";
+        return;
+      }
+
+      if (linkKeyPages.has(page) && !resolved.can_use_link_keys) {
+        window.location.href = "dashboard.html?upgrade_required=1";
         return;
       }
 
