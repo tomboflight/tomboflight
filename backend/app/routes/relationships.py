@@ -3,7 +3,7 @@ from typing import Any
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
-from app.dependencies.auth import get_current_user
+from app.dependencies.auth import get_current_user, has_internal_admin_access
 from app.schemas.relationship import RelationshipCreate, RelationshipResponse
 from app.services.relationship_guardrails import RelationshipGuardrailService
 
@@ -36,7 +36,7 @@ def _current_user_display_name(user: dict[str, Any]) -> str:
 
 
 def _is_admin(user: dict[str, Any]) -> bool:
-    return str(user.get("role", "")).strip().lower() == "admin"
+    return has_internal_admin_access(user)
 
 
 def _family_is_visible_to_user(

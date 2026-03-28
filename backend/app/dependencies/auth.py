@@ -107,6 +107,10 @@ def _has_internal_admin_access(user: dict) -> bool:
     return any(value in INTERNAL_ADMIN_KEYS for value in values if value)
 
 
+def has_internal_admin_access(user: dict) -> bool:
+    return _has_internal_admin_access(user)
+
+
 def get_current_user(
     request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
@@ -173,7 +177,7 @@ def get_current_user(
 
 
 def require_admin(current_user: dict = Depends(get_current_user)) -> dict:
-    if not _has_internal_admin_access(current_user):
+    if not has_internal_admin_access(current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required.",

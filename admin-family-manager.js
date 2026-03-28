@@ -388,6 +388,14 @@
 
             <div class="inline-actions" style="margin-top: 1rem">
               <button
+                class="btn btn-secondary"
+                type="button"
+                data-edit-member-id="${escapeHtml(member.id || "")}"
+              >
+                Edit Details
+              </button>
+
+              <button
                 class="btn btn-primary"
                 type="button"
                 data-verify-member-id="${escapeHtml(member.id || "")}"
@@ -491,6 +499,25 @@
       .join("");
   }
 
+  function buildUploadPreviewMarkup(upload) {
+    if (!String(upload.content_type || "").startsWith("image/")) {
+      return "";
+    }
+
+    const apiBaseUrl =
+      typeof app.getApiBaseUrl === "function" ? app.getApiBaseUrl() : "";
+
+    return `<div style="margin: 0 0 1rem;">
+      <img
+        src="${escapeHtml(
+          `${apiBaseUrl}/uploads/${encodeURIComponent(upload.id || "")}/download`,
+        )}"
+        alt="${escapeHtml(upload.original_filename || "Uploaded image")}"
+        style="width: 100%; max-height: 220px; object-fit: cover; border-radius: 18px; border: 1px solid rgba(255,255,255,0.08);"
+      />
+    </div>`;
+  }
+
   function renderMemberUploads(records) {
     const listNode = document.querySelector("[data-admin-member-uploads-list]");
     const emptyNode = document.querySelector(
@@ -511,6 +538,7 @@
         return `
           <div class="family-record-card">
             <div class="card-number">${index + 1}</div>
+            ${buildUploadPreviewMarkup(upload)}
             <h3>${escapeHtml(upload.original_filename || "Uploaded File")}</h3>
             <p class="card-copy"><strong>Category:</strong> ${escapeHtml(upload.category || "—")}</p>
             <p class="card-copy"><strong>Verification Type:</strong> ${escapeHtml(upload.verification_type || "—")}</p>
@@ -543,6 +571,21 @@
         `;
       })
       .join("");
+  }
+
+  function focusMemberUploads(memberId, category) {
+    const memberSelect = document.querySelector("[data-admin-uploads-member]");
+    const categorySelect = document.querySelector(
+      "[data-admin-upload-category-filter]",
+    );
+
+    if (memberSelect && memberId) {
+      memberSelect.value = memberId;
+    }
+
+    if (categorySelect && category) {
+      categorySelect.value = category;
+    }
   }
 
   function setSelectOptions(selectNode, members, placeholder) {
@@ -903,6 +946,8 @@
       });
 
       form.reset();
+      focusMemberUploads(memberId, "member_photo");
+      await loadMemberUploads();
       await loadFamilyGraph();
       setStatus(actionNode, "Member photo uploaded successfully.", "success");
     } catch (error) {
@@ -963,6 +1008,8 @@
       });
 
       form.reset();
+      focusMemberUploads(memberId, "verification_evidence");
+      await loadMemberUploads();
       setStatus(
         actionNode,
         "Verification evidence uploaded successfully.",
@@ -1044,6 +1091,115 @@
       setStatus(
         actionNode,
         error.message || "Unable to delete family member.",
+        "error",
+      );
+    }
+  }
+
+  async function editMember(memberId) {
+    const actionNode = document.querySelector(
+      "[data-admin-family-action-status]",
+    );
+
+    const member = (currentGraph.members || []).find(function (item) {
+      return String(item.id) === String(memberId);
+    });
+
+    if (!member) {
+      setStatus(actionNode, "Unable to locate selected member.", "error");
+      return;
+    }
+
+    const displayName = getDisplayName(member);
+
+    const firstName = window.prompt(
+      `First name for ${displayName}?`,
+      member.first_name || "",
+    );
+    if (firstName === null) return;
+
+    const lastName = window.prompt(
+      `Last name for ${displayName}?`,
+      member.last_name || "",
+    );
+    if (lastName === null) return;
+
+    const generation = window.prompt(
+      `Generation for ${displayName}?`,
+      member.generation ?? "",
+    );
+    if (generation === null) return;
+
+    const birthYear = window.prompt(
+      `Birth year for ${displayName}? Leave blank to clear it.`,
+      member.birth_year ?? "",
+    );
+    if (birthYear === null) return;
+
+    const bio = window.prompt(
+      `Bio for ${displayName}?`,
+      member.bio || "",
+    );
+    if (bio === null) return;
+
+    const normalizedFirstName = String(firstName || "").trim();
+    const normalizedLastName = String(lastName || "").trim();
+    const normalizedGeneration = String(generation || "").trim();
+    const normalizedBirthYear = String(birthYear || "").trim();
+
+    if (!normalizedFirstName || !normalizedLastName || !normalizedGeneration) {
+      setStatus(
+        actionNode,
+        "First name, last name, and generation are required.",
+        "error",
+      );
+      return;
+    }
+
+    const generationValue = Number(normalizedGeneration);
+    if (!Number.isInteger(generationValue) || generationValue < 0) {
+      setStatus(
+        actionNode,
+        "Generation must be a whole number greater than or equal to 0.",
+        "error",
+      );
+      return;
+    }
+
+    let birthYearValue = null;
+    if (normalizedBirthYear) {
+      birthYearValue = Number(normalizedBirthYear);
+      if (!Number.isInteger(birthYearValue) || birthYearValue < 0) {
+        setStatus(
+          actionNode,
+          "Birth year must be a whole number or blank.",
+          "error",
+        );
+        return;
+      }
+    }
+
+    try {
+      setStatus(actionNode, "Updating family member...", "info");
+
+      await app.apiRequest(`/family-members/${encodeURIComponent(memberId)}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          first_name: normalizedFirstName,
+          last_name: normalizedLastName,
+          generation: generationValue,
+          birth_year: birthYearValue,
+          bio: String(bio || "").trim(),
+        }),
+      });
+
+      await loadFamilyGraph();
+      setStatus(actionNode, `${displayName} updated successfully.`, "success");
+    } catch (error) {
+      console.error("Update member failed:", error);
+      setStatus(
+        actionNode,
+        error.message || "Unable to update family member.",
         "error",
       );
     }
@@ -1281,6 +1437,12 @@
             memberButton.getAttribute("data-delete-member-id"),
             memberButton.getAttribute("data-delete-member-name"),
           );
+          return;
+        }
+
+        const editMemberButton = event.target.closest("[data-edit-member-id]");
+        if (editMemberButton) {
+          editMember(editMemberButton.getAttribute("data-edit-member-id"));
           return;
         }
 

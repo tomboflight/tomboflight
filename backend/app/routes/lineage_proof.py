@@ -4,7 +4,7 @@ from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.database import get_database
-from app.dependencies.auth import get_current_user
+from app.dependencies.auth import get_current_user, has_internal_admin_access
 from app.services.lineage_proof_service import generate_lineage_proof
 
 router = APIRouter(
@@ -39,7 +39,7 @@ def _current_user_display_name(user: dict[str, Any]) -> str:
 
 
 def _is_admin(user: dict[str, Any]) -> bool:
-    return str(user.get("role", "")).strip().lower() == "admin"
+    return has_internal_admin_access(user)
 
 
 def _family_is_visible_to_user(
