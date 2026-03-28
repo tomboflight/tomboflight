@@ -4,6 +4,62 @@ from copy import deepcopy
 from typing import Any
 
 
+PACKAGE_CODE_ALIASES: dict[str, str] = {
+    "legacy-snapshot": "legacy_snapshot",
+    "legacy_snapshot": "legacy_snapshot",
+    "legacy-portrait-intro": "legacy_portrait_intro",
+    "legacy_portrait_intro": "legacy_portrait_intro",
+    "digital-legacy-portrait": "digital_legacy_portrait",
+    "digital_legacy_portrait": "digital_legacy_portrait",
+    "starter-family-tree": "household_foundation",
+    "starter_family_tree": "household_foundation",
+    "household-foundation": "household_foundation",
+    "household_foundation": "household_foundation",
+    "heirloom-legacy-tree": "heirloom_legacy_tree",
+    "heirloom_legacy_tree": "heirloom_legacy_tree",
+    "legacy-plus": "legacy_plus",
+    "legacy_plus": "legacy_plus",
+    "family-estate-concierge": "family_estate_concierge",
+    "family_estate_concierge": "family_estate_concierge",
+    "command-structure-network": "command_structure_network",
+    "command_structure_network": "command_structure_network",
+}
+
+ADDON_CODE_ALIASES: dict[str, str] = {
+    "extra-upload-pack": "extra_upload_pack",
+    "extra_upload_pack": "extra_upload_pack",
+    "extra-storage": "extra_storage",
+    "extra_storage": "extra_storage",
+    "portrait-polish": "portrait_polish",
+    "portrait_polish": "portrait_polish",
+    "tribute-narration": "tribute_narration",
+    "tribute_narration": "tribute_narration",
+    "rush-delivery": "rush_delivery",
+    "rush_delivery": "rush_delivery",
+    "extra-mapped-person": "extra_mapped_person",
+    "extra_mapped_person": "extra_mapped_person",
+    "extra-zoom-layer": "extra_zoom_layer",
+    "extra_zoom_layer": "extra_zoom_layer",
+    "additional-narration-minute": "additional_narration_minute",
+    "additional_narration_minute": "additional_narration_minute",
+    "on-site-photo-scanning": "on_site_photo_scanning",
+    "on_site_photo_scanning": "on_site_photo_scanning",
+    "extra-linked-household": "extra_linked_household",
+    "extra_linked_household": "extra_linked_household",
+    "extra-branch": "extra_branch",
+    "extra_branch": "extra_branch",
+    "white-glove-archive-support": "white_glove_archive_support",
+    "white_glove_archive_support": "white_glove_archive_support",
+    "extra-org-node": "extra_org_node",
+    "extra_org_node": "extra_org_node",
+    "extra-org-level": "extra_org_level",
+    "extra_org_level": "extra_org_level",
+    "extra-admin-seat": "extra_admin_seat",
+    "extra_admin_seat": "extra_admin_seat",
+    "command-report-addon": "command_report_addon",
+    "command_report_addon": "command_report_addon",
+}
+
 PACKAGE_CATALOG: dict[str, dict[str, Any]] = {
     "legacy_snapshot": {
         "package_code": "legacy_snapshot",
@@ -29,6 +85,11 @@ PACKAGE_CATALOG: dict[str, dict[str, Any]] = {
         "can_upload_verification_docs": True,
         "can_use_viewer": True,
         "can_use_narration": False,
+        "can_use_lineage_certificate": False,
+        "can_open_family_intake": False,
+        "can_open_org_intake": False,
+        "can_use_link_keys": False,
+        "can_manage_link_keys": False,
         "allowed_addons": [
             "extra_upload_pack",
             "extra_storage",
@@ -70,6 +131,11 @@ PACKAGE_CATALOG: dict[str, dict[str, Any]] = {
         "can_upload_verification_docs": True,
         "can_use_viewer": True,
         "can_use_narration": False,
+        "can_use_lineage_certificate": False,
+        "can_open_family_intake": False,
+        "can_open_org_intake": False,
+        "can_use_link_keys": False,
+        "can_manage_link_keys": False,
         "allowed_addons": [
             "extra_upload_pack",
             "extra_storage",
@@ -110,6 +176,11 @@ PACKAGE_CATALOG: dict[str, dict[str, Any]] = {
         "can_upload_verification_docs": True,
         "can_use_viewer": True,
         "can_use_narration": False,
+        "can_use_lineage_certificate": False,
+        "can_open_family_intake": False,
+        "can_open_org_intake": False,
+        "can_use_link_keys": True,
+        "can_manage_link_keys": True,
         "allowed_addons": [
             "extra_upload_pack",
             "extra_storage",
@@ -149,6 +220,11 @@ PACKAGE_CATALOG: dict[str, dict[str, Any]] = {
         "can_upload_verification_docs": True,
         "can_use_viewer": True,
         "can_use_narration": False,
+        "can_use_lineage_certificate": True,
+        "can_open_family_intake": True,
+        "can_open_org_intake": False,
+        "can_use_link_keys": True,
+        "can_manage_link_keys": True,
         "allowed_addons": [
             "extra_mapped_person",
             "extra_zoom_layer",
@@ -188,6 +264,11 @@ PACKAGE_CATALOG: dict[str, dict[str, Any]] = {
         "can_upload_verification_docs": True,
         "can_use_viewer": True,
         "can_use_narration": True,
+        "can_use_lineage_certificate": True,
+        "can_open_family_intake": True,
+        "can_open_org_intake": False,
+        "can_use_link_keys": True,
+        "can_manage_link_keys": True,
         "allowed_addons": [
             "extra_mapped_person",
             "extra_zoom_layer",
@@ -226,6 +307,11 @@ PACKAGE_CATALOG: dict[str, dict[str, Any]] = {
         "can_upload_verification_docs": True,
         "can_use_viewer": True,
         "can_use_narration": True,
+        "can_use_lineage_certificate": True,
+        "can_open_family_intake": True,
+        "can_open_org_intake": False,
+        "can_use_link_keys": True,
+        "can_manage_link_keys": True,
         "allowed_addons": [
             "extra_mapped_person",
             "extra_zoom_layer",
@@ -264,6 +350,11 @@ PACKAGE_CATALOG: dict[str, dict[str, Any]] = {
         "can_upload_verification_docs": True,
         "can_use_viewer": True,
         "can_use_narration": True,
+        "can_use_lineage_certificate": True,
+        "can_open_family_intake": True,
+        "can_open_org_intake": False,
+        "can_use_link_keys": True,
+        "can_manage_link_keys": True,
         "allowed_addons": [
             "extra_mapped_person",
             "extra_zoom_layer",
@@ -302,6 +393,11 @@ PACKAGE_CATALOG: dict[str, dict[str, Any]] = {
         "can_upload_verification_docs": True,
         "can_use_viewer": True,
         "can_use_narration": False,
+        "can_use_lineage_certificate": False,
+        "can_open_family_intake": False,
+        "can_open_org_intake": True,
+        "can_use_link_keys": True,
+        "can_manage_link_keys": True,
         "allowed_addons": [
             "extra_org_node",
             "extra_org_level",
@@ -457,15 +553,31 @@ def get_addon_catalog() -> dict[str, dict[str, Any]]:
     return deepcopy(ADDON_CATALOG)
 
 
+def _normalize_package_code(package_code: str) -> str:
+    return PACKAGE_CODE_ALIASES.get(
+        str(package_code or "").strip(),
+        str(package_code or "").strip(),
+    )
+
+
+def _normalize_addon_code(addon_code: str) -> str:
+    return ADDON_CODE_ALIASES.get(
+        str(addon_code or "").strip(),
+        str(addon_code or "").strip(),
+    )
+
+
 def get_package(package_code: str) -> dict[str, Any] | None:
-    if not package_code:
+    normalized = _normalize_package_code(package_code)
+    if not normalized:
         return None
-    value = PACKAGE_CATALOG.get(str(package_code).strip())
+    value = PACKAGE_CATALOG.get(normalized)
     return deepcopy(value) if value else None
 
 
 def get_addon(addon_code: str) -> dict[str, Any] | None:
-    if not addon_code:
+    normalized = _normalize_addon_code(addon_code)
+    if not normalized:
         return None
-    value = ADDON_CATALOG.get(str(addon_code).strip())
+    value = ADDON_CATALOG.get(normalized)
     return deepcopy(value) if value else None

@@ -40,6 +40,65 @@
       .toLowerCase();
   }
 
+  function normalizePackageCode(value) {
+    const normalized = normalizeValue(value);
+    const mapping = {
+      "legacy-snapshot": "legacy_snapshot",
+      legacy_snapshot: "legacy_snapshot",
+      "legacy-portrait-intro": "legacy_portrait_intro",
+      legacy_portrait_intro: "legacy_portrait_intro",
+      "digital-legacy-portrait": "digital_legacy_portrait",
+      digital_legacy_portrait: "digital_legacy_portrait",
+      "starter-family-tree": "household_foundation",
+      starter_family_tree: "household_foundation",
+      "household-foundation": "household_foundation",
+      household_foundation: "household_foundation",
+      "heirloom-legacy-tree": "heirloom_legacy_tree",
+      heirloom_legacy_tree: "heirloom_legacy_tree",
+      "legacy-plus": "legacy_plus",
+      legacy_plus: "legacy_plus",
+      "family-estate-concierge": "family_estate_concierge",
+      family_estate_concierge: "family_estate_concierge",
+      "command-structure-network": "command_structure_network",
+      command_structure_network: "command_structure_network",
+    };
+    return mapping[normalized] || normalized;
+  }
+
+  function resolvePackageLane(packageCode) {
+    const normalized = normalizePackageCode(packageCode);
+
+    if (
+      normalized === "legacy_snapshot" ||
+      normalized === "legacy_portrait_intro" ||
+      normalized === "digital_legacy_portrait"
+    ) {
+      return "portrait";
+    }
+
+    if (
+      normalized === "household_foundation" ||
+      normalized === "heirloom_legacy_tree" ||
+      normalized === "legacy_plus"
+    ) {
+      return "household";
+    }
+
+    if (normalized === "family_estate_concierge") {
+      return "network";
+    }
+
+    if (normalized === "command_structure_network") {
+      return "organization";
+    }
+
+    return "unknown";
+  }
+
+  function supportsFamilyBuild(lane) {
+    return lane === "household" || lane === "network";
+  }
+
   function humanizeValue(value) {
     const normalized = normalizeValue(value);
     if (!normalized) return "Unknown";
@@ -227,9 +286,12 @@
     selectNode.innerHTML = `<option value="">Select a family build</option>`;
 
     familyBuilds.forEach(function (item) {
+      const lane = resolvePackageLane(
+        item.package_code || item.package_slug || "",
+      );
       const option = document.createElement("option");
       option.value = item.family_root_id;
-      option.textContent = `${item.email || "Unknown Email"} — ${item.family_root_id}`;
+      option.textContent = `${item.package_name || humanizeValue(lane)} — ${item.email || "Unknown Email"} — ${item.family_root_id}`;
       selectNode.appendChild(option);
     });
 
@@ -237,8 +299,13 @@
       "family_id",
     );
     if (fromQuery) {
-      selectNode.value = fromQuery;
-      currentFamilyId = fromQuery;
+      const exists = familyBuilds.some(function (item) {
+        return String(item.family_root_id || "") === String(fromQuery);
+      });
+      if (exists) {
+        selectNode.value = fromQuery;
+        currentFamilyId = fromQuery;
+      }
     }
   }
 
@@ -556,6 +623,10 @@
       familyBuilds = (Array.isArray(submissions) ? submissions : []).filter(
         function (item) {
           const familyRootId = String(item.family_root_id || "").trim();
+          const lane = resolvePackageLane(
+            item.package_code || item.package_slug || "",
+          );
+          if (!supportsFamilyBuild(lane)) return false;
           if (!familyRootId) return false;
           if (seen.has(familyRootId)) return false;
           seen.add(familyRootId);
@@ -568,7 +639,7 @@
       if (statusNode) {
         statusNode.textContent = familyBuilds.length
           ? `Loaded ${familyBuilds.length} provisioned family build(s).`
-          : "No provisioned family builds were found yet.";
+          : "No provisioned household or network family builds were found yet.";
       }
     } catch (error) {
       console.error("Family build options load failed:", error);

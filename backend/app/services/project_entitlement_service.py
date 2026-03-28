@@ -25,11 +25,14 @@ def _serialize(document: dict[str, Any] | None) -> dict[str, Any] | None:
     if not document:
         return None
 
+    resolved = document.get("resolved_entitlements") or {}
+
     return {
         "id": str(document.get("_id")),
         "project_id": document.get("project_id"),
         "user_id": document.get("user_id"),
         "package_code": document.get("package_code"),
+        "package_name": document.get("package_name") or resolved.get("display_name"),
         "package_lane": document.get("package_lane"),
         "active_addons": document.get("active_addons", []),
         "maintenance_plan": document.get("maintenance_plan"),
@@ -38,7 +41,7 @@ def _serialize(document: dict[str, Any] | None) -> dict[str, Any] | None:
         "maintenance_renews_at": document.get("maintenance_renews_at"),
         "delivered_at": document.get("delivered_at"),
         "status": document.get("status"),
-        "resolved_entitlements": document.get("resolved_entitlements", {}),
+        "resolved_entitlements": resolved,
         "created_at": document.get("created_at"),
         "updated_at": document.get("updated_at"),
     }
@@ -50,13 +53,16 @@ def _compute_maintenance_fields(
 ) -> tuple[str, datetime | None, datetime | None]:
     plan = str(maintenance_plan or "").strip().lower()
 
-    if plan in {"", "not_started", "pending_delivery", "unselected"} or delivered_at is None:
+    if (
+        plan in {"", "not_started", "pending_delivery", "unselected"}
+        or delivered_at is None
+    ):
         return "not_started", None, None
 
     if plan == "lifetime":
         return "active", delivered_at, None
 
-    if plan == "annual" or plan == "yearly":
+    if plan in {"annual", "yearly"}:
         return "active", delivered_at, delivered_at + timedelta(days=365)
 
     return "active", delivered_at, delivered_at + timedelta(days=30)
@@ -88,7 +94,8 @@ def upsert_project_entitlement(
     document: dict[str, Any] = {
         "project_id": project_id,
         "user_id": user_id,
-        "package_code": package_code,
+        "package_code": resolved.get("package_code") or package_code,
+        "package_name": resolved.get("display_name") or package_code,
         "package_lane": resolved.get("package_lane"),
         "active_addons": active_addons or [],
         "maintenance_plan": maintenance_plan,
@@ -126,9 +133,19 @@ def get_project_entitlement(project_id: str) -> dict[str, Any] | None:
     return _serialize(document)
 
 
-def list_user_project_entitlements(user_id: str) -> list[dict[str, Any]]:
+def list_user_project_entitlements(
+    user_id: str,
+    *,
+    active_only: bool = True,
+) -> list[dict[str, Any]]:
     collection = _collection()
-    cursor = collection.find({"user_id": user_id}).sort("updated_at", -1)
+
+    query: dict[str, Any] = {"user_id": user_id}
+    if active_only:
+        query["status"] = "active"
+
+    cursor = collection.find(query).sort("updated_at", -1)
+
     return [
         serialized
         for serialized in (_serialize(cast(dict[str, Any], document)) for document in cursor)

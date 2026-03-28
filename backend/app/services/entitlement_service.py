@@ -32,8 +32,9 @@ def resolve_project_entitlements(
     entitlements = deepcopy(package)
     entitlements["active_addons"] = []
 
-    for addon_code in active_addon_codes or []:
-        addon = get_addon_or_raise(addon_code)
+    for raw_addon_code in active_addon_codes or []:
+        addon = get_addon_or_raise(raw_addon_code)
+        addon_code = str(addon.get("addon_code") or raw_addon_code).strip()
 
         if package["package_lane"] not in addon.get("allowed_lanes", []):
             raise ValueError(
@@ -45,22 +46,37 @@ def resolve_project_entitlements(
         if addon_code == "extra_upload_pack":
             entitlements["max_uploads"] = int(entitlements.get("max_uploads", 0)) + 10
         elif addon_code == "extra_storage":
-            entitlements["max_storage_gb"] = float(entitlements.get("max_storage_gb", 0)) + 10
+            entitlements["max_storage_gb"] = float(
+                entitlements.get("max_storage_gb", 0)
+            ) + 10
         elif addon_code == "extra_mapped_person":
             entitlements["max_members"] = int(entitlements.get("max_members", 0)) + 1
         elif addon_code == "extra_zoom_layer":
-            entitlements["max_zoom_layers"] = int(entitlements.get("max_zoom_layers", 0)) + 1
+            entitlements["max_zoom_layers"] = int(
+                entitlements.get("max_zoom_layers", 0)
+            ) + 1
         elif addon_code == "extra_linked_household":
-            entitlements["max_households"] = int(entitlements.get("max_households", 0)) + 1
+            entitlements["max_households"] = int(
+                entitlements.get("max_households", 0)
+            ) + 1
             entitlements["can_link_households"] = True
         elif addon_code == "extra_branch":
-            entitlements["max_households"] = int(entitlements.get("max_households", 0)) + 1
+            entitlements["max_households"] = int(
+                entitlements.get("max_households", 0)
+            ) + 1
+            entitlements["can_link_households"] = True
         elif addon_code == "extra_org_node":
-            entitlements["max_org_nodes"] = int(entitlements.get("max_org_nodes", 0)) + 1
+            entitlements["max_org_nodes"] = int(
+                entitlements.get("max_org_nodes", 0)
+            ) + 1
         elif addon_code == "extra_org_level":
-            entitlements["max_zoom_layers"] = int(entitlements.get("max_zoom_layers", 0)) + 1
+            entitlements["max_zoom_layers"] = int(
+                entitlements.get("max_zoom_layers", 0)
+            ) + 1
         elif addon_code == "extra_admin_seat":
-            entitlements["extra_admin_seats"] = int(entitlements.get("extra_admin_seats", 0)) + 1
+            entitlements["extra_admin_seats"] = int(
+                entitlements.get("extra_admin_seats", 0)
+            ) + 1
 
     entitlements["resolved"] = True
     return entitlements
@@ -74,10 +90,14 @@ def can_purchase_addon(package_code: str, addon_code: str) -> bool:
 
 def can_upgrade(from_package_code: str, to_package_code: str) -> bool:
     package = get_package_or_raise(from_package_code)
-    return _normalize(to_package_code) in package.get("upgrade_targets", [])
+    target_package = get_package_or_raise(to_package_code)
+    return target_package["package_code"] in package.get("upgrade_targets", [])
 
 
-def compute_upgrade_quote(from_package_code: str, to_package_code: str) -> dict[str, Any]:
+def compute_upgrade_quote(
+    from_package_code: str,
+    to_package_code: str,
+) -> dict[str, Any]:
     from_package = get_package_or_raise(from_package_code)
     to_package = get_package_or_raise(to_package_code)
 

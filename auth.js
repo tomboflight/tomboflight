@@ -5,6 +5,40 @@
   const POST_LOGIN_REDIRECT = "dashboard.html";
   const SIGNUP_POLICY_VERSION = "2026-03-26";
 
+  const INTERNAL_ROLE_KEYS = new Set([
+    "admin",
+    "super_admin",
+    "root_admin",
+    "platform_admin",
+    "operations_admin",
+    "finance_admin",
+    "marketing_admin",
+    "executive_technology",
+    "operations",
+    "finance",
+    "marketing",
+  ]);
+
+  const LINK_KEY_ENABLED_PACKAGES = new Set([
+    "digital_legacy_portrait",
+    "household_foundation",
+    "heirloom_legacy_tree",
+    "legacy_plus",
+    "family_estate_concierge",
+    "command_structure_network",
+  ]);
+
+  const NARRATION_ENABLED_PACKAGES = new Set([
+    "heirloom_legacy_tree",
+    "legacy_plus",
+    "family_estate_concierge",
+  ]);
+
+  const HOUSEHOLD_LINK_ENABLED_PACKAGES = new Set([
+    "legacy_plus",
+    "family_estate_concierge",
+  ]);
+
   if (!app) {
     console.error("auth.js requires app.js to be loaded first.");
     return;
@@ -14,6 +48,16 @@
     return String(value || "")
       .trim()
       .toLowerCase();
+  }
+
+  function isInternalRole(user) {
+    const role = normalizeValue(user && user.role);
+    const accessTier = normalizeValue(user && user.access_tier);
+    const departmentRole = normalizeValue(user && user.department_role);
+
+    return [role, accessTier, departmentRole].some(function (value) {
+      return INTERNAL_ROLE_KEYS.has(value);
+    });
   }
 
   function getAccessTokenFromResponse(loginData) {
@@ -166,6 +210,63 @@
     };
 
     return mapping[normalized] || normalized || "Package";
+  }
+
+  function packageSupportsLinkKeys(packageCode) {
+    return LINK_KEY_ENABLED_PACKAGES.has(stripMaintenanceSuffix(packageCode));
+  }
+
+  function buildFallbackEntitlements(packageCode, packageLane) {
+    const normalizedCode = stripMaintenanceSuffix(packageCode);
+    const lane =
+      normalizeValue(packageLane) || resolvePackageLane(normalizedCode);
+
+    return {
+      package_code: normalizedCode,
+      package_lane: lane,
+      can_upload_portraits: true,
+      can_upload_verification_docs: true,
+      can_build_household: lane === "household" || lane === "network",
+      can_build_family_tree: lane === "household" || lane === "network",
+      can_build_org_chart: lane === "organization",
+      can_link_households: HOUSEHOLD_LINK_ENABLED_PACKAGES.has(normalizedCode),
+      can_link_org_units: lane === "organization",
+      can_use_viewer: true,
+      can_use_narration: NARRATION_ENABLED_PACKAGES.has(normalizedCode),
+      can_use_lineage_certificate: lane === "household" || lane === "network",
+      can_open_family_intake: lane === "household" || lane === "network",
+      can_open_org_intake: lane === "organization",
+      can_use_link_keys: packageSupportsLinkKeys(normalizedCode),
+      can_manage_link_keys: packageSupportsLinkKeys(normalizedCode),
+      allowed_addons: [],
+      upgrade_targets: [],
+    };
+  }
+
+  function getResolvedEntitlements(
+    activeEntitlement,
+    packageCode,
+    packageLane,
+  ) {
+    const fallback = buildFallbackEntitlements(packageCode, packageLane);
+    const resolved =
+      activeEntitlement &&
+      activeEntitlement.resolved_entitlements &&
+      typeof activeEntitlement.resolved_entitlements === "object"
+        ? activeEntitlement.resolved_entitlements
+        : {};
+
+    return Object.assign({}, fallback, resolved, {
+      package_code: stripMaintenanceSuffix(
+        resolved.package_code || activeEntitlement?.package_code || packageCode,
+      ),
+      package_lane:
+        normalizeValue(
+          resolved.package_lane ||
+            activeEntitlement?.package_lane ||
+            packageLane,
+        ) || fallback.package_lane,
+    });
   }
 
   function getPaidOrder(orders) {
@@ -435,12 +536,20 @@
       resolvePackageLane(packageCode);
 
     const packageName =
+      activeEntitlement?.package_name ||
+      activeEntitlement?.resolved_entitlements?.display_name ||
       paidOrder?.package_name ||
       activeProject?.package_name ||
       resolvePackageDisplayName(packageCode);
 
-    const resolvedEntitlements =
-      activeEntitlement?.resolved_entitlements || {};
+    const hasPackageAccess = Boolean(
+      activeEntitlement || activeProject || paidOrder,
+    );
+    const resolvedEntitlements = getResolvedEntitlements(
+      activeEntitlement,
+      packageCode,
+      packageLane,
+    );
 
     return {
       user: user || null,
@@ -454,7 +563,8 @@
       packageLane,
       packageName,
       resolvedEntitlements,
-      hasPaidPackage: Boolean(activeEntitlement || activeProject || paidOrder),
+      hasPackageAccess,
+      hasPaidPackage: hasPackageAccess,
     };
   }
 
@@ -479,21 +589,37 @@
     );
     const upgradeAction = document.querySelector("[data-upgrade-action]");
 
-    const hasPaidOrder = !!context?.hasPaidPackage;
+    const hasPackageAccess = !!context?.hasPackageAccess;
     const packageLane = normalizeValue(context?.packageLane);
     const packageName = context?.packageName || "your package";
+    const resolved =
+      context?.resolvedEntitlements ||
+      buildFallbackEntitlements(context?.packageCode, context?.packageLane);
 
-    setPaidActionState(hasPaidOrder);
+    const canUploadRecords = Boolean(
+      resolved.can_upload_verification_docs || resolved.can_upload_portraits,
+    );
+    const canUseLinkKeys = Boolean(resolved.can_use_link_keys);
+    const canOpenFamilyIntake = Boolean(resolved.can_open_family_intake);
+    const upgradeTargets = Array.isArray(resolved.upgrade_targets)
+      ? resolved.upgrade_targets
+      : [];
+    const allowedAddons = Array.isArray(resolved.allowed_addons)
+      ? resolved.allowed_addons
+      : [];
+
+    setPaidActionState(hasPackageAccess);
 
     if (intakeOpenAction) {
-      setActionEnabled(intakeOpenAction, hasPaidOrder);
-      intakeOpenAction.style.display = hasPaidOrder ? "" : "none";
+      const showIntakeAction = hasPackageAccess && canOpenFamilyIntake;
+      setActionEnabled(intakeOpenAction, showIntakeAction);
+      intakeOpenAction.style.display = showIntakeAction ? "" : "none";
     }
 
     if (upgradeAction) {
       upgradeAction.style.display = "";
 
-      if (!hasPaidOrder) {
+      if (!hasPackageAccess) {
         setActionHrefAndText(
           upgradeAction,
           "index.html#pricing",
@@ -505,19 +631,25 @@
           "index.html#pricing",
           "Upgrade to Household Package",
         );
-      } else if (packageLane === "organization") {
-        setActionHrefAndText(
-          upgradeAction,
-          "index.html#pricing",
-          "View Expansion Options",
-        );
-      } else if (packageLane === "household") {
+      } else if (upgradeTargets.length && allowedAddons.length) {
         setActionHrefAndText(
           upgradeAction,
           "index.html#pricing",
           "View Add-Ons & Upgrades",
         );
-      } else if (packageLane === "network") {
+      } else if (allowedAddons.length) {
+        setActionHrefAndText(
+          upgradeAction,
+          "index.html#pricing",
+          "View Add-Ons",
+        );
+      } else if (upgradeTargets.length) {
+        setActionHrefAndText(
+          upgradeAction,
+          "index.html#pricing",
+          "View Upgrade Options",
+        );
+      } else if (packageLane === "organization" || packageLane === "network") {
         setActionHrefAndText(
           upgradeAction,
           "index.html#pricing",
@@ -534,28 +666,36 @@
 
     if (!accessStatus) return;
 
-    if (!hasPaidOrder) {
+    if (!hasPackageAccess) {
       accessStatus.textContent =
         "Purchase required. Buy a Tomb of Light package to unlock platform tools.";
       return;
     }
 
     if (packageLane === "portrait") {
-      accessStatus.textContent = `Access unlocked through ${packageName}. This portrait lane includes uploads and verification workflows. Upgrade to a household package for family build tools.`;
+      accessStatus.textContent = canUseLinkKeys
+        ? `Access unlocked through ${packageName}. This portrait package includes uploads, verification workflows, and link capabilities. Household build tools require an upgrade.`
+        : `Access unlocked through ${packageName}. This portrait package includes uploads and verification workflows. Household build tools require an upgrade.`;
       return;
     }
 
     if (packageLane === "organization") {
-      accessStatus.textContent = `Access unlocked through ${packageName}. This organization lane includes structure and verification workflows. Expansion options are available if you need more scope.`;
+      accessStatus.textContent = canUseLinkKeys
+        ? `Access unlocked through ${packageName}. This organization package includes structure workflows, verification uploads, and link capabilities.`
+        : `Access unlocked through ${packageName}. This organization package includes structure workflows and verification uploads.`;
       return;
     }
 
     if (packageLane === "network") {
-      accessStatus.textContent = `Access unlocked through ${packageName}. Network and branch workflows are active for this account.`;
+      accessStatus.textContent = canUseLinkKeys
+        ? `Access unlocked through ${packageName}. Network, branch, verification, and link capabilities are active for this account.`
+        : `Access unlocked through ${packageName}. Network, branch, and verification workflows are active for this account.`;
       return;
     }
 
-    accessStatus.textContent = `Access unlocked through ${packageName}. Family build tools and verification workflows are active.`;
+    accessStatus.textContent = canUseLinkKeys
+      ? `Access unlocked through ${packageName}. Family build tools, verification uploads, and link capabilities are active.`
+      : `Access unlocked through ${packageName}. Family build tools and verification uploads are active.`;
   }
 
   function renderNoIntakeBecauseNoPurchase() {
@@ -588,7 +728,8 @@
       nextStep.textContent = "Purchase a package first to unlock intake.";
     }
     if (lockNote) {
-      lockNote.textContent = "Intake is locked until a paid package exists.";
+      lockNote.textContent =
+        "Intake is locked until a package is attached to your account.";
     }
     if (intakeHistoryStatus) {
       intakeHistoryStatus.textContent = "No intake submissions found yet.";
@@ -792,6 +933,15 @@
 
       if (authRequired) authRequired.style.display = "block";
 
+      if (isInternalRole(me)) {
+        app.setStatus(
+          statusNode,
+          "You are signed in to the Tomb of Light internal operations portal.",
+          "success",
+        );
+        return;
+      }
+
       app.setStatus(
         statusNode,
         "You are signed in and connected to the Tomb of Light platform.",
@@ -845,11 +995,11 @@
       updateAccessState(context);
       publishDashboardContext(context);
 
-      if (!context.hasPaidPackage) {
+      if (!context.hasPackageAccess) {
         renderNoIntakeBecauseNoPurchase();
         app.setStatus(
           statusNode,
-          "Your customer workspace is connected, but no paid package is active yet.",
+          "Your customer workspace is connected, but no active package is attached yet.",
           "error",
         );
         return;
@@ -887,20 +1037,26 @@
   async function gatePurchaseRequiredPages() {
     const page = window.location.pathname.split("/").pop() || "";
 
-    const paidOnlyPages = new Set(["verification-upload.html"]);
-
-    const householdOrNetworkOnlyPages = new Set([
+    const uploadPages = new Set(["verification-upload.html"]);
+    const linkKeyPages = new Set(["link-keys.html"]);
+    const familyIntakePages = new Set([
       "intake-welcome.html",
       "intake-household.html",
       "intake-family-map.html",
       "intake-uploads.html",
       "intake-consent.html",
       "intake-review.html",
-      "tree-view.html",
-      "lineage-certificate.html",
     ]);
+    const familyTreePages = new Set(["tree-view.html"]);
+    const certificatePages = new Set(["lineage-certificate.html"]);
 
-    if (!paidOnlyPages.has(page) && !householdOrNetworkOnlyPages.has(page)) {
+    if (
+      !uploadPages.has(page) &&
+      !linkKeyPages.has(page) &&
+      !familyIntakePages.has(page) &&
+      !familyTreePages.has(page) &&
+      !certificatePages.has(page)
+    ) {
       return;
     }
 
@@ -919,6 +1075,10 @@
         300,
       );
 
+      if (isInternalRole(me)) {
+        return;
+      }
+
       const orders = await withRetry(
         function () {
           return fetchOrders();
@@ -928,19 +1088,41 @@
       );
 
       const context = await getDashboardContext(me, orders);
+      const resolved =
+        context?.resolvedEntitlements ||
+        buildFallbackEntitlements(context?.packageCode, context?.packageLane);
 
-      if (!context || !context.hasPaidPackage) {
+      if (!context || !context.hasPackageAccess) {
         window.location.href = "dashboard.html?purchase_required=1";
         return;
       }
 
-      const lane = normalizeValue(context.packageLane);
-
-      if (paidOnlyPages.has(page)) {
+      if (
+        uploadPages.has(page) &&
+        !(
+          resolved.can_upload_verification_docs || resolved.can_upload_portraits
+        )
+      ) {
+        window.location.href = "dashboard.html?purchase_required=1";
         return;
       }
 
-      if (!["household", "network"].includes(lane)) {
+      if (linkKeyPages.has(page) && !resolved.can_use_link_keys) {
+        window.location.href = "dashboard.html?upgrade_required=1";
+        return;
+      }
+
+      if (familyIntakePages.has(page) && !resolved.can_open_family_intake) {
+        window.location.href = "dashboard.html?upgrade_required=1";
+        return;
+      }
+
+      if (familyTreePages.has(page) && !resolved.can_build_family_tree) {
+        window.location.href = "dashboard.html?upgrade_required=1";
+        return;
+      }
+
+      if (certificatePages.has(page) && !resolved.can_use_lineage_certificate) {
         window.location.href = "dashboard.html?upgrade_required=1";
       }
     } catch (error) {
@@ -1016,9 +1198,13 @@
     fetchProjectEntitlements,
     fetchProjects,
     getDashboardContext,
+    getResolvedEntitlements,
+    buildFallbackEntitlements,
     normalizePackageCode,
     resolvePackageLane,
     resolvePackageDisplayName,
+    packageSupportsLinkKeys,
+    isInternalRole,
     getPaidOrder,
   };
 })();

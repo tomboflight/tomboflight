@@ -141,6 +141,7 @@
 
   function updateBuildPathPanel(config) {
     const panel =
+      findPanelByText("Your Build Path") ||
       findPanelByText("Your Family Build Path") ||
       findPanelByText("Your Build Path") ||
       findPanelByText("Your Portrait Workflow") ||
@@ -184,26 +185,42 @@
     );
   }
 
-  function getLaneConfig(packageLane, resolvedEntitlements) {
-    const lane = normalizeValue(packageLane);
-    const re = resolvedEntitlements || {};
-    const canBuildFamilyTree = Boolean(re.can_build_family_tree);
-    const canBuildOrgChart = Boolean(re.can_build_org_chart);
+  function getEntitlementConfig(context) {
+    const resolved = context?.resolvedEntitlements || {};
+    const lane = normalizeValue(context?.packageLane || resolved?.package_lane);
+    const packageName = context?.packageName || "Active Package";
+
+    const canBuildFamilyTree = Boolean(resolved.can_build_family_tree);
+    const canUseCertificate = Boolean(resolved.can_use_lineage_certificate);
+    const canUploadRecords = Boolean(
+      resolved.can_upload_verification_docs || resolved.can_upload_portraits,
+    );
+    const canUseLinkKeys = Boolean(resolved.can_use_link_keys);
+    const canOpenFamilyIntake = Boolean(resolved.can_open_family_intake);
+    const canOpenOrgIntake = Boolean(resolved.can_open_org_intake);
 
     if (lane === "portrait") {
       return {
         lane: "portrait",
         presenceBadge: "Portrait Lane Active",
         presenceTitle: "Your portrait workspace is live and connected.",
-        presenceCopy:
-          "Tomb of Light is now reading from your portrait package, uploads, and verification records. This workspace is focused on your personal legacy build.",
+        presenceCopy: canUseLinkKeys
+          ? "Tomb of Light is now reading from your portrait package, uploads, verification records, and link capabilities."
+          : "Tomb of Light is now reading from your portrait package, uploads, and verification records.",
         stages: [
           { title: "Portrait Record", subtitle: "Connected" },
-          { title: "Verification", subtitle: "Upload Ready" },
-          { title: "Delivery Path", subtitle: "Preparing" },
+          {
+            title: "Verification",
+            subtitle: canUploadRecords ? "Upload Ready" : "Locked",
+          },
+          {
+            title: "Link Capabilities",
+            subtitle: canUseLinkKeys ? "Enabled" : "Unavailable",
+          },
         ],
-        workspaceCopy:
-          "Your portrait workspace connects package access, portrait uploads, verification records, and guided delivery in one place.",
+        workspaceCopy: canUseLinkKeys
+          ? "Your portrait workspace connects package access, portrait uploads, verification records, guided delivery, and link capabilities in one place."
+          : "Your portrait workspace connects package access, portrait uploads, verification records, and guided delivery in one place.",
         primaryActionText: "Upload Portrait & Records",
         primaryActionHref: "verification-upload.html",
         secondaryActionText: "Verification Uploads",
@@ -211,9 +228,11 @@
         showTree: canBuildFamilyTree,
         showCertificate: canBuildFamilyTree,
         showVerification: true,
-        navTree: canBuildFamilyTree,
-        navCertificate: canBuildFamilyTree,
+        showLinkKeys: canUseLinkKeys,
+        navTree: false,
+        navCertificate: false,
         navIntake: false,
+        navLinkKeys: canUseLinkKeys,
         buildPathEyebrow: "Your Portrait Workflow",
         buildSteps: [
           {
@@ -225,13 +244,16 @@
             copy: "Upload IDs and supporting records that help verify the portrait record.",
           },
           {
-            title: "Delivery & Upgrade Path",
-            copy: "Receive your portrait package and upgrade to a household package whenever you are ready.",
+            title: "Delivery, Linking & Upgrade Path",
+            copy: canUseLinkKeys
+              ? "Receive your portrait package, use link capabilities, and upgrade whenever you are ready."
+              : "Receive your portrait package and upgrade whenever you are ready.",
           },
         ],
         platformStatusTitle: "Entitled Tools",
-        platformStatusCopy:
-          "This portrait lane includes portrait uploads and verification workflows. Household build tools require an upgrade.",
+        platformStatusCopy: canUseLinkKeys
+          ? "This portrait lane includes portrait uploads, verification workflows, and link capabilities. Household build tools require an upgrade."
+          : "This portrait lane includes portrait uploads and verification workflows. Household build tools require an upgrade.",
         upgradeText: "Upgrade to Household Package",
         upgradeHref: "index.html#pricing",
       };
@@ -243,15 +265,23 @@
         presenceBadge: "Organization Lane Active",
         presenceTitle:
           "Your command structure workspace is live and connected.",
-        presenceCopy:
-          "Tomb of Light is now reading from your organization package, role structure scope, and supporting record workflow.",
+        presenceCopy: canUseLinkKeys
+          ? "Tomb of Light is now reading from your organization package, role structure scope, supporting record workflow, and link capabilities."
+          : "Tomb of Light is now reading from your organization package, role structure scope, and supporting record workflow.",
         stages: [
           { title: "Organization Root", subtitle: "Connected" },
-          { title: "Structure Build", subtitle: "Configured" },
-          { title: "Command Outputs", subtitle: "Preparing" },
+          {
+            title: "Structure Build",
+            subtitle: canOpenOrgIntake ? "Configured" : "Prepared",
+          },
+          {
+            title: "Link Capabilities",
+            subtitle: canUseLinkKeys ? "Enabled" : "Unavailable",
+          },
         ],
-        workspaceCopy:
-          "Your organization workspace connects package access, command structure planning, uploads, and guided record handling in one place.",
+        workspaceCopy: canUseLinkKeys
+          ? "Your organization workspace connects package access, command structure planning, uploads, and link capabilities in one place."
+          : "Your organization workspace connects package access, command structure planning, uploads, and guided record handling in one place.",
         primaryActionText: "Upload Structure Records",
         primaryActionHref: "verification-upload.html",
         secondaryActionText: "Upload Structure Records",
@@ -259,9 +289,11 @@
         showTree: canBuildFamilyTree,
         showCertificate: canBuildFamilyTree,
         showVerification: true,
-        navTree: canBuildFamilyTree,
-        navCertificate: canBuildFamilyTree,
+        showLinkKeys: canUseLinkKeys,
+        navTree: false,
+        navCertificate: false,
         navIntake: false,
+        navLinkKeys: canUseLinkKeys,
         buildPathEyebrow: "Your Command Build Path",
         buildSteps: [
           {
@@ -273,13 +305,16 @@
             copy: "Add leadership roles, officers, or command nodes as the structure expands.",
           },
           {
-            title: "Supporting Records",
-            copy: "Upload supporting records and materials tied to the organization build.",
+            title: "Supporting Records & Expansion",
+            copy: canUseLinkKeys
+              ? "Upload supporting materials, use link capabilities, and expand the structure when needed."
+              : "Upload supporting records and materials tied to the organization build.",
           },
         ],
         platformStatusTitle: "Entitled Tools",
-        platformStatusCopy:
-          "This organization lane includes structure and verification workflows. Expansion options are available if you need more scope.",
+        platformStatusCopy: canUseLinkKeys
+          ? "This organization lane includes structure workflows, verification uploads, and link capabilities."
+          : "This organization lane includes structure and verification workflows. Expansion options are available if you need more scope.",
         upgradeText: "View Expansion Options",
         upgradeHref: "index.html#pricing",
       };
@@ -290,25 +325,35 @@
         lane: "network",
         presenceBadge: "Network Lane Active",
         presenceTitle: "Your network workspace is live and connected.",
-        presenceCopy:
-          "Tomb of Light is now reading from your branch network package, household connections, and expanded lineage workflow.",
+        presenceCopy: canUseLinkKeys
+          ? "Tomb of Light is now reading from your branch network package, household connections, lineage workflow, and link capabilities."
+          : "Tomb of Light is now reading from your branch network package, household connections, and expanded lineage workflow.",
         stages: [
           { title: "Branch Root", subtitle: "Connected" },
-          { title: "Network Build", subtitle: "Build Ready" },
-          { title: "Living Outputs", subtitle: "Tree + Certificate Live" },
+          {
+            title: "Network Build",
+            subtitle: canBuildFamilyTree ? "Build Ready" : "Prepared",
+          },
+          {
+            title: "Living Outputs",
+            subtitle: canUseCertificate ? "Tree + Certificate Live" : "Live",
+          },
         ],
-        workspaceCopy:
-          "Your network workspace connects package access, linked branches, lineage structure, and verification records in one place.",
+        workspaceCopy: canUseLinkKeys
+          ? "Your network workspace connects package access, linked branches, lineage structure, verification records, and link capabilities in one place."
+          : "Your network workspace connects package access, linked branches, lineage structure, and verification records in one place.",
         primaryActionText: "Continue Network Build",
         primaryActionHref: "tree-view.html",
         secondaryActionText: "Upload Verification Docs",
         secondaryActionHref: "verification-upload.html",
         showTree: canBuildFamilyTree,
-        showCertificate: canBuildFamilyTree,
+        showCertificate: canUseCertificate,
         showVerification: true,
+        showLinkKeys: canUseLinkKeys,
         navTree: canBuildFamilyTree,
-        navCertificate: canBuildFamilyTree,
-        navIntake: true,
+        navCertificate: canUseCertificate,
+        navIntake: canOpenFamilyIntake,
+        navLinkKeys: canUseLinkKeys,
         buildPathEyebrow: "Your Network Build Path",
         buildSteps: [
           {
@@ -320,13 +365,16 @@
             copy: "Add linked households, branches, and connected lineage structures over time.",
           },
           {
-            title: "Verification Evidence",
-            copy: "Upload IDs, certificates, and supporting family records for the network build.",
+            title: "Verification, Delivery & Linking",
+            copy: canUseLinkKeys
+              ? "Upload supporting records, continue delivery, and use link capabilities across the network."
+              : "Upload IDs, certificates, and supporting family records for the network build.",
           },
         ],
         platformStatusTitle: "Entitled Tools",
-        platformStatusCopy:
-          "This network lane includes branch, lineage, and verification workflows.",
+        platformStatusCopy: canUseLinkKeys
+          ? "This network lane includes branch, lineage, verification, certificate, and link workflows."
+          : "This network lane includes branch, lineage, and verification workflows.",
         upgradeText: "View Expansion Options",
         upgradeHref: "index.html#pricing",
       };
@@ -336,25 +384,35 @@
       lane: "household",
       presenceBadge: "Household Lane Active",
       presenceTitle: "Your lineage workspace is live and connected.",
-      presenceCopy:
-        "Tomb of Light is now reading from your household package, family structure, project records, and verification workflow. This workspace is designed to grow as your family grows.",
+      presenceCopy: canUseLinkKeys
+        ? "Tomb of Light is now reading from your household package, family structure, verification workflow, and link capabilities."
+        : "Tomb of Light is now reading from your household package, family structure, project records, and verification workflow.",
       stages: [
         { title: "Family Root", subtitle: "Connected" },
-        { title: "Production Build", subtitle: "Build Ready" },
-        { title: "Living Outputs", subtitle: "Tree + Certificate Live" },
+        {
+          title: "Production Build",
+          subtitle: canBuildFamilyTree ? "Build Ready" : "Prepared",
+        },
+        {
+          title: "Living Outputs",
+          subtitle: canUseCertificate ? "Tree + Certificate Live" : "Live",
+        },
       ],
-      workspaceCopy:
-        "Your Tomb of Light customer workspace connects package access, onboarding, family structure, lineage tools, and document-backed verification in one place.",
+      workspaceCopy: canUseLinkKeys
+        ? "Your Tomb of Light customer workspace connects package access, onboarding, family structure, lineage tools, verification, and link capabilities in one place."
+        : "Your Tomb of Light customer workspace connects package access, onboarding, family structure, lineage tools, and document-backed verification in one place.",
       primaryActionText: "Continue Family Build",
       primaryActionHref: "tree-view.html",
       secondaryActionText: "Upload Verification Docs",
       secondaryActionHref: "verification-upload.html",
       showTree: canBuildFamilyTree,
-      showCertificate: canBuildFamilyTree,
+      showCertificate: canUseCertificate,
       showVerification: true,
+      showLinkKeys: canUseLinkKeys,
       navTree: canBuildFamilyTree,
-      navCertificate: canBuildFamilyTree,
-      navIntake: true,
+      navCertificate: canUseCertificate,
+      navIntake: canOpenFamilyIntake,
+      navLinkKeys: canUseLinkKeys,
       buildPathEyebrow: "Your Family Build Path",
       buildSteps: [
         {
@@ -366,32 +424,41 @@
           copy: "Add parents, spouses, children, and connected branches over time.",
         },
         {
-          title: "Verification Evidence",
-          copy: "Upload IDs, birth certificates, marriage records, adoption records, and supporting family documents for review.",
+          title: "Verification, Delivery & Linking",
+          copy: canUseLinkKeys
+            ? "Upload supporting family documents, continue delivery, and use link capabilities as included in your package."
+            : "Upload IDs, birth certificates, marriage records, adoption records, and supporting family documents for review.",
         },
       ],
       platformStatusTitle: "Entitled Tools",
-      platformStatusCopy:
-        "Family build tools and verification workflows are active for this household lane package.",
+      platformStatusCopy: canUseLinkKeys
+        ? "Family build tools, verification workflows, certificate access, and link capabilities are active for this package."
+        : "Family build tools and verification workflows are active for this household lane package.",
       upgradeText: "View Add-Ons & Upgrades",
       upgradeHref: "index.html#pricing",
     };
   }
 
-  function getLaneAwareIntakeMessages(lane, status) {
-    const normalizedLane = normalizeValue(lane);
+  function getLaneAwareIntakeMessages(context, status) {
+    const resolved = context?.resolvedEntitlements || {};
+    const normalizedLane = normalizeValue(
+      context?.packageLane || resolved.package_lane,
+    );
     const normalizedStatus = normalizeStatus(status);
+    const canUseLinkKeys = Boolean(resolved.can_use_link_keys);
 
     if (normalizedLane === "portrait") {
       if (normalizedStatus === "build_ready") {
         return {
-          cardCopy:
-            "Your portrait package is approved and ready for portrait and verification work.",
+          cardCopy: canUseLinkKeys
+            ? "Your portrait package is approved and ready for portrait, verification, and link-enabled work."
+            : "Your portrait package is approved and ready for portrait and verification work.",
           nextStep: "Upload portrait and supporting verification records.",
           lockNote:
             "Editing is locked because this portrait package has already been approved and provisioned.",
-          workspaceCopy:
-            "Your portrait intake has been approved and provisioned. This workspace now moves from onboarding into the portrait record stage.",
+          workspaceCopy: canUseLinkKeys
+            ? "Your portrait intake has been approved and provisioned. This workspace now moves into the portrait record stage with link capabilities available."
+            : "Your portrait intake has been approved and provisioned. This workspace now moves from onboarding into the portrait record stage.",
         };
       }
 
@@ -399,22 +466,25 @@
         cardCopy: "Your portrait intake information is shown below.",
         nextStep: "Upload portrait and supporting verification records.",
         lockNote: "Intake lock state is based on your current review status.",
-        workspaceCopy:
-          "Your portrait workspace connects package access, portrait uploads, verification records, and guided delivery in one place.",
+        workspaceCopy: canUseLinkKeys
+          ? "Your portrait workspace connects package access, portrait uploads, verification records, guided delivery, and link capabilities in one place."
+          : "Your portrait workspace connects package access, portrait uploads, verification records, and guided delivery in one place.",
       };
     }
 
     if (normalizedLane === "organization") {
       if (normalizedStatus === "build_ready") {
         return {
-          cardCopy:
-            "Your organization package is approved and ready for structure and record work.",
+          cardCopy: canUseLinkKeys
+            ? "Your organization package is approved and ready for structure, record, and link-enabled work."
+            : "Your organization package is approved and ready for structure and record work.",
           nextStep:
             "Upload leadership, structure, and supporting records to continue.",
           lockNote:
             "Editing is locked because this organization package has already been approved and provisioned.",
-          workspaceCopy:
-            "Your organization intake has been approved and provisioned. This workspace now moves into the command structure stage.",
+          workspaceCopy: canUseLinkKeys
+            ? "Your organization intake has been approved and provisioned. This workspace now moves into the command structure stage with link capabilities available."
+            : "Your organization intake has been approved and provisioned. This workspace now moves into the command structure stage.",
         };
       }
 
@@ -422,34 +492,39 @@
         cardCopy: "Your organization intake information is shown below.",
         nextStep: "Upload structure and supporting records to continue.",
         lockNote: "Intake lock state is based on your current review status.",
-        workspaceCopy:
-          "Your organization workspace connects package access, command structure planning, uploads, and guided record handling in one place.",
+        workspaceCopy: canUseLinkKeys
+          ? "Your organization workspace connects package access, command structure planning, uploads, and link capabilities in one place."
+          : "Your organization workspace connects package access, command structure planning, uploads, and guided record handling in one place.",
       };
     }
 
     if (normalizedLane === "network" && normalizedStatus === "build_ready") {
       return {
-        cardCopy:
-          "Your network intake has been approved and provisioned for production.",
+        cardCopy: canUseLinkKeys
+          ? "Your network intake has been approved and provisioned for production with link capabilities active."
+          : "Your network intake has been approved and provisioned for production.",
         nextStep:
           "Production records are created. Next step is building branches and linked households.",
         lockNote:
           "Editing is locked because this network project has already been approved and provisioned.",
-        workspaceCopy:
-          "Your network intake has been approved and provisioned. This workspace now moves into connected branch and household build.",
+        workspaceCopy: canUseLinkKeys
+          ? "Your network intake has been approved and provisioned. This workspace now moves into connected branch, household build, and link-enabled operation."
+          : "Your network intake has been approved and provisioned. This workspace now moves into connected branch and household build.",
       };
     }
 
     if (normalizedStatus === "build_ready") {
       return {
-        cardCopy:
-          "Your intake has been approved and provisioned for production.",
+        cardCopy: canUseLinkKeys
+          ? "Your intake has been approved and provisioned for production with link capabilities active."
+          : "Your intake has been approved and provisioned for production.",
         nextStep:
           "Production records are created. Next step is building members and relationships.",
         lockNote:
           "Editing is locked. This intake has already been approved and provisioned.",
-        workspaceCopy:
-          "Your intake has been approved and provisioned. This workspace now moves from onboarding into the real family build stage.",
+        workspaceCopy: canUseLinkKeys
+          ? "Your intake has been approved and provisioned. This workspace now moves from onboarding into the real family build stage with link capabilities available."
+          : "Your intake has been approved and provisioned. This workspace now moves from onboarding into the real family build stage.",
       };
     }
 
@@ -457,8 +532,9 @@
       cardCopy: "Your most recent intake submission is shown below.",
       nextStep: "Continue and finalize your intake.",
       lockNote: "Editing is still open until final submission.",
-      workspaceCopy:
-        "Your Tomb of Light customer workspace connects package access, onboarding, family structure, lineage tools, and document-backed verification in one place.",
+      workspaceCopy: canUseLinkKeys
+        ? "Your Tomb of Light customer workspace connects package access, onboarding, lineage tools, and link capabilities in one place."
+        : "Your Tomb of Light customer workspace connects package access, onboarding, family structure, lineage tools, and document-backed verification in one place.",
     };
   }
 
@@ -471,6 +547,7 @@
     applyNavVisibility("lineage-certificate.html", config.navCertificate);
     applyNavVisibility("intake-review.html", config.navIntake);
     applyNavVisibility("verification-upload.html", config.showVerification);
+    applyNavVisibility("link-keys.html", config.navLinkKeys);
 
     applyAction(
       "[data-dashboard-workspace-primary-action], [data-dashboard-package-primary-action]",
@@ -489,6 +566,12 @@
         show: config.showVerification,
       },
     );
+
+    applyAction("[data-dashboard-link-keys-action]", {
+      text: "Open Link Keys",
+      href: "link-keys.html",
+      show: config.showLinkKeys,
+    });
 
     applyAction(
       '[data-dashboard-workspace-tree-action], a[href="tree-view.html"][data-paid-action]',
@@ -602,8 +685,30 @@
     }
   }
 
-  function updatePrimaryIntakeAction(status, actionNode) {
+  function updatePrimaryIntakeAction(context, status, actionNode) {
     if (!actionNode) return;
+
+    const resolved = context?.resolvedEntitlements || {};
+    const lane = normalizeValue(context?.packageLane || resolved.package_lane);
+    const canOpenFamilyIntake = Boolean(resolved.can_open_family_intake);
+    const canOpenOrgIntake = Boolean(resolved.can_open_org_intake);
+
+    if (lane === "portrait") {
+      actionNode.textContent = "Upload Portrait & Records";
+      actionNode.setAttribute("href", "verification-upload.html");
+      return;
+    }
+
+    if (lane === "organization") {
+      actionNode.textContent = "Upload Structure Records";
+      actionNode.setAttribute("href", "verification-upload.html");
+      return;
+    }
+
+    if (!canOpenFamilyIntake && !canOpenOrgIntake) {
+      actionNode.style.display = "none";
+      return;
+    }
 
     const normalized = normalizeStatus(status);
 
@@ -666,11 +771,11 @@
           )
         : null);
 
-    if (!context || !context.hasPaidPackage) {
+    if (!context || !context.hasPackageAccess) {
       return;
     }
 
-    const config = getLaneConfig(context.packageLane, context.resolvedEntitlements);
+    const config = getEntitlementConfig(context);
     updateLaneUi(context, config);
 
     const intakeCardStatus = document.querySelector(
@@ -719,22 +824,13 @@
         );
 
         if (openAction) {
-          if (config.lane === "portrait") {
-            openAction.textContent = "Upload Portrait & Records";
-            openAction.setAttribute("href", "verification-upload.html");
-          } else if (config.lane === "organization") {
-            openAction.textContent = "Upload Structure Records";
-            openAction.setAttribute("href", "verification-upload.html");
-          } else {
-            openAction.textContent = "Open Intake";
-            openAction.setAttribute("href", "intake-welcome.html");
-          }
+          updatePrimaryIntakeAction(context, "", openAction);
         }
       } else {
         const status = normalizeStatus(
           latest.status || latest.submission_status,
         );
-        const laneMessages = getLaneAwareIntakeMessages(config.lane, status);
+        const laneMessages = getLaneAwareIntakeMessages(context, status);
 
         text(intakeCardStatus, laneMessages.cardCopy);
         text(statusBadge, humanizeStatus(status));
@@ -745,15 +841,7 @@
         text(workspaceCopy, laneMessages.workspaceCopy);
 
         if (openAction) {
-          if (config.lane === "portrait") {
-            openAction.textContent = "Upload Portrait & Records";
-            openAction.setAttribute("href", "verification-upload.html");
-          } else if (config.lane === "organization") {
-            openAction.textContent = "Upload Structure Records";
-            openAction.setAttribute("href", "verification-upload.html");
-          } else {
-            updatePrimaryIntakeAction(status, openAction);
-          }
+          updatePrimaryIntakeAction(context, status, openAction);
         }
       }
 

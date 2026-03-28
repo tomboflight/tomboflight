@@ -35,40 +35,36 @@
       .replaceAll("'", "&#039;");
   }
 
-  function getInternalRoleKey(me) {
-    const role = normalizeValue(me && me.role);
-    const accessTier = normalizeValue(me && me.access_tier);
-    const departmentRole = normalizeValue(me && me.department_role);
+  function getRoleSignals(me) {
+    return [
+      normalizeValue(me && me.role),
+      normalizeValue(me && me.access_tier),
+      normalizeValue(me && me.department_role),
+    ].filter(Boolean);
+  }
 
-    return accessTier || departmentRole || role;
+  function getInternalRoleKey(me) {
+    const signals = getRoleSignals(me);
+    return (
+      signals.find(function (value) {
+        return INTERNAL_ROLE_KEYS.has(value);
+      }) || ""
+    );
   }
 
   function isInternalRole(me) {
-    const role = normalizeValue(me && me.role);
-    const accessTier = normalizeValue(me && me.access_tier);
-    const departmentRole = normalizeValue(me && me.department_role);
-
-    return [role, accessTier, departmentRole].some(function (value) {
-      return INTERNAL_ROLE_KEYS.has(value);
-    });
+    return Boolean(getInternalRoleKey(me));
   }
 
   function card(number, title, copy, href, buttonText) {
-    const action =
-      href && buttonText
-        ? `<div class="inline-actions" style="margin-top: 1rem;">
-             <a class="btn btn-primary" href="${escapeHtml(href)}">${escapeHtml(buttonText)}</a>
-           </div>`
-        : `<div class="inline-actions" style="margin-top: 1rem;">
-             <span class="btn btn-secondary" aria-disabled="true">Coming Next</span>
-           </div>`;
-
     return `
       <div class="family-record-card">
         <div class="card-number">${escapeHtml(number)}</div>
         <h3>${escapeHtml(title)}</h3>
         <p class="card-copy">${escapeHtml(copy)}</p>
-        ${action}
+        <div class="inline-actions" style="margin-top: 1rem;">
+          <a class="btn btn-primary" href="${escapeHtml(href)}">${escapeHtml(buttonText)}</a>
+        </div>
       </div>
     `;
   }
@@ -78,6 +74,7 @@
 
     if (roleKey === "root_admin") return "Company Root Control";
     if (roleKey === "super_admin") return "Executive Control";
+    if (roleKey === "admin") return "Administrative Control";
     if (roleKey === "operations_admin" || roleKey === "operations") {
       return "Operations Control";
     }
@@ -96,125 +93,31 @@
   function getRoleCards(me) {
     const roleKey = getInternalRoleKey(me);
 
-    if (["root_admin", "super_admin", "admin"].includes(roleKey)) {
+    if (
+      [
+        "root_admin",
+        "super_admin",
+        "admin",
+        "operations_admin",
+        "operations",
+        "platform_admin",
+        "executive_technology",
+      ].includes(roleKey)
+    ) {
       return [
         card(
           "A",
           "Intake Queue",
-          "Review submitted intake records, move them through approval, and provision build records.",
+          "Review submitted intake records, move them through approval, and provision package workspaces correctly by lane.",
           "admin-intake-queue.html",
           "Open Intake Queue",
         ),
         card(
           "B",
           "Family Manager",
-          "Load provisioned family roots, add members, and create lineage relationships without Mongo or Swagger.",
+          "Load real household and network family builds, add members, and manage lineage relationships in the live platform.",
           "admin-family-manager.html",
           "Open Family Manager",
-        ),
-        card(
-          "C",
-          "Operations Pipeline",
-          "Track approved submissions, build readiness, verification flow, and delivery progression.",
-          "",
-          "",
-        ),
-        card(
-          "D",
-          "Platform Control",
-          "Use system-level oversight for workflow governance, audit review, and environment control.",
-          "",
-          "",
-        ),
-        card(
-          "E",
-          "Marketing Intelligence",
-          "Review demand, conversion, and growth metrics without exposing protected customer lineage data.",
-          "",
-          "",
-        ),
-      ];
-    }
-
-    if (roleKey === "operations_admin" || roleKey === "operations") {
-      return [
-        card(
-          "A",
-          "Intake Queue",
-          "Review submitted onboarding records and move customer submissions through the review process.",
-          "admin-intake-queue.html",
-          "Open Intake Queue",
-        ),
-        card(
-          "B",
-          "Family Manager",
-          "Prepare provisioned family builds by adding members and wiring relationships in the live platform.",
-          "admin-family-manager.html",
-          "Open Family Manager",
-        ),
-      ];
-    }
-
-    if (roleKey === "platform_admin" || roleKey === "executive_technology") {
-      return [
-        card(
-          "A",
-          "Intake Queue",
-          "Access internal onboarding review workflow and troubleshoot intake state transitions.",
-          "admin-intake-queue.html",
-          "Open Intake Queue",
-        ),
-        card(
-          "B",
-          "Family Manager",
-          "Operate the live family build layer by loading provisioned families and managing lineage records.",
-          "admin-family-manager.html",
-          "Open Family Manager",
-        ),
-        card(
-          "C",
-          "Platform Tools",
-          "Platform health, operational debugging, and system-level workflow support.",
-          "",
-          "",
-        ),
-      ];
-    }
-
-    if (roleKey === "finance_admin" || roleKey === "finance") {
-      return [
-        card(
-          "A",
-          "Finance Oversight",
-          "Track orders, package activation, payment truth, and customer billing checkpoints.",
-          "",
-          "",
-        ),
-        card(
-          "B",
-          "Revenue View",
-          "Use finance-specific reporting without exposing protected family lineage content.",
-          "",
-          "",
-        ),
-      ];
-    }
-
-    if (roleKey === "marketing_admin" || roleKey === "marketing") {
-      return [
-        card(
-          "A",
-          "Marketing Intelligence",
-          "View conversion-level business insight and campaign-facing reporting without exposing private customer lineage records.",
-          "",
-          "",
-        ),
-        card(
-          "B",
-          "Growth Oversight",
-          "Prepare future campaign, funnel, and acquisition visibility inside a controlled internal environment.",
-          "",
-          "",
         ),
       ];
     }
@@ -228,6 +131,22 @@
       .forEach(function (node) {
         node.style.display = "none";
       });
+  }
+
+  function hideCustomerNavItems() {
+    [
+      'a[href="intake-review.html"]',
+      'a[href="verification-upload.html"]',
+      'a[href="link-keys.html"]',
+      'a[href="tree-view.html"]',
+      'a[href="lineage-certificate.html"]',
+    ].forEach(function (selector) {
+      document
+        .querySelectorAll(`.site-nav ${selector}`)
+        .forEach(function (node) {
+          node.style.display = "none";
+        });
+    });
   }
 
   function updateHeroForInternal() {
@@ -246,7 +165,9 @@
   function injectAdminPanel(me) {
     const anchor = document.querySelector("[data-admin-portal-anchor]");
     if (!anchor) return;
-    if (document.querySelector("[data-admin-tools-panel]")) return;
+
+    const existing = document.querySelector("[data-admin-tools-panel]");
+    if (existing) existing.remove();
 
     if (!isInternalRole(me)) return;
 
@@ -254,16 +175,17 @@
     panel.className = "form-panel";
     panel.setAttribute("data-admin-tools-panel", "true");
 
-    const cards = getRoleCards(me).join("");
+    const cards = getRoleCards(me);
+    const cardsMarkup = cards.length
+      ? `<div class="grid-3">${cards.join("")}</div>`
+      : `<p class="card-copy">No dedicated browser-based tools are currently published for this internal role.</p>`;
 
     panel.innerHTML = `
       <span class="eyebrow">${escapeHtml(getRoleTitle(me))}</span>
       <p class="card-copy" style="margin-bottom: 1.25rem;">
         This internal workspace is reserved for authorized Tomb of Light operational roles and is separate from the public customer workspace.
       </p>
-      <div class="grid-3">
-        ${cards}
-      </div>
+      ${cardsMarkup}
     `;
 
     anchor.prepend(panel);
@@ -278,6 +200,7 @@
 
       if (isInternalRole(me)) {
         hideCustomerPanels();
+        hideCustomerNavItems();
         updateHeroForInternal();
         injectAdminPanel(me);
       }
