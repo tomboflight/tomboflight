@@ -142,6 +142,7 @@
   function updateBuildPathPanel(config) {
     const panel =
       findPanelByText("Your Family Build Path") ||
+      findPanelByText("Your Build Path") ||
       findPanelByText("Your Portrait Workflow") ||
       findPanelByText("Your Command Build Path") ||
       findPanelByText("Your Network Build Path");
@@ -183,8 +184,11 @@
     );
   }
 
-  function getLaneConfig(packageLane) {
+  function getLaneConfig(packageLane, resolvedEntitlements) {
     const lane = normalizeValue(packageLane);
+    const re = resolvedEntitlements || {};
+    const canBuildFamilyTree = Boolean(re.can_build_family_tree);
+    const canBuildOrgChart = Boolean(re.can_build_org_chart);
 
     if (lane === "portrait") {
       return {
@@ -204,11 +208,11 @@
         primaryActionHref: "verification-upload.html",
         secondaryActionText: "Verification Uploads",
         secondaryActionHref: "verification-upload.html",
-        showTree: false,
-        showCertificate: false,
+        showTree: canBuildFamilyTree,
+        showCertificate: canBuildFamilyTree,
         showVerification: true,
-        navTree: false,
-        navCertificate: false,
+        navTree: canBuildFamilyTree,
+        navCertificate: canBuildFamilyTree,
         navIntake: false,
         buildPathEyebrow: "Your Portrait Workflow",
         buildSteps: [
@@ -252,11 +256,11 @@
         primaryActionHref: "verification-upload.html",
         secondaryActionText: "Upload Structure Records",
         secondaryActionHref: "verification-upload.html",
-        showTree: false,
-        showCertificate: false,
+        showTree: canBuildFamilyTree,
+        showCertificate: canBuildFamilyTree,
         showVerification: true,
-        navTree: false,
-        navCertificate: false,
+        navTree: canBuildFamilyTree,
+        navCertificate: canBuildFamilyTree,
         navIntake: false,
         buildPathEyebrow: "Your Command Build Path",
         buildSteps: [
@@ -299,11 +303,11 @@
         primaryActionHref: "tree-view.html",
         secondaryActionText: "Upload Verification Docs",
         secondaryActionHref: "verification-upload.html",
-        showTree: true,
-        showCertificate: true,
+        showTree: canBuildFamilyTree,
+        showCertificate: canBuildFamilyTree,
         showVerification: true,
-        navTree: true,
-        navCertificate: true,
+        navTree: canBuildFamilyTree,
+        navCertificate: canBuildFamilyTree,
         navIntake: true,
         buildPathEyebrow: "Your Network Build Path",
         buildSteps: [
@@ -345,11 +349,11 @@
       primaryActionHref: "tree-view.html",
       secondaryActionText: "Upload Verification Docs",
       secondaryActionHref: "verification-upload.html",
-      showTree: true,
-      showCertificate: true,
+      showTree: canBuildFamilyTree,
+      showCertificate: canBuildFamilyTree,
       showVerification: true,
-      navTree: true,
-      navCertificate: true,
+      navTree: canBuildFamilyTree,
+      navCertificate: canBuildFamilyTree,
       navIntake: true,
       buildPathEyebrow: "Your Family Build Path",
       buildSteps: [
@@ -511,9 +515,36 @@
 
     const upgradeAction = document.querySelector("[data-upgrade-action]");
     if (upgradeAction) {
-      upgradeAction.style.display = "";
-      upgradeAction.textContent = config.upgradeText;
-      upgradeAction.setAttribute("href", config.upgradeHref);
+      const re = context.resolvedEntitlements || {};
+      const upgradeTargets = Array.isArray(re.upgrade_targets)
+        ? re.upgrade_targets
+        : [];
+      const allowedAddons = Array.isArray(re.allowed_addons)
+        ? re.allowed_addons
+        : [];
+      const resolveDisplayName =
+        window.TOLAuthPages &&
+        typeof window.TOLAuthPages.resolvePackageDisplayName === "function"
+          ? window.TOLAuthPages.resolvePackageDisplayName
+          : function (code) {
+              return code || "Package";
+            };
+
+      if (upgradeTargets.length > 0) {
+        const firstName = resolveDisplayName(upgradeTargets[0]);
+        upgradeAction.textContent =
+          upgradeTargets.length === 1
+            ? "Upgrade to " + firstName
+            : "Upgrade to " + firstName + " or higher";
+        upgradeAction.setAttribute("href", "index.html#pricing");
+        upgradeAction.style.display = "";
+      } else if (allowedAddons.length > 0) {
+        upgradeAction.textContent = "View Available Add-Ons";
+        upgradeAction.setAttribute("href", "index.html#pricing");
+        upgradeAction.style.display = "";
+      } else {
+        upgradeAction.style.display = "none";
+      }
     }
 
     const currentPackage = document.querySelector(
@@ -639,7 +670,7 @@
       return;
     }
 
-    const config = getLaneConfig(context.packageLane);
+    const config = getLaneConfig(context.packageLane, context.resolvedEntitlements);
     updateLaneUi(context, config);
 
     const intakeCardStatus = document.querySelector(

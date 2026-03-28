@@ -439,6 +439,9 @@
       activeProject?.package_name ||
       resolvePackageDisplayName(packageCode);
 
+    const resolvedEntitlements =
+      activeEntitlement?.resolved_entitlements || {};
+
     return {
       user: user || null,
       orders,
@@ -450,7 +453,8 @@
       packageCode,
       packageLane,
       packageName,
-      hasPaidPackage: !!paidOrder,
+      resolvedEntitlements,
+      hasPaidPackage: Boolean(activeEntitlement || activeProject || paidOrder),
     };
   }
 
