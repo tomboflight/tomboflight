@@ -48,7 +48,9 @@ class ProjectResponse(BaseModel):
 def _as_string(value: Any, default: str = "") -> str:
     if value is None:
         return default
-    return str(value).strip()
+
+    value_str = str(value).strip()
+    return value_str or default
 
 
 def _as_datetime_string(value: Any) -> str:
@@ -70,9 +72,6 @@ def build_project_response(data: dict[str, Any]) -> ProjectResponse:
     )
 
     project_lane = _as_string(data.get("project_lane"), "unknown")
-
-    if not project_lane:
-      project_lane = "unknown"
 
     return ProjectResponse(
         id=_as_string(data.get("_id")),
