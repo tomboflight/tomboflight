@@ -1,8 +1,8 @@
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.dependencies.auth import get_current_user, require_admin
+from app.dependencies.auth import INTERNAL_ADMIN_KEYS, get_current_user, require_admin
 from app.schemas.intake_submission import (
     IntakeSubmissionCreate,
     IntakeSubmissionListItem,
@@ -43,6 +43,15 @@ def _actor_label(current_user: dict) -> str:
         or str(current_user.get("id") or "").strip()
         or "system"
     )
+
+
+def _is_admin(user: dict[str, Any]) -> bool:
+    values = {
+        str(user.get("role") or "").strip().lower(),
+        str(user.get("access_tier") or "").strip().lower(),
+        str(user.get("department_role") or "").strip().lower(),
+    }
+    return any(value in INTERNAL_ADMIN_KEYS for value in values if value)
 
 
 @router.post(
@@ -90,9 +99,8 @@ def get_submission(
         raise HTTPException(status_code=404, detail="Intake submission not found.")
 
     current_user_id = _current_user_id(current_user)
-    current_user_role = str(current_user.get("role") or "").strip().lower()
 
-    if result["user_id"] != current_user_id and current_user_role not in {"admin", "super_admin"}:
+    if result["user_id"] != current_user_id and not _is_admin(current_user):
         raise HTTPException(status_code=403, detail="Not authorized to access this intake submission.")
 
     return result

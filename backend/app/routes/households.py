@@ -1,5 +1,8 @@
-from fastapi import APIRouter
+from typing import Any
 
+from fastapi import APIRouter, Depends
+
+from app.dependencies.auth import require_admin
 from app.schemas.household import (
     HouseholdCreate,
     HouseholdResponse,
@@ -11,12 +14,15 @@ router = APIRouter(prefix="/households", tags=["Households"])
 
 
 @router.get("/", response_model=list[HouseholdResponse])
-def get_households():
+def get_households(current_user: dict[str, Any] = Depends(require_admin)):
     households = list_households()
     return [build_household_response(household) for household in households]
 
 
 @router.post("/", response_model=HouseholdResponse)
-def create_household_route(payload: HouseholdCreate):
+def create_household_route(
+    payload: HouseholdCreate,
+    current_user: dict[str, Any] = Depends(require_admin),
+):
     household = create_household(payload)
     return build_household_response(household)
