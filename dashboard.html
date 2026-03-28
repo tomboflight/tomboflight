@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Dashboard | Tomb of Light</title>
     <meta name="description" content="Your Tomb of Light dashboard." />
-    <link rel="stylesheet" href="styles.css?v=20260325-6" />
+    <link rel="stylesheet" href="styles.css?v=20260328-6" />
   </head>
   <body>
     <div class="page-wrap">
@@ -27,10 +27,14 @@
 
           <nav class="site-nav" id="site-nav" aria-label="Portal navigation">
             <a href="dashboard.html" aria-current="page">Dashboard</a>
-            <a href="intake-review.html">My Intake</a>
-            <a href="verification-upload.html">Verification Uploads</a>
-            <a href="tree-view.html">Family Tree</a>
-            <a href="lineage-certificate.html">Lineage Certificate</a>
+            <a href="intake-review.html" style="display: none">My Intake</a>
+            <a href="verification-upload.html" style="display: none"
+              >Verification Uploads</a
+            >
+            <a href="tree-view.html" style="display: none">Family Tree</a>
+            <a href="lineage-certificate.html" style="display: none"
+              >Lineage Certificate</a
+            >
             <a href="faq.html">Help</a>
           </nav>
 
@@ -46,9 +50,9 @@
         <section class="page-hero dashboard-hero">
           <div class="container">
             <div class="page-hero-panel dashboard-hero-panel">
-              <span class="eyebrow" data-dashboard-hero-eyebrow>
-                Portal Access
-              </span>
+              <span class="eyebrow" data-dashboard-hero-eyebrow
+                >Portal Access</span
+              >
               <h1 data-dashboard-hero-title>Your Workspace</h1>
               <p data-dashboard-status>Loading your account...</p>
             </div>
@@ -66,42 +70,41 @@
               data-dashboard-customer-only
             >
               <div class="dashboard-presence-top">
-                <span class="eyebrow">Live Build Status</span>
-                <span class="presence-badge">Digital Lineage Active</span>
+                <span class="eyebrow">Workspace Status</span>
+                <span class="presence-badge">Preparing Workspace</span>
               </div>
 
               <h2 class="dashboard-presence-title">
-                Your lineage workspace is live and connected.
+                Your workspace is loading.
               </h2>
 
               <p class="dashboard-presence-copy">
-                Tomb of Light is now reading from your real family, household,
-                project, family tree, and certificate records. This portal is
-                designed to grow as your family grows.
+                Tomb of Light is resolving the exact tools, limits, and
+                workflows attached to your active package.
               </p>
 
               <div class="workspace-stage-strip">
                 <div class="workspace-stage-node is-live">
                   <span class="workspace-stage-dot"></span>
                   <div>
-                    <strong>Family Root</strong>
-                    <small>Connected</small>
+                    <strong>Package Access</strong>
+                    <small>Resolving</small>
                   </div>
                 </div>
 
                 <div class="workspace-stage-node is-live">
                   <span class="workspace-stage-dot"></span>
                   <div>
-                    <strong>Production Build</strong>
-                    <small>Build Ready</small>
+                    <strong>Feature Scope</strong>
+                    <small>Checking</small>
                   </div>
                 </div>
 
                 <div class="workspace-stage-node is-live">
                   <span class="workspace-stage-dot"></span>
                   <div>
-                    <strong>Living Outputs</strong>
-                    <small>Tree + Certificate Live</small>
+                    <strong>Next Step</strong>
+                    <small>Preparing</small>
                   </div>
                 </div>
               </div>
@@ -109,16 +112,18 @@
               <div class="inline-actions" style="margin-top: 1.5rem">
                 <a
                   class="btn btn-primary"
-                  href="tree-view.html"
+                  href="verification-upload.html"
                   data-dashboard-workspace-primary-action
                   data-paid-action
+                  style="display: none"
                 >
-                  Continue Family Build
+                  Open Workspace
                 </a>
                 <a
                   class="btn btn-secondary"
                   href="verification-upload.html"
                   data-paid-action
+                  style="display: none"
                 >
                   Upload Verification Docs
                 </a>
@@ -127,6 +132,7 @@
                   href="lineage-certificate.html"
                   data-dashboard-workspace-certificate-action
                   data-paid-action
+                  style="display: none"
                 >
                   View Lineage Certificate
                 </a>
@@ -159,24 +165,26 @@
             <div class="form-panel" data-dashboard-customer-only>
               <span class="eyebrow">Customer Workspace</span>
               <p class="card-copy" data-dashboard-workspace-copy>
-                Your Tomb of Light customer workspace connects package access,
-                onboarding, family structure, lineage tools, and document-backed
-                verification in one place.
+                Your Tomb of Light customer workspace loads the exact package
+                access, onboarding, uploads, lineage tools, and verification
+                features attached to your account.
               </p>
 
               <div class="inline-actions" style="margin-top: 1.5rem">
                 <a
                   class="btn btn-primary"
-                  href="tree-view.html"
+                  href="verification-upload.html"
                   data-dashboard-workspace-primary-action
                   data-paid-action
+                  style="display: none"
                 >
-                  Continue Family Build
+                  Open Workspace
                 </a>
                 <a
                   class="btn btn-secondary"
                   href="verification-upload.html"
                   data-paid-action
+                  style="display: none"
                 >
                   Verification Uploads
                 </a>
@@ -185,6 +193,7 @@
                   href="lineage-certificate.html"
                   data-dashboard-workspace-certificate-action
                   data-paid-action
+                  style="display: none"
                 >
                   View Lineage Certificate
                 </a>
@@ -200,16 +209,18 @@
               <div class="inline-actions" style="margin-top: 1.5rem">
                 <a
                   class="btn btn-primary"
-                  href="tree-view.html"
+                  href="verification-upload.html"
                   data-dashboard-package-primary-action
                   data-paid-action
+                  style="display: none"
                 >
-                  Continue Family Build
+                  Open Workspace
                 </a>
                 <a
                   class="btn btn-secondary"
                   href="verification-upload.html"
                   data-paid-action
+                  style="display: none"
                 >
                   Upload Verification Docs
                 </a>
@@ -217,6 +228,7 @@
                   class="btn btn-secondary"
                   href="lineage-certificate.html"
                   data-paid-action
+                  style="display: none"
                 >
                   Open Lineage Certificate
                 </a>
@@ -297,6 +309,7 @@
                   class="btn btn-primary"
                   href="intake-review.html"
                   data-intake-open-action
+                  style="display: none"
                 >
                   View Intake Record
                 </a>
@@ -304,8 +317,9 @@
                   class="btn btn-secondary"
                   href="verification-upload.html"
                   data-paid-action
+                  style="display: none"
                 >
-                  Upload Family Records
+                  Upload Verification Records
                 </a>
               </div>
             </div>
@@ -319,30 +333,30 @@
             </div>
 
             <div class="form-panel" data-dashboard-customer-only>
-              <span class="eyebrow">Your Family Build Path</span>
+              <span class="eyebrow">Your Build Path</span>
               <div class="grid-3">
                 <div>
                   <div class="card-number">1</div>
-                  <h3>Family Root</h3>
+                  <h3>Package Scope</h3>
                   <p class="card-copy">
-                    Establish the household family record that anchors your
-                    lineage build.
+                    Tomb of Light resolves the exact tools, limits, and
+                    workflows attached to your active package.
                   </p>
                 </div>
                 <div>
                   <div class="card-number">2</div>
-                  <h3>Members and Relationships</h3>
+                  <h3>Records and Structure</h3>
                   <p class="card-copy">
-                    Add parents, spouses, children, and connected branches over
-                    time.
+                    Upload, verification, lineage, and structure features appear
+                    only when they are included in your package.
                   </p>
                 </div>
                 <div>
                   <div class="card-number">3</div>
-                  <h3>Verification Evidence</h3>
+                  <h3>Delivery and Growth</h3>
                   <p class="card-copy">
-                    Upload IDs, birth certificates, marriage records, adoption
-                    records, and supporting family documents for review.
+                    Your workspace can expand over time through package upgrades
+                    and approved add-ons.
                   </p>
                 </div>
               </div>
@@ -370,8 +384,8 @@
                   <div class="card-number">C</div>
                   <h3>Package Access</h3>
                   <p class="card-copy">
-                    Family build tools and upload workflows unlock once a paid
-                    package is recorded to your account.
+                    Package access, uploads, intake, and lineage tools are
+                    controlled by your active entitlement.
                   </p>
                 </div>
               </div>
@@ -391,10 +405,10 @@
       </footer>
     </div>
 
-    <script src="config.js?v=20260328-4"></script>
-    <script src="app.js?v=20260328-4"></script>
-    <script src="auth.js?v=20260328-4"></script>
-    <script src="dashboard-intake.js?v=20260328-4"></script>
-    <script src="dashboard-admin.js?v=20260328-4"></script>
+    <script src="config.js?v=20260328-6"></script>
+    <script src="app.js?v=20260328-6"></script>
+    <script src="auth.js?v=20260328-6"></script>
+    <script src="dashboard-intake.js?v=20260328-6"></script>
+    <script src="dashboard-admin.js?v=20260328-6"></script>
   </body>
 </html>

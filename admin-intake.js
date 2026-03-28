@@ -21,6 +21,15 @@
     "marketing",
   ]);
 
+  const LINK_KEY_ENABLED_PACKAGES = new Set([
+    "digital_legacy_portrait",
+    "household_foundation",
+    "heirloom_legacy_tree",
+    "legacy_plus",
+    "family_estate_concierge",
+    "command_structure_network",
+  ]);
+
   let allSubmissions = [];
   let currentSubmission = null;
 
@@ -34,9 +43,7 @@
   }
 
   function normalizeValue(value) {
-    return String(value || "")
-      .trim()
-      .toLowerCase();
+    return String(value || "").trim().toLowerCase();
   }
 
   function normalizeStatus(status) {
@@ -62,6 +69,100 @@
     } catch (error) {
       return String(value);
     }
+  }
+
+  function normalizePackageCode(value) {
+    const normalized = normalizeValue(value);
+    const mapping = {
+      "legacy-snapshot": "legacy_snapshot",
+      legacy_snapshot: "legacy_snapshot",
+      "legacy-portrait-intro": "legacy_portrait_intro",
+      legacy_portrait_intro: "legacy_portrait_intro",
+      "digital-legacy-portrait": "digital_legacy_portrait",
+      digital_legacy_portrait: "digital_legacy_portrait",
+      "starter-family-tree": "household_foundation",
+      starter_family_tree: "household_foundation",
+      "household-foundation": "household_foundation",
+      household_foundation: "household_foundation",
+      "heirloom-legacy-tree": "heirloom_legacy_tree",
+      heirloom_legacy_tree: "heirloom_legacy_tree",
+      "legacy-plus": "legacy_plus",
+      legacy_plus: "legacy_plus",
+      "family-estate-concierge": "family_estate_concierge",
+      family_estate_concierge: "family_estate_concierge",
+      "command-structure-network": "command_structure_network",
+      command_structure_network: "command_structure_network",
+    };
+
+    return mapping[normalized] || normalized;
+  }
+
+  function resolvePackageLane(packageCode) {
+    const normalized = normalizePackageCode(packageCode);
+
+    if (
+      normalized === "legacy_snapshot" ||
+      normalized === "legacy_portrait_intro" ||
+      normalized === "digital_legacy_portrait"
+    ) {
+      return "portrait";
+    }
+
+    if (
+      normalized === "household_foundation" ||
+      normalized === "heirloom_legacy_tree" ||
+      normalized === "legacy_plus"
+    ) {
+      return "household";
+    }
+
+    if (normalized === "family_estate_concierge") {
+      return "network";
+    }
+
+    if (normalized === "command_structure_network") {
+      return "organization";
+    }
+
+    return "unknown";
+  }
+
+  function getSubmissionPackageCode(submission) {
+    return normalizePackageCode(
+      submission &&
+        (submission.package_code || submission.package_slug || submission.package_name)
+    );
+  }
+
+  function isFamilyBuildLane(lane) {
+    return lane === "household" || lane === "network";
+  }
+
+  function packageSupportsLinkKeys(packageCode) {
+    return LINK_KEY_ENABLED_PACKAGES.has(normalizePackageCode(packageCode));
+  }
+
+  function isFamilyBuildSubmission(submission) {
+    const lane = resolvePackageLane(getSubmissionPackageCode(submission));
+    return isFamilyBuildLane(lane) && !!String(submission?.family_root_id || "").trim();
+  }
+
+  function isProvisionedSubmission(submission) {
+    if (!submission) return false;
+
+    const statusValue = normalizeStatus(submission.status);
+    return (
+      !!submission.provisioned_at ||
+      !!submission.project_id ||
+      [
+        "build_ready",
+        "in_production",
+        "qa_review",
+        "client_review",
+        "delivered",
+        "archived",
+      ].includes(statusValue)
+    );
   }
 
   function setStatus(node, message, type) {
@@ -139,37 +240,42 @@
     throw lastError || new Error("All API request attempts failed.");
   }
 
-  function isProvisionedSubmission(submission) {
-    if (!submission) return false;
+  function configureActionLink(node, { text, href, show = true }) {
+    if (!node) return;
+    node.textContent = text;
+    node.setAttribute("href", href);
+    node.style.display = show ? "" : "none";
+  }
 
-    const statusValue = normalizeStatus(submission.status);
-    return (
-      !!submission.provisioned_at ||
-      !!submission.family_root_id ||
-      !!submission.household_id ||
-      !!submission.project_id ||
-      statusValue === "build_ready" ||
-      statusValue === "in_production"
-    );
+  function getProvisionedWorkspaceLabel(submission) {
+    const lane = resolvePackageLane(getSubmissionPackageCode(submission));
+
+    if (lane === "portrait") return "live portrait workspace";
+    if (lane === "organization") return "live organization workspace";
+    return "live family build";
+  }
+
+  function getProvisionedActionMessage(submission) {
+    const lane = resolvePackageLane(getSubmissionPackageCode(submission));
+
+    if (lane === "portrait") {
+      return "This submission is already provisioned. Use the customer dashboard or Verification Uploads instead.";
+    }
+
+    if (lane === "organization") {
+      return "This submission is already provisioned. Use the customer dashboard or structure upload tools instead.";
+    }
+
+    return "This submission is already provisioned. Use Family Manager, Family Tree, or Lineage Certificate instead.";
   }
 
   function updateReviewActionState(submission) {
-    const postBuildNotice = document.querySelector(
-      "[data-admin-post-build-notice]",
-    );
-    const postBuildActions = document.querySelector(
-      "[data-admin-post-build-actions]",
-    );
+    const postBuildNotice = document.querySelector("[data-admin-post-build-notice]");
+    const postBuildActions = document.querySelector("[data-admin-post-build-actions]");
 
-    const familyManagerLink = document.querySelector(
-      "[data-admin-open-family-manager]",
-    );
-    const familyTreeLink = document.querySelector(
-      "[data-admin-open-family-tree]",
-    );
-    const certificateLink = document.querySelector(
-      "[data-admin-open-lineage-certificate]",
-    );
+    const familyManagerLink = document.querySelector("[data-admin-open-family-manager]");
+    const familyTreeLink = document.querySelector("[data-admin-open-family-tree]");
+    const certificateLink = document.querySelector("[data-admin-open-lineage-certificate]");
 
     const reviewBtn = document.querySelector("[data-admin-mark-review]");
     const approveBtn = document.querySelector("[data-admin-approve]");
@@ -178,37 +284,104 @@
 
     const provisioned = isProvisionedSubmission(submission);
     const statusValue = normalizeStatus(submission && submission.status);
-
-    if (familyManagerLink) {
-      familyManagerLink.href =
-        submission && submission.family_root_id
-          ? `admin-family-manager.html?family_id=${encodeURIComponent(submission.family_root_id)}`
-          : "admin-family-manager.html";
-    }
-
-    if (familyTreeLink) {
-      familyTreeLink.href =
-        submission && submission.family_root_id
-          ? `tree-view.html?family_id=${encodeURIComponent(submission.family_root_id)}`
-          : "tree-view.html";
-    }
-
-    if (certificateLink) {
-      certificateLink.href =
-        submission && submission.family_root_id
-          ? `lineage-certificate.html?family_id=${encodeURIComponent(submission.family_root_id)}`
-          : "lineage-certificate.html";
-    }
+    const packageCode = getSubmissionPackageCode(submission);
+    const lane = resolvePackageLane(packageCode);
+    const hasFamilyBuild = isFamilyBuildSubmission(submission);
+    const linkKeysEnabled = packageSupportsLinkKeys(packageCode);
 
     if (provisioned) {
-      if (postBuildNotice) postBuildNotice.style.display = "block";
+      if (postBuildNotice) {
+        let notice = `This submission has already been provisioned into a ${getProvisionedWorkspaceLabel(submission)}.`;
+
+        if (linkKeysEnabled) {
+          notice += " Link capabilities are enabled for this package.";
+        }
+
+        postBuildNotice.textContent = notice;
+        postBuildNotice.style.display = "block";
+      }
+
       if (postBuildActions) postBuildActions.style.display = "flex";
 
       if (reviewBtn) reviewBtn.style.display = "none";
       if (approveBtn) approveBtn.style.display = "none";
       if (rejectBtn) rejectBtn.style.display = "none";
       if (provisionBtn) provisionBtn.style.display = "none";
-      return;
+
+      if (hasFamilyBuild) {
+        configureActionLink(familyManagerLink, {
+          text: "Open Family Manager",
+          href:
+            submission && submission.family_root_id
+              ? `admin-family-manager.html?family_id=${encodeURIComponent(submission.family_root_id)}`
+              : "admin-family-manager.html",
+          show: true,
+        });
+
+        configureActionLink(familyTreeLink, {
+          text: "Open Family Tree",
+          href:
+            submission && submission.family_root_id
+              ? `tree-view.html?family_id=${encodeURIComponent(submission.family_root_id)}`
+              : "tree-view.html",
+          show: true,
+        });
+
+        configureActionLink(certificateLink, {
+          text: "Open Lineage Certificate",
+          href:
+            submission && submission.family_root_id
+              ? `lineage-certificate.html?family_id=${encodeURIComponent(submission.family_root_id)}`
+              : "lineage-certificate.html",
+          show: true,
+        });
+
+        return;
+      }
+
+      if (lane === "portrait") {
+        configureActionLink(familyManagerLink, {
+          text: "Open Customer Dashboard",
+          href: "dashboard.html",
+          show: true,
+        });
+
+        configureActionLink(familyTreeLink, {
+          text: "Open Verification Uploads",
+          href: "verification-upload.html",
+          show: true,
+        });
+
+        configureActionLink(certificateLink, {
+          text: "Open Lineage Certificate",
+          href: "lineage-certificate.html",
+          show: false,
+        });
+
+        return;
+      }
+
+      if (lane === "organization") {
+        configureActionLink(familyManagerLink, {
+          text: "Open Customer Dashboard",
+          href: "dashboard.html",
+          show: true,
+        });
+
+        configureActionLink(familyTreeLink, {
+          text: "Open Structure Uploads",
+          href: "verification-upload.html",
+          show: true,
+        });
+
+        configureActionLink(certificateLink, {
+          text: "Open Lineage Certificate",
+          href: "lineage-certificate.html",
+          show: false,
+        });
+
+        return;
+      }
     }
 
     if (postBuildNotice) postBuildNotice.style.display = "none";
@@ -276,11 +449,13 @@
 
     listNode.innerHTML = filtered
       .map(function (item, index) {
+        const lane = resolvePackageLane(getSubmissionPackageCode(item));
         return `
           <div class="family-record-card">
             <div class="card-number">${index + 1}</div>
             <h3>${escapeHtml(item.package_name || item.package_slug || "Submission")}</h3>
             ${valueLine("Status", humanizeStatus(item.status))}
+            ${valueLine("Lane", lane)}
             ${valueLine("Email", item.email)}
             ${valueLine("Submission ID", item.id)}
             ${valueLine("Created", formatDate(item.created_at))}
@@ -301,9 +476,7 @@
 
   async function loadQueue() {
     const statusNode = document.querySelector("[data-admin-queue-status]");
-    const actionNode = document.querySelector(
-      "[data-admin-queue-action-status]",
-    );
+    const actionNode = document.querySelector("[data-admin-queue-action-status]");
 
     try {
       clearStatus(actionNode);
@@ -356,25 +529,22 @@
   function renderDetail(submission) {
     currentSubmission = submission;
 
-    const pageStatus = document.querySelector(
-      "[data-admin-review-page-status]",
-    );
+    const pageStatus = document.querySelector("[data-admin-review-page-status]");
     const metaNode = document.querySelector("[data-admin-review-meta]");
     const timelineNode = document.querySelector("[data-admin-review-timeline]");
-    const householdNode = document.querySelector(
-      "[data-admin-review-household]",
-    );
-    const familyMapNode = document.querySelector(
-      "[data-admin-review-family-map]",
-    );
+    const householdNode = document.querySelector("[data-admin-review-household]");
+    const familyMapNode = document.querySelector("[data-admin-review-family-map]");
     const uploadsNode = document.querySelector("[data-admin-review-uploads]");
     const consentNode = document.querySelector("[data-admin-review-consent]");
 
     const provisioned = isProvisionedSubmission(submission);
+    const packageCode = getSubmissionPackageCode(submission);
+    const lane = resolvePackageLane(packageCode);
+    const hasFamilyBuild = isFamilyBuildSubmission(submission);
 
     if (pageStatus) {
       pageStatus.textContent = provisioned
-        ? `Submission ${submission.id} is currently ${humanizeStatus(submission.status)} and has already been provisioned into a live family build.`
+        ? `Submission ${submission.id} is currently ${humanizeStatus(submission.status)} and has already been provisioned into a ${getProvisionedWorkspaceLabel(submission)}.`
         : `Submission ${submission.id} is currently ${humanizeStatus(submission.status)}.`;
     }
 
@@ -386,11 +556,12 @@
       "1",
       [
         `Status: ${humanizeStatus(submission.status)}`,
+        `Lane: ${lane}`,
         `Email: ${submission.email || "—"}`,
         `Package: ${submission.package_name || submission.package_slug || "—"}`,
         `Review Locked: ${submission.review_locked ? "Yes" : "No"}`,
-        `Family Root ID: ${submission.family_root_id || "—"}`,
-        `Household ID: ${submission.household_id || "—"}`,
+        `Family Root ID: ${hasFamilyBuild ? submission.family_root_id || "—" : "Not applicable"}`,
+        `Household ID: ${hasFamilyBuild ? submission.household_id || "—" : "Not applicable"}`,
         `Project ID: ${submission.project_id || "—"}`,
       ],
     );
@@ -409,7 +580,12 @@
     const household = submission.household || {};
     renderReviewBlock(
       householdNode,
-      household.household_name || "Household",
+      household.household_name ||
+        (lane === "portrait"
+          ? "Portrait Intake"
+          : lane === "organization"
+            ? "Structure Intake"
+            : "Household"),
       "3",
       [
         `Primary Contact: ${household.primary_contact_name || "—"}`,
@@ -425,7 +601,8 @@
     const familyMap = submission.family_map || {};
     renderReviewBlock(
       familyMapNode,
-      familyMap.family_branch_name || "Family Map",
+      familyMap.family_branch_name ||
+        (lane === "organization" ? "Structure Map" : "Family Map"),
       "4",
       [
         `People in Scope: ${familyMap.people_in_scope || "—"}`,
@@ -479,9 +656,7 @@
 
   async function loadReviewDetail() {
     const submissionId = getQueryParam("submission_id");
-    const statusNode = document.querySelector(
-      "[data-admin-review-action-status]",
-    );
+    const statusNode = document.querySelector("[data-admin-review-action-status]");
 
     if (!submissionId) {
       setStatus(statusNode, "Missing submission_id in page URL.", "error");
@@ -555,9 +730,7 @@
   }
 
   async function runAdminAction(action) {
-    const statusNode = document.querySelector(
-      "[data-admin-review-action-status]",
-    );
+    const statusNode = document.querySelector("[data-admin-review-action-status]");
     const submissionId = getQueryParam("submission_id");
     if (!submissionId) {
       setStatus(statusNode, "Missing submission_id in page URL.", "error");
@@ -565,11 +738,7 @@
     }
 
     if (currentSubmission && isProvisionedSubmission(currentSubmission)) {
-      setStatus(
-        statusNode,
-        "This submission is already provisioned. Use Family Manager, Family Tree, or Lineage Certificate instead.",
-        "error",
-      );
+      setStatus(statusNode, getProvisionedActionMessage(currentSubmission), "error");
       return;
     }
 
@@ -586,8 +755,7 @@
 
     if (
       action === "provision" &&
-      normalizeStatus(currentSubmission && currentSubmission.status) !==
-        "approved"
+      normalizeStatus(currentSubmission && currentSubmission.status) !== "approved"
     ) {
       setStatus(
         statusNode,
@@ -628,9 +796,14 @@
 
       renderDetail(result);
 
+      const lane = resolvePackageLane(getSubmissionPackageCode(result));
       const label =
         action === "provision"
-          ? "Build provisioned successfully."
+          ? lane === "portrait"
+            ? "Portrait workspace provisioned successfully."
+            : lane === "organization"
+              ? "Organization workspace provisioned successfully."
+              : "Family build provisioned successfully."
           : `Submission updated to ${humanizeStatus(result.status)}.`;
 
       setStatus(statusNode, label, "success");
@@ -688,13 +861,9 @@
       const reviewBtn = document.querySelector("[data-admin-mark-review]");
       const approveBtn = document.querySelector("[data-admin-approve]");
       const rejectBtn = document.querySelector("[data-admin-reject]");
-      const provisionBtn = document.querySelector(
-        "[data-admin-provision-build]",
-      );
+      const provisionBtn = document.querySelector("[data-admin-provision-build]");
       const refreshBtn = document.querySelector("[data-admin-refresh-detail]");
-      const refreshPostBtn = document.querySelector(
-        "[data-admin-refresh-detail-post]",
-      );
+      const refreshPostBtn = document.querySelector("[data-admin-refresh-detail-post]");
 
       if (reviewBtn) {
         reviewBtn.addEventListener("click", function () {

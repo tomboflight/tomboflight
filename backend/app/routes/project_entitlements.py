@@ -16,6 +16,20 @@ from app.services.project_entitlement_service import (
 
 router = APIRouter(prefix="/project-entitlements", tags=["Project Entitlements"])
 
+INTERNAL_ADMIN_KEYS = {
+    "admin",
+    "super_admin",
+    "root_admin",
+    "platform_admin",
+    "operations_admin",
+    "finance_admin",
+    "marketing_admin",
+    "executive_technology",
+    "operations",
+    "finance",
+    "marketing",
+}
+
 
 class ApplyProjectEntitlementPayload(BaseModel):
     project_id: str = Field(min_length=1)
@@ -35,6 +49,17 @@ def _current_user_id(user: dict[str, Any]) -> str:
             detail="Authenticated user id is missing.",
         )
     return str(raw_id)
+
+
+def _is_admin(user: dict[str, Any]) -> bool:
+    role = str(user.get("role") or "").strip().lower()
+    access_tier = str(user.get("access_tier") or "").strip().lower()
+    department_role = str(user.get("department_role") or "").strip().lower()
+
+    return any(
+        value in INTERNAL_ADMIN_KEYS
+        for value in (role, access_tier, department_role)
+    )
 
 
 @router.post("/apply")
@@ -72,9 +97,8 @@ def get_project_entitlement_route(
         )
 
     current_user_id = _current_user_id(current_user)
-    current_role = str(current_user.get("role") or "").strip().lower()
 
-    if current_role != "admin" and entitlement.get("user_id") != current_user_id:
+    if not _is_admin(current_user) and entitlement.get("user_id") != current_user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to view this project entitlement.",
@@ -89,7 +113,7 @@ def list_my_project_entitlements(
 ):
     current_user_id = _current_user_id(current_user)
     return {
-        "items": list_user_project_entitlements(current_user_id),
+        "items": list_user_project_entitlements(current_user_id, active_only=True),
     }
 
 
@@ -107,9 +131,8 @@ def get_project_upgrade_quote_route(
         )
 
     current_user_id = _current_user_id(current_user)
-    current_role = str(current_user.get("role") or "").strip().lower()
 
-    if current_role != "admin" and entitlement.get("user_id") != current_user_id:
+    if not _is_admin(current_user) and entitlement.get("user_id") != current_user_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to view this upgrade quote.",
