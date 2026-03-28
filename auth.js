@@ -882,16 +882,23 @@
 
   async function gatePurchaseRequiredPages() {
     const page = window.location.pathname.split("/").pop() || "";
-    const intakePages = new Set([
+
+    const paidOnlyPages = new Set(["verification-upload.html"]);
+
+    const householdOrNetworkOnlyPages = new Set([
       "intake-welcome.html",
       "intake-household.html",
       "intake-family-map.html",
       "intake-uploads.html",
       "intake-consent.html",
       "intake-review.html",
+      "tree-view.html",
+      "lineage-certificate.html",
     ]);
 
-    if (!intakePages.has(page)) return;
+    if (!paidOnlyPages.has(page) && !householdOrNetworkOnlyPages.has(page)) {
+      return;
+    }
 
     const token = app.getToken();
     if (!token) {
@@ -900,6 +907,14 @@
     }
 
     try {
+      const me = await withRetry(
+        function () {
+          return app.fetchCurrentUser();
+        },
+        2,
+        300,
+      );
+
       const orders = await withRetry(
         function () {
           return fetchOrders();
@@ -908,10 +923,21 @@
         300,
       );
 
-      const paidOrder = getPaidOrder(orders);
+      const context = await getDashboardContext(me, orders);
 
-      if (!paidOrder) {
+      if (!context || !context.hasPaidPackage) {
         window.location.href = "dashboard.html?purchase_required=1";
+        return;
+      }
+
+      const lane = normalizeValue(context.packageLane);
+
+      if (paidOnlyPages.has(page)) {
+        return;
+      }
+
+      if (!["household", "network"].includes(lane)) {
+        window.location.href = "dashboard.html?upgrade_required=1";
       }
     } catch (error) {
       if (isAuthFailure(error)) {

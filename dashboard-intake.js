@@ -96,7 +96,9 @@
 
   function applyAction(selector, options) {
     document.querySelectorAll(selector).forEach(function (node) {
-      if (options.text) node.textContent = options.text;
+      if (options.text) {
+        node.textContent = options.text;
+      }
 
       if (options.href && node.tagName === "A") {
         node.setAttribute("href", options.href);
@@ -207,6 +209,7 @@
         showVerification: true,
         navTree: false,
         navCertificate: false,
+        navIntake: false,
         buildPathEyebrow: "Your Portrait Workflow",
         buildSteps: [
           {
@@ -254,6 +257,7 @@
         showVerification: true,
         navTree: false,
         navCertificate: false,
+        navIntake: false,
         buildPathEyebrow: "Your Command Build Path",
         buildSteps: [
           {
@@ -300,6 +304,7 @@
         showVerification: true,
         navTree: true,
         navCertificate: true,
+        navIntake: true,
         buildPathEyebrow: "Your Network Build Path",
         buildSteps: [
           {
@@ -345,6 +350,7 @@
       showVerification: true,
       navTree: true,
       navCertificate: true,
+      navIntake: true,
       buildPathEyebrow: "Your Family Build Path",
       buildSteps: [
         {
@@ -459,6 +465,8 @@
 
     applyNavVisibility("tree-view.html", config.navTree);
     applyNavVisibility("lineage-certificate.html", config.navCertificate);
+    applyNavVisibility("intake-review.html", config.navIntake);
+    applyNavVisibility("verification-upload.html", config.showVerification);
 
     applyAction(
       "[data-dashboard-workspace-primary-action], [data-dashboard-package-primary-action]",
@@ -680,8 +688,16 @@
         );
 
         if (openAction) {
-          openAction.textContent = "Open Intake";
-          openAction.setAttribute("href", "intake-welcome.html");
+          if (config.lane === "portrait") {
+            openAction.textContent = "Upload Portrait & Records";
+            openAction.setAttribute("href", "verification-upload.html");
+          } else if (config.lane === "organization") {
+            openAction.textContent = "Upload Structure Records";
+            openAction.setAttribute("href", "verification-upload.html");
+          } else {
+            openAction.textContent = "Open Intake";
+            openAction.setAttribute("href", "intake-welcome.html");
+          }
         }
       } else {
         const status = normalizeStatus(
@@ -697,7 +713,17 @@
         text(lockNote, laneMessages.lockNote);
         text(workspaceCopy, laneMessages.workspaceCopy);
 
-        updatePrimaryIntakeAction(status, openAction);
+        if (openAction) {
+          if (config.lane === "portrait") {
+            openAction.textContent = "Upload Portrait & Records";
+            openAction.setAttribute("href", "verification-upload.html");
+          } else if (config.lane === "organization") {
+            openAction.textContent = "Upload Structure Records";
+            openAction.setAttribute("href", "verification-upload.html");
+          } else {
+            updatePrimaryIntakeAction(status, openAction);
+          }
+        }
       }
 
       if (!Array.isArray(history) || history.length === 0) {
