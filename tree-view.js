@@ -1,6 +1,7 @@
 (function () {
   "use strict";
 
+  const authPages = window.TOLAuthPages || {};
   const ANCESTRY_TYPES = new Set([
     "parent_child",
     "adoptive_parent_child",
@@ -107,6 +108,57 @@
     return rel.replaceAll("_", " ");
   }
 
+  function getFamilyIdFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("family_id") || "";
+  }
+
+  function setFamilyIdInUrl(familyId) {
+    if (!familyId) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("family_id", familyId);
+    window.history.replaceState({}, "", url.toString());
+  }
+
+  async function getCurrentContext() {
+    if (
+      !authPages ||
+      typeof authPages.fetchOrders !== "function" ||
+      (typeof authPages.getDashboardContextForCurrentPage !== "function" &&
+        typeof authPages.getDashboardContext !== "function")
+    ) {
+      return null;
+    }
+
+    const currentUser = await window.TOLAuth.apiRequest("/auth/me", {
+      method: "GET",
+    });
+    const orders = await authPages.fetchOrders();
+
+    if (typeof authPages.getDashboardContextForCurrentPage === "function") {
+      return await authPages.getDashboardContextForCurrentPage(
+        currentUser,
+        orders,
+      );
+    }
+
+    const hints =
+      typeof authPages.getWorkspaceSelectionHints === "function"
+        ? authPages.getWorkspaceSelectionHints()
+        : undefined;
+
+    return await authPages.getDashboardContext(currentUser, orders, hints);
+  }
+
+  function getPreferredFamilyId(context) {
+    return String(
+      getFamilyIdFromUrl() ||
+        context?.activeProject?.family_id ||
+        context?.activeProject?.familyId ||
+        "",
+    ).trim();
+  }
+
   async function setupTreeViewPage() {
     if (!window.TOLAuth) return;
 
@@ -134,7 +186,17 @@
       return;
     }
 
-    await loadFamilyOptions(familySelect, statusNode);
+    let currentContext = null;
+
+    try {
+      currentContext = await getCurrentContext();
+    } catch (error) {
+      currentContext = null;
+    }
+
+    const preferredFamilyId = getPreferredFamilyId(currentContext);
+
+    await loadFamilyOptions(familySelect, statusNode, preferredFamilyId);
 
     if (loadBtn) {
       loadBtn.addEventListener("click", async function () {
@@ -145,6 +207,7 @@
         }
 
         clearDetailPanel(detailPanel, detailEmpty);
+        setFamilyIdInUrl(familyId);
         await loadAndRenderTree(
           familyId,
           canvas,
@@ -160,9 +223,20 @@
         hideStatus(statusNode);
       });
     }
+
+    if (familySelect && familySelect.value) {
+      clearDetailPanel(detailPanel, detailEmpty);
+      await loadAndRenderTree(
+        familySelect.value,
+        canvas,
+        statusNode,
+        detailPanel,
+        detailEmpty,
+      );
+    }
   }
 
-  async function loadFamilyOptions(selectNode, statusNode) {
+  async function loadFamilyOptions(selectNode, statusNode, preferredFamilyId) {
     if (!selectNode || !window.TOLAuth) return;
 
     selectNode.innerHTML = '<option value="">Loading families...</option>';
@@ -173,6 +247,19 @@
       });
 
       if (!Array.isArray(families) || families.length === 0) {
+        if (preferredFamilyId) {
+          selectNode.innerHTML =
+            '<option value="">Select a family</option>';
+
+          const fallbackOption = document.createElement("option");
+          fallbackOption.value = preferredFamilyId;
+          fallbackOption.textContent = "Current Workspace Family";
+          selectNode.appendChild(fallbackOption);
+          selectNode.value = preferredFamilyId;
+          hideStatus(statusNode);
+          return;
+        }
+
         selectNode.innerHTML =
           '<option value="">No families available</option>';
         showStatus(
@@ -192,7 +279,20 @@
         selectNode.appendChild(option);
       });
 
-      if (families.length === 1) {
+      if (preferredFamilyId) {
+        const matched = families.some(function (family) {
+          return String(family?.id || "") === preferredFamilyId;
+        });
+
+        if (!matched) {
+          const fallbackOption = document.createElement("option");
+          fallbackOption.value = preferredFamilyId;
+          fallbackOption.textContent = "Current Workspace Family";
+          selectNode.appendChild(fallbackOption);
+        }
+
+        selectNode.value = preferredFamilyId;
+      } else if (families.length === 1) {
         selectNode.value = families[0].id;
       }
 

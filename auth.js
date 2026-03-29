@@ -4,6 +4,7 @@
   const app = window.TOLApp || window.TOLAuth;
   const POST_LOGIN_REDIRECT = "dashboard.html";
   const SIGNUP_POLICY_VERSION = "2026-03-26";
+  const DASHBOARD_CONTEXT_STORAGE_KEY = "tol_dashboard_context_v1";
 
   const INTERNAL_ROLE_KEYS = new Set([
     "admin",
@@ -314,6 +315,221 @@
     return rawId == null ? "" : String(rawId);
   }
 
+  function getFamilyIdFromRecord(record) {
+    if (!record || typeof record !== "object") return "";
+
+    const rawId = record.family_id || record.familyId;
+    return rawId == null ? "" : String(rawId).trim();
+  }
+
+  function getWorkspaceSelectionHints(search) {
+    try {
+      const params = new URLSearchParams(
+        typeof search === "string" ? search : window.location.search,
+      );
+
+      return {
+        projectId: String(params.get("project_id") || "").trim(),
+        familyId: String(params.get("family_id") || "").trim(),
+      };
+    } catch (error) {
+      return {
+        projectId: "",
+        familyId: "",
+      };
+    }
+  }
+
+  function hasWorkspaceSelectionHints(hints) {
+    return Boolean(hints?.projectId || hints?.familyId);
+  }
+
+  function candidateMatchesWorkspaceHints(candidate, hints) {
+    if (!candidate || !hasWorkspaceSelectionHints(hints)) {
+      return false;
+    }
+
+    const candidateProjectId = String(
+      candidate.projectId || getProjectIdFromRecord(candidate.activeProject),
+    ).trim();
+    const candidateFamilyId = getFamilyIdFromRecord(candidate.activeProject);
+
+    if (hints.projectId && candidateProjectId === hints.projectId) {
+      return true;
+    }
+
+    if (hints.familyId && candidateFamilyId === hints.familyId) {
+      return true;
+    }
+
+    return false;
+  }
+
+  function toSerializableContextRecord(record) {
+    if (!record || typeof record !== "object") return null;
+
+    return {
+      id: record.id,
+      _id: record._id,
+      project_id: record.project_id,
+      projectId: record.projectId,
+      family_id: record.family_id,
+      familyId: record.familyId,
+      package_code: record.package_code,
+      package_slug: record.package_slug,
+      package_name: record.package_name,
+      package_lane: record.package_lane,
+      project_lane: record.project_lane,
+      status: record.status,
+      created_at: record.created_at,
+      updated_at: record.updated_at,
+      delivered_at: record.delivered_at,
+      item_type: record.item_type,
+      resolved_entitlements:
+        record.resolved_entitlements &&
+        typeof record.resolved_entitlements === "object"
+          ? record.resolved_entitlements
+          : undefined,
+    };
+  }
+
+  function toSerializableWorkspaceCandidate(candidate) {
+    if (!candidate || typeof candidate !== "object") return null;
+
+    return {
+      source: candidate.source,
+      sourcePriority: candidate.sourcePriority,
+      projectId: candidate.projectId,
+      packageCode: candidate.packageCode,
+      packageLane: candidate.packageLane,
+      packageName: candidate.packageName,
+      sortKey: candidate.sortKey,
+      resolvedEntitlements:
+        candidate.resolvedEntitlements &&
+        typeof candidate.resolvedEntitlements === "object"
+          ? candidate.resolvedEntitlements
+          : {},
+      paidOrder: toSerializableContextRecord(candidate.paidOrder),
+      activeEntitlement: toSerializableContextRecord(candidate.activeEntitlement),
+      activeProject: toSerializableContextRecord(candidate.activeProject),
+    };
+  }
+
+  function toSerializableDashboardContext(context, user) {
+    if (!context || typeof context !== "object") return null;
+
+    return {
+      userId: String(
+        user?.id ||
+          user?._id ||
+          user?.user_id ||
+          context.user?.id ||
+          context.user?._id ||
+          "",
+      ).trim(),
+      userEmail: normalizeValue(user?.email || context.user?.email),
+      storedAt: Date.now(),
+      context: {
+        user: user
+          ? {
+              id: user.id,
+              _id: user._id,
+              user_id: user.user_id,
+              email: user.email,
+              role: user.role,
+              access_tier: user.access_tier,
+              department_role: user.department_role,
+              full_name: user.full_name,
+              name: user.name,
+            }
+          : null,
+        packageCode: context.packageCode,
+        packageLane: context.packageLane,
+        packageName: context.packageName,
+        hasPackageAccess: Boolean(context.hasPackageAccess),
+        hasPaidPackage: Boolean(context.hasPaidPackage),
+        resolvedEntitlements:
+          context.resolvedEntitlements &&
+          typeof context.resolvedEntitlements === "object"
+            ? context.resolvedEntitlements
+            : {},
+        paidOrder: toSerializableContextRecord(context.paidOrder),
+        activeEntitlement: toSerializableContextRecord(context.activeEntitlement),
+        activeProject: toSerializableContextRecord(context.activeProject),
+        currentWorkspace: toSerializableWorkspaceCandidate(context.currentWorkspace),
+      },
+    };
+  }
+
+  function cacheDashboardContext(context, user) {
+    try {
+      const payload = toSerializableDashboardContext(context, user);
+      if (!payload) return;
+
+      window.sessionStorage.setItem(
+        DASHBOARD_CONTEXT_STORAGE_KEY,
+        JSON.stringify(payload),
+      );
+    } catch (error) {
+      // no-op
+    }
+  }
+
+  function clearCachedDashboardContext() {
+    try {
+      window.sessionStorage.removeItem(DASHBOARD_CONTEXT_STORAGE_KEY);
+    } catch (error) {
+      // no-op
+    }
+  }
+
+  function readCachedDashboardContext(user, hints) {
+    try {
+      const raw = window.sessionStorage.getItem(DASHBOARD_CONTEXT_STORAGE_KEY);
+      if (!raw) return null;
+
+      const payload = JSON.parse(raw);
+      const cachedContext =
+        payload && typeof payload.context === "object" ? payload.context : null;
+
+      if (!cachedContext) return null;
+
+      const cachedUserId = String(payload.userId || "").trim();
+      const currentUserId = String(
+        user?.id || user?._id || user?.user_id || "",
+      ).trim();
+      const cachedUserEmail = normalizeValue(payload.userEmail);
+      const currentUserEmail = normalizeValue(user?.email);
+
+      if (
+        (cachedUserId && currentUserId && cachedUserId !== currentUserId) ||
+        (cachedUserEmail &&
+          currentUserEmail &&
+          cachedUserEmail !== currentUserEmail)
+      ) {
+        return null;
+      }
+
+      if (
+        hasWorkspaceSelectionHints(hints) &&
+        !candidateMatchesWorkspaceHints(cachedContext.currentWorkspace, hints) &&
+        !candidateMatchesWorkspaceHints(
+          {
+            projectId: getProjectIdFromRecord(cachedContext.activeProject),
+            activeProject: cachedContext.activeProject,
+          },
+          hints,
+        )
+      ) {
+        return null;
+      }
+
+      return cachedContext;
+    } catch (error) {
+      return null;
+    }
+  }
+
   function createProjectLookup(items) {
     return (Array.isArray(items) ? items : []).reduce(function (lookup, item) {
       const projectId = getProjectIdFromRecord(item);
@@ -432,6 +648,7 @@
       throw new Error("Login succeeded but no access token was returned.");
     }
 
+    clearCachedDashboardContext();
     app.saveToken(token);
 
     const me = await fetchCurrentUserWithToken(token);
@@ -623,7 +840,15 @@
     };
   }
 
-  function resolveCurrentWorkspace(orders, entitlements, projects) {
+  function resolveCurrentWorkspace(orders, entitlements, projects, options) {
+    const hints =
+      options && typeof options === "object"
+        ? {
+            projectId: String(options.projectId || "").trim(),
+            familyId: String(options.familyId || "").trim(),
+          }
+        : { projectId: "", familyId: "" };
+
     const paidOrders = sortByMostRecent(
       (Array.isArray(orders) ? orders : []).filter(function (order) {
         if (!hasKnownPackage(order)) return false;
@@ -687,12 +912,29 @@
       return left.sourcePriority - right.sourcePriority;
     });
 
+    if (hasWorkspaceSelectionHints(hints)) {
+      const hintedCandidate = candidates.find(function (candidate) {
+        return candidateMatchesWorkspaceHints(candidate, hints);
+      });
+
+      if (hintedCandidate) {
+        return hintedCandidate;
+      }
+    }
+
     return candidates[0] || null;
   }
 
-  async function getDashboardContext(user, orders) {
+  async function getDashboardContext(user, orders, options) {
     let entitlements = [];
     let projects = [];
+    const hints =
+      options && typeof options === "object"
+        ? {
+            projectId: String(options.projectId || "").trim(),
+            familyId: String(options.familyId || "").trim(),
+          }
+        : { projectId: "", familyId: "" };
 
     try {
       const results = await Promise.all([
@@ -715,6 +957,7 @@
       orders,
       entitlements,
       projects,
+      hints,
     );
     const paidOrder = currentWorkspace?.paidOrder || getPaidOrder(orders);
     const activeEntitlement =
@@ -766,8 +1009,20 @@
     };
   }
 
+  async function getDashboardContextForCurrentPage(user, orders) {
+    const hints = getWorkspaceSelectionHints();
+    const cached = readCachedDashboardContext(user, hints);
+
+    if (cached) {
+      return cached;
+    }
+
+    return getDashboardContext(user, orders, hints);
+  }
+
   function publishDashboardContext(context) {
     window.TOLDashboardContext = context;
+    cacheDashboardContext(context, context?.user);
 
     try {
       window.dispatchEvent(
@@ -1151,6 +1406,7 @@
       );
     } catch (error) {
       if (isAuthFailure(error)) {
+        clearCachedDashboardContext();
         app.clearSession();
         app.setStatus(
           statusNode,
@@ -1216,6 +1472,7 @@
       console.error("Dashboard load failed:", error);
 
       if (isAuthFailure(error)) {
+        clearCachedDashboardContext();
         app.clearSession();
         app.setStatus(
           statusNode,
@@ -1296,7 +1553,8 @@
         300,
       );
 
-      const context = await getDashboardContext(me, orders);
+      const context = await getDashboardContextForCurrentPage(me, orders);
+      publishDashboardContext(context);
       const resolved =
         context?.resolvedEntitlements ||
         buildFallbackEntitlements(context?.packageCode, context?.packageLane);
@@ -1336,6 +1594,7 @@
       }
     } catch (error) {
       if (isAuthFailure(error)) {
+        clearCachedDashboardContext();
         app.clearSession();
         window.location.href = "signin.html";
         return;
@@ -1358,6 +1617,7 @@
           app.clearSession();
         }
 
+        clearCachedDashboardContext();
         window.location.href = "signin.html";
       });
     });
@@ -1384,6 +1644,7 @@
       })
       .catch(function (error) {
         if (isAuthFailure(error)) {
+          clearCachedDashboardContext();
           app.clearSession();
         } else {
           console.error("Auth page protection check failed:", error);
@@ -1407,8 +1668,10 @@
     fetchProjectEntitlements,
     fetchProjects,
     getDashboardContext,
+    getDashboardContextForCurrentPage,
     getResolvedEntitlements,
     buildFallbackEntitlements,
+    getWorkspaceSelectionHints,
     normalizePackageCode,
     resolvePackageLane,
     resolvePackageDisplayName,

@@ -1,6 +1,8 @@
 (function () {
   "use strict";
 
+  const authPages = window.TOLAuthPages || {};
+
   async function setupLineageCertificatePage() {
     if (!window.TOLAuth) return;
 
@@ -106,6 +108,45 @@
       const url = new URL(window.location.href);
       url.searchParams.set("family_id", familyId);
       window.history.replaceState({}, "", url.toString());
+    }
+
+    async function getCurrentContext() {
+      if (
+        !authPages ||
+        typeof authPages.fetchOrders !== "function" ||
+        (typeof authPages.getDashboardContextForCurrentPage !== "function" &&
+          typeof authPages.getDashboardContext !== "function")
+      ) {
+        return null;
+      }
+
+      const currentUser = await window.TOLAuth.apiRequest("/auth/me", {
+        method: "GET",
+      });
+      const orders = await authPages.fetchOrders();
+
+      if (typeof authPages.getDashboardContextForCurrentPage === "function") {
+        return await authPages.getDashboardContextForCurrentPage(
+          currentUser,
+          orders,
+        );
+      }
+
+      const hints =
+        typeof authPages.getWorkspaceSelectionHints === "function"
+          ? authPages.getWorkspaceSelectionHints()
+          : undefined;
+
+      return await authPages.getDashboardContext(currentUser, orders, hints);
+    }
+
+    function getPreferredFamilyId(context) {
+      return String(
+        getFamilyIdFromUrl() ||
+          context?.activeProject?.family_id ||
+          context?.activeProject?.familyId ||
+          "",
+      ).trim();
     }
 
     function populateFamilyDropdown(families) {
@@ -227,7 +268,7 @@
       `;
     }
 
-    async function loadFamilyOptions() {
+    async function loadFamilyOptions(preferredFamilyId) {
       if (!familySelect) return;
 
       familySelect.disabled = true;
@@ -245,15 +286,38 @@
         populateFamilyDropdown(families);
 
         if (!families.length) {
+          if (preferredFamilyId) {
+            familySelect.innerHTML =
+              '<option value="">Select a family</option>';
+
+            const fallbackOption = document.createElement("option");
+            fallbackOption.value = preferredFamilyId;
+            fallbackOption.textContent = "Current Workspace Family";
+            familySelect.appendChild(fallbackOption);
+            familySelect.value = preferredFamilyId;
+            clearStatus();
+            return;
+          }
+
           familySelect.innerHTML =
             '<option value="">No families available</option>';
           setStatus("No families were found for this account.", "error");
           return;
         }
 
-        const urlFamilyId = getFamilyIdFromUrl();
-        if (urlFamilyId) {
-          familySelect.value = urlFamilyId;
+        if (preferredFamilyId) {
+          const matched = families.some(function (family) {
+            return String(family?.id || "") === preferredFamilyId;
+          });
+
+          if (!matched) {
+            const fallbackOption = document.createElement("option");
+            fallbackOption.value = preferredFamilyId;
+            fallbackOption.textContent = "Current Workspace Family";
+            familySelect.appendChild(fallbackOption);
+          }
+
+          familySelect.value = preferredFamilyId;
         }
 
         clearStatus();
@@ -325,11 +389,19 @@
     showOutput(false);
     clearStatus();
 
-    await loadFamilyOptions();
+    let currentContext = null;
+    try {
+      currentContext = await getCurrentContext();
+    } catch (error) {
+      currentContext = null;
+    }
 
-    const urlFamilyId = getFamilyIdFromUrl();
-    if (urlFamilyId && familySelect) {
-      familySelect.value = urlFamilyId;
+    const preferredFamilyId = getPreferredFamilyId(currentContext);
+
+    await loadFamilyOptions(preferredFamilyId);
+
+    if (preferredFamilyId && familySelect) {
+      familySelect.value = preferredFamilyId;
       if (familySelect.value) {
         await generateSelectedCertificate();
       }
