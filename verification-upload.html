@@ -499,13 +499,64 @@
           const auth = window.TOLAuthPages || {};
           if (!app || typeof app.apiRequest !== "function") return;
 
+          function getFamilyIdFromContext(context) {
+            return String(
+              context?.activeProject?.family_id ||
+                context?.activeProject?.familyId ||
+                "",
+            ).trim();
+          }
+
+          function getProjectIdFromContext(context) {
+            return String(
+              context?.activeProject?.project_id ||
+                context?.activeProject?.projectId ||
+                context?.activeProject?.id ||
+                context?.activeProject?._id ||
+                context?.currentWorkspace?.projectId ||
+                "",
+            ).trim();
+          }
+
+          function withWorkspaceHref(href, context) {
+            if (!href) return href;
+
+            const familyId = getFamilyIdFromContext(context);
+            const projectId = getProjectIdFromContext(context);
+
+            if (!familyId && !projectId) {
+              return href;
+            }
+
+            try {
+              const url = new URL(href, window.location.href);
+              if (familyId) {
+                url.searchParams.set("family_id", familyId);
+              }
+              if (projectId) {
+                url.searchParams.set("project_id", projectId);
+              }
+              return `${url.pathname.split("/").pop() || href}${url.search}`;
+            } catch (error) {
+              return href;
+            }
+          }
+
+          function updateNavHref(href, context) {
+            document
+              .querySelectorAll(`.site-nav a[href^="${href}"]`)
+              .forEach(function (node) {
+                node.setAttribute("href", withWorkspaceHref(href, context));
+              });
+          }
+
           const token = app.getToken ? app.getToken() : null;
           if (!token) return;
 
           const me = await app.apiRequest("/auth/me", { method: "GET" });
           if (auth.isInternalRole && auth.isInternalRole(me)) {
             document
-              .querySelectorAll('.site-nav a[href="verification-upload.html"]')
+              .querySelectorAll('.site-nav a[href^="verification-upload.html"]')
               .forEach(function (node) {
                 node.style.display = "";
               });
@@ -513,9 +564,12 @@
           }
 
           const orders = auth.fetchOrders ? await auth.fetchOrders() : [];
-          const context = auth.getDashboardContext
-            ? await auth.getDashboardContext(me, orders)
-            : null;
+          const context =
+            typeof auth.getDashboardContextForCurrentPage === "function"
+              ? await auth.getDashboardContextForCurrentPage(me, orders)
+              : auth.getDashboardContext
+                ? await auth.getDashboardContext(me, orders)
+                : null;
 
           const resolved =
             context?.resolvedEntitlements ||
@@ -534,32 +588,38 @@
           const canBuildFamilyTree = !!resolved.can_build_family_tree;
           const canUseCertificate = !!resolved.can_use_lineage_certificate;
 
+          updateNavHref("intake-review.html", context);
+          updateNavHref("verification-upload.html", context);
+          updateNavHref("link-keys.html", context);
+          updateNavHref("tree-view.html", context);
+          updateNavHref("lineage-certificate.html", context);
+
           document
-            .querySelectorAll('.site-nav a[href="intake-review.html"]')
+            .querySelectorAll('.site-nav a[href^="intake-review.html"]')
             .forEach(function (node) {
               node.style.display = canOpenFamilyIntake ? "" : "none";
             });
 
           document
-            .querySelectorAll('.site-nav a[href="verification-upload.html"]')
+            .querySelectorAll('.site-nav a[href^="verification-upload.html"]')
             .forEach(function (node) {
               node.style.display = canUpload ? "" : "none";
             });
 
           document
-            .querySelectorAll('.site-nav a[href="link-keys.html"]')
+            .querySelectorAll('.site-nav a[href^="link-keys.html"]')
             .forEach(function (node) {
               node.style.display = canUseLinkKeys ? "" : "none";
             });
 
           document
-            .querySelectorAll('.site-nav a[href="tree-view.html"]')
+            .querySelectorAll('.site-nav a[href^="tree-view.html"]')
             .forEach(function (node) {
               node.style.display = canBuildFamilyTree ? "" : "none";
             });
 
           document
-            .querySelectorAll('.site-nav a[href="lineage-certificate.html"]')
+            .querySelectorAll('.site-nav a[href^="lineage-certificate.html"]')
             .forEach(function (node) {
               node.style.display = canUseCertificate ? "" : "none";
             });

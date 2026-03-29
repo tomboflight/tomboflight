@@ -211,6 +211,38 @@
       .replaceAll("'", "&#039;");
   }
 
+  function withWorkspaceHref(href, submission) {
+    if (!href) return href;
+
+    const familyId = String(
+      submission?.family_root_id ||
+        submission?.familyRootId ||
+        submission?.family_id ||
+        submission?.familyId ||
+        "",
+    ).trim();
+    const projectId = String(
+      submission?.project_id || submission?.projectId || "",
+    ).trim();
+
+    if (!familyId && !projectId) {
+      return href;
+    }
+
+    try {
+      const url = new URL(href, window.location.href);
+      if (familyId) {
+        url.searchParams.set("family_id", familyId);
+      }
+      if (projectId) {
+        url.searchParams.set("project_id", projectId);
+      }
+      return `${url.pathname.split("/").pop() || href}${url.search}`;
+    } catch (error) {
+      return href;
+    }
+  }
+
   function hydrateForm(form, values) {
     if (!form || !values) return;
 
@@ -261,14 +293,18 @@
     if (
       !authPages ||
       typeof authPages.fetchOrders !== "function" ||
-      typeof authPages.getDashboardContext !== "function"
+      (typeof authPages.getDashboardContextForCurrentPage !== "function" &&
+        typeof authPages.getDashboardContext !== "function")
     ) {
       return null;
     }
 
     const currentUser = await app.fetchCurrentUser();
     const orders = await authPages.fetchOrders();
-    const context = await authPages.getDashboardContext(currentUser, orders);
+    const context =
+      typeof authPages.getDashboardContextForCurrentPage === "function"
+        ? await authPages.getDashboardContextForCurrentPage(currentUser, orders)
+        : await authPages.getDashboardContext(currentUser, orders);
 
     return context && context.hasPackageAccess ? context : null;
   }
@@ -449,7 +485,10 @@
       ) {
         secondaryAction.style.display = "inline-flex";
         secondaryAction.textContent = "Open Family Tree";
-        secondaryAction.setAttribute("href", "tree-view.html");
+        secondaryAction.setAttribute(
+          "href",
+          withWorkspaceHref("tree-view.html", latestSubmission),
+        );
       } else {
         secondaryAction.style.display = "none";
       }

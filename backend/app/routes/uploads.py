@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse
 
 from app.config import settings
 from app.database import get_database
-from app.dependencies.auth import get_current_user
+from app.dependencies.auth import get_current_user, require_any_package_capability
 from app.services.upload_service import (
     serialize_upload_record,
     store_member_photo_upload,
@@ -367,6 +367,13 @@ async def upload_member_photo(
     file: UploadFile = File(...),
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
+    require_any_package_capability(
+        current_user,
+        "can_upload_portraits",
+        "can_upload_verification_docs",
+        detail="Your active package does not include upload access.",
+    )
+
     db = get_database()
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")
@@ -414,6 +421,13 @@ async def upload_verification_evidence(
     file: UploadFile = File(...),
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
+    require_any_package_capability(
+        current_user,
+        "can_upload_verification_docs",
+        "can_upload_portraits",
+        detail="Your active package does not include upload access.",
+    )
+
     db = get_database()
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")
@@ -469,6 +483,13 @@ def list_member_uploads(
     category: Optional[str] = Query(default=None),
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
+    require_any_package_capability(
+        current_user,
+        "can_upload_verification_docs",
+        "can_upload_portraits",
+        detail="Your active package does not include upload access.",
+    )
+
     db = get_database()
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")
@@ -495,6 +516,13 @@ def list_family_uploads(
     category: Optional[str] = Query(default=None),
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
+    require_any_package_capability(
+        current_user,
+        "can_upload_verification_docs",
+        "can_upload_portraits",
+        detail="Your active package does not include upload access.",
+    )
+
     db = get_database()
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")
@@ -519,6 +547,13 @@ def download_upload(
     upload_id: str,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
+    require_any_package_capability(
+        current_user,
+        "can_upload_verification_docs",
+        "can_upload_portraits",
+        detail="Your active package does not include upload access.",
+    )
+
     db = get_database()
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")
@@ -550,6 +585,13 @@ def delete_upload(
     upload_id: str,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
+    require_any_package_capability(
+        current_user,
+        "can_upload_verification_docs",
+        "can_upload_portraits",
+        detail="Your active package does not include upload access.",
+    )
+
     db = get_database()
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")

@@ -37,6 +37,50 @@ def _entitlements_collection():
     return db["project_entitlements"]
 
 
+def _orders_collection():
+    db = get_database()
+    return db["orders"]
+
+
+def _normalize_value(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _project_id_candidates(project_id: str) -> list[Any]:
+    values: list[Any] = [str(project_id)]
+    oid = _to_object_id(project_id)
+    if oid is not None:
+        values.append(oid)
+    return values
+
+
+def _is_paid_package_order(order: dict[str, Any] | None) -> bool:
+    if not isinstance(order, dict):
+        return False
+
+    item_type = _normalize_value(order.get("item_type") or "package").lower()
+    status = _normalize_value(order.get("status")).lower()
+
+    return item_type == "package" and status in {
+        "paid",
+        "complete",
+        "completed",
+        "succeeded",
+    }
+
+
+def _get_paid_package_order(project_id: str) -> dict[str, Any] | None:
+    cursor = _orders_collection().find(
+        {"project_id": {"$in": _project_id_candidates(project_id)}}
+    ).sort("created_at", -1)
+
+    for order in cursor:
+        if _is_paid_package_order(order):
+            return order
+
+    return None
+
+
 def _serialize_key(document: dict[str, Any] | None) -> dict[str, Any] | None:
     if not document:
         return None
@@ -70,7 +114,17 @@ def get_project_summary(project_id: str) -> dict[str, Any] | None:
         return None
 
     raw_id = project.get("_id")
-    package_code = str(project.get("package_code") or project.get("package_slug") or "").strip()
+    project_id_str = str(raw_id)
+    entitlement = _get_project_entitlement(project_id_str)
+    paid_order = _get_paid_package_order(project_id_str)
+    package_code = str(
+        (entitlement or {}).get("package_code")
+        or (paid_order or {}).get("package_code")
+        or (paid_order or {}).get("package_slug")
+        or project.get("package_code")
+        or project.get("package_slug")
+        or ""
+    ).strip()
     package = get_package(package_code) or {}
 
     return {
@@ -79,8 +133,21 @@ def get_project_summary(project_id: str) -> dict[str, Any] | None:
         "owner_user_id": str(project.get("owner_user_id") or "").strip(),
         "owner_email": str(project.get("owner_email") or "").strip(),
         "package_code": package_code or None,
-        "package_name": str(project.get("package_name") or package.get("display_name") or "").strip() or None,
-        "package_lane": str(project.get("project_lane") or package.get("package_lane") or "").strip() or None,
+        "package_name": str(
+            (entitlement or {}).get("package_name")
+            or (paid_order or {}).get("package_name")
+            or project.get("package_name")
+            or package.get("display_name")
+            or ""
+        ).strip()
+        or None,
+        "package_lane": str(
+            (entitlement or {}).get("package_lane")
+            or project.get("project_lane")
+            or package.get("package_lane")
+            or ""
+        ).strip()
+        or None,
         "household_id": str(project.get("household_id") or "").strip() or None,
         "family_id": str(project.get("family_id") or "").strip() or None,
     }
@@ -104,11 +171,12 @@ def project_supports_link_keys(project_id: str) -> bool:
         if "can_use_link_keys" in resolved:
             return bool(resolved.get("can_use_link_keys"))
 
-    project = get_project_by_id(project_id)
-    if not project:
-        return False
-
-    package_code = str(project.get("package_code") or project.get("package_slug") or "").strip()
+    paid_order = _get_paid_package_order(project_id)
+    package_code = str(
+        (paid_order or {}).get("package_code")
+        or (paid_order or {}).get("package_slug")
+        or ""
+    ).strip()
     package = get_package(package_code) or {}
     return bool(package.get("can_use_link_keys", False))
 
@@ -117,12 +185,25 @@ def user_can_access_project(project_id: str, user_id: str) -> bool:
     summary = get_project_summary(project_id)
     if not summary:
         return False
-    return str(summary.get("owner_user_id") or "") == str(user_id or "")
+
+    if str(summary.get("owner_user_id") or "") != str(user_id or ""):
+        return False
+
+    return bool(
+        _get_project_entitlement(project_id) or _get_paid_package_order(project_id)
+    )
 
 
 def list_owned_project_ids(user_id: str) -> list[str]:
     cursor = _projects_collection().find({"owner_user_id": str(user_id or "")})
-    return [str(item.get("_id")) for item in cursor]
+
+    project_ids: list[str] = []
+    for item in cursor:
+        project_id = str(item.get("_id"))
+        if user_can_access_project(project_id, user_id):
+            project_ids.append(project_id)
+
+    return project_ids
 
 
 def get_active_key_doc_for_project(project_id: str) -> dict[str, Any] | None:

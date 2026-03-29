@@ -2,6 +2,7 @@
   "use strict";
 
   const app = window.TOLApp || window.TOLAuth;
+  const authPages = window.TOLAuthPages || {};
   if (!app || typeof app.apiRequest !== "function") {
     console.error("verification-upload.js requires app.js/auth.js first.");
     return;
@@ -21,6 +22,7 @@
   ]);
 
   let currentFamilyId = "";
+  let currentContext = null;
   let currentGraph = { members: [] };
   let families = [];
 
@@ -61,6 +63,104 @@
     if (!node) return;
     node.style.display = "none";
     node.textContent = "";
+  }
+
+  function getFamilyIdFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("family_id") || "";
+  }
+
+  function setFamilyIdInUrl(familyId) {
+    if (!familyId) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("family_id", familyId);
+    window.history.replaceState({}, "", url.toString());
+  }
+
+  function getFamilyIdFromContext(context) {
+    return String(
+      context?.activeProject?.family_id || context?.activeProject?.familyId || "",
+    ).trim();
+  }
+
+  function getProjectIdFromContext(context) {
+    return String(
+      context?.activeProject?.project_id ||
+        context?.activeProject?.projectId ||
+        context?.activeProject?.id ||
+        context?.activeProject?._id ||
+        context?.currentWorkspace?.projectId ||
+        "",
+    ).trim();
+  }
+
+  function withWorkspaceHref(href, context, familyIdOverride) {
+    if (!href) return href;
+
+    const familyId = String(
+      familyIdOverride || getFamilyIdFromUrl() || getFamilyIdFromContext(context) || "",
+    ).trim();
+    const projectId = getProjectIdFromContext(context);
+
+    if (!familyId && !projectId) {
+      return href;
+    }
+
+    try {
+      const url = new URL(href, window.location.href);
+      if (familyId) {
+        url.searchParams.set("family_id", familyId);
+      }
+      if (projectId) {
+        url.searchParams.set("project_id", projectId);
+      }
+      return `${url.pathname.split("/").pop() || href}${url.search}`;
+    } catch (error) {
+      return href;
+    }
+  }
+
+  function updateNav(context, familyIdOverride) {
+    [
+      "intake-review.html",
+      "verification-upload.html",
+      "link-keys.html",
+      "tree-view.html",
+      "lineage-certificate.html",
+    ].forEach(function (href) {
+      document.querySelectorAll(`.site-nav a[href^="${href}"]`).forEach(function (node) {
+        node.setAttribute("href", withWorkspaceHref(href, context, familyIdOverride));
+      });
+    });
+  }
+
+  async function getCurrentContext() {
+    if (
+      !authPages ||
+      typeof authPages.fetchOrders !== "function" ||
+      (typeof authPages.getDashboardContextForCurrentPage !== "function" &&
+        typeof authPages.getDashboardContext !== "function")
+    ) {
+      return null;
+    }
+
+    const me = await app.apiRequest("/auth/me", { method: "GET" });
+    const orders = await authPages.fetchOrders();
+
+    if (typeof authPages.getDashboardContextForCurrentPage === "function") {
+      return await authPages.getDashboardContextForCurrentPage(me, orders);
+    }
+
+    const hints =
+      typeof authPages.getWorkspaceSelectionHints === "function"
+        ? authPages.getWorkspaceSelectionHints()
+        : undefined;
+
+    return await authPages.getDashboardContext(me, orders, hints);
+  }
+
+  function getPreferredFamilyId(context) {
+    return String(getFamilyIdFromUrl() || getFamilyIdFromContext(context) || "").trim();
   }
 
   function getDisplayName(member) {
@@ -129,14 +229,28 @@
     );
   }
 
-  function renderFamilies() {
+  function renderFamilies(preferredFamilyId) {
     const selectNode = document.querySelector(
       "[data-verification-family-select]",
     );
     if (!selectNode) return;
 
     if (!families.length) {
+      if (preferredFamilyId) {
+        selectNode.innerHTML = `<option value="">Select family</option>`;
+        const option = document.createElement("option");
+        option.value = preferredFamilyId;
+        option.textContent = "Current Workspace Family";
+        selectNode.appendChild(option);
+        selectNode.value = preferredFamilyId;
+        currentFamilyId = preferredFamilyId;
+        updateNav(currentContext, currentFamilyId);
+        return;
+      }
+
       selectNode.innerHTML = `<option value="">No family records found</option>`;
+      currentFamilyId = "";
+      updateNav(currentContext, "");
       return;
     }
 
@@ -153,10 +267,28 @@
       selectNode.appendChild(option);
     });
 
-    if (families.length === 1) {
+    if (preferredFamilyId) {
+      const matched = families.some(function (family) {
+        return String(family?.id || "") === preferredFamilyId;
+      });
+
+      if (!matched) {
+        const option = document.createElement("option");
+        option.value = preferredFamilyId;
+        option.textContent = "Current Workspace Family";
+        selectNode.appendChild(option);
+      }
+
+      selectNode.value = preferredFamilyId;
+      currentFamilyId = selectNode.value || preferredFamilyId;
+    } else if (families.length === 1) {
       selectNode.value = families[0].id;
       currentFamilyId = families[0].id;
+    } else {
+      currentFamilyId = "";
     }
+
+    updateNav(currentContext, currentFamilyId);
   }
 
   function validateRequiredForm(form, statusNode) {
@@ -188,7 +320,7 @@
     });
   }
 
-  async function loadFamilies() {
+  async function loadFamilies(preferredFamilyId) {
     const pageStatus = document.querySelector(
       "[data-verification-page-status]",
     );
@@ -204,11 +336,13 @@
         families = [];
       }
 
-      renderFamilies();
+      renderFamilies(preferredFamilyId);
 
       pageStatus.textContent = families.length
         ? `Loaded ${families.length} family record(s).`
-        : "No family records are available yet.";
+        : preferredFamilyId
+          ? "Loaded your current workspace family."
+          : "No family records are available yet.";
     } catch (error) {
       console.error("Failed to load families:", error);
       pageStatus.textContent = "Unable to load family records.";
@@ -240,6 +374,8 @@
     try {
       clearStatus(actionStatus);
       currentFamilyId = familyId;
+      setFamilyIdInUrl(familyId);
+      updateNav(currentContext, familyId);
 
       const graph = await app.apiRequest(
         `/families/${encodeURIComponent(familyId)}/graph`,
@@ -615,7 +751,15 @@
       }
 
       await app.apiRequest("/auth/me", { method: "GET" });
-      await loadFamilies();
+      try {
+        currentContext = await getCurrentContext();
+      } catch (error) {
+        currentContext = null;
+      }
+
+      const preferredFamilyId = getPreferredFamilyId(currentContext);
+      updateNav(currentContext, preferredFamilyId);
+      await loadFamilies(preferredFamilyId);
 
       const loadFamilyButton = document.querySelector(
         "[data-verification-load-family]",
@@ -665,6 +809,11 @@
       const familySelect = document.querySelector(
         "[data-verification-family-select]",
       );
+      if (familySelect) {
+        familySelect.addEventListener("change", function () {
+          updateNav(currentContext, familySelect.value);
+        });
+      }
       if (familySelect && familySelect.value) {
         await loadFamilyGraph();
       }

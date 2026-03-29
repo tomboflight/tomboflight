@@ -110,6 +110,52 @@
       window.history.replaceState({}, "", url.toString());
     }
 
+    function getProjectIdFromContext(context) {
+      return String(
+        context?.activeProject?.project_id ||
+          context?.activeProject?.projectId ||
+          context?.activeProject?.id ||
+          context?.activeProject?._id ||
+          context?.currentWorkspace?.projectId ||
+          "",
+      ).trim();
+    }
+
+    function withWorkspaceHref(href, context, familyIdOverride) {
+      if (!href) return href;
+
+      const familyId = String(
+        familyIdOverride || getFamilyIdFromUrl() || getPreferredFamilyId(context) || "",
+      ).trim();
+      const projectId = getProjectIdFromContext(context);
+
+      if (!familyId && !projectId) {
+        return href;
+      }
+
+      try {
+        const url = new URL(href, window.location.href);
+        if (familyId) {
+          url.searchParams.set("family_id", familyId);
+        }
+        if (projectId) {
+          url.searchParams.set("project_id", projectId);
+        }
+        return `${url.pathname.split("/").pop() || href}${url.search}`;
+      } catch (error) {
+        return href;
+      }
+    }
+
+    function updateWorkspaceLinks(context, familyIdOverride) {
+      document.querySelectorAll('a[href^="tree-view.html"]').forEach(function (node) {
+        node.setAttribute(
+          "href",
+          withWorkspaceHref("tree-view.html", context, familyIdOverride),
+        );
+      });
+    }
+
     async function getCurrentContext() {
       if (
         !authPages ||
@@ -351,6 +397,7 @@
 
       try {
         setFamilyIdInUrl(familyId);
+        updateWorkspaceLinks(currentContext, familyId);
         const data = await window.TOLAuth.apiRequest(
           `/lineage-certificate/${encodeURIComponent(familyId)}`,
           { method: "GET" },
@@ -375,6 +422,7 @@
 
     if (familySelect) {
       familySelect.addEventListener("change", function () {
+        updateWorkspaceLinks(currentContext, familySelect.value);
         clearStatus();
       });
     }
@@ -397,6 +445,7 @@
     }
 
     const preferredFamilyId = getPreferredFamilyId(currentContext);
+    updateWorkspaceLinks(currentContext, preferredFamilyId);
 
     await loadFamilyOptions(preferredFamilyId);
 
