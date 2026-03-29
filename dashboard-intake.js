@@ -672,7 +672,7 @@
     );
 
     applyAction(
-      '[data-dashboard-workspace-tree-action], a[href="tree-view.html"][data-paid-action]',
+      "[data-dashboard-hero-tree-action], [data-dashboard-package-tree-action], [data-dashboard-workspace-tree-action], a[href=\"tree-view.html\"][data-paid-action]",
       {
         text: "Open Family Tree",
         href: "tree-view.html",

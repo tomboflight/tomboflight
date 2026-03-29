@@ -2,6 +2,7 @@
   "use strict";
 
   const app = window.TOLApp || window.TOLAuth;
+  const authPages = window.TOLAuthPages || {};
   const DRAFT_KEY = "tol_intake_draft_v1";
   const LATEST_SUBMISSION_CACHE_KEY = "tol_latest_intake_submission_v1";
   const POLICY_VERSION = "2026-03-26";
@@ -256,24 +257,20 @@
     return true;
   }
 
-  async function fetchPaidOrder() {
-    const payload = await app.apiRequest("/orders/my-orders", {
-      method: "GET",
-    });
-    const orders = Array.isArray(payload)
-      ? payload
-      : Array.isArray(payload?.orders)
-        ? payload.orders
-        : Array.isArray(payload?.data)
-          ? payload.data
-          : [];
+  async function getCurrentWorkspaceContext() {
+    if (
+      !authPages ||
+      typeof authPages.fetchOrders !== "function" ||
+      typeof authPages.getDashboardContext !== "function"
+    ) {
+      return null;
+    }
 
-    return (
-      orders.find(function (order) {
-        const status = String(order?.status || "").toLowerCase();
-        return ["paid", "complete", "completed", "succeeded"].includes(status);
-      }) || null
-    );
+    const currentUser = await app.fetchCurrentUser();
+    const orders = await authPages.fetchOrders();
+    const context = await authPages.getDashboardContext(currentUser, orders);
+
+    return context && context.hasPackageAccess ? context : null;
   }
 
   async function getLatestSubmission() {
@@ -480,22 +477,26 @@
     const intakeStart = document.querySelector("[data-intake-start]");
 
     try {
-      const paidOrder = await fetchPaidOrder();
+      const currentContext = await getCurrentWorkspaceContext();
       const latestSubmission = await getLatestSubmission();
       const draft = loadDraft();
 
-      if (paidOrder) {
+      if (currentContext) {
+        const activePackageName =
+          currentContext.packageName || draft.package_name || "Active Package";
+
         draft.package_name =
-          paidOrder.package_name || draft.package_name || "Active Package";
-        draft.package_slug = paidOrder.package_slug || draft.package_slug || "";
+          activePackageName;
+        draft.package_slug =
+          currentContext.packageCode || draft.package_slug || "";
         saveDraft(draft);
 
         if (packageName) {
-          packageName.textContent = paidOrder.package_name || "Active Package";
+          packageName.textContent = activePackageName;
         }
 
         if (packageSummary) {
-          packageSummary.textContent = `Your package is active and ready for onboarding. Current unlocked package: ${paidOrder.package_name || "Active Package"}.`;
+          packageSummary.textContent = `Your package is active and ready for onboarding. Current unlocked package: ${activePackageName}.`;
         }
 
         if (packagePath) {
@@ -553,7 +554,7 @@
           }
         } else {
           if (intakeStatus) {
-            intakeStatus.textContent = `Your package is active: ${paidOrder.package_name || "Active Package"}. Begin your household onboarding below.`;
+            intakeStatus.textContent = `Your package is active: ${activePackageName}. Begin your household onboarding below.`;
           }
         }
       } else {

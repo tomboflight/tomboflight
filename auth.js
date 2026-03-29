@@ -268,16 +268,76 @@
     });
   }
 
+  function toTimestamp(value) {
+    if (!value) return 0;
+
+    const timestamp = new Date(value).getTime();
+    return Number.isFinite(timestamp) ? timestamp : 0;
+  }
+
+  function getRecordRecency(record) {
+    if (!record || typeof record !== "object") return 0;
+
+    return Math.max(
+      toTimestamp(record.updated_at),
+      toTimestamp(record.created_at),
+      toTimestamp(record.delivered_at),
+      toTimestamp(record.maintenance_started_at),
+    );
+  }
+
+  function sortByMostRecent(items) {
+    return (Array.isArray(items) ? items.slice() : []).sort(function (a, b) {
+      return getRecordRecency(b) - getRecordRecency(a);
+    });
+  }
+
+  function getPackageCodeFromRecord(record) {
+    if (!record || typeof record !== "object") return "";
+
+    return stripMaintenanceSuffix(
+      normalizePackageCode(
+        record.package_code || record.package_slug || record.package_type,
+      ),
+    );
+  }
+
+  function hasKnownPackage(record) {
+    const packageCode = getPackageCodeFromRecord(record);
+    return Boolean(packageCode && packageCode !== "unknown");
+  }
+
+  function getProjectIdFromRecord(record) {
+    if (!record || typeof record !== "object") return "";
+
+    const rawId = record.project_id || record.projectId || record.id || record._id;
+    return rawId == null ? "" : String(rawId);
+  }
+
+  function createProjectLookup(items) {
+    return (Array.isArray(items) ? items : []).reduce(function (lookup, item) {
+      const projectId = getProjectIdFromRecord(item);
+      if (projectId && !lookup.has(projectId)) {
+        lookup.set(projectId, item);
+      }
+      return lookup;
+    }, new Map());
+  }
+
   function getPaidOrder(orders) {
     return (
-      orders.find(function (order) {
-        const status = normalizeValue(order?.status);
-        const itemType = normalizeValue(order?.item_type || "package");
-        return (
-          itemType === "package" &&
-          ["paid", "complete", "completed", "succeeded"].includes(status)
-        );
-      }) || null
+      sortByMostRecent(
+        (Array.isArray(orders) ? orders : []).filter(function (order) {
+          if (!hasKnownPackage(order)) return false;
+
+          const status = normalizeValue(order?.status);
+          const itemType = normalizeValue(order?.item_type || "package");
+          return (
+            itemType === "package" &&
+            ["paid", "complete", "completed", "succeeded"].includes(status)
+          );
+        }),
+      )[0] || null
     );
   }
 
@@ -456,40 +516,178 @@
   }
 
   function getActiveEntitlement(entitlements) {
-    if (!Array.isArray(entitlements) || !entitlements.length) return null;
+    const active = sortByMostRecent(
+      (Array.isArray(entitlements) ? entitlements : []).filter(function (item) {
+        return hasKnownPackage(item) && normalizeValue(item.status) === "active";
+      }),
+    );
+
+    if (active.length) return active[0];
 
     return (
-      entitlements.find(function (item) {
-        return normalizeValue(item.status) === "active";
-      }) || entitlements[0]
+      sortByMostRecent(
+        (Array.isArray(entitlements) ? entitlements : []).filter(hasKnownPackage),
+      )[0] || null
     );
   }
 
   function getActiveProject(projects, activeEntitlement, paidOrder) {
-    if (!Array.isArray(projects) || !projects.length) return null;
+    const validProjects = sortByMostRecent(
+      (Array.isArray(projects) ? projects : []).filter(hasKnownPackage),
+    );
+    if (!validProjects.length) return null;
 
-    const entitlementProjectId = activeEntitlement?.project_id;
+    const projectsById = createProjectLookup(validProjects);
+
+    const entitlementProjectId = getProjectIdFromRecord(activeEntitlement);
     if (entitlementProjectId) {
-      const found = projects.find(function (project) {
-        return (
-          String(project.id || project._id || "") ===
-          String(entitlementProjectId)
-        );
-      });
+      const found = projectsById.get(entitlementProjectId);
       if (found) return found;
     }
 
-    const paidOrderProjectId = paidOrder?.project_id;
+    const paidOrderProjectId = getProjectIdFromRecord(paidOrder);
     if (paidOrderProjectId) {
-      const found = projects.find(function (project) {
-        return (
-          String(project.id || project._id || "") === String(paidOrderProjectId)
-        );
-      });
+      const found = projectsById.get(paidOrderProjectId);
       if (found) return found;
     }
 
-    return projects[0] || null;
+    return validProjects[0] || null;
+  }
+
+  function buildWorkspaceCandidate(source, record, lookups) {
+    if (!record || !hasKnownPackage(record)) return null;
+
+    const recordProjectId = getProjectIdFromRecord(record);
+    const activeEntitlement =
+      source === "entitlement"
+        ? record
+        : recordProjectId
+          ? lookups.entitlementsByProjectId.get(recordProjectId) || null
+          : null;
+    const activeProject =
+      source === "project"
+        ? record
+        : recordProjectId
+          ? lookups.projectsById.get(recordProjectId) || null
+          : null;
+    const paidOrder =
+      source === "order"
+        ? record
+        : recordProjectId
+          ? lookups.ordersByProjectId.get(recordProjectId) || null
+          : null;
+
+    const packageCode =
+      getPackageCodeFromRecord(activeEntitlement) ||
+      getPackageCodeFromRecord(activeProject) ||
+      getPackageCodeFromRecord(paidOrder) ||
+      getPackageCodeFromRecord(record);
+
+    if (!packageCode || packageCode === "unknown") {
+      return null;
+    }
+
+    const packageLane =
+      normalizeValue(activeEntitlement?.package_lane) ||
+      normalizeValue(activeProject?.project_lane) ||
+      resolvePackageLane(packageCode);
+
+    return {
+      source,
+      sourcePriority:
+        source === "entitlement" ? 0 : source === "order" ? 1 : 2,
+      paidOrder,
+      activeEntitlement,
+      activeProject,
+      projectId:
+        recordProjectId || getProjectIdFromRecord(activeEntitlement) || getProjectIdFromRecord(activeProject),
+      packageCode,
+      packageLane,
+      packageName:
+        activeEntitlement?.package_name ||
+        activeEntitlement?.resolved_entitlements?.display_name ||
+        paidOrder?.package_name ||
+        activeProject?.package_name ||
+        resolvePackageDisplayName(packageCode),
+      resolvedEntitlements: getResolvedEntitlements(
+        activeEntitlement,
+        packageCode,
+        packageLane,
+      ),
+      sortKey: Math.max(
+        getRecordRecency(record),
+        getRecordRecency(activeEntitlement),
+        getRecordRecency(activeProject),
+        getRecordRecency(paidOrder),
+      ),
+    };
+  }
+
+  function resolveCurrentWorkspace(orders, entitlements, projects) {
+    const paidOrders = sortByMostRecent(
+      (Array.isArray(orders) ? orders : []).filter(function (order) {
+        if (!hasKnownPackage(order)) return false;
+
+        const status = normalizeValue(order?.status);
+        const itemType = normalizeValue(order?.item_type || "package");
+        return (
+          itemType === "package" &&
+          ["paid", "complete", "completed", "succeeded"].includes(status)
+        );
+      }),
+    );
+    const activeEntitlements = sortByMostRecent(
+      (Array.isArray(entitlements) ? entitlements : []).filter(function (item) {
+        return hasKnownPackage(item) && normalizeValue(item.status) === "active";
+      }),
+    );
+    const validProjects = sortByMostRecent(
+      (Array.isArray(projects) ? projects : []).filter(hasKnownPackage),
+    );
+
+    const lookups = {
+      ordersByProjectId: createProjectLookup(paidOrders),
+      entitlementsByProjectId: createProjectLookup(activeEntitlements),
+      projectsById: createProjectLookup(validProjects),
+    };
+
+    const candidates = [];
+    const seen = new Set();
+
+    function pushCandidate(source, record) {
+      const candidate = buildWorkspaceCandidate(source, record, lookups);
+      if (!candidate) return;
+
+      const key = [
+        candidate.projectId || "no-project",
+        candidate.packageCode || "no-package",
+        candidate.source,
+      ].join("|");
+
+      if (seen.has(key)) return;
+      seen.add(key);
+      candidates.push(candidate);
+    }
+
+    activeEntitlements.forEach(function (item) {
+      pushCandidate("entitlement", item);
+    });
+    paidOrders.forEach(function (item) {
+      pushCandidate("order", item);
+    });
+    validProjects.forEach(function (item) {
+      pushCandidate("project", item);
+    });
+
+    candidates.sort(function (left, right) {
+      if (right.sortKey !== left.sortKey) {
+        return right.sortKey - left.sortKey;
+      }
+
+      return left.sourcePriority - right.sourcePriority;
+    });
+
+    return candidates[0] || null;
   }
 
   async function getDashboardContext(user, orders) {
@@ -513,42 +711,42 @@
       projects = [];
     }
 
-    const paidOrder = getPaidOrder(orders);
-    const activeEntitlement = getActiveEntitlement(entitlements);
-    const activeProject = getActiveProject(
+    const currentWorkspace = resolveCurrentWorkspace(
+      orders,
+      entitlements,
       projects,
-      activeEntitlement,
-      paidOrder,
     );
+    const paidOrder = currentWorkspace?.paidOrder || getPaidOrder(orders);
+    const activeEntitlement =
+      currentWorkspace?.activeEntitlement || getActiveEntitlement(entitlements);
+    const activeProject =
+      currentWorkspace?.activeProject ||
+      getActiveProject(projects, activeEntitlement, paidOrder);
 
-    const packageCode = normalizePackageCode(
-      activeEntitlement?.package_code ||
-        activeProject?.package_code ||
-        activeProject?.package_slug ||
-        paidOrder?.package_code ||
-        paidOrder?.package_slug,
-    );
+    const packageCode =
+      currentWorkspace?.packageCode ||
+      getPackageCodeFromRecord(activeEntitlement) ||
+      getPackageCodeFromRecord(activeProject) ||
+      getPackageCodeFromRecord(paidOrder);
 
     const packageLane =
+      currentWorkspace?.packageLane ||
       normalizeValue(activeEntitlement?.package_lane) ||
       normalizeValue(activeProject?.project_lane) ||
       resolvePackageLane(packageCode);
 
     const packageName =
+      currentWorkspace?.packageName ||
       activeEntitlement?.package_name ||
       activeEntitlement?.resolved_entitlements?.display_name ||
       paidOrder?.package_name ||
       activeProject?.package_name ||
       resolvePackageDisplayName(packageCode);
 
-    const hasPackageAccess = Boolean(
-      activeEntitlement || activeProject || paidOrder,
-    );
-    const resolvedEntitlements = getResolvedEntitlements(
-      activeEntitlement,
-      packageCode,
-      packageLane,
-    );
+    const hasPackageAccess = Boolean(currentWorkspace && packageCode);
+    const resolvedEntitlements =
+      currentWorkspace?.resolvedEntitlements ||
+      getResolvedEntitlements(activeEntitlement, packageCode, packageLane);
 
     return {
       user: user || null,
@@ -562,6 +760,7 @@
       packageLane,
       packageName,
       resolvedEntitlements,
+      currentWorkspace,
       hasPackageAccess,
       hasPaidPackage: hasPackageAccess,
     };
