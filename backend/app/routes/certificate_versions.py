@@ -4,7 +4,11 @@ from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.database import get_database
-from app.dependencies.auth import get_current_user, has_internal_admin_access
+from app.dependencies.auth import (
+    get_current_user,
+    has_internal_admin_access,
+    require_package_capability,
+)
 from app.services.issued_certificate_service import IssuedCertificateService
 
 router = APIRouter(
@@ -143,6 +147,11 @@ def list_family_certificate_versions(
     family_id: str,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
+    require_package_capability(
+        current_user,
+        "can_use_lineage_certificate",
+        detail="Your active package does not include lineage certificates.",
+    )
     _require_family_access(family_id, current_user)
 
     try:
@@ -159,6 +168,11 @@ def get_latest_family_certificate(
     family_id: str,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
+    require_package_capability(
+        current_user,
+        "can_use_lineage_certificate",
+        detail="Your active package does not include lineage certificates.",
+    )
     _require_family_access(family_id, current_user)
 
     try:

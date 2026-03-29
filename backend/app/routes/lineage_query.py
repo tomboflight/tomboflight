@@ -3,7 +3,11 @@ from typing import Any
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
-from app.dependencies.auth import get_current_user, has_internal_admin_access
+from app.dependencies.auth import (
+    get_current_user,
+    has_internal_admin_access,
+    require_package_capability,
+)
 from app.services.lineage_query_service import LineageQueryService
 
 router = APIRouter(prefix="/lineage-query", tags=["Lineage Query"])
@@ -140,6 +144,11 @@ async def get_ancestors(
     request: Request,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
+    require_package_capability(
+        current_user,
+        "can_build_family_tree",
+        detail="Your active package does not include lineage query access.",
+    )
     db = request.app.state.db
     service = LineageQueryService(db)
 
@@ -153,6 +162,11 @@ async def get_descendants(
     request: Request,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
+    require_package_capability(
+        current_user,
+        "can_build_family_tree",
+        detail="Your active package does not include lineage query access.",
+    )
     db = request.app.state.db
     service = LineageQueryService(db)
 
@@ -166,6 +180,11 @@ async def get_tree(
     request: Request,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
+    require_package_capability(
+        current_user,
+        "can_build_family_tree",
+        detail="Your active package does not include lineage query access.",
+    )
     db = request.app.state.db
     service = LineageQueryService(db)
 
@@ -179,6 +198,11 @@ async def get_family_graph(
     request: Request,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
+    require_package_capability(
+        current_user,
+        "can_build_family_tree",
+        detail="Your active package does not include lineage query access.",
+    )
     db = request.app.state.db
     service = LineageQueryService(db)
 
@@ -192,6 +216,11 @@ async def get_neighbors(
     request: Request,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
+    require_package_capability(
+        current_user,
+        "can_build_family_tree",
+        detail="Your active package does not include lineage query access.",
+    )
     db = request.app.state.db
     service = LineageQueryService(db)
 

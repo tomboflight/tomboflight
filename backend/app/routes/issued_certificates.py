@@ -4,7 +4,11 @@ from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.database import get_database
-from app.dependencies.auth import get_current_user, has_internal_admin_access
+from app.dependencies.auth import (
+    get_current_user,
+    has_internal_admin_access,
+    require_package_capability,
+)
 from app.services.issued_certificate_service import IssuedCertificateService
 
 router = APIRouter(
@@ -159,6 +163,11 @@ def issue_certificate(
     notes: str | None = Query(default=None),
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
+    require_package_capability(
+        current_user,
+        "can_use_lineage_certificate",
+        detail="Your active package does not include lineage certificates.",
+    )
     _require_family_access(family_id, current_user)
 
     issued_by = (
@@ -193,6 +202,11 @@ def list_issued_certificates(
     limit: int = Query(default=50, ge=1, le=200),
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
+    require_package_capability(
+        current_user,
+        "can_use_lineage_certificate",
+        detail="Your active package does not include lineage certificates.",
+    )
     try:
         records = service.list_certificates(limit=limit)
 
@@ -224,6 +238,11 @@ def get_issued_certificate_by_certificate_id(
     certificate_id: str,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
+    require_package_capability(
+        current_user,
+        "can_use_lineage_certificate",
+        detail="Your active package does not include lineage certificates.",
+    )
     try:
         record = service.get_certificate_by_certificate_id(certificate_id)
         family_id = _extract_family_id_from_record(record)
@@ -254,6 +273,11 @@ def get_issued_certificate(
     record_id: str,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
+    require_package_capability(
+        current_user,
+        "can_use_lineage_certificate",
+        detail="Your active package does not include lineage certificates.",
+    )
     try:
         record = service.get_certificate_by_record_id(record_id)
         family_id = _extract_family_id_from_record(record)

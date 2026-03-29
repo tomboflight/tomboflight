@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.metadata import apply_update_metadata
 from app.database import get_database
-from app.dependencies.auth import get_current_user, require_admin
+from app.dependencies.auth import require_admin
 from app.services.approval import ApprovalError, approve_match_candidate
 from app.services.audit_log_service import create_audit_log
 
@@ -11,7 +11,7 @@ router = APIRouter(prefix="/match-candidates", tags=["match_candidates"])
 
 
 @router.get("")
-def list_match_candidates(current_user: dict = Depends(get_current_user)):
+def list_match_candidates(current_user: dict = Depends(require_admin)):
     db = get_database()
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")

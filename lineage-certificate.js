@@ -70,10 +70,19 @@
         : "Generate Certificate";
     }
 
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
     function safe(value, fallback = "Not available") {
-      if (value === null || value === undefined) return fallback;
+      if (value === null || value === undefined) return escapeHtml(fallback);
       const str = String(value).trim();
-      return str ? str : fallback;
+      return escapeHtml(str ? str : fallback);
     }
 
     function renderList(items) {

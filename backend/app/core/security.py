@@ -6,7 +6,28 @@ from passlib.context import CryptContext
 
 from app.config import settings
 
-SECRET_KEY: str = str(settings.secret_key or "change-me")
+
+def _resolve_secret_key() -> str:
+    secret_key = str(settings.secret_key or "").strip()
+    environment = str(settings.environment or "development").strip().lower()
+
+    if not secret_key:
+        raise RuntimeError("SECRET_KEY is not configured.")
+
+    if secret_key == "change-me" and environment not in {
+        "development",
+        "dev",
+        "local",
+        "test",
+    }:
+        raise RuntimeError(
+            "SECRET_KEY must be set to a unique value outside development."
+        )
+
+    return secret_key
+
+
+SECRET_KEY: str = _resolve_secret_key()
 ALGORITHM: str = str(settings.algorithm or "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES: int = int(settings.access_token_expire_minutes or 60)
 

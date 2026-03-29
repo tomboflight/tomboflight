@@ -30,6 +30,15 @@
     return normalizeValue(status);
   }
 
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
   function humanizeStatus(status) {
     const normalized = normalizeStatus(status);
     if (!normalized) return "Unknown";
@@ -46,7 +55,20 @@
     return LOCKED_STATUSES.has(normalizeStatus(status));
   }
 
-  function isInternalRole(role) {
+  function isInternalRole(userOrRole, accessTier, departmentRole) {
+    const values =
+      userOrRole && typeof userOrRole === "object"
+        ? [
+            normalizeValue(userOrRole.role),
+            normalizeValue(userOrRole.access_tier),
+            normalizeValue(userOrRole.department_role),
+          ]
+        : [
+            normalizeValue(userOrRole),
+            normalizeValue(accessTier),
+            normalizeValue(departmentRole),
+          ];
+
     return [
       "admin",
       "super_admin",
@@ -55,7 +77,13 @@
       "finance_admin",
       "marketing_admin",
       "root_admin",
-    ].includes(normalizeValue(role));
+      "executive_technology",
+      "operations",
+      "finance",
+      "marketing",
+    ].some(function (value) {
+      return values.includes(value);
+    });
   }
 
   function formatDate(value) {
@@ -640,12 +668,12 @@
     return `
       <div class="family-record-card">
         <div class="card-number">${index + 1}</div>
-        <h3>${humanizeStatus(item.status || "unknown")}</h3>
-        <p class="card-copy"><strong>Package:</strong> ${item.package_name || item.package_slug || "—"}</p>
-        <p class="card-copy"><strong>Created:</strong> ${formatDate(item.created_at)}</p>
-        <p class="card-copy"><strong>Submission ID:</strong> ${item.id || "—"}</p>
-        <p class="card-copy"><strong>Family Root ID:</strong> ${item.family_root_id || "—"}</p>
-        <p class="card-copy"><strong>Project ID:</strong> ${item.project_id || "—"}</p>
+        <h3>${escapeHtml(humanizeStatus(item.status || "unknown"))}</h3>
+        <p class="card-copy"><strong>Package:</strong> ${escapeHtml(item.package_name || item.package_slug || "—")}</p>
+        <p class="card-copy"><strong>Created:</strong> ${escapeHtml(formatDate(item.created_at))}</p>
+        <p class="card-copy"><strong>Submission ID:</strong> ${escapeHtml(item.id || "—")}</p>
+        <p class="card-copy"><strong>Family Root ID:</strong> ${escapeHtml(item.family_root_id || "—")}</p>
+        <p class="card-copy"><strong>Project ID:</strong> ${escapeHtml(item.project_id || "—")}</p>
       </div>
     `;
   }
@@ -753,7 +781,7 @@
       return;
     }
 
-    if (isInternalRole(me && me.role)) {
+    if (isInternalRole(me)) {
       const statusNode = document.querySelector("[data-dashboard-status]");
       if (statusNode) {
         statusNode.textContent =

@@ -3,8 +3,11 @@ from urllib.parse import urlparse
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from app.core.package_catalog import get_package
 from app.core.security import decode_access_token
 from app.services.auth_service import get_user_by_email
+from app.services.project_entitlement_service import list_user_project_entitlements
+from app.services.project_service import list_projects
 
 COOKIE_NAME = "tol_access_token"
 
@@ -109,6 +112,113 @@ def _has_internal_admin_access(user: dict) -> bool:
 
 def has_internal_admin_access(user: dict) -> bool:
     return _has_internal_admin_access(user)
+
+
+def _current_user_id(user: dict) -> str:
+    raw_id = user.get("id") or user.get("_id") or user.get("user_id")
+    return str(raw_id or "").strip()
+
+
+def _current_user_email(user: dict) -> str:
+    return str(user.get("email") or "").strip().lower()
+
+
+def _collect_capabilities_from_mapping(
+    target: set[str],
+    values: dict | None,
+) -> None:
+    if not isinstance(values, dict):
+        return
+
+    for key, enabled in values.items():
+        normalized_key = _normalize_value(key)
+        if normalized_key.startswith("can_") and bool(enabled):
+            target.add(normalized_key)
+
+
+def get_user_package_capabilities(user: dict) -> set[str]:
+    if has_internal_admin_access(user):
+        return {"*"}
+
+    capabilities: set[str] = set()
+    user_id = _current_user_id(user)
+    user_email = _current_user_email(user)
+
+    if user_id:
+        entitlements = list_user_project_entitlements(user_id, active_only=True)
+        for entitlement in entitlements:
+            _collect_capabilities_from_mapping(
+                capabilities,
+                entitlement.get("resolved_entitlements"),
+            )
+
+    projects = list_projects(
+        owner_user_id=user_id or None,
+        owner_email=user_email or None,
+        is_admin=False,
+    )
+    for project in projects:
+        package_code = str(
+            project.get("package_code") or project.get("package_slug") or ""
+        ).strip()
+        package = get_package(package_code)
+        _collect_capabilities_from_mapping(capabilities, package)
+
+    return capabilities
+
+
+def has_package_capability(user: dict, capability: str) -> bool:
+    if has_internal_admin_access(user):
+        return True
+
+    normalized_capability = _normalize_value(capability)
+    if not normalized_capability:
+        return False
+
+    return normalized_capability in get_user_package_capabilities(user)
+
+
+def has_any_package_capability(user: dict, *capabilities: str) -> bool:
+    normalized_capabilities = [
+        _normalize_value(capability)
+        for capability in capabilities
+        if _normalize_value(capability)
+    ]
+    if not normalized_capabilities:
+        return False
+
+    if has_internal_admin_access(user):
+        return True
+
+    user_capabilities = get_user_package_capabilities(user)
+    return any(capability in user_capabilities for capability in normalized_capabilities)
+
+
+def require_package_capability(
+    user: dict,
+    capability: str,
+    *,
+    detail: str = "Your active package does not include this feature.",
+) -> dict:
+    if not has_package_capability(user, capability):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=detail,
+        )
+    return user
+
+
+def require_any_package_capability(
+    user: dict,
+    *capabilities: str,
+    detail: str = "Your active package does not include this feature.",
+) -> dict:
+    if not has_any_package_capability(user, *capabilities):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=detail,
+        )
+    return user
 
 
 def get_current_user(

@@ -4,7 +4,11 @@ from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.database import get_database
-from app.dependencies.auth import get_current_user, has_internal_admin_access
+from app.dependencies.auth import (
+    get_current_user,
+    has_internal_admin_access,
+    require_package_capability,
+)
 from app.services.tree_service import get_family_tree, get_filtered_family_tree
 
 router = APIRouter(prefix="/tree", tags=["Tree"])
@@ -120,6 +124,12 @@ def get_tree(
     family_id: str,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
+    require_package_capability(
+        current_user,
+        "can_build_family_tree",
+        detail="Your active package does not include family tree access.",
+    )
+
     _require_family_access(family_id, current_user)
 
     tree = get_family_tree(family_id)
@@ -135,6 +145,11 @@ def get_verified_tree(
     family_id: str,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
+    require_package_capability(
+        current_user,
+        "can_build_family_tree",
+        detail="Your active package does not include family tree access.",
+    )
     _require_family_access(family_id, current_user)
     tree = get_filtered_family_tree(family_id, "verified")
     return tree
@@ -145,6 +160,11 @@ def get_narrative_tree(
     family_id: str,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
+    require_package_capability(
+        current_user,
+        "can_build_family_tree",
+        detail="Your active package does not include family tree access.",
+    )
     _require_family_access(family_id, current_user)
     tree = get_filtered_family_tree(family_id, "narrative")
     return tree
@@ -155,6 +175,11 @@ def get_private_tree(
     family_id: str,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
+    require_package_capability(
+        current_user,
+        "can_build_family_tree",
+        detail="Your active package does not include family tree access.",
+    )
     _require_family_access(family_id, current_user)
     tree = get_filtered_family_tree(family_id, "private")
     return tree
