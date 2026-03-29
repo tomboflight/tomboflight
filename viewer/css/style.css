@@ -284,17 +284,84 @@ a {
   backdrop-filter: blur(10px);
 }
 
+.gaze-shell {
+  position: absolute;
+  z-index: 3;
+  min-width: 120px;
+  min-height: 74px;
+  border-radius: 999px;
+  border: 1px solid rgba(214, 176, 102, 0.24);
+  background:
+    radial-gradient(circle at center, rgba(214, 176, 102, 0.08), transparent 68%),
+    linear-gradient(180deg, rgba(214, 176, 102, 0.03), rgba(214, 176, 102, 0.01));
+  box-shadow:
+    0 0 0 1px rgba(214, 176, 102, 0.06),
+    0 0 42px rgba(214, 176, 102, 0.08);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -50%) scale(0.96);
+  transition:
+    opacity var(--transition),
+    transform var(--transition),
+    border-color var(--transition),
+    box-shadow var(--transition),
+    background var(--transition);
+}
+
+.gaze-shell.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.gaze-shell.is-left-armed,
+.gaze-shell.is-right-armed {
+  transform: translate(-50%, -50%) scale(1);
+  border-color: rgba(214, 176, 102, 0.72);
+  box-shadow:
+    0 0 0 1px rgba(214, 176, 102, 0.1),
+    0 0 56px rgba(214, 176, 102, 0.16);
+}
+
+.gaze-label {
+  position: absolute;
+  z-index: 5;
+  min-width: 108px;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid rgba(214, 176, 102, 0.22);
+  background: rgba(5, 9, 17, 0.88);
+  color: rgba(255, 244, 221, 0.92);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-align: center;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  transition:
+    opacity var(--transition),
+    border-color var(--transition),
+    transform var(--transition);
+}
+
+.gaze-label.is-visible {
+  opacity: 1;
+}
+
 .eye-hint {
-  appearance: none;
   position: absolute;
   z-index: 4;
-  width: 44px;
-  height: 44px;
-  padding: 0;
+  width: 58px;
+  height: 58px;
   border-radius: 999px;
-  border: 1px solid rgba(214, 176, 102, 0.38);
-  background: rgba(214, 176, 102, 0.08);
-  box-shadow: 0 0 0 4px rgba(214, 176, 102, 0.10);
+  border: 1px solid rgba(214, 176, 102, 0.18);
+  background:
+    radial-gradient(circle at center, rgba(214, 176, 102, 0.14), transparent 66%),
+    radial-gradient(circle at center, rgba(214, 176, 102, 0.06), transparent 76%);
+  box-shadow:
+    0 0 0 10px rgba(214, 176, 102, 0.04),
+    inset 0 0 0 1px rgba(214, 176, 102, 0.08);
   opacity: 0;
   pointer-events: none;
   transform: translate(-50%, -50%);
@@ -307,25 +374,28 @@ a {
 }
 
 .eye-hint.is-visible {
-  opacity: 0.85;
-  pointer-events: auto;
-  cursor: pointer;
+  opacity: 0.92;
 }
 
 .eye-hint.is-visible:hover,
 .eye-hint.is-visible.is-active {
-  transform: translate(-50%, -50%) scale(1.05);
-  box-shadow: 0 0 0 6px rgba(214, 176, 102, 0.14);
-  background: rgba(214, 176, 102, 0.14);
+  transform: translate(-50%, -50%) scale(1.08);
+  box-shadow:
+    0 0 0 12px rgba(214, 176, 102, 0.08),
+    inset 0 0 0 1px rgba(214, 176, 102, 0.18);
+  background:
+    radial-gradient(circle at center, rgba(214, 176, 102, 0.2), transparent 62%),
+    radial-gradient(circle at center, rgba(214, 176, 102, 0.08), transparent 78%);
   border-color: rgba(214, 176, 102, 0.8);
 }
 
-.eye-hint.is-visible:focus-visible {
-  outline: 2px solid var(--gold);
-  outline-offset: 3px;
+.embed-mode .eye-hint {
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
-.embed-mode .eye-hint {
+.embed-mode .gaze-shell,
+.embed-mode .gaze-label {
   opacity: 0 !important;
   pointer-events: none !important;
 }

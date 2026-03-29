@@ -658,8 +658,8 @@ def build_viewer_manifest(
         "hero_body": hero_body,
         "workspace_name": workspace_name,
         "instructions": (
-            "Hold C to reveal the lineage portals. Hover a portal and scroll in to enter that line, or scroll out to return. "
-            "Use the zoom buttons below only when you want a closer look at the portrait. (Full viewer only)"
+            "Hold C to reveal the Iris Gate. Hover the left or right side of the gaze field to arm your line, then scroll in to enter. "
+            "Scroll out to return. Use the zoom buttons below only when you want a closer look at the portrait. (Full viewer only)"
         ),
         "path_title": path_title,
         "path_items": path_items,
