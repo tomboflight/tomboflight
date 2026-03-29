@@ -18,11 +18,16 @@ from fastapi.responses import FileResponse
 
 from app.config import settings
 from app.database import get_database
-from app.dependencies.auth import get_current_user, require_any_package_capability
+from app.dependencies.auth import get_current_user
 from app.services.upload_service import (
     serialize_upload_record,
     store_member_photo_upload,
     store_verification_evidence_upload,
+)
+from app.services.workspace_access_service import (
+    count_workspace_uploads,
+    require_workspace_capability,
+    resolve_workspace_context,
 )
 
 router = APIRouter(prefix="/uploads", tags=["Uploads"])
@@ -244,6 +249,8 @@ def _require_upload_access(
     upload_id: str,
     db: Any,
     current_user: dict[str, Any],
+    *,
+    detail: str,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     if not ObjectId.is_valid(upload_id):
         raise HTTPException(status_code=400, detail="Invalid upload id.")
@@ -253,8 +260,26 @@ def _require_upload_access(
         raise HTTPException(status_code=404, detail="Upload not found.")
 
     family_id = _normalize_value(upload_record.get("family_id"))
-    family = _require_family_access_by_family_id(family_id, db, current_user)
-    return upload_record, family
+    project_id = _normalize_value(upload_record.get("project_id"))
+    context = require_workspace_capability(
+        current_user,
+        project_id=project_id,
+        family_id=family_id,
+        capabilities=("can_upload_portraits", "can_upload_verification_docs"),
+        detail=detail,
+    )
+
+    if (
+        not context.get("is_admin")
+        and project_id
+        and _normalize_value(context["project"].get("_id")) != project_id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Upload does not belong to the current workspace.",
+        )
+
+    return upload_record, context
 
 
 def _public_upload_record(record: dict[str, Any]) -> dict[str, Any]:
@@ -360,6 +385,32 @@ def _validate_upload_file(
     upload.file.seek(0)
 
 
+def _as_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except Exception:
+        return default
+
+
+def _enforce_workspace_upload_limit(context: dict[str, Any]) -> None:
+    entitlements = context.get("resolved_entitlements") or {}
+    max_uploads = _as_int(entitlements.get("max_uploads"), 0)
+    if max_uploads <= 0:
+        return
+
+    family_id = _normalize_value((context.get("family") or {}).get("_id"))
+    project_id = _normalize_value((context.get("project") or {}).get("_id"))
+    current_count = count_workspace_uploads(family_id=family_id, project_id=project_id)
+    if current_count >= max_uploads:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "This workspace has reached its upload limit for the active package. "
+                "Upgrade or add upload capacity before uploading more files."
+            ),
+        )
+
+
 @router.post("/member-photo")
 async def upload_member_photo(
     family_id: str = Form(...),
@@ -367,10 +418,11 @@ async def upload_member_photo(
     file: UploadFile = File(...),
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
-    require_any_package_capability(
+    context = require_workspace_capability(
         current_user,
-        "can_upload_portraits",
-        "can_upload_verification_docs",
+        family_id=family_id,
+        member_id=member_id,
+        capabilities=("can_upload_portraits",),
         detail="Your active package does not include upload access.",
     )
 
@@ -386,7 +438,7 @@ async def upload_member_photo(
         label="member photo",
     )
 
-    member, _family = _require_member_access(member_id, db, current_user)
+    member = context["member"]
     actual_family_id = _normalize_value(member.get("family_id"))
 
     if _normalize_value(family_id) != actual_family_id:
@@ -395,8 +447,11 @@ async def upload_member_photo(
             detail="family_id does not match the selected member.",
         )
 
+    _enforce_workspace_upload_limit(context)
+
     upload_record = await store_member_photo_upload(
         db=db,
+        project_id=_normalize_value(context["project"].get("_id")),
         family_id=actual_family_id,
         member_id=member_id,
         upload=file,
@@ -421,10 +476,11 @@ async def upload_verification_evidence(
     file: UploadFile = File(...),
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
-    require_any_package_capability(
+    context = require_workspace_capability(
         current_user,
-        "can_upload_verification_docs",
-        "can_upload_portraits",
+        family_id=family_id,
+        member_id=member_id,
+        capabilities=("can_upload_verification_docs",),
         detail="Your active package does not include upload access.",
     )
 
@@ -449,7 +505,7 @@ async def upload_verification_evidence(
         label="verification evidence",
     )
 
-    member, _family = _require_member_access(member_id, db, current_user)
+    member = context["member"]
     actual_family_id = _normalize_value(member.get("family_id"))
 
     if _normalize_value(family_id) != actual_family_id:
@@ -458,8 +514,11 @@ async def upload_verification_evidence(
             detail="family_id does not match the selected member.",
         )
 
+    _enforce_workspace_upload_limit(context)
+
     upload_record = await store_verification_evidence_upload(
         db=db,
+        project_id=_normalize_value(context["project"].get("_id")),
         family_id=actual_family_id,
         member_id=member_id,
         verification_type=normalized_verification_type,
@@ -483,10 +542,10 @@ def list_member_uploads(
     category: Optional[str] = Query(default=None),
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
-    require_any_package_capability(
+    context = require_workspace_capability(
         current_user,
-        "can_upload_verification_docs",
-        "can_upload_portraits",
+        member_id=member_id,
+        capabilities=("can_upload_verification_docs", "can_upload_portraits"),
         detail="Your active package does not include upload access.",
     )
 
@@ -494,11 +553,15 @@ def list_member_uploads(
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")
 
-    member, _family = _require_member_access(member_id, db, current_user)
+    member = context["member"]
+    family = context["family"]
 
     normalized_category = _validate_category_filter(category)
 
-    query: dict[str, Any] = {"member_id": str(member.get("_id"))}
+    query: dict[str, Any] = {
+        "member_id": str(member.get("_id")),
+        "family_id": _normalize_value((family or {}).get("_id")),
+    }
     if normalized_category:
         query["category"] = normalized_category
 
@@ -516,10 +579,10 @@ def list_family_uploads(
     category: Optional[str] = Query(default=None),
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
-    require_any_package_capability(
+    context = require_workspace_capability(
         current_user,
-        "can_upload_verification_docs",
-        "can_upload_portraits",
+        family_id=family_id,
+        capabilities=("can_upload_verification_docs", "can_upload_portraits"),
         detail="Your active package does not include upload access.",
     )
 
@@ -527,16 +590,16 @@ def list_family_uploads(
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")
 
-    _require_family_access_by_family_id(family_id, db, current_user)
+    family = context["family"]
     normalized_category = _validate_category_filter(category)
 
-    query: dict[str, Any] = {"family_id": family_id}
+    query: dict[str, Any] = {"family_id": _normalize_value((family or {}).get("_id"))}
     if normalized_category:
         query["category"] = normalized_category
 
     records = list(db["uploaded_files"].find(query).sort("created_at", -1))
     return {
-        "family_id": family_id,
+        "family_id": _normalize_value((family or {}).get("_id")),
         "count": len(records),
         "uploads": _serialize_uploads(records),
     }
@@ -547,18 +610,16 @@ def download_upload(
     upload_id: str,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
-    require_any_package_capability(
-        current_user,
-        "can_upload_verification_docs",
-        "can_upload_portraits",
-        detail="Your active package does not include upload access.",
-    )
-
     db = get_database()
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")
 
-    upload_record, _family = _require_upload_access(upload_id, db, current_user)
+    upload_record, _context = _require_upload_access(
+        upload_id,
+        db,
+        current_user,
+        detail="Your active package does not include upload access.",
+    )
 
     relative_path = _normalize_value(upload_record.get("relative_path"))
     if not relative_path:
@@ -585,18 +646,16 @@ def delete_upload(
     upload_id: str,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
-    require_any_package_capability(
-        current_user,
-        "can_upload_verification_docs",
-        "can_upload_portraits",
-        detail="Your active package does not include upload access.",
-    )
-
     db = get_database()
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")
 
-    upload_record, _family = _require_upload_access(upload_id, db, current_user)
+    upload_record, _context = _require_upload_access(
+        upload_id,
+        db,
+        current_user,
+        detail="Your active package does not include upload access.",
+    )
 
     relative_path = _normalize_value(upload_record.get("relative_path"))
     if relative_path:

@@ -15,11 +15,18 @@
       return;
     }
 
+    let currentContext = null;
+
     try {
       const me = await window.TOLAuth.apiRequest('/auth/me', { method: 'GET' });
 
       if (createdByInput && !createdByInput.value.trim()) {
         createdByInput.value = me.full_name || me.email || '';
+      }
+
+      if (window.TOLAuthPages && typeof window.TOLAuthPages.fetchOrders === 'function' && typeof window.TOLAuthPages.getDashboardContextForCurrentPage === 'function') {
+        const orders = await window.TOLAuthPages.fetchOrders();
+        currentContext = await window.TOLAuthPages.getDashboardContextForCurrentPage(me, orders);
       }
     } catch (error) {
       window.TOLAuth.clearSession();
@@ -44,14 +51,15 @@
       const payload = {
         family_name: String(formData.get('family_name') || '').trim(),
         created_by: String(formData.get('created_by') || '').trim(),
-        description: String(formData.get('description') || '').trim() || null
+        description: String(formData.get('description') || '').trim() || null,
+        project_id: String(currentContext?.activeProject?.id || currentContext?.activeProject?._id || '').trim() || null
       };
 
-      if (!payload.family_name || !payload.created_by) {
+      if (!payload.family_name || !payload.created_by || !payload.project_id) {
         if (statusNode) {
           statusNode.style.display = 'block';
           statusNode.style.color = '#ffb3b3';
-          statusNode.textContent = 'Please complete the required fields.';
+          statusNode.textContent = 'Please open this page from an active family-capable workspace.';
         }
         return;
       }

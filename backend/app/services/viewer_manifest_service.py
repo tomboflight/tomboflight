@@ -348,6 +348,22 @@ def ensure_project_workspace_anchor(
 
     family_id = _normalize_value(family_doc.get("_id"))
 
+    if project_id and family_id:
+        family_project_id = _normalize_value(family_doc.get("project_id"))
+        if family_project_id != project_id and ObjectId.is_valid(family_id):
+            families.update_one(
+                {"_id": ObjectId(family_id)},
+                {
+                    "$set": {
+                        "project_id": project_id,
+                        "updated_at": _now(),
+                    }
+                },
+            )
+            refreshed_family = families.find_one({"_id": ObjectId(family_id)})
+            if refreshed_family is not None:
+                family_doc = refreshed_family
+
     if family_id and existing_family_id != family_id and project_object_id is not None:
         projects.update_one(
             {"_id": project_object_id},

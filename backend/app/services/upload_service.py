@@ -98,6 +98,7 @@ def serialize_upload_record(record: dict[str, Any]) -> dict[str, Any]:
     record_id = str(record.get("_id") or record.get("id") or "")
     return {
         "id": record_id,
+        "project_id": record.get("project_id"),
         "family_id": record.get("family_id"),
         "member_id": record.get("member_id"),
         "category": record.get("category"),
@@ -117,6 +118,7 @@ def serialize_upload_record(record: dict[str, Any]) -> dict[str, Any]:
 async def store_member_photo_upload(
     *,
     db: Any,
+    project_id: str,
     family_id: str,
     member_id: str,
     upload: UploadFile,
@@ -149,6 +151,7 @@ async def store_member_photo_upload(
     now_iso = datetime.now(UTC).isoformat()
 
     upload_record = {
+        "project_id": project_id,
         "family_id": family_id,
         "member_id": member_id,
         "category": "member_photo",
@@ -192,6 +195,7 @@ async def store_member_photo_upload(
 async def store_verification_evidence_upload(
     *,
     db: Any,
+    project_id: str,
     family_id: str,
     member_id: str,
     verification_type: str,
@@ -233,6 +237,7 @@ async def store_verification_evidence_upload(
     now_iso = datetime.now(UTC).isoformat()
 
     upload_record = {
+        "project_id": project_id,
         "family_id": family_id,
         "member_id": member_id,
         "category": "verification_evidence",

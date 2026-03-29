@@ -10,6 +10,10 @@ from app.dependencies.auth import (
     require_any_package_capability,
 )
 from app.schemas.family import FamilyCreate, FamilyResponse, build_family_response
+from app.services.workspace_access_service import (
+    list_accessible_families_for_user,
+    require_workspace_capability,
+)
 
 router = APIRouter(prefix="/families", tags=["Families"])
 
@@ -107,10 +111,6 @@ def get_families(user: dict[str, Any] = Depends(get_current_user)):
     db = get_database()
     families_collection = db["families"]
 
-    current_user_id = _current_user_id(user)
-    current_user_email = _current_user_email(user)
-    current_user_name = _current_user_display_name(user)
-
     docs = list(families_collection.find().sort("created_at", -1))
 
     results: list[FamilyResponse] = []
@@ -122,16 +122,10 @@ def get_families(user: dict[str, Any] = Depends(get_current_user)):
                 results.append(built)
         return results
 
-    for family in docs:
-        if _family_is_visible_to_user(
-            family=family,
-            current_user_id=current_user_id,
-            current_user_email=current_user_email,
-            current_user_name=current_user_name,
-        ):
-            built = _safe_build_family_response(family)
-            if built is not None:
-                results.append(built)
+    for family in list_accessible_families_for_user(user):
+        built = _safe_build_family_response(family)
+        if built is not None:
+            results.append(built)
 
     return results
 
@@ -147,22 +141,17 @@ def create_family_route(
     payload: FamilyCreate,
     user: dict[str, Any] = Depends(get_current_user),
 ):
-    require_any_package_capability(
-        user,
-        "can_build_family_tree",
-        "can_open_family_intake",
-        detail="Your active package does not include family build access.",
-    )
-
     db = get_database()
     families_collection = db["families"]
 
     current_user_id = _current_user_id(user)
     current_user_email = _current_user_email(user)
+    is_admin = _is_admin(user)
 
     family_name = str(payload.family_name).strip()
     created_by = str(payload.created_by).strip() if payload.created_by else ""
     description = str(payload.description).strip() if payload.description else None
+    project_id = str(payload.project_id or "").strip()
 
     if not family_name:
         raise HTTPException(
@@ -173,10 +162,50 @@ def create_family_route(
     if not created_by:
         created_by = str(user.get("full_name") or current_user_email).strip()
 
+    project = None
+    if is_admin:
+        if project_id:
+            context = require_workspace_capability(
+                user,
+                project_id=project_id,
+                capabilities=("can_build_family_tree", "can_open_family_intake"),
+                detail="This workspace does not support family build access.",
+            )
+            project = context["project"]
+    else:
+        if not project_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="project_id is required to create a family inside a workspace.",
+            )
+        context = require_workspace_capability(
+            user,
+            project_id=project_id,
+            capabilities=("can_build_family_tree", "can_open_family_intake"),
+            detail="Your active package does not include family build access.",
+        )
+        project = context["project"]
+
+    if project is not None:
+        existing_project_family_id = str(project.get("family_id") or "").strip()
+        existing_project_family = (
+            families_collection.find_one({"project_id": str(project.get("_id"))})
+            if not existing_project_family_id
+            else None
+        )
+        if existing_project_family_id or existing_project_family is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "This workspace already has a family root. "
+                    "Use the existing family workspace instead of creating a new root."
+                ),
+            )
+
     existing = families_collection.find_one(
         {
             "family_name": family_name,
-            "owner_user_id": current_user_id,
+            "owner_user_id": current_user_id if not is_admin else str(project.get("owner_user_id") or current_user_id) if project is not None else current_user_id,
         }
     )
     if existing:
@@ -189,15 +218,24 @@ def create_family_route(
         "family_name": family_name,
         "created_by": created_by,
         "description": description,
-        "owner_user_id": current_user_id,
-        "owner_email": current_user_email,
+        "project_id": str(project.get("_id")) if project is not None else None,
+        "owner_user_id": str(project.get("owner_user_id") or current_user_id) if project is not None else current_user_id,
+        "owner_email": str(project.get("owner_email") or current_user_email).strip().lower() if project is not None else current_user_email,
         "visibility": "private",
         "shared_with_user_ids": [],
         "shared_with_emails": [],
+        "package_code": str(project.get("package_code") or "").strip() if project is not None else None,
+        "package_name": str(project.get("package_name") or "").strip() if project is not None else None,
         "created_at": datetime.now(UTC),
     }
 
     result = families_collection.insert_one(family_doc)
     family_doc["_id"] = result.inserted_id
+
+    if project is not None:
+        db["projects"].update_one(
+            {"_id": project["_id"]},
+            {"$set": {"family_id": str(result.inserted_id), "updated_at": datetime.now(UTC)}},
+        )
 
     return build_family_response(family_doc)

@@ -4,7 +4,8 @@ from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.database import get_database
-from app.dependencies.auth import get_current_user, require_any_package_capability
+from app.dependencies.auth import get_current_user
+from app.services.workspace_access_service import require_workspace_capability
 
 router = APIRouter(prefix="/families", tags=["Family Graph"])
 
@@ -109,42 +110,25 @@ def get_family_graph(
     family_id: str,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
-    require_any_package_capability(
+    context = require_workspace_capability(
         current_user,
-        "can_build_family_tree",
-        "can_upload_verification_docs",
-        "can_upload_portraits",
+        family_id=family_id,
+        capabilities=(
+            "can_build_family_tree",
+            "can_upload_verification_docs",
+            "can_upload_portraits",
+        ),
         detail="Your active package does not include access to this family workspace.",
     )
 
     db = get_database()
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")
+    family = context["family"]
+    resolved_family_id = str(family.get("_id"))
 
-    if not ObjectId.is_valid(family_id):
-        raise HTTPException(status_code=400, detail="Invalid family id.")
-
-    family = db.families.find_one({"_id": ObjectId(family_id)})
-    if not family:
-        raise HTTPException(status_code=404, detail="Family not found.")
-
-    current_user_id = _current_user_id(current_user)
-    current_user_email = _current_user_email(current_user)
-    current_user_name = _current_user_display_name(current_user)
-
-    if not _is_admin(current_user) and not _family_is_visible_to_user(
-        family=family,
-        current_user_id=current_user_id,
-        current_user_email=current_user_email,
-        current_user_name=current_user_name,
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to access this family graph.",
-        )
-
-    members_cursor = db.family_members.find({"family_id": family_id}).sort("generation", 1)
-    relationships_cursor = db.relationships.find({"family_id": family_id})
+    members_cursor = db.family_members.find({"family_id": resolved_family_id}).sort("generation", 1)
+    relationships_cursor = db.relationships.find({"family_id": resolved_family_id})
 
     members = []
     for member in members_cursor:

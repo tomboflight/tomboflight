@@ -6,9 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.database import get_database
 from app.dependencies.auth import (
     get_current_user,
-    has_internal_admin_access,
-    require_package_capability,
 )
+from app.services.workspace_access_service import require_workspace_capability
 from app.services.tree_service import get_family_tree, get_filtered_family_tree
 
 router = APIRouter(prefix="/tree", tags=["Tree"])
@@ -39,100 +38,20 @@ def _current_user_display_name(user: dict[str, Any]) -> str:
     return str(raw_name).strip()
 
 
-def _is_admin(user: dict[str, Any]) -> bool:
-    return has_internal_admin_access(user)
-
-
-def _family_is_visible_to_user(
-    family: dict[str, Any],
-    current_user_id: str,
-    current_user_email: str,
-    current_user_name: str,
-) -> bool:
-    owner_user_id = str(family.get("owner_user_id") or "").strip()
-    owner_email = str(family.get("owner_email") or "").strip().lower()
-
-    shared_with_user_ids = [
-        str(value).strip()
-        for value in (family.get("shared_with_user_ids") or [])
-        if value is not None
-    ]
-    shared_with_emails = [
-        str(value).strip().lower()
-        for value in (family.get("shared_with_emails") or [])
-        if value is not None
-    ]
-
-    if owner_user_id and owner_user_id == current_user_id:
-        return True
-
-    if owner_email and owner_email == current_user_email:
-        return True
-
-    if current_user_id in shared_with_user_ids:
-        return True
-
-    if current_user_email in shared_with_emails:
-        return True
-
-    # Temporary backward-compatible fallback for older family records
-    if not owner_user_id and not owner_email:
-        created_by = str(family.get("created_by") or "").strip()
-        if created_by and (
-            created_by == current_user_name or created_by.lower() == current_user_email
-        ):
-            return True
-
-    return False
-
-
-def _require_family_access(family_id: str, current_user: dict[str, Any]) -> dict[str, Any]:
-    db = get_database()
-    if db is None:
-        raise HTTPException(status_code=500, detail="Database is not connected.")
-
-    if not ObjectId.is_valid(family_id):
-        raise HTTPException(status_code=400, detail="Invalid family id.")
-
-    family = db.families.find_one({"_id": ObjectId(family_id)})
-    if not family:
-        raise HTTPException(status_code=404, detail="Family not found.")
-
-    if _is_admin(current_user):
-        return family
-
-    current_user_id = _current_user_id(current_user)
-    current_user_email = _current_user_email(current_user)
-    current_user_name = _current_user_display_name(current_user)
-
-    if not _family_is_visible_to_user(
-        family=family,
-        current_user_id=current_user_id,
-        current_user_email=current_user_email,
-        current_user_name=current_user_name,
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to access this family tree.",
-        )
-
-    return family
-
-
 @router.get("/{family_id}")
 def get_tree(
     family_id: str,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
-    require_package_capability(
+    context = require_workspace_capability(
         current_user,
-        "can_build_family_tree",
+        family_id=family_id,
+        capabilities=("can_build_family_tree",),
         detail="Your active package does not include family tree access.",
     )
+    resolved_family_id = str(context["family"].get("_id"))
 
-    _require_family_access(family_id, current_user)
-
-    tree = get_family_tree(family_id)
+    tree = get_family_tree(resolved_family_id)
 
     if not tree["members"] and not tree["nodes"] and not tree["relationships"]:
         raise HTTPException(status_code=404, detail="Family tree not found.")
@@ -145,13 +64,13 @@ def get_verified_tree(
     family_id: str,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
-    require_package_capability(
+    context = require_workspace_capability(
         current_user,
-        "can_build_family_tree",
+        family_id=family_id,
+        capabilities=("can_build_family_tree",),
         detail="Your active package does not include family tree access.",
     )
-    _require_family_access(family_id, current_user)
-    tree = get_filtered_family_tree(family_id, "verified")
+    tree = get_filtered_family_tree(str(context["family"].get("_id")), "verified")
     return tree
 
 
@@ -160,13 +79,13 @@ def get_narrative_tree(
     family_id: str,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
-    require_package_capability(
+    context = require_workspace_capability(
         current_user,
-        "can_build_family_tree",
+        family_id=family_id,
+        capabilities=("can_build_family_tree",),
         detail="Your active package does not include family tree access.",
     )
-    _require_family_access(family_id, current_user)
-    tree = get_filtered_family_tree(family_id, "narrative")
+    tree = get_filtered_family_tree(str(context["family"].get("_id")), "narrative")
     return tree
 
 
@@ -175,11 +94,11 @@ def get_private_tree(
     family_id: str,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
-    require_package_capability(
+    context = require_workspace_capability(
         current_user,
-        "can_build_family_tree",
+        family_id=family_id,
+        capabilities=("can_build_family_tree",),
         detail="Your active package does not include family tree access.",
     )
-    _require_family_access(family_id, current_user)
-    tree = get_filtered_family_tree(family_id, "private")
+    tree = get_filtered_family_tree(str(context["family"].get("_id")), "private")
     return tree

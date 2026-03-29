@@ -9,7 +9,10 @@ from pymongo.database import Database
 from pymongo.errors import OperationFailure
 
 from app.database import get_database
-from app.services.project_service import create_project_from_paid_order
+from app.services.project_service import (
+    apply_package_purchase_to_project,
+    create_project_from_paid_order,
+)
 
 
 def _get_orders_collection() -> Collection:
@@ -153,13 +156,24 @@ def create_order_for_user(user: dict[str, Any], payload: Any) -> dict[str, Any]:
     order_doc["_id"] = result.inserted_id
 
     if order_doc["item_type"] == "package":
-        project = create_project_from_paid_order(
-            user=user,
-            package_code=package_code,
-            package_name=payload.package_name,
-            stripe_session_id=payload.stripe_session_id,
-            stripe_payment_link_id=payload.stripe_payment_link_id,
-        )
+        target_project_id = _normalize(getattr(payload, "project_id", None))
+        if target_project_id:
+            project = apply_package_purchase_to_project(
+                user=user,
+                project_id=target_project_id,
+                package_code=package_code,
+                package_name=payload.package_name,
+                stripe_session_id=payload.stripe_session_id,
+                stripe_payment_link_id=payload.stripe_payment_link_id,
+            )
+        else:
+            project = create_project_from_paid_order(
+                user=user,
+                package_code=package_code,
+                package_name=payload.package_name,
+                stripe_session_id=payload.stripe_session_id,
+                stripe_payment_link_id=payload.stripe_payment_link_id,
+            )
         if project:
             orders.update_one(
                 {"_id": result.inserted_id},
@@ -316,6 +330,16 @@ def _format_price_label(amount_subtotal: Any, billing_plan: str) -> str:
         return f"${amount:,.2f}/year"
 
     return f"${amount:,.2f}"
+
+
+def _extract_target_project_id(session: dict[str, Any]) -> str:
+    metadata = session.get("metadata") or {}
+    return _normalize(
+        metadata.get("project_id")
+        or metadata.get("upgrade_project_id")
+        or metadata.get("existing_project_id")
+        or metadata.get("target_project_id")
+    )
 
 
 def _infer_purchase_fields(session: dict[str, Any]) -> tuple[str, str, str, str, str]:
@@ -539,13 +563,24 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
     order_doc["_id"] = result.inserted_id
 
     if item_type == "package":
-        project = create_project_from_paid_order(
-            user=user,
-            package_code=package_code,
-            package_name=package_name,
-            stripe_session_id=session_id,
-            stripe_payment_link_id=session.get("payment_link"),
-        )
+        target_project_id = _extract_target_project_id(session)
+        if target_project_id:
+            project = apply_package_purchase_to_project(
+                user=user,
+                project_id=target_project_id,
+                package_code=package_code,
+                package_name=package_name,
+                stripe_session_id=session_id,
+                stripe_payment_link_id=session.get("payment_link"),
+            )
+        else:
+            project = create_project_from_paid_order(
+                user=user,
+                package_code=package_code,
+                package_name=package_name,
+                stripe_session_id=session_id,
+                stripe_payment_link_id=session.get("payment_link"),
+            )
         if project:
             orders.update_one(
                 {"_id": result.inserted_id},
