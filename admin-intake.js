@@ -27,7 +27,6 @@
     "heirloom_legacy_tree",
     "legacy_plus",
     "family_estate_concierge",
-    "command_structure_network",
   ]);
 
   let allSubmissions = [];
@@ -353,9 +352,9 @@
         });
 
         configureActionLink(certificateLink, {
-          text: "Open Lineage Certificate",
-          href: "lineage-certificate.html",
-          show: false,
+          text: "Open Linking Keys",
+          href: "link-keys.html",
+          show: linkKeysEnabled,
         });
 
         return;
@@ -363,15 +362,15 @@
 
       if (lane === "organization") {
         configureActionLink(familyManagerLink, {
-          text: "Open Customer Dashboard",
-          href: "dashboard.html",
+          text: "Open Structure Workspace",
+          href: "verification-upload.html",
           show: true,
         });
 
         configureActionLink(familyTreeLink, {
-          text: "Open Structure Uploads",
-          href: "verification-upload.html",
-          show: true,
+          text: "Open Family Tree",
+          href: "tree-view.html",
+          show: false,
         });
 
         configureActionLink(certificateLink, {
