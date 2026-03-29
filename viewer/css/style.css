@@ -263,23 +263,45 @@ a {
 }
 
 .eye-hint {
+  appearance: none;
   position: absolute;
   width: 44px;
   height: 44px;
+  padding: 0;
   border-radius: 999px;
   border: 1px solid rgba(214, 176, 102, 0.38);
+  background: rgba(214, 176, 102, 0.08);
   box-shadow: 0 0 0 4px rgba(214, 176, 102, 0.10);
   opacity: 0;
   pointer-events: none;
   transform: translate(-50%, -50%);
+  transition:
+    opacity var(--transition),
+    transform var(--transition),
+    box-shadow var(--transition),
+    background var(--transition);
 }
 
-body.show-eyes .eye-hint {
+.eye-hint.is-visible {
   opacity: 0.85;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.eye-hint.is-visible:hover {
+  transform: translate(-50%, -50%) scale(1.05);
+  box-shadow: 0 0 0 6px rgba(214, 176, 102, 0.14);
+  background: rgba(214, 176, 102, 0.14);
+}
+
+.eye-hint.is-visible:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
 }
 
 .embed-mode .eye-hint {
   opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 .narration-text {

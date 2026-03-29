@@ -289,6 +289,7 @@
   let scale = 1;
   const SCALE_MIN = 0.65;
   const SCALE_MAX = 1.25;
+  const ZOOM_STEP = 0.12;
 
   function clamp(v, min, max) {
     return Math.min(max, Math.max(min, v));
@@ -409,6 +410,8 @@
 
     eyeLeft.classList.toggle("is-visible", visible);
     eyeRight.classList.toggle("is-visible", visible);
+    eyeLeft.setAttribute("aria-hidden", visible ? "false" : "true");
+    eyeRight.setAttribute("aria-hidden", visible ? "false" : "true");
   }
 
   function onKeyDown(e) {
@@ -441,14 +444,30 @@
   // ----------------------------
   // Existing button controls still work (full viewer only)
   // ----------------------------
-  function zoomIn() {
+  function navigateParents() {
     if (EMBED_MODE) return;
-    goRightEye();
-  }
-  function zoomOut() {
-    if (EMBED_MODE) return;
+    markInteraction();
     goLeftEye();
   }
+
+  function navigateDescendants() {
+    if (EMBED_MODE) return;
+    markInteraction();
+    goRightEye();
+  }
+
+  function zoomIn() {
+    if (EMBED_MODE) return;
+    markInteraction();
+    setZoom(scale + ZOOM_STEP, true);
+  }
+
+  function zoomOut() {
+    if (EMBED_MODE) return;
+    markInteraction();
+    setZoom(scale - ZOOM_STEP, true);
+  }
+
   function resetViewer() {
     if (EMBED_MODE) return;
     setZoom(1, false);
@@ -456,6 +475,8 @@
     if (isPlaying) startNarrationAutoAdvance();
   }
 
+  window.navigateParents = navigateParents;
+  window.navigateDescendants = navigateDescendants;
   window.zoomIn = zoomIn;
   window.zoomOut = zoomOut;
   window.resetViewer = resetViewer;
