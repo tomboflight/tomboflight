@@ -201,6 +201,84 @@
     }
   }
 
+  function navigateToWorkspaceArea(href) {
+    if (!href) return;
+
+    if (href.startsWith("#")) {
+      const target = document.querySelector(href);
+      if (target) {
+        target.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+      window.history.replaceState({}, "", href);
+      return;
+    }
+
+    window.location.href = href;
+  }
+
+  function makeWorkspaceLink(selector, href, label) {
+    const node = document.querySelector(selector);
+    if (!node) return;
+
+    node.setAttribute("data-admin-workspace-link", "true");
+    node.setAttribute("tabindex", "0");
+    node.setAttribute("role", "link");
+    node.setAttribute("aria-label", label);
+    node.dataset.workspaceHref = href;
+
+    if (node.dataset.workspaceLinkBound === "true") {
+      return;
+    }
+
+    node.dataset.workspaceLinkBound = "true";
+    node.addEventListener("click", function () {
+      navigateToWorkspaceArea(node.dataset.workspaceHref || "");
+    });
+    node.addEventListener("keydown", function (event) {
+      if (event.key !== "Enter" && event.key !== " ") {
+        return;
+      }
+
+      event.preventDefault();
+      navigateToWorkspaceArea(node.dataset.workspaceHref || "");
+    });
+  }
+
+  function enableAdminWorkspaceLinks(me) {
+    const roleTitle = getRoleTitle(me);
+
+    makeWorkspaceLink(
+      "[data-dashboard-lane-chip]",
+      "#dashboard-admin-workspace",
+      "Open admin workspace",
+    );
+    makeWorkspaceLink(
+      "[data-dashboard-package-chip]",
+      "#dashboard-active-package",
+      `Open ${roleTitle}`,
+    );
+    makeWorkspaceLink(
+      "[data-dashboard-scope-chip]",
+      "#dashboard-admin-tools",
+      "Open authorized tools",
+    );
+    makeWorkspaceLink(
+      "[data-dashboard-identity-node]",
+      "#dashboard-account-profile",
+      "Open identity workspace area",
+    );
+    makeWorkspaceLink(
+      "[data-dashboard-package-node]",
+      "#dashboard-active-package",
+      "Open package workspace area",
+    );
+    makeWorkspaceLink(
+      "[data-dashboard-records-node]",
+      "admin-intake-queue.html",
+      "Open records workspace area",
+    );
+  }
+
   function injectAdminPanel(me) {
     const anchor = document.querySelector("[data-admin-portal-anchor]");
     if (!anchor) return;
@@ -243,6 +321,7 @@
         hideCustomerNavItems();
         updateHeroForInternal();
         injectAdminPanel(me);
+        enableAdminWorkspaceLinks(me);
       }
     } catch (error) {
       console.error("Failed to load internal dashboard layer:", error);

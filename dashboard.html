@@ -8,7 +8,7 @@
       name="description"
       content="Your private Tomb of Light customer or internal operations workspace."
     />
-    <link rel="stylesheet" href="styles.css?v=20260328-8" />
+    <link rel="stylesheet" href="styles.css?v=20260329-1" />
   </head>
   <body class="portal-dashboard-body">
     <div class="site-watermark" aria-hidden="true"></div>
@@ -48,7 +48,7 @@
         </div>
       </header>
 
-      <main data-dashboard>
+      <main data-dashboard id="dashboard-admin-workspace">
         <section class="page-hero dashboard-hero portal-dashboard-hero">
           <div class="container">
             <div class="portal-command-bar">
@@ -133,16 +133,35 @@
                   </span>
                   <strong data-dashboard-core-subtitle>Authenticating</strong>
                 </div>
-                <div class="portal-node portal-node-top">Identity</div>
-                <div class="portal-node portal-node-left">Package</div>
-                <div class="portal-node portal-node-right">Records</div>
+                <div
+                  class="portal-node portal-node-top"
+                  data-dashboard-identity-node
+                >
+                  Identity
+                </div>
+                <div
+                  class="portal-node portal-node-left"
+                  data-dashboard-package-node
+                >
+                  Package
+                </div>
+                <div
+                  class="portal-node portal-node-right"
+                  data-dashboard-records-node
+                >
+                  Records
+                </div>
                 <div class="portal-gridline portal-gridline-x"></div>
                 <div class="portal-gridline portal-gridline-y"></div>
               </div>
             </div>
 
             <div class="portal-metric-grid">
-              <article class="portal-metric-card">
+              <article
+                class="portal-metric-card"
+                id="dashboard-access-lane"
+                data-dashboard-section-anchor
+              >
                 <span class="portal-metric-label">Access Lane</span>
                 <strong data-dashboard-lane-summary>Resolving access lane</strong>
                 <p data-dashboard-lane-description>
@@ -151,7 +170,11 @@
                 </p>
               </article>
 
-              <article class="portal-metric-card">
+              <article
+                class="portal-metric-card"
+                id="dashboard-active-package"
+                data-dashboard-section-anchor
+              >
                 <span class="portal-metric-label">Active Package</span>
                 <strong data-dashboard-package-display>Checking package scope</strong>
                 <p>
@@ -160,7 +183,11 @@
                 </p>
               </article>
 
-              <article class="portal-metric-card">
+              <article
+                class="portal-metric-card"
+                id="dashboard-next-focus"
+                data-dashboard-section-anchor
+              >
                 <span class="portal-metric-label">Next Focus</span>
                 <strong data-dashboard-next-focus>Preparing workspace actions</strong>
                 <p>
@@ -223,7 +250,11 @@
 
             </div>
 
-            <div class="form-panel portal-profile-panel">
+            <div
+              class="form-panel portal-profile-panel"
+              id="dashboard-account-profile"
+              data-dashboard-section-anchor
+            >
               <span class="eyebrow">Account Profile</span>
               <div class="grid-3">
                 <div>
@@ -244,7 +275,11 @@
               </div>
             </div>
 
-            <div data-admin-portal-anchor></div>
+            <div
+              data-admin-portal-anchor
+              id="dashboard-admin-tools"
+              data-dashboard-section-anchor
+            ></div>
 
             <div
               class="form-panel portal-workspace-panel"
@@ -497,10 +532,10 @@
       </footer>
     </div>
 
-    <script src="config.js?v=20260328-8"></script>
-    <script src="app.js?v=20260328-8"></script>
-    <script src="auth.js?v=20260328-8"></script>
+    <script src="config.js?v=20260329-1"></script>
+    <script src="app.js?v=20260329-1"></script>
+    <script src="auth.js?v=20260329-1"></script>
     <script src="dashboard-intake.js?v=20260328-8"></script>
-    <script src="dashboard-admin.js?v=20260328-8"></script>
+    <script src="dashboard-admin.js?v=20260329-1"></script>
   </body>
 </html>
