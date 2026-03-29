@@ -297,11 +297,11 @@
     const lane = resolvePackageLane(getSubmissionPackageCode(submission));
 
     if (lane === "portrait") {
-      return "This submission is already provisioned. Use the customer dashboard or Verification Uploads instead.";
+      return "This submission is already provisioned. Use Verification Uploads for the portrait workspace.";
     }
 
     if (lane === "organization") {
-      return "This submission is already provisioned. Use the customer dashboard or structure upload tools instead.";
+      return "This submission is already provisioned. Use the structure upload workspace instead.";
     }
 
     return "This submission is already provisioned. Use Family Manager, Family Tree, or Lineage Certificate instead.";
@@ -370,21 +370,21 @@
 
       if (lane === "portrait") {
         configureActionLink(familyManagerLink, {
-          text: "Open Customer Dashboard",
-          href: "dashboard.html",
-          show: true,
-        });
-
-        configureActionLink(familyTreeLink, {
           text: "Open Verification Uploads",
           href: withWorkspaceHref("verification-upload.html", submission),
           show: true,
         });
 
+        configureActionLink(familyTreeLink, {
+          text: "Open Family Tree",
+          href: "tree-view.html",
+          show: false,
+        });
+
         configureActionLink(certificateLink, {
           text: "Open Linking Keys",
           href: withWorkspaceHref("link-keys.html", submission),
-          show: linkKeysEnabled,
+          show: false,
         });
 
         return;
@@ -479,6 +479,7 @@
     listNode.innerHTML = filtered
       .map(function (item, index) {
         const lane = resolvePackageLane(getSubmissionPackageCode(item));
+        const hasFamilyBuild = isFamilyBuildLane(lane);
         return `
           <div class="family-record-card">
             <div class="card-number">${index + 1}</div>
@@ -490,7 +491,7 @@
             ${valueLine("Created", formatDate(item.created_at))}
             ${valueLine("Submitted", formatDate(item.submitted_at))}
             ${valueLine("Reviewed By", item.reviewed_by || "—")}
-            ${valueLine("Family Root", item.family_root_id || "—")}
+            ${valueLine("Family Root", hasFamilyBuild ? item.family_root_id || "—" : "Not applicable")}
             ${valueLine("Project ID", item.project_id || "—")}
             <div class="inline-actions" style="margin-top: 1rem;">
               <a class="btn btn-primary" href="admin-intake-review.html?submission_id=${encodeURIComponent(item.id)}">
