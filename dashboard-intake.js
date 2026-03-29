@@ -100,6 +100,34 @@
     node.textContent = value;
   }
 
+  function withFamilyId(href, context) {
+    const familyId = String(
+      context?.activeProject?.family_id || context?.activeProject?.familyId || "",
+    ).trim();
+    const projectId = String(
+      context?.activeProject?.project_id ||
+        context?.activeProject?.projectId ||
+        context?.activeProject?.id ||
+        context?.activeProject?._id ||
+        "",
+    ).trim();
+
+    if (!href || (!familyId && !projectId)) return href;
+
+    try {
+      const url = new URL(href, window.location.href);
+      if (familyId) {
+        url.searchParams.set("family_id", familyId);
+      }
+      if (projectId) {
+        url.searchParams.set("project_id", projectId);
+      }
+      return `${url.pathname.split("/").pop() || href}${url.search}`;
+    } catch (error) {
+      return href;
+    }
+  }
+
   function getLaneLabel(lane) {
     if (lane === "portrait") return "Portrait Lane";
     if (lane === "organization") return "Organization Lane";
@@ -644,11 +672,26 @@
     applyNavVisibility("verification-upload.html", config.showVerification);
     applyNavVisibility("link-keys.html", config.navLinkKeys);
 
+    applyAction('.site-nav a[href^="tree-view.html"]', {
+      href: withFamilyId("tree-view.html", context),
+      show: config.navTree,
+    });
+
+    applyAction('.site-nav a[href^="lineage-certificate.html"]', {
+      href: withFamilyId("lineage-certificate.html", context),
+      show: config.navCertificate,
+    });
+
+    applyAction('.site-nav a[href^="link-keys.html"]', {
+      href: withFamilyId("link-keys.html", context),
+      show: config.navLinkKeys,
+    });
+
     applyAction(
       "[data-dashboard-hero-primary-action], [data-dashboard-package-primary-action]",
       {
         text: config.primaryActionText,
-        href: config.primaryActionHref,
+        href: withFamilyId(config.primaryActionHref, context),
         show: true,
       },
     );
@@ -657,7 +700,7 @@
       "[data-dashboard-hero-secondary-action], [data-dashboard-package-secondary-action], [data-dashboard-intake-verification-action], [data-dashboard-next-family-action]",
       {
         text: config.secondaryActionText,
-        href: config.secondaryActionHref,
+        href: withFamilyId(config.secondaryActionHref, context),
         show: config.showVerification,
       },
     );
@@ -666,7 +709,7 @@
       "[data-dashboard-hero-link-action], [data-dashboard-package-link-action]",
       {
         text: "Manage Linking Keys",
-        href: "link-keys.html",
+        href: withFamilyId("link-keys.html", context),
         show: config.showLinkKeys,
       },
     );
@@ -675,7 +718,7 @@
       "[data-dashboard-hero-tree-action], [data-dashboard-package-tree-action], [data-dashboard-workspace-tree-action], a[href=\"tree-view.html\"][data-paid-action]",
       {
         text: "Open Family Tree",
-        href: "tree-view.html",
+        href: withFamilyId("tree-view.html", context),
         show: config.showTree,
       },
     );
@@ -684,7 +727,7 @@
       "[data-dashboard-hero-certificate-action], [data-dashboard-package-certificate-action]",
       {
         text: "View Lineage Certificate",
-        href: "lineage-certificate.html",
+        href: withFamilyId("lineage-certificate.html", context),
         show: config.showCertificate,
       },
     );

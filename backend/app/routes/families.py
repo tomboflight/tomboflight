@@ -34,6 +34,11 @@ def _current_user_email(user: dict[str, Any]) -> str:
     return str(raw_email).strip().lower()
 
 
+def _current_user_display_name(user: dict[str, Any]) -> str:
+    raw_name = user.get("full_name") or user.get("name") or ""
+    return str(raw_name).strip()
+
+
 def _is_admin(user: dict[str, Any]) -> bool:
     role = str(user.get("role", "")).strip().lower()
     access_tier = str(user.get("access_tier", "")).strip().lower()
@@ -50,6 +55,7 @@ def _family_is_visible_to_user(
     family: dict[str, Any],
     current_user_id: str,
     current_user_email: str,
+    current_user_name: str,
 ) -> bool:
     owner_user_id = str(family.get("owner_user_id") or "").strip()
     owner_email = str(family.get("owner_email") or "").strip().lower()
@@ -77,6 +83,14 @@ def _family_is_visible_to_user(
     if current_user_email in shared_with_emails:
         return True
 
+    # Backward-compatible fallback for older family records
+    if not owner_user_id and not owner_email:
+        created_by = str(family.get("created_by") or "").strip()
+        if created_by and (
+            created_by == current_user_name or created_by.lower() == current_user_email
+        ):
+            return True
+
     return False
 
 
@@ -95,6 +109,7 @@ def get_families(user: dict[str, Any] = Depends(get_current_user)):
 
     current_user_id = _current_user_id(user)
     current_user_email = _current_user_email(user)
+    current_user_name = _current_user_display_name(user)
 
     docs = list(families_collection.find().sort("created_at", -1))
 
@@ -112,6 +127,7 @@ def get_families(user: dict[str, Any] = Depends(get_current_user)):
             family=family,
             current_user_id=current_user_id,
             current_user_email=current_user_email,
+            current_user_name=current_user_name,
         ):
             built = _safe_build_family_response(family)
             if built is not None:
