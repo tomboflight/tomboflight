@@ -629,21 +629,21 @@ def build_viewer_manifest(
             "Move through the protected command portrait sequence attached to your organization workspace."
         )
         path_title = "Structure Flow"
-        nav_labels = {"left": "Previous Role", "right": "Next Role"}
+        nav_labels = {"left": "Foundations", "right": "Next Role"}
     elif lane in {"household", "network"}:
         hero_title = "Private Family Viewer"
         hero_body = (
             "Move through the uploaded family portraits attached to your protected lineage workspace."
         )
         path_title = "Family Flow"
-        nav_labels = {"left": "Previous Portrait", "right": "Next Portrait"}
+        nav_labels = {"left": "Origins", "right": "Forward Line"}
     else:
         hero_title = "Private Portrait Viewer"
         hero_body = (
             "Move through the portrait sequence attached to your protected legacy workspace."
         )
         path_title = "Portrait Flow"
-        nav_labels = {"left": "Previous Portrait", "right": "Next Portrait"}
+        nav_labels = {"left": "Origins", "right": "Forward View"}
 
     path_items = [
         f"{state['title']} — {state['status']}"
@@ -658,8 +658,8 @@ def build_viewer_manifest(
         "hero_body": hero_body,
         "workspace_name": workspace_name,
         "instructions": (
-            "Hold C, then click the left or right navigation marker. You can also use the controls below. "
-            "Use scroll, pinch, or the zoom buttons to adjust the photo scale. (Full viewer only)"
+            "Hold C to reveal the lineage portals. Hover a portal and scroll in to enter that line, or scroll out to return. "
+            "Use the zoom buttons below only when you want a closer look at the portrait. (Full viewer only)"
         ),
         "path_title": path_title,
         "path_items": path_items,

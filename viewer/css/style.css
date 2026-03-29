@@ -287,6 +287,7 @@ a {
 .eye-hint {
   appearance: none;
   position: absolute;
+  z-index: 4;
   width: 44px;
   height: 44px;
   padding: 0;
@@ -301,7 +302,8 @@ a {
     opacity var(--transition),
     transform var(--transition),
     box-shadow var(--transition),
-    background var(--transition);
+    background var(--transition),
+    border-color var(--transition);
 }
 
 .eye-hint.is-visible {
@@ -310,10 +312,12 @@ a {
   cursor: pointer;
 }
 
-.eye-hint.is-visible:hover {
+.eye-hint.is-visible:hover,
+.eye-hint.is-visible.is-active {
   transform: translate(-50%, -50%) scale(1.05);
   box-shadow: 0 0 0 6px rgba(214, 176, 102, 0.14);
   background: rgba(214, 176, 102, 0.14);
+  border-color: rgba(214, 176, 102, 0.8);
 }
 
 .eye-hint.is-visible:focus-visible {
