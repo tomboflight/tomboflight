@@ -5,9 +5,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.core.metadata import apply_create_metadata, apply_update_metadata
 from app.database import get_database
-from app.dependencies.auth import get_current_user, require_any_package_capability
+from app.dependencies.auth import get_current_user
 from app.services.audit_log_service import create_audit_log
 from app.services.matching import generate_match_candidates_for_member
+from app.services.workspace_access_service import (
+    list_accessible_families_for_user,
+    require_workspace_capability,
+)
 
 router = APIRouter(prefix="/family-members", tags=["family_members"])
 
@@ -195,14 +199,6 @@ def _display_name(member: dict[str, Any]) -> str:
 
 @router.get("-index")
 def list_family_members_index(current_user: dict[str, Any] = Depends(get_current_user)):
-    require_any_package_capability(
-        current_user,
-        "can_build_family_tree",
-        "can_upload_verification_docs",
-        "can_upload_portraits",
-        detail="Your active package does not include family member access.",
-    )
-
     db = get_database()
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")
@@ -211,21 +207,13 @@ def list_family_members_index(current_user: dict[str, Any] = Depends(get_current
         cursor = db.family_members.find().sort("created_at", 1)
         return [_serialize_member(member) for member in cursor]
 
-    current_user_id = _current_user_id(current_user)
-    current_user_email = _current_user_email(current_user)
-    current_user_name = _current_user_display_name(current_user)
-
-    visible_family_ids: list[str] = []
-    family_cursor = db.families.find()
-
-    for family in family_cursor:
-        if _family_is_visible_to_user(
-            family=family,
-            current_user_id=current_user_id,
-            current_user_email=current_user_email,
-            current_user_name=current_user_name,
-        ):
-            visible_family_ids.append(str(family.get("_id")))
+    visible_family_ids = [
+        str(family.get("_id"))
+        for family in list_accessible_families_for_user(
+            current_user,
+            capabilities=("can_build_family_tree", "can_open_family_intake"),
+        )
+    ]
 
     if not visible_family_ids:
         return []
@@ -242,24 +230,22 @@ def create_family_member(
     payload: Dict[str, Any],
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
-    require_any_package_capability(
-        current_user,
-        "can_build_family_tree",
-        "can_open_family_intake",
-        detail="Your active package does not include family member editing.",
-    )
-
     db = get_database()
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")
 
     family_id = str(payload.get("family_id") or "").strip()
-    _require_family_access_by_family_id(family_id, current_user)
+    context = require_workspace_capability(
+        current_user,
+        family_id=family_id,
+        capabilities=("can_build_family_tree", "can_open_family_intake"),
+        detail="Your active package does not include family member editing.",
+    )
 
     user_id = _current_user_id(current_user)
 
     payload = dict(payload)
-    payload["family_id"] = family_id
+    payload["family_id"] = str(context["family"].get("_id"))
 
     payload = apply_create_metadata(payload, user_id)
     result = db.family_members.insert_one(payload)
@@ -272,7 +258,7 @@ def create_family_member(
         entity_type="family_member",
         entity_id=member_id,
         details={
-            "family_id": family_id,
+            "family_id": payload["family_id"],
             "payload_keys": list(payload.keys()),
         },
     )
@@ -292,18 +278,17 @@ def update_family_member(
     payload: Dict[str, Any],
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
-    require_any_package_capability(
-        current_user,
-        "can_build_family_tree",
-        "can_open_family_intake",
-        detail="Your active package does not include family member editing.",
-    )
-
     db = get_database()
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")
 
-    existing, _family = _require_family_access_for_member(member_id, current_user)
+    context = require_workspace_capability(
+        current_user,
+        member_id=member_id,
+        capabilities=("can_build_family_tree", "can_open_family_intake"),
+        detail="Your active package does not include family member editing.",
+    )
+    existing = context["member"]
 
     if "family_id" in payload:
         incoming_family_id = str(payload.get("family_id") or "").strip()
@@ -345,18 +330,17 @@ def delete_family_member(
     member_id: str,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
-    require_any_package_capability(
-        current_user,
-        "can_build_family_tree",
-        "can_open_family_intake",
-        detail="Your active package does not include family member editing.",
-    )
-
     db = get_database()
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")
 
-    existing, _family = _require_family_access_for_member(member_id, current_user)
+    context = require_workspace_capability(
+        current_user,
+        member_id=member_id,
+        capabilities=("can_build_family_tree", "can_open_family_intake"),
+        detail="Your active package does not include family member editing.",
+    )
+    existing = context["member"]
 
     relationship_count = db.relationships.count_documents(
         {

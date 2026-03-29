@@ -343,6 +343,18 @@ def provision_build_from_submission(
 
     project_id = str(project_doc["_id"])
 
+    resolved_family_id = str(project_doc.get("family_id") or family_root_id or "").strip()
+    if resolved_family_id and ObjectId.is_valid(resolved_family_id):
+        families.update_one(
+            {"_id": ObjectId(resolved_family_id)},
+            {
+                "$set": {
+                    "project_id": project_id,
+                    "updated_at": _now(),
+                }
+            },
+        )
+
     submission_set: dict[str, Any] = {
         "status": "build_ready",
         "review_locked": True,

@@ -13,6 +13,7 @@ class OrderCreate(BaseModel):
     billing_plan: str = Field(default="one_time")
     source: str = Field(default="stripe_payment_link")
     order_status: str = Field(default="paid")
+    project_id: Optional[str] = None
     stripe_session_id: Optional[str] = None
     stripe_payment_link_id: Optional[str] = None
 

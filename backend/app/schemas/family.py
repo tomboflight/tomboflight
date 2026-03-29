@@ -8,6 +8,7 @@ class FamilyCreate(BaseModel):
     family_name: str = Field(..., min_length=1, max_length=150)
     created_by: str = Field(..., min_length=1)
     description: str | None = None
+    project_id: str | None = None
 
 
 class FamilyResponse(BaseModel):
@@ -16,9 +17,12 @@ class FamilyResponse(BaseModel):
     created_by: str
     description: str | None = None
     created_at: datetime
+    project_id: str | None = None
     owner_user_id: str | None = None
     owner_email: str | None = None
     visibility: str | None = None
+    package_code: str | None = None
+    package_name: str | None = None
 
 
 def _to_string(value: Any, default: str = "") -> str:
@@ -59,7 +63,10 @@ def build_family_response(data: dict[str, Any]) -> FamilyResponse:
         created_by=created_by,
         description=data.get("description"),
         created_at=_to_datetime(data.get("created_at")),
+        project_id=_to_string(data.get("project_id")) or None,
         owner_user_id=_to_string(data.get("owner_user_id")) or None,
         owner_email=_to_string(data.get("owner_email")).lower() or None,
         visibility=_to_string(data.get("visibility")) or None,
+        package_code=_to_string(data.get("package_code")) or None,
+        package_name=_to_string(data.get("package_name")) or None,
     )

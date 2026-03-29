@@ -6,10 +6,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from app.dependencies.auth import (
     get_current_user,
     has_internal_admin_access,
-    require_any_package_capability,
 )
 from app.schemas.relationship import RelationshipCreate, RelationshipResponse
 from app.services.relationship_guardrails import RelationshipGuardrailService
+from app.services.workspace_access_service import require_workspace_capability
 
 router = APIRouter(prefix="/relationships", tags=["Relationships"])
 
@@ -151,9 +151,13 @@ def _require_relationship_access(
     if not relationship:
         raise HTTPException(status_code=404, detail="Relationship not found")
 
-    family_id = str(relationship.get("family_id") or "").strip()
-    family = _require_family_access_by_family_id(family_id, db, current_user)
-    return relationship, family
+    context = require_workspace_capability(
+        current_user,
+        family_id=str(relationship.get("family_id") or "").strip(),
+        capabilities=("can_build_family_tree", "can_open_family_intake"),
+        detail="Your active package does not include relationship editing.",
+    )
+    return relationship, context
 
 
 @router.post("", response_model=RelationshipResponse, status_code=status.HTTP_201_CREATED)
@@ -162,17 +166,15 @@ async def create_relationship(
     request: Request,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
-    require_any_package_capability(
-        current_user,
-        "can_build_family_tree",
-        "can_open_family_intake",
-        detail="Your active package does not include relationship editing.",
-    )
-
     db = request.app.state.db
     service = RelationshipGuardrailService(db)
-
-    _require_family_access_by_family_id(payload.family_id, db, current_user)
+    context = require_workspace_capability(
+        current_user,
+        family_id=payload.family_id,
+        capabilities=("can_build_family_tree", "can_open_family_intake"),
+        detail="Your active package does not include relationship editing.",
+    )
+    resolved_family_id = str(context["family"].get("_id"))
 
     created_by = (
         current_user.get("email")
@@ -184,7 +186,7 @@ async def create_relationship(
     )
 
     guarded_payload = RelationshipCreate(
-        family_id=payload.family_id,
+        family_id=resolved_family_id,
         source_member_id=payload.source_member_id,
         target_member_id=payload.target_member_id,
         relationship_type=payload.relationship_type,
@@ -224,19 +226,17 @@ async def get_family_relationships(
     request: Request,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
-    require_any_package_capability(
+    db = request.app.state.db
+    context = require_workspace_capability(
         current_user,
-        "can_build_family_tree",
-        "can_open_family_intake",
+        family_id=family_id,
+        capabilities=("can_build_family_tree", "can_open_family_intake"),
         detail="Your active package does not include relationship access.",
     )
-
-    db = request.app.state.db
-
-    _require_family_access_by_family_id(family_id, db, current_user)
+    resolved_family_id = str(context["family"].get("_id"))
 
     relationships = []
-    cursor = db["relationships"].find({"family_id": family_id})
+    cursor = db["relationships"].find({"family_id": resolved_family_id})
 
     for rel in cursor:
         relationships.append(
@@ -253,7 +253,7 @@ async def get_family_relationships(
         )
 
     return {
-        "family_id": family_id,
+        "family_id": resolved_family_id,
         "count": len(relationships),
         "relationships": relationships,
     }
@@ -265,16 +265,13 @@ async def get_member_relationships(
     request: Request,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
-    require_any_package_capability(
+    db = request.app.state.db
+    require_workspace_capability(
         current_user,
-        "can_build_family_tree",
-        "can_open_family_intake",
+        member_id=member_id,
+        capabilities=("can_build_family_tree", "can_open_family_intake"),
         detail="Your active package does not include relationship access.",
     )
-
-    db = request.app.state.db
-
-    _member, _family = _require_member_access(member_id, db, current_user)
 
     relationships = []
     cursor = db["relationships"].find(
@@ -313,13 +310,6 @@ async def delete_relationship(
     request: Request,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
-    require_any_package_capability(
-        current_user,
-        "can_build_family_tree",
-        "can_open_family_intake",
-        detail="Your active package does not include relationship editing.",
-    )
-
     db = request.app.state.db
 
     relationship, _family = _require_relationship_access(relationship_id, db, current_user)
