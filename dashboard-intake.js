@@ -645,7 +645,7 @@
     applyNavVisibility("link-keys.html", config.navLinkKeys);
 
     applyAction(
-      "[data-dashboard-workspace-primary-action], [data-dashboard-package-primary-action]",
+      "[data-dashboard-hero-primary-action], [data-dashboard-package-primary-action]",
       {
         text: config.primaryActionText,
         href: config.primaryActionHref,
@@ -654,7 +654,7 @@
     );
 
     applyAction(
-      '[href="verification-upload.html"][data-paid-action], [data-dashboard-next-family-action]',
+      "[data-dashboard-hero-secondary-action], [data-dashboard-package-secondary-action], [data-dashboard-intake-verification-action], [data-dashboard-next-family-action]",
       {
         text: config.secondaryActionText,
         href: config.secondaryActionHref,
@@ -662,11 +662,14 @@
       },
     );
 
-    applyAction("[data-dashboard-link-keys-action]", {
-      text: "Open Link Keys",
-      href: "link-keys.html",
-      show: config.showLinkKeys,
-    });
+    applyAction(
+      "[data-dashboard-hero-link-action], [data-dashboard-package-link-action]",
+      {
+        text: "Manage Linking Keys",
+        href: "link-keys.html",
+        show: config.showLinkKeys,
+      },
+    );
 
     applyAction(
       '[data-dashboard-workspace-tree-action], a[href="tree-view.html"][data-paid-action]',
@@ -678,7 +681,7 @@
     );
 
     applyAction(
-      '[data-dashboard-workspace-certificate-action], a[href="lineage-certificate.html"][data-paid-action]',
+      "[data-dashboard-hero-certificate-action], [data-dashboard-package-certificate-action]",
       {
         text: "View Lineage Certificate",
         href: "lineage-certificate.html",

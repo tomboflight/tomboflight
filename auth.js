@@ -845,6 +845,10 @@
 
     const statusNode = document.querySelector("[data-signin-status]");
     const submitBtn = form.querySelector("[data-submit-btn]");
+    const defaultSubmitLabel =
+      (submitBtn && submitBtn.textContent
+        ? submitBtn.textContent.trim()
+        : "") || "Enter Portal";
 
     form.addEventListener("submit", async function (event) {
       event.preventDefault();
@@ -876,7 +880,7 @@
 
       try {
         await handleLogin(email, password);
-        app.setStatus(statusNode, "Sign-in successful.", "success");
+        app.setStatus(statusNode, "Portal access granted.", "success");
         redirectAfterLogin();
       } catch (error) {
         app.setStatus(
@@ -887,7 +891,7 @@
       } finally {
         if (submitBtn) {
           submitBtn.disabled = false;
-          submitBtn.textContent = "Sign In";
+          submitBtn.textContent = defaultSubmitLabel;
         }
       }
     });

@@ -29,6 +29,9 @@
 
 html {
   scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  scroll-padding-top: 108px;
 }
 
 body {
@@ -57,6 +60,7 @@ body {
   line-height: 1.6;
   min-height: 100vh;
   position: relative;
+  color-scheme: dark;
 }
 
 body.menu-open {
@@ -121,6 +125,7 @@ img {
 a {
   color: inherit;
   text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 button,
@@ -128,6 +133,7 @@ input,
 textarea,
 select {
   font: inherit;
+  -webkit-tap-highlight-color: transparent;
 }
 
 h1,
@@ -219,6 +225,7 @@ a {
   text-decoration: none;
   white-space: nowrap;
   transition: color var(--transition);
+  touch-action: manipulation;
 }
 
 .site-nav a:hover,
@@ -251,6 +258,7 @@ a {
   cursor: pointer;
   font-weight: 700;
   transition: all var(--transition);
+  touch-action: manipulation;
 }
 
 .menu-toggle:hover {
@@ -292,6 +300,8 @@ a {
   text-decoration: none;
   text-align: center;
   white-space: normal;
+  touch-action: manipulation;
+  user-select: none;
 }
 
 .btn:hover {
@@ -301,6 +311,32 @@ a {
 }
 
 .btn:focus {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.btn:focus:not(:focus-visible),
+.menu-toggle:focus:not(:focus-visible),
+.site-nav a:focus:not(:focus-visible),
+.small-link-row a:focus:not(:focus-visible),
+.brand:focus:not(:focus-visible),
+.mini-link:focus:not(:focus-visible),
+input:focus:not(:focus-visible),
+textarea:focus:not(:focus-visible),
+select:focus:not(:focus-visible) {
+  outline: none;
+  box-shadow: none;
+}
+
+.btn:focus-visible,
+.menu-toggle:focus-visible,
+.site-nav a:focus-visible,
+.small-link-row a:focus-visible,
+.brand:focus-visible,
+.mini-link:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
   outline: 2px solid var(--gold);
   outline-offset: 2px;
 }
@@ -913,6 +949,7 @@ select {
   max-width: 100%;
   min-width: 0;
   min-height: 54px;
+  font-size: 16px;
   border-radius: 16px;
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.03);
@@ -1231,6 +1268,7 @@ textarea {
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+  touch-action: manipulation;
 }
 
 .portal-entry-section {
@@ -1612,6 +1650,10 @@ textarea {
   background: rgba(255, 255, 255, 0.025);
 }
 
+.portal-workspace-signal-grid {
+  margin-top: 1.5rem;
+}
+
 .portal-dashboard-body [data-orders-list],
 .portal-dashboard-body [data-intake-history-list] {
   display: grid;
@@ -1679,6 +1721,75 @@ textarea {
     box-shadow:
       0 0 0 1px rgba(120, 217, 255, 0.12),
       0 0 80px rgba(120, 217, 255, 0.26);
+  }
+}
+
+@media (hover: none) {
+  .btn:hover,
+  .menu-toggle:hover,
+  .feature-card:hover,
+  .section-card:hover,
+  .trust-card:hover,
+  .policy-card:hover,
+  .arch-box:hover,
+  .viewer-step:hover,
+  .family-record-card:hover {
+    transform: none;
+    box-shadow: none;
+  }
+
+  .btn-primary:hover,
+  .portal-login-body .btn-primary:hover,
+  .portal-dashboard-body .btn-primary:hover {
+    color: #05111d;
+  }
+
+  .btn-primary:hover {
+    background: var(--white-btn);
+  }
+
+  .portal-login-body .btn-primary:hover,
+  .portal-dashboard-body .btn-primary:hover {
+    background: linear-gradient(135deg, #f4fbff, #c8eeff);
+  }
+
+  .btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  .portal-login-body .btn-secondary:hover,
+  .portal-dashboard-body .btn-secondary:hover {
+    background: rgba(7, 16, 29, 0.72);
+    border-color: rgba(138, 169, 213, 0.18);
+  }
+
+  .menu-toggle:hover {
+    border-color: var(--border);
+    background: transparent;
+  }
+
+  .site-nav a:hover,
+  .btn-ghost:hover,
+  .small-link-row a:hover,
+  .footer-links a:hover {
+    color: var(--muted);
+  }
+}
+
+@media (pointer: coarse) {
+  .btn,
+  .menu-toggle,
+  .site-nav a {
+    min-height: 52px;
+  }
+
+  .site-nav a {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .portal-chip {
+    min-height: 40px;
   }
 }
 
