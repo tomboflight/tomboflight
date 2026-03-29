@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Tomb of Light | Viewer</title>
 
-    <link rel="stylesheet" href="css/style.css?v=20260329-3" />
+    <link rel="stylesheet" href="css/style.css?v=20260329-4" />
 
     <script>
       (function () {
@@ -186,11 +186,10 @@
           </p>
 
           <p class="viewer-instructions" id="viewerInstructions">
-            Hold <strong>C</strong>, then click
-            <strong>Left Eye</strong> (Parents) or
-            <strong>Right Eye</strong> (Descendants). You can also use the
-            navigation controls below. Use scroll, pinch, or the zoom buttons
-            to adjust the photo scale. (Full viewer only)
+            Hold <strong>C</strong> to reveal the lineage portals. Hover a
+            portal and scroll in to enter that line, or scroll out to return.
+            Use the zoom buttons below only when you want a closer look at the
+            portrait. (Full viewer only)
           </p>
         </div>
       </header>
@@ -219,8 +218,20 @@
                 Upload portraits to activate your private cinematic viewer.
               </div>
 
-              <div class="eye-hint" id="eyeLeft" aria-hidden="true"></div>
-              <div class="eye-hint" id="eyeRight" aria-hidden="true"></div>
+              <button
+                class="eye-hint"
+                id="eyeLeft"
+                type="button"
+                aria-hidden="true"
+                aria-label="Origins portal"
+              ></button>
+              <button
+                class="eye-hint"
+                id="eyeRight"
+                type="button"
+                aria-hidden="true"
+                aria-label="Future line portal"
+              ></button>
             </div>
 
             <div id="narrationDisplay" class="narration-text"></div>
@@ -231,9 +242,9 @@
           <div class="viewer-line"></div>
 
           <div class="controls" id="controls">
-            <button type="button" id="navLeftBtn" onclick="navigateParents()">Parents</button>
+            <button type="button" id="navLeftBtn" onclick="navigateParents()">Origins</button>
             <button type="button" id="navRightBtn" onclick="navigateDescendants()">
-              Descendants
+              Future Line
             </button>
             <button type="button" onclick="zoomOut()">Zoom Out</button>
             <button type="button" onclick="zoomIn()">Zoom In</button>
@@ -273,6 +284,6 @@
 
     <script src="../config.js"></script>
     <script src="../app.js"></script>
-    <script src="js/script.js?v=20260329-3"></script>
+    <script src="js/script.js?v=20260329-4"></script>
   </body>
 </html>

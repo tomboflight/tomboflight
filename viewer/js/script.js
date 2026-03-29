@@ -44,7 +44,7 @@
     hero_body:
       "Navigate through generations of the Moreland lineage and explore family branches through the Tomb of Light viewer.",
     instructions:
-      "Hold C, then click Left Eye (Parents) or Right Eye (Descendants). You can also use the navigation controls below. Use scroll, pinch, or the zoom buttons to adjust the photo scale. (Full viewer only)",
+      "Hold C to reveal the lineage portals. Hover a portal and scroll in to enter that line, or scroll out to return. Use the zoom buttons below only when you want a closer look at the portrait. (Full viewer only)",
     path_title: "Lineage Flow",
     path_items: [
       "Malik → Parents",
@@ -54,8 +54,8 @@
       "Julian → Parents",
     ],
     nav_labels: {
-      left: "Parents",
-      right: "Descendants",
+      left: "Origins",
+      right: "Future Line",
     },
     initial_state_id: "malik",
     branch_options_by_state: {
@@ -198,10 +198,8 @@
 
   let pendingWheelDelta = 0;
   let wheelRaf = null;
-
-  let pointers = new Map();
-  let startDist = 0;
-  let startScale = 1;
+  let hoveredPortalSide = "";
+  let gestureNavigationLock = false;
 
   let isUserInteracting = false;
   let interactionTimeout = null;
@@ -501,6 +499,16 @@
     eyeRight.setAttribute("aria-hidden", visible ? "false" : "true");
   }
 
+  function setHoveredPortal(side) {
+    hoveredPortalSide = side || "";
+    if (eyeLeft) {
+      eyeLeft.classList.toggle("is-active", hoveredPortalSide === "left");
+    }
+    if (eyeRight) {
+      eyeRight.classList.toggle("is-active", hoveredPortalSide === "right");
+    }
+  }
+
   function onKeyDown(e) {
     if (EMBED_MODE) return;
     if (e.key === "c" || e.key === "C") {
@@ -513,6 +521,7 @@
     if (e.key === "c" || e.key === "C") {
       cHeld = false;
       setEyeHintsVisible(false);
+      setHoveredPortal("");
     }
   }
 
@@ -524,16 +533,51 @@
     return statesById[state]?.rightStateId || "";
   }
 
+  function portalCanInteract(node) {
+    return Boolean(node && node.classList.contains("is-visible"));
+  }
+
+  async function animatePortalTransition(side, nextState) {
+    if (!nextState || !viewerImage || gestureNavigationLock) return;
+
+    gestureNavigationLock = true;
+
+    const config = statesById[state];
+    const targets =
+      config?.eyeTargets ||
+      DEFAULT_DYNAMIC_EYE_TARGETS;
+    const target = side === "left" ? targets.left : targets.right;
+    const shiftX = clamp((50 - Number(target?.x || 50)) * 0.45, -20, 20);
+    const shiftY = clamp((50 - Number(target?.y || 50)) * 0.3, -14, 14);
+
+    viewerImage.style.transition =
+      "transform 240ms cubic-bezier(0.22, 1, 0.36, 1), opacity 0.25s ease";
+    viewerImage.style.transform = `translate(${shiftX}%, ${shiftY}%) scale(1.24)`;
+
+    await new Promise(function (resolve) {
+      window.setTimeout(resolve, 210);
+    });
+
+    await applyState(nextState);
+    gestureNavigationLock = false;
+  }
+
   function onEyeLeftClick() {
-    if (EMBED_MODE || !cHeld) return;
+    if (EMBED_MODE || !portalCanInteract(eyeLeft)) return;
     const next = resolveLeftTarget();
-    if (next) applyState(next);
+    if (next) {
+      markInteraction();
+      animatePortalTransition("left", next);
+    }
   }
 
   function onEyeRightClick() {
-    if (EMBED_MODE || !cHeld) return;
+    if (EMBED_MODE || !portalCanInteract(eyeRight)) return;
     const next = resolveRightTarget();
-    if (next) applyState(next);
+    if (next) {
+      markInteraction();
+      animatePortalTransition("right", next);
+    }
   }
 
   function selectBranch(targetStateId) {
@@ -630,14 +674,14 @@
     if (EMBED_MODE) return;
     markInteraction();
     const next = resolveLeftTarget();
-    if (next) applyState(next);
+    if (next) animatePortalTransition("left", next);
   }
 
   function navigateDescendants() {
     if (EMBED_MODE) return;
     markInteraction();
     const next = resolveRightTarget();
-    if (next) applyState(next);
+    if (next) animatePortalTransition("right", next);
   }
 
   function zoomIn() {
@@ -671,51 +715,42 @@
         pendingWheelDelta = 0;
         wheelRaf = null;
 
-        const zoomChange = -delta * 0.0007;
-        setZoom(scale + zoomChange, true);
+        if (Math.abs(delta) < 12 || gestureNavigationLock) return;
+
         markInteraction();
+
+        if (delta < 0) {
+          const side =
+            hoveredPortalSide ||
+            (resolveRightTarget() ? "right" : resolveLeftTarget() ? "left" : "");
+          const next =
+            side === "left" ? resolveLeftTarget() : resolveRightTarget();
+          if (next) {
+            animatePortalTransition(side || "right", next);
+          }
+          return;
+        }
+
+        const backTarget = resolveLeftTarget();
+        if (backTarget) {
+          animatePortalTransition("left", backTarget);
+        }
       });
     }
   }
 
-  function getDist(a, b) {
-    const dx = a.clientX - b.clientX;
-    const dy = a.clientY - b.clientY;
-    return Math.hypot(dx, dy);
-  }
-
   function onPointerDown(e) {
     if (EMBED_MODE || !stage) return;
-    stage.setPointerCapture(e.pointerId);
-    pointers.set(e.pointerId, e);
     markInteraction();
-
-    if (pointers.size === 2) {
-      const activePointers = Array.from(pointers.values());
-      startDist = getDist(activePointers[0], activePointers[1]);
-      startScale = scale;
-    }
   }
 
   function onPointerMove(e) {
-    if (EMBED_MODE || !pointers.has(e.pointerId)) return;
-    pointers.set(e.pointerId, e);
-
-    if (pointers.size === 2) {
-      const activePointers = Array.from(pointers.values());
-      const dist = getDist(activePointers[0], activePointers[1]);
-      if (startDist > 0) {
-        const ratio = dist / startDist;
-        setZoom(startScale * ratio, false);
-        markInteraction();
-      }
-    }
+    if (EMBED_MODE) return;
+    markInteraction();
   }
 
   function onPointerUp(e) {
-    if (!pointers.has(e.pointerId)) return;
-    pointers.delete(e.pointerId);
-    if (pointers.size < 2) startDist = 0;
+    if (EMBED_MODE) return;
   }
 
   async function loadDynamicManifest() {
@@ -760,8 +795,6 @@
       stage.addEventListener("pointerdown", onPointerDown);
       stage.addEventListener("pointermove", onPointerMove);
       stage.addEventListener("pointerup", onPointerUp);
-      stage.addEventListener("pointercancel", onPointerUp);
-      stage.addEventListener("pointerleave", onPointerUp);
     }
 
     window.addEventListener("keydown", onKeyDown);
@@ -769,6 +802,22 @@
 
     if (eyeLeft) eyeLeft.addEventListener("click", onEyeLeftClick);
     if (eyeRight) eyeRight.addEventListener("click", onEyeRightClick);
+    if (eyeLeft) {
+      eyeLeft.addEventListener("pointerenter", function () {
+        setHoveredPortal("left");
+      });
+      eyeLeft.addEventListener("pointerleave", function () {
+        if (hoveredPortalSide === "left") setHoveredPortal("");
+      });
+    }
+    if (eyeRight) {
+      eyeRight.addEventListener("pointerenter", function () {
+        setHoveredPortal("right");
+      });
+      eyeRight.addEventListener("pointerleave", function () {
+        if (hoveredPortalSide === "right") setHoveredPortal("");
+      });
+    }
 
     if (branchOptions) {
       branchOptions.addEventListener("click", function (event) {
