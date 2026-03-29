@@ -1271,6 +1271,28 @@ textarea {
   touch-action: manipulation;
 }
 
+[data-admin-workspace-link="true"] {
+  cursor: pointer;
+  user-select: none;
+  transition:
+    border-color var(--transition),
+    background var(--transition),
+    color var(--transition),
+    box-shadow var(--transition);
+}
+
+[data-admin-workspace-link="true"]:hover {
+  color: var(--text);
+  border-color: rgba(120, 217, 255, 0.34);
+  background: rgba(120, 217, 255, 0.08);
+  box-shadow: 0 0 0 1px rgba(120, 217, 255, 0.08);
+}
+
+[data-admin-workspace-link="true"]:focus-visible {
+  outline: 2px solid rgba(120, 217, 255, 0.72);
+  outline-offset: 3px;
+}
+
 .portal-entry-section {
   padding: 44px 0 56px;
 }
@@ -1634,6 +1656,11 @@ textarea {
   align-items: start;
 }
 
+[data-dashboard-section-anchor],
+#dashboard-admin-workspace {
+  scroll-margin-top: 120px;
+}
+
 .portal-dashboard-body .form-panel {
   position: relative;
   overflow: hidden;
@@ -1673,6 +1700,17 @@ textarea {
   border-color: rgba(255, 155, 103, 0.22);
   background: rgba(255, 155, 103, 0.08);
   color: #ffc7a8;
+}
+
+.portal-admin-mode [data-admin-workspace-link="true"]:hover {
+  color: #fff1e7;
+  border-color: rgba(255, 155, 103, 0.38);
+  background: rgba(255, 155, 103, 0.12);
+  box-shadow: 0 0 0 1px rgba(255, 155, 103, 0.12);
+}
+
+.portal-admin-mode [data-admin-workspace-link="true"]:focus-visible {
+  outline-color: rgba(255, 155, 103, 0.82);
 }
 
 .portal-admin-mode [data-admin-tools-panel] {
