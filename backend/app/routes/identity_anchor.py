@@ -4,7 +4,11 @@ from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.database import get_database
-from app.dependencies.auth import get_current_user, has_internal_admin_access
+from app.dependencies.auth import (
+    get_current_user,
+    has_internal_admin_access,
+    require_package_capability,
+)
 from app.services.identity_anchor_service import (
     create_identity_anchor,
     get_identity_anchor,
@@ -145,6 +149,11 @@ def create_anchor(
     family_id: str,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
+    require_package_capability(
+        current_user,
+        "can_build_family_tree",
+        detail="Your active package does not include identity anchor access.",
+    )
     _require_family_access(family_id, current_user)
     return create_identity_anchor(person_id, family_id)
 
@@ -154,6 +163,11 @@ def fetch_anchor(
     person_id: str,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
+    require_package_capability(
+        current_user,
+        "can_build_family_tree",
+        detail="Your active package does not include identity anchor access.",
+    )
     anchor = get_identity_anchor(person_id)
 
     if not anchor:

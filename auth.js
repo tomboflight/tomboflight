@@ -1047,7 +1047,14 @@
       "intake-consent.html",
       "intake-review.html",
     ]);
-    const familyTreePages = new Set(["tree-view.html"]);
+    const familyTreePages = new Set([
+      "tree-view.html",
+      "create-family.html",
+      "add-member.html",
+      "create-relationship.html",
+      "family-graph.html",
+      "lineage-intelligence.html",
+    ]);
     const certificatePages = new Set(["lineage-certificate.html"]);
 
     if (

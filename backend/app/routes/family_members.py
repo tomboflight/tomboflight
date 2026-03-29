@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.core.metadata import apply_create_metadata, apply_update_metadata
 from app.database import get_database
-from app.dependencies.auth import get_current_user
+from app.dependencies.auth import get_current_user, require_any_package_capability
 from app.services.audit_log_service import create_audit_log
 from app.services.matching import generate_match_candidates_for_member
 
@@ -195,6 +195,14 @@ def _display_name(member: dict[str, Any]) -> str:
 
 @router.get("-index")
 def list_family_members_index(current_user: dict[str, Any] = Depends(get_current_user)):
+    require_any_package_capability(
+        current_user,
+        "can_build_family_tree",
+        "can_upload_verification_docs",
+        "can_upload_portraits",
+        detail="Your active package does not include family member access.",
+    )
+
     db = get_database()
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")
@@ -234,6 +242,13 @@ def create_family_member(
     payload: Dict[str, Any],
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
+    require_any_package_capability(
+        current_user,
+        "can_build_family_tree",
+        "can_open_family_intake",
+        detail="Your active package does not include family member editing.",
+    )
+
     db = get_database()
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")
@@ -277,6 +292,13 @@ def update_family_member(
     payload: Dict[str, Any],
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
+    require_any_package_capability(
+        current_user,
+        "can_build_family_tree",
+        "can_open_family_intake",
+        detail="Your active package does not include family member editing.",
+    )
+
     db = get_database()
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")
@@ -323,6 +345,13 @@ def delete_family_member(
     member_id: str,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
+    require_any_package_capability(
+        current_user,
+        "can_build_family_tree",
+        "can_open_family_intake",
+        detail="Your active package does not include family member editing.",
+    )
+
     db = get_database()
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")

@@ -3,7 +3,11 @@ from typing import Any
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
-from app.dependencies.auth import get_current_user, has_internal_admin_access
+from app.dependencies.auth import (
+    get_current_user,
+    has_internal_admin_access,
+    require_any_package_capability,
+)
 from app.schemas.relationship import RelationshipCreate, RelationshipResponse
 from app.services.relationship_guardrails import RelationshipGuardrailService
 
@@ -158,6 +162,13 @@ async def create_relationship(
     request: Request,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
+    require_any_package_capability(
+        current_user,
+        "can_build_family_tree",
+        "can_open_family_intake",
+        detail="Your active package does not include relationship editing.",
+    )
+
     db = request.app.state.db
     service = RelationshipGuardrailService(db)
 
@@ -213,6 +224,13 @@ async def get_family_relationships(
     request: Request,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
+    require_any_package_capability(
+        current_user,
+        "can_build_family_tree",
+        "can_open_family_intake",
+        detail="Your active package does not include relationship access.",
+    )
+
     db = request.app.state.db
 
     _require_family_access_by_family_id(family_id, db, current_user)
@@ -247,6 +265,13 @@ async def get_member_relationships(
     request: Request,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
+    require_any_package_capability(
+        current_user,
+        "can_build_family_tree",
+        "can_open_family_intake",
+        detail="Your active package does not include relationship access.",
+    )
+
     db = request.app.state.db
 
     _member, _family = _require_member_access(member_id, db, current_user)
@@ -288,6 +313,13 @@ async def delete_relationship(
     request: Request,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
+    require_any_package_capability(
+        current_user,
+        "can_build_family_tree",
+        "can_open_family_intake",
+        detail="Your active package does not include relationship editing.",
+    )
+
     db = request.app.state.db
 
     relationship, _family = _require_relationship_access(relationship_id, db, current_user)

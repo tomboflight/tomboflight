@@ -6,6 +6,8 @@ from app.core.security import create_access_token, hash_password, verify_passwor
 from app.database import get_database
 from app.schemas.auth import UserCreate
 
+PUBLIC_SIGNUP_ROLE = "user"
+
 
 def _now_iso() -> str:
     return datetime.now(UTC).isoformat()
@@ -44,7 +46,7 @@ def register_user(payload: UserCreate) -> dict | None:
             "_id": "local-user-preview",
             "email": payload.email.lower(),
             "full_name": payload.full_name.strip(),
-            "role": payload.role,
+            "role": PUBLIC_SIGNUP_ROLE,
             "status": "active",
             "created_at": now_iso,
             "policy_version": payload.policy_version,
@@ -60,7 +62,7 @@ def register_user(payload: UserCreate) -> dict | None:
     user = {
         "email": payload.email.lower(),
         "full_name": payload.full_name.strip(),
-        "role": payload.role,
+        "role": PUBLIC_SIGNUP_ROLE,
         "status": "active",
         "password_hash": hash_password(payload.password),
         "created_at": now_iso,

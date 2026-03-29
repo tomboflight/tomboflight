@@ -4,7 +4,7 @@ from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.database import get_database
-from app.dependencies.auth import get_current_user
+from app.dependencies.auth import get_current_user, require_any_package_capability
 
 router = APIRouter(prefix="/families", tags=["Family Graph"])
 
@@ -109,6 +109,14 @@ def get_family_graph(
     family_id: str,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
+    require_any_package_capability(
+        current_user,
+        "can_build_family_tree",
+        "can_upload_verification_docs",
+        "can_upload_portraits",
+        detail="Your active package does not include access to this family workspace.",
+    )
+
     db = get_database()
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")

@@ -4,7 +4,11 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.database import get_database
-from app.dependencies.auth import INTERNAL_ADMIN_KEYS, get_current_user
+from app.dependencies.auth import (
+    INTERNAL_ADMIN_KEYS,
+    get_current_user,
+    require_any_package_capability,
+)
 from app.schemas.family import FamilyCreate, FamilyResponse, build_family_response
 
 router = APIRouter(prefix="/families", tags=["Families"])
@@ -127,6 +131,13 @@ def create_family_route(
     payload: FamilyCreate,
     user: dict[str, Any] = Depends(get_current_user),
 ):
+    require_any_package_capability(
+        user,
+        "can_build_family_tree",
+        "can_open_family_intake",
+        detail="Your active package does not include family build access.",
+    )
+
     db = get_database()
     families_collection = db["families"]
 
