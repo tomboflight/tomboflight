@@ -835,6 +835,10 @@
       return null;
     }
 
+    if (source === "project" && !activeEntitlement && !paidOrder) {
+      return null;
+    }
+
     const packageLane =
       normalizeValue(activeEntitlement?.package_lane) ||
       normalizeValue(activeProject?.project_lane) ||

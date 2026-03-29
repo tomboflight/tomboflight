@@ -120,6 +120,53 @@
     window.history.replaceState({}, "", url.toString());
   }
 
+  function getProjectIdFromContext(context) {
+    return String(
+      context?.activeProject?.project_id ||
+        context?.activeProject?.projectId ||
+        context?.activeProject?.id ||
+        context?.activeProject?._id ||
+        context?.currentWorkspace?.projectId ||
+        "",
+    ).trim();
+  }
+
+  function withWorkspaceHref(href, context, familyIdOverride) {
+    if (!href) return href;
+
+    const familyId = String(
+      familyIdOverride || getFamilyIdFromUrl() || getPreferredFamilyId(context) || "",
+    ).trim();
+    const projectId = getProjectIdFromContext(context);
+
+    if (!familyId && !projectId) {
+      return href;
+    }
+
+    try {
+      const url = new URL(href, window.location.href);
+      if (familyId) {
+        url.searchParams.set("family_id", familyId);
+      }
+      if (projectId) {
+        url.searchParams.set("project_id", projectId);
+      }
+      return `${url.pathname.split("/").pop() || href}${url.search}`;
+    } catch (error) {
+      return href;
+    }
+  }
+
+  function updateWorkspaceLinks(context, familyIdOverride) {
+    ["intake-review.html", "tree-view.html", "lineage-certificate.html"].forEach(
+      function (href) {
+        document.querySelectorAll(`a[href^="${href}"]`).forEach(function (node) {
+          node.setAttribute("href", withWorkspaceHref(href, context, familyIdOverride));
+        });
+      },
+    );
+  }
+
   async function getCurrentContext() {
     if (
       !authPages ||
@@ -195,6 +242,7 @@
     }
 
     const preferredFamilyId = getPreferredFamilyId(currentContext);
+    updateWorkspaceLinks(currentContext, preferredFamilyId);
 
     await loadFamilyOptions(familySelect, statusNode, preferredFamilyId);
 
@@ -208,6 +256,7 @@
 
         clearDetailPanel(detailPanel, detailEmpty);
         setFamilyIdInUrl(familyId);
+        updateWorkspaceLinks(currentContext, familyId);
         await loadAndRenderTree(
           familyId,
           canvas,
@@ -220,12 +269,14 @@
 
     if (familySelect) {
       familySelect.addEventListener("change", function () {
+        updateWorkspaceLinks(currentContext, familySelect.value);
         hideStatus(statusNode);
       });
     }
 
     if (familySelect && familySelect.value) {
       clearDetailPanel(detailPanel, detailEmpty);
+      updateWorkspaceLinks(currentContext, familySelect.value);
       await loadAndRenderTree(
         familySelect.value,
         canvas,

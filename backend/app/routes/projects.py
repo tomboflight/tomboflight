@@ -82,16 +82,13 @@ def create_project_route(
     current_user_email = _current_user_email(current_user)
 
     if not _is_admin(current_user):
-        if str(payload.owner_user_id).strip() != current_user_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You can only create projects for your own account.",
-            )
-        if str(payload.owner_email).strip().lower() != current_user_email:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Owner email must match the authenticated account.",
-            )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Projects are provisioned through paid packages and approved "
+                "intake. Customer accounts cannot create projects directly."
+            ),
+        )
 
     project = create_project(payload)
     return build_project_response(project)

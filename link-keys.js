@@ -63,10 +63,45 @@
     node.textContent = "";
   }
 
+  function getFamilyIdFromContext(context) {
+    return String(
+      context?.activeProject?.family_id || context?.activeProject?.familyId || "",
+    ).trim();
+  }
+
   function getProjectIdFromContext(context) {
     return String(
-      context?.activeProject?.id || context?.activeProject?._id || "",
+      context?.activeProject?.project_id ||
+        context?.activeProject?.projectId ||
+        context?.activeProject?.id ||
+        context?.activeProject?._id ||
+        context?.currentWorkspace?.projectId ||
+        "",
     ).trim();
+  }
+
+  function withContextHref(href, context) {
+    if (!href) return href;
+
+    const familyId = getFamilyIdFromContext(context);
+    const projectId = getProjectIdFromContext(context);
+
+    if (!familyId && !projectId) {
+      return href;
+    }
+
+    try {
+      const url = new URL(href, window.location.href);
+      if (familyId) {
+        url.searchParams.set("family_id", familyId);
+      }
+      if (projectId) {
+        url.searchParams.set("project_id", projectId);
+      }
+      return `${url.pathname.split("/").pop() || href}${url.search}`;
+    } catch (error) {
+      return href;
+    }
   }
 
   function getResolvedEntitlements(context) {
@@ -98,16 +133,25 @@
 
     if (navTree) {
       navTree.style.display = resolved.can_build_family_tree ? "" : "none";
+      navTree.setAttribute("href", withContextHref("tree-view.html", context));
     }
 
     if (navCertificate) {
       navCertificate.style.display = resolved.can_use_lineage_certificate
         ? ""
         : "none";
+      navCertificate.setAttribute(
+        "href",
+        withContextHref("lineage-certificate.html", context),
+      );
     }
 
     if (navIntake) {
       navIntake.style.display = resolved.can_open_family_intake ? "" : "none";
+      navIntake.setAttribute(
+        "href",
+        withContextHref("intake-review.html", context),
+      );
     }
 
     if (navVerification) {
@@ -115,6 +159,10 @@
         resolved.can_upload_verification_docs || resolved.can_upload_portraits
           ? ""
           : "none";
+      navVerification.setAttribute(
+        "href",
+        withContextHref("verification-upload.html", context),
+      );
     }
   }
 
@@ -584,9 +632,15 @@
       currentUser = await app.apiRequest("/auth/me", { method: "GET" });
 
       const orders = authPages.fetchOrders ? await authPages.fetchOrders() : [];
-      currentContext = authPages.getDashboardContext
-        ? await authPages.getDashboardContext(currentUser, orders)
-        : null;
+      currentContext =
+        typeof authPages.getDashboardContextForCurrentPage === "function"
+          ? await authPages.getDashboardContextForCurrentPage(
+              currentUser,
+              orders,
+            )
+          : authPages.getDashboardContext
+            ? await authPages.getDashboardContext(currentUser, orders)
+            : null;
 
       if (!currentContext || !currentContext.hasPackageAccess) {
         throw new Error("No active package is attached to this account yet.");

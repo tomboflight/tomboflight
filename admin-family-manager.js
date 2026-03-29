@@ -152,7 +152,9 @@
     });
 
     if (!hasAccess) {
-      throw new Error("Admin access is required to use this page.");
+      const error = new Error("Admin access is required to use this page.");
+      error.code = "admin_access_required";
+      throw error;
     }
   }
 
@@ -181,6 +183,15 @@
     }
 
     throw lastError || new Error("All API request attempts failed.");
+  }
+
+  function redirectCustomerToDashboard(error) {
+    if (error?.code !== "admin_access_required") {
+      return false;
+    }
+
+    window.location.replace("dashboard.html");
+    return true;
   }
 
   function getDisplayName(member) {
@@ -1511,6 +1522,7 @@
       }
     } catch (error) {
       console.error("Admin family manager setup failed:", error);
+      if (redirectCustomerToDashboard(error)) return;
 
       const statusNode = document.querySelector("[data-admin-family-status]");
       const actionNode = document.querySelector(

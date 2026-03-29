@@ -6,8 +6,8 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from app.core.package_catalog import get_package
 from app.core.security import decode_access_token
 from app.services.auth_service import get_user_by_email
+from app.services.order_service import get_orders_for_user
 from app.services.project_entitlement_service import list_user_project_entitlements
-from app.services.project_service import list_projects
 
 COOKIE_NAME = "tol_access_token"
 
@@ -136,6 +136,21 @@ def _collect_capabilities_from_mapping(
             target.add(normalized_key)
 
 
+def _is_paid_package_order(order: dict | None) -> bool:
+    if not isinstance(order, dict):
+        return False
+
+    item_type = _normalize_value(order.get("item_type") or "package")
+    status = _normalize_value(order.get("status"))
+
+    return item_type == "package" and status in {
+        "paid",
+        "complete",
+        "completed",
+        "succeeded",
+    }
+
+
 def get_user_package_capabilities(user: dict) -> set[str]:
     if has_internal_admin_access(user):
         return {"*"}
@@ -152,14 +167,17 @@ def get_user_package_capabilities(user: dict) -> set[str]:
                 entitlement.get("resolved_entitlements"),
             )
 
-    projects = list_projects(
-        owner_user_id=user_id or None,
-        owner_email=user_email or None,
-        is_admin=False,
-    )
-    for project in projects:
+    try:
+        orders = get_orders_for_user(user)
+    except Exception:
+        orders = []
+
+    for order in orders:
+        if not _is_paid_package_order(order):
+            continue
+
         package_code = str(
-            project.get("package_code") or project.get("package_slug") or ""
+            order.get("package_code") or order.get("package_slug") or ""
         ).strip()
         package = get_package(package_code)
         _collect_capabilities_from_mapping(capabilities, package)

@@ -196,6 +196,34 @@
     return params.get(name) || "";
   }
 
+  function withWorkspaceHref(href, submission) {
+    if (!href) return href;
+
+    const familyId = String(
+      submission?.family_root_id || submission?.family_id || "",
+    ).trim();
+    const projectId = String(
+      submission?.project_id || submission?.projectId || "",
+    ).trim();
+
+    if (!familyId && !projectId) {
+      return href;
+    }
+
+    try {
+      const url = new URL(href, window.location.href);
+      if (familyId) {
+        url.searchParams.set("family_id", familyId);
+      }
+      if (projectId) {
+        url.searchParams.set("project_id", projectId);
+      }
+      return `${url.pathname.split("/").pop() || href}${url.search}`;
+    } catch (error) {
+      return href;
+    }
+  }
+
   function ensureAdminAccess(me) {
     const values = [
       normalizeValue(me && me.role),
@@ -208,7 +236,9 @@
     });
 
     if (!hasAccess) {
-      throw new Error("Admin access is required to use this page.");
+      const error = new Error("Admin access is required to use this page.");
+      error.code = "admin_access_required";
+      throw error;
     }
   }
 
@@ -244,6 +274,15 @@
     node.textContent = text;
     node.setAttribute("href", href);
     node.style.display = show ? "" : "none";
+  }
+
+  function redirectCustomerToDashboard(error) {
+    if (error?.code !== "admin_access_required") {
+      return false;
+    }
+
+    window.location.replace("dashboard.html");
+    return true;
   }
 
   function getProvisionedWorkspaceLabel(submission) {
@@ -310,28 +349,19 @@
       if (hasFamilyBuild) {
         configureActionLink(familyManagerLink, {
           text: "Open Family Manager",
-          href:
-            submission && submission.family_root_id
-              ? `admin-family-manager.html?family_id=${encodeURIComponent(submission.family_root_id)}`
-              : "admin-family-manager.html",
+          href: withWorkspaceHref("admin-family-manager.html", submission),
           show: true,
         });
 
         configureActionLink(familyTreeLink, {
           text: "Open Family Tree",
-          href:
-            submission && submission.family_root_id
-              ? `tree-view.html?family_id=${encodeURIComponent(submission.family_root_id)}`
-              : "tree-view.html",
+          href: withWorkspaceHref("tree-view.html", submission),
           show: true,
         });
 
         configureActionLink(certificateLink, {
           text: "Open Lineage Certificate",
-          href:
-            submission && submission.family_root_id
-              ? `lineage-certificate.html?family_id=${encodeURIComponent(submission.family_root_id)}`
-              : "lineage-certificate.html",
+          href: withWorkspaceHref("lineage-certificate.html", submission),
           show: true,
         });
 
@@ -347,13 +377,13 @@
 
         configureActionLink(familyTreeLink, {
           text: "Open Verification Uploads",
-          href: "verification-upload.html",
+          href: withWorkspaceHref("verification-upload.html", submission),
           show: true,
         });
 
         configureActionLink(certificateLink, {
           text: "Open Linking Keys",
-          href: "link-keys.html",
+          href: withWorkspaceHref("link-keys.html", submission),
           show: linkKeysEnabled,
         });
 
@@ -363,7 +393,7 @@
       if (lane === "organization") {
         configureActionLink(familyManagerLink, {
           text: "Open Structure Workspace",
-          href: "verification-upload.html",
+          href: withWorkspaceHref("verification-upload.html", submission),
           show: true,
         });
 
@@ -838,6 +868,7 @@
       }
     } catch (error) {
       console.error("Admin queue page setup failed:", error);
+      if (redirectCustomerToDashboard(error)) return;
 
       const node = document.querySelector("[data-admin-queue-action-status]");
       setStatus(node, error.message || "Admin access is required.", "error");
@@ -901,6 +932,7 @@
       }
     } catch (error) {
       console.error("Admin review page setup failed:", error);
+      if (redirectCustomerToDashboard(error)) return;
 
       const node = document.querySelector("[data-admin-review-action-status]");
       setStatus(node, error.message || "Admin access is required.", "error");
