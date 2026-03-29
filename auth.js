@@ -322,6 +322,18 @@
     return rawId == null ? "" : String(rawId).trim();
   }
 
+  function getFamilyIdFromSubmission(record) {
+    if (!record || typeof record !== "object") return "";
+
+    const rawId =
+      record.family_root_id ||
+      record.familyRootId ||
+      record.family_id ||
+      record.familyId;
+
+    return rawId == null ? "" : String(rawId).trim();
+  }
+
   function getWorkspaceSelectionHints(search) {
     try {
       const params = new URLSearchParams(
@@ -676,6 +688,25 @@
     return toArray(payload);
   }
 
+  async function fetchLatestIntakeSubmissionSafe() {
+    try {
+      return await app.apiRequest("/intake-submissions/my-latest", {
+        method: "GET",
+      });
+    } catch (error) {
+      const message = getErrorMessage(error).toLowerCase();
+
+      if (
+        message.includes("no intake submissions found") ||
+        message.includes("404")
+      ) {
+        return null;
+      }
+
+      throw error;
+    }
+  }
+
   async function fetchProjectEntitlements() {
     const payload = await app.apiRequest("/project-entitlements/my-active", {
       method: "GET",
@@ -953,7 +984,7 @@
       projects = [];
     }
 
-    const currentWorkspace = resolveCurrentWorkspace(
+    let currentWorkspace = resolveCurrentWorkspace(
       orders,
       entitlements,
       projects,
@@ -962,7 +993,7 @@
     const paidOrder = currentWorkspace?.paidOrder || getPaidOrder(orders);
     const activeEntitlement =
       currentWorkspace?.activeEntitlement || getActiveEntitlement(entitlements);
-    const activeProject =
+    let activeProject =
       currentWorkspace?.activeProject ||
       getActiveProject(projects, activeEntitlement, paidOrder);
 
@@ -990,6 +1021,46 @@
     const resolvedEntitlements =
       currentWorkspace?.resolvedEntitlements ||
       getResolvedEntitlements(activeEntitlement, packageCode, packageLane);
+
+    const shouldBackfillFamilyId =
+      (packageLane === "household" || packageLane === "network") &&
+      !getFamilyIdFromRecord(activeProject);
+
+    if (shouldBackfillFamilyId) {
+      try {
+        const latestSubmission = await fetchLatestIntakeSubmissionSafe();
+        const submissionFamilyId = getFamilyIdFromSubmission(latestSubmission);
+        const submissionProjectId = String(
+          latestSubmission?.project_id || latestSubmission?.projectId || "",
+        ).trim();
+        const activeProjectId = getProjectIdFromRecord(activeProject);
+
+        if (
+          submissionFamilyId &&
+          (!submissionProjectId ||
+            !activeProjectId ||
+            submissionProjectId === activeProjectId)
+        ) {
+          activeProject = Object.assign({}, activeProject || {}, {
+            family_id: submissionFamilyId,
+          });
+
+          if (currentWorkspace?.activeProject) {
+            currentWorkspace = Object.assign({}, currentWorkspace, {
+              activeProject: Object.assign(
+                {},
+                currentWorkspace.activeProject,
+                {
+                  family_id: submissionFamilyId,
+                },
+              ),
+            });
+          }
+        }
+      } catch (error) {
+        // Ignore supplemental intake lookups so dashboard context can still load.
+      }
+    }
 
     return {
       user: user || null,

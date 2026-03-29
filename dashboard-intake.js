@@ -20,6 +20,15 @@
     "archived",
   ]);
 
+  const PRODUCTION_STATUSES = new Set([
+    "build_ready",
+    "in_production",
+    "qa_review",
+    "client_review",
+    "delivered",
+    "archived",
+  ]);
+
   function normalizeValue(value) {
     return String(value || "")
       .trim()
@@ -100,17 +109,33 @@
     node.textContent = value;
   }
 
-  function withFamilyId(href, context) {
-    const familyId = String(
-      context?.activeProject?.family_id || context?.activeProject?.familyId || "",
+  function getContextFamilyId(context) {
+    return String(
+      context?.activeProject?.family_id ||
+        context?.activeProject?.familyId ||
+        context?.latestSubmission?.family_root_id ||
+        context?.latestSubmission?.familyRootId ||
+        context?.latestSubmission?.family_id ||
+        context?.latestSubmission?.familyId ||
+        "",
     ).trim();
-    const projectId = String(
+  }
+
+  function getContextProjectId(context) {
+    return String(
       context?.activeProject?.project_id ||
         context?.activeProject?.projectId ||
         context?.activeProject?.id ||
         context?.activeProject?._id ||
+        context?.latestSubmission?.project_id ||
+        context?.latestSubmission?.projectId ||
         "",
     ).trim();
+  }
+
+  function withFamilyId(href, context) {
+    const familyId = getContextFamilyId(context);
+    const projectId = getContextProjectId(context);
 
     if (!href || (!familyId && !projectId)) return href;
 
@@ -306,6 +331,76 @@
       config.platformStatusTitle,
       config.platformStatusCopy,
     );
+  }
+
+  function isProductionStatus(status) {
+    return PRODUCTION_STATUSES.has(normalizeStatus(status));
+  }
+
+  function getPrimaryWorkspaceAction(context, config, latestSubmission) {
+    const resolved = context?.resolvedEntitlements || {};
+    const lane = normalizeValue(context?.packageLane || resolved.package_lane);
+    const status = normalizeStatus(
+      latestSubmission?.status || latestSubmission?.submission_status,
+    );
+    const hasWorkspaceFamily = Boolean(getContextFamilyId(context));
+    const canOpenIntake = Boolean(
+      resolved.can_open_family_intake || resolved.can_open_org_intake,
+    );
+
+    if (lane === "portrait" || lane === "organization") {
+      return {
+        text: config.primaryActionText,
+        href: config.primaryActionHref,
+        show: true,
+      };
+    }
+
+    if (hasWorkspaceFamily || isProductionStatus(status)) {
+      if (hasWorkspaceFamily) {
+        return {
+          text: config.primaryActionText,
+          href: config.primaryActionHref,
+          show: true,
+        };
+      }
+
+      return {
+        text: "View Intake Record",
+        href: "intake-review.html",
+        show: true,
+      };
+    }
+
+    if (status === "rejected") {
+      return {
+        text: "Resume Intake",
+        href: "intake-household.html",
+        show: true,
+      };
+    }
+
+    if (isLockedStatus(status)) {
+      return {
+        text: "View Intake Record",
+        href: "intake-review.html",
+        show: true,
+      };
+    }
+
+    if (!status && canOpenIntake) {
+      return {
+        text: "Start Intake",
+        href: "intake-welcome.html",
+        show: true,
+      };
+    }
+
+    return {
+      text: "Continue Intake",
+      href: "intake-welcome.html",
+      show: canOpenIntake,
+    };
   }
 
   function getEntitlementConfig(context) {
@@ -661,25 +756,37 @@
     };
   }
 
-  function updateLaneUi(context, config) {
+  function updateLaneUi(context, config, latestSubmission) {
     updatePresencePanel(config);
     updateBuildPathPanel(config);
     updatePlatformStatusPanel(config);
 
-    applyNavVisibility("tree-view.html", config.navTree);
-    applyNavVisibility("lineage-certificate.html", config.navCertificate);
+    const hasWorkspaceFamily = Boolean(getContextFamilyId(context));
+    const showTreeActions = config.showTree && hasWorkspaceFamily;
+    const showCertificateActions = config.showCertificate && hasWorkspaceFamily;
+    const primaryAction = getPrimaryWorkspaceAction(
+      context,
+      config,
+      latestSubmission,
+    );
+
+    applyNavVisibility("tree-view.html", config.navTree && hasWorkspaceFamily);
+    applyNavVisibility(
+      "lineage-certificate.html",
+      config.navCertificate && hasWorkspaceFamily,
+    );
     applyNavVisibility("intake-review.html", config.navIntake);
     applyNavVisibility("verification-upload.html", config.showVerification);
     applyNavVisibility("link-keys.html", config.navLinkKeys);
 
     applyAction('.site-nav a[href^="tree-view.html"]', {
       href: withFamilyId("tree-view.html", context),
-      show: config.navTree,
+      show: config.navTree && hasWorkspaceFamily,
     });
 
     applyAction('.site-nav a[href^="lineage-certificate.html"]', {
       href: withFamilyId("lineage-certificate.html", context),
-      show: config.navCertificate,
+      show: config.navCertificate && hasWorkspaceFamily,
     });
 
     applyAction('.site-nav a[href^="link-keys.html"]', {
@@ -690,9 +797,9 @@
     applyAction(
       "[data-dashboard-hero-primary-action], [data-dashboard-package-primary-action]",
       {
-        text: config.primaryActionText,
-        href: withFamilyId(config.primaryActionHref, context),
-        show: true,
+        text: primaryAction.text,
+        href: withFamilyId(primaryAction.href, context),
+        show: primaryAction.show,
       },
     );
 
@@ -719,7 +826,7 @@
       {
         text: "Open Family Tree",
         href: withFamilyId("tree-view.html", context),
-        show: config.showTree,
+        show: showTreeActions,
       },
     );
 
@@ -728,7 +835,7 @@
       {
         text: "View Lineage Certificate",
         href: withFamilyId("lineage-certificate.html", context),
-        show: config.showCertificate,
+        show: showCertificateActions,
       },
     );
 
@@ -917,7 +1024,7 @@
     }
 
     const config = getEntitlementConfig(context);
-    updateLaneUi(context, config);
+    updateLaneUi(context, config, null);
     applyPortalTheme(context, config);
 
     const intakeCardStatus = document.querySelector(
@@ -945,6 +1052,16 @@
     try {
       const latest = await getLatestSubmission();
       const history = await getSubmissionHistory();
+      const contextWithLatest = Object.assign({}, context, {
+        latestSubmission: latest || null,
+      });
+      const primaryAction = getPrimaryWorkspaceAction(
+        contextWithLatest,
+        config,
+        latest,
+      );
+
+      updateLaneUi(contextWithLatest, config, latest);
 
       text(currentPackage, context.packageName || "Active Package");
 
@@ -963,11 +1080,7 @@
         );
         text(
           nextFocusNode,
-          config.lane === "portrait"
-            ? "Upload portrait and supporting records."
-            : config.lane === "organization"
-              ? "Upload organization and supporting records."
-              : config.primaryActionText || "Open your workspace.",
+          primaryAction.text || "Open your workspace.",
         );
         text(
           lockNote,
