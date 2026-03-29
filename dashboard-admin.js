@@ -125,6 +125,45 @@
     return [];
   }
 
+  function applyAdminPortalTheme(me) {
+    const body = document.body;
+    const dashboard = document.querySelector("[data-dashboard]");
+    const roleTitle = getRoleTitle(me);
+    const cards = getRoleCards(me);
+    const nextFocus = cards.length ? "Intake Queue" : "Awaiting published tools";
+
+    if (body) {
+      body.classList.add("portal-dashboard-body", "portal-admin-mode");
+      body.dataset.portalMode = "admin";
+      body.dataset.portalLane = "admin";
+    }
+
+    if (dashboard) {
+      dashboard.setAttribute("data-portal-mode", "admin");
+      dashboard.setAttribute("data-portal-lane", "admin");
+    }
+
+    const updates = [
+      ["[data-dashboard-lane-chip]", "Admin Lane"],
+      ["[data-dashboard-package-chip]", roleTitle],
+      ["[data-dashboard-scope-chip]", "Authorized Tools"],
+      ["[data-dashboard-core-label]", "Operations Core"],
+      ["[data-dashboard-core-subtitle]", "Secure Internal Access"],
+      ["[data-dashboard-lane-summary]", "Internal Operations"],
+      [
+        "[data-dashboard-lane-description]",
+        "This environment exposes internal Tomb of Light workflow tools without mixing in customer package panels.",
+      ],
+      ["[data-dashboard-package-display]", roleTitle],
+      ["[data-dashboard-next-focus]", nextFocus],
+    ];
+
+    updates.forEach(function (item) {
+      const node = document.querySelector(item[0]);
+      if (node) node.textContent = item[1];
+    });
+  }
+
   function hideCustomerPanels() {
     document
       .querySelectorAll("[data-dashboard-customer-only]")
@@ -172,7 +211,7 @@
     if (!isInternalRole(me)) return;
 
     const panel = document.createElement("div");
-    panel.className = "form-panel";
+    panel.className = "form-panel portal-admin-panel";
     panel.setAttribute("data-admin-tools-panel", "true");
 
     const cards = getRoleCards(me);
@@ -199,6 +238,7 @@
       const me = await app.apiRequest("/auth/me", { method: "GET" });
 
       if (isInternalRole(me)) {
+        applyAdminPortalTheme(me);
         hideCustomerPanels();
         hideCustomerNavItems();
         updateHeroForInternal();
