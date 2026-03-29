@@ -28,6 +28,8 @@
   const stage = document.getElementById("viewerStage");
   const slideshow = document.getElementById("slideshow");
 
+  const gazeShell = document.getElementById("gazeShell");
+  const gazeLabel = document.getElementById("gazeLabel");
   const eyeLeft = document.getElementById("eyeLeft");
   const eyeRight = document.getElementById("eyeRight");
 
@@ -44,7 +46,7 @@
     hero_body:
       "Navigate through generations of the Moreland lineage and explore family branches through the Tomb of Light viewer.",
     instructions:
-      "Hold C to reveal the lineage portals. Hover a portal and scroll in to enter that line, or scroll out to return. Use the zoom buttons below only when you want a closer look at the portrait. (Full viewer only)",
+      "Hold C to reveal the Iris Gate. Hover the left or right side of the gaze field to arm Origins or Future Line, then scroll in to enter. Scroll out to return. Use the zoom buttons below only when you want a closer look at the portrait. (Full viewer only)",
     path_title: "Lineage Flow",
     path_items: [
       "Malik → Parents",
@@ -195,9 +197,12 @@
   const SCALE_MIN = 0.65;
   const SCALE_MAX = 1.25;
   const ZOOM_STEP = 0.12;
+  const WHEEL_NAVIGATION_THRESHOLD = 48;
+  const WHEEL_NAVIGATION_COOLDOWN_MS = 720;
 
   let pendingWheelDelta = 0;
   let wheelRaf = null;
+  let wheelNavigationCooldownUntil = 0;
   let hoveredPortalSide = "";
   let gestureNavigationLock = false;
 
@@ -212,6 +217,30 @@
   function setText(node, value) {
     if (!node) return;
     node.textContent = value || "";
+  }
+
+  function getCurrentTargets() {
+    const config = statesById[state];
+    return (
+      config?.eyeTargets ||
+      (currentManifest?.mode === "dynamic"
+        ? DEFAULT_DYNAMIC_EYE_TARGETS
+        : DEFAULT_DYNAMIC_EYE_TARGETS)
+    );
+  }
+
+  function getPortalLabel(side) {
+    if (side === "left") {
+      return currentManifest?.navLabels?.left || "Origins";
+    }
+    if (side === "right") {
+      return currentManifest?.navLabels?.right || "Future Line";
+    }
+    return "Iris Gate";
+  }
+
+  function updateGazeLabel(side) {
+    setText(gazeLabel, getPortalLabel(side));
   }
 
   function getApiBaseUrl() {
@@ -447,7 +476,7 @@
     if (narrationToggleBtn) {
       narrationToggleBtn.textContent = isPlaying
         ? "Narration: ON"
-        : "Narration: OFF";
+        : "Resume Narration";
     }
     if (isPlaying) {
       showNarration(statesById[state]?.narration || "");
@@ -455,6 +484,15 @@
     } else {
       stopNarrationAutoAdvance();
     }
+  }
+
+  function pauseNarrationForManualControl() {
+    if (EMBED_MODE || !isPlaying) return;
+    isPlaying = false;
+    if (narrationToggleBtn) {
+      narrationToggleBtn.textContent = "Resume Narration";
+    }
+    stopNarrationAutoAdvance();
   }
 
   function setZoom(nextScale, smooth = true) {
@@ -475,18 +513,34 @@
   function placeEyeHints() {
     if (!eyeLeft || !eyeRight || !slideshow) return;
 
-    const config = statesById[state];
-    const targets =
-      config?.eyeTargets ||
-      (currentManifest?.mode === "dynamic"
-        ? DEFAULT_DYNAMIC_EYE_TARGETS
-        : DEFAULT_DYNAMIC_EYE_TARGETS);
+    const targets = getCurrentTargets();
 
     eyeLeft.style.left = `${targets.left.x}%`;
     eyeLeft.style.top = `${targets.left.y}%`;
 
     eyeRight.style.left = `${targets.right.x}%`;
     eyeRight.style.top = `${targets.right.y}%`;
+
+    if (gazeShell) {
+      const centerX = (Number(targets.left.x) + Number(targets.right.x)) / 2;
+      const centerY = (Number(targets.left.y) + Number(targets.right.y)) / 2;
+      const span = Math.max(
+        10,
+        Math.abs(Number(targets.right.x) - Number(targets.left.x)),
+      );
+      const shellWidth = clamp(span * 3.1, 18, 32);
+      const shellHeight = clamp(shellWidth * 0.72, 10, 22);
+
+      gazeShell.style.left = `${centerX}%`;
+      gazeShell.style.top = `${centerY}%`;
+      gazeShell.style.width = `${shellWidth}%`;
+      gazeShell.style.height = `${shellHeight}%`;
+
+      if (gazeLabel) {
+        gazeLabel.style.left = `${centerX}%`;
+        gazeLabel.style.top = `${centerY - shellHeight * 0.7}%`;
+      }
+    }
   }
 
   function setEyeHintsVisible(visible) {
@@ -497,6 +551,17 @@
     eyeRight.classList.toggle("is-visible", visible);
     eyeLeft.setAttribute("aria-hidden", visible ? "false" : "true");
     eyeRight.setAttribute("aria-hidden", visible ? "false" : "true");
+
+    if (gazeShell) {
+      gazeShell.classList.toggle("is-visible", visible);
+      gazeShell.setAttribute("aria-hidden", visible ? "false" : "true");
+    }
+
+    if (gazeLabel) {
+      gazeLabel.classList.toggle("is-visible", visible);
+      gazeLabel.setAttribute("aria-hidden", visible ? "false" : "true");
+      updateGazeLabel(visible ? hoveredPortalSide : "");
+    }
   }
 
   function setHoveredPortal(side) {
@@ -507,6 +572,11 @@
     if (eyeRight) {
       eyeRight.classList.toggle("is-active", hoveredPortalSide === "right");
     }
+    if (gazeShell) {
+      gazeShell.classList.toggle("is-left-armed", hoveredPortalSide === "left");
+      gazeShell.classList.toggle("is-right-armed", hoveredPortalSide === "right");
+    }
+    updateGazeLabel(hoveredPortalSide);
   }
 
   function onKeyDown(e) {
@@ -533,14 +603,25 @@
     return statesById[state]?.rightStateId || "";
   }
 
-  function portalCanInteract(node) {
-    return Boolean(node && node.classList.contains("is-visible"));
+  function portalCanInteract() {
+    return Boolean(gazeShell && gazeShell.classList.contains("is-visible"));
+  }
+
+  function resolvePortalSideFromPointer(event) {
+    if (!gazeShell) return "";
+    const bounds = gazeShell.getBoundingClientRect();
+    if (!bounds.width) return "";
+    const midpoint = bounds.left + bounds.width / 2;
+    return event.clientX <= midpoint ? "left" : "right";
   }
 
   async function animatePortalTransition(side, nextState) {
     if (!nextState || !viewerImage || gestureNavigationLock) return;
 
+    pauseNarrationForManualControl();
     gestureNavigationLock = true;
+    pendingWheelDelta = 0;
+    wheelNavigationCooldownUntil = Date.now() + WHEEL_NAVIGATION_COOLDOWN_MS;
 
     const config = statesById[state];
     const targets =
@@ -563,7 +644,7 @@
   }
 
   function onEyeLeftClick() {
-    if (EMBED_MODE || !portalCanInteract(eyeLeft)) return;
+    if (EMBED_MODE || !portalCanInteract()) return;
     const next = resolveLeftTarget();
     if (next) {
       markInteraction();
@@ -572,7 +653,7 @@
   }
 
   function onEyeRightClick() {
-    if (EMBED_MODE || !portalCanInteract(eyeRight)) return;
+    if (EMBED_MODE || !portalCanInteract()) return;
     const next = resolveRightTarget();
     if (next) {
       markInteraction();
@@ -583,6 +664,7 @@
   function selectBranch(targetStateId) {
     if (EMBED_MODE || !targetStateId) return;
     markInteraction();
+    pauseNarrationForManualControl();
     applyState(targetStateId);
   }
 
@@ -606,6 +688,32 @@
       .join("");
 
     branchOptions.style.display = branchOptionsForState.length ? "flex" : "none";
+  }
+
+  function onGazeShellPointerEnter(event) {
+    if (!cHeld || !portalCanInteract()) return;
+    setHoveredPortal(resolvePortalSideFromPointer(event));
+  }
+
+  function onGazeShellPointerMove(event) {
+    if (!cHeld || !portalCanInteract()) return;
+    setHoveredPortal(resolvePortalSideFromPointer(event));
+  }
+
+  function onGazeShellPointerLeave() {
+    if (!cHeld) return;
+    setHoveredPortal("");
+  }
+
+  function onGazeShellClick() {
+    if (EMBED_MODE || !portalCanInteract()) return;
+    if (hoveredPortalSide === "left") {
+      onEyeLeftClick();
+      return;
+    }
+    if (hoveredPortalSide === "right") {
+      onEyeRightClick();
+    }
   }
 
   async function swapViewerImage(imageUrl, altText) {
@@ -687,12 +795,14 @@
   function zoomIn() {
     if (EMBED_MODE) return;
     markInteraction();
+    pauseNarrationForManualControl();
     setZoom(scale + ZOOM_STEP, true);
   }
 
   function zoomOut() {
     if (EMBED_MODE) return;
     markInteraction();
+    pauseNarrationForManualControl();
     setZoom(scale - ZOOM_STEP, true);
   }
 
@@ -715,9 +825,18 @@
         pendingWheelDelta = 0;
         wheelRaf = null;
 
-        if (Math.abs(delta) < 12 || gestureNavigationLock) return;
+        if (Math.abs(delta) < WHEEL_NAVIGATION_THRESHOLD || gestureNavigationLock) {
+          return;
+        }
+
+        const now = Date.now();
+        if (now < wheelNavigationCooldownUntil) {
+          return;
+        }
 
         markInteraction();
+        pauseNarrationForManualControl();
+        wheelNavigationCooldownUntil = now + WHEEL_NAVIGATION_COOLDOWN_MS;
 
         if (delta < 0) {
           const side =
@@ -800,23 +919,11 @@
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
 
-    if (eyeLeft) eyeLeft.addEventListener("click", onEyeLeftClick);
-    if (eyeRight) eyeRight.addEventListener("click", onEyeRightClick);
-    if (eyeLeft) {
-      eyeLeft.addEventListener("pointerenter", function () {
-        setHoveredPortal("left");
-      });
-      eyeLeft.addEventListener("pointerleave", function () {
-        if (hoveredPortalSide === "left") setHoveredPortal("");
-      });
-    }
-    if (eyeRight) {
-      eyeRight.addEventListener("pointerenter", function () {
-        setHoveredPortal("right");
-      });
-      eyeRight.addEventListener("pointerleave", function () {
-        if (hoveredPortalSide === "right") setHoveredPortal("");
-      });
+    if (gazeShell) {
+      gazeShell.addEventListener("pointerenter", onGazeShellPointerEnter);
+      gazeShell.addEventListener("pointermove", onGazeShellPointerMove);
+      gazeShell.addEventListener("pointerleave", onGazeShellPointerLeave);
+      gazeShell.addEventListener("click", onGazeShellClick);
     }
 
     if (branchOptions) {
