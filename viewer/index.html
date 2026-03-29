@@ -3,9 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tomb of Light | Genesis Prototype</title>
+    <title>Tomb of Light | Viewer</title>
 
-    <link rel="stylesheet" href="css/style.css?v=20260329-2" />
+    <link rel="stylesheet" href="css/style.css?v=20260329-3" />
 
     <script>
       (function () {
@@ -178,9 +178,9 @@
         </div>
 
         <div class="viewer-header-copy">
-          <span class="viewer-kicker">Genesis Prototype</span>
-          <h1>Interactive Family Lineage</h1>
-          <p>
+          <span class="viewer-kicker" id="viewerHeaderKicker">Genesis Prototype</span>
+          <h1 id="viewerHeroTitle">Interactive Family Lineage</h1>
+          <p id="viewerHeroBody">
             Navigate through generations of the Moreland lineage and explore
             family branches through the Tomb of Light viewer.
           </p>
@@ -215,6 +215,9 @@
                 src="images/malik.jpg"
                 alt="Malik Moreland"
               />
+              <div class="viewer-empty-note" id="viewerEmptyState" hidden>
+                Upload portraits to activate your private cinematic viewer.
+              </div>
 
               <div class="eye-hint" id="eyeLeft" aria-hidden="true"></div>
               <div class="eye-hint" id="eyeRight" aria-hidden="true"></div>
@@ -222,24 +225,14 @@
 
             <div id="narrationDisplay" class="narration-text"></div>
 
-            <div class="branch-options" id="branchOptions">
-              <button type="button" onclick="selectBranch('julian')">
-                Julian
-              </button>
-              <button type="button" onclick="selectBranch('malik')">
-                Malik
-              </button>
-              <button type="button" onclick="selectBranch('selah')">
-                Selah
-              </button>
-            </div>
+            <div class="branch-options" id="branchOptions"></div>
           </div>
 
           <div class="viewer-line"></div>
 
           <div class="controls" id="controls">
-            <button type="button" onclick="navigateParents()">Parents</button>
-            <button type="button" onclick="navigateDescendants()">
+            <button type="button" id="navLeftBtn" onclick="navigateParents()">Parents</button>
+            <button type="button" id="navRightBtn" onclick="navigateDescendants()">
               Descendants
             </button>
             <button type="button" onclick="zoomOut()">Zoom Out</button>
@@ -265,8 +258,8 @@
           </div>
 
           <div class="side-card">
-            <span class="panel-kicker">Lineage Flow</span>
-            <div class="path-list">
+            <span class="panel-kicker" id="pathListTitle">Lineage Flow</span>
+            <div class="path-list" id="pathList">
               <div class="path-item">Malik → Parents</div>
               <div class="path-item">Malik → Descendants</div>
               <div class="path-item">Imani → Descendants</div>
@@ -278,6 +271,8 @@
       </main>
     </div>
 
-    <script src="js/script.js?v=20260329-2"></script>
+    <script src="../config.js"></script>
+    <script src="../app.js"></script>
+    <script src="js/script.js?v=20260329-3"></script>
   </body>
 </html>

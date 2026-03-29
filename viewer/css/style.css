@@ -262,6 +262,28 @@ a {
   transition: opacity 0.25s ease;
 }
 
+#viewerImage.is-empty {
+  opacity: 0;
+}
+
+.viewer-empty-note {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  z-index: 4;
+  width: min(82%, 420px);
+  padding: 18px 20px;
+  border-radius: 24px;
+  border: 1px solid rgba(214, 176, 102, 0.18);
+  background: rgba(5, 9, 17, 0.82);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.28);
+  color: var(--text);
+  font-size: 0.96rem;
+  line-height: 1.6;
+  text-align: center;
+  transform: translate(-50%, -50%);
+  backdrop-filter: blur(10px);
+}
+
 .eye-hint {
   appearance: none;
   position: absolute;
@@ -340,6 +362,10 @@ a {
   background: rgba(4, 8, 15, 0.82);
   backdrop-filter: blur(12px);
   box-shadow: var(--shadow);
+}
+
+.branch-options:empty {
+  display: none;
 }
 
 /* -----------------------

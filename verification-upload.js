@@ -26,6 +26,10 @@
   let currentGraph = { members: [] };
   let families = [];
 
+  function normalizeValue(value) {
+    return String(value || "").trim().toLowerCase();
+  }
+
   function escapeHtml(value) {
     return String(value ?? "")
       .replaceAll("&", "&amp;")
@@ -161,6 +165,51 @@
 
   function getPreferredFamilyId(context) {
     return String(getFamilyIdFromUrl() || getFamilyIdFromContext(context) || "").trim();
+  }
+
+  async function ensureWorkspaceFamilyId(context) {
+    const existingFamilyId = getPreferredFamilyId(context);
+    if (existingFamilyId) {
+      return existingFamilyId;
+    }
+
+    const projectId = getProjectIdFromContext(context);
+    const lane = normalizeValue(
+      context?.packageLane || context?.activeProject?.project_lane,
+    );
+
+    if (!projectId || !lane) {
+      return existingFamilyId;
+    }
+
+    try {
+      const manifest = await app.apiRequest(
+        `/viewer/manifest?project_id=${encodeURIComponent(projectId)}`,
+        { method: "GET" },
+      );
+
+      const resolvedFamilyId = String(
+        manifest?.family?.id || manifest?.project?.family_id || "",
+      ).trim();
+
+      if (!resolvedFamilyId) {
+        return existingFamilyId;
+      }
+
+      if (context?.activeProject) {
+        context.activeProject.family_id = resolvedFamilyId;
+      }
+
+      if (context?.currentWorkspace?.activeProject) {
+        context.currentWorkspace.activeProject.family_id = resolvedFamilyId;
+      }
+
+      setFamilyIdInUrl(resolvedFamilyId);
+      return resolvedFamilyId;
+    } catch (error) {
+      console.warn("Unable to resolve workspace family via viewer manifest:", error);
+      return existingFamilyId;
+    }
   }
 
   function getDisplayName(member) {
@@ -757,7 +806,7 @@
         currentContext = null;
       }
 
-      const preferredFamilyId = getPreferredFamilyId(currentContext);
+      const preferredFamilyId = await ensureWorkspaceFamilyId(currentContext);
       updateNav(currentContext, preferredFamilyId);
       await loadFamilies(preferredFamilyId);
 

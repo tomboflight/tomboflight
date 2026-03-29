@@ -7,6 +7,7 @@ from bson import ObjectId
 
 from app.core.package_catalog import get_package
 from app.database import get_database
+from app.services.viewer_manifest_service import ensure_project_workspace_anchor
 
 
 def _now() -> datetime:
@@ -334,6 +335,11 @@ def provision_build_from_submission(
             {"$set": project_payload},
         )
         project_doc = projects.find_one({"_id": project_doc["_id"]}) or project_doc
+
+    _family_doc, _primary_member, project_doc = ensure_project_workspace_anchor(
+        project=project_doc,
+        submission=submission,
+    )
 
     project_id = str(project_doc["_id"])
 
