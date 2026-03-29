@@ -25,7 +25,6 @@
     "heirloom_legacy_tree",
     "legacy_plus",
     "family_estate_concierge",
-    "command_structure_network",
   ]);
 
   const NARRATION_ENABLED_PACKAGES = new Set([

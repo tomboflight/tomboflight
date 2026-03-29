@@ -396,8 +396,8 @@ PACKAGE_CATALOG: dict[str, dict[str, Any]] = {
         "can_use_lineage_certificate": False,
         "can_open_family_intake": False,
         "can_open_org_intake": True,
-        "can_use_link_keys": True,
-        "can_manage_link_keys": True,
+        "can_use_link_keys": False,
+        "can_manage_link_keys": False,
         "allowed_addons": [
             "extra_org_node",
             "extra_org_level",

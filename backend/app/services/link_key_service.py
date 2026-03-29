@@ -8,6 +8,7 @@ from bson import ObjectId
 
 from app.core.package_catalog import get_package
 from app.database import get_database
+from app.services.entitlement_service import resolve_project_entitlements
 
 
 def _utcnow_iso() -> str:
@@ -93,7 +94,13 @@ def _get_project_entitlement(project_id: str) -> dict[str, Any] | None:
 def project_supports_link_keys(project_id: str) -> bool:
     entitlement = _get_project_entitlement(project_id)
     if entitlement:
-        resolved = entitlement.get("resolved_entitlements") or {}
+        try:
+            resolved = resolve_project_entitlements(
+                str(entitlement.get("package_code") or "").strip(),
+                list(entitlement.get("active_addons", [])),
+            )
+        except Exception:
+            resolved = entitlement.get("resolved_entitlements") or {}
         if "can_use_link_keys" in resolved:
             return bool(resolved.get("can_use_link_keys"))
 

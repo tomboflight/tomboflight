@@ -25,16 +25,22 @@ def _serialize(document: dict[str, Any] | None) -> dict[str, Any] | None:
     if not document:
         return None
 
-    resolved = document.get("resolved_entitlements") or {}
+    package_code = str(document.get("package_code") or "").strip()
+    active_addons = list(document.get("active_addons", []))
+
+    try:
+        resolved = resolve_project_entitlements(package_code, active_addons)
+    except Exception:
+        resolved = document.get("resolved_entitlements") or {}
 
     return {
         "id": str(document.get("_id")),
         "project_id": document.get("project_id"),
         "user_id": document.get("user_id"),
-        "package_code": document.get("package_code"),
+        "package_code": package_code or document.get("package_code"),
         "package_name": document.get("package_name") or resolved.get("display_name"),
         "package_lane": document.get("package_lane"),
-        "active_addons": document.get("active_addons", []),
+        "active_addons": active_addons,
         "maintenance_plan": document.get("maintenance_plan"),
         "maintenance_status": document.get("maintenance_status"),
         "maintenance_started_at": document.get("maintenance_started_at"),
