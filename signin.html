@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Sign In | Tomb of Light</title>
+    <title>Enter Private Portal | Tomb of Light</title>
     <meta
       name="description"
-      content="Sign in to your private Tomb of Light customer or operations workspace."
+      content="Enter your private Tomb of Light customer or operations workspace."
     />
     <link rel="stylesheet" href="styles.css?v=20260328-8" />
   </head>
@@ -40,7 +40,15 @@
           </nav>
 
           <div class="header-actions">
-            <a class="btn btn-primary" href="signup.html">Create Account</a>
+            <a
+              class="btn btn-primary"
+              href="signup.html"
+              data-auth-cta
+              data-logged-in-href="dashboard.html"
+              data-logged-in-label="Enter Private Portal"
+            >
+              Start Your Legacy Build
+            </a>
           </div>
         </div>
       </header>
@@ -154,11 +162,17 @@
 
                 <div class="inline-actions">
                   <button class="btn btn-primary" type="submit" data-submit-btn>
-                    Enter Portal
+                    Enter Private Portal
                   </button>
 
-                  <a class="btn btn-secondary" href="signup.html">
-                    Create Account
+                  <a
+                    class="btn btn-secondary"
+                    href="signup.html"
+                    data-auth-cta
+                    data-logged-in-href="dashboard.html"
+                    data-logged-in-label="Enter Private Portal"
+                  >
+                    Start Your Legacy Build
                   </a>
                 </div>
               </form>
@@ -189,8 +203,8 @@
                   Tomb of Light<span class="brand-symbol">™</span>
                 </div>
                 <p class="footer-copy">
-                  A private, cinematic platform for preserving and exploring
-                  family lineage across generations.
+                  A private, guided, premium digital lineage platform for
+                  protecting memory, lineage, and identity across generations.
                 </p>
                 <div class="cookie-status" data-cookie-status>
                   Your cookie preference has not been set yet.
