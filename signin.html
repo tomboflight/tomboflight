@@ -4,10 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Sign In | Tomb of Light</title>
-    <meta name="description" content="Sign in to your Tomb of Light account." />
-    <link rel="stylesheet" href="styles.css?v=20260326-4" />
+    <meta
+      name="description"
+      content="Sign in to your private Tomb of Light customer or operations workspace."
+    />
+    <link rel="stylesheet" href="styles.css?v=20260328-8" />
   </head>
-  <body>
+  <body class="portal-login-body">
     <a href="#main-content" class="skip-to-content">Skip to main content</a>
 
     <div class="site-watermark" aria-hidden="true"></div>
@@ -43,23 +46,83 @@
       </header>
 
       <main id="main-content" role="main">
-        <section class="page-hero">
-          <div class="container">
-            <div class="page-hero-panel">
-              <span class="eyebrow">Account Access</span>
-              <h1>Sign In</h1>
-              <p>
-                Enter your Tomb of Light account and continue building your
-                digital legacy.
-              </p>
-            </div>
-          </div>
-        </section>
+        <section class="page-sections portal-entry-section">
+          <div class="container portal-entry-shell">
+            <div class="portal-entry-story">
+              <div class="portal-entry-panel">
+                <span class="eyebrow">Private Access Gateway</span>
+                <h1>Enter the private Tomb of Light portal.</h1>
+                <p class="portal-entry-lead">
+                  This sign-in layer routes each account into its exact
+                  workspace scope, whether that is a customer package, a
+                  lineage build, or an internal operations environment.
+                </p>
 
-        <section class="page-sections">
-          <div class="container form-shell">
-            <div class="form-panel">
-              <form class="form-grid" data-signin-form novalidate>
+                <div class="portal-chip-row">
+                  <span class="portal-chip">Customer Workspace</span>
+                  <span class="portal-chip">Admin Operations</span>
+                  <span class="portal-chip">Package-Aware Routing</span>
+                </div>
+              </div>
+
+              <div class="portal-entry-grid" aria-label="Portal access signals">
+                <article class="portal-signal-card">
+                  <span class="portal-signal-label">Identity Handshake</span>
+                  <strong>Protected session exchange</strong>
+                  <p>
+                    Tomb of Light validates your account, role, and active
+                    purchase scope before any workspace opens.
+                  </p>
+                </article>
+
+                <article class="portal-signal-card">
+                  <span class="portal-signal-label">Workspace Mapping</span>
+                  <strong>Lane-specific access</strong>
+                  <p>
+                    Portrait, household, network, and internal operations
+                    accounts are routed into different environments.
+                  </p>
+                </article>
+
+                <article class="portal-signal-card">
+                  <span class="portal-signal-label">Technology Layer</span>
+                  <strong>Secure delivery stack</strong>
+                  <p>
+                    Customer records, verification workflows, and production
+                    states stay tied to the exact tools each account is allowed
+                    to open.
+                  </p>
+                </article>
+              </div>
+
+              <div class="portal-visual" aria-hidden="true">
+                <div class="portal-orbit portal-orbit-outer"></div>
+                <div class="portal-orbit portal-orbit-mid"></div>
+                <div class="portal-orbit portal-orbit-inner"></div>
+                <div class="portal-core">
+                  <span class="portal-core-label">Portal Sync</span>
+                  <strong>Private Access</strong>
+                </div>
+                <div class="portal-node portal-node-top">Customer</div>
+                <div class="portal-node portal-node-left">Lineage</div>
+                <div class="portal-node portal-node-right">Operations</div>
+                <div class="portal-gridline portal-gridline-x"></div>
+                <div class="portal-gridline portal-gridline-y"></div>
+              </div>
+            </div>
+
+            <div class="portal-access-card">
+              <div class="portal-access-top">
+                <span class="eyebrow">Authenticated Entry</span>
+                <h2>Access your workspace</h2>
+                <p>
+                  Sign in with the account attached to your package or internal
+                  role. Tomb of Light will open only the tools your account is
+                  entitled to use.
+                </p>
+              </div>
+
+              <form class="form-grid portal-access-form" data-signin-form novalidate>
                 <label>
                   Email Address
                   <input
@@ -91,7 +154,7 @@
 
                 <div class="inline-actions">
                   <button class="btn btn-primary" type="submit" data-submit-btn>
-                    Sign In
+                    Enter Portal
                   </button>
 
                   <a class="btn btn-secondary" href="signup.html">
@@ -99,37 +162,17 @@
                   </a>
                 </div>
               </form>
-            </div>
 
-            <div class="form-panel">
-              <span class="eyebrow">Why Sign In?</span>
-
-              <div class="grid-3">
-                <div>
-                  <div class="card-number">1</div>
-                  <h3>Secure access</h3>
-                  <p class="card-copy">
-                    Your account protects your family records and platform
-                    activity.
-                  </p>
+              <div class="portal-access-footer">
+                <div class="portal-access-note">
+                  <strong>Customer access:</strong> portrait, household,
+                  network, and organization workspaces are opened by package
+                  entitlement.
                 </div>
-
-                <div>
-                  <div class="card-number">2</div>
-                  <h3>Continue your build</h3>
-                  <p class="card-copy">
-                    Return to your family structure, lineage data, and future
-                    uploads.
-                  </p>
-                </div>
-
-                <div>
-                  <div class="card-number">3</div>
-                  <h3>Prepare for expansion</h3>
-                  <p class="card-copy">
-                    Your account becomes the foundation for tree building and
-                    media uploads.
-                  </p>
+                <div class="portal-access-note">
+                  <strong>Internal access:</strong> authorized operators enter
+                  a separate operations environment instead of the customer
+                  portal.
                 </div>
               </div>
             </div>
@@ -204,8 +247,8 @@
       </div>
     </div>
 
-    <script src="config.js?v=20260326-4"></script>
-    <script src="app.js?v=20260326-4"></script>
-    <script src="auth.js?v=20260326-4"></script>
+    <script src="config.js?v=20260328-8"></script>
+    <script src="app.js?v=20260328-8"></script>
+    <script src="auth.js?v=20260328-8"></script>
   </body>
 </html>

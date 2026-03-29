@@ -4,10 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Dashboard | Tomb of Light</title>
-    <meta name="description" content="Your Tomb of Light dashboard." />
-    <link rel="stylesheet" href="styles.css?v=20260328-7" />
+    <meta
+      name="description"
+      content="Your private Tomb of Light customer or internal operations workspace."
+    />
+    <link rel="stylesheet" href="styles.css?v=20260328-8" />
   </head>
-  <body>
+  <body class="portal-dashboard-body">
+    <div class="site-watermark" aria-hidden="true"></div>
+
     <div class="page-wrap">
       <header class="site-header">
         <div class="container site-header-inner">
@@ -44,26 +49,118 @@
       </header>
 
       <main data-dashboard>
-        <section class="page-hero dashboard-hero">
+        <section class="page-hero dashboard-hero portal-dashboard-hero">
           <div class="container">
-            <div class="page-hero-panel dashboard-hero-panel">
-              <span class="eyebrow" data-dashboard-hero-eyebrow>
-                Portal Access
-              </span>
-              <h1 data-dashboard-hero-title>Your Workspace</h1>
-              <p data-dashboard-status>Loading your account...</p>
+            <div class="portal-command-bar">
+              <span class="portal-command-label">Private Workspace</span>
+              <div class="portal-chip-row portal-chip-row-compact">
+                <span class="portal-chip" data-dashboard-lane-chip>
+                  Access Sync
+                </span>
+                <span class="portal-chip" data-dashboard-package-chip>
+                  Package Resolving
+                </span>
+                <span class="portal-chip" data-dashboard-scope-chip>
+                  Tool Scope Loading
+                </span>
+              </div>
+            </div>
+
+            <div class="page-hero-panel dashboard-hero-panel portal-core-panel">
+              <div class="portal-core-copy">
+                <span class="eyebrow" data-dashboard-hero-eyebrow>
+                  Portal Access
+                </span>
+                <h1 data-dashboard-hero-title>Your Workspace</h1>
+                <p data-dashboard-status>Loading your account...</p>
+
+                <div class="inline-actions portal-core-actions">
+                  <a
+                    class="btn btn-primary"
+                    href="verification-upload.html"
+                    data-dashboard-workspace-primary-action
+                    data-paid-action
+                    style="display: none"
+                  >
+                    Open Workspace
+                  </a>
+                  <a
+                    class="btn btn-secondary"
+                    href="verification-upload.html"
+                    data-paid-action
+                    style="display: none"
+                  >
+                    Verification Uploads
+                  </a>
+                  <a
+                    class="btn btn-secondary"
+                    href="link-keys.html"
+                    data-dashboard-link-keys-action
+                    data-paid-action
+                    style="display: none"
+                  >
+                    Manage Link Keys
+                  </a>
+                </div>
+              </div>
+
+              <div class="portal-core-visual" aria-hidden="true">
+                <div class="portal-orbit portal-orbit-outer"></div>
+                <div class="portal-orbit portal-orbit-mid"></div>
+                <div class="portal-orbit portal-orbit-inner"></div>
+                <div class="portal-core">
+                  <span class="portal-core-label" data-dashboard-core-label>
+                    Workspace Sync
+                  </span>
+                  <strong data-dashboard-core-subtitle>Authenticating</strong>
+                </div>
+                <div class="portal-node portal-node-top">Identity</div>
+                <div class="portal-node portal-node-left">Package</div>
+                <div class="portal-node portal-node-right">Records</div>
+                <div class="portal-gridline portal-gridline-x"></div>
+                <div class="portal-gridline portal-gridline-y"></div>
+              </div>
+            </div>
+
+            <div class="portal-metric-grid">
+              <article class="portal-metric-card">
+                <span class="portal-metric-label">Access Lane</span>
+                <strong data-dashboard-lane-summary>Resolving access lane</strong>
+                <p data-dashboard-lane-description>
+                  Tomb of Light is determining which private workspace this
+                  account is allowed to open.
+                </p>
+              </article>
+
+              <article class="portal-metric-card">
+                <span class="portal-metric-label">Active Package</span>
+                <strong data-dashboard-package-display>Checking package scope</strong>
+                <p>
+                  Your workspace will load the exact tools, limits, and
+                  workflows attached to your current entitlement.
+                </p>
+              </article>
+
+              <article class="portal-metric-card">
+                <span class="portal-metric-label">Next Focus</span>
+                <strong data-dashboard-next-focus>Preparing workspace actions</strong>
+                <p>
+                  Core actions update in real time once package and role access
+                  have been resolved.
+                </p>
+              </article>
             </div>
           </div>
         </section>
 
         <section class="page-sections">
           <div
-            class="container form-shell"
+            class="container form-shell portal-dashboard-shell"
             data-auth-required
             style="display: none"
           >
             <div
-              class="form-panel dashboard-presence-panel"
+              class="form-panel dashboard-presence-panel portal-priority-panel"
               data-dashboard-customer-only
             >
               <div class="dashboard-presence-top">
@@ -144,7 +241,7 @@
               </div>
             </div>
 
-            <div class="form-panel">
+            <div class="form-panel portal-profile-panel">
               <span class="eyebrow">Account Profile</span>
               <div class="grid-3">
                 <div>
@@ -167,7 +264,10 @@
 
             <div data-admin-portal-anchor></div>
 
-            <div class="form-panel" data-dashboard-customer-only>
+            <div
+              class="form-panel portal-workspace-panel"
+              data-dashboard-customer-only
+            >
               <span class="eyebrow">Customer Workspace</span>
               <p class="card-copy" data-dashboard-workspace-copy>
                 Your Tomb of Light customer workspace loads the exact package access, onboarding, uploads, lineage tools, and verification features attached to your account.
@@ -212,7 +312,7 @@
               </div>
             </div>
 
-            <div class="form-panel" data-dashboard-customer-only>
+            <div class="form-panel portal-package-panel" data-dashboard-customer-only>
               <span class="eyebrow">Package Access</span>
               <p class="card-copy" data-access-status>
                 Checking your purchase access...
@@ -269,7 +369,7 @@
               </div>
             </div>
 
-            <div class="form-panel" data-dashboard-customer-only>
+            <div class="form-panel portal-orders-panel" data-dashboard-customer-only>
               <span class="eyebrow">Your Orders</span>
               <p class="card-copy" data-orders-status>
                 Loading your purchases...
@@ -277,7 +377,7 @@
               <div class="grid-3" data-orders-list></div>
             </div>
 
-            <div class="form-panel" data-dashboard-customer-only>
+            <div class="form-panel portal-intake-panel" data-dashboard-customer-only>
               <span class="eyebrow">Intake Status</span>
               <p class="card-copy" data-intake-card-status>
                 Checking your onboarding submission...
@@ -343,7 +443,7 @@
               </div>
             </div>
 
-            <div class="form-panel" data-dashboard-customer-only>
+            <div class="form-panel portal-history-panel" data-dashboard-customer-only>
               <span class="eyebrow">Intake History</span>
               <p class="card-copy" data-intake-history-status>
                 Loading your intake history...
@@ -351,7 +451,7 @@
               <div class="grid-3" data-intake-history-list></div>
             </div>
 
-            <div class="form-panel" data-dashboard-customer-only>
+            <div class="form-panel portal-build-panel" data-dashboard-customer-only>
               <span class="eyebrow">Your Build Path</span>
               <div class="grid-3">
                 <div>
@@ -378,7 +478,7 @@
               </div>
             </div>
 
-            <div class="form-panel" data-dashboard-customer-only>
+            <div class="form-panel portal-status-panel" data-dashboard-customer-only>
               <span class="eyebrow">Platform Status</span>
               <div class="grid-3">
                 <div>
@@ -419,10 +519,10 @@
       </footer>
     </div>
 
-    <script src="config.js?v=20260328-7"></script>
-    <script src="app.js?v=20260328-7"></script>
-    <script src="auth.js?v=20260328-7"></script>
-    <script src="dashboard-intake.js?v=20260328-7"></script>
-    <script src="dashboard-admin.js?v=20260328-7"></script>
+    <script src="config.js?v=20260328-8"></script>
+    <script src="app.js?v=20260328-8"></script>
+    <script src="auth.js?v=20260328-8"></script>
+    <script src="dashboard-intake.js?v=20260328-8"></script>
+    <script src="dashboard-admin.js?v=20260328-8"></script>
   </body>
 </html>

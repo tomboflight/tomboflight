@@ -100,6 +100,73 @@
     node.textContent = value;
   }
 
+  function getLaneLabel(lane) {
+    if (lane === "portrait") return "Portrait Lane";
+    if (lane === "organization") return "Organization Lane";
+    if (lane === "network") return "Network Lane";
+    return "Household Lane";
+  }
+
+  function getPortalHeroTitle(lane) {
+    if (lane === "portrait") return "Your Portrait Chamber";
+    if (lane === "organization") return "Your Structure Command";
+    if (lane === "network") return "Your Network Chamber";
+    return "Your Lineage Chamber";
+  }
+
+  function getPortalScopeLabel(config) {
+    if (config.lane === "portrait") {
+      return config.showLinkKeys ? "Portrait + Linking" : "Portrait Scope";
+    }
+
+    if (config.lane === "organization") {
+      return "Structure Scope";
+    }
+
+    if (config.lane === "network") {
+      return "Network Build Scope";
+    }
+
+    return "Household Build Scope";
+  }
+
+  function applyPortalTheme(context, config) {
+    const body = document.body;
+    const dashboard = document.querySelector("[data-dashboard]");
+    const packageName = context.packageName || "Active Package";
+    const laneLabel = getLaneLabel(config.lane);
+
+    if (body) {
+      body.classList.add("portal-dashboard-body");
+      body.classList.remove("portal-admin-mode");
+      body.dataset.portalMode = "customer";
+      body.dataset.portalLane = config.lane;
+    }
+
+    if (dashboard) {
+      dashboard.setAttribute("data-portal-mode", "customer");
+      dashboard.setAttribute("data-portal-lane", config.lane);
+    }
+
+    text(document.querySelector("[data-dashboard-hero-eyebrow]"), laneLabel);
+    text(document.querySelector("[data-dashboard-hero-title]"), getPortalHeroTitle(config.lane));
+    text(document.querySelector("[data-dashboard-lane-chip]"), laneLabel);
+    text(document.querySelector("[data-dashboard-package-chip]"), packageName);
+    text(document.querySelector("[data-dashboard-scope-chip]"), getPortalScopeLabel(config));
+    text(document.querySelector("[data-dashboard-core-label]"), laneLabel);
+    text(document.querySelector("[data-dashboard-core-subtitle]"), config.presenceBadge);
+    text(document.querySelector("[data-dashboard-lane-summary]"), laneLabel);
+    text(
+      document.querySelector("[data-dashboard-lane-description]"),
+      config.presenceCopy,
+    );
+    text(document.querySelector("[data-dashboard-package-display]"), packageName);
+    text(
+      document.querySelector("[data-dashboard-next-focus]"),
+      config.primaryActionText || "Open Workspace",
+    );
+  }
+
   function findPanelByText(textFragment) {
     return Array.from(document.querySelectorAll(".form-panel")).find(
       function (panel) {
@@ -805,6 +872,7 @@
 
     const config = getEntitlementConfig(context);
     updateLaneUi(context, config);
+    applyPortalTheme(context, config);
 
     const intakeCardStatus = document.querySelector(
       "[data-intake-card-status]",
@@ -826,6 +894,7 @@
     const workspaceCopy = document.querySelector(
       "[data-dashboard-workspace-copy]",
     );
+    const nextFocusNode = document.querySelector("[data-dashboard-next-focus]");
 
     try {
       const latest = await getLatestSubmission();
@@ -847,6 +916,14 @@
               : "Open your intake flow and submit the review step.",
         );
         text(
+          nextFocusNode,
+          config.lane === "portrait"
+            ? "Upload portrait and supporting records."
+            : config.lane === "organization"
+              ? "Upload organization and supporting records."
+              : config.primaryActionText || "Open your workspace.",
+        );
+        text(
           lockNote,
           "Editing is open because no final submission exists yet.",
         );
@@ -865,6 +942,7 @@
         text(submissionId, latest.id || latest._id || "—");
         text(submittedAt, formatDate(latest.submitted_at || latest.created_at));
         text(nextStep, laneMessages.nextStep);
+        text(nextFocusNode, laneMessages.nextStep);
         text(lockNote, laneMessages.lockNote);
         text(workspaceCopy, laneMessages.workspaceCopy);
 
@@ -890,6 +968,7 @@
       text(intakeCardStatus, "Intake status is temporarily unavailable.");
       text(statusBadge, "Unavailable");
       text(nextStep, "Please try again shortly.");
+      text(nextFocusNode, "Retry loading your workspace shortly.");
       text(lockNote, "Could not determine current submission lock state.");
       text(historyStatus, "Intake history is temporarily unavailable.");
     }
