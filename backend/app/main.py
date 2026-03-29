@@ -48,6 +48,7 @@ from app.routes.tree import router as tree_router
 from app.routes.uploads import router as uploads_router
 from app.routes.users import router as users_router
 from app.routes.verification_records import router as verification_records_router
+from app.routes.viewer_manifest import router as viewer_manifest_router
 
 
 def _resolve_allowed_origins() -> list[str]:
@@ -148,6 +149,7 @@ app.include_router(graph_integrity_router)
 app.include_router(orders_router)
 app.include_router(package_catalog_router)
 app.include_router(uploads_router)
+app.include_router(viewer_manifest_router)
 
 # Stripe Webhooks
 app.include_router(stripe_webhooks_router)
@@ -213,6 +215,7 @@ def root():
             "/uploads/member/{member_id}",
             "/uploads/family/{family_id}",
             "/uploads/{upload_id}/download",
+            "/viewer/manifest",
             "/link-keys/my-list",
             "/link-keys/my-active?project_id={project_id}",
             "/link-keys/project/{project_id}/generate",
