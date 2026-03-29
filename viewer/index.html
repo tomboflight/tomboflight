@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Tomb of Light | Genesis Prototype</title>
 
-    <link rel="stylesheet" href="css/style.css?v=20260325-1" />
+    <link rel="stylesheet" href="css/style.css?v=20260329-2" />
 
     <script>
       (function () {
@@ -188,8 +188,9 @@
           <p class="viewer-instructions" id="viewerInstructions">
             Hold <strong>C</strong>, then click
             <strong>Left Eye</strong> (Parents) or
-            <strong>Right Eye</strong> (Descendants). Use scroll/pinch to zoom.
-            (Full viewer only)
+            <strong>Right Eye</strong> (Descendants). You can also use the
+            navigation controls below. Use scroll, pinch, or the zoom buttons
+            to adjust the photo scale. (Full viewer only)
           </p>
         </div>
       </header>
@@ -237,6 +238,10 @@
           <div class="viewer-line"></div>
 
           <div class="controls" id="controls">
+            <button type="button" onclick="navigateParents()">Parents</button>
+            <button type="button" onclick="navigateDescendants()">
+              Descendants
+            </button>
             <button type="button" onclick="zoomOut()">Zoom Out</button>
             <button type="button" onclick="zoomIn()">Zoom In</button>
             <button type="button" onclick="resetViewer()">Reset</button>
@@ -273,6 +278,6 @@
       </main>
     </div>
 
-    <script src="js/script.js?v=20260325-1"></script>
+    <script src="js/script.js?v=20260329-2"></script>
   </body>
 </html>
