@@ -123,36 +123,62 @@ def _token_type_argument(token_type: str, input_type: str) -> Any:
 
 
 def _contract_function(contract: Any, *, recipient: str, metadata_uri: str, token_type: str):
-    function_name = _normalize(settings.nft_mint_function_name) or "mintAnchor"
-    candidate = getattr(contract.functions, function_name, None)
-    if candidate is None:
-        raise RuntimeError(f"Mint function '{function_name}' was not found in the contract ABI.")
+    preferred_name = _normalize(settings.nft_mint_function_name)
+    candidate_names: list[str] = []
+    if preferred_name:
+        candidate_names.append(preferred_name)
+    for fallback_name in ("mintAnchor", "safeMint"):
+        if fallback_name not in candidate_names:
+            candidate_names.append(fallback_name)
 
-    functions_abi = [
-        item
-        for item in _contract_abi()
-        if item.get("type") == "function" and item.get("name") == function_name
-    ]
-    if not functions_abi:
-        raise RuntimeError(f"Mint function '{function_name}' was not found in the ABI.")
+    function_name = ""
+    candidate = None
+    functions_abi: list[dict[str, Any]] = []
+    abi = _contract_abi()
+
+    for candidate_name in candidate_names:
+        function_candidate = getattr(contract.functions, candidate_name, None)
+        abi_matches = [
+            item
+            for item in abi
+            if item.get("type") == "function" and item.get("name") == candidate_name
+        ]
+        if function_candidate is not None and abi_matches:
+            function_name = candidate_name
+            candidate = function_candidate
+            functions_abi = abi_matches
+            break
+
+    if candidate is None or not functions_abi:
+        searched_names = ", ".join(candidate_names)
+        raise RuntimeError(
+            f"No supported mint function was found in the contract ABI. Tried: {searched_names}."
+        )
 
     abi = functions_abi[0]
     arguments: list[Any] = []
-    string_index = 0
+    recipient_consumed = False
+    metadata_uri_consumed = False
     token_type_consumed = False
 
     for input_item in abi.get("inputs", []):
         input_type = _normalize(input_item.get("type")).lower()
         if input_type == "address":
+            if recipient_consumed:
+                raise RuntimeError(
+                    "Mint function ABI exposes more than one address parameter. "
+                    "Expected a recipient address plus metadata URI, with an optional token type."
+                )
             arguments.append(recipient)
+            recipient_consumed = True
             continue
         if input_type.startswith("string"):
-            if string_index == 0:
+            if not metadata_uri_consumed:
                 arguments.append(metadata_uri)
+                metadata_uri_consumed = True
             else:
                 arguments.append(_token_type_argument(token_type, input_type))
                 token_type_consumed = True
-            string_index += 1
             continue
         if input_type.startswith("uint") or input_type.startswith("int") or input_type == "bytes32":
             arguments.append(_token_type_argument(token_type, input_type))
@@ -163,10 +189,9 @@ def _contract_function(contract: Any, *, recipient: str, metadata_uri: str, toke
             "Expected address, string, uint, int, or bytes32 parameters only."
         )
 
-    if not token_type_consumed:
+    if not recipient_consumed or not metadata_uri_consumed:
         raise RuntimeError(
-            "Mint function ABI does not expose a token type argument. "
-            "Update NFT_MINT_FUNCTION_NAME or contract ABI configuration."
+            "Mint function ABI must expose at least a recipient address and metadata URI."
         )
 
     return candidate(*arguments)
