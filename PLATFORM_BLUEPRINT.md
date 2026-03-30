@@ -5,6 +5,7 @@ Status: Working blueprint
 Purpose: Turn Tomb of Light from a working prototype into a controlled production platform for private family archives, lineage verification, premium package fulfillment, and limited on-chain proof anchoring.
 
 Execution companion: See [IMPLEMENTATION_CHECKLIST.md](/Users/ok/Documents/GitHub/tomboflight/IMPLEMENTATION_CHECKLIST.md) for the ordered build sequence.
+On-chain backend spec: See [ONCHAIN_ANCHOR_BACKEND_SPEC.md](/Users/ok/Documents/GitHub/tomboflight/ONCHAIN_ANCHOR_BACKEND_SPEC.md) for the detailed minting, metadata, and dashboard architecture.
 
 ## 1. Product model
 
@@ -266,6 +267,8 @@ Developer machines should only be used for:
 - internal operations
 
 ### 3.9 Blockchain and NFT boundary
+
+Detailed implementation reference: [ONCHAIN_ANCHOR_BACKEND_SPEC.md](/Users/ok/Documents/GitHub/tomboflight/ONCHAIN_ANCHOR_BACKEND_SPEC.md)
 
 The platform should keep sensitive family data off-chain.
 

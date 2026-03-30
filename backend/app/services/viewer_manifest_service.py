@@ -102,6 +102,15 @@ def _sort_members(members: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(members, key=_generation)
 
 
+def _coerce_int(value: Any) -> int | None:
+    if isinstance(value, int):
+        return value
+    try:
+        return int(str(value).strip())
+    except Exception:
+        return None
+
+
 def _lane_from_project(project: dict[str, Any]) -> str:
     lane = _normalize_value(project.get("project_lane")).lower()
     if lane:
@@ -174,6 +183,15 @@ def resolve_project_for_viewer(
         for project in sorted_projects:
             if _normalize_value(project.get("family_id")) == normalized_family_id:
                 return project
+        db = get_database()
+        if db is not None and ObjectId.is_valid(normalized_family_id):
+            family_doc = db["families"].find_one({"_id": ObjectId(normalized_family_id)})
+            family_project_id = _normalize_value((family_doc or {}).get("project_id"))
+            if family_project_id:
+                for project in sorted_projects:
+                    candidate_id = _normalize_value(project.get("_id") or project.get("id"))
+                    if candidate_id == family_project_id:
+                        return project
         return None
 
     return sorted_projects[0] if sorted_projects else None
@@ -538,14 +556,59 @@ def _sequence_members_for_viewer(
             if _normalize_value(member.get("_id")) == primary_member_id
         ]
         if primary_photo:
-            trailing = [
-                member
-                for member in members_with_photos
-                if _normalize_value(member.get("_id")) != primary_member_id
-            ]
-            return primary_photo + trailing
+            return primary_photo
 
     return members_with_photos
+
+
+def _resolve_member_photo_upload(
+    *,
+    db: Any,
+    member: dict[str, Any],
+    project_id: str,
+    family_id: str,
+) -> dict[str, Any] | None:
+    uploads = db["uploaded_files"]
+    member_id = _normalize_value(member.get("_id"))
+    candidate_upload_ids: list[str] = []
+
+    primary_upload_id = _normalize_value(member.get("photo_upload_id"))
+    if primary_upload_id:
+        candidate_upload_ids.append(primary_upload_id)
+
+    fallback_cursor = uploads.find(
+        {
+            "project_id": project_id,
+            "family_id": family_id,
+            "member_id": member_id,
+            "category": "member_photo",
+        }
+    ).sort("created_at", -1)
+
+    for upload in fallback_cursor:
+        upload_id = _normalize_value(upload.get("_id"))
+        if upload_id and upload_id not in candidate_upload_ids:
+            candidate_upload_ids.append(upload_id)
+
+    for upload_id in candidate_upload_ids:
+        if not ObjectId.is_valid(upload_id):
+            continue
+        upload = uploads.find_one({"_id": ObjectId(upload_id)})
+        if upload is None:
+            continue
+        if _normalize_value(upload.get("category")) != "member_photo":
+            continue
+        if _normalize_value(upload.get("project_id")) != project_id:
+            continue
+        if _normalize_value(upload.get("family_id")) != family_id:
+            continue
+        if _normalize_value(upload.get("member_id")) != member_id:
+            continue
+        if not _normalize_value(upload.get("relative_path")):
+            continue
+        return upload
+
+    return None
 
 
 def build_viewer_manifest(
@@ -585,15 +648,25 @@ def build_viewer_manifest(
     )
 
     primary_member_id = _normalize_value((primary_member or {}).get("_id"))
-    anchor_generation = None
-    if primary_member and isinstance(primary_member.get("generation"), int):
-        anchor_generation = int(primary_member["generation"])
+    anchor_generation = _coerce_int((primary_member or {}).get("generation"))
 
     states: list[dict[str, Any]] = []
     if ordered_members:
-        for index, member in enumerate(ordered_members):
+        project_id_value = _normalize_value(project.get("_id") or project.get("id"))
+        valid_member_views: list[tuple[dict[str, Any], dict[str, Any]]] = []
+        for member in ordered_members:
+            upload_record = _resolve_member_photo_upload(
+                db=db,
+                member=member,
+                project_id=project_id_value,
+                family_id=family_id_value,
+            )
+            if upload_record is not None:
+                valid_member_views.append((member, upload_record))
+
+        for index, (member, upload_record) in enumerate(valid_member_views):
             member_id = _normalize_value(member.get("_id"))
-            upload_id = _normalize_value(member.get("photo_upload_id"))
+            upload_id = _normalize_value(upload_record.get("_id"))
             title = _display_name(member)
             status = _member_status(
                 lane=lane,
@@ -618,12 +691,13 @@ def build_viewer_manifest(
                     "node": title,
                     "description": description,
                     "narration": description,
-                    "left_state_id": f"member-{_normalize_value(ordered_members[index - 1].get('_id'))}" if index > 0 else None,
-                    "right_state_id": f"member-{_normalize_value(ordered_members[index + 1].get('_id'))}" if index + 1 < len(ordered_members) else None,
+                    "left_state_id": f"member-{_normalize_value(valid_member_views[index - 1][0].get('_id'))}" if index > 0 else None,
+                    "right_state_id": f"member-{_normalize_value(valid_member_views[index + 1][0].get('_id'))}" if index + 1 < len(valid_member_views) else None,
                     "eye_targets": DEFAULT_EYE_TARGETS,
                 }
             )
-    else:
+
+    if not states:
         states.append(
             _build_empty_state(
                 lane=lane,
