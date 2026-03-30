@@ -3,6 +3,7 @@
 Purpose: Convert the platform blueprint into an ordered execution plan that product, engineering, operations, and legal can work through together.
 
 Related blueprint: [PLATFORM_BLUEPRINT.md](/Users/ok/Documents/GitHub/tomboflight/PLATFORM_BLUEPRINT.md)
+Detailed on-chain backend reference: [ONCHAIN_ANCHOR_BACKEND_SPEC.md](/Users/ok/Documents/GitHub/tomboflight/ONCHAIN_ANCHOR_BACKEND_SPEC.md)
 
 ## How to use this file
 
@@ -335,6 +336,8 @@ Acceptance criteria:
 ## Phase 7: Blockchain and Certificate Boundary
 
 Goal: Keep proof on-chain while keeping private family content off-chain.
+
+Detailed implementation reference: [ONCHAIN_ANCHOR_BACKEND_SPEC.md](/Users/ok/Documents/GitHub/tomboflight/ONCHAIN_ANCHOR_BACKEND_SPEC.md)
 
 ### 7.1 Certificate issuance boundary
 

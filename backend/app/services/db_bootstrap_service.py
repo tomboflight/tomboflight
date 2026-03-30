@@ -1,4 +1,4 @@
-from pymongo import ASCENDING
+from pymongo import ASCENDING, DESCENDING
 from pymongo.errors import OperationFailure
 
 from app.database import get_database
@@ -103,6 +103,65 @@ CORE_COLLECTIONS: dict[str, list[tuple[list[tuple[str, int]], dict]]] = {
     "certificate_versions": [
         ([("family_id", ASCENDING)], {"name": "idx_certificate_versions_family_id"}),
         ([("version", ASCENDING)], {"name": "idx_certificate_versions_version"}),
+    ],
+    "mint_records": [
+        (
+            [("project_id", ASCENDING), ("version_number", DESCENDING)],
+            {"name": "idx_mint_records_project_id_1_version_number_-1"},
+        ),
+        (
+            [("mint_status", ASCENDING), ("created_at", DESCENDING)],
+            {"name": "idx_mint_records_mint_status_1_created_at_-1"},
+        ),
+        ([("tx_hash", ASCENDING)], {"name": "idx_mint_records_tx_hash_1"}),
+        (
+            [("token_id", ASCENDING), ("contract_address", ASCENDING)],
+            {"name": "idx_mint_records_token_id_1_contract_address_1"},
+        ),
+    ],
+    "mint_jobs": [
+        (
+            [("status", ASCENDING), ("run_after", ASCENDING), ("priority", DESCENDING)],
+            {"name": "idx_mint_jobs_status_1_run_after_1_priority_-1"},
+        ),
+        (
+            [("project_id", ASCENDING), ("created_at", DESCENDING)],
+            {"name": "idx_mint_jobs_project_id_1_created_at_-1"},
+        ),
+        (
+            [("mint_record_id", ASCENDING)],
+            {"name": "idx_mint_jobs_mint_record_id_1"},
+        ),
+    ],
+    "public_metadata_manifests": [
+        (
+            [("project_id", ASCENDING), ("version_number", DESCENDING)],
+            {"name": "idx_public_metadata_manifests_project_id_1_version_number_-1"},
+        ),
+        (
+            [("public_token_id", ASCENDING)],
+            {
+                "name": "idx_public_metadata_manifests_public_token_id_1",
+                "unique": True,
+                "partialFilterExpression": {
+                    "public_token_id": {"$type": "string"}
+                },
+            },
+        ),
+        (
+            [("mint_record_id", ASCENDING)],
+            {"name": "idx_public_metadata_manifests_mint_record_id_1"},
+        ),
+    ],
+    "mint_approvals": [
+        (
+            [("project_id", ASCENDING), ("approval_type", ASCENDING), ("status", ASCENDING)],
+            {"name": "idx_mint_approvals_project_id_1_approval_type_1_status_1"},
+        ),
+        (
+            [("mint_record_id", ASCENDING)],
+            {"name": "idx_mint_approvals_mint_record_id_1"},
+        ),
     ],
 }
 

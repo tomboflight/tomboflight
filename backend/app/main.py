@@ -37,6 +37,9 @@ from app.routes.link_keys import router as link_keys_router
 from app.routes.link_requests import router as link_requests_router
 from app.routes.match_candidates import router as match_candidates_router
 from app.routes.match_generation import router as match_generation_router
+from app.routes.mint_jobs import router as mint_jobs_router
+from app.routes.mint_policy import router as mint_policy_router
+from app.routes.mint_records import router as mint_records_router
 from app.routes.narrative_records import router as narrative_records_router
 from app.routes.orders import router as orders_router
 from app.routes.package_catalog import router as package_catalog_router
@@ -150,6 +153,9 @@ app.include_router(orders_router)
 app.include_router(package_catalog_router)
 app.include_router(uploads_router)
 app.include_router(viewer_manifest_router)
+app.include_router(mint_policy_router)
+app.include_router(mint_records_router)
+app.include_router(mint_jobs_router)
 
 # Stripe Webhooks
 app.include_router(stripe_webhooks_router)
@@ -216,6 +222,13 @@ def root():
             "/uploads/family/{family_id}",
             "/uploads/{upload_id}/download",
             "/viewer/manifest",
+            "/mint-policy/packages",
+            "/projects/{project_id}/mint-eligibility",
+            "/projects/{project_id}/mint-records/prepare",
+            "/projects/{project_id}/mint-records",
+            "/projects/{project_id}/mint-status",
+            "/mint-jobs/run-next",
+            "/tokens/{public_token_id}",
             "/link-keys/my-list",
             "/link-keys/my-active?project_id={project_id}",
             "/link-keys/project/{project_id}/generate",
