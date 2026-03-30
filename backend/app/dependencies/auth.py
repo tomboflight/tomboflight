@@ -1,3 +1,4 @@
+from typing import Any
 from urllib.parse import urlparse
 
 from fastapi import Depends, HTTPException, Request, status
@@ -35,11 +36,11 @@ ALLOWED_COOKIE_AUTH_ORIGINS = {
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
-def _normalize_value(value) -> str:
+def _normalize_value(value: Any) -> str:
     return str(value or "").strip().lower()
 
 
-def _normalize_user(user: dict, payload: dict) -> dict:
+def _normalize_user(user: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
     normalized_user = dict(user)
 
     raw_id = (
@@ -101,7 +102,7 @@ def _get_token_from_request(
     return None, None
 
 
-def _has_internal_admin_access(user: dict) -> bool:
+def _has_internal_admin_access(user: dict[str, Any]) -> bool:
     values = {
         _normalize_value(user.get("role")),
         _normalize_value(user.get("access_tier")),
@@ -110,22 +111,22 @@ def _has_internal_admin_access(user: dict) -> bool:
     return any(value in INTERNAL_ADMIN_KEYS for value in values if value)
 
 
-def has_internal_admin_access(user: dict) -> bool:
+def has_internal_admin_access(user: dict[str, Any]) -> bool:
     return _has_internal_admin_access(user)
 
 
-def _current_user_id(user: dict) -> str:
+def _current_user_id(user: dict[str, Any]) -> str:
     raw_id = user.get("id") or user.get("_id") or user.get("user_id")
     return str(raw_id or "").strip()
 
 
-def _current_user_email(user: dict) -> str:
+def _current_user_email(user: dict[str, Any]) -> str:
     return str(user.get("email") or "").strip().lower()
 
 
 def _collect_capabilities_from_mapping(
     target: set[str],
-    values: dict | None,
+    values: dict[str, Any] | None,
 ) -> None:
     if not isinstance(values, dict):
         return
@@ -136,14 +137,14 @@ def _collect_capabilities_from_mapping(
             target.add(normalized_key)
 
 
-def _is_paid_package_order(order: dict | None) -> bool:
+def _is_paid_package_order(order: dict[str, Any] | None) -> bool:
     if not isinstance(order, dict):
         return False
 
     item_type = _normalize_value(order.get("item_type") or "package")
-    status = _normalize_value(order.get("status"))
+    status_value = _normalize_value(order.get("status"))
 
-    return item_type == "package" and status in {
+    return item_type == "package" and status_value in {
         "paid",
         "complete",
         "completed",
@@ -151,16 +152,36 @@ def _is_paid_package_order(order: dict | None) -> bool:
     }
 
 
-def get_user_package_capabilities(user: dict) -> set[str]:
+def _list_active_entitlements_for_user(user_id: str) -> list[dict[str, Any]]:
+    if not user_id:
+        return []
+
+    try:
+        return list_user_project_entitlements(user_id, active_only=True)
+    except TypeError:
+        try:
+            entitlements = list_user_project_entitlements(user_id)
+        except Exception:
+            return []
+
+        return [
+            entitlement
+            for entitlement in entitlements
+            if _normalize_value(entitlement.get("status")) == "active"
+        ]
+    except Exception:
+        return []
+
+
+def get_user_package_capabilities(user: dict[str, Any]) -> set[str]:
     if has_internal_admin_access(user):
         return {"*"}
 
     capabilities: set[str] = set()
     user_id = _current_user_id(user)
-    user_email = _current_user_email(user)
 
     if user_id:
-        entitlements = list_user_project_entitlements(user_id, active_only=True)
+        entitlements = _list_active_entitlements_for_user(user_id)
         for entitlement in entitlements:
             _collect_capabilities_from_mapping(
                 capabilities,
@@ -185,7 +206,7 @@ def get_user_package_capabilities(user: dict) -> set[str]:
     return capabilities
 
 
-def has_package_capability(user: dict, capability: str) -> bool:
+def has_package_capability(user: dict[str, Any], capability: str) -> bool:
     if has_internal_admin_access(user):
         return True
 
@@ -196,7 +217,7 @@ def has_package_capability(user: dict, capability: str) -> bool:
     return normalized_capability in get_user_package_capabilities(user)
 
 
-def has_any_package_capability(user: dict, *capabilities: str) -> bool:
+def has_any_package_capability(user: dict[str, Any], *capabilities: str) -> bool:
     normalized_capabilities = [
         _normalize_value(capability)
         for capability in capabilities
@@ -213,11 +234,11 @@ def has_any_package_capability(user: dict, *capabilities: str) -> bool:
 
 
 def require_package_capability(
-    user: dict,
+    user: dict[str, Any],
     capability: str,
     *,
     detail: str = "Your active package does not include this feature.",
-) -> dict:
+) -> dict[str, Any]:
     if not has_package_capability(user, capability):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -227,10 +248,10 @@ def require_package_capability(
 
 
 def require_any_package_capability(
-    user: dict,
+    user: dict[str, Any],
     *capabilities: str,
     detail: str = "Your active package does not include this feature.",
-) -> dict:
+) -> dict[str, Any]:
     if not has_any_package_capability(user, *capabilities):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -242,7 +263,7 @@ def require_any_package_capability(
 def get_current_user(
     request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
-) -> dict:
+) -> dict[str, Any]:
     token, source = _get_token_from_request(request, credentials)
 
     if not token:
@@ -304,7 +325,7 @@ def get_current_user(
     return normalized_user
 
 
-def require_admin(current_user: dict = Depends(get_current_user)) -> dict:
+def require_admin(current_user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]:
     if not has_internal_admin_access(current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

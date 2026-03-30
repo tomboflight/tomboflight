@@ -88,8 +88,8 @@ def _bucket_for_zone(zone: str) -> str:
 
 def _lazy_s3_client():
     try:
-        import boto3
-        from botocore.config import Config
+        import boto3 # type: ignore
+        from botocore.config import Config # type: ignore
     except ImportError as exc:
         raise RuntimeError(
             "boto3 is required for R2 storage writes. Install backend requirements "

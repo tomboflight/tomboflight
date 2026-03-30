@@ -16,8 +16,8 @@ def _normalize(value: Any) -> str:
 
 def _lazy_web3():
     try:
-        from eth_account import Account
-        from web3 import Web3
+        from eth_account import Account # type: ignore
+        from web3 import Web3 # type: ignore
     except ImportError as exc:
         raise RuntimeError(
             "web3 and eth-account are required for live blockchain minting. "

@@ -94,7 +94,7 @@ def _sort_members(members: list[dict[str, Any]]) -> list[dict[str, Any]]:
             generation = raw_generation
         else:
             try:
-                generation = int(raw_generation)
+                generation = int(raw_generation) # type: ignore
             except Exception:
                 generation = 999
         return generation, _display_name(member).lower()
@@ -219,15 +219,15 @@ def _build_anchor_family_name(
 
     if lane in {"household", "network"}:
         return (
-            _normalize_value(household.get("household_name"))
-            or _normalize_value(family_map.get("family_branch_name"))
+            _normalize_value(household.get("household_name")) # type: ignore
+            or _normalize_value(family_map.get("family_branch_name")) # type: ignore
             or project_name
             or "Tomb of Light Family"
         )
 
     if lane == "organization":
         base = (
-            _normalize_value(household.get("household_name"))
+            _normalize_value(household.get("household_name")) # type: ignore
             or project_name
             or package_name
             or "Organization Workspace"
@@ -249,9 +249,9 @@ def _build_anchor_description(
     review = submission.get("review") if isinstance(submission, dict) else {}
 
     return (
-        _normalize_value(family_map.get("family_structure_summary"))
-        or _normalize_value(household.get("project_scope"))
-        or _normalize_value(review.get("final_intake_notes"))
+        _normalize_value(family_map.get("family_structure_summary")) # type: ignore
+        or _normalize_value(household.get("project_scope")) # type: ignore
+        or _normalize_value(review.get("final_intake_notes")) # type: ignore
         or _normalize_value(project.get("notes"))
         or (
             "Private lineage viewer workspace for guided family portraits."
@@ -516,7 +516,7 @@ def _member_status(
 
     raw_generation = member.get("generation")
     try:
-        generation = int(raw_generation)
+        generation = int(raw_generation) # type: ignore
     except Exception:
         generation = None
 

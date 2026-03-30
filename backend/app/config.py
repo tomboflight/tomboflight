@@ -6,19 +6,49 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    app_name: str = "Tomb of Light API"
-    app_version: str = "1.0.0"
-    environment: str = "development"
+    app_name: str = Field(
+        default="Tomb of Light API",
+        validation_alias=AliasChoices("APP_NAME"),
+    )
+    app_version: str = Field(
+        default="1.0.0",
+        validation_alias=AliasChoices("APP_VERSION"),
+    )
+    environment: str = Field(
+        default="development",
+        validation_alias=AliasChoices("ENVIRONMENT"),
+    )
 
-    mongodb_uri: str = "mongodb://localhost:27017"
-    mongodb_db_name: str = "tomboflight"
+    mongodb_uri: str = Field(
+        default="mongodb://localhost:27017",
+        validation_alias=AliasChoices("MONGODB_URI"),
+    )
+    mongodb_db_name: str = Field(
+        default="tomboflight",
+        validation_alias=AliasChoices("MONGODB_DB_NAME", "DATABASE_NAME"),
+    )
 
-    secret_key: str = "change-me"
-    algorithm: str = "HS256"
-    access_token_expire_minutes: int = 60
+    secret_key: str = Field(
+        default="change-me",
+        validation_alias=AliasChoices("SECRET_KEY"),
+    )
+    algorithm: str = Field(
+        default="HS256",
+        validation_alias=AliasChoices("ALGORITHM"),
+    )
+    access_token_expire_minutes: int = Field(
+        default=60,
+        validation_alias=AliasChoices("ACCESS_TOKEN_EXPIRE_MINUTES"),
+    )
 
-    stripe_secret_key: str = ""
-    stripe_webhook_secret: str = ""
+    stripe_secret_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("STRIPE_SECRET_KEY"),
+    )
+    stripe_webhook_secret: str = Field(
+        default="",
+        validation_alias=AliasChoices("STRIPE_WEBHOOK_SECRET"),
+    )
 
     nft_chain: str = Field(
         default="base-mainnet",
@@ -60,6 +90,19 @@ class Settings(BaseSettings):
         default=False,
         validation_alias=AliasChoices("NFT_ORG_MINT_ENABLED"),
     )
+    nft_token_name_prefix: str = Field(
+        default="Tomb of Light Legacy Anchor",
+        validation_alias=AliasChoices("NFT_TOKEN_NAME_PREFIX"),
+    )
+    nft_schema_version: str = Field(
+        default="tol-nft-1.0",
+        validation_alias=AliasChoices("NFT_SCHEMA_VERSION"),
+    )
+    nft_default_external_url: str = Field(
+        default="https://tomboflight.com",
+        validation_alias=AliasChoices("NFT_DEFAULT_EXTERNAL_URL"),
+    )
+
     hash_salt: str = Field(
         default="",
         validation_alias=AliasChoices("HASH_SALT"),
@@ -69,12 +112,15 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("METADATA_BASE_URL"),
     )
     poster_base_url: str = Field(
-        default="https://metadata.tomboflight.com/v1/posters",
+        default="https://posters.tomboflight.com/v1",
         validation_alias=AliasChoices("POSTER_BASE_URL"),
     )
     public_token_external_base_url: str = Field(
         default="https://tomboflight.com/token",
-        validation_alias=AliasChoices("PUBLIC_TOKEN_EXTERNAL_BASE_URL"),
+        validation_alias=AliasChoices(
+            "PUBLIC_TOKEN_EXTERNAL_BASE_URL",
+            "NFT_DEFAULT_EXTERNAL_URL",
+        ),
     )
     ipfs_mirror_enabled: bool = Field(
         default=False,
@@ -166,34 +212,44 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("PUBLIC_STORAGE_DIR"),
     )
 
-    allowed_origins: str = (
-        "http://127.0.0.1:5500,"
-        "http://localhost:5500,"
-        "http://[::1]:5500,"
-        "http://127.0.0.1:8000,"
-        "http://localhost:8000,"
-        "http://[::1]:8000,"
-        "https://tomboflight.com,"
-        "https://www.tomboflight.com"
+    allowed_origins: str = Field(
+        default=(
+            "http://127.0.0.1:5500,"
+            "http://localhost:5500,"
+            "http://[::1]:5500,"
+            "http://127.0.0.1:8000,"
+            "http://localhost:8000,"
+            "http://[::1]:8000,"
+            "https://tomboflight.com,"
+            "https://www.tomboflight.com"
+        ),
+        validation_alias=AliasChoices("ALLOWED_ORIGINS"),
     )
 
-    # Upload / storage
-    upload_storage_dir: str = "storage/uploads"
-    render_disk_mount_path: str = ""
-    upload_max_image_mb: int = 10
-    upload_max_document_mb: int = 25
-
-    upload_image_content_types: str = (
-        "image/jpeg,"
-        "image/png,"
-        "image/webp"
+    upload_storage_dir: str = Field(
+        default="storage/uploads",
+        validation_alias=AliasChoices("UPLOAD_STORAGE_DIR"),
+    )
+    render_disk_mount_path: str = Field(
+        default="",
+        validation_alias=AliasChoices("RENDER_DISK_MOUNT_PATH"),
+    )
+    upload_max_image_mb: int = Field(
+        default=10,
+        validation_alias=AliasChoices("UPLOAD_MAX_IMAGE_MB"),
+    )
+    upload_max_document_mb: int = Field(
+        default=25,
+        validation_alias=AliasChoices("UPLOAD_MAX_DOCUMENT_MB"),
     )
 
-    upload_document_content_types: str = (
-        "application/pdf,"
-        "image/jpeg,"
-        "image/png,"
-        "image/webp"
+    upload_image_content_types: str = Field(
+        default="image/jpeg,image/png,image/webp",
+        validation_alias=AliasChoices("UPLOAD_IMAGE_CONTENT_TYPES"),
+    )
+    upload_document_content_types: str = Field(
+        default="application/pdf,image/jpeg,image/png,image/webp",
+        validation_alias=AliasChoices("UPLOAD_DOCUMENT_CONTENT_TYPES"),
     )
 
     model_config = SettingsConfigDict(
@@ -260,6 +316,18 @@ class Settings(BaseSettings):
         if mount_path:
             return str(Path(mount_path) / "public")
         return str(Path(self.public_storage_dir))
+
+    @property
+    def metadata_base_url_clean(self) -> str:
+        return str(self.metadata_base_url or "").strip().rstrip("/")
+
+    @property
+    def poster_base_url_clean(self) -> str:
+        return str(self.poster_base_url or "").strip().rstrip("/")
+
+    @property
+    def public_token_external_base_url_clean(self) -> str:
+        return str(self.public_token_external_base_url or "").strip().rstrip("/")
 
 
 @lru_cache
