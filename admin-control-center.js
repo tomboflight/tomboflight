@@ -130,6 +130,15 @@
     return Boolean(allowed && allowed.has(currentRoleKey));
   }
 
+  SECTION_ACCESS.users = new Set([
+    "operations_admin",
+    "operations",
+    "finance_admin",
+    "finance",
+    "marketing_admin",
+    "marketing",
+  ]);
+
   function getSearchValue() {
     const node = document.querySelector("[data-admin-control-search]");
     return String((node && node.value) || "").trim();
@@ -373,10 +382,18 @@
     return `
       <div class="family-record-card">
         <div class="card-number">U</div>
-        <h3>${escapeHtml(`${item.first_name || ""} ${item.last_name || ""}`.trim() || item.email || "User")}</h3>
+        <h3>${escapeHtml(item.full_name || `${item.first_name || ""} ${item.last_name || ""}`.trim() || item.email || "User")}</h3>
         <p class="card-copy"><strong>Email:</strong> ${escapeHtml(item.email || "—")}</p>
         <p class="card-copy"><strong>Role:</strong> ${escapeHtml(item.role || "—")}</p>
+        <p class="card-copy"><strong>Status:</strong> ${escapeHtml(item.status || "—")}</p>
+        <p class="card-copy"><strong>Last Login:</strong> ${escapeHtml(formatDate(item.last_login_at))}</p>
+        <p class="card-copy"><strong>Reset Requested:</strong> ${escapeHtml(formatDate(item.password_reset_requested_at))}</p>
         <p class="card-copy"><strong>Created:</strong> ${escapeHtml(formatDate(item.created_at))}</p>
+        <div class="inline-actions" style="margin-top: 1rem;">
+          <button class="btn btn-secondary" type="button" data-admin-password-reset="${escapeHtml(item.id || "")}">
+            Issue Reset Link
+          </button>
+        </div>
       </div>
     `;
   }
@@ -533,11 +550,13 @@
       const items = await fetchJson("/users/");
       const filtered = Array.isArray(items)
         ? items.filter(function (item) {
-            const haystack = [
+          const haystack = [
+              item.full_name,
               item.first_name,
               item.last_name,
               item.email,
               item.role,
+              item.status,
             ]
               .join(" ")
               .toLowerCase();
@@ -723,6 +742,40 @@
         {},
         "Syncing mint receipt...",
       );
+      return;
+    }
+
+    const passwordResetButton = event.target.closest("[data-admin-password-reset]");
+    if (passwordResetButton) {
+      const userId = passwordResetButton.getAttribute("data-admin-password-reset");
+      if (!userId) return;
+      try {
+        setPageStatus("Issuing password reset link...", "info");
+        const payload = await app.apiRequest(
+          `/auth/admin/users/${encodeURIComponent(userId)}/password-reset`,
+          {
+            method: "POST",
+          },
+        );
+        const resetUrl = String(payload && payload.reset_url ? payload.reset_url : "").trim();
+        if (resetUrl && navigator.clipboard && navigator.clipboard.writeText) {
+          try {
+            await navigator.clipboard.writeText(resetUrl);
+            setPageStatus("Password reset link issued and copied to clipboard.", "success");
+          } catch (_error) {
+            setPageStatus("Password reset link issued. Copy it from the dialog.", "success");
+          }
+        } else {
+          setPageStatus("Password reset link issued successfully.", "success");
+        }
+
+        if (resetUrl) {
+          window.prompt("Share this secure reset link with the user:", resetUrl);
+        }
+        await loadUsers();
+      } catch (error) {
+        setPageStatus(error.message || "Unable to issue password reset link.", "error");
+      }
     }
   }
 

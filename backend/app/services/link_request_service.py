@@ -7,6 +7,7 @@ from bson import ObjectId
 
 from app.database import get_database
 from app.schemas.link_request import LinkRequestCreate
+from app.services.audit_log_service import create_audit_log
 from app.services.link_key_service import (
     get_active_key_doc_for_project,
     get_key_doc_by_value,
@@ -41,6 +42,10 @@ def _household_links_collection():
 def _projects_collection():
     db = get_database()
     return db["projects"]
+
+
+def _normalize_value(value: Any) -> str:
+    return str(value or "").strip()
 
 
 def _enrich_request(document: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -179,6 +184,14 @@ def create_link_request(
         "requested_by": str(requested_by or "").strip() or "Unknown User",
         "requested_by_user_id": str(requested_by_user_id or "").strip(),
         "notes": payload.notes,
+        "handshake_state": "awaiting_target_consent",
+        "source_handshake_at": _utcnow_iso(),
+        "source_handshake_by": str(requested_by or "").strip() or "Unknown User",
+        "source_handshake_user_id": str(requested_by_user_id or "").strip() or None,
+        "target_handshake_at": None,
+        "target_handshake_by": None,
+        "target_handshake_user_id": None,
+        "handshake_completed_at": None,
         "source_package_code": source_project.get("package_code"),
         "source_package_name": source_project.get("package_name"),
         "target_package_code": target_project.get("package_code"),
@@ -189,6 +202,20 @@ def create_link_request(
 
     result = _requests_collection().insert_one(data)
     data["_id"] = result.inserted_id
+    try:
+        create_audit_log(
+            "link_request_created",
+            str(requested_by_user_id or "").strip() or None,
+            "link_request",
+            str(result.inserted_id),
+            {
+                "source_project_id": source_project_id,
+                "target_project_id": target_project_id,
+                "handshake_state": "awaiting_target_consent",
+            },
+        )
+    except Exception:
+        pass
     return _enrich_request(data) or data
 
 
@@ -214,6 +241,32 @@ def _can_manage_request(request: dict[str, Any], user_id: str, *, side: str) -> 
     )
 
 
+def _validate_active_handshake_keys(request: dict[str, Any]) -> None:
+    source_project_id = _normalize_value(request.get("source_project_id"))
+    target_project_id = _normalize_value(request.get("target_project_id"))
+    source_key = _normalize_value(request.get("source_key"))
+    target_key = _normalize_value(request.get("target_key"))
+
+    active_source_key = get_active_key_doc_for_project(source_project_id)
+    active_target_key = get_active_key_doc_for_project(target_project_id)
+
+    if (
+        active_source_key is None
+        or _normalize_value(active_source_key.get("key_value")) != source_key
+    ):
+        raise ValueError(
+            "The requesting workspace must still present the same active link key to complete the handshake."
+        )
+
+    if (
+        active_target_key is None
+        or _normalize_value(active_target_key.get("key_value")) != target_key
+    ):
+        raise ValueError(
+            "The receiving workspace must still present the same active link key to complete the handshake."
+        )
+
+
 def approve_link_request(
     request_id: str,
     *,
@@ -236,12 +289,19 @@ def approve_link_request(
     if str(request.get("status") or "").strip().lower() == "approved":
         return _enrich_request(request)
 
+    _validate_active_handshake_keys(request)
+
     now = _utcnow_iso()
     _requests_collection().update_one(
         {"_id": object_id},
         {
             "$set": {
                 "status": "approved",
+                "handshake_state": "complete",
+                "target_handshake_at": now,
+                "target_handshake_by": approved_by,
+                "target_handshake_user_id": approver_user_id,
+                "handshake_completed_at": now,
                 "approved_by": approved_by,
                 "approved_at": now,
                 "approval_notes": approval_notes,
@@ -285,6 +345,20 @@ def approve_link_request(
             )
 
     updated = _requests_collection().find_one({"_id": object_id})
+    try:
+        create_audit_log(
+            "link_request_approved",
+            str(approver_user_id or "").strip() or None,
+            "link_request",
+            str(object_id),
+            {
+                "source_project_id": _normalize_value(request.get("source_project_id")),
+                "target_project_id": _normalize_value(request.get("target_project_id")),
+                "handshake_state": "complete",
+            },
+        )
+    except Exception:
+        pass
     return _enrich_request(updated)
 
 
@@ -317,6 +391,7 @@ def reject_link_request(
         {
             "$set": {
                 "status": "rejected",
+                "handshake_state": "rejected",
                 "rejected_by": rejected_by,
                 "rejected_at": now,
                 "rejection_notes": rejection_notes,
@@ -326,6 +401,19 @@ def reject_link_request(
     )
 
     updated = _requests_collection().find_one({"_id": object_id})
+    try:
+        create_audit_log(
+            "link_request_rejected",
+            str(rejector_user_id or "").strip() or None,
+            "link_request",
+            str(object_id),
+            {
+                "source_project_id": _normalize_value(request.get("source_project_id")),
+                "target_project_id": _normalize_value(request.get("target_project_id")),
+            },
+        )
+    except Exception:
+        pass
     return _enrich_request(updated)
 
 
@@ -358,6 +446,7 @@ def revoke_link_request(
         {
             "$set": {
                 "status": "revoked",
+                "handshake_state": "revoked",
                 "revoked_by": revoked_by,
                 "revoked_at": now,
                 "revoke_notes": revoke_notes,
@@ -386,4 +475,17 @@ def revoke_link_request(
         )
 
     updated = _requests_collection().find_one({"_id": object_id})
+    try:
+        create_audit_log(
+            "link_request_revoked",
+            str(revoker_user_id or "").strip() or None,
+            "link_request",
+            str(object_id),
+            {
+                "source_project_id": _normalize_value(request.get("source_project_id")),
+                "target_project_id": _normalize_value(request.get("target_project_id")),
+            },
+        )
+    except Exception:
+        pass
     return _enrich_request(updated)

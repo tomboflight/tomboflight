@@ -42,6 +42,17 @@
       .join(" ");
   }
 
+  function handshakeLabel(item) {
+    const normalized = normalizeValue(item && item.handshake_state);
+    if (normalized === "complete") return "Handshake Complete";
+    if (normalized === "awaiting_target_consent") {
+      return "Awaiting Other Side";
+    }
+    if (normalized === "revoked") return "Handshake Revoked";
+    if (normalized === "rejected") return "Handshake Rejected";
+    return "Handshake Pending";
+  }
+
   function setStatus(node, message, type) {
     if (!node) return;
 
@@ -235,9 +246,22 @@
     const lines = [
       `<p class="card-copy"><strong>Workspace:</strong> ${escapeHtml(label)}</p>`,
       `<p class="card-copy"><strong>Status:</strong> ${escapeHtml(humanizeStatus(item.status))}</p>`,
+      `<p class="card-copy"><strong>Trust Handshake:</strong> ${escapeHtml(handshakeLabel(item))}</p>`,
       `<p class="card-copy"><strong>Requested By:</strong> ${escapeHtml(item.requested_by || "—")}</p>`,
       `<p class="card-copy"><strong>Created:</strong> ${escapeHtml(item.created_at || "—")}</p>`,
     ];
+
+    if (item.source_handshake_at) {
+      lines.push(
+        `<p class="card-copy"><strong>Requesting Side Key Shared:</strong> ${escapeHtml(item.source_handshake_at)}</p>`,
+      );
+    }
+
+    if (item.target_handshake_at) {
+      lines.push(
+        `<p class="card-copy"><strong>Receiving Side Accepted:</strong> ${escapeHtml(item.target_handshake_at)}</p>`,
+      );
+    }
 
     if (item.notes) {
       lines.push(
@@ -668,7 +692,7 @@
       if (workspaceStatusNode) {
         setStatus(
           workspaceStatusNode,
-          "This workspace can generate a project link key, send link requests, and manage active links.",
+          "This workspace can generate a project link key, exchange keys with another workspace, and complete a mutual trust handshake only when both sides choose to link.",
           "success",
         );
       }

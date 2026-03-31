@@ -25,6 +25,29 @@ class UserLogin(BaseModel):
     password: str = Field(..., min_length=8, max_length=128)
 
 
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+
+class PasswordResetConfirm(BaseModel):
+    token: str = Field(..., min_length=16, max_length=512)
+    new_password: str = Field(..., min_length=8, max_length=128)
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str = Field(..., min_length=8, max_length=128)
+    new_password: str = Field(..., min_length=8, max_length=128)
+
+
+class PasswordResetResponse(BaseModel):
+    success: bool = True
+    message: str
+    expires_at: Optional[str] = None
+    reset_token: Optional[str] = None
+    reset_url: Optional[str] = None
+    delivery_mode: Optional[str] = None
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"

@@ -9,6 +9,7 @@ from pymongo.database import Database
 from pymongo.errors import OperationFailure
 
 from app.database import get_database
+from app.services.billing_service import store_stripe_customer_reference
 from app.services.project_service import (
     apply_package_purchase_to_project,
     create_project_from_paid_order,
@@ -559,6 +560,17 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
             "session_id": session_id,
             "email": email,
         }
+
+    customer_id = _normalize(session.get("customer"))
+    if customer_id:
+        try:
+            store_stripe_customer_reference(
+                user_id=str(user.get("_id") or ""),
+                email=email,
+                customer_id=customer_id,
+            )
+        except Exception:
+            pass
 
     orders = _get_orders_collection()
 
