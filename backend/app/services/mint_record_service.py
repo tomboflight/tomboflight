@@ -678,8 +678,10 @@ def build_mint_status(project_id: str) -> dict[str, Any]:
     if latest is not None and manifest is not None:
         latest = {
             **latest,
+            "public_token_id": manifest["public_token_id"],
             "metadata_uri": manifest["metadata_uri"],
             "poster_image_uri_public": manifest["poster_image_uri_public"],
+            "public_payload": manifest["payload"],
         }
 
     return {

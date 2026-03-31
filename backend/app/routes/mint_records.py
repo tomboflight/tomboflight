@@ -9,9 +9,11 @@ from app.dependencies.auth import get_current_user, require_admin
 from app.schemas.mint_record import (
     AdminMintApprovalPayload,
     CustomerMintApprovalPayload,
+    MintMaintenancePayload,
     PrepareMintRecordPayload,
 )
 from app.services.mint_job_service import queue_mint_pipeline, sync_receipt_for_mint_record
+from app.services.mint_maintenance_service import run_mint_maintenance
 from app.services.mint_policy_service import describe_project_mint_eligibility
 from app.services.mint_record_service import (
     approve_admin_mint_record,
@@ -185,6 +187,27 @@ def list_admin_mint_overview(
             break
 
     return {"items": items}
+
+
+@router.post("/admin/mint-records/maintenance/backfill")
+def backfill_admin_mint_records(
+    payload: MintMaintenancePayload,
+    current_user: dict[str, Any] = Depends(require_admin),
+):
+    del current_user
+    try:
+        return run_mint_maintenance(
+            limit=payload.limit,
+            normalize_tx_hashes=payload.normalize_tx_hashes,
+            supersede_stale_records=payload.supersede_stale_records,
+            sync_receipts=payload.sync_receipts,
+            republish_public_artifacts=payload.republish_public_artifacts,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
 
 
 @router.post("/projects/{project_id}/mint-records/prepare")
