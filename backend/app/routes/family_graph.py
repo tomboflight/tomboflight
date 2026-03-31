@@ -4,7 +4,7 @@ from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.database import get_database
-from app.dependencies.auth import get_current_user
+from app.dependencies.auth import get_current_user, has_internal_admin_access
 from app.services.viewer_manifest_service import ensure_project_workspace_anchor
 from app.services.workspace_access_service import require_workspace_capability
 
@@ -134,6 +134,7 @@ def get_family_graph(
         raise HTTPException(status_code=500, detail="Database is not connected.")
     family = context["family"]
     project = context["project"]
+    is_internal_admin = has_internal_admin_access(current_user)
     resolved_family_id = str(family.get("_id"))
 
     member_query = {"family_id": {"$in": _family_id_candidates(resolved_family_id)}}
@@ -181,17 +182,22 @@ def get_family_graph(
                 "spouse_id": member.get("spouse_id"),
                 "bio": member.get("bio"),
                 "created_at": member.get("created_at"),
-                "updated_at": member.get("updated_at"),
-                "created_by": member.get("created_by"),
-                "updated_by": member.get("updated_by"),
                 "is_verified": bool(member.get("is_verified", False)),
                 "verification_status": member.get("verification_status"),
-                "verification_method": member.get("verification_method"),
-                "verified_by": member.get("verified_by"),
-                "verified_at": member.get("verified_at"),
-                "verification_notes": member.get("verification_notes"),
             }
         )
+        if is_internal_admin:
+            members[-1].update(
+                {
+                    "updated_at": member.get("updated_at"),
+                    "created_by": member.get("created_by"),
+                    "updated_by": member.get("updated_by"),
+                    "verification_method": member.get("verification_method"),
+                    "verified_by": member.get("verified_by"),
+                    "verified_at": member.get("verified_at"),
+                    "verification_notes": member.get("verification_notes"),
+                }
+            )
 
     relationships = []
     for rel in relationships_raw:
@@ -234,9 +240,15 @@ def get_family_graph(
             "created_by": family.get("created_by"),
             "description": family.get("description"),
             "created_at": family.get("created_at"),
-            "owner_user_id": family.get("owner_user_id"),
-            "owner_email": family.get("owner_email"),
             "visibility": family.get("visibility", "private"),
+            **(
+                {
+                    "owner_user_id": family.get("owner_user_id"),
+                    "owner_email": family.get("owner_email"),
+                }
+                if is_internal_admin
+                else {}
+            ),
         },
         "members": members,
         "relationships": relationships,

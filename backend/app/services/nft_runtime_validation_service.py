@@ -89,8 +89,10 @@ def validate_nft_runtime_configuration_on_startup() -> None:
         ("NFT_CONTRACT_ADDRESS", settings.nft_contract_address),
         ("NFT_CONTRACT_ABI_JSON", settings.nft_contract_abi_json),
         ("NFT_MINTER_PRIVATE_KEY", settings.nft_minter_private_key),
+        ("HASH_SALT", settings.hash_salt),
         ("METADATA_BASE_URL", settings.metadata_base_url),
         ("POSTER_BASE_URL", settings.poster_base_url),
+        ("PUBLIC_TOKEN_EXTERNAL_BASE_URL", settings.public_token_external_base_url),
     ):
         if not _normalize(value):
             missing.append(field_name)
@@ -111,6 +113,10 @@ def validate_nft_runtime_configuration_on_startup() -> None:
         settings.poster_base_url_clean,
         field_name="POSTER_BASE_URL",
         require_v1_path=True,
+    )
+    _validate_http_url(
+        settings.public_token_external_base_url_clean,
+        field_name="PUBLIC_TOKEN_EXTERNAL_BASE_URL",
     )
     _validate_contract_address()
     _validate_private_key()

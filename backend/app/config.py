@@ -147,7 +147,7 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("POSTER_BASE_URL"),
     )
     public_token_external_base_url: str = Field(
-        default="https://tomboflight.com/token",
+        default="https://tomboflight-api.onrender.com/tokens",
         validation_alias=AliasChoices(
             "PUBLIC_TOKEN_EXTERNAL_BASE_URL",
             "NFT_DEFAULT_EXTERNAL_URL",

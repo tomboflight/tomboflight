@@ -420,7 +420,6 @@ def get_public_token_landing_payload(public_token_id: str):
     return {
         "public_token_id": manifest["public_token_id"],
         "metadata_uri": manifest["metadata_uri"],
-        "project_id": manifest["project_id"],
         "version_number": manifest["version_number"],
         "poster_image_uri_public": manifest["poster_image_uri_public"],
         "approval_status": manifest["approval_status"],
