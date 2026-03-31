@@ -9,6 +9,25 @@
   const TOKEN_KEY = "tol_access_token";
   const USER_KEY = "tol_user";
   const COOKIE_CHOICE_KEY = "tol_cookie_choice";
+  const PENDING_CHECKOUT_KEY = "tol_pending_checkout";
+
+  const ADDON_OR_EXTRA_SLUGS = new Set([
+    "extra_upload_pack",
+    "extra_storage",
+    "portrait_polish",
+    "tribute_narration",
+    "extra_mapped_person",
+    "extra_zoom_layer",
+    "additional_narration_minute",
+    "on_site_photo_scanning",
+    "extra_linked_household",
+    "extra_branch",
+    "white_glove_archive_support",
+    "extra_org_node",
+    "extra_org_level",
+    "extra_admin_seat",
+    "command_report_addon",
+  ]);
 
   function isLocalApp() {
     return LOCAL_HOSTS.has(window.location.hostname);
@@ -31,6 +50,41 @@
 
   function getPaymentLinks() {
     return (window.TOL_CONFIG && window.TOL_CONFIG.PAYMENT_LINKS) || {};
+  }
+
+  function inferPurchaseTypeFromSlug(slug) {
+    const normalizedSlug = String(slug || "")
+      .trim()
+      .toLowerCase();
+
+    if (!normalizedSlug) return "package";
+
+    if (
+      normalizedSlug.endsWith("_maintenance_monthly") ||
+      normalizedSlug.endsWith("_maintenance_yearly")
+    ) {
+      return "maintenance";
+    }
+
+    if (ADDON_OR_EXTRA_SLUGS.has(normalizedSlug)) {
+      if (
+        normalizedSlug.startsWith("extra_") ||
+        normalizedSlug === "white_glove_archive_support"
+      ) {
+        return "extra";
+      }
+      return "addon";
+    }
+
+    return "package";
+  }
+
+  function savePendingCheckout(payload) {
+    try {
+      localStorage.setItem(PENDING_CHECKOUT_KEY, JSON.stringify(payload || {}));
+    } catch (_error) {
+      // Ignore storage errors for checkout convenience.
+    }
   }
 
   function saveToken(token) {
@@ -358,6 +412,14 @@
 
       if (resolved) {
         link.href = resolved;
+        link.addEventListener("click", function () {
+          savePendingCheckout({
+            packageCode: slug,
+            purchaseType: link.dataset.paymentType || inferPurchaseTypeFromSlug(slug),
+            paymentLink: resolved,
+            selectedAt: new Date().toISOString(),
+          });
+        });
       }
     });
   }
@@ -423,6 +485,8 @@
     requireSession,
     setStatus,
     clearStatus,
+    inferPurchaseTypeFromSlug,
+    savePendingCheckout,
   };
 
   window.TOLApp = sharedApi;
