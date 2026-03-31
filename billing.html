@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Billing & Cards | Tomb of Light</title>
+    <meta
+      name="description"
+      content="Manage Tomb of Light billing, payment methods, maintenance subscriptions, and saved cards."
+    />
+    <link rel="stylesheet" href="styles.css?v=20260331-2" />
+  </head>
+  <body class="portal-dashboard-body">
+    <div class="page-wrap">
+      <header class="site-header" role="banner">
+        <div class="container site-header-inner">
+          <a class="brand" href="index.html" aria-label="Tomb of Light home">
+            <span>Tomb of Light<span class="brand-symbol">™</span></span>
+          </a>
+
+          <button
+            class="menu-toggle"
+            type="button"
+            aria-label="Toggle navigation menu"
+            aria-expanded="false"
+            aria-controls="site-nav"
+          >
+            Menu
+          </button>
+
+          <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
+            <a href="dashboard.html">Dashboard</a>
+            <a href="account-security.html">Account Security</a>
+            <a href="faq.html">FAQ</a>
+          </nav>
+
+          <div class="header-actions">
+            <a class="btn btn-secondary" href="dashboard.html">
+              Back to Dashboard
+            </a>
+            <button class="btn btn-secondary" type="button" data-logout-btn>
+              Log Out
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main id="main-content" role="main">
+        <section class="page-hero">
+          <div class="container">
+            <div class="page-hero-panel">
+              <span class="eyebrow">Billing Control</span>
+              <h1>Saved cards, subscription payments, and maintenance access.</h1>
+              <p data-billing-page-status>
+                Loading your Tomb of Light billing profile...
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section class="page-sections">
+          <div class="container form-shell portal-account-grid">
+            <div class="form-panel">
+              <span class="eyebrow">Subscription Actions</span>
+              <p class="card-copy" data-billing-subscriptions-status>
+                Loading subscriptions...
+              </p>
+
+              <div class="inline-actions" style="margin-top: 1rem">
+                <button class="btn btn-primary" type="button" data-open-billing-portal>
+                  Open Billing Portal
+                </button>
+                <a
+                  class="btn btn-secondary"
+                  href="#"
+                  data-maintenance-monthly-link
+                  style="display: none"
+                >
+                  Start Monthly Maintenance
+                </a>
+                <a
+                  class="btn btn-secondary"
+                  href="#"
+                  data-maintenance-yearly-link
+                  style="display: none"
+                >
+                  Start Yearly Maintenance
+                </a>
+              </div>
+
+              <div class="grid-3" style="margin-top: 1rem" data-billing-subscriptions-list></div>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Cards on File</span>
+              <p class="card-copy" data-billing-cards-status>
+                Loading saved cards...
+              </p>
+              <div class="grid-3" data-billing-cards-list></div>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Add Card</span>
+              <p class="card-copy" data-billing-add-card-copy>
+                You can store up to three cards on file for Tomb of Light billing.
+              </p>
+
+              <form class="form-grid" data-billing-card-form novalidate>
+                <label>
+                  Card Details
+                  <div class="stripe-card-mount" data-stripe-card-element></div>
+                </label>
+
+                <div class="inline-actions" style="margin-top: 1rem">
+                  <button class="btn btn-primary" type="submit" data-billing-save-card>
+                    Save Card
+                  </button>
+                </div>
+              </form>
+
+              <div
+                class="helper"
+                data-billing-card-status
+                style="display: none; margin-top: 1rem"
+                aria-live="polite"
+              ></div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer" role="contentinfo">
+        <div class="container">
+          <div class="footer-card">
+            <div class="footer-top">
+              <div>
+                <div class="footer-brand">
+                  Tomb of Light<span class="brand-symbol">™</span>
+                </div>
+                <p class="footer-copy">
+                  Protected billing management for maintenance subscriptions,
+                  saved cards, and private workspace continuity.
+                </p>
+              </div>
+            </div>
+
+            <div class="footer-bottom">
+              <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
+              <span>Billing identity and private family records remain separate.</span>
+            </div>
+          </div>
+        </div>
+      </footer>
+    </div>
+
+    <script src="https://js.stripe.com/v3/"></script>
+    <script src="config.js?v=20260331-2"></script>
+    <script src="app.js?v=20260331-2"></script>
+    <script src="auth.js?v=20260331-2"></script>
+    <script src="billing.js?v=20260331-2"></script>
+  </body>
+</html>

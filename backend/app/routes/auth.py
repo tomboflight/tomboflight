@@ -3,9 +3,26 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from app.config import settings
-from app.dependencies.auth import COOKIE_NAME, get_current_user
-from app.schemas.auth import TokenResponse, UserCreate, UserLogin, UserResponse
-from app.services.auth_service import authenticate_user, build_user_response, register_user
+from app.dependencies.auth import COOKIE_NAME, get_current_user, require_admin
+from app.schemas.auth import (
+    PasswordChangeRequest,
+    PasswordResetConfirm,
+    PasswordResetRequest,
+    PasswordResetResponse,
+    TokenResponse,
+    UserCreate,
+    UserLogin,
+    UserResponse,
+)
+from app.services.auth_service import (
+    admin_issue_password_reset,
+    authenticate_user,
+    build_user_response,
+    change_password,
+    register_user,
+    request_password_reset,
+    reset_password_with_token,
+)
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -89,3 +106,77 @@ def logout(request: Request, response: Response):
 def me(response: Response, current_user: dict = Depends(get_current_user)):
     _apply_no_store(response)
     return build_user_response(current_user)
+
+
+def _current_user_id(user: dict) -> str:
+    raw_value = user.get("id") or user.get("_id") or user.get("user_id")
+    return str(raw_value or "").strip()
+
+
+def _current_user_display(user: dict) -> str:
+    return (
+        str(user.get("full_name") or user.get("name") or user.get("email") or "").strip()
+        or "Tomb of Light Admin"
+    )
+
+
+@router.post("/password-reset/request", response_model=PasswordResetResponse)
+def password_reset_request_route(payload: PasswordResetRequest, response: Response):
+    result = request_password_reset(payload.email)
+    _apply_no_store(response)
+    return result
+
+
+@router.post("/password-reset/confirm", response_model=PasswordResetResponse)
+def password_reset_confirm_route(
+    payload: PasswordResetConfirm,
+    response: Response,
+):
+    try:
+        result = reset_password_with_token(payload.token, payload.new_password)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    _apply_no_store(response)
+    return result
+
+
+@router.post("/password-change", response_model=PasswordResetResponse)
+def password_change_route(
+    payload: PasswordChangeRequest,
+    response: Response,
+    current_user: dict = Depends(get_current_user),
+):
+    try:
+        result = change_password(
+            _current_user_id(current_user),
+            current_password=payload.current_password,
+            new_password=payload.new_password,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    _apply_no_store(response)
+    return result
+
+
+@router.post(
+    "/admin/users/{user_id}/password-reset",
+    response_model=PasswordResetResponse,
+)
+def admin_issue_password_reset_route(
+    user_id: str,
+    response: Response,
+    current_user: dict = Depends(require_admin),
+):
+    try:
+        result = admin_issue_password_reset(
+            user_id,
+            admin_user_id=_current_user_id(current_user),
+            admin_display=_current_user_display(current_user),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    _apply_no_store(response)
+    return result

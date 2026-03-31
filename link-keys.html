@@ -102,6 +102,8 @@
               <div class="helper" style="margin-bottom: 1rem">
                 Generate a link key for your current eligible workspace. Share
                 this key with the other person or branch you want to connect.
+                A link is only completed when both sides present active keys and
+                the receiving side accepts the handshake by choice.
               </div>
 
               <label>
@@ -149,6 +151,11 @@
 
             <div class="form-panel" data-link-request-panel>
               <span class="eyebrow">Request a Link</span>
+              <div class="helper" style="margin-bottom: 1rem">
+                Tomb of Light records this as a trust handshake: your workspace
+                shares its active key first, then the other workspace must
+                accept with its own active key before the link becomes live.
+              </div>
 
               <form class="form-grid" data-link-request-form novalidate>
                 <label>

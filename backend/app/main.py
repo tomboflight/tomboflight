@@ -11,6 +11,7 @@ from app.routes.admin_intake_submissions import (
 )
 from app.routes.audit_logs import router as audit_logs_router
 from app.routes.auth import router as auth_router
+from app.routes.billing import router as billing_router
 from app.routes.canonical_persons import router as canonical_persons_router
 from app.routes.certificate_versions import router as certificate_versions_router
 from app.routes.consistency import router as consistency_router
@@ -136,6 +137,7 @@ async def add_security_headers(request: Request, call_next):
 # ----------------------------
 app.include_router(health_router)
 app.include_router(auth_router)
+app.include_router(billing_router)
 app.include_router(intake_router)
 app.include_router(intake_submissions_router)
 app.include_router(admin_intake_submissions_router)
@@ -216,6 +218,9 @@ def root():
             "/auth/login",
             "/auth/logout",
             "/auth/me",
+            "/auth/password-reset/request",
+            "/auth/password-reset/confirm",
+            "/auth/password-change",
             "/intake",
             "/intake-submissions",
             "/intake-submissions/my-latest",
@@ -247,6 +252,12 @@ def root():
             "/orders/record-checkout",
             "/orders/my-orders",
             "/orders/health",
+            "/billing/config",
+            "/billing/overview",
+            "/billing/setup-intent",
+            "/billing/payment-methods/{payment_method_id}/default",
+            "/billing/payment-methods/{payment_method_id}",
+            "/billing/portal-session",
             "/audit-logs",
             "/docs",
         ],

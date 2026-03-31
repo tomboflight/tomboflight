@@ -48,9 +48,37 @@ class Settings(BaseSettings):
         default="",
         validation_alias=AliasChoices("STRIPE_SECRET_KEY"),
     )
+    stripe_publishable_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("STRIPE_PUBLISHABLE_KEY"),
+    )
     stripe_webhook_secret: str = Field(
         default="",
         validation_alias=AliasChoices("STRIPE_WEBHOOK_SECRET"),
+    )
+    stripe_billing_portal_configuration_id: str = Field(
+        default="",
+        validation_alias=AliasChoices("STRIPE_BILLING_PORTAL_CONFIGURATION_ID"),
+    )
+    stripe_billing_portal_return_url: str = Field(
+        default="https://tomboflight.com/billing.html",
+        validation_alias=AliasChoices("STRIPE_BILLING_PORTAL_RETURN_URL"),
+    )
+    stripe_payment_method_max_cards: int = Field(
+        default=3,
+        validation_alias=AliasChoices("STRIPE_PAYMENT_METHOD_MAX_CARDS"),
+    )
+    password_reset_token_expire_minutes: int = Field(
+        default=30,
+        validation_alias=AliasChoices("PASSWORD_RESET_TOKEN_EXPIRE_MINUTES"),
+    )
+    password_reset_base_url: str = Field(
+        default="https://tomboflight.com/account-security.html",
+        validation_alias=AliasChoices("PASSWORD_RESET_BASE_URL"),
+    )
+    password_reset_preview_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("PASSWORD_RESET_PREVIEW_ENABLED"),
     )
 
     nft_chain: str = Field(
@@ -331,6 +359,14 @@ class Settings(BaseSettings):
     @property
     def public_token_external_base_url_clean(self) -> str:
         return str(self.public_token_external_base_url or "").strip().rstrip("/")
+
+    @property
+    def stripe_billing_portal_return_url_clean(self) -> str:
+        return str(self.stripe_billing_portal_return_url or "").strip().rstrip("/")
+
+    @property
+    def password_reset_base_url_clean(self) -> str:
+        return str(self.password_reset_base_url or "").strip().rstrip("/")
 
 
 @lru_cache

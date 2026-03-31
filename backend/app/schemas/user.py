@@ -16,6 +16,11 @@ class UserResponse(BaseModel):
     email: str
     role: str
     created_at: str
+    status: str | None = None
+    full_name: str | None = None
+    last_login_at: str | None = None
+    password_reset_requested_at: str | None = None
+    password_reset_expires_at: str | None = None
 
 
 def _normalize_text(value: object) -> str:
@@ -62,4 +67,13 @@ def build_user_response(data: dict) -> UserResponse:
         email=_normalize_text(data.get("email")) or "—",
         role=_normalize_text(data.get("role")) or "client",
         created_at=_serialize_created_at(data.get("created_at")),
+        status=_normalize_text(data.get("status")) or None,
+        full_name=_normalize_text(data.get("full_name")) or None,
+        last_login_at=_normalize_text(data.get("last_login_at")) or None,
+        password_reset_requested_at=(
+            _normalize_text(data.get("password_reset_requested_at")) or None
+        ),
+        password_reset_expires_at=(
+            _normalize_text(data.get("password_reset_expires_at")) or None
+        ),
     )

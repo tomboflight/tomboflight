@@ -32,6 +32,14 @@ class LinkRequestResponse(BaseModel):
     target_project_name: str | None = None
     target_owner_email: str | None = None
     notes: str | None = None
+    handshake_state: str | None = None
+    source_handshake_at: str | None = None
+    source_handshake_by: str | None = None
+    source_handshake_user_id: str | None = None
+    target_handshake_at: str | None = None
+    target_handshake_by: str | None = None
+    target_handshake_user_id: str | None = None
+    handshake_completed_at: str | None = None
     approved_by: str | None = None
     approved_at: str | None = None
     approval_notes: str | None = None
@@ -112,6 +120,26 @@ def build_link_request_response(data: dict[str, Any]) -> LinkRequestResponse:
             else None
         ),
         notes=data.get("notes"),
+        handshake_state=(
+            str(data.get("handshake_state"))
+            if data.get("handshake_state")
+            else None
+        ),
+        source_handshake_at=data.get("source_handshake_at"),
+        source_handshake_by=data.get("source_handshake_by"),
+        source_handshake_user_id=(
+            str(data.get("source_handshake_user_id"))
+            if data.get("source_handshake_user_id") is not None
+            else None
+        ),
+        target_handshake_at=data.get("target_handshake_at"),
+        target_handshake_by=data.get("target_handshake_by"),
+        target_handshake_user_id=(
+            str(data.get("target_handshake_user_id"))
+            if data.get("target_handshake_user_id") is not None
+            else None
+        ),
+        handshake_completed_at=data.get("handshake_completed_at"),
         approved_by=data.get("approved_by"),
         approved_at=data.get("approved_at"),
         approval_notes=data.get("approval_notes"),
