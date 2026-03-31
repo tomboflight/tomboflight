@@ -112,7 +112,12 @@ def _hash_sha256(value: str) -> str:
 
 
 def _hash_salt() -> str:
-    return _normalize(settings.hash_salt) or _normalize(settings.secret_key) or "change-me"
+    salt = _normalize(settings.hash_salt)
+    if salt:
+        return salt
+    raise RuntimeError(
+        "HASH_SALT must be configured before Tomb of Light can generate public-safe anchor hashes."
+    )
 
 
 def _project_document(project_id: str) -> dict[str, Any]:
@@ -204,7 +209,7 @@ def _default_description() -> str:
 
 
 def _token_external_url(public_token_id: str) -> str:
-    return f"{settings.public_token_external_base_url.rstrip('/')}/{public_token_id}"
+    return f"{settings.public_token_external_base_url_clean}/{public_token_id}"
 
 
 def _attributes_for_manifest(

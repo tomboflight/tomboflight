@@ -465,8 +465,8 @@ def count_workspace_uploads(
     project_id: str = "",
 ) -> int:
     db = _require_database()
-    if family_id:
-        return int(db["uploaded_files"].count_documents({"family_id": family_id}))
     if project_id:
         return int(db["uploaded_files"].count_documents({"project_id": project_id}))
+    if family_id:
+        return int(db["uploaded_files"].count_documents({"family_id": family_id}))
     return 0

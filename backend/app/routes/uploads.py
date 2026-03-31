@@ -288,6 +288,7 @@ def _public_upload_record(record: dict[str, Any]) -> dict[str, Any]:
     serialized.pop("relative_path", None)
     serialized.pop("absolute_path", None)
     serialized.pop("storage_path", None)
+    serialized.pop("uploaded_by_user_id", None)
     return serialized
 
 
@@ -656,12 +657,14 @@ def list_member_uploads(
 
     member = context["member"]
     family = context["family"]
+    project = context["project"]
 
     normalized_category = _validate_category_filter(category)
 
     query: dict[str, Any] = {
         "member_id": str(member.get("_id")),
         "family_id": _normalize_value((family or {}).get("_id")),
+        "project_id": _normalize_value((project or {}).get("_id")),
     }
     if normalized_category:
         query["category"] = normalized_category
@@ -692,9 +695,13 @@ def list_family_uploads(
         raise HTTPException(status_code=500, detail="Database is not connected.")
 
     family = context["family"]
+    project = context["project"]
     normalized_category = _validate_category_filter(category)
 
-    query: dict[str, Any] = {"family_id": _normalize_value((family or {}).get("_id"))}
+    query: dict[str, Any] = {
+        "family_id": _normalize_value((family or {}).get("_id")),
+        "project_id": _normalize_value((project or {}).get("_id")),
+    }
     if normalized_category:
         query["category"] = normalized_category
 

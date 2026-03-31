@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Any, cast
+from urllib.parse import urlparse
 
 import stripe
 from bson import ObjectId
@@ -53,6 +54,26 @@ def _require_stripe_secret_key() -> str:
         raise RuntimeError("STRIPE_SECRET_KEY is not configured.")
     stripe.api_key = secret_key
     return secret_key
+
+
+def _validate_portal_return_url(return_url: str | None) -> str:
+    normalized = _normalize_text(return_url)
+    fallback = (
+        settings.stripe_billing_portal_return_url_clean
+        or "https://tomboflight.com/billing.html"
+    )
+    if not normalized:
+        return fallback
+
+    parsed = urlparse(normalized)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return fallback
+
+    origin = f"{parsed.scheme}://{parsed.netloc}"
+    if origin not in set(settings.allowed_origins_list):
+        return fallback
+
+    return normalized
 
 
 def _stripe_to_dict(value: Any) -> dict[str, Any]:
@@ -146,14 +167,18 @@ def _ensure_stripe_customer_for_user(user: dict[str, Any]) -> dict[str, Any]:
         except Exception:
             pass
 
-    created_customer = stripe.Customer.create(
-        email=email or None,
-        name=full_name or None,
-        metadata={
+    create_payload: dict[str, Any] = {
+        "metadata": {
             "user_id": user_id,
             "platform": "tomboflight",
         },
-    )
+    }
+    if email:
+        create_payload["email"] = email
+    if full_name:
+        create_payload["name"] = full_name
+
+    created_customer = stripe.Customer.create(**create_payload)
     customer_dict = _stripe_to_dict(created_customer)
     customer_id = _normalize_text(customer_dict.get("id"))
     if customer_id:
@@ -391,11 +416,7 @@ def create_billing_portal_session_for_user(
 ) -> dict[str, Any]:
     _require_stripe_secret_key()
     customer_id = _customer_id_for_user(user)
-    resolved_return_url = (
-        _normalize_text(return_url)
-        or settings.stripe_billing_portal_return_url_clean
-        or "https://tomboflight.com/billing.html"
-    )
+    resolved_return_url = _validate_portal_return_url(return_url)
 
     kwargs: dict[str, Any] = {
         "customer": customer_id,
