@@ -204,6 +204,13 @@ def _display_name(member: dict[str, Any]) -> str:
     return joined or "Unknown Member"
 
 
+def _as_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except Exception:
+        return default
+
+
 @router.get("-index")
 def list_family_members_index(current_user: dict[str, Any] = Depends(get_current_user)):
     db = get_database()
@@ -257,6 +264,21 @@ def create_family_member(
 
     payload = dict(payload)
     payload["family_id"] = str(context["family"].get("_id"))
+
+    entitlements = context.get("resolved_entitlements") or {}
+    max_members = _as_int(entitlements.get("max_members"), 0)
+    if max_members > 0:
+        current_member_count = db.family_members.count_documents(
+            {"family_id": {"$in": _family_id_candidates(payload["family_id"])}}
+        )
+        if current_member_count >= max_members:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "This workspace has reached the member limit for the active package. "
+                    "Upgrade or add member capacity before creating another member."
+                ),
+            )
 
     payload = apply_create_metadata(payload, user_id)
     result = db.family_members.insert_one(payload)
