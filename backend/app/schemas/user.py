@@ -13,17 +13,53 @@ class UserResponse(BaseModel):
     id: str
     first_name: str
     last_name: str
-    email: EmailStr
+    email: str
     role: str
     created_at: str
 
 
+def _normalize_text(value: object) -> str:
+    return str(value or "").strip()
+
+
+def _split_display_name(data: dict) -> tuple[str, str]:
+    first_name = _normalize_text(data.get("first_name"))
+    last_name = _normalize_text(data.get("last_name"))
+    if first_name or last_name:
+        return first_name or "Unknown", last_name
+
+    fallback_name = (
+        _normalize_text(data.get("full_name"))
+        or _normalize_text(data.get("name"))
+        or _normalize_text(data.get("display_name"))
+    )
+
+    if not fallback_name:
+        email_value = _normalize_text(data.get("email")).split("@")[0]
+        fallback_name = email_value.replace(".", " ").replace("_", " ").strip()
+
+    parts = [part for part in fallback_name.split() if part]
+    if not parts:
+        return "Unknown", ""
+    if len(parts) == 1:
+        return parts[0], ""
+    return parts[0], " ".join(parts[1:])
+
+
+def _serialize_created_at(value: object) -> str:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    normalized = _normalize_text(value)
+    return normalized or datetime.now(UTC).isoformat()
+
+
 def build_user_response(data: dict) -> UserResponse:
+    first_name, last_name = _split_display_name(data)
     return UserResponse(
         id=str(data.get("_id", "")),
-        first_name=data["first_name"],
-        last_name=data["last_name"],
-        email=data["email"],
-        role=data.get("role", "client"),
-        created_at=data.get("created_at", datetime.now(UTC).isoformat()),
+        first_name=first_name,
+        last_name=last_name,
+        email=_normalize_text(data.get("email")) or "—",
+        role=_normalize_text(data.get("role")) or "client",
+        created_at=_serialize_created_at(data.get("created_at")),
     )
