@@ -192,6 +192,37 @@ def get_orders_for_user(user: dict[str, Any]) -> list[dict[str, Any]]:
     return [_serialize_order(doc) for doc in docs]
 
 
+def list_recent_orders(
+    *,
+    limit: int = 100,
+    status: str = "",
+    search: str = "",
+) -> list[dict[str, Any]]:
+    orders = _get_orders_collection()
+
+    normalized_status = _normalize(status).lower()
+    normalized_search = _normalize(search)
+
+    query: dict[str, Any] = {}
+    if normalized_status:
+        query["status"] = normalized_status
+
+    if normalized_search:
+        regex = {"$regex": re.escape(normalized_search), "$options": "i"}
+        query["$or"] = [
+            {"email": regex},
+            {"package_name": regex},
+            {"package_code": regex},
+            {"package_slug": regex},
+            {"price_label": regex},
+            {"stripe_session_id": regex},
+            {"stripe_payment_link_id": regex},
+        ]
+
+    docs = list(orders.find(query).sort("created_at", -1).limit(max(1, min(limit, 500))))
+    return [_serialize_order(doc) for doc in docs]
+
+
 def ensure_order_indexes() -> None:
     orders = _get_orders_collection()
     existing = orders.index_information()

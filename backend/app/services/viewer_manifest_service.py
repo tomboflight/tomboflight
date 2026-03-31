@@ -28,6 +28,13 @@ def _normalize_email(value: Any) -> str:
     return _normalize_value(value).lower()
 
 
+def _family_id_candidates(family_id: str) -> list[Any]:
+    candidates: list[Any] = [family_id]
+    if ObjectId.is_valid(family_id):
+        candidates.append(ObjectId(family_id))
+    return candidates
+
+
 def _current_user_id(user: dict[str, Any]) -> str:
     return _normalize_value(user.get("id") or user.get("_id") or user.get("user_id"))
 
@@ -401,7 +408,9 @@ def ensure_project_workspace_anchor(
 
     primary_member = None
     if family_id:
-        member_query: dict[str, Any] = {"family_id": family_id}
+        member_query: dict[str, Any] = {
+            "family_id": {"$in": _family_id_candidates(family_id)},
+        }
         owned_member_filters: list[dict[str, Any]] = []
         if owner_user_id:
             owned_member_filters.append({"owner_user_id": owner_user_id})
@@ -639,7 +648,11 @@ def build_viewer_manifest(
     family_id_value = _normalize_value((family_doc or {}).get("_id") or project.get("family_id"))
     members: list[dict[str, Any]] = []
     if family_id_value:
-        members = list(db["family_members"].find({"family_id": family_id_value}))
+        members = list(
+            db["family_members"].find(
+                {"family_id": {"$in": _family_id_candidates(family_id_value)}},
+            ),
+        )
 
     ordered_members = _sequence_members_for_viewer(
         lane=lane,

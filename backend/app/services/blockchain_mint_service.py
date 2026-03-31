@@ -14,6 +14,13 @@ def _normalize(value: Any) -> str:
     return str(value or "").strip()
 
 
+def _normalize_tx_hash(value: Any) -> str:
+    normalized = _normalize(value)
+    if not normalized:
+        return ""
+    return normalized if normalized.lower().startswith("0x") else f"0x{normalized}"
+
+
 def _lazy_web3():
     try:
         from eth_account import Account # type: ignore
@@ -217,11 +224,15 @@ def _extract_token_id_from_receipt(receipt: Any) -> str | None:
         if len(topics) < 4:
             continue
         first_topic = topics[0]
-        topic_hex = first_topic.hex() if hasattr(first_topic, "hex") else str(first_topic)
-        if not topic_hex.lower().startswith(TRANSFER_EVENT_SIGNATURE):
+        topic_hex = _normalize_tx_hash(
+            first_topic.hex() if hasattr(first_topic, "hex") else first_topic
+        ).lower()
+        if topic_hex != TRANSFER_EVENT_SIGNATURE:
             continue
         token_topic = topics[3]
-        token_hex = token_topic.hex() if hasattr(token_topic, "hex") else str(token_topic)
+        token_hex = _normalize_tx_hash(
+            token_topic.hex() if hasattr(token_topic, "hex") else token_topic
+        )
         try:
             return str(int(token_hex, 16))
         except Exception:
@@ -269,7 +280,7 @@ def mint_anchor(
         private_key=_normalize(settings.nft_minter_private_key),
     )
     tx_hash = client.eth.send_raw_transaction(signed.raw_transaction)
-    tx_hash_hex = tx_hash.hex()
+    tx_hash_hex = _normalize_tx_hash(tx_hash.hex())
 
     receipt = None
     try:
@@ -284,7 +295,7 @@ def mint_anchor(
     token_id = _extract_token_id_from_receipt(receipt) if receipt is not None else None
 
     return {
-        "status": "submitted",
+        "status": "minted" if receipt is not None and int(receipt.status) == 1 and token_id else "submitted",
         "chain": _normalize(settings.nft_chain),
         "contract_address": _checksum_address(settings.nft_contract_address),
         "tx_hash": tx_hash_hex,
@@ -306,18 +317,20 @@ def sync_mint_receipt(tx_hash: str) -> dict[str, Any]:
                 "status": "pending",
                 "chain": _normalize(settings.nft_chain),
                 "contract_address": _checksum_address(settings.nft_contract_address),
-                "tx_hash": _normalize(tx_hash),
+                "tx_hash": _normalize_tx_hash(tx_hash),
                 "token_id": None,
                 "block_number": None,
             }
         raise
     token_id = _extract_token_id_from_receipt(receipt)
+    receipt_status = int(getattr(receipt, "status", None) or receipt.get("status") or 0)
+    normalized_tx_hash = _normalize_tx_hash(tx_hash)
 
     return {
-        "status": "confirmed" if int(receipt.status) == 1 else "failed",
+        "status": "minted" if receipt_status == 1 and token_id else "confirmed" if receipt_status == 1 else "failed",
         "chain": _normalize(settings.nft_chain),
         "contract_address": _checksum_address(settings.nft_contract_address),
-        "tx_hash": _normalize(tx_hash),
+        "tx_hash": normalized_tx_hash,
         "token_id": token_id,
         "block_number": int(receipt.blockNumber),
     }

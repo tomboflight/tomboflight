@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Control Center | Tomb of Light</title>
+    <meta
+      name="description"
+      content="Internal control center for Tomb of Light uploads, minting, orders, entitlements, users, and audit review."
+    />
+    <link rel="stylesheet" href="styles.css?v=20260330-1" />
+  </head>
+  <body>
+    <div class="page-wrap">
+      <header class="site-header">
+        <div class="container site-header-inner">
+          <a class="brand" href="index.html" aria-label="Tomb of Light home">
+            <span>Tomb of Light<span class="brand-symbol">™</span></span>
+          </a>
+
+          <button
+            class="menu-toggle"
+            type="button"
+            aria-label="Toggle navigation menu"
+            aria-expanded="false"
+            aria-controls="site-nav"
+          >
+            Menu
+          </button>
+
+          <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
+            <a href="dashboard.html">Dashboard</a>
+            <a href="admin-control-center.html" aria-current="page">
+              Control Center
+            </a>
+            <a href="admin-intake-queue.html">Admin Intake Queue</a>
+            <a href="admin-family-manager.html">Family Manager</a>
+            <a href="faq.html">FAQ</a>
+          </nav>
+
+          <div class="header-actions">
+            <a class="btn btn-secondary" href="dashboard.html">
+              Back to Dashboard
+            </a>
+            <button class="btn btn-secondary" type="button" data-logout-btn>
+              Log Out
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main data-admin-control-center-page>
+        <section class="page-hero">
+          <div class="container">
+            <div class="page-hero-panel">
+              <span class="eyebrow">Internal Control Layer</span>
+              <h1 data-admin-control-title>Admin Control Center</h1>
+              <p data-admin-control-status>
+                Loading internal role controls...
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section class="page-sections">
+          <div class="container form-shell">
+            <div class="form-panel">
+              <span class="eyebrow">Control Scope</span>
+              <div class="form-grid two-col">
+                <label>
+                  Search
+                  <input
+                    type="text"
+                    placeholder="Email, project, package, upload, record..."
+                    data-admin-control-search
+                  />
+                </label>
+
+                <label>
+                  Refresh Internal Console
+                  <button
+                    class="btn btn-primary"
+                    type="button"
+                    data-admin-control-refresh
+                    style="margin-top: 0.45rem"
+                  >
+                    Refresh All
+                  </button>
+                </label>
+              </div>
+
+              <div class="grid-3" data-admin-control-role-summary>
+                <div>
+                  <div class="card-number">1</div>
+                  <h3>Role</h3>
+                  <p class="card-copy" data-admin-control-role>
+                    Loading role...
+                  </p>
+                </div>
+                <div>
+                  <div class="card-number">2</div>
+                  <h3>Access Lane</h3>
+                  <p class="card-copy" data-admin-control-lane>
+                    Internal operations
+                  </p>
+                </div>
+                <div>
+                  <div class="card-number">3</div>
+                  <h3>Published Tools</h3>
+                  <p class="card-copy" data-admin-control-tools>
+                    Resolving access...
+                  </p>
+                </div>
+              </div>
+
+              <div
+                class="helper"
+                data-admin-control-action-status
+                aria-live="polite"
+                style="display: none; margin-top: 1rem"
+              ></div>
+            </div>
+
+            <div class="form-panel" data-control-section="uploads">
+              <span class="eyebrow">Verification Upload Review</span>
+              <div class="inline-actions" style="margin-bottom: 1rem">
+                <button
+                  class="btn btn-secondary"
+                  type="button"
+                  data-section-refresh="uploads"
+                >
+                  Refresh Uploads
+                </button>
+              </div>
+              <p class="helper" data-section-status="uploads">
+                Loading uploaded file review...
+              </p>
+              <div class="grid-3" data-section-list="uploads"></div>
+            </div>
+
+            <div class="form-panel" data-control-section="mints">
+              <span class="eyebrow">Onchain Anchor Control</span>
+              <div class="inline-actions" style="margin-bottom: 1rem">
+                <button
+                  class="btn btn-secondary"
+                  type="button"
+                  data-section-refresh="mints"
+                >
+                  Refresh Mint Queue
+                </button>
+              </div>
+              <p class="helper" data-section-status="mints">
+                Loading mint controls...
+              </p>
+              <div class="grid-3" data-section-list="mints"></div>
+            </div>
+
+            <div class="form-panel" data-control-section="orders">
+              <span class="eyebrow">Orders</span>
+              <div class="inline-actions" style="margin-bottom: 1rem">
+                <button
+                  class="btn btn-secondary"
+                  type="button"
+                  data-section-refresh="orders"
+                >
+                  Refresh Orders
+                </button>
+              </div>
+              <p class="helper" data-section-status="orders">
+                Loading order records...
+              </p>
+              <div class="grid-3" data-section-list="orders"></div>
+            </div>
+
+            <div class="form-panel" data-control-section="entitlements">
+              <span class="eyebrow">Project Entitlements</span>
+              <div class="inline-actions" style="margin-bottom: 1rem">
+                <button
+                  class="btn btn-secondary"
+                  type="button"
+                  data-section-refresh="entitlements"
+                >
+                  Refresh Entitlements
+                </button>
+              </div>
+              <p class="helper" data-section-status="entitlements">
+                Loading project entitlements...
+              </p>
+              <div class="grid-3" data-section-list="entitlements"></div>
+            </div>
+
+            <div class="form-panel" data-control-section="projects">
+              <span class="eyebrow">Projects</span>
+              <div class="inline-actions" style="margin-bottom: 1rem">
+                <button
+                  class="btn btn-secondary"
+                  type="button"
+                  data-section-refresh="projects"
+                >
+                  Refresh Projects
+                </button>
+              </div>
+              <p class="helper" data-section-status="projects">
+                Loading project records...
+              </p>
+              <div class="grid-3" data-section-list="projects"></div>
+            </div>
+
+            <div class="form-panel" data-control-section="users">
+              <span class="eyebrow">Users</span>
+              <div class="inline-actions" style="margin-bottom: 1rem">
+                <button
+                  class="btn btn-secondary"
+                  type="button"
+                  data-section-refresh="users"
+                >
+                  Refresh Users
+                </button>
+              </div>
+              <p class="helper" data-section-status="users">
+                Loading user directory...
+              </p>
+              <div class="grid-3" data-section-list="users"></div>
+            </div>
+
+            <div class="form-panel" data-control-section="audit">
+              <span class="eyebrow">Audit Logs</span>
+              <div class="inline-actions" style="margin-bottom: 1rem">
+                <button
+                  class="btn btn-secondary"
+                  type="button"
+                  data-section-refresh="audit"
+                >
+                  Refresh Audit Logs
+                </button>
+              </div>
+              <p class="helper" data-section-status="audit">
+                Loading audit trail...
+              </p>
+              <div class="grid-3" data-section-list="audit"></div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <div class="container footer-grid">
+          <div>
+            <div class="footer-brand">Tomb of Light<span>™</span></div>
+            <p class="footer-copy">
+              Internal Tomb of Light operational workspace.
+            </p>
+          </div>
+        </div>
+      </footer>
+    </div>
+
+    <script src="config.js?v=20260329-1"></script>
+    <script src="app.js?v=20260330-1"></script>
+    <script src="auth.js?v=20260329-1"></script>
+    <script src="admin-control-center.js?v=20260330-1"></script>
+  </body>
+</html>

@@ -41,6 +41,13 @@ def _current_user_display_name(user: dict[str, Any]) -> str:
     return str(raw_name).strip()
 
 
+def _family_id_candidates(family_id: str) -> list[Any]:
+    candidates: list[Any] = [family_id]
+    if ObjectId.is_valid(family_id):
+        candidates.append(ObjectId(family_id))
+    return candidates
+
+
 def _is_admin(user: dict[str, Any]) -> bool:
     role = str(user.get("role", "")).strip().lower()
     access_tier = str(user.get("access_tier", "")).strip().lower()
@@ -218,8 +225,12 @@ def list_family_members_index(current_user: dict[str, Any] = Depends(get_current
     if not visible_family_ids:
         return []
 
+    family_id_candidates: list[Any] = []
+    for family_id in visible_family_ids:
+        family_id_candidates.extend(_family_id_candidates(family_id))
+
     cursor = db.family_members.find(
-        {"family_id": {"$in": visible_family_ids}}
+        {"family_id": {"$in": family_id_candidates}}
     ).sort("created_at", 1)
 
     return [_serialize_member(member) for member in cursor]

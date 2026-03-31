@@ -4,6 +4,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from app.database import get_database
 from app.dependencies.auth import get_current_user, require_admin
 from app.schemas.mint_record import (
     AdminMintApprovalPayload,
@@ -93,6 +94,28 @@ def _require_project_match(project_id: str, mint_record_id: str) -> dict[str, An
     return record
 
 
+def _admin_mint_overview_item(project: dict[str, Any]) -> dict[str, Any]:
+    project_id = _normalize(project.get("_id") or project.get("id"))
+    latest = get_latest_mint_record(project_id)
+    status = build_mint_status(project_id)
+    eligibility = describe_project_mint_eligibility(project)
+
+    return {
+        "project_id": project_id,
+        "project_name": _normalize(project.get("project_name") or project.get("name")) or "Workspace",
+        "owner_email": _normalize(project.get("owner_email")) or None,
+        "package_code": _normalize(project.get("package_code") or project.get("package_slug")),
+        "package_name": _normalize(project.get("package_name")) or None,
+        "project_lane": _normalize(project.get("project_lane")) or None,
+        "family_id": _normalize(project.get("family_id")) or None,
+        "status": _normalize(project.get("status")) or None,
+        "phase": _normalize(project.get("phase")) or None,
+        "eligibility": eligibility,
+        "latest_mint_record": latest,
+        "mint_status": status,
+    }
+
+
 @router.on_event("startup")
 def startup_mint_record_indexes():
     ensure_mint_record_indexes()
@@ -108,6 +131,59 @@ def get_project_mint_eligibility(
     latest = get_latest_mint_record(project_id)
     eligibility["latest_mint_record_id"] = (latest or {}).get("id")
     return eligibility
+
+
+@router.get("/admin/mint-records/overview")
+def list_admin_mint_overview(
+    limit: int = 100,
+    search: str = "",
+    status_filter: str = "",
+    mintable_only: bool = False,
+    current_user: dict[str, Any] = Depends(require_admin),
+):
+    del current_user
+
+    db = get_database()
+    if db is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database is not connected.",
+        )
+
+    normalized_search = _normalize(search).lower()
+    normalized_status = _normalize(status_filter).lower()
+
+    projects = list(db["projects"].find({}).sort("updated_at", -1).limit(max(1, min(limit * 4, 1000))))
+    items: list[dict[str, Any]] = []
+
+    for project in projects:
+        item = _admin_mint_overview_item(project)
+        haystack = " ".join(
+            [
+                _normalize(item.get("project_id")),
+                _normalize(item.get("project_name")),
+                _normalize(item.get("owner_email")),
+                _normalize(item.get("package_code")),
+                _normalize(item.get("package_name")),
+                _normalize(item.get("project_lane")),
+            ]
+        ).lower()
+
+        if normalized_search and normalized_search not in haystack:
+            continue
+
+        latest_status = _normalize(((item.get("latest_mint_record") or {}).get("mint_status"))).lower()
+        if normalized_status and latest_status != normalized_status:
+            continue
+
+        if mintable_only and not bool((item.get("eligibility") or {}).get("mint_policy", {}).get("product_includes_onchain_anchor")):
+            continue
+
+        items.append(item)
+        if len(items) >= max(1, min(limit, 500)):
+            break
+
+    return {"items": items}
 
 
 @router.post("/projects/{project_id}/mint-records/prepare")
@@ -194,14 +270,53 @@ def approve_project_mint_record_customer(
         ) from exc
 
 
+@router.post("/projects/{project_id}/mint-records/{mint_record_id}/approve-customer-admin")
+def approve_project_mint_record_customer_admin(
+    project_id: str,
+    mint_record_id: str,
+    payload: CustomerMintApprovalPayload,
+    current_user: dict[str, Any] = Depends(require_admin),
+):
+    _project_for_request(current_user, project_id)
+    _require_project_match(project_id, mint_record_id)
+
+    try:
+        return approve_customer_mint_record(
+            mint_record_id,
+            approved_by_user_id=_current_user_id(current_user),
+            approved_by_email=_current_user_email(current_user),
+            notes=payload.notes or "Approved by internal admin override.",
+            wallet_address=payload.wallet_address,
+            approved_poster_opt_in=payload.approved_poster_opt_in,
+            public_title_opt_in=payload.public_title_opt_in,
+            public_title=payload.public_title,
+            public_title_kind=payload.public_title_kind,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+
 @router.post("/projects/{project_id}/mint-records/{mint_record_id}/queue")
 def queue_project_mint_record(
     project_id: str,
     mint_record_id: str,
     current_user: dict[str, Any] = Depends(require_admin),
 ):
-    _project_for_request(current_user, project_id)
+    project = _project_for_request(current_user, project_id)
     _require_project_match(project_id, mint_record_id)
+
+    eligibility = describe_project_mint_eligibility(project)
+    if not eligibility.get("eligible"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "This project is not ready to queue for minting yet: "
+                + ", ".join(eligibility.get("reasons") or ["unknown_reason"])
+            ),
+        )
 
     try:
         return {

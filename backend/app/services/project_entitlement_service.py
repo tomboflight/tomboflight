@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 
@@ -151,6 +152,38 @@ def list_user_project_entitlements(
         query["status"] = "active"
 
     cursor = collection.find(query).sort("updated_at", -1)
+
+    return [
+        serialized
+        for serialized in (_serialize(cast(dict[str, Any], document)) for document in cursor)
+        if serialized is not None
+    ]
+
+
+def list_project_entitlements(
+    *,
+    active_only: bool = False,
+    limit: int = 100,
+    search: str = "",
+) -> list[dict[str, Any]]:
+    collection = _collection()
+
+    normalized_search = str(search or "").strip()
+    query: dict[str, Any] = {}
+    if active_only:
+        query["status"] = "active"
+
+    if normalized_search:
+        regex = {"$regex": re.escape(normalized_search), "$options": "i"}
+        query["$or"] = [
+            {"project_id": regex},
+            {"user_id": regex},
+            {"package_code": regex},
+            {"package_name": regex},
+            {"package_lane": regex},
+        ]
+
+    cursor = collection.find(query).sort("updated_at", -1).limit(max(1, min(limit, 500)))
 
     return [
         serialized

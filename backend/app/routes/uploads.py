@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any, Optional
 
@@ -18,7 +19,7 @@ from fastapi.responses import FileResponse
 
 from app.config import settings
 from app.database import get_database
-from app.dependencies.auth import get_current_user
+from app.dependencies.auth import get_current_user, require_admin
 from app.services.upload_service import (
     serialize_upload_record,
     store_member_photo_upload,
@@ -294,6 +295,50 @@ def _serialize_uploads(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [_public_upload_record(record) for record in records]
 
 
+def _display_member_name(member: dict[str, Any] | None) -> str | None:
+    if not isinstance(member, dict):
+        return None
+
+    first_name = _normalize_value(member.get("first_name"))
+    last_name = _normalize_value(member.get("last_name"))
+    display_name = f"{first_name} {last_name}".strip()
+    return display_name or _normalize_value(member.get("display_name")) or None
+
+
+def _serialize_admin_upload_review(
+    record: dict[str, Any],
+    *,
+    db: Any,
+) -> dict[str, Any]:
+    serialized = _public_upload_record(record)
+
+    project_id = _normalize_value(record.get("project_id"))
+    family_id = _normalize_value(record.get("family_id"))
+    member_id = _normalize_value(record.get("member_id"))
+
+    project = None
+    family = None
+    member = None
+
+    if ObjectId.is_valid(project_id):
+        project = db["projects"].find_one({"_id": ObjectId(project_id)})
+    if ObjectId.is_valid(family_id):
+        family = db["families"].find_one({"_id": ObjectId(family_id)})
+    if ObjectId.is_valid(member_id):
+        member = db["family_members"].find_one({"_id": ObjectId(member_id)})
+
+    return {
+        **serialized,
+        "project_id": project_id or None,
+        "project_name": _normalize_value((project or {}).get("project_name") or (project or {}).get("name")) or None,
+        "project_owner_email": _normalize_email((project or {}).get("owner_email")) or None,
+        "family_id": family_id or None,
+        "family_name": _normalize_value((family or {}).get("family_name")) or None,
+        "member_id": member_id or None,
+        "member_name": _display_member_name(member),
+    }
+
+
 def _absolute_upload_path(relative_path: str) -> Path:
     root = Path(settings.upload_root_path).resolve()
     candidate = (root / relative_path).resolve()
@@ -409,6 +454,62 @@ def _enforce_workspace_upload_limit(context: dict[str, Any]) -> None:
                 "Upgrade or add upload capacity before uploading more files."
             ),
         )
+
+
+@router.get("/admin/review")
+def list_admin_uploads(
+    category: Optional[str] = Query(default=None),
+    project_id: str = Query(default=""),
+    family_id: str = Query(default=""),
+    member_id: str = Query(default=""),
+    search: str = Query(default=""),
+    limit: int = Query(default=100, ge=1, le=500),
+    current_user: dict[str, Any] = Depends(require_admin),
+):
+    del current_user
+
+    db = get_database()
+    if db is None:
+        raise HTTPException(status_code=500, detail="Database is not connected.")
+
+    normalized_category = _validate_category_filter(category)
+    normalized_project_id = _normalize_value(project_id)
+    normalized_family_id = _normalize_value(family_id)
+    normalized_member_id = _normalize_value(member_id)
+    normalized_search = _normalize_value(search)
+
+    query: dict[str, Any] = {}
+    if normalized_category:
+        query["category"] = normalized_category
+    if normalized_project_id:
+        query["project_id"] = normalized_project_id
+    if normalized_family_id:
+        query["family_id"] = normalized_family_id
+    if normalized_member_id:
+        query["member_id"] = normalized_member_id
+    if normalized_search:
+        regex = {"$regex": re.escape(normalized_search), "$options": "i"}
+        query["$or"] = [
+            {"original_filename": regex},
+            {"uploaded_by": regex},
+            {"verification_type": regex},
+            {"evidence_kind": regex},
+            {"project_id": regex},
+            {"family_id": regex},
+            {"member_id": regex},
+        ]
+
+    records = list(
+        db["uploaded_files"].find(query).sort("created_at", -1).limit(limit)
+    )
+
+    return {
+        "count": len(records),
+        "items": [
+            _serialize_admin_upload_review(record, db=db)
+            for record in records
+        ],
+    }
 
 
 @router.post("/member-photo")

@@ -98,8 +98,6 @@
         "root_admin",
         "super_admin",
         "admin",
-        "operations_admin",
-        "operations",
         "platform_admin",
         "executive_technology",
       ].includes(roleKey)
@@ -107,17 +105,79 @@
       return [
         card(
           "A",
+          "Control Center",
+          "Review uploads, oversee mint records, inspect orders, entitlements, user records, and audit history from one internal workspace.",
+          "admin-control-center.html",
+          "Open Control Center",
+        ),
+        card(
+          "B",
           "Intake Queue",
           "Review submitted intake records, move them through approval, and provision package workspaces correctly by lane.",
           "admin-intake-queue.html",
           "Open Intake Queue",
         ),
         card(
-          "B",
+          "C",
           "Family Manager",
           "Load real household and network family builds, add members, and manage lineage relationships in the live platform.",
           "admin-family-manager.html",
           "Open Family Manager",
+        ),
+      ];
+    }
+
+    if (
+      [
+        "operations_admin",
+        "operations",
+      ].includes(roleKey)
+    ) {
+      return [
+        card(
+          "A",
+          "Control Center",
+          "Review uploads, monitor onchain anchor readiness, and troubleshoot provisioned workspaces from one operations console.",
+          "admin-control-center.html",
+          "Open Control Center",
+        ),
+        card(
+          "B",
+          "Intake Queue",
+          "Review submitted intake records, move them through approval, and provision package workspaces correctly by lane.",
+          "admin-intake-queue.html",
+          "Open Intake Queue",
+        ),
+        card(
+          "C",
+          "Family Manager",
+          "Load real household and network family builds, add members, and manage lineage relationships in the live platform.",
+          "admin-family-manager.html",
+          "Open Family Manager",
+        ),
+      ];
+    }
+
+    if (["finance_admin", "finance"].includes(roleKey)) {
+      return [
+        card(
+          "A",
+          "Control Center",
+          "Review order records, project entitlements, mint status, and audit events tied to protected package delivery.",
+          "admin-control-center.html",
+          "Open Control Center",
+        ),
+      ];
+    }
+
+    if (["marketing_admin", "marketing"].includes(roleKey)) {
+      return [
+        card(
+          "A",
+          "Control Center",
+          "Review users, projects, and audit-visible customer records published to your internal marketing scope.",
+          "admin-control-center.html",
+          "Open Control Center",
         ),
       ];
     }

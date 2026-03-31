@@ -33,6 +33,13 @@ def _normalize(value: Any) -> str:
     return str(value or "").strip()
 
 
+def _normalize_tx_hash(value: Any) -> str:
+    normalized = _normalize(value)
+    if not normalized:
+        return ""
+    return normalized if normalized.lower().startswith("0x") else f"0x{normalized}"
+
+
 def _to_object_id(value: str) -> ObjectId | None:
     try:
         return ObjectId(str(value))
@@ -267,7 +274,7 @@ def _execute_mint_anchor(job: dict[str, Any], record: dict[str, Any]) -> dict[st
     )
 
     token_id = _normalize(mint_result.get("token_id"))
-    tx_hash = _normalize(mint_result.get("tx_hash"))
+    tx_hash = _normalize_tx_hash(mint_result.get("tx_hash"))
     if tx_hash:
         mark_mint_minting(record["id"], tx_hash=tx_hash)
     if token_id and tx_hash:
@@ -287,7 +294,7 @@ def sync_receipt_for_mint_record(mint_record_id: str) -> dict[str, Any]:
     record = get_mint_record(mint_record_id)
     if record is None:
         raise ValueError("Mint record not found.")
-    tx_hash = _normalize(record.get("tx_hash"))
+    tx_hash = _normalize_tx_hash(record.get("tx_hash"))
     if not tx_hash:
         return {
             "mint_record_id": mint_record_id,
@@ -296,10 +303,18 @@ def sync_receipt_for_mint_record(mint_record_id: str) -> dict[str, Any]:
         }
 
     receipt = sync_mint_receipt(tx_hash)
-    token_id = _normalize(receipt.get("token_id"))
-    synced_tx_hash = _normalize(receipt.get("tx_hash")) or tx_hash
+    synced_status = _normalize(receipt.get("status")).lower()
+    token_id = _normalize(receipt.get("token_id")) or _normalize(record.get("token_id"))
+    synced_tx_hash = _normalize_tx_hash(receipt.get("tx_hash")) or tx_hash
 
-    if token_id:
+    if synced_status == "failed":
+        return mark_mint_failed(
+            mint_record_id,
+            error_code="mint_receipt_failed",
+            error_message="Mint transaction failed on-chain.",
+        )
+
+    if token_id and synced_status in {"minted", "confirmed"}:
         return mark_mint_minted(
             mint_record_id,
             token_id=token_id,
@@ -309,10 +324,20 @@ def sync_receipt_for_mint_record(mint_record_id: str) -> dict[str, Any]:
             chain=receipt.get("chain"),
         )
 
+    if synced_status == "confirmed":
+        return mark_mint_failed(
+            mint_record_id,
+            error_code="mint_token_id_missing",
+            error_message=(
+                "Mint receipt was confirmed on-chain but no ERC721 Transfer token id "
+                "could be extracted from the receipt."
+            ),
+        )
+
     return {
         "mint_record_id": mint_record_id,
         "tx_hash": synced_tx_hash,
-        "status": "pending",
+        "status": synced_status or "pending",
     }
 
 
