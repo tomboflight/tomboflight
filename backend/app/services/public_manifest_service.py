@@ -267,12 +267,20 @@ def write_public_metadata(
     collection = _collection()
     now = _now()
     publish = _normalize(approval_status).lower() == "approved"
-    storage_write = upload_json(
-        zone=ZONE_METADATA,
-        key=f"v1/tokens/{public_token_id}.json",
-        payload=payload,
-        publish=publish,
-    )
+    storage_key = f"v1/tokens/{public_token_id}.json"
+    if publish:
+        storage_write = upload_json(
+            zone=ZONE_METADATA,
+            key=storage_key,
+            payload=payload,
+            publish=True,
+        )
+    else:
+        storage_write = {
+            "storage_provider": "planned_public_metadata",
+            "bucket": None,
+            "key": storage_key,
+        }
 
     document: dict[str, Any] = {
         "project_id": project_id,

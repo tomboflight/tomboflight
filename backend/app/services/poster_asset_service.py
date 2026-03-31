@@ -100,14 +100,22 @@ def _upload_svg_poster(
     filename: str,
     publish: bool,
 ) -> dict[str, Any]:
-    uploaded = upload_bytes(
-        zone=ZONE_POSTER,
-        key=f"v1/{filename}",
-        body=svg_text.encode("utf-8"),
-        content_type=SVG_CONTENT_TYPE,
-        cache_control="public, max-age=86400",
-        publish=publish,
-    )
+    storage_key = f"v1/{filename}"
+    if publish:
+        uploaded = upload_bytes(
+            zone=ZONE_POSTER,
+            key=storage_key,
+            body=svg_text.encode("utf-8"),
+            content_type=SVG_CONTENT_TYPE,
+            cache_control="public, max-age=86400",
+            publish=True,
+        )
+    else:
+        uploaded = {
+            "storage_provider": "planned_public_poster",
+            "bucket": None,
+            "key": storage_key,
+        }
     return {
         "poster_image_uri_public": _poster_url(filename),
         "poster_filename": filename,
@@ -206,14 +214,22 @@ def export_approved_public_poster(
 
     body, content_type, suffix = source
     filename = f"{public_token_id}-approved-poster{suffix}"
-    uploaded = upload_bytes(
-        zone=ZONE_POSTER,
-        key=f"v1/{filename}",
-        body=body,
-        content_type=content_type,
-        cache_control="public, max-age=86400",
-        publish=publish,
-    )
+    storage_key = f"v1/{filename}"
+    if publish:
+        uploaded = upload_bytes(
+            zone=ZONE_POSTER,
+            key=storage_key,
+            body=body,
+            content_type=content_type,
+            cache_control="public, max-age=86400",
+            publish=True,
+        )
+    else:
+        uploaded = {
+            "storage_provider": "planned_public_poster",
+            "bucket": None,
+            "key": storage_key,
+        }
 
     return {
         "poster_image_uri_public": _poster_url(filename),
