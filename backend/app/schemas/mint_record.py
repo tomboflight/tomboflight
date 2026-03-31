@@ -26,6 +26,7 @@ class MintEligibilityResponse(BaseModel):
     eligible: bool
     reasons: list[str] = Field(default_factory=list)
     latest_mint_record_id: str | None = None
+    missing_approvals: list[str] = Field(default_factory=list)
 
 
 class PrepareMintRecordPayload(BaseModel):

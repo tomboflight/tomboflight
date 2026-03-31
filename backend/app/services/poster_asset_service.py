@@ -23,7 +23,7 @@ def _normalize(value: Any) -> str:
 
 
 def _poster_url(filename: str) -> str:
-    base = settings.poster_base_url.rstrip("/")
+    base = settings.poster_base_url_clean
     return f"{base}/{filename}"
 
 
@@ -102,7 +102,7 @@ def _upload_svg_poster(
 ) -> dict[str, Any]:
     uploaded = upload_bytes(
         zone=ZONE_POSTER,
-        key=f"posters/{filename}",
+        key=f"v1/{filename}",
         body=svg_text.encode("utf-8"),
         content_type=SVG_CONTENT_TYPE,
         cache_control="public, max-age=86400",
@@ -208,7 +208,7 @@ def export_approved_public_poster(
     filename = f"{public_token_id}-approved-poster{suffix}"
     uploaded = upload_bytes(
         zone=ZONE_POSTER,
-        key=f"posters/{filename}",
+        key=f"v1/{filename}",
         body=body,
         content_type=content_type,
         cache_control="public, max-age=86400",

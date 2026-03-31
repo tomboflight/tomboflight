@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from typing import Any, cast
 
@@ -24,6 +25,9 @@ from app.services.public_manifest_service import (
 ADMIN_APPROVAL_TYPE = "admin_final"
 CUSTOMER_APPROVAL_TYPE = "customer_public_safe"
 ACTIVE_MINT_RECORD_STATUSES = {"pending_approval", "approved", "queued", "minting"}
+NON_AUTHORITATIVE_MINT_RECORD_STATUSES = {"superseded", "cancelled"}
+EVM_WALLET_PATTERN = re.compile(r"^0x[a-fA-F0-9]{40}$")
+HEX_PRIVATE_KEY_PATTERN = re.compile(r"^(0x)?[a-fA-F0-9]{64}$")
 
 
 def _now() -> datetime:
@@ -38,7 +42,26 @@ def _normalize_tx_hash(value: Any) -> str | None:
     normalized = _normalize(value)
     if not normalized:
         return None
-    return normalized if normalized.lower().startswith("0x") else f"0x{normalized}"
+    if not normalized.lower().startswith("0x"):
+        normalized = f"0x{normalized}"
+    return normalized.lower()
+
+
+def _normalize_wallet_address(wallet_address: str | None, *, required: bool = False) -> str | None:
+    normalized = _normalize(wallet_address)
+    if not normalized:
+        if required:
+            raise ValueError("A valid recipient wallet address is required.")
+        return None
+
+    lowered = normalized.lower()
+    if "wallet_address" in lowered or "customer_wallet" in lowered:
+        raise ValueError("Placeholder wallet values are not allowed.")
+    if HEX_PRIVATE_KEY_PATTERN.fullmatch(normalized) and len(normalized.removeprefix("0x")) == 64:
+        raise ValueError("A wallet address is required. Private keys are not accepted here.")
+    if not EVM_WALLET_PATTERN.fullmatch(normalized):
+        raise ValueError("Wallet address must be a valid EVM address starting with 0x.")
+    return f"0x{normalized[2:].lower()}"
 
 
 def _to_object_id(value: str) -> ObjectId | None:
@@ -158,7 +181,7 @@ def _serialize_record(document: dict[str, Any]) -> dict[str, Any]:
         "contract_address": _normalize(document.get("contract_address"))
         or settings.nft_contract_address,
         "token_id": _normalize(document.get("token_id")) or None,
-        "tx_hash": _normalize(document.get("tx_hash")) or None,
+        "tx_hash": _normalize_tx_hash(document.get("tx_hash")),
         "metadata_uri": _normalize(document.get("metadata_uri")),
         "project_ref_hash": _normalize(document.get("project_ref_hash")),
         "household_ref_hash": _normalize(document.get("household_ref_hash")) or None,
@@ -196,11 +219,23 @@ def get_mint_record(mint_record_id: str) -> dict[str, Any] | None:
     return _serialize_record(document)
 
 
+def _latest_authoritative_document(project_id: str) -> dict[str, Any] | None:
+    cursor = _records_collection().find(
+        {"project_id": _normalize(project_id)}
+    ).sort([("version_number", -1), ("created_at", -1)])
+
+    fallback: dict[str, Any] | None = None
+    for document in cursor:
+        if fallback is None:
+            fallback = document
+        status_value = _normalize(document.get("mint_status")).lower()
+        if status_value not in NON_AUTHORITATIVE_MINT_RECORD_STATUSES:
+            return document
+    return fallback
+
+
 def get_latest_mint_record(project_id: str) -> dict[str, Any] | None:
-    document = _records_collection().find_one(
-        {"project_id": _normalize(project_id)},
-        sort=[("version_number", -1), ("created_at", -1)],
-    )
+    document = _latest_authoritative_document(project_id)
     if document is None:
         return None
     return _serialize_record(document)
@@ -486,6 +521,7 @@ def approve_customer_mint_record(
     record = get_mint_record(mint_record_id)
     if record is None:
         raise ValueError("Mint record not found.")
+    normalized_wallet = _normalize_wallet_address(wallet_address, required=True)
 
     next_poster_style = record["poster_style"]
     if next_poster_style == "approved_poster" and not approved_poster_opt_in:
@@ -495,7 +531,7 @@ def approve_customer_mint_record(
         {"_id": _to_object_id(mint_record_id)},
         {
             "$set": {
-                "customer_wallet": _normalize(wallet_address) or None,
+                "customer_wallet": normalized_wallet,
                 "poster_style": next_poster_style,
                 "public_title_opt_in": bool(public_title_opt_in),
                 "public_title": _normalize(public_title) or None,
@@ -516,7 +552,7 @@ def approve_customer_mint_record(
         consent_snapshot={
             "public_title_opt_in": bool(public_title_opt_in),
             "approved_poster_opt_in": bool(approved_poster_opt_in),
-            "wallet_address": _normalize(wallet_address) or None,
+            "wallet_address": normalized_wallet,
         },
     )
     return _recompute_mint_approval_state(mint_record_id)
@@ -528,6 +564,9 @@ def mark_mint_queued(mint_record_id: str) -> dict[str, Any]:
         raise ValueError("Mint record not found.")
     if record["mint_status"] not in {"approved", "queued"}:
         raise ValueError("Mint record must be approved before queueing.")
+    latest = get_latest_mint_record(record["project_id"])
+    if latest is None or latest["id"] != mint_record_id:
+        raise ValueError("Only the newest authoritative mint record may be queued.")
 
     _records_collection().update_one(
         {"_id": _to_object_id(mint_record_id)},
@@ -628,7 +667,7 @@ def build_mint_status(project_id: str) -> dict[str, Any]:
     project = _project_document(project_id)
     package_code, _package_lane = _package_fields(project)
     history = list_mint_records(project_id)
-    latest = history[0] if history else None
+    latest = get_latest_mint_record(project_id)
     manifest = (
         get_public_manifest_for_mint_record(latest["id"])
         if latest is not None
