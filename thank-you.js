@@ -1,9 +1,63 @@
 (function () {
   "use strict";
 
+  const PENDING_CHECKOUT_KEY = "tol_pending_checkout";
+  const PORTRAIT_PACKAGE_CODES = new Set([
+    "legacy_snapshot",
+    "legacy_portrait_intro",
+    "digital_legacy_portrait",
+  ]);
+  const FAMILY_PACKAGE_CODES = new Set([
+    "household_foundation",
+    "heirloom_legacy_tree",
+    "legacy_plus",
+    "family_estate_concierge",
+  ]);
+  const ORGANIZATION_PACKAGE_CODES = new Set(["command_structure_network"]);
+  const PORTRAIT_FLOW_ADDONS = new Set([
+    "extra_upload_pack",
+    "extra_storage",
+    "portrait_polish",
+    "tribute_narration",
+    "additional_narration_minute",
+  ]);
+  const FAMILY_FLOW_EXTRAS = new Set([
+    "extra_mapped_person",
+    "extra_zoom_layer",
+    "on_site_photo_scanning",
+    "extra_linked_household",
+    "extra_branch",
+    "white_glove_archive_support",
+  ]);
+  const ORGANIZATION_FLOW_EXTRAS = new Set([
+    "extra_org_node",
+    "extra_org_level",
+    "extra_admin_seat",
+    "command_report_addon",
+  ]);
+
   function getParam(name) {
     const params = new URLSearchParams(window.location.search);
     return params.get(name) || "";
+  }
+
+  function getPendingCheckout() {
+    try {
+      const raw = localStorage.getItem(PENDING_CHECKOUT_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" ? parsed : null;
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  function clearPendingCheckout() {
+    try {
+      localStorage.removeItem(PENDING_CHECKOUT_KEY);
+    } catch (_error) {
+      // Ignore storage cleanup errors.
+    }
   }
 
   function humanize(value) {
@@ -15,44 +69,182 @@
       });
   }
 
-  function nextStepMessage(type, packageCode) {
+  function normalizePackageCode(packageCode) {
+    return String(packageCode || "")
+      .trim()
+      .toLowerCase();
+  }
+
+  function inferType(type, packageCode) {
     const normalizedType = String(type || "")
       .trim()
       .toLowerCase();
-    const normalizedPackage = String(packageCode || "")
-      .trim()
-      .toLowerCase();
+    const normalizedPackage = normalizePackageCode(packageCode);
+
+    if (
+      normalizedType === "maintenance" ||
+      normalizedType === "addon" ||
+      normalizedType === "extra"
+    ) {
+      return normalizedType;
+    }
+
+    if (
+      normalizedPackage.endsWith("_monthly") ||
+      normalizedPackage.endsWith("_yearly")
+    ) {
+      return "maintenance";
+    }
+
+    if (
+      PORTRAIT_FLOW_ADDONS.has(normalizedPackage) ||
+      normalizedPackage === "command_report_addon"
+    ) {
+      return "addon";
+    }
+
+    if (
+      FAMILY_FLOW_EXTRAS.has(normalizedPackage) ||
+      ORGANIZATION_FLOW_EXTRAS.has(normalizedPackage)
+    ) {
+      return "extra";
+    }
+
+    return "package";
+  }
+
+  function basePackageCode(packageCode) {
+    const normalizedPackage = normalizePackageCode(packageCode);
+
+    if (normalizedPackage.endsWith("_maintenance_monthly")) {
+      return normalizedPackage.slice(
+        0,
+        normalizedPackage.length - "_maintenance_monthly".length,
+      );
+    }
+
+    if (normalizedPackage.endsWith("_maintenance_yearly")) {
+      return normalizedPackage.slice(
+        0,
+        normalizedPackage.length - "_maintenance_yearly".length,
+      );
+    }
+
+    if (normalizedPackage.endsWith("_monthly")) {
+      return normalizedPackage.slice(0, normalizedPackage.length - "_monthly".length);
+    }
+
+    if (normalizedPackage.endsWith("_yearly")) {
+      return normalizedPackage.slice(0, normalizedPackage.length - "_yearly".length);
+    }
+
+    return normalizedPackage;
+  }
+
+  function packageLane(packageCode) {
+    const normalizedBase = basePackageCode(packageCode);
+
+    if (PORTRAIT_PACKAGE_CODES.has(normalizedBase)) return "portrait";
+    if (FAMILY_PACKAGE_CODES.has(normalizedBase)) return "family";
+    if (ORGANIZATION_PACKAGE_CODES.has(normalizedBase)) return "organization";
+    if (PORTRAIT_FLOW_ADDONS.has(normalizedBase)) return "portrait";
+    if (FAMILY_FLOW_EXTRAS.has(normalizedBase)) return "family";
+    if (ORGANIZATION_FLOW_EXTRAS.has(normalizedBase)) return "organization";
+    return "general";
+  }
+
+  function nextStepMessage(type, packageCode) {
+    const normalizedType = inferType(type, packageCode);
+    const normalizedBase = basePackageCode(packageCode);
+    const lane = packageLane(packageCode);
 
     if (normalizedType === "maintenance") {
       return "Your maintenance subscription selection was received. Return to your dashboard for account access and package status.";
     }
 
     if (normalizedType === "addon" || normalizedType === "extra") {
+      if (lane === "organization") {
+        return "Your organization add-on purchase was received. It will be applied to the correct command structure workspace after payment confirmation.";
+      }
+
+      if (lane === "family") {
+        return "Your family build add-on purchase was received. It will be applied to the correct household or network workspace after payment confirmation.";
+      }
+
       return "Your add-on purchase was received. It will be applied to the correct Tomb of Light project or package workflow.";
     }
 
-    if (
-      normalizedPackage === "legacy_snapshot" ||
-      normalizedPackage === "legacy_portrait_intro" ||
-      normalizedPackage === "digital_legacy_portrait"
-    ) {
+    if (PORTRAIT_PACKAGE_CODES.has(normalizedBase)) {
       return "Your portrait package purchase was received. Continue to your dashboard and upload your portrait and supporting records.";
     }
 
-    if (
-      normalizedPackage === "household_foundation" ||
-      normalizedPackage === "heirloom_legacy_tree" ||
-      normalizedPackage === "legacy_plus" ||
-      normalizedPackage === "family_estate_concierge"
-    ) {
+    if (FAMILY_PACKAGE_CODES.has(normalizedBase)) {
       return "Your household or family package purchase was received. Continue to your dashboard to begin or continue your family build.";
     }
 
-    if (normalizedPackage === "command_structure_network") {
+    if (ORGANIZATION_PACKAGE_CODES.has(normalizedBase)) {
       return "Your organizational package purchase was received. Continue to your dashboard to begin your command or leadership structure build.";
     }
 
     return "Your payment was received successfully. Continue to your dashboard for the next step.";
+  }
+
+  function actionConfig(type, packageCode) {
+    const normalizedType = inferType(type, packageCode);
+    const lane = packageLane(packageCode);
+
+    const primary = {
+      href: "dashboard.html",
+      label: "Go to Dashboard",
+    };
+
+    if (normalizedType === "maintenance") {
+      return {
+        primary,
+        secondary: {
+          href: "billing.html",
+          label: "Open Billing",
+        },
+      };
+    }
+
+    if (lane === "portrait") {
+      return {
+        primary,
+        secondary: {
+          href: "verification-upload.html",
+          label: "Upload Records",
+        },
+      };
+    }
+
+    if (lane === "family") {
+      return {
+        primary,
+        secondary: {
+          href: "tree-view.html",
+          label: normalizedType === "package" ? "Open Family Tree" : "Open Family Build",
+        },
+      };
+    }
+
+    if (lane === "organization") {
+      return {
+        primary,
+        secondary: {
+          href: "dashboard.html",
+          label: "Open Workspace",
+        },
+      };
+    }
+
+    return {
+      primary,
+      secondary: {
+        href: "dashboard.html",
+        label: "Open Workspace",
+      },
+    };
   }
 
   document.addEventListener("DOMContentLoaded", function () {
@@ -60,10 +252,17 @@
     const typeNode = document.querySelector("[data-thank-you-type]");
     const packageNode = document.querySelector("[data-thank-you-package-code]");
     const nextStepNode = document.querySelector("[data-thank-you-next-step]");
+    const primaryAction = document.querySelector("[data-thank-you-primary-action]");
+    const secondaryAction = document.querySelector("[data-thank-you-secondary-action]");
+    const pendingCheckout = getPendingCheckout();
 
     const sessionId = getParam("session_id");
-    const type = getParam("type") || "package";
-    const packageCode = getParam("package");
+    const packageCode = getParam("package") || (pendingCheckout && pendingCheckout.packageCode) || "";
+    const type =
+      getParam("type") ||
+      (pendingCheckout && pendingCheckout.purchaseType) ||
+      inferType("", packageCode);
+    const actions = actionConfig(type, packageCode);
 
     if (sessionNode) {
       sessionNode.textContent = sessionId || "Not provided";
@@ -74,11 +273,25 @@
     }
 
     if (packageNode) {
-      packageNode.textContent = packageCode || "Not provided";
+      packageNode.textContent = packageCode ? humanize(packageCode) : "Not provided";
     }
 
     if (nextStepNode) {
       nextStepNode.textContent = nextStepMessage(type, packageCode);
+    }
+
+    if (primaryAction) {
+      primaryAction.setAttribute("href", actions.primary.href);
+      primaryAction.textContent = actions.primary.label;
+    }
+
+    if (secondaryAction) {
+      secondaryAction.setAttribute("href", actions.secondary.href);
+      secondaryAction.textContent = actions.secondary.label;
+    }
+
+    if (packageCode) {
+      clearPendingCheckout();
     }
   });
 })();
