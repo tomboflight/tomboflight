@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.database import get_database
 from app.dependencies.auth import get_current_user
+from app.services.viewer_manifest_service import ensure_project_workspace_anchor
 from app.services.workspace_access_service import require_workspace_capability
 
 router = APIRouter(prefix="/families", tags=["Family Graph"])
@@ -51,6 +52,13 @@ def _current_user_display_name(user: dict[str, Any]) -> str:
 
 def _normalize_value(value: Any) -> str:
     return str(value or "").strip().lower()
+
+
+def _family_id_candidates(family_id: str) -> list[Any]:
+    candidates: list[Any] = [family_id]
+    if ObjectId.is_valid(family_id):
+        candidates.append(ObjectId(family_id))
+    return candidates
 
 
 def _is_admin(user: dict[str, Any]) -> bool:
@@ -125,13 +133,36 @@ def get_family_graph(
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")
     family = context["family"]
+    project = context["project"]
     resolved_family_id = str(family.get("_id"))
 
-    members_cursor = db.family_members.find({"family_id": resolved_family_id}).sort("generation", 1)
-    relationships_cursor = db.relationships.find({"family_id": resolved_family_id})
+    member_query = {"family_id": {"$in": _family_id_candidates(resolved_family_id)}}
+    relationship_query = {"family_id": {"$in": _family_id_candidates(resolved_family_id)}}
+
+    members_cursor = db.family_members.find(member_query).sort("generation", 1)
+    relationships_cursor = db.relationships.find(relationship_query)
+    members_raw = list(members_cursor)
+    relationships_raw = list(relationships_cursor)
+
+    if not members_raw:
+        ensured_family, _primary_member, ensured_project = ensure_project_workspace_anchor(
+            project=project,
+        )
+        if ensured_family is not None:
+            family = ensured_family
+            resolved_family_id = str(family.get("_id"))
+        if ensured_project is not None:
+            project = ensured_project
+
+        member_query = {"family_id": {"$in": _family_id_candidates(resolved_family_id)}}
+        relationship_query = {"family_id": {"$in": _family_id_candidates(resolved_family_id)}}
+        members_raw = list(
+            db.family_members.find(member_query).sort("generation", 1),
+        )
+        relationships_raw = list(db.relationships.find(relationship_query))
 
     members = []
-    for member in members_cursor:
+    for member in members_raw:
         first_name = member.get("first_name")
         last_name = member.get("last_name")
         display_name = f"{first_name or ''} {last_name or ''}".strip()
@@ -163,7 +194,7 @@ def get_family_graph(
         )
 
     relationships = []
-    for rel in relationships_cursor:
+    for rel in relationships_raw:
         relationships.append(
             {
                 "id": str(rel.get("_id")),

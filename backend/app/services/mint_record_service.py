@@ -34,6 +34,13 @@ def _normalize(value: Any) -> str:
     return str(value or "").strip()
 
 
+def _normalize_tx_hash(value: Any) -> str | None:
+    normalized = _normalize(value)
+    if not normalized:
+        return None
+    return normalized if normalized.lower().startswith("0x") else f"0x{normalized}"
+
+
 def _to_object_id(value: str) -> ObjectId | None:
     try:
         return ObjectId(str(value))
@@ -290,6 +297,30 @@ def _refresh_manifest(mint_record_id: str, approval_timestamp: datetime | None =
     )
 
 
+def _supersede_active_records(
+    project_id: str,
+    *,
+    keep_mint_record_id: str = "",
+) -> None:
+    query: dict[str, Any] = {
+        "project_id": _normalize(project_id),
+        "mint_status": {"$in": list(ACTIVE_MINT_RECORD_STATUSES)},
+    }
+    keep_oid = _to_object_id(keep_mint_record_id)
+    if keep_oid is not None:
+        query["_id"] = {"$ne": keep_oid}
+
+    _records_collection().update_many(
+        query,
+        {
+            "$set": {
+                "mint_status": "superseded",
+                "updated_at": _now(),
+            }
+        },
+    )
+
+
 def _next_version_number(project_id: str) -> int:
     latest = get_latest_mint_record(project_id)
     return int((latest or {}).get("version_number") or 0) + 1
@@ -360,6 +391,7 @@ def create_mint_record(
 
     result = _records_collection().insert_one(document)
     mint_record_id = _normalize(result.inserted_id)
+    _supersede_active_records(project_doc_id, keep_mint_record_id=mint_record_id)
 
     _ensure_approval_record(
         project_id=project_doc_id,
@@ -517,7 +549,10 @@ def mark_mint_minting(mint_record_id: str, *, tx_hash: str | None = None) -> dic
         {
             "$set": {
                 "mint_status": "minting",
-                "tx_hash": _normalize(tx_hash) or record.get("tx_hash"),
+                "tx_hash": _normalize_tx_hash(tx_hash) or record.get("tx_hash"),
+                "failed_at": None,
+                "error_code": None,
+                "error_message": None,
                 "updated_at": _now(),
             }
         },
@@ -543,7 +578,7 @@ def mark_mint_minted(
             "$set": {
                 "mint_status": "minted",
                 "token_id": _normalize(token_id),
-                "tx_hash": _normalize(tx_hash),
+                "tx_hash": _normalize_tx_hash(tx_hash),
                 "minted_by": _normalize(minted_by) or "system",
                 "contract_address": _normalize(contract_address) or settings.nft_contract_address,
                 "chain": _normalize(chain) or settings.nft_chain,
@@ -554,6 +589,10 @@ def mark_mint_minted(
                 "updated_at": _now(),
             }
         },
+    )
+    _supersede_active_records(
+        _normalize((get_mint_record(mint_record_id) or {}).get("project_id")),
+        keep_mint_record_id=mint_record_id,
     )
     updated = get_mint_record(mint_record_id)
     if updated is None:

@@ -253,6 +253,11 @@
       })
     ) {
       selectNode.value = currentValue;
+      return;
+    }
+
+    if ((members || []).length === 1) {
+      selectNode.value = String(members[0].id || "").trim();
     }
   }
 
@@ -426,18 +431,51 @@
       setFamilyIdInUrl(familyId);
       updateNav(currentContext, familyId);
 
-      const graph = await app.apiRequest(
+      let graph = await app.apiRequest(
         `/families/${encodeURIComponent(familyId)}/graph`,
         { method: "GET" },
       );
 
+      let members = Array.isArray(graph.members) ? graph.members : [];
+
+      if (!members.length) {
+        const projectId = getProjectIdFromContext(currentContext);
+        if (projectId) {
+          try {
+            await app.apiRequest(
+              `/viewer/manifest?project_id=${encodeURIComponent(projectId)}&family_id=${encodeURIComponent(familyId)}`,
+              { method: "GET" },
+            );
+            graph = await app.apiRequest(
+              `/families/${encodeURIComponent(familyId)}/graph`,
+              { method: "GET" },
+            );
+            members = Array.isArray(graph.members) ? graph.members : [];
+          } catch (retryError) {
+            console.warn(
+              "Verification upload member backfill retry failed:",
+              retryError,
+            );
+          }
+        }
+      }
+
       currentGraph = {
-        members: Array.isArray(graph.members) ? graph.members : [],
+        members,
       };
 
       populateMemberSelects();
-      pageStatus.textContent = `Family ${familyId} loaded successfully.`;
-      setStatus(actionStatus, "Family loaded successfully.", "success");
+      if (members.length) {
+        pageStatus.textContent = `Family ${familyId} loaded successfully.`;
+        setStatus(actionStatus, "Family loaded successfully.", "success");
+      } else {
+        pageStatus.textContent = `Family ${familyId} loaded, but no member records were found yet.`;
+        setStatus(
+          actionStatus,
+          "Family loaded, but no member record is available yet for uploads. Please refresh or contact Tomb of Light support if this workspace was just provisioned.",
+          "error",
+        );
+      }
     } catch (error) {
       console.error("Failed to load family graph:", error);
       setStatus(

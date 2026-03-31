@@ -16,23 +16,18 @@
         /* =========================
            MAIN PACKAGES
         ========================= */
-        legacy_snapshot:
-          "https://buy.stripe.com/bJe7sL6ge27Z2eOcNDbEA0F",
+        legacy_snapshot: "https://buy.stripe.com/bJe7sL6ge27Z2eOcNDbEA0F",
 
-        legacy_portrait_intro:
-          "https://buy.stripe.com/7sY7sLfQO8wn3iS14VbEA0B",
+        legacy_portrait_intro: "https://buy.stripe.com/7sY7sLfQO8wn3iS14VbEA0B",
 
         digital_legacy_portrait:
           "https://buy.stripe.com/3cIaEXdIG8wn5r08xnbEA0G",
 
-        household_foundation:
-          "https://buy.stripe.com/28E4gz1ZY8wn7z800RbEA0H",
+        household_foundation: "https://buy.stripe.com/28E4gz1ZY8wn7z800RbEA0H",
 
-        heirloom_legacy_tree:
-          "https://buy.stripe.com/7sY6oHbAybIzf1A6pfbEA00",
+        heirloom_legacy_tree: "https://buy.stripe.com/7sY6oHbAybIzf1A6pfbEA00",
 
-        legacy_plus:
-          "https://buy.stripe.com/dRmaEXeMK9Ar1aKaFvbEA0y",
+        legacy_plus: "https://buy.stripe.com/dRmaEXeMK9Ar1aKaFvbEA0y",
 
         family_estate_concierge:
           "https://buy.stripe.com/eVqeVdbAyh2T9HgbJzbEA0I",
@@ -43,29 +38,22 @@
         /* =========================
            BACKWARD-COMPATIBILITY ALIASES
         ========================= */
-        starter_family_tree:
-          "https://buy.stripe.com/28E4gz1ZY8wn7z800RbEA0H",
+        starter_family_tree: "https://buy.stripe.com/28E4gz1ZY8wn7z800RbEA0H",
 
         /* =========================
            ADD-ONS
         ========================= */
-        extra_upload_pack:
-          "https://buy.stripe.com/4gMaEXawu8wncTseVLbEA0z",
+        extra_upload_pack: "https://buy.stripe.com/4gMaEXawu8wncTseVLbEA0z",
 
-        extra_storage:
-          "https://buy.stripe.com/7sY5kD1ZY9Arg5EcNDbEA0q",
+        extra_storage: "https://buy.stripe.com/7sY5kD1ZY9Arg5EcNDbEA0q",
 
-        portrait_polish:
-          "https://buy.stripe.com/00w00j0VU5kbg5EaFvbEA0A",
+        portrait_polish: "https://buy.stripe.com/00w00j0VU5kbg5EaFvbEA0A",
 
-        tribute_narration:
-          "https://buy.stripe.com/cNi7sL9sqaEvg5E4h7bEA0K",
+        tribute_narration: "https://buy.stripe.com/cNi7sL9sqaEvg5E4h7bEA0K",
 
-        extra_mapped_person:
-          "https://buy.stripe.com/28E14nawuh2T2eO9BrbEA0n",
+        extra_mapped_person: "https://buy.stripe.com/28E14nawuh2T2eO9BrbEA0n",
 
-        extra_zoom_layer:
-          "https://buy.stripe.com/6oUeVddIG8wncTs7tjbEA0o",
+        extra_zoom_layer: "https://buy.stripe.com/6oUeVddIG8wncTs7tjbEA0o",
 
         additional_narration_minute:
           "https://buy.stripe.com/5kQ4gz5ca13VdXwcNDbEA0p",
@@ -76,23 +64,18 @@
         extra_linked_household:
           "https://buy.stripe.com/9B67sL8om3c32eO7tjbEA0L",
 
-        extra_branch:
-          "https://buy.stripe.com/bJe00j7kidQH06G14VbEA0M",
+        extra_branch: "https://buy.stripe.com/bJe00j7kidQH06G14VbEA0M",
 
         white_glove_archive_support:
           "https://buy.stripe.com/8x214n48613V2eO14VbEA0N",
 
-        extra_org_node:
-          "https://buy.stripe.com/8x2eVd342cMD8Dc6pfbEA0O",
+        extra_org_node: "https://buy.stripe.com/8x2eVd342cMD8Dc6pfbEA0O",
 
-        extra_org_level:
-          "https://buy.stripe.com/aFabJ1awu8wn3iS14VbEA0P",
+        extra_org_level: "https://buy.stripe.com/aFabJ1awu8wn3iS14VbEA0P",
 
-        extra_admin_seat:
-          "https://buy.stripe.com/28E9AT3426ofdXw9BrbEA0Q",
+        extra_admin_seat: "https://buy.stripe.com/28E9AT3426ofdXw9BrbEA0Q",
 
-        command_report_addon:
-          "https://buy.stripe.com/8x2eVdeMKcMD2eO00RbEA0R",
+        command_report_addon: "https://buy.stripe.com/8x2eVdeMKcMD2eO00RbEA0R",
 
         /* =========================
            MAINTENANCE — MONTHLY
@@ -125,7 +108,7 @@
            MAINTENANCE — YEARLY
         ========================= */
         legacy_snapshot_maintenance_yearly:
-          "https://buy.stripe.com/6oU14n7ki9Ar4mW00RbEA0D",
+          "https://buy.stripe.com/00wfZh4864g7cTsbJzbEA0Y",
 
         legacy_portrait_intro_maintenance_yearly:
           "https://buy.stripe.com/00w5kDdIGeULcTscNDbEA0T",
@@ -146,8 +129,8 @@
           "https://buy.stripe.com/7sYfZhfQO5kbdXwbJzbEA0m",
 
         command_structure_network_maintenance_yearly:
-          "https://buy.stripe.com/fZu5kDeMK4g72eO3d3bEA0X"
-      }
-    )
+          "https://buy.stripe.com/fZu5kDeMK4g72eO3d3bEA0X",
+      },
+    ),
   });
 })();

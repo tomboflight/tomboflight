@@ -10,6 +10,7 @@ from app.dependencies.auth import INTERNAL_ADMIN_KEYS, get_current_user, require
 from app.services.project_entitlement_service import (
     get_project_entitlement,
     get_upgrade_quote_for_project,
+    list_project_entitlements,
     list_user_project_entitlements,
     upsert_project_entitlement,
 )
@@ -114,6 +115,23 @@ def list_my_project_entitlements(
     current_user_id = _current_user_id(current_user)
     return {
         "items": list_user_project_entitlements(current_user_id, active_only=True),
+    }
+
+
+@router.get("/admin/list")
+def list_project_entitlements_admin(
+    limit: int = 100,
+    active_only: bool = False,
+    search: str = "",
+    current_user: dict[str, Any] = Depends(require_admin),
+):
+    del current_user
+    return {
+        "items": list_project_entitlements(
+            active_only=active_only,
+            limit=limit,
+            search=search,
+        )
     }
 
 
