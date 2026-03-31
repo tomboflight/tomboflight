@@ -143,7 +143,8 @@ def upload_bytes(
     metadata: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     normalized_key = key.lstrip("/")
-    storage_key = normalized_key if publish else f"draft/{normalized_key}"
+    del publish
+    storage_key = normalized_key
     bucket = _bucket_for_zone(zone)
 
     if not r2_is_configured() or not bucket:

@@ -267,12 +267,20 @@ def write_public_metadata(
     collection = _collection()
     now = _now()
     publish = _normalize(approval_status).lower() == "approved"
-    storage_write = upload_json(
-        zone=ZONE_METADATA,
-        key=f"tokens/{public_token_id}.json",
-        payload=payload,
-        publish=publish,
-    )
+    storage_key = f"v1/tokens/{public_token_id}.json"
+    if publish:
+        storage_write = upload_json(
+            zone=ZONE_METADATA,
+            key=storage_key,
+            payload=payload,
+            publish=True,
+        )
+    else:
+        storage_write = {
+            "storage_provider": "planned_public_metadata",
+            "bucket": None,
+            "key": storage_key,
+        }
 
     document: dict[str, Any] = {
         "project_id": project_id,
@@ -356,7 +364,7 @@ def build_public_manifest(
     poster_image_uri_public = poster_asset["poster_image_uri_public"]
 
     metadata_uri = (
-        f"{settings.metadata_base_url.rstrip('/')}/tokens/{public_token_id}.json"
+        f"{settings.metadata_base_url_clean}/tokens/{public_token_id}.json"
     )
     project_ref_hash = compute_project_ref_hash(project_id)
     household_ref_hash = compute_household_ref_hash(project.get("household_id"))

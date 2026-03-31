@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
@@ -24,6 +25,15 @@ from app.services.public_manifest_service import (
     get_public_manifest_for_mint_record,
 )
 
+JOB_SEQUENCE = (
+    "prepare_manifest",
+    "generate_poster",
+    "mint_anchor",
+    "sync_receipt",
+)
+
+logger = logging.getLogger(__name__)
+
 
 def _now() -> datetime:
     return datetime.now(UTC)
@@ -37,7 +47,9 @@ def _normalize_tx_hash(value: Any) -> str:
     normalized = _normalize(value)
     if not normalized:
         return ""
-    return normalized if normalized.lower().startswith("0x") else f"0x{normalized}"
+    if not normalized.lower().startswith("0x"):
+        normalized = f"0x{normalized}"
+    return normalized.lower()
 
 
 def _to_object_id(value: str) -> ObjectId | None:
@@ -290,6 +302,39 @@ def _execute_mint_anchor(job: dict[str, Any], record: dict[str, Any]) -> dict[st
     return mint_result
 
 
+def _job_dependencies(job_type: str) -> tuple[str, ...]:
+    try:
+        index = JOB_SEQUENCE.index(job_type)
+    except ValueError:
+        return tuple()
+    return JOB_SEQUENCE[:index]
+
+
+def _queued_or_running_dependency(project_id: str, mint_record_id: str, job_type: str) -> dict[str, Any] | None:
+    for dependency in _job_dependencies(job_type):
+        pending_job = _collection().find_one(
+            {
+                "project_id": _normalize(project_id),
+                "mint_record_id": _normalize(mint_record_id),
+                "job_type": dependency,
+                "status": {"$in": ["queued", "running"]},
+            }
+        )
+        if pending_job is not None:
+            return pending_job
+        failed_job = _collection().find_one(
+            {
+                "project_id": _normalize(project_id),
+                "mint_record_id": _normalize(mint_record_id),
+                "job_type": dependency,
+                "status": "failed",
+            }
+        )
+        if failed_job is not None:
+            return failed_job
+    return None
+
+
 def sync_receipt_for_mint_record(mint_record_id: str) -> dict[str, Any]:
     record = get_mint_record(mint_record_id)
     if record is None:
@@ -403,6 +448,60 @@ def run_next_job(worker_id: str) -> dict[str, Any]:
             error_message="Mint record was not found.",
         )
 
+    latest = get_latest_mint_record(record["project_id"])
+    if latest is None or latest["id"] != record["id"]:
+        return _finish_job(
+            job["_id"],
+            status="cancelled",
+            error_code="mint_record_superseded",
+            error_message="Mint job belongs to a non-authoritative mint record.",
+        )
+
+    dependency = _queued_or_running_dependency(
+        serialized_job["project_id"],
+        serialized_job["mint_record_id"],
+        serialized_job["job_type"],
+    )
+    if dependency is not None:
+        dependency_status = _normalize(dependency.get("status")).lower()
+        if dependency_status == "failed":
+            return _finish_job(
+                job["_id"],
+                status="cancelled",
+                error_code="mint_dependency_failed",
+                error_message=(
+                    "A required earlier mint job failed, so this job was cancelled."
+                ),
+            )
+
+        _collection().update_one(
+            {"_id": job["_id"]},
+            {
+                "$set": {
+                    "status": "queued",
+                    "locked_by": None,
+                    "locked_at": None,
+                    "started_at": None,
+                    "run_after": now + timedelta(seconds=30),
+                    "updated_at": _now(),
+                }
+            },
+        )
+        return _serialize_job(_collection().find_one({"_id": job["_id"]}) or job)
+
+    logger.info(
+        "Running Tomb of Light mint job",
+        extra={
+            "project_id": record["project_id"],
+            "mint_record_id": record["id"],
+            "job_type": serialized_job["job_type"],
+            "version_number": record["version_number"],
+            "contract_address": record.get("contract_address"),
+            "recipient_wallet": record.get("customer_wallet"),
+            "tx_hash": record.get("tx_hash"),
+        },
+    )
+
     try:
         if serialized_job["job_type"] == "prepare_manifest":
             result = _execute_prepare_manifest(serialized_job, record)
@@ -415,12 +514,37 @@ def run_next_job(worker_id: str) -> dict[str, Any]:
         else:
             raise RuntimeError("Unsupported mint job type.")
 
+        if (
+            serialized_job["job_type"] == "sync_receipt"
+            and _normalize((result or {}).get("status")).lower() == "pending"
+        ):
+            enqueue_job(
+                project_id=record["project_id"],
+                mint_record_id=record["id"],
+                job_type="sync_receipt",
+                priority=60,
+                run_after=_now() + timedelta(seconds=60),
+                payload={"version_number": record["version_number"]},
+            )
+
         return _finish_job(
             job["_id"],
             status="succeeded",
             result=result,
         )
     except Exception as exc:
+        logger.exception(
+            "Tomb of Light mint job failed",
+            extra={
+                "project_id": record["project_id"],
+                "mint_record_id": record["id"],
+                "job_type": serialized_job["job_type"],
+                "version_number": record["version_number"],
+                "contract_address": record.get("contract_address"),
+                "recipient_wallet": record.get("customer_wallet"),
+                "tx_hash": record.get("tx_hash"),
+            },
+        )
         mark_mint_failed(
             record["id"],
             error_code="mint_job_failed",

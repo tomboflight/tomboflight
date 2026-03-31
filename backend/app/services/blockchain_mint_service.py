@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import logging
+import re
 from typing import Any
 
 from app.config import settings
@@ -8,6 +10,10 @@ from app.config import settings
 TRANSFER_EVENT_SIGNATURE = (
     "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
 )
+EVM_WALLET_PATTERN = re.compile(r"^0x[a-fA-F0-9]{40}$")
+HEX_PRIVATE_KEY_PATTERN = re.compile(r"^(0x)?[a-fA-F0-9]{64}$")
+
+logger = logging.getLogger(__name__)
 
 
 def _normalize(value: Any) -> str:
@@ -18,7 +24,9 @@ def _normalize_tx_hash(value: Any) -> str:
     normalized = _normalize(value)
     if not normalized:
         return ""
-    return normalized if normalized.lower().startswith("0x") else f"0x{normalized}"
+    if not normalized.lower().startswith("0x"):
+        normalized = f"0x{normalized}"
+    return normalized.lower()
 
 
 def _lazy_web3():
@@ -78,18 +86,40 @@ def _contract_abi() -> list[dict[str, Any]]:
 
 def _account():
     _Web3, Account = _lazy_web3()
-    return Account.from_key(_normalize(settings.nft_minter_private_key))
+    private_key = _normalize(settings.nft_minter_private_key)
+    if not HEX_PRIVATE_KEY_PATTERN.fullmatch(private_key):
+        raise RuntimeError(
+            "NFT_MINTER_PRIVATE_KEY must be a 32-byte hex private key."
+        )
+    if EVM_WALLET_PATTERN.fullmatch(private_key):
+        raise RuntimeError(
+            "NFT_MINTER_PRIVATE_KEY is a wallet address, not a private key."
+        )
+    try:
+        return Account.from_key(private_key)
+    except Exception as exc:
+        raise RuntimeError("NFT_MINTER_PRIVATE_KEY is invalid.") from exc
 
 
-def _checksum_address(address: str) -> str:
+def _checksum_address(address: str, *, field_name: str = "wallet address") -> str:
     Web3, _Account = _lazy_web3()
-    return Web3.to_checksum_address(_normalize(address))
+    normalized = _normalize(address)
+    if not normalized:
+        raise RuntimeError(f"{field_name} is missing.")
+    if "wallet_address" in normalized.lower():
+        raise RuntimeError(f"{field_name} contains a placeholder value.")
+    if not EVM_WALLET_PATTERN.fullmatch(normalized):
+        raise RuntimeError(f"{field_name} must be a valid EVM address.")
+    try:
+        return Web3.to_checksum_address(normalized)
+    except Exception as exc:
+        raise RuntimeError(f"{field_name} is invalid.") from exc
 
 
 def _recipient_wallet(recipient_wallet: str | None) -> str:
     preferred = _normalize(recipient_wallet) or _normalize(settings.nft_default_recipient_wallet)
     if preferred:
-        return _checksum_address(preferred)
+        return _checksum_address(preferred, field_name="Recipient wallet")
     raise RuntimeError(
         "A recipient wallet is required before minting. "
         "Provide a customer wallet or configure NFT_DEFAULT_RECIPIENT_WALLET."
@@ -138,7 +168,6 @@ def _contract_function(contract: Any, *, recipient: str, metadata_uri: str, toke
         if fallback_name not in candidate_names:
             candidate_names.append(fallback_name)
 
-    function_name = ""
     candidate = None
     functions_abi: list[dict[str, Any]] = []
     abi = _contract_abi()
@@ -151,7 +180,6 @@ def _contract_function(contract: Any, *, recipient: str, metadata_uri: str, toke
             if item.get("type") == "function" and item.get("name") == candidate_name
         ]
         if function_candidate is not None and abi_matches:
-            function_name = candidate_name
             candidate = function_candidate
             functions_abi = abi_matches
             break
@@ -166,7 +194,6 @@ def _contract_function(contract: Any, *, recipient: str, metadata_uri: str, toke
     arguments: list[Any] = []
     recipient_consumed = False
     metadata_uri_consumed = False
-    token_type_consumed = False
 
     for input_item in abi.get("inputs", []):
         input_type = _normalize(input_item.get("type")).lower()
@@ -185,11 +212,9 @@ def _contract_function(contract: Any, *, recipient: str, metadata_uri: str, toke
                 metadata_uri_consumed = True
             else:
                 arguments.append(_token_type_argument(token_type, input_type))
-                token_type_consumed = True
             continue
         if input_type.startswith("uint") or input_type.startswith("int") or input_type == "bytes32":
             arguments.append(_token_type_argument(token_type, input_type))
-            token_type_consumed = True
             continue
         raise RuntimeError(
             f"Unsupported mint function input type '{input_type}'. "
@@ -202,6 +227,26 @@ def _contract_function(contract: Any, *, recipient: str, metadata_uri: str, toke
         )
 
     return candidate(*arguments)
+
+
+def _contract_owner(contract: Any) -> str | None:
+    owner_function = getattr(contract.functions, "owner", None)
+    if owner_function is None:
+        return None
+    try:
+        return _checksum_address(owner_function().call(), field_name="Contract owner")
+    except Exception as exc:
+        raise RuntimeError("Unable to resolve the NFT contract owner.") from exc
+
+
+def _assert_contract_owner(contract: Any, signer_address: str) -> None:
+    owner_address = _contract_owner(contract)
+    if owner_address is None:
+        return
+    if owner_address.lower() != signer_address.lower():
+        raise RuntimeError(
+            "Configured NFT minter wallet is not the owner of the NFT contract."
+        )
 
 
 def _gas_fields(client: Any) -> dict[str, int]:
@@ -250,11 +295,28 @@ def mint_anchor(
 
     client = _web3_client()
     contract = client.eth.contract(
-        address=_checksum_address(settings.nft_contract_address),
+        address=_checksum_address(
+            settings.nft_contract_address,
+            field_name="NFT contract address",
+        ),
         abi=_contract_abi(),
     )
     signer = _account()
+    _assert_contract_owner(contract, signer.address)
     recipient = _recipient_wallet(recipient_wallet)
+    normalized_contract_address = _checksum_address(
+        settings.nft_contract_address,
+        field_name="NFT contract address",
+    )
+    logger.info(
+        "Minting Tomb of Light anchor",
+        extra={
+            "contract_address": normalized_contract_address,
+            "recipient_wallet": recipient,
+            "token_type": _normalize(token_type) or None,
+            "metadata_uri": _normalize(metadata_uri),
+        },
+    )
     contract_function = _contract_function(
         contract,
         recipient=recipient,
@@ -297,7 +359,7 @@ def mint_anchor(
     return {
         "status": "minted" if receipt is not None and int(receipt.status) == 1 and token_id else "submitted",
         "chain": _normalize(settings.nft_chain),
-        "contract_address": _checksum_address(settings.nft_contract_address),
+        "contract_address": normalized_contract_address,
         "tx_hash": tx_hash_hex,
         "token_id": token_id,
         "recipient_wallet": recipient,
@@ -309,27 +371,43 @@ def sync_mint_receipt(tx_hash: str) -> dict[str, Any]:
     _require_mint_runtime()
 
     client = _web3_client()
+    normalized_tx_hash = _normalize_tx_hash(tx_hash)
     try:
-        receipt = client.eth.get_transaction_receipt(_normalize(tx_hash))
+        receipt = client.eth.get_transaction_receipt(normalized_tx_hash)
     except Exception as exc:
         if exc.__class__.__name__ == "TransactionNotFound":
             return {
                 "status": "pending",
                 "chain": _normalize(settings.nft_chain),
-                "contract_address": _checksum_address(settings.nft_contract_address),
-                "tx_hash": _normalize_tx_hash(tx_hash),
+                "contract_address": _checksum_address(
+                    settings.nft_contract_address,
+                    field_name="NFT contract address",
+                ),
+                "tx_hash": normalized_tx_hash,
                 "token_id": None,
                 "block_number": None,
             }
         raise
     token_id = _extract_token_id_from_receipt(receipt)
     receipt_status = int(getattr(receipt, "status", None) or receipt.get("status") or 0)
-    normalized_tx_hash = _normalize_tx_hash(tx_hash)
+    normalized_contract_address = _checksum_address(
+        settings.nft_contract_address,
+        field_name="NFT contract address",
+    )
+    logger.info(
+        "Synced Tomb of Light anchor receipt",
+        extra={
+            "contract_address": normalized_contract_address,
+            "tx_hash": normalized_tx_hash,
+            "token_id": token_id,
+            "receipt_status": receipt_status,
+        },
+    )
 
     return {
         "status": "minted" if receipt_status == 1 and token_id else "confirmed" if receipt_status == 1 else "failed",
         "chain": _normalize(settings.nft_chain),
-        "contract_address": _checksum_address(settings.nft_contract_address),
+        "contract_address": normalized_contract_address,
         "tx_hash": normalized_tx_hash,
         "token_id": token_id,
         "block_number": int(receipt.blockNumber),

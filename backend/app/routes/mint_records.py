@@ -130,6 +130,7 @@ def get_project_mint_eligibility(
     eligibility = describe_project_mint_eligibility(project)
     latest = get_latest_mint_record(project_id)
     eligibility["latest_mint_record_id"] = (latest or {}).get("id")
+    eligibility["missing_approvals"] = list((latest or {}).get("pending_approvals") or [])
     return eligibility
 
 
