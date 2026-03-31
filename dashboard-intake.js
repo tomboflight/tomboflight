@@ -29,6 +29,8 @@
     "archived",
   ]);
 
+  let legacyAnchorState = null;
+
   function normalizeValue(value) {
     return String(value || "")
       .trim()
@@ -131,6 +133,481 @@
         context?.latestSubmission?.projectId ||
         "",
     ).trim();
+  }
+
+  function shortenMiddle(value, head = 12, tail = 8) {
+    const normalized = String(value || "").trim();
+    if (!normalized || normalized.length <= head + tail + 3) {
+      return normalized || "—";
+    }
+    return `${normalized.slice(0, head)}...${normalized.slice(-tail)}`;
+  }
+
+  function reasonLabel(reason) {
+    const normalized = normalizeValue(reason);
+    if (normalized === "build_not_ready") return "Build completion is still pending.";
+    if (normalized === "package_not_included") return "This package does not include automatic on-chain minting.";
+    if (normalized === "mint_runtime_disabled") return "Minting is temporarily offline.";
+    return humanizeStatus(normalized || "unavailable");
+  }
+
+  function chainLabel(chain) {
+    const normalized = normalizeValue(chain);
+    if (normalized === "base-mainnet" || normalized === "base") return "Base Mainnet";
+    if (normalized === "base-sepolia") return "Base Sepolia";
+    return chain || "Base Mainnet";
+  }
+
+  function baseExplorerUrl(chain) {
+    return normalizeValue(chain) === "base-sepolia"
+      ? "https://sepolia.basescan.org"
+      : "https://basescan.org";
+  }
+
+  function buildExplorerLink(anchor) {
+    if (!anchor) return "";
+    const base = baseExplorerUrl(anchor.chain);
+    if (anchor.txHash) return `${base}/tx/${anchor.txHash}`;
+    if (anchor.contractAddress && anchor.tokenId) {
+      return `${base}/token/${anchor.contractAddress}?a=${encodeURIComponent(anchor.tokenId)}`;
+    }
+    if (anchor.contractAddress) return `${base}/address/${anchor.contractAddress}`;
+    return "";
+  }
+
+  function setAnchorCopyButton(selector, value, label) {
+    const node = document.querySelector(selector);
+    if (!node) return;
+    const normalized = String(value || "").trim();
+    node.disabled = !normalized;
+    node.dataset.copyValue = normalized;
+    node.dataset.copyLabel = label;
+  }
+
+  function setAnchorLink(selector, href, show) {
+    const node = document.querySelector(selector);
+    if (!node) return;
+    if (href) {
+      node.setAttribute("href", href);
+    } else {
+      node.removeAttribute("href");
+    }
+    node.style.display = show ? "" : "none";
+  }
+
+  function setAnchorPosterPreview(href) {
+    const wrapper = document.querySelector("[data-anchor-poster-link-wrapper]");
+    const image = document.querySelector("[data-anchor-poster-preview]");
+    const empty = document.querySelector("[data-anchor-poster-empty]");
+
+    if (wrapper) {
+      if (href) wrapper.setAttribute("href", href);
+      else wrapper.removeAttribute("href");
+    }
+
+    if (image) {
+      if (href) {
+        image.src = href;
+        image.style.display = "";
+      } else {
+        image.removeAttribute("src");
+        image.style.display = "none";
+      }
+    }
+
+    if (empty) {
+      empty.style.display = href ? "none" : "";
+    }
+  }
+
+  function resolveAnchorPresentation(hasProject, eligibility, mintStatus) {
+    const latest = mintStatus && mintStatus.latest ? mintStatus.latest : null;
+    const latestStatus = normalizeValue(latest && latest.mint_status);
+    const reasons = Array.isArray(eligibility && eligibility.reasons)
+      ? eligibility.reasons
+      : [];
+    const missingApprovals = Array.isArray(eligibility && eligibility.missing_approvals)
+      ? eligibility.missing_approvals
+      : [];
+    const policy =
+      eligibility && eligibility.mint_policy ? eligibility.mint_policy : {};
+
+    if (!hasProject) {
+      return {
+        badge: "Awaiting Workspace",
+        copy: "A provisioned workspace is required before Tomb of Light can prepare your Legacy Anchor.",
+        note: "Once your project is provisioned, this panel will show live mint status, public proof links, and wallet verification.",
+      };
+    }
+
+    if (!policy.product_includes_onchain_anchor) {
+      return {
+        badge: "Not Included",
+        copy: "This package does not include an automatic on-chain Legacy Anchor.",
+        note: "Upgrade into an eligible package to unlock Base Mainnet anchor minting and public-safe proof records.",
+      };
+    }
+
+    if (latestStatus === "minted") {
+      return {
+        badge: "Minted",
+        copy: "Your Legacy Anchor has been minted successfully on Base Mainnet.",
+        note: "Use the contract address, token ID, transaction hash, explorer link, metadata, and poster below to prove the anchor exists without exposing private family records.",
+      };
+    }
+
+    if (latestStatus === "minting") {
+      return {
+        badge: "Minting",
+        copy: "Your Legacy Anchor transaction has been submitted and is waiting for receipt sync.",
+        note: "The panel will finalize the token ID and proof links as soon as the Base receipt confirms.",
+      };
+    }
+
+    if (latestStatus === "queued") {
+      return {
+        badge: "Queued",
+        copy: "Your Legacy Anchor is queued for public-safe manifest, poster, mint, and receipt sync.",
+        note: "Tomb of Light will only finalize the anchor after approvals, mint execution, and receipt confirmation are complete.",
+      };
+    }
+
+    if (latestStatus === "approved") {
+      return {
+        badge: "Approved",
+        copy: "Your Legacy Anchor is approved and ready to enter the mint queue.",
+        note: "The remaining step is queue execution through Tomb of Light’s mint worker.",
+      };
+    }
+
+    if (latestStatus === "pending_approval" || missingApprovals.length > 0) {
+      return {
+        badge: "Waiting for Approval",
+        copy: "Your Legacy Anchor is waiting for the required approval flow before it can be queued.",
+        note:
+          missingApprovals.length > 0
+            ? `Missing approvals: ${missingApprovals
+                .map(humanizeStatus)
+                .join(", ")}.`
+            : "Admin final approval and customer public-safe approval must both be completed first.",
+      };
+    }
+
+    if (latestStatus === "failed") {
+      return {
+        badge: "Failed",
+        copy: "The last Legacy Anchor attempt failed and needs review before a new version is queued.",
+        note:
+          latest && latest.error_message
+            ? latest.error_message
+            : "Review the recorded error, correct it, and re-queue the newest mint record.",
+      };
+    }
+
+    if (reasons.includes("build_not_ready")) {
+      return {
+        badge: "Waiting for Build",
+        copy: "Your package is eligible, but the build is not complete enough to mint yet.",
+        note: reasons.map(reasonLabel).join(" "),
+      };
+    }
+
+    if (reasons.includes("mint_runtime_disabled")) {
+      return {
+        badge: "Minting Offline",
+        copy: "Your package is eligible, but Tomb of Light minting is temporarily disabled in the live runtime.",
+        note: "Once the live mint runtime is enabled again, this panel will resume from the current approved state.",
+      };
+    }
+
+    return {
+      badge: "Waiting for Approval",
+      copy: "Your Legacy Anchor will appear here once the public-safe approval flow starts for this workspace.",
+      note: "Eligible customers will be able to prove the anchor through on-chain, wallet, explorer, and metadata proof layers from this panel.",
+    };
+  }
+
+  function setLegacyAnchorUnavailable(copy, note) {
+    const presentation = {
+      badge: "Unavailable",
+      copy: copy || "Legacy Anchor status is temporarily unavailable.",
+      note:
+        note ||
+        "Please refresh the dashboard shortly. Tomb of Light will show public-safe proof details here when the workspace is ready.",
+    };
+
+    legacyAnchorState = null;
+    text(document.querySelector("[data-anchor-status-badge]"), presentation.badge);
+    text(document.querySelector("[data-anchor-status-copy]"), presentation.copy);
+    text(document.querySelector("[data-anchor-proof-note]"), presentation.note);
+    text(
+      document.querySelector("[data-anchor-proof-copy]"),
+      "Public proof details will appear here after Tomb of Light prepares or mints your anchor.",
+    );
+    text(document.querySelector("[data-anchor-chain]"), "—");
+    text(document.querySelector("[data-anchor-contract]"), "—");
+    text(document.querySelector("[data-anchor-token-id]"), "—");
+    text(document.querySelector("[data-anchor-tx-hash]"), "—");
+    text(document.querySelector("[data-anchor-recipient-wallet]"), "—");
+    text(document.querySelector("[data-anchor-public-token-id]"), "—");
+    text(
+      document.querySelector("[data-anchor-verify-status]"),
+      "Wallet proof will appear here when you verify the recipient wallet.",
+    );
+    setAnchorPosterPreview("");
+    setAnchorLink("[data-anchor-explorer-link]", "", false);
+    setAnchorLink("[data-anchor-metadata-link]", "", false);
+    setAnchorLink("[data-anchor-poster-link]", "", false);
+    setAnchorCopyButton("[data-anchor-copy-contract]", "", "contract");
+    setAnchorCopyButton("[data-anchor-copy-tx]", "", "transaction hash");
+    setAnchorCopyButton("[data-anchor-copy-token]", "", "token id");
+    setAnchorCopyButton("[data-anchor-copy-public-token]", "", "public token id");
+    const verifyButton = document.querySelector("[data-anchor-verify-wallet]");
+    if (verifyButton) verifyButton.disabled = true;
+  }
+
+  async function copyAnchorValue(button) {
+    if (!button) return;
+    const value = String(button.dataset.copyValue || "").trim();
+    const label = String(button.dataset.copyLabel || "value").trim();
+    const statusNode = document.querySelector("[data-anchor-verify-status]");
+
+    if (!value) {
+      text(statusNode, `No ${label} is available yet.`);
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(value);
+      text(statusNode, `${label.charAt(0).toUpperCase() + label.slice(1)} copied.`);
+    } catch (error) {
+      text(statusNode, `Could not copy the ${label} automatically.`);
+    }
+  }
+
+  async function verifyLegacyAnchorWallet() {
+    const statusNode = document.querySelector("[data-anchor-verify-status]");
+
+    if (!legacyAnchorState || !legacyAnchorState.recipientWallet) {
+      text(statusNode, "A recipient wallet must be recorded before wallet ownership can be verified.");
+      return;
+    }
+
+    if (!window.ethereum || typeof window.ethereum.request !== "function") {
+      text(
+        statusNode,
+        "Open the wallet that received this anchor in a browser with wallet access to verify ownership here.",
+      );
+      return;
+    }
+
+    try {
+      const accounts = await window.ethereum.request({
+        method: "eth_requestAccounts",
+      });
+      const selected = Array.isArray(accounts) && accounts[0] ? String(accounts[0]) : "";
+
+      if (normalizeValue(selected) !== normalizeValue(legacyAnchorState.recipientWallet)) {
+        text(
+          statusNode,
+          `Connected wallet ${shortenMiddle(selected)} does not match the recorded recipient ${shortenMiddle(legacyAnchorState.recipientWallet)}.`,
+        );
+        return;
+      }
+
+      const message = [
+        "Tomb of Light wallet ownership verification",
+        `Legacy Anchor: ${legacyAnchorState.publicTokenId || "pending"}`,
+        `Wallet: ${legacyAnchorState.recipientWallet}`,
+        `Timestamp: ${new Date().toISOString()}`,
+      ].join("\n");
+
+      const signature = await window.ethereum.request({
+        method: "personal_sign",
+        params: [message, selected],
+      });
+
+      text(
+        statusNode,
+        `Wallet ownership verified for ${shortenMiddle(selected)}. Signature proof: ${shortenMiddle(signature, 14, 12)}.`,
+      );
+    } catch (error) {
+      text(
+        statusNode,
+        `Wallet verification did not complete: ${String(error && error.message ? error.message : error)}`,
+      );
+    }
+  }
+
+  function bindLegacyAnchorInteractions() {
+    [
+      "[data-anchor-copy-contract]",
+      "[data-anchor-copy-tx]",
+      "[data-anchor-copy-token]",
+      "[data-anchor-copy-public-token]",
+    ].forEach(function (selector) {
+      const button = document.querySelector(selector);
+      if (!button || button.dataset.bound === "true") return;
+      button.dataset.bound = "true";
+      button.addEventListener("click", function () {
+        copyAnchorValue(button);
+      });
+    });
+
+    const verifyButton = document.querySelector("[data-anchor-verify-wallet]");
+    if (verifyButton && verifyButton.dataset.bound !== "true") {
+      verifyButton.dataset.bound = "true";
+      verifyButton.addEventListener("click", function () {
+        verifyLegacyAnchorWallet();
+      });
+    }
+  }
+
+  async function getMintEligibility(projectId) {
+    return await app.apiRequest(
+      `/projects/${encodeURIComponent(projectId)}/mint-eligibility`,
+      { method: "GET" },
+    );
+  }
+
+  async function getMintStatus(projectId) {
+    return await app.apiRequest(
+      `/projects/${encodeURIComponent(projectId)}/mint-status`,
+      { method: "GET" },
+    );
+  }
+
+  async function updateLegacyAnchorPanel(context) {
+    bindLegacyAnchorInteractions();
+
+    const projectId = getContextProjectId(context);
+    if (!projectId) {
+      setLegacyAnchorUnavailable(
+        "Your workspace is still being provisioned, so Tomb of Light cannot prepare a Legacy Anchor yet.",
+      );
+      return;
+    }
+
+    try {
+      const [eligibility, mintStatus] = await Promise.all([
+        getMintEligibility(projectId),
+        getMintStatus(projectId),
+      ]);
+
+      const presentation = resolveAnchorPresentation(true, eligibility, mintStatus);
+      const latest = mintStatus && mintStatus.latest ? mintStatus.latest : null;
+      const explorerLink = buildExplorerLink({
+        chain: latest && latest.chain ? latest.chain : "base-mainnet",
+        contractAddress: latest && latest.contract_address ? latest.contract_address : "",
+        tokenId: latest && latest.token_id ? latest.token_id : "",
+        txHash: latest && latest.tx_hash ? latest.tx_hash : "",
+      });
+
+      legacyAnchorState = {
+        chain: latest && latest.chain ? latest.chain : "base-mainnet",
+        contractAddress: latest && latest.contract_address ? latest.contract_address : "",
+        tokenId: latest && latest.token_id ? latest.token_id : "",
+        txHash: latest && latest.tx_hash ? latest.tx_hash : "",
+        recipientWallet: latest && latest.customer_wallet ? latest.customer_wallet : "",
+        publicTokenId: latest && latest.public_token_id ? latest.public_token_id : "",
+        metadataUri: latest && latest.metadata_uri ? latest.metadata_uri : "",
+        posterUrl:
+          latest && latest.poster_image_uri_public
+            ? latest.poster_image_uri_public
+            : "",
+        explorerUrl: explorerLink,
+      };
+
+      text(document.querySelector("[data-anchor-status-badge]"), presentation.badge);
+      text(document.querySelector("[data-anchor-status-copy]"), presentation.copy);
+      text(document.querySelector("[data-anchor-proof-note]"), presentation.note);
+      text(
+        document.querySelector("[data-anchor-proof-copy]"),
+        legacyAnchorState.tokenId && legacyAnchorState.txHash
+          ? "This NFT was minted to your wallet on Base Mainnet. Use the contract address, token ID, transaction hash, and public metadata record below to prove it."
+          : "Once minted, Tomb of Light will let you prove the Legacy Anchor through on-chain, wallet, explorer, and metadata proof at the same time.",
+      );
+
+      text(
+        document.querySelector("[data-anchor-chain]"),
+        chainLabel(legacyAnchorState.chain),
+      );
+      text(
+        document.querySelector("[data-anchor-contract]"),
+        legacyAnchorState.contractAddress || "Pending mint",
+      );
+      text(
+        document.querySelector("[data-anchor-token-id]"),
+        legacyAnchorState.tokenId || "Pending receipt sync",
+      );
+      text(
+        document.querySelector("[data-anchor-tx-hash]"),
+        legacyAnchorState.txHash || "Pending transaction",
+      );
+      text(
+        document.querySelector("[data-anchor-recipient-wallet]"),
+        legacyAnchorState.recipientWallet || "Awaiting customer approval",
+      );
+      text(
+        document.querySelector("[data-anchor-public-token-id]"),
+        legacyAnchorState.publicTokenId || "Preparing public token ID",
+      );
+
+      setAnchorPosterPreview(legacyAnchorState.posterUrl);
+      setAnchorLink(
+        "[data-anchor-explorer-link]",
+        legacyAnchorState.explorerUrl,
+        Boolean(legacyAnchorState.explorerUrl),
+      );
+      setAnchorLink(
+        "[data-anchor-metadata-link]",
+        legacyAnchorState.metadataUri,
+        Boolean(legacyAnchorState.metadataUri),
+      );
+      setAnchorLink(
+        "[data-anchor-poster-link]",
+        legacyAnchorState.posterUrl,
+        Boolean(legacyAnchorState.posterUrl),
+      );
+
+      setAnchorCopyButton(
+        "[data-anchor-copy-contract]",
+        legacyAnchorState.contractAddress,
+        "contract address",
+      );
+      setAnchorCopyButton(
+        "[data-anchor-copy-tx]",
+        legacyAnchorState.txHash,
+        "transaction hash",
+      );
+      setAnchorCopyButton(
+        "[data-anchor-copy-token]",
+        legacyAnchorState.tokenId,
+        "token id",
+      );
+      setAnchorCopyButton(
+        "[data-anchor-copy-public-token]",
+        legacyAnchorState.publicTokenId,
+        "public token id",
+      );
+
+      const verifyButton = document.querySelector("[data-anchor-verify-wallet]");
+      if (verifyButton) {
+        verifyButton.disabled = !legacyAnchorState.recipientWallet;
+      }
+
+      text(
+        document.querySelector("[data-anchor-verify-status]"),
+        legacyAnchorState.recipientWallet
+          ? "Connect the wallet that received this anchor to verify ownership here."
+          : "Wallet proof will appear here once a recipient wallet is recorded.",
+      );
+    } catch (error) {
+      setLegacyAnchorUnavailable(
+        "Legacy Anchor status could not be loaded right now.",
+        String(error && error.message ? error.message : error),
+      );
+    }
   }
 
   function withFamilyId(href, context) {
@@ -1020,6 +1497,9 @@
         : null);
 
     if (!context || !context.hasPackageAccess) {
+      setLegacyAnchorUnavailable(
+        "Legacy Anchor proof becomes available once package access is resolved for this account.",
+      );
       return;
     }
 
@@ -1055,6 +1535,7 @@
       const contextWithLatest = Object.assign({}, context, {
         latestSubmission: latest || null,
       });
+      await updateLegacyAnchorPanel(contextWithLatest);
       const primaryAction = getPrimaryWorkspaceAction(
         contextWithLatest,
         config,
@@ -1124,6 +1605,10 @@
         dashboardStatus.textContent = `Your package is active: ${context.packageName || "Active Package"}.`;
       }
     } catch (error) {
+      setLegacyAnchorUnavailable(
+        "Legacy Anchor status is temporarily unavailable.",
+        "Please refresh shortly. Tomb of Light could not finish loading the customer workspace state.",
+      );
       text(intakeCardStatus, "Intake status is temporarily unavailable.");
       text(statusBadge, "Unavailable");
       text(nextStep, "Please try again shortly.");
@@ -1134,6 +1619,7 @@
   }
 
   document.addEventListener("DOMContentLoaded", function () {
+    bindLegacyAnchorInteractions();
     applyDashboardIntake();
   });
 

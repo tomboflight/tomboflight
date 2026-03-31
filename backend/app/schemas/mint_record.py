@@ -37,6 +37,14 @@ class PrepareMintRecordPayload(BaseModel):
     public_title_kind: str = Field(default="none")
 
 
+class MintMaintenancePayload(BaseModel):
+    limit: int = Field(default=200, ge=1, le=1000)
+    normalize_tx_hashes: bool = True
+    supersede_stale_records: bool = True
+    sync_receipts: bool = True
+    republish_public_artifacts: bool = True
+
+
 class AdminMintApprovalPayload(BaseModel):
     notes: str = ""
 

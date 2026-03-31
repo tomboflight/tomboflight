@@ -52,6 +52,9 @@ from app.routes.uploads import router as uploads_router
 from app.routes.users import router as users_router
 from app.routes.verification_records import router as verification_records_router
 from app.routes.viewer_manifest import router as viewer_manifest_router
+from app.services.nft_runtime_validation_service import (
+    validate_nft_runtime_configuration_on_startup,
+)
 
 
 def _resolve_allowed_origins() -> list[str]:
@@ -84,6 +87,7 @@ def _is_secure_request(request: Request) -> bool:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    validate_nft_runtime_configuration_on_startup()
     connect_to_mongo()
     app.state.db = get_database()
     print("Connected to MongoDB database.")
@@ -227,6 +231,7 @@ def root():
             "/projects/{project_id}/mint-records/prepare",
             "/projects/{project_id}/mint-records",
             "/projects/{project_id}/mint-status",
+            "/admin/mint-records/maintenance/backfill",
             "/mint-jobs/run-next",
             "/tokens/{public_token_id}",
             "/link-keys/my-list",

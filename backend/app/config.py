@@ -4,6 +4,9 @@ from pathlib import Path
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+BACKEND_ENV_PATH = Path(__file__).resolve().parents[1] / ".env"
+ROOT_ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
+
 
 class Settings(BaseSettings):
     app_name: str = Field(
@@ -253,7 +256,7 @@ class Settings(BaseSettings):
     )
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(str(BACKEND_ENV_PATH), str(ROOT_ENV_PATH)),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",

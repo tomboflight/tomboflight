@@ -8,7 +8,7 @@
       name="description"
       content="Your private Tomb of Light customer or internal operations workspace."
     />
-    <link rel="stylesheet" href="styles.css?v=20260329-1" />
+    <link rel="stylesheet" href="styles.css?v=20260331-1" />
   </head>
   <body class="portal-dashboard-body">
     <div class="site-watermark" aria-hidden="true"></div>
@@ -382,6 +382,132 @@
               </div>
             </div>
 
+            <div class="form-panel portal-anchor-panel" data-dashboard-customer-only>
+              <div class="anchor-status-row">
+                <span class="eyebrow">Legacy Anchor</span>
+                <span class="presence-badge anchor-status-badge" data-anchor-status-badge>
+                  Checking Status
+                </span>
+              </div>
+
+              <p class="card-copy" data-anchor-status-copy>
+                Loading your on-chain legacy anchor status...
+              </p>
+
+              <p class="card-copy anchor-proof-note" data-anchor-proof-note>
+                Eligible packages will show mint status, public-safe proof links, and wallet ownership checks here.
+              </p>
+
+              <p class="card-copy anchor-proof-copy" data-anchor-proof-copy>
+                What you prove publicly is the Tomb of Light anchor, not your private family archive.
+              </p>
+
+              <div class="grid-3 anchor-proof-grid">
+                <div class="anchor-proof-item">
+                  <div class="card-number">A</div>
+                  <h3>Chain</h3>
+                  <p class="card-copy" data-anchor-chain>—</p>
+                </div>
+                <div class="anchor-proof-item">
+                  <div class="card-number">B</div>
+                  <h3>Contract</h3>
+                  <p class="card-copy" data-anchor-contract>—</p>
+                </div>
+                <div class="anchor-proof-item">
+                  <div class="card-number">C</div>
+                  <h3>Token ID</h3>
+                  <p class="card-copy" data-anchor-token-id>—</p>
+                </div>
+                <div class="anchor-proof-item">
+                  <div class="card-number">D</div>
+                  <h3>Transaction Hash</h3>
+                  <p class="card-copy" data-anchor-tx-hash>—</p>
+                </div>
+                <div class="anchor-proof-item">
+                  <div class="card-number">E</div>
+                  <h3>Recipient Wallet</h3>
+                  <p class="card-copy" data-anchor-recipient-wallet>—</p>
+                </div>
+                <div class="anchor-proof-item">
+                  <div class="card-number">F</div>
+                  <h3>Public Token ID</h3>
+                  <p class="card-copy" data-anchor-public-token-id>—</p>
+                </div>
+              </div>
+
+              <div class="anchor-proof-preview-shell">
+                <a
+                  class="anchor-poster-card"
+                  href="#"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-anchor-poster-link-wrapper
+                >
+                  <img
+                    class="anchor-poster-preview"
+                    alt="Legacy Anchor poster preview"
+                    data-anchor-poster-preview
+                    style="display: none"
+                  />
+                  <span class="anchor-poster-empty" data-anchor-poster-empty>
+                    Poster preview will appear here once your public-safe anchor art is ready.
+                  </span>
+                </a>
+              </div>
+
+              <div class="inline-actions anchor-proof-actions">
+                <a
+                  class="btn btn-primary"
+                  href="#"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-anchor-explorer-link
+                  style="display: none"
+                >
+                  View on Base Explorer
+                </a>
+                <a
+                  class="btn btn-secondary"
+                  href="#"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-anchor-metadata-link
+                  style="display: none"
+                >
+                  View Metadata
+                </a>
+                <a
+                  class="btn btn-secondary"
+                  href="#"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-anchor-poster-link
+                  style="display: none"
+                >
+                  View Poster
+                </a>
+                <button class="btn btn-secondary" type="button" data-anchor-copy-contract>
+                  Copy Contract
+                </button>
+                <button class="btn btn-secondary" type="button" data-anchor-copy-tx>
+                  Copy Tx Hash
+                </button>
+                <button class="btn btn-secondary" type="button" data-anchor-copy-token>
+                  Copy Token ID
+                </button>
+                <button class="btn btn-secondary" type="button" data-anchor-copy-public-token>
+                  Copy Public Token ID
+                </button>
+                <button class="btn btn-secondary" type="button" data-anchor-verify-wallet>
+                  Verify Wallet Ownership
+                </button>
+              </div>
+
+              <p class="card-copy anchor-verify-status" data-anchor-verify-status>
+                Wallet proof will appear here when you verify the recipient wallet.
+              </p>
+            </div>
+
             <div class="form-panel portal-orders-panel" data-dashboard-customer-only>
               <span class="eyebrow">Your Orders</span>
               <p class="card-copy" data-orders-status>
@@ -535,7 +661,7 @@
     <script src="config.js?v=20260329-1"></script>
     <script src="app.js?v=20260329-1"></script>
     <script src="auth.js?v=20260329-1"></script>
-    <script src="dashboard-intake.js?v=20260328-8"></script>
+    <script src="dashboard-intake.js?v=20260331-1"></script>
     <script src="dashboard-admin.js?v=20260330-1"></script>
   </body>
 </html>
