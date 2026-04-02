@@ -6,10 +6,12 @@ from urllib.parse import quote
 from bson import ObjectId
 
 from app.config import settings
+from app.core.password_policy import validate_password_strength
 from app.core.security import create_access_token, hash_password, verify_password
 from app.database import get_database
 from app.schemas.auth import UserCreate
 from app.services.audit_log_service import create_audit_log
+from app.services.email_service import send_password_changed_email, send_password_reset_email
 
 PUBLIC_SIGNUP_ROLE = "user"
 
@@ -123,6 +125,8 @@ def register_user(payload: UserCreate) -> dict | None:
     if existing is not None:
         return None
 
+    validate_password_strength(payload.password)
+
     user = {
         "email": payload.email.lower(),
         "full_name": payload.full_name.strip(),
@@ -211,12 +215,12 @@ def request_password_reset(
 ) -> dict[str, object]:
     normalized_email = _normalize_text(email).lower()
     generic_message = (
-        "If this account exists, Tomb of Light created a secure password reset request."
+        "If this account exists, a password reset link has been sent to that email address."
     )
     generic_response: dict[str, object] = {
         "success": True,
         "message": generic_message,
-        "delivery_mode": "admin_assisted",
+        "delivery_mode": "email",
     }
 
     db = get_database()
@@ -266,10 +270,23 @@ def request_password_reset(
     except Exception:
         pass
 
+    reset_url = _build_password_reset_url(token, normalized_email)
+
+    # Send reset email (best-effort; never blocks the auth flow).
+    if not bool(expose_token):
+        try:
+            send_password_reset_email(
+                to_email=normalized_email,
+                reset_url=reset_url,
+                expires_at=expires_at,
+            )
+        except Exception:
+            pass
+
     should_expose = bool(expose_token) or _should_expose_password_reset_preview()
     if should_expose:
         generic_response["reset_token"] = token
-        generic_response["reset_url"] = _build_password_reset_url(token, normalized_email)
+        generic_response["reset_url"] = reset_url
         generic_response["expires_at"] = expires_at
 
     return generic_response
@@ -279,6 +296,8 @@ def reset_password_with_token(token: str, new_password: str) -> dict[str, object
     normalized_token = _normalize_text(token)
     if not normalized_token:
         raise ValueError("Password reset token is required.")
+
+    validate_password_strength(new_password)
 
     db = get_database()
     if db is None:
@@ -326,6 +345,14 @@ def reset_password_with_token(token: str, new_password: str) -> dict[str, object
     except Exception:
         pass
 
+    # Notify user (best-effort).
+    try:
+        send_password_changed_email(
+            to_email=_normalize_text(user.get("email")).lower()
+        )
+    except Exception:
+        pass
+
     return {
         "success": True,
         "message": "Password reset completed successfully.",
@@ -338,6 +365,8 @@ def change_password(
     current_password: str,
     new_password: str,
 ) -> dict[str, object]:
+    validate_password_strength(new_password)
+
     db = get_database()
     if db is None:
         raise RuntimeError("Database is not connected.")
@@ -369,6 +398,14 @@ def change_password(
             "user",
             user_id,
             {"email": _normalize_text(user.get("email")).lower()},
+        )
+    except Exception:
+        pass
+
+    # Notify user (best-effort).
+    try:
+        send_password_changed_email(
+            to_email=_normalize_text(user.get("email")).lower()
         )
     except Exception:
         pass

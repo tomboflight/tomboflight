@@ -147,6 +147,9 @@ def password_change_route(
     response: Response,
     current_user: dict = Depends(get_current_user),
 ):
+    if payload.new_password != payload.confirm_new_password:
+        raise HTTPException(status_code=400, detail="New passwords do not match.")
+
     try:
         result = change_password(
             _current_user_id(current_user),

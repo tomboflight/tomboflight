@@ -243,6 +243,32 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("PUBLIC_STORAGE_DIR"),
     )
 
+    # Email / SMTP
+    email_sender: str = Field(
+        default="admin@tomboflight.com",
+        validation_alias=AliasChoices("EMAIL_SENDER"),
+    )
+    smtp_host: str = Field(
+        default="",
+        validation_alias=AliasChoices("SMTP_HOST"),
+    )
+    smtp_port: int = Field(
+        default=0,
+        validation_alias=AliasChoices("SMTP_PORT"),
+    )
+    smtp_username: str = Field(
+        default="",
+        validation_alias=AliasChoices("SMTP_USERNAME"),
+    )
+    smtp_password: str = Field(
+        default="",
+        validation_alias=AliasChoices("SMTP_PASSWORD"),
+    )
+    smtp_use_tls: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("SMTP_USE_TLS"),
+    )
+
     allowed_origins: str = Field(
         default=(
             "http://127.0.0.1:5500,"
