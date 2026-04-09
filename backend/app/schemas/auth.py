@@ -7,7 +7,7 @@ POLICY_VERSION_DEFAULT = "2026-03-26"
 
 class UserCreate(BaseModel):
     email: EmailStr
-    password: str = Field(..., min_length=8, max_length=128)
+    password: str = Field(..., min_length=12, max_length=128)
     full_name: str = Field(..., min_length=1, max_length=150)
 
     terms_accepted: bool = Field(...)
@@ -31,12 +31,13 @@ class PasswordResetRequest(BaseModel):
 
 class PasswordResetConfirm(BaseModel):
     token: str = Field(..., min_length=16, max_length=512)
-    new_password: str = Field(..., min_length=8, max_length=128)
+    new_password: str = Field(..., min_length=12, max_length=128)
 
 
 class PasswordChangeRequest(BaseModel):
     current_password: str = Field(..., min_length=8, max_length=128)
-    new_password: str = Field(..., min_length=8, max_length=128)
+    new_password: str = Field(..., min_length=12, max_length=128)
+    confirm_new_password: str = Field(..., min_length=12, max_length=128)
 
 
 class PasswordResetResponse(BaseModel):

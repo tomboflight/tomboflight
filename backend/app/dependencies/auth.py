@@ -76,8 +76,21 @@ def _is_unsafe_method(method: str) -> bool:
     return method.upper() in {"POST", "PUT", "PATCH", "DELETE"}
 
 
+def _is_public_password_reset_route(request: Request) -> bool:
+    path = str(request.url.path or "").rstrip("/")
+    return path in {
+        "/auth/password-reset/request",
+        "/auth/password-reset/confirm",
+    }
+
+
 def _enforce_cookie_auth_origin(request: Request) -> None:
     if not _is_unsafe_method(request.method):
+        return
+
+    # Public password-reset routes must remain accessible even when a stale
+    # auth cookie is present in the browser.
+    if _is_public_password_reset_route(request):
         return
 
     origin = _extract_request_origin(request)
