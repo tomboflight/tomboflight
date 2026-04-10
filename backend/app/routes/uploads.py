@@ -467,6 +467,7 @@ def _enforce_workspace_upload_limit(context: dict[str, Any]) -> None:
 
 
 def _workspace_storage_used_bytes(*, db: Any, project_id: str, family_id: str) -> int:
+    """Return cumulative uploaded size for a project/family, treating missing size as zero."""
     query: dict[str, Any] = {}
     if project_id:
         query["project_id"] = project_id

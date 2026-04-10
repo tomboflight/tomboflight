@@ -419,6 +419,8 @@ WORKFLOW_PHASE_BY_STATE: dict[str, str] = {
     "archived": "archived",
 }
 
+BYTES_PER_GB = 1024 * 1024 * 1024
+
 
 def _db():
     db = get_database()
@@ -567,10 +569,11 @@ def _resolve_workflow_state(project_id: str | None) -> dict[str, Any]:
     if project is None:
         return {"state": None, "phase": None}
 
-    latest_event = db["workflow_events"].find_one(
-        {"project_id": str(project.get("_id"))},
-        sort=[("created_at", -1)],
-    )
+    project_id_value = str(project.get("_id"))
+    workflow_query: dict[str, Any] = {"project_id": project_id_value}
+    if ObjectId.is_valid(project_id_value):
+        workflow_query = {"project_id": {"$in": [project_id_value, ObjectId(project_id_value)]}}
+    latest_event = db["workflow_events"].find_one(workflow_query, sort=[("created_at", -1)])
     return {
         "state": _normalize_value(project.get("status")) or None,
         "phase": _normalize_value(project.get("phase")) or None,
@@ -719,7 +722,7 @@ def enforce_limit(
     elif normalized_limit == "family_members":
         max_allowed = int(entitlements.get("max_members") or 0)
     elif normalized_limit == "vault_storage_bytes":
-        max_allowed = int(float(entitlements.get("max_storage_gb") or 0) * 1024 * 1024 * 1024)
+        max_allowed = int(float(entitlements.get("max_storage_gb") or 0) * BYTES_PER_GB)
     else:
         raise ValueError(f"Unsupported limit type: {limit_type}")
 
