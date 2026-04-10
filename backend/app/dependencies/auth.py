@@ -83,7 +83,7 @@ def _is_public_password_reset_route(request: Request) -> bool:
 
 
 def _allowed_cookie_auth_origins() -> set[str]:
-    configured = getattr(settings, "allowed_origins_list", []) or []
+    configured = settings.allowed_origins_list or []
     normalized = {
         _normalize_origin(origin)
         for origin in configured

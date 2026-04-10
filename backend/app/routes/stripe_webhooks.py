@@ -83,6 +83,7 @@ async def stripe_webhook(request: Request) -> Dict[str, Any]:
 
     order_result: Dict[str, Any] = {"order_id": None}
 
+    # Order upsert currently maps Stripe Checkout sessions to orders.
     if event_type == "checkout.session.completed":
         try:
             order_result = upsert_order_from_stripe_event(event)
