@@ -12,7 +12,7 @@ from app.services.link_key_service import (
     get_active_key_doc_for_project,
     get_key_doc_by_value,
     get_project_summary,
-    list_owned_project_ids,
+    list_accessible_link_key_project_ids,
     project_supports_link_keys,
     user_can_access_project,
 )
@@ -90,7 +90,7 @@ def list_link_requests_for_user(
             return []
         owned_project_ids = [str(project_id)]
     else:
-        owned_project_ids = list_owned_project_ids(user_id, user_email)
+        owned_project_ids = list_accessible_link_key_project_ids(user_id, user_email)
 
     if not owned_project_ids:
         return []

@@ -224,7 +224,10 @@ def user_can_access_project(
     )
 
 
-def list_owned_project_ids(user_id: str, user_email: str = "") -> list[str]:
+def list_accessible_link_key_project_ids(
+    user_id: str,
+    user_email: str = "",
+) -> list[str]:
     project_ids: list[str] = []
     seen: set[str] = set()
 
@@ -264,6 +267,10 @@ def list_owned_project_ids(user_id: str, user_email: str = "") -> list[str]:
     return project_ids
 
 
+def list_owned_project_ids(user_id: str, user_email: str = "") -> list[str]:
+    return list_accessible_link_key_project_ids(user_id, user_email)
+
+
 def get_active_key_doc_for_project(project_id: str) -> dict[str, Any] | None:
     return _keys_collection().find_one(
         {
@@ -299,7 +306,7 @@ def list_link_keys_for_user(
             return []
         owned_project_ids = [str(project_id)]
     else:
-        owned_project_ids = list_owned_project_ids(user_id, user_email)
+        owned_project_ids = list_accessible_link_key_project_ids(user_id, user_email)
 
     if not owned_project_ids:
         return []
