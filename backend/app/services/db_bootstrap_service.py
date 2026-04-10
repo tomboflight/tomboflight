@@ -143,7 +143,6 @@ CORE_COLLECTIONS: dict[str, list[tuple[list[tuple[str, int]], dict]]] = {
     ],
     "audit_logs": [
         ([("action", ASCENDING)], {"name": "idx_audit_logs_action"}),
-        ([("created_at", ASCENDING)], {"name": "idx_audit_logs_created_at"}),
         ([("timestamp", DESCENDING)], {"name": "idx_audit_logs_timestamp"}),
         ([("target_type", ASCENDING)], {"name": "idx_audit_logs_target_type"}),
         ([("target_id", ASCENDING)], {"name": "idx_audit_logs_target_id"}),

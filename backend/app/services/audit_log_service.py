@@ -33,8 +33,6 @@ def write_audit_log(
         "actor_user_id": _normalize(actor_user_id) or None,
         "actor_email": _normalize(actor_email).lower() or None,
         "actor_name": _normalize(actor_name) or None,
-        "entity_type": _normalize(target_type, "system"),
-        "entity_id": _normalize(target_id, "unknown"),
         "target_type": _normalize(target_type, "system"),
         "target_id": _normalize(target_id, "unknown"),
         "before": before or {},
@@ -74,7 +72,7 @@ def list_audit_logs() -> List[Dict[str, Any]]:
 
     logs: List[Dict[str, Any]] = []
 
-    for log in db.audit_logs.find().sort("created_at", -1):
+    for log in db.audit_logs.find().sort("timestamp", -1):
         log["_id"] = str(log["_id"])
         logs.append(log)
 
