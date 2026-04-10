@@ -2132,6 +2132,28 @@ textarea {
   background: rgba(255, 255, 255, 0.03);
 }
 
+/*
+ * CSS-first admin/customer dashboard split.
+ *
+ * auth.js sets body[data-portal-mode] before revealing [data-auth-required],
+ * so these rules eliminate the flash of customer "Loading…" sections that
+ * admin users would otherwise see while the second (now removed) /auth/me
+ * call resolved.
+ *
+ * - portal-mode="admin"    → hide customer-only sections declaratively
+ * - portal-mode="customer" → hide admin-only sections declaratively
+ *
+ * Until portal-mode is set (page just loaded), [data-auth-required] is
+ * display:none via its inline style, so nothing is revealed prematurely.
+ */
+body[data-portal-mode="admin"] [data-dashboard-customer-only] {
+  display: none;
+}
+
+body[data-portal-mode="customer"] [data-dashboard-admin-only] {
+  display: none;
+}
+
 @keyframes portalSpin {
   from {
     transform: rotate(0deg);

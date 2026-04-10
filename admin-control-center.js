@@ -6,6 +6,11 @@
     return;
   }
 
+  // Role-key set used to determine which internal role a user holds.
+  // app.js exports a canonical isInternalRole() helper for boolean checks;
+  // admin-control-center.js also needs the specific role key to drive
+  // SECTION_ACCESS and role-title logic, so the set is retained here.
+  // Keep this list in sync with INTERNAL_ROLE_KEYS in app.js.
   const INTERNAL_ROLE_KEYS = new Set([
     "admin",
     "super_admin",

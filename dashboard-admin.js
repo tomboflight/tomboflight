@@ -52,7 +52,12 @@
     );
   }
 
+  // Use the canonical check from app.js when available, falling back to the
+  // local role-key lookup (which is also needed for role-specific card sets).
   function isInternalRole(me) {
+    if (app && typeof app.isInternalRole === "function") {
+      return app.isInternalRole(me);
+    }
     return Boolean(getInternalRoleKey(me));
   }
 
@@ -224,14 +229,6 @@
     });
   }
 
-  function hideCustomerPanels() {
-    document
-      .querySelectorAll("[data-dashboard-customer-only]")
-      .forEach(function (node) {
-        node.style.display = "none";
-      });
-  }
-
   function hideCustomerNavItems() {
     [
       'a[href="intake-review.html"]',
@@ -384,29 +381,37 @@
     anchor.prepend(panel);
   }
 
-  async function setupAdminDashboardTools() {
+  function applyAdminDashboardLayer(me) {
     const dashboard = document.querySelector("[data-dashboard]");
-    if (!dashboard) return;
+    if (!dashboard || !isInternalRole(me)) return;
 
-    try {
-      const me = await app.apiRequest("/auth/me", { method: "GET" });
-
-      if (isInternalRole(me)) {
-        applyAdminPortalTheme(me);
-        hideCustomerPanels();
-        hideCustomerNavItems();
-        hideCustomerBillingLinks();
-        showAdminOnlyPanels();
-        updateHeroForInternal();
-        injectAdminPanel(me);
-        enableAdminWorkspaceLinks(me);
-      }
-    } catch (error) {
-      console.error("Failed to load internal dashboard layer:", error);
-    }
+    applyAdminPortalTheme(me);
+    // Customer-only panels are hidden declaratively by CSS using
+    // body[data-portal-mode="admin"] — no DOM iteration needed here.
+    hideCustomerNavItems();
+    hideCustomerBillingLinks();
+    showAdminOnlyPanels();
+    updateHeroForInternal();
+    injectAdminPanel(me);
+    enableAdminWorkspaceLinks(me);
   }
 
   document.addEventListener("DOMContentLoaded", function () {
-    setupAdminDashboardTools();
+    // auth.js fetches /auth/me in setupDashboard() and publishes
+    // tol:user-resolved with the result.  We subscribe here instead of
+    // making a duplicate network request.
+    if (window.TOLResolvedUser) {
+      // auth.js resolved before this DOMContentLoaded handler ran.
+      applyAdminDashboardLayer(window.TOLResolvedUser);
+      return;
+    }
+
+    window.addEventListener(
+      "tol:user-resolved",
+      function (event) {
+        applyAdminDashboardLayer(event.detail.user);
+      },
+      { once: true },
+    );
   });
 })();

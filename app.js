@@ -35,6 +35,34 @@
     "command_report_addon",
   ]);
 
+  // Canonical set of internal-role values shared across all modules.
+  // Any module needing role gating should call app.isInternalRole() rather
+  // than maintaining its own copy of this set.
+  const INTERNAL_ROLE_KEYS = new Set([
+    "admin",
+    "super_admin",
+    "root_admin",
+    "platform_admin",
+    "operations_admin",
+    "finance_admin",
+    "marketing_admin",
+    "executive_technology",
+    "operations",
+    "finance",
+    "marketing",
+  ]);
+
+  function isInternalRole(user) {
+    if (!user || typeof user !== "object") return false;
+    return [
+      String(user.role || "").trim().toLowerCase(),
+      String(user.access_tier || "").trim().toLowerCase(),
+      String(user.department_role || "").trim().toLowerCase(),
+    ].some(function (v) {
+      return v && INTERNAL_ROLE_KEYS.has(v);
+    });
+  }
+
   function isLocalApp() {
     return LOCAL_HOSTS.has(window.location.hostname);
   }
@@ -648,6 +676,7 @@
 
   const sharedApi = {
     isLocalApp,
+    isInternalRole,
     getApiBaseUrl,
     getPaymentLinks,
     saveToken,
