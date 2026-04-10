@@ -4,18 +4,16 @@ from typing import Any, Optional
 from bson import ObjectId
 from fastapi import HTTPException, status
 
-from app.schemas.relationship import ALLOWED_RELATIONSHIP_TYPES, RelationshipCreate
+from app.core.relationship_catalog import (
+    ALLOWED_RELATIONSHIP_TYPE_SET,
+    ALLOWED_RELATIONSHIP_TYPES,
+    ANCESTRY_RELATIONSHIP_TYPES,
+    BIOLOGICAL_PARENT_RELATIONSHIP_TYPE,
+    SYMMETRIC_RELATIONSHIP_TYPES,
+    normalize_relationship_type,
+)
+from app.schemas.relationship import RelationshipCreate
 
-
-SYMMETRIC_RELATIONSHIP_TYPES = {"spouse", "sibling"}
-
-ANCESTRY_RELATIONSHIP_TYPES = {
-    "parent_child",
-    "adoptive_parent_child",
-    "step_parent_child",
-}
-
-BIOLOGICAL_PARENT_RELATIONSHIP_TYPE = "parent_child"
 MIN_PARENT_CHILD_AGE_GAP = 12
 
 
@@ -43,14 +41,17 @@ class RelationshipGuardrailService:
                     ("target_member_id", 1),
                     ("relationship_type", 1),
                 ],
-                name="uniq_relationship_edge",
+                name="idx_relationships_edge_unique",
                 unique=True,
             )
         except Exception as e:
             print(f"Warning: could not create relationship index: {e}")
 
     def validate_relationship_payload(self, payload: RelationshipCreate) -> None:
-        if payload.relationship_type not in ALLOWED_RELATIONSHIP_TYPES:
+        normalized_relationship_type = normalize_relationship_type(
+            payload.relationship_type
+        )
+        if normalized_relationship_type not in ALLOWED_RELATIONSHIP_TYPE_SET:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=(
@@ -58,6 +59,7 @@ class RelationshipGuardrailService:
                     f"Allowed values: {sorted(ALLOWED_RELATIONSHIP_TYPES)}"
                 ),
             )
+        payload.relationship_type = normalized_relationship_type
 
         if payload.source_member_id == payload.target_member_id:
             raise HTTPException(

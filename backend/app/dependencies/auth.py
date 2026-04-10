@@ -8,6 +8,12 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.config import settings
 from app.core.package_catalog import get_package
+from app.core.role_catalog import (
+    INTERNAL_ADMIN_ROLE_CODES,
+    collect_role_codes,
+    has_internal_admin_role,
+    normalize_role_code,
+)
 from app.core.security import decode_access_token
 from app.database import get_database
 from app.services.audit_log_service import write_audit_log
@@ -15,22 +21,14 @@ from app.services.auth_service import get_user_by_email
 from app.services.control_layer_service import create_workflow_event
 from app.services.order_service import get_orders_for_user
 from app.services.project_entitlement_service import list_user_project_entitlements
+from app.services.project_membership_service import (
+    get_project_access_snapshot,
+    list_accessible_project_ids,
+)
 
 COOKIE_NAME = "tol_access_token"
 
-INTERNAL_ADMIN_KEYS = {
-    "admin",
-    "super_admin",
-    "root_admin",
-    "platform_admin",
-    "operations_admin",
-    "finance_admin",
-    "marketing_admin",
-    "executive_technology",
-    "operations",
-    "finance",
-    "marketing",
-}
+INTERNAL_ADMIN_KEYS = set(INTERNAL_ADMIN_ROLE_CODES)
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -139,12 +137,13 @@ def _get_token_from_request(
 
 
 def _has_internal_admin_access(user: dict[str, Any]) -> bool:
-    values = {
-        _normalize_value(user.get("role")),
-        _normalize_value(user.get("access_tier")),
-        _normalize_value(user.get("department_role")),
-    }
-    return any(value in INTERNAL_ADMIN_KEYS for value in values if value)
+    return has_internal_admin_role(
+        (
+            user.get("role"),
+            user.get("access_tier"),
+            user.get("department_role"),
+        )
+    )
 
 
 def has_internal_admin_access(user: dict[str, Any]) -> bool:
@@ -471,11 +470,9 @@ def _load_user_by_id(user_id: str) -> dict[str, Any] | None:
 
 
 def _collect_role_codes_for_user(user: dict[str, Any]) -> set[str]:
-    role_codes: set[str] = set()
-    for field_name in ("role", "access_tier", "department_role"):
-        value = _normalize_value(user.get(field_name))
-        if value:
-            role_codes.add(value)
+    role_codes = collect_role_codes(
+        user.get(field_name) for field_name in ("role", "access_tier", "department_role")
+    )
 
     user_id = _current_user_id(user)
     if user_id:
@@ -483,7 +480,7 @@ def _collect_role_codes_for_user(user: dict[str, Any]) -> set[str]:
             {"user_id": user_id, "status": {"$in": ["active", "enabled", ""]}}
         )
         for assignment in assignments:
-            role_code = _normalize_value(assignment.get("role_code"))
+            role_code = normalize_role_code(assignment.get("role_code"))
             if role_code:
                 role_codes.add(role_code)
     return role_codes
@@ -524,37 +521,43 @@ def _resolve_project_scope(user: dict[str, Any], project_id: str | None = None) 
         if project is None:
             return {"project_id": project_id, "accessible": False}
 
-        owner_user_id = _normalize_value(project.get("owner_user_id"))
-        owner_email = _normalize_value(project.get("owner_email"))
-        current_user_id = _current_user_id(user)
-        current_user_email = _current_user_email(user)
-        accessible = bool(
-            has_internal_admin_access(user)
-            or (current_user_id and current_user_id == owner_user_id)
-            or (current_user_email and current_user_email == owner_email)
+        access_snapshot = get_project_access_snapshot(
+            project,
+            user_id=_current_user_id(user),
+            email=_current_user_email(user),
         )
         return {
             "project_id": str(project.get("_id")),
-            "accessible": accessible,
-            "owner_user_id": owner_user_id,
-            "owner_email": owner_email,
+            "accessible": bool(
+                has_internal_admin_access(user) or access_snapshot.get("accessible")
+            ),
+            "owner_user_id": access_snapshot.get("owner_user_id"),
+            "owner_email": access_snapshot.get("owner_email"),
+            "access_via": access_snapshot.get("via"),
+            "member_role": access_snapshot.get("member_role"),
         }
 
     if has_internal_admin_access(user):
         return {"scope": "all", "project_count": int(projects.count_documents({}))}
 
-    filters: list[dict[str, Any]] = []
     user_id = _current_user_id(user)
     user_email = _current_user_email(user)
+    project_ids = set(list_accessible_project_ids(user_id=user_id, email=user_email))
+
+    filters: list[dict[str, Any]] = []
     if user_id:
         filters.append({"owner_user_id": user_id})
     if user_email:
         filters.append({"owner_email": user_email})
-    if not filters:
+
+    if filters:
+        docs = projects.find({"$or": filters}, {"_id": 1})
+        project_ids.update(str(doc.get("_id")) for doc in docs if doc.get("_id") is not None)
+
+    if not project_ids:
         return {"scope": "owned", "project_ids": []}
 
-    docs = projects.find({"$or": filters}, {"_id": 1})
-    return {"scope": "owned", "project_ids": [str(doc.get("_id")) for doc in docs]}
+    return {"scope": "owned", "project_ids": sorted(project_ids)}
 
 
 def _resolve_workflow_state(project_id: str | None) -> dict[str, Any]:

@@ -3,6 +3,8 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
+from app.core.package_type_catalog import normalize_package_type
+
 
 PACKAGE_CODE_ALIASES: dict[str, str] = {
     "legacy-snapshot": "legacy_snapshot",
@@ -545,22 +547,31 @@ ADDON_CATALOG: dict[str, dict[str, Any]] = {
 }
 
 
+def _copy_package(value: dict[str, Any]) -> dict[str, Any]:
+    package = deepcopy(value)
+    package["package_lane"] = normalize_package_type(package.get("package_lane"))
+    return package
+
+
 def get_package_catalog() -> dict[str, dict[str, Any]]:
-    return deepcopy(PACKAGE_CATALOG)
+    return {
+        package_code: _copy_package(package)
+        for package_code, package in PACKAGE_CATALOG.items()
+    }
 
 
 def get_addon_catalog() -> dict[str, dict[str, Any]]:
     return deepcopy(ADDON_CATALOG)
 
 
-def _normalize_package_code(package_code: str) -> str:
+def normalize_package_code(package_code: str) -> str:
     return PACKAGE_CODE_ALIASES.get(
         str(package_code or "").strip(),
         str(package_code or "").strip(),
     )
 
 
-def _normalize_addon_code(addon_code: str) -> str:
+def normalize_addon_code(addon_code: str) -> str:
     return ADDON_CODE_ALIASES.get(
         str(addon_code or "").strip(),
         str(addon_code or "").strip(),
@@ -568,15 +579,15 @@ def _normalize_addon_code(addon_code: str) -> str:
 
 
 def get_package(package_code: str) -> dict[str, Any] | None:
-    normalized = _normalize_package_code(package_code)
+    normalized = normalize_package_code(package_code)
     if not normalized:
         return None
     value = PACKAGE_CATALOG.get(normalized)
-    return deepcopy(value) if value else None
+    return _copy_package(value) if value else None
 
 
 def get_addon(addon_code: str) -> dict[str, Any] | None:
-    normalized = _normalize_addon_code(addon_code)
+    normalized = normalize_addon_code(addon_code)
     if not normalized:
         return None
     value = ADDON_CATALOG.get(normalized)

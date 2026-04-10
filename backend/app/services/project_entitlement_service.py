@@ -7,6 +7,7 @@ from typing import Any, cast
 from pymongo.collection import Collection
 
 from app.database import get_database
+from app.services.project_membership_service import list_accessible_project_ids
 from app.services.entitlement_service import (
     compute_upgrade_quote,
     resolve_project_entitlements,
@@ -146,13 +147,22 @@ def list_user_project_entitlements(
     active_only: bool = True,
 ) -> list[dict[str, Any]]:
     collection = _collection()
+    project_ids = list_accessible_project_ids(user_id=user_id)
 
-    query: dict[str, Any] = {"user_id": user_id}
+    or_filters: list[dict[str, Any]] = []
+    if user_id:
+        or_filters.append({"user_id": user_id})
+    if project_ids:
+        or_filters.append({"project_id": {"$in": project_ids}})
+
+    if not or_filters:
+        return []
+
+    query: dict[str, Any] = {"$or": or_filters}
     if active_only:
         query["status"] = "active"
 
     cursor = collection.find(query).sort("updated_at", -1)
-
     return [
         serialized
         for serialized in (_serialize(cast(dict[str, Any], document)) for document in cursor)

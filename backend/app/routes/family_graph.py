@@ -5,7 +5,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.database import get_database
 from app.dependencies.auth import get_current_user, has_internal_admin_access
-from app.services.viewer_manifest_service import ensure_project_workspace_anchor
 from app.services.workspace_access_service import require_workspace_capability
 
 router = APIRouter(prefix="/families", tags=["Family Graph"])
@@ -144,23 +143,8 @@ def get_family_graph(
     relationships_cursor = db.relationships.find(relationship_query)
     members_raw = list(members_cursor)
     relationships_raw = list(relationships_cursor)
-
-    if not members_raw:
-        ensured_family, _primary_member, ensured_project = ensure_project_workspace_anchor(
-            project=project,
-        )
-        if ensured_family is not None:
-            family = ensured_family
-            resolved_family_id = str(family.get("_id"))
-        if ensured_project is not None:
-            project = ensured_project
-
-        member_query = {"family_id": {"$in": _family_id_candidates(resolved_family_id)}}
-        relationship_query = {"family_id": {"$in": _family_id_candidates(resolved_family_id)}}
-        members_raw = list(
-            db.family_members.find(member_query).sort("generation", 1),
-        )
-        relationships_raw = list(db.relationships.find(relationship_query))
+    # Phase 1 keeps this GET route read-only; anchor provisioning now happens
+    # only through explicit write paths such as the intake pipeline.
 
     members = []
     for member in members_raw:

@@ -3,6 +3,10 @@ from typing import Any, Dict, Optional
 from bson import ObjectId
 
 from app.core.metadata import apply_create_metadata, apply_update_metadata
+from app.core.state_catalog import (
+    normalize_approval_state,
+    normalize_relationship_link_state,
+)
 from app.database import get_database
 from app.services.audit_log_service import create_audit_log
 
@@ -69,7 +73,8 @@ def ensure_identity_link(member_id: str, canonical_person_id: str, actor_user_id
     payload = {
         "family_member_id": member_id,
         "canonical_person_id": canonical_person_id,
-        "status": "active",
+        "status": normalize_relationship_link_state("linked"),
+        "link_status": normalize_relationship_link_state("linked"),
     }
     payload = apply_create_metadata(payload, actor_user_id)
     db.identity_links.insert_one(payload)
@@ -87,11 +92,11 @@ def approve_match_candidate(candidate_id: str, actor_user_id: Optional[str] = No
     if not candidate:
         raise ApprovalError("Match candidate not found.")
 
-    if candidate.get("status") != "pending":
+    if normalize_approval_state(candidate.get("status")) != "pending":
         raise ApprovalError("Only pending match candidates can be approved.")
 
-    source_member_id = candidate.get("source_member_id")
-    target_member_id = candidate.get("target_member_id")
+    source_member_id = candidate.get("source_member_id") or candidate.get("member_id_a")
+    target_member_id = candidate.get("target_member_id") or candidate.get("member_id_b")
 
     if not source_member_id or not target_member_id:
         raise ApprovalError("Candidate is missing member references.")
@@ -115,7 +120,7 @@ def approve_match_candidate(candidate_id: str, actor_user_id: Optional[str] = No
     ensure_identity_link(target_member_id, canonical_person_id, actor_user_id)
 
     update_data = {
-        "status": "approved",
+        "status": normalize_approval_state("approved"),
         "approved_by": actor_user_id,
         "canonical_person_id": canonical_person_id,
     }

@@ -5,10 +5,11 @@ from typing import Any, Iterable
 from bson import ObjectId
 from fastapi import HTTPException, status
 
-from app.core.package_catalog import get_package
+from app.core.package_catalog import get_package, normalize_package_code
 from app.database import get_database
 from app.dependencies.auth import has_internal_admin_access
 from app.services.entitlement_service import resolve_project_entitlements
+from app.services.project_membership_service import get_project_access_snapshot
 
 PAID_PACKAGE_STATUSES = {
     "paid",
@@ -235,6 +236,7 @@ def _resolve_project_entitlement_map(project: dict[str, Any]) -> dict[str, Any]:
         or project.get("package_slug")
         or project.get("package_type")
     )
+    package_code = normalize_package_code(package_code)
     active_addons = list((entitlement_doc or {}).get("active_addons") or [])
 
     resolved_entitlements: dict[str, Any] = {}
@@ -267,6 +269,14 @@ def _project_is_visible_to_user(
     current_user_id = _current_user_id(current_user)
     current_user_email = _current_user_email(current_user)
     current_user_name = _current_user_name(current_user)
+    access_snapshot = get_project_access_snapshot(
+        project,
+        user_id=current_user_id,
+        email=current_user_email,
+    )
+
+    if access_snapshot.get("accessible"):
+        return True
 
     owner_user_ids = {
         _normalize_value(project.get("owner_user_id")),
