@@ -618,7 +618,7 @@
         </div>
         <div class="admin-card-meta">
           <p class="card-copy"><strong>Target:</strong> ${escapeHtml(item.target_type || item.entity_type || "—")} / <span class="admin-id-ref">${escapeHtml(shortId(item.target_id || item.entity_id))}</span></p>
-          <p class="card-copy"><strong>Actor:</strong> ${escapeHtml(item.actor_email || item.actor_name || shortId(item.actor_user_id) || "—")}</p>
+          <p class="card-copy"><strong>Actor:</strong> ${escapeHtml(item.actor_email || item.actor_name || shortId(item.actor_user_id))}</p>
           <p class="card-copy"><strong>Result:</strong> ${buildStatusChip(item.result, item.result === "success" ? "success" : item.result === "failure" ? "error" : "default")}</p>
           <p class="card-copy"><strong>When:</strong> ${escapeHtml(formatDate(item.created_at || item.timestamp))}</p>
         </div>
