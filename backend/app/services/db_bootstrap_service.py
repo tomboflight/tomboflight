@@ -10,6 +10,37 @@ CORE_COLLECTIONS: dict[str, list[tuple[list[tuple[str, int]], dict]]] = {
         ([("email", ASCENDING)], {"unique": True, "name": "idx_users_email_unique"}),
         ([("role", ASCENDING)], {"name": "idx_users_role"}),
     ],
+    "roles": [
+        (
+            [("role_code", ASCENDING)],
+            {"unique": True, "name": "idx_roles_role_code_unique"},
+        ),
+        ([("status", ASCENDING)], {"name": "idx_roles_status"}),
+        ([("updated_at", DESCENDING)], {"name": "idx_roles_updated_at"}),
+    ],
+    "permissions": [
+        (
+            [("permission_code", ASCENDING)],
+            {"unique": True, "name": "idx_permissions_permission_code_unique"},
+        ),
+        ([("status", ASCENDING)], {"name": "idx_permissions_status"}),
+        ([("updated_at", DESCENDING)], {"name": "idx_permissions_updated_at"}),
+    ],
+    "role_permissions": [
+        (
+            [("role_code", ASCENDING), ("permission_code", ASCENDING)],
+            {"unique": True, "name": "idx_role_permissions_role_permission_unique"},
+        ),
+        ([("status", ASCENDING)], {"name": "idx_role_permissions_status"}),
+    ],
+    "user_role_assignments": [
+        (
+            [("user_id", ASCENDING), ("role_code", ASCENDING)],
+            {"unique": True, "name": "idx_user_role_assignments_user_role_unique"},
+        ),
+        ([("status", ASCENDING)], {"name": "idx_user_role_assignments_status"}),
+        ([("assigned_at", DESCENDING)], {"name": "idx_user_role_assignments_assigned_at"}),
+    ],
     "families": [
         ([("family_name", ASCENDING)], {"name": "idx_families_family_name"}),
         ([("created_at", ASCENDING)], {"name": "idx_families_created_at"}),
@@ -74,10 +105,70 @@ CORE_COLLECTIONS: dict[str, list[tuple[list[tuple[str, int]], dict]]] = {
         ([("name", ASCENDING)], {"name": "idx_projects_name"}),
         ([("created_at", ASCENDING)], {"name": "idx_projects_created_at"}),
     ],
+    "project_entitlements": [
+        (
+            [("project_id", ASCENDING)],
+            {"unique": True, "name": "idx_project_entitlements_project_id_unique"},
+        ),
+        ([("user_id", ASCENDING)], {"name": "idx_project_entitlements_user_id"}),
+        ([("status", ASCENDING)], {"name": "idx_project_entitlements_status"}),
+        ([("updated_at", DESCENDING)], {"name": "idx_project_entitlements_updated_at"}),
+    ],
+    "workflow_events": [
+        ([("project_id", ASCENDING)], {"name": "idx_workflow_events_project_id"}),
+        ([("from_state", ASCENDING)], {"name": "idx_workflow_events_from_state"}),
+        ([("to_state", ASCENDING)], {"name": "idx_workflow_events_to_state"}),
+        ([("created_at", DESCENDING)], {"name": "idx_workflow_events_created_at"}),
+    ],
+    "vaults": [
+        (
+            [("vault_code", ASCENDING)],
+            {"unique": True, "name": "idx_vaults_vault_code_unique"},
+        ),
+        ([("project_id", ASCENDING)], {"name": "idx_vaults_project_id"}),
+        ([("family_id", ASCENDING)], {"name": "idx_vaults_family_id"}),
+        ([("organization_id", ASCENDING)], {"name": "idx_vaults_organization_id"}),
+        ([("status", ASCENDING)], {"name": "idx_vaults_status"}),
+    ],
+    "vault_files": [
+        (
+            [("file_id", ASCENDING)],
+            {"unique": True, "name": "idx_vault_files_file_id_unique"},
+        ),
+        ([("vault_id", ASCENDING)], {"name": "idx_vault_files_vault_id"}),
+        ([("project_id", ASCENDING)], {"name": "idx_vault_files_project_id"}),
+        ([("uploader_id", ASCENDING)], {"name": "idx_vault_files_uploader_id"}),
+        ([("uploaded_at", DESCENDING)], {"name": "idx_vault_files_uploaded_at"}),
+        ([("verification_status", ASCENDING)], {"name": "idx_vault_files_verification_status"}),
+    ],
     "audit_logs": [
         ([("action", ASCENDING)], {"name": "idx_audit_logs_action"}),
-        ([("created_at", ASCENDING)], {"name": "idx_audit_logs_created_at"}),
+        ([("timestamp", DESCENDING)], {"name": "idx_audit_logs_timestamp"}),
+        ([("target_type", ASCENDING)], {"name": "idx_audit_logs_target_type"}),
+        ([("target_id", ASCENDING)], {"name": "idx_audit_logs_target_id"}),
+        ([("result", ASCENDING)], {"name": "idx_audit_logs_result"}),
+        ([("actor_user_id", ASCENDING)], {"name": "idx_audit_logs_actor_user_id"}),
         ([("actor_email", ASCENDING)], {"name": "idx_audit_logs_actor_email"}),
+    ],
+    "tool_status": [
+        (
+            [("tool_code", ASCENDING)],
+            {"unique": True, "name": "idx_tool_status_tool_code_unique"},
+        ),
+        ([("status", ASCENDING)], {"name": "idx_tool_status_status"}),
+        ([("severity", ASCENDING)], {"name": "idx_tool_status_severity"}),
+        ([("updated_at", DESCENDING)], {"name": "idx_tool_status_updated_at"}),
+    ],
+    "failed_workflow_queue": [
+        (
+            [("queue_item_id", ASCENDING)],
+            {"unique": True, "name": "idx_failed_workflow_queue_queue_item_id_unique"},
+        ),
+        ([("project_id", ASCENDING)], {"name": "idx_failed_workflow_queue_project_id"}),
+        ([("workflow_name", ASCENDING)], {"name": "idx_failed_workflow_queue_workflow_name"}),
+        ([("status", ASCENDING)], {"name": "idx_failed_workflow_queue_status"}),
+        ([("next_retry_at", ASCENDING)], {"name": "idx_failed_workflow_queue_next_retry_at"}),
+        ([("created_at", DESCENDING)], {"name": "idx_failed_workflow_queue_created_at"}),
     ],
     "verification_records": [
         ([("family_id", ASCENDING)], {"name": "idx_verification_records_family_id"}),
