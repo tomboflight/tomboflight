@@ -27,7 +27,7 @@ def _normalize(value: str | None) -> str:
     return str(value or "").strip()
 
 
-def _sort_projects(projects: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+def _sort_projects(project_map: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
     def _sort_key(item: dict[str, Any]) -> datetime:
         value = item.get("updated_at") or item.get("created_at")
         if isinstance(value, datetime):
@@ -40,7 +40,7 @@ def _sort_projects(projects: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
         return datetime.min.replace(tzinfo=UTC)
 
     return sorted(
-        projects.values(),
+        project_map.values(),
         key=_sort_key,
         reverse=True,
     )

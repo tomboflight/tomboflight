@@ -134,19 +134,16 @@ CORE_COLLECTIONS: dict[str, list[tuple[list[tuple[str, int]], dict]]] = {
         ([("member_role", ASCENDING)], {"name": "idx_project_members_member_role"}),
         ([("status", ASCENDING)], {"name": "idx_project_members_status"}),
         (
-            [("project_id", ASCENDING), ("user_id", ASCENDING)],
+            [("project_id", ASCENDING), ("user_id", ASCENDING), ("email", ASCENDING)],
             {
                 "unique": True,
-                "name": "idx_project_members_project_user_unique",
-                "partialFilterExpression": {"user_id": {"$type": "string"}},
-            },
-        ),
-        (
-            [("project_id", ASCENDING), ("email", ASCENDING)],
-            {
-                "unique": True,
-                "name": "idx_project_members_project_email_unique",
-                "partialFilterExpression": {"email": {"$type": "string"}},
+                "name": "idx_project_members_project_identity_unique",
+                "partialFilterExpression": {
+                    "$or": [
+                        {"user_id": {"$type": "string"}},
+                        {"email": {"$type": "string"}},
+                    ]
+                },
             },
         ),
     ],
