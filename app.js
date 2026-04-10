@@ -5,11 +5,16 @@
 
   const DEFAULT_LOCAL_API_BASE_URL = "http://127.0.0.1:8000";
   const DEFAULT_LIVE_API_BASE_URL = "https://tomboflight-api.onrender.com";
+  const DEFAULT_LIVE_API_BASE_URLS = [
+    "https://api.tomboflight.com",
+    DEFAULT_LIVE_API_BASE_URL,
+  ];
 
   const TOKEN_KEY = "tol_access_token";
   const USER_KEY = "tol_user";
   const COOKIE_CHOICE_KEY = "tol_cookie_choice";
   const PENDING_CHECKOUT_KEY = "tol_pending_checkout";
+  const API_BASE_URL_STORAGE_KEY = "tol_api_base_url";
 
   const ADDON_OR_EXTRA_SLUGS = new Set([
     "extra_upload_pack",
@@ -33,19 +38,115 @@
     return LOCAL_HOSTS.has(window.location.hostname);
   }
 
-  function getApiBaseUrl() {
-    const configured =
+  function uniqueNonEmptyValues(values) {
+    return Array.from(
+      new Set(
+        (Array.isArray(values) ? values : [])
+          .map(function (value) {
+            return typeof value === "string" ? value.trim().replace(/\/+$/, "") : "";
+          })
+          .filter(Boolean),
+      ),
+    );
+  }
+
+  function getConfiguredApiBaseUrls() {
+    const configuredList =
+      window.TOL_CONFIG && Array.isArray(window.TOL_CONFIG.API_BASE_URLS)
+        ? window.TOL_CONFIG.API_BASE_URLS
+        : [];
+    const configuredSingle =
       window.TOL_CONFIG && typeof window.TOL_CONFIG.API_BASE_URL === "string"
-        ? window.TOL_CONFIG.API_BASE_URL.trim()
+        ? window.TOL_CONFIG.API_BASE_URL
         : "";
 
-    if (configured) {
+    const configured = uniqueNonEmptyValues([
+      ...configuredList,
+      configuredSingle,
+    ]);
+    if (configured.length) {
       return configured;
     }
 
     return isLocalApp()
-      ? DEFAULT_LOCAL_API_BASE_URL
-      : DEFAULT_LIVE_API_BASE_URL;
+      ? [DEFAULT_LOCAL_API_BASE_URL]
+      : DEFAULT_LIVE_API_BASE_URLS.slice();
+  }
+
+  function getSavedApiBaseUrl() {
+    try {
+      const value = sessionStorage.getItem(API_BASE_URL_STORAGE_KEY);
+      return typeof value === "string" ? value.trim().replace(/\/+$/, "") : "";
+    } catch (_error) {
+      return "";
+    }
+  }
+
+  function saveApiBaseUrl(value) {
+    try {
+      if (typeof value === "string" && value.trim()) {
+        sessionStorage.setItem(
+          API_BASE_URL_STORAGE_KEY,
+          value.trim().replace(/\/+$/, ""),
+        );
+      }
+    } catch (_error) {
+      // Ignore storage errors.
+    }
+  }
+
+  function getApiBaseUrls() {
+    const configured = getConfiguredApiBaseUrls();
+    const saved = getSavedApiBaseUrl();
+    if (saved && configured.includes(saved)) {
+      return [saved].concat(
+        configured.filter(function (item) {
+          return item !== saved;
+        }),
+      );
+    }
+    return configured;
+  }
+
+  async function discoverApiBaseUrl(candidates) {
+    const urls = uniqueNonEmptyValues(candidates);
+    for (const apiBaseUrl of urls) {
+      try {
+        const response = await fetch(`${apiBaseUrl}/health`, {
+          method: "GET",
+          headers: { Accept: "application/json" },
+          credentials: "include",
+        });
+        if (response && response.ok) {
+          saveApiBaseUrl(apiBaseUrl);
+          return apiBaseUrl;
+        }
+      } catch (_error) {
+        // Try the next configured API origin.
+      }
+    }
+
+    return urls[0] || "";
+  }
+
+  function buildNetworkErrorMessage(apiBaseUrls) {
+    const candidates = uniqueNonEmptyValues(apiBaseUrls);
+    const details = [
+      "Network error calling API.",
+      "",
+      `API base candidates: ${candidates.join(", ") || "none configured"}`,
+      `Page origin: ${window.location.origin}`,
+    ];
+
+    if (isLocalApp()) {
+      details.push(
+        "",
+        "Local frontend should usually run on http://127.0.0.1:5500",
+        "Local backend should usually run on http://127.0.0.1:8000",
+      );
+    }
+
+    return details.join("\n");
   }
 
   function getPaymentLinks() {
@@ -135,7 +236,8 @@
   }
 
   async function apiRequest(path, options = {}) {
-    const apiBaseUrl = getApiBaseUrl();
+    const configuredApiBaseUrls = getApiBaseUrls();
+    const savedApiBaseUrl = getSavedApiBaseUrl();
     const token = getToken();
 
     const headers = {
@@ -151,22 +253,40 @@
       headers.Authorization = `Bearer ${token}`;
     }
 
-    let response;
+    const preferredApiBaseUrl =
+      savedApiBaseUrl && configuredApiBaseUrls.includes(savedApiBaseUrl)
+        ? savedApiBaseUrl
+        : configuredApiBaseUrls.length > 1
+        ? await discoverApiBaseUrl(configuredApiBaseUrls)
+        : configuredApiBaseUrls[0] || "";
+    const apiBaseUrls = uniqueNonEmptyValues([
+      preferredApiBaseUrl,
+      ...configuredApiBaseUrls,
+    ]);
 
-    try {
-      response = await fetch(`${apiBaseUrl}${path}`, {
-        ...options,
-        headers,
-        credentials: "include",
-      });
-    } catch (networkError) {
-      throw new Error(
-        `Network error calling API.\n\n` +
-          `API_BASE_URL: ${apiBaseUrl}\n` +
-          `Page origin: ${window.location.origin}\n\n` +
-          `Local frontend should usually run on http://127.0.0.1:5500\n` +
-          `Local backend should usually run on http://127.0.0.1:8000`,
-      );
+    let response = null;
+    let lastNetworkError = null;
+
+    for (const apiBaseUrl of apiBaseUrls) {
+      try {
+        response = await fetch(`${apiBaseUrl}${path}`, {
+          ...options,
+          headers,
+          credentials: "include",
+        });
+        saveApiBaseUrl(apiBaseUrl);
+        break;
+      } catch (networkError) {
+        lastNetworkError = networkError;
+      }
+    }
+
+    if (!response) {
+      const error = new Error(buildNetworkErrorMessage(apiBaseUrls));
+      if (lastNetworkError) {
+        error.cause = lastNetworkError;
+      }
+      throw error;
     }
 
     const contentType = response.headers.get("content-type") || "";

@@ -9,6 +9,10 @@ from bson import ObjectId
 from app.core.package_catalog import get_package
 from app.database import get_database
 from app.services.entitlement_service import resolve_project_entitlements
+from app.services.project_membership_service import (
+    get_project_access_snapshot,
+    list_accessible_project_ids,
+)
 
 
 def _utcnow_iso() -> str:
@@ -153,6 +157,24 @@ def get_project_summary(project_id: str) -> dict[str, Any] | None:
     }
 
 
+def _can_user_access_project(
+    project_id: str,
+    *,
+    user_id: str = "",
+    user_email: str = "",
+) -> bool:
+    project = get_project_by_id(project_id)
+    if not project:
+        return False
+
+    access_snapshot = get_project_access_snapshot(
+        project,
+        user_id=str(user_id or "").strip(),
+        email=str(user_email or "").strip().lower(),
+    )
+    return bool(access_snapshot.get("accessible"))
+
+
 def _get_project_entitlement(project_id: str) -> dict[str, Any] | None:
     entitlements = _entitlements_collection()
     return entitlements.find_one({"project_id": str(project_id), "status": "active"}) or entitlements.find_one({"project_id": str(project_id)})
@@ -181,12 +203,20 @@ def project_supports_link_keys(project_id: str) -> bool:
     return bool(package.get("can_use_link_keys", False))
 
 
-def user_can_access_project(project_id: str, user_id: str) -> bool:
+def user_can_access_project(
+    project_id: str,
+    user_id: str,
+    user_email: str = "",
+) -> bool:
     summary = get_project_summary(project_id)
     if not summary:
         return False
 
-    if str(summary.get("owner_user_id") or "") != str(user_id or ""):
+    if not _can_user_access_project(
+        project_id,
+        user_id=user_id,
+        user_email=user_email,
+    ):
         return False
 
     return bool(
@@ -194,14 +224,42 @@ def user_can_access_project(project_id: str, user_id: str) -> bool:
     )
 
 
-def list_owned_project_ids(user_id: str) -> list[str]:
-    cursor = _projects_collection().find({"owner_user_id": str(user_id or "")})
-
+def list_owned_project_ids(user_id: str, user_email: str = "") -> list[str]:
     project_ids: list[str] = []
-    for item in cursor:
-        project_id = str(item.get("_id"))
-        if user_can_access_project(project_id, user_id):
+    seen: set[str] = set()
+
+    normalized_user_id = str(user_id or "").strip()
+    normalized_user_email = str(user_email or "").strip().lower()
+
+    for project_id in list_accessible_project_ids(
+        user_id=normalized_user_id,
+        email=normalized_user_email,
+    ):
+        if project_id not in seen and user_can_access_project(
+            project_id,
+            normalized_user_id,
+            normalized_user_email,
+        ):
+            seen.add(project_id)
             project_ids.append(project_id)
+
+    owner_filters: dict[str, Any] = {}
+    if normalized_user_id:
+        owner_filters.setdefault("$or", []).append({"owner_user_id": normalized_user_id})
+    if normalized_user_email:
+        owner_filters.setdefault("$or", []).append({"owner_email": normalized_user_email})
+
+    if owner_filters.get("$or"):
+        cursor = _projects_collection().find(owner_filters)
+        for item in cursor:
+            project_id = str(item.get("_id") or "")
+            if project_id and project_id not in seen and user_can_access_project(
+                project_id,
+                normalized_user_id,
+                normalized_user_email,
+            ):
+                seen.add(project_id)
+                project_ids.append(project_id)
 
     return project_ids
 
@@ -232,15 +290,16 @@ def get_key_doc_by_value(key_value: str) -> dict[str, Any] | None:
 def list_link_keys_for_user(
     user_id: str,
     *,
+    user_email: str = "",
     project_id: str | None = None,
     include_revoked: bool = True,
 ) -> list[dict[str, Any]]:
     if project_id:
-        if not user_can_access_project(project_id, user_id):
+        if not user_can_access_project(project_id, user_id, user_email):
             return []
         owned_project_ids = [str(project_id)]
     else:
-        owned_project_ids = list_owned_project_ids(user_id)
+        owned_project_ids = list_owned_project_ids(user_id, user_email)
 
     if not owned_project_ids:
         return []
@@ -261,9 +320,10 @@ def generate_link_key(
     *,
     project_id: str,
     user_id: str,
+    user_email: str = "",
     allow_admin: bool = False,
 ) -> dict[str, Any]:
-    if not allow_admin and not user_can_access_project(project_id, user_id):
+    if not allow_admin and not user_can_access_project(project_id, user_id, user_email):
         raise PermissionError("Not authorized to generate a link key for this project.")
 
     if not project_supports_link_keys(project_id):
@@ -309,6 +369,7 @@ def revoke_link_key(
     *,
     key_id: str,
     actor_user_id: str,
+    actor_user_email: str = "",
     allow_admin: bool = False,
 ) -> dict[str, Any] | None:
     oid = _to_object_id(key_id)
@@ -321,7 +382,11 @@ def revoke_link_key(
         return None
 
     project_id = str(document.get("project_id") or "")
-    if not allow_admin and not user_can_access_project(project_id, actor_user_id):
+    if not allow_admin and not user_can_access_project(
+        project_id,
+        actor_user_id,
+        actor_user_email,
+    ):
         raise PermissionError("Not authorized to revoke this link key.")
 
     now = _utcnow_iso()
