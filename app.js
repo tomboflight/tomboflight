@@ -15,6 +15,7 @@
   const COOKIE_CHOICE_KEY = "tol_cookie_choice";
   const PENDING_CHECKOUT_KEY = "tol_pending_checkout";
   const API_BASE_URL_STORAGE_KEY = "tol_api_base_url";
+  const API_REQUEST_TIMEOUT_MS = 15000;
 
   const ADDON_OR_EXTRA_SLUGS = new Set([
     "extra_upload_pack",
@@ -106,6 +107,15 @@
       );
     }
     return configured;
+  }
+
+  function getApiBaseUrl() {
+    const configured = getApiBaseUrls();
+    const saved = getSavedApiBaseUrl();
+    if (saved && configured.includes(saved)) {
+      return saved;
+    }
+    return configured[0] || "";
   }
 
   async function discoverApiBaseUrl(candidates) {
@@ -273,16 +283,59 @@
     let lastNetworkError = null;
 
     for (const apiBaseUrl of apiBaseUrls) {
+      let timeoutId = null;
+      let signalHandler = null;
       try {
-        response = await fetch(`${apiBaseUrl}${path}`, {
+        const requestOptions = {
           ...options,
           headers,
           credentials: "include",
-        });
+        };
+
+        if (typeof AbortController === "function") {
+          const controller = new AbortController();
+          requestOptions.signal = controller.signal;
+
+          timeoutId = window.setTimeout(function () {
+            controller.abort();
+          }, API_REQUEST_TIMEOUT_MS);
+
+          if (options.signal) {
+            if (options.signal.aborted) {
+              controller.abort();
+            } else {
+              signalHandler = function () {
+                controller.abort();
+              };
+              options.signal.addEventListener("abort", signalHandler, {
+                once: true,
+              });
+            }
+          }
+        }
+
+        response = await fetch(`${apiBaseUrl}${path}`, requestOptions);
         saveApiBaseUrl(apiBaseUrl);
         break;
       } catch (networkError) {
-        lastNetworkError = networkError;
+        if (
+          networkError &&
+          networkError.name === "AbortError" &&
+          !response
+        ) {
+          lastNetworkError = new Error(
+            "Request timed out. Please try again in a moment.",
+          );
+        } else {
+          lastNetworkError = networkError;
+        }
+      } finally {
+        if (timeoutId) {
+          window.clearTimeout(timeoutId);
+        }
+        if (options.signal && signalHandler) {
+          options.signal.removeEventListener("abort", signalHandler);
+        }
       }
     }
 

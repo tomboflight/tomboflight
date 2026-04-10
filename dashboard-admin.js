@@ -256,6 +256,14 @@
       });
   }
 
+  function showAdminOnlyPanels() {
+    document
+      .querySelectorAll("[data-dashboard-admin-only]")
+      .forEach(function (node) {
+        node.style.display = "";
+      });
+  }
+
   function updateHeroForInternal() {
     const eyebrow = document.querySelector("[data-dashboard-hero-eyebrow]");
     const title = document.querySelector("[data-dashboard-hero-title]");
@@ -388,6 +396,7 @@
         hideCustomerPanels();
         hideCustomerNavItems();
         hideCustomerBillingLinks();
+        showAdminOnlyPanels();
         updateHeroForInternal();
         injectAdminPanel(me);
         enableAdminWorkspaceLinks(me);

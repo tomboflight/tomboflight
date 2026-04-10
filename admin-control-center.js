@@ -65,6 +65,7 @@
 
   let currentUser = null;
   let currentRoleKey = "";
+  const sectionSnapshots = {};
 
   function normalizeValue(value) {
     return String(value || "").trim().toLowerCase();
@@ -174,6 +175,140 @@
         <p class="card-copy">${escapeHtml(copy)}</p>
       </div>
     `;
+  }
+
+  function safeErrorMessage(error, fallback) {
+    const local = typeof app.isLocalApp === "function" && app.isLocalApp();
+    if (local && error && error.message) {
+      return error.message;
+    }
+    return fallback || "Unable to load data right now.";
+  }
+
+  function updateSectionSnapshot(sectionKey, payload) {
+    sectionSnapshots[sectionKey] = Object.assign(
+      {
+        items: [],
+        state: "ok",
+        updatedAt: Date.now(),
+      },
+      payload || {},
+      {
+        updatedAt: Date.now(),
+      },
+    );
+    renderAdvancedVisibility();
+  }
+
+  function buildSectionSnapshotCard(sectionKey) {
+    const snapshot = sectionSnapshots[sectionKey] || {};
+    const state = snapshot.state || "idle";
+    const label =
+      state === "error"
+        ? "Unavailable"
+        : state === "ok"
+          ? "Live"
+          : "Loading";
+    const total = Array.isArray(snapshot.items) ? snapshot.items.length : 0;
+    const title = sectionKey.charAt(0).toUpperCase() + sectionKey.slice(1);
+    const updated = snapshot.updatedAt
+      ? new Date(snapshot.updatedAt).toLocaleTimeString()
+      : "—";
+
+    return `
+      <div class="family-record-card">
+        <div class="card-number">${escapeHtml(title.charAt(0))}</div>
+        <h3>${escapeHtml(title)}</h3>
+        <p class="card-copy"><strong>State:</strong> ${escapeHtml(label)}</p>
+        <p class="card-copy"><strong>Visible Records:</strong> ${escapeHtml(String(total))}</p>
+        <p class="card-copy"><strong>Updated:</strong> ${escapeHtml(updated)}</p>
+      </div>
+    `;
+  }
+
+  function buildPriorityAlerts() {
+    const alerts = [];
+
+    const uploads = sectionSnapshots.uploads?.items || [];
+    uploads.slice(0, 3).forEach(function (item) {
+      alerts.push({
+        code: "U",
+        title: item.original_filename || "Upload review item",
+        copy: `${item.category || "upload"} · ${item.uploaded_by || "unknown user"}`,
+      });
+    });
+
+    const mints = sectionSnapshots.mints?.items || [];
+    mints
+      .filter(function (item) {
+        const latest = item.latest_mint_record || {};
+        return Boolean(latest.error_message || (latest.pending_approvals || []).length);
+      })
+      .slice(0, 3)
+      .forEach(function (item) {
+        const latest = item.latest_mint_record || {};
+        alerts.push({
+          code: "M",
+          title: item.project_name || item.project_id || "Mint queue item",
+          copy:
+            latest.error_message ||
+            `Pending approvals: ${(latest.pending_approvals || []).join(", ") || "none"}`,
+        });
+      });
+
+    const orders = sectionSnapshots.orders?.items || [];
+    orders
+      .filter(function (item) {
+        return ["pending", "failed", "requires_action"].includes(
+          normalizeValue(item.status),
+        );
+      })
+      .slice(0, 2)
+      .forEach(function (item) {
+        alerts.push({
+          code: "O",
+          title: item.email || item.package_name || "Order needs review",
+          copy: `Status: ${item.status || "unknown"}`,
+        });
+      });
+
+    return alerts.slice(0, 6);
+  }
+
+  function renderAdvancedVisibility() {
+    const summaryNode = document.querySelector("[data-admin-ops-summary]");
+    const feedNode = document.querySelector("[data-admin-priority-feed]");
+    const feedStatusNode = document.querySelector("[data-admin-priority-feed-status]");
+    if (!summaryNode || !feedNode) return;
+
+    const visibleSections = Object.keys(SECTION_LOADERS).filter(canAccessSection);
+    const summaryCards = visibleSections.length
+      ? visibleSections.map(buildSectionSnapshotCard).join("")
+      : emptyCard("No section access", "No advanced operations sections are available.");
+    summaryNode.innerHTML = summaryCards;
+
+    const alerts = buildPriorityAlerts();
+    if (!alerts.length) {
+      feedNode.innerHTML = emptyCard(
+        "Priority queue is clear",
+        "No urgent upload, mint, or order items are currently flagged.",
+      );
+      app.clearStatus(feedStatusNode);
+      return;
+    }
+
+    feedNode.innerHTML = alerts
+      .map(function (alert) {
+        return `
+          <div class="family-record-card">
+            <div class="card-number">${escapeHtml(alert.code)}</div>
+            <h3>${escapeHtml(alert.title)}</h3>
+            <p class="card-copy">${escapeHtml(alert.copy)}</p>
+          </div>
+        `;
+      })
+      .join("");
+    app.setStatus(feedStatusNode, `Priority items: ${alerts.length}`, "info");
   }
 
   function updateRoleSummary() {
@@ -418,6 +553,7 @@
         `/uploads/admin/review?limit=24&search=${encodeURIComponent(getSearchValue())}`,
       );
       const items = Array.isArray(payload.items) ? payload.items : [];
+      updateSectionSnapshot(sectionKey, { items, state: "ok" });
       renderSectionCards(
         sectionKey,
         items.length
@@ -426,11 +562,16 @@
       );
       clearSectionStatus(sectionKey);
     } catch (error) {
+      const message = safeErrorMessage(
+        error,
+        "This section is temporarily unavailable.",
+      );
+      updateSectionSnapshot(sectionKey, { items: [], state: "error" });
       renderSectionCards(
         sectionKey,
-        emptyCard("Upload review unavailable", error.message || "Unable to load uploads."),
+        emptyCard("Upload review unavailable", message),
       );
-      setSectionStatus(sectionKey, error.message || "Unable to load uploads.", "error");
+      setSectionStatus(sectionKey, message, "error");
     }
   }
 
@@ -442,6 +583,7 @@
         `/admin/mint-records/overview?limit=24&search=${encodeURIComponent(getSearchValue())}&mintable_only=true`,
       );
       const items = Array.isArray(payload.items) ? payload.items : [];
+      updateSectionSnapshot(sectionKey, { items, state: "ok" });
       renderSectionCards(
         sectionKey,
         items.length
@@ -450,11 +592,16 @@
       );
       clearSectionStatus(sectionKey);
     } catch (error) {
+      const message = safeErrorMessage(
+        error,
+        "This section is temporarily unavailable.",
+      );
+      updateSectionSnapshot(sectionKey, { items: [], state: "error" });
       renderSectionCards(
         sectionKey,
-        emptyCard("Mint controls unavailable", error.message || "Unable to load mint controls."),
+        emptyCard("Mint controls unavailable", message),
       );
-      setSectionStatus(sectionKey, error.message || "Unable to load mint controls.", "error");
+      setSectionStatus(sectionKey, message, "error");
     }
   }
 
@@ -466,6 +613,7 @@
         `/orders/admin/all?limit=24&search=${encodeURIComponent(getSearchValue())}`,
       );
       const items = Array.isArray(payload.items) ? payload.items : [];
+      updateSectionSnapshot(sectionKey, { items, state: "ok" });
       renderSectionCards(
         sectionKey,
         items.length
@@ -474,11 +622,16 @@
       );
       clearSectionStatus(sectionKey);
     } catch (error) {
+      const message = safeErrorMessage(
+        error,
+        "This section is temporarily unavailable.",
+      );
+      updateSectionSnapshot(sectionKey, { items: [], state: "error" });
       renderSectionCards(
         sectionKey,
-        emptyCard("Orders unavailable", error.message || "Unable to load orders."),
+        emptyCard("Orders unavailable", message),
       );
-      setSectionStatus(sectionKey, error.message || "Unable to load orders.", "error");
+      setSectionStatus(sectionKey, message, "error");
     }
   }
 
@@ -490,6 +643,7 @@
         `/project-entitlements/admin/list?limit=24&search=${encodeURIComponent(getSearchValue())}`,
       );
       const items = Array.isArray(payload.items) ? payload.items : [];
+      updateSectionSnapshot(sectionKey, { items, state: "ok" });
       renderSectionCards(
         sectionKey,
         items.length
@@ -498,11 +652,16 @@
       );
       clearSectionStatus(sectionKey);
     } catch (error) {
+      const message = safeErrorMessage(
+        error,
+        "This section is temporarily unavailable.",
+      );
+      updateSectionSnapshot(sectionKey, { items: [], state: "error" });
       renderSectionCards(
         sectionKey,
-        emptyCard("Entitlements unavailable", error.message || "Unable to load entitlements."),
+        emptyCard("Entitlements unavailable", message),
       );
-      setSectionStatus(sectionKey, error.message || "Unable to load entitlements.", "error");
+      setSectionStatus(sectionKey, message, "error");
     }
   }
 
@@ -527,6 +686,7 @@
             return !search || haystack.includes(search);
           })
         : [];
+      updateSectionSnapshot(sectionKey, { items: filtered.slice(0, 24), state: "ok" });
       renderSectionCards(
         sectionKey,
         filtered.length
@@ -535,11 +695,16 @@
       );
       clearSectionStatus(sectionKey);
     } catch (error) {
+      const message = safeErrorMessage(
+        error,
+        "This section is temporarily unavailable.",
+      );
+      updateSectionSnapshot(sectionKey, { items: [], state: "error" });
       renderSectionCards(
         sectionKey,
-        emptyCard("Projects unavailable", error.message || "Unable to load projects."),
+        emptyCard("Projects unavailable", message),
       );
-      setSectionStatus(sectionKey, error.message || "Unable to load projects.", "error");
+      setSectionStatus(sectionKey, message, "error");
     }
   }
 
@@ -564,6 +729,7 @@
             return !search || haystack.includes(search);
           })
         : [];
+      updateSectionSnapshot(sectionKey, { items: filtered.slice(0, 24), state: "ok" });
       renderSectionCards(
         sectionKey,
         filtered.length
@@ -572,11 +738,16 @@
       );
       clearSectionStatus(sectionKey);
     } catch (error) {
+      const message = safeErrorMessage(
+        error,
+        "This section is temporarily unavailable.",
+      );
+      updateSectionSnapshot(sectionKey, { items: [], state: "error" });
       renderSectionCards(
         sectionKey,
-        emptyCard("Users unavailable", error.message || "Unable to load users."),
+        emptyCard("Users unavailable", message),
       );
-      setSectionStatus(sectionKey, error.message || "Unable to load users.", "error");
+      setSectionStatus(sectionKey, message, "error");
     }
   }
 
@@ -600,6 +771,7 @@
             return !search || haystack.includes(search);
           })
         : [];
+      updateSectionSnapshot(sectionKey, { items: filtered.slice(0, 24), state: "ok" });
       renderSectionCards(
         sectionKey,
         filtered.length
@@ -608,16 +780,27 @@
       );
       clearSectionStatus(sectionKey);
     } catch (error) {
+      const message = safeErrorMessage(
+        error,
+        "This section is temporarily unavailable.",
+      );
+      updateSectionSnapshot(sectionKey, { items: [], state: "error" });
       renderSectionCards(
         sectionKey,
-        emptyCard("Audit logs unavailable", error.message || "Unable to load audit logs."),
+        emptyCard("Audit logs unavailable", message),
       );
-      setSectionStatus(sectionKey, error.message || "Unable to load audit logs.", "error");
+      setSectionStatus(sectionKey, message, "error");
     }
   }
 
   async function loadVisibleSections() {
     const sectionKeys = Object.keys(SECTION_LOADERS).filter(canAccessSection);
+    sectionKeys.forEach(function (sectionKey) {
+      updateSectionSnapshot(sectionKey, {
+        items: (sectionSnapshots[sectionKey] && sectionSnapshots[sectionKey].items) || [],
+        state: "loading",
+      });
+    });
     for (const sectionKey of sectionKeys) {
       await SECTION_LOADERS[sectionKey]();
     }
@@ -816,6 +999,7 @@
 
     updateRoleSummary();
     applySectionVisibility();
+    renderAdvancedVisibility();
     bindRefreshButtons();
     document.addEventListener("click", function (event) {
       handleClick(event).catch(function (error) {
