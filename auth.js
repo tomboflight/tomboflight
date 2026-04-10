@@ -1681,7 +1681,7 @@
     if (hasLogoutBinding) return;
     hasLogoutBinding = true;
 
-    document.addEventListener("click", async function (event) {
+    document.addEventListener("click", function (event) {
       const button = event.target.closest("[data-logout-btn]");
       if (!button) return;
 
@@ -1689,17 +1689,26 @@
       if (button.disabled) return;
       button.disabled = true;
 
+      // Clear the local session immediately so the redirect is not blocked by
+      // network latency or a backend timeout (the API call can take up to 15 s).
       try {
-        if (app.logoutUser) {
-          await app.logoutUser();
-        } else {
+        if (app && typeof app.clearSession === "function") {
           app.clearSession();
         }
-      } catch (error) {
-        app.clearSession();
+      } catch (_error) {
+        // Best-effort local cleanup.
       }
 
       clearCachedDashboardContext();
+
+      // Notify the backend in the background — do not await.  The local session
+      // is already cleared, so the user is logged out regardless of the outcome.
+      if (app && typeof app.logoutUser === "function") {
+        app.logoutUser().catch(function (err) {
+          console.warn("Background logout request failed:", err);
+        });
+      }
+
       window.location.href = "signin.html";
     });
   }

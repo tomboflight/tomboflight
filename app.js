@@ -403,14 +403,17 @@
   }
 
   async function logoutUser() {
+    // Clear the local session immediately so the caller is not blocked on the
+    // network round-trip.  The backend call is best-effort: we still attempt it
+    // so the server-side httpOnly auth cookie is revoked, but a slow or failing
+    // backend cannot prevent the user from being logged out locally.
+    clearSession();
     try {
       await apiRequest("/auth/logout", {
         method: "POST",
       });
-    } catch (error) {
-      // Ignore logout errors and still clear local session.
-    } finally {
-      clearSession();
+    } catch (_error) {
+      // Ignore – local session already cleared above.
     }
   }
 
