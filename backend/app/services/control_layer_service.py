@@ -252,7 +252,7 @@ def create_vault_file(
     result = _collection("vault_files").insert_one(payload)
 
     if payload["vault_id"]:
-        vault_id_query: dict[str, Any] = {"vault_id": payload["vault_id"]}
+        vault_id_query: dict[str, Any] = {"vault_code": payload["vault_id"]}
         object_id = _object_id_or_none(payload["vault_id"])
         if object_id is not None:
             vault_id_query = {"_id": object_id}
