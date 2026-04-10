@@ -110,6 +110,7 @@
 
   async function discoverApiBaseUrl(candidates) {
     const urls = uniqueNonEmptyValues(candidates);
+    const failures = [];
     for (const apiBaseUrl of urls) {
       try {
         const response = await fetch(`${apiBaseUrl}/health`, {
@@ -121,9 +122,14 @@
           saveApiBaseUrl(apiBaseUrl);
           return apiBaseUrl;
         }
+        failures.push(`${apiBaseUrl} returned ${response.status}`);
       } catch (_error) {
-        // Try the next configured API origin.
+        failures.push(`${apiBaseUrl} could not be reached`);
       }
+    }
+
+    if (failures.length) {
+      console.warn("Tomb of Light API discovery failed:", failures.join("; "));
     }
 
     return urls[0] || "";

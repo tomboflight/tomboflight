@@ -246,14 +246,13 @@ def list_accessible_link_key_project_ids(
             seen.add(project_id)
             project_ids.append(project_id)
 
-    owner_filters: dict[str, Any] = {}
-    if normalized_user_id:
-        owner_filters.setdefault("$or", []).append({"owner_user_id": normalized_user_id})
-    if normalized_user_email:
-        owner_filters.setdefault("$or", []).append({"owner_email": normalized_user_email})
+    owner_filters = [
+        *([{"owner_user_id": normalized_user_id}] if normalized_user_id else []),
+        *([{"owner_email": normalized_user_email}] if normalized_user_email else []),
+    ]
 
-    if owner_filters.get("$or"):
-        cursor = _projects_collection().find(owner_filters)
+    if owner_filters:
+        cursor = _projects_collection().find({"$or": owner_filters})
         for item in cursor:
             project_id = str(item.get("_id") or "")
             if project_id and project_id not in seen and user_can_access_project(
@@ -265,10 +264,6 @@ def list_accessible_link_key_project_ids(
                 project_ids.append(project_id)
 
     return project_ids
-
-
-def list_owned_project_ids(user_id: str, user_email: str = "") -> list[str]:
-    return list_accessible_link_key_project_ids(user_id, user_email)
 
 
 def get_active_key_doc_for_project(project_id: str) -> dict[str, Any] | None:
