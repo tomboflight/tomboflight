@@ -28,6 +28,13 @@ def _normalize_text(value: object) -> str:
     return str(value or "").strip()
 
 
+def _get_database_or_none():
+    try:
+        return get_database()
+    except RuntimeError:
+        return None
+
+
 def _current_user_id_from_doc(user: dict) -> str:
     raw_value = user.get("_id") or user.get("id") or user.get("user_id")
     return _normalize_text(raw_value)
@@ -104,7 +111,7 @@ def register_user(payload: UserCreate) -> dict | None:
             "You must confirm your eligibility and authority to create the account."
         )
 
-    db = get_database()
+    db = _get_database_or_none()
     now_iso = _now_iso()
 
     if db is None:
@@ -150,7 +157,7 @@ def register_user(payload: UserCreate) -> dict | None:
 
 
 def authenticate_user(email: str, password: str) -> str | None:
-    db = get_database()
+    db = _get_database_or_none()
     if db is None:
         return create_access_token({"sub": email.lower(), "role": "user"})
 
@@ -185,7 +192,7 @@ def authenticate_user(email: str, password: str) -> str | None:
 
 
 def get_user_by_email(email: str) -> dict | None:
-    db = get_database()
+    db = _get_database_or_none()
     if db is None:
         return None
 
@@ -193,7 +200,7 @@ def get_user_by_email(email: str) -> dict | None:
 
 
 def get_user_by_id(user_id: str) -> dict | None:
-    db = get_database()
+    db = _get_database_or_none()
     if db is None:
         return None
 
@@ -223,7 +230,7 @@ def request_password_reset(
         "delivery_mode": "email",
     }
 
-    db = get_database()
+    db = _get_database_or_none()
     if db is None:
         return generic_response
 
