@@ -52,11 +52,13 @@ def approve_match_candidate(candidate_id: str, decided_by: str) -> dict | None:
 
     try:
         object_id = ObjectId(candidate_id)
+    except Exception:
+        return None
+
+    try:
         approve_candidate_record(candidate_id=candidate_id, actor_user_id=decided_by)
     except ApprovalError as exc:
         raise MatchCandidateApprovalError(str(exc)) from exc
-    except Exception:
-        return None
 
     return db.match_candidates.find_one({"_id": object_id})
 

@@ -27,10 +27,19 @@ class ProjectMemberResponse(BaseModel):
     updated_at: str | None = None
 
 
-
 def _as_string(value: Any) -> str:
     return str(value or "").strip()
 
+
+def _format_timestamp(value: Any, *, default: str = "") -> str:
+    if isinstance(value, datetime):
+        return value.isoformat()
+
+    normalized = _as_string(value)
+    if normalized:
+        return normalized
+
+    return default
 
 
 def build_project_member_response(data: dict[str, Any]) -> ProjectMemberResponse:
@@ -43,6 +52,6 @@ def build_project_member_response(data: dict[str, Any]) -> ProjectMemberResponse
         email=_as_string(data.get("email")).lower() or None,
         member_role=normalize_project_member_role(data.get("member_role"), default="viewer"),
         status=_as_string(data.get("status") or "active") or "active",
-        created_at=(created_at.isoformat() if isinstance(created_at, datetime) else _as_string(created_at) or datetime.now(UTC).isoformat()),
-        updated_at=(updated_at.isoformat() if isinstance(updated_at, datetime) else _as_string(updated_at) or None),
+        created_at=_format_timestamp(created_at, default=datetime.now(UTC).isoformat()),
+        updated_at=_format_timestamp(updated_at) or None,
     )

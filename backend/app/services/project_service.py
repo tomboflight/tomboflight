@@ -251,10 +251,11 @@ def apply_package_purchase_to_project(
         return None
 
     now = _now()
+    fallback_project_lane = _normalize(project.get("project_lane")) or "portrait"
     updated_fields: dict[str, Any] = {
         "project_lane": normalize_package_type(
             package.get("package_lane") or project.get("project_lane"),
-            default=_normalize(project.get("project_lane")) or "portrait",
+            default=fallback_project_lane,
         ),
         "package_code": package_code,
         "package_slug": package_code,
