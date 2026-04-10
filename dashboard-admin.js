@@ -409,7 +409,7 @@
     window.addEventListener(
       "tol:user-resolved",
       function (event) {
-        applyAdminDashboardLayer(event && event.detail && event.detail.user);
+        applyAdminDashboardLayer(event.detail.user);
       },
       { once: true },
     );

@@ -37,9 +37,9 @@
   }
 
   function isInternalRole(user) {
-    return Boolean(app && typeof app.isInternalRole === "function"
+    return app && typeof app.isInternalRole === "function"
       ? app.isInternalRole(user)
-      : false);
+      : false;
   }
 
   function getAccessTokenFromResponse(loginData) {
