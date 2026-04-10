@@ -6,7 +6,7 @@ from typing import Any
 from bson import ObjectId
 
 from app.core.role_catalog import normalize_project_member_role
-from app.core.state_catalog import is_active_record_state
+from app.core.state_catalog import ACTIVE_OR_UNSET_RECORD_STATES, is_active_record_state
 from app.database import get_database
 
 
@@ -61,7 +61,7 @@ def list_accessible_project_ids(
 
     query: dict[str, Any] = {"$or": filters}
     if active_only:
-        query["status"] = {"$in": ["active", "enabled", ""]}
+        query["status"] = {"$in": sorted(ACTIVE_OR_UNSET_RECORD_STATES)}
 
     seen: set[str] = set()
     project_ids: list[str] = []

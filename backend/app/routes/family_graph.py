@@ -143,6 +143,8 @@ def get_family_graph(
     relationships_cursor = db.relationships.find(relationship_query)
     members_raw = list(members_cursor)
     relationships_raw = list(relationships_cursor)
+    # Phase 1 keeps this GET route read-only; anchor provisioning now happens
+    # only through explicit write paths such as the intake pipeline.
 
     members = []
     for member in members_raw:

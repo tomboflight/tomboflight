@@ -290,6 +290,7 @@ def load_project_workspace_anchor(
     project: dict[str, Any],
     submission: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any]]:
+    """Load the current workspace anchor state without creating missing records."""
     db = get_database()
     if db is None:
         return None, None, project

@@ -47,6 +47,9 @@ NARRATIVE_STATE_ALIASES: dict[str, str] = {
 }
 
 ACTIVE_RECORD_STATES: frozenset[str] = frozenset({"active", "enabled"})
+ACTIVE_OR_UNSET_RECORD_STATES: frozenset[str] = frozenset(
+    set(ACTIVE_RECORD_STATES) | {""}
+)
 
 
 

@@ -5,10 +5,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.relationship_catalog import (
     ALLOWED_RELATIONSHIP_TYPES,
+    ALLOWED_RELATIONSHIP_TYPE_SET,
     normalize_relationship_type,
 )
-
-ALLOWED_RELATIONSHIP_TYPE_SET = frozenset(ALLOWED_RELATIONSHIP_TYPES)
 
 
 class RelationshipCreate(BaseModel):

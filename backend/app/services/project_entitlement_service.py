@@ -163,19 +163,11 @@ def list_user_project_entitlements(
         query["status"] = "active"
 
     cursor = collection.find(query).sort("updated_at", -1)
-    serialized_items: list[dict[str, Any]] = []
-    seen_project_ids: set[str] = set()
-    for document in cursor:
-        serialized = _serialize(cast(dict[str, Any], document))
-        if serialized is None:
-            continue
-        project_id = str(serialized.get("project_id") or "").strip()
-        if project_id and project_id in seen_project_ids:
-            continue
-        if project_id:
-            seen_project_ids.add(project_id)
-        serialized_items.append(serialized)
-    return serialized_items
+    return [
+        serialized
+        for serialized in (_serialize(cast(dict[str, Any], document)) for document in cursor)
+        if serialized is not None
+    ]
 
 
 def list_project_entitlements(
