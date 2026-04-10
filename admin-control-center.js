@@ -834,9 +834,11 @@
         state: "loading",
       });
     });
-    for (const sectionKey of sectionKeys) {
-      await SECTION_LOADERS[sectionKey]();
-    }
+    await Promise.allSettled(
+      sectionKeys.map(function (sectionKey) {
+        return SECTION_LOADERS[sectionKey]();
+      }),
+    );
   }
 
   async function runMintAction(path, body, message) {
