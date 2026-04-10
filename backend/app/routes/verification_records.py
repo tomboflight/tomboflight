@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.database import get_database
-from app.dependencies.auth import get_current_user, require_admin
+from app.dependencies.auth import require_permission
 from app.schemas.verification_record import (
     VerificationRecordCreate,
     VerificationRecordResponse,
@@ -148,7 +148,7 @@ def _insert_verification_record(
 
 @router.get("/", response_model=list[VerificationRecordResponse])
 def get_verification_records(
-    current_user: dict[str, Any] = Depends(require_admin),
+    current_user: dict[str, Any] = Depends(require_permission("verification.review")),
 ):
     records = list_verification_records()
     return [build_verification_record_response(record) for record in records]
@@ -157,7 +157,7 @@ def get_verification_records(
 @router.get("/member/{member_id}", response_model=list[VerificationRecordResponse])
 def get_verification_records_for_member(
     member_id: str,
-    current_user: dict[str, Any] = Depends(require_admin),
+    current_user: dict[str, Any] = Depends(require_permission("verification.review")),
 ):
     db, member = _require_member(member_id)
 
@@ -172,7 +172,7 @@ def get_verification_records_for_member(
 @router.post("/", response_model=VerificationRecordResponse)
 def create_verification_record_route(
     payload: VerificationRecordCreate,
-    current_user: dict[str, Any] = Depends(require_admin),
+    current_user: dict[str, Any] = Depends(require_permission("verification.review")),
 ):
     record = create_verification_record(payload)
     return build_verification_record_response(record)
@@ -182,7 +182,7 @@ def create_verification_record_route(
 def verify_member_route(
     member_id: str,
     payload: MemberVerificationActionPayload,
-    current_user: dict[str, Any] = Depends(require_admin),
+    current_user: dict[str, Any] = Depends(require_permission("verification.review")),
 ):
     db, member = _require_member(member_id)
     reviewed_by = _review_actor(current_user)
@@ -229,7 +229,7 @@ def verify_member_route(
 def reject_member_verification_route(
     member_id: str,
     payload: MemberVerificationActionPayload,
-    current_user: dict[str, Any] = Depends(require_admin),
+    current_user: dict[str, Any] = Depends(require_permission("verification.review")),
 ):
     db, member = _require_member(member_id)
     reviewed_by = _review_actor(current_user)
@@ -276,7 +276,7 @@ def reject_member_verification_route(
 def mark_member_verification_pending_route(
     member_id: str,
     payload: MemberVerificationActionPayload,
-    current_user: dict[str, Any] = Depends(require_admin),
+    current_user: dict[str, Any] = Depends(require_permission("verification.review")),
 ):
     db, member = _require_member(member_id)
     reviewed_by = _review_actor(current_user)
@@ -323,7 +323,7 @@ def mark_member_verification_pending_route(
 def clear_member_verification_route(
     member_id: str,
     payload: MemberVerificationClearPayload,
-    current_user: dict[str, Any] = Depends(require_admin),
+    current_user: dict[str, Any] = Depends(require_permission("verification.review")),
 ):
     db, _member = _require_member(member_id)
     reviewed_by = _review_actor(current_user)

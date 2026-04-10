@@ -7,6 +7,7 @@ from bson import ObjectId
 
 from app.core.package_catalog import get_package
 from app.database import get_database
+from app.dependencies.auth import transition_project
 from app.services.viewer_manifest_service import ensure_project_workspace_anchor
 
 
@@ -133,6 +134,7 @@ def provision_build_from_submission(
     *,
     submission_id: str,
     provisioned_by: str,
+    provisioned_by_user_id: str,
     family_name_override: str = "",
     project_name_override: str = "",
     production_notes: str = "",
@@ -315,8 +317,6 @@ def provision_build_from_submission(
         "package_name": package_name,
         "item_type": "package",
         "billing_plan": "one_time",
-        "status": "build_ready",
-        "phase": "intake_approved",
         "source": "approved_intake",
         "intake_submission_id": submission_id,
         "created_by": provisioned_by,
@@ -325,6 +325,8 @@ def provision_build_from_submission(
     }
 
     if project_doc is None:
+        project_payload["status"] = "draft"
+        project_payload["phase"] = "created"
         project_payload["created_at"] = _now()
         project_result = projects.insert_one(project_payload)
         project_payload["_id"] = project_result.inserted_id
@@ -342,6 +344,11 @@ def provision_build_from_submission(
     )
 
     project_id = str(project_doc["_id"])
+    project_doc = transition_project(
+        project_id,
+        "build_ready",
+        {"id": provisioned_by_user_id, "email": provisioned_by},
+    )
 
     resolved_family_id = str(project_doc.get("family_id") or family_root_id or "").strip()
     if resolved_family_id and ObjectId.is_valid(resolved_family_id):

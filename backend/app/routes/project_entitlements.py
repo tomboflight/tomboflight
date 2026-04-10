@@ -6,7 +6,11 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
-from app.dependencies.auth import INTERNAL_ADMIN_KEYS, get_current_user, require_admin
+from app.dependencies.auth import (
+    INTERNAL_ADMIN_KEYS,
+    get_current_user,
+    require_permission,
+)
 from app.services.project_entitlement_service import (
     get_project_entitlement,
     get_upgrade_quote_for_project,
@@ -66,7 +70,7 @@ def _is_admin(user: dict[str, Any]) -> bool:
 @router.post("/apply")
 def apply_project_entitlement(
     payload: ApplyProjectEntitlementPayload,
-    current_user: dict[str, Any] = Depends(require_admin),
+    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
 ):
     try:
         return upsert_project_entitlement(
@@ -123,7 +127,7 @@ def list_project_entitlements_admin(
     limit: int = 100,
     active_only: bool = False,
     search: str = "",
-    current_user: dict[str, Any] = Depends(require_admin),
+    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
 ):
     del current_user
     return {

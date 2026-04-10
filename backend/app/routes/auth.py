@@ -3,7 +3,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from app.config import settings
-from app.dependencies.auth import COOKIE_NAME, get_current_user, require_admin
+from app.dependencies.auth import COOKIE_NAME, get_current_user, require_permission
 from app.schemas.auth import (
     PasswordChangeRequest,
     PasswordResetConfirm,
@@ -170,7 +170,7 @@ def password_change_route(
 def admin_issue_password_reset_route(
     user_id: str,
     response: Response,
-    current_user: dict = Depends(require_admin),
+    current_user: dict = Depends(require_permission("admin.access")),
 ):
     try:
         result = admin_issue_password_reset(

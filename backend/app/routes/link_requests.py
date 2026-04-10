@@ -5,7 +5,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
-from app.dependencies.auth import get_current_user, require_admin
+from app.dependencies.auth import get_current_user, require_permission
 from app.schemas.link_request import (
     LinkRequestCreate,
     LinkRequestResponse,
@@ -71,7 +71,7 @@ def _is_admin(user: dict[str, Any]) -> bool:
 
 @router.get("/", response_model=list[LinkRequestResponse])
 def get_link_requests(
-    current_user: dict[str, Any] = Depends(require_admin),
+    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
 ):
     requests = list_link_requests()
     return [build_link_request_response(item) for item in requests]
