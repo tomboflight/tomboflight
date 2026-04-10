@@ -51,6 +51,10 @@ def _current_user_id(user: dict[str, Any]) -> str:
     return str(raw_id)
 
 
+def _current_user_email(user: dict[str, Any]) -> str:
+    return str(user.get("email") or "").strip().lower()
+
+
 def _current_user_display(user: dict[str, Any]) -> str:
     return (
         str(user.get("full_name") or user.get("name") or user.get("email") or "").strip()
@@ -85,8 +89,10 @@ def get_my_link_requests(
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
     user_id = _current_user_id(current_user)
+    user_email = _current_user_email(current_user)
     items = list_link_requests_for_user(
         user_id,
+        user_email=user_email,
         project_id=project_id,
         direction=direction,
         status=status_value,
@@ -104,6 +110,7 @@ def create_link_request_route(
             payload,
             requested_by=_current_user_display(current_user),
             requested_by_user_id=_current_user_id(current_user),
+            requested_by_user_email=_current_user_email(current_user),
         )
         return build_link_request_response(request)
     except PermissionError as exc:
@@ -129,6 +136,7 @@ def approve_link_request_route(
             request_id,
             approved_by=_current_user_display(current_user),
             approver_user_id=_current_user_id(current_user),
+            approver_user_email=_current_user_email(current_user),
             approval_notes=(payload.notes if payload else None),
             is_admin=_is_admin(current_user),
         )
@@ -160,6 +168,7 @@ def reject_link_request_route(
             request_id,
             rejected_by=_current_user_display(current_user),
             rejector_user_id=_current_user_id(current_user),
+            rejector_user_email=_current_user_email(current_user),
             rejection_notes=(payload.notes if payload else None),
             is_admin=_is_admin(current_user),
         )
@@ -191,6 +200,7 @@ def revoke_link_request_route(
             request_id,
             revoked_by=_current_user_display(current_user),
             revoker_user_id=_current_user_id(current_user),
+            revoker_user_email=_current_user_email(current_user),
             revoke_notes=(payload.notes if payload else None),
             is_admin=_is_admin(current_user),
         )

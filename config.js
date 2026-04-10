@@ -8,6 +8,12 @@
     API_BASE_URL: isLocal
       ? "http://127.0.0.1:8000"
       : "https://tomboflight-api.onrender.com",
+    API_BASE_URLS: isLocal
+      ? ["http://127.0.0.1:8000"]
+      : [
+          "https://api.tomboflight.com",
+          "https://tomboflight-api.onrender.com",
+        ],
 
     PAYMENT_LINKS: Object.assign(
       {},
