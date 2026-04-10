@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 
+from app.core.state_catalog import normalize_relationship_link_state
 from app.database import get_database
 from app.schemas.identity_link import IdentityLinkCreate
 
@@ -16,6 +17,10 @@ def create_identity_link(payload: IdentityLinkCreate) -> dict:
     db = get_database()
     data = payload.model_dump()
     data["created_at"] = datetime.now(UTC).isoformat()
+    data["status"] = normalize_relationship_link_state(
+        data.get("status") or data.get("link_status"),
+    )
+    data["link_status"] = data["status"]
 
     if db is None:
         data["_id"] = "local-identity-link-preview"

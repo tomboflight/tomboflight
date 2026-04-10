@@ -5,7 +5,9 @@ from typing import Any
 
 from bson import ObjectId
 
-from app.core.package_catalog import get_package
+from app.core.package_catalog import get_package, normalize_package_code
+from app.core.package_type_catalog import normalize_package_type
+from app.core.state_catalog import normalize_visibility_state
 from app.database import get_database
 from app.dependencies.auth import transition_project
 from app.services.viewer_manifest_service import ensure_project_workspace_anchor
@@ -28,39 +30,12 @@ def _serialize_submission(doc: dict[str, Any]) -> dict[str, Any]:
 
 
 def _normalize_visibility(value: str | None) -> str:
-    normalized = str(value or "").strip().lower()
-    if normalized == "private":
-        return "private"
-    if normalized in {"family", "family-only", "family_only"}:
-        return "family_only"
-    if normalized in {"public", "certificate-only", "certificate_only"}:
-        return "certificate_only"
-    return "private"
+    return normalize_visibility_state(value)
 
 
 def _normalize_package_code(value: str | None) -> str:
-    normalized = str(value or "").strip().lower()
-    mapping = {
-        "legacy-snapshot": "legacy_snapshot",
-        "legacy_snapshot": "legacy_snapshot",
-        "legacy-portrait-intro": "legacy_portrait_intro",
-        "legacy_portrait_intro": "legacy_portrait_intro",
-        "digital-legacy-portrait": "digital_legacy_portrait",
-        "digital_legacy_portrait": "digital_legacy_portrait",
-        "starter-family-tree": "household_foundation",
-        "starter_family_tree": "household_foundation",
-        "household-foundation": "household_foundation",
-        "household_foundation": "household_foundation",
-        "heirloom-legacy-tree": "heirloom_legacy_tree",
-        "heirloom_legacy_tree": "heirloom_legacy_tree",
-        "legacy-plus": "legacy_plus",
-        "legacy_plus": "legacy_plus",
-        "family-estate-concierge": "family_estate_concierge",
-        "family_estate_concierge": "family_estate_concierge",
-        "command-structure-network": "command_structure_network",
-        "command_structure_network": "command_structure_network",
-    }
-    return mapping.get(normalized, normalized or "unknown")
+    normalized = normalize_package_code(value)
+    return normalized or "unknown"
 
 
 def _supports_family_build(package: dict[str, Any]) -> bool:
@@ -183,7 +158,7 @@ def provision_build_from_submission(
         str(submission.get("package_name") or "").strip() or "Tomb of Light Package"
     )
     package = get_package(package_code) or {}
-    project_lane = str(package.get("package_lane") or "portrait").strip().lower()
+    project_lane = normalize_package_type(package.get("package_lane"), default="portrait")
 
     supports_family_build = _supports_family_build(package)
     supports_org_build = _supports_org_build(package)

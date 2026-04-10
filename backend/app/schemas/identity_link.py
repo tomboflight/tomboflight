@@ -1,6 +1,8 @@
 from datetime import UTC, datetime
 from pydantic import BaseModel, Field
 
+from app.core.state_catalog import normalize_relationship_link_state
+
 
 class IdentityLinkCreate(BaseModel):
     family_member_id: str = Field(..., min_length=1)
@@ -25,7 +27,10 @@ def build_identity_link_response(data: dict) -> IdentityLinkResponse:
         id=str(data.get("_id", "")),
         family_member_id=data["family_member_id"],
         canonical_person_id=data["canonical_person_id"],
-        link_status=data.get("link_status", "linked"),
+        link_status=normalize_relationship_link_state(
+            data.get("status") or data.get("link_status"),
+            default="active",
+        ),
         linked_by=data["linked_by"],
         notes=data.get("notes"),
         created_at=data.get("created_at", datetime.now(UTC).isoformat()),

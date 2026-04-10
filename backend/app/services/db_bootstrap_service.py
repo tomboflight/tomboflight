@@ -78,8 +78,15 @@ CORE_COLLECTIONS: dict[str, list[tuple[list[tuple[str, int]], dict]]] = {
         ([("status", ASCENDING)], {"name": "idx_household_links_status"}),
     ],
     "identity_links": [
-        ([("source_member_id", ASCENDING)], {"name": "idx_identity_links_source_member_id"}),
-        ([("target_member_id", ASCENDING)], {"name": "idx_identity_links_target_member_id"}),
+        ([("family_member_id", ASCENDING)], {"name": "idx_identity_links_family_member_id"}),
+        ([("canonical_person_id", ASCENDING)], {"name": "idx_identity_links_canonical_person_id"}),
+        (
+            [("family_member_id", ASCENDING), ("canonical_person_id", ASCENDING)],
+            {
+                "unique": True,
+                "name": "idx_identity_links_member_canonical_unique",
+            },
+        ),
         ([("status", ASCENDING)], {"name": "idx_identity_links_status"}),
     ],
     "lineage_nodes": [
@@ -97,13 +104,51 @@ CORE_COLLECTIONS: dict[str, list[tuple[list[tuple[str, int]], dict]]] = {
     ],
     "relationships": [
         ([("family_id", ASCENDING)], {"name": "idx_relationships_family_id"}),
-        ([("source_id", ASCENDING)], {"name": "idx_relationships_source_id"}),
-        ([("target_id", ASCENDING)], {"name": "idx_relationships_target_id"}),
+        ([("source_member_id", ASCENDING)], {"name": "idx_relationships_source_member_id"}),
+        ([("target_member_id", ASCENDING)], {"name": "idx_relationships_target_member_id"}),
         ([("relationship_type", ASCENDING)], {"name": "idx_relationships_relationship_type"}),
+        (
+            [
+                ("family_id", ASCENDING),
+                ("source_member_id", ASCENDING),
+                ("target_member_id", ASCENDING),
+                ("relationship_type", ASCENDING),
+            ],
+            {
+                "unique": True,
+                "name": "idx_relationships_edge_unique",
+            },
+        ),
     ],
     "projects": [
         ([("name", ASCENDING)], {"name": "idx_projects_name"}),
         ([("created_at", ASCENDING)], {"name": "idx_projects_created_at"}),
+        ([("owner_user_id", ASCENDING)], {"name": "idx_projects_owner_user_id"}),
+        ([("owner_email", ASCENDING)], {"name": "idx_projects_owner_email"}),
+        ([("family_id", ASCENDING)], {"name": "idx_projects_family_id"}),
+    ],
+    "project_members": [
+        ([("project_id", ASCENDING)], {"name": "idx_project_members_project_id"}),
+        ([("user_id", ASCENDING)], {"name": "idx_project_members_user_id"}),
+        ([("email", ASCENDING)], {"name": "idx_project_members_email"}),
+        ([("member_role", ASCENDING)], {"name": "idx_project_members_member_role"}),
+        ([("status", ASCENDING)], {"name": "idx_project_members_status"}),
+        (
+            [("project_id", ASCENDING), ("user_id", ASCENDING)],
+            {
+                "unique": True,
+                "name": "idx_project_members_project_user_unique",
+                "partialFilterExpression": {"user_id": {"$type": "string"}},
+            },
+        ),
+        (
+            [("project_id", ASCENDING), ("email", ASCENDING)],
+            {
+                "unique": True,
+                "name": "idx_project_members_project_email_unique",
+                "partialFilterExpression": {"email": {"$type": "string"}},
+            },
+        ),
     ],
     "project_entitlements": [
         (

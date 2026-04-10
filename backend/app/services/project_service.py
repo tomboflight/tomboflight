@@ -3,10 +3,16 @@ from typing import Any
 
 from bson import ObjectId
 
-from app.core.package_catalog import get_package
+from app.core.package_catalog import get_package, normalize_package_code
+from app.core.package_type_catalog import normalize_package_type
 from app.database import get_database
 from app.schemas.project import ProjectCreate
 from app.services.entitlement_service import can_upgrade
+from app.services.project_membership_service import (
+    ensure_project_owner_membership,
+    get_project_access_snapshot,
+    list_accessible_project_ids,
+)
 from app.services.project_entitlement_service import (
     get_project_entitlement,
     upsert_project_entitlement,
@@ -19,6 +25,27 @@ def _now() -> datetime:
 
 def _normalize(value: str | None) -> str:
     return str(value or "").strip()
+
+
+def _sort_projects(projects: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    def _sort_key(item: dict[str, Any]) -> str:
+        return str(item.get("updated_at") or item.get("created_at") or "")
+
+    return sorted(
+        projects.values(),
+        key=_sort_key,
+        reverse=True,
+    )
+
+
+def _find_project_by_identifier(db, project_id: str) -> dict[str, Any] | None:
+    if not project_id:
+        return None
+    if ObjectId.is_valid(project_id):
+        project = db.projects.find_one({"_id": ObjectId(project_id)})
+        if project is not None:
+            return project
+    return db.projects.find_one({"id": project_id})
 
 
 def list_projects(
@@ -37,18 +64,26 @@ def list_projects(
     owner_user_id = _normalize(owner_user_id)
     owner_email = _normalize(owner_email).lower()
 
+    project_map: dict[str, dict[str, Any]] = {}
+    for project_id in list_accessible_project_ids(
+        user_id=owner_user_id,
+        email=owner_email,
+    ):
+        project = _find_project_by_identifier(db, project_id)
+        if project is not None:
+            project_map[str(project.get("_id") or project.get("id"))] = project
+
     filters: list[dict[str, Any]] = []
     if owner_user_id:
         filters.append({"owner_user_id": owner_user_id})
     if owner_email:
         filters.append({"owner_email": owner_email})
 
-    if not filters:
-        return []
+    if filters:
+        for project in db.projects.find({"$or": filters}).sort("created_at", -1):
+            project_map[str(project.get("_id") or project.get("id"))] = project
 
-    return list(
-        db.projects.find({"$or": filters}).sort("created_at", -1)
-    )
+    return _sort_projects(project_map)
 
 
 def create_project(payload: ProjectCreate) -> dict[str, Any]:
@@ -59,6 +94,8 @@ def create_project(payload: ProjectCreate) -> dict[str, Any]:
     data["created_at"] = now
     data["updated_at"] = now
     data["project_name"] = data["name"]
+    data["package_code"] = normalize_package_code(data["package_code"])
+    data["project_lane"] = normalize_package_type(data["project_lane"], default="portrait")
     data["package_slug"] = data["package_code"]
     data["package_type"] = data["package_code"]
 
@@ -68,6 +105,7 @@ def create_project(payload: ProjectCreate) -> dict[str, Any]:
 
     result = db.projects.insert_one(data)
     data["_id"] = result.inserted_id
+    ensure_project_owner_membership(data)
     return data
 
 
@@ -83,11 +121,12 @@ def create_project_from_paid_order(
     if db is None:
         return None
 
+    package_code = normalize_package_code(package_code)
     package = get_package(package_code)
     if not package:
         return None
 
-    package_lane = str(package.get("package_lane") or "").strip().lower()
+    package_lane = normalize_package_type(package.get("package_lane"))
     if package_lane not in {"portrait", "household", "network", "organization"}:
         return None
 
@@ -132,6 +171,7 @@ def create_project_from_paid_order(
 
     result = db.projects.insert_one(project_doc)
     project_doc["_id"] = result.inserted_id
+    ensure_project_owner_membership(project_doc)
 
     try:
         upsert_project_entitlement(
@@ -165,6 +205,7 @@ def apply_package_purchase_to_project(
     if not ObjectId.is_valid(project_id):
         return None
 
+    package_code = normalize_package_code(package_code)
     package = get_package(package_code)
     if not package:
         return None
@@ -177,10 +218,13 @@ def apply_package_purchase_to_project(
     owner_user_id = str(project.get("owner_user_id") or "").strip()
     owner_email = str(project.get("owner_email") or "").strip().lower()
     user_email = str(user.get("email") or "").strip().lower()
+    access_snapshot = get_project_access_snapshot(
+        project,
+        user_id=user_id,
+        email=user_email,
+    )
 
-    if user_id and owner_user_id and owner_user_id != user_id:
-        return None
-    if user_email and owner_email and owner_email != user_email:
+    if not access_snapshot.get("accessible"):
         return None
 
     current_entitlement = get_project_entitlement(project_id) or {}
@@ -200,7 +244,10 @@ def apply_package_purchase_to_project(
 
     now = _now()
     updated_fields: dict[str, Any] = {
-        "project_lane": str(package.get("package_lane") or project.get("project_lane") or "").strip().lower() or project.get("project_lane"),
+        "project_lane": normalize_package_type(
+            package.get("package_lane") or project.get("project_lane"),
+            default=_normalize(project.get("project_lane")) or "portrait",
+        ),
         "package_code": package_code,
         "package_slug": package_code,
         "package_type": package_code,
@@ -224,6 +271,7 @@ def apply_package_purchase_to_project(
     )
 
     refreshed = db.projects.find_one({"_id": ObjectId(project_id)}) or project
+    ensure_project_owner_membership(refreshed)
 
     existing_addons = list(current_entitlement.get("active_addons") or [])
     maintenance_plan = str(current_entitlement.get("maintenance_plan") or "not_started")

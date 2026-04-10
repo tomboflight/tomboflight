@@ -3,6 +3,7 @@ from typing import Any
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
+from app.core.relationship_catalog import normalize_relationship_type
 from app.dependencies.auth import (
     get_current_user,
     has_internal_admin_access,
@@ -213,7 +214,7 @@ async def create_relationship(
         family_id=created["family_id"],
         source_member_id=created["source_member_id"],
         target_member_id=created["target_member_id"],
-        relationship_type=created["relationship_type"],
+        relationship_type=normalize_relationship_type(created["relationship_type"]),
         notes=created.get("notes"),
         created_by=created.get("created_by"),
         created_at=created["created_at"],
@@ -245,7 +246,9 @@ async def get_family_relationships(
                 "family_id": rel.get("family_id"),
                 "source_member_id": rel.get("source_member_id"),
                 "target_member_id": rel.get("target_member_id"),
-                "relationship_type": rel.get("relationship_type"),
+                "relationship_type": normalize_relationship_type(
+                    rel.get("relationship_type")
+                ),
                 "notes": rel.get("notes"),
                 "created_by": rel.get("created_by"),
                 "created_at": rel.get("created_at"),
@@ -290,7 +293,9 @@ async def get_member_relationships(
                 "family_id": rel.get("family_id"),
                 "source_member_id": rel.get("source_member_id"),
                 "target_member_id": rel.get("target_member_id"),
-                "relationship_type": rel.get("relationship_type"),
+                "relationship_type": normalize_relationship_type(
+                    rel.get("relationship_type")
+                ),
                 "notes": rel.get("notes"),
                 "created_by": rel.get("created_by"),
                 "created_at": rel.get("created_at"),
