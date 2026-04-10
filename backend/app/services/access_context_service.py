@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import logging
+
 from app.database import get_database
 from app.dependencies.auth import has_internal_admin_access
 from app.services.experience_catalog_service import (
@@ -11,6 +13,9 @@ from app.services.experience_catalog_service import (
 )
 from app.services.project_entitlement_service import list_user_project_entitlements
 from app.services.workspace_access_service import resolve_workspace_context
+
+
+logger = logging.getLogger(__name__)
 
 
 def _normalize(value: Any) -> str:
@@ -60,7 +65,11 @@ def resolve_default_project_id(current_user: dict[str, Any]) -> str | None:
     if user_id:
         try:
             entitlements = list_user_project_entitlements(user_id, active_only=True)
-        except Exception:
+        except RuntimeError as exc:
+            logger.warning("Unable to load project entitlements for user %s: %s", user_id, exc)
+            entitlements = []
+        except ValueError as exc:
+            logger.warning("Invalid project entitlement data for user %s: %s", user_id, exc)
             entitlements = []
         for entitlement in entitlements:
             project_id = _normalize(entitlement.get("project_id"))

@@ -110,8 +110,8 @@ def _build_checkpoints(context: dict[str, Any]) -> list[dict[str, Any]]:
         {
             "key": "archive_seed",
             "label": "Seed the archive chamber",
-            "completed": summary["pending_uploads"] < trust_state.get("member_count", 0),
-            "detail": f"{summary['pending_uploads']} archive items still need trust-state follow-through.",
+            "completed": bool(trust_state.get("archive_asset_count")),
+            "detail": f"{summary['pending_uploads']} archive items still need verification processing.",
         },
         {
             "key": "verification_trust",
@@ -298,7 +298,13 @@ def start_experience_session(
 
     allowed_chambers = get_lane_chambers(package_lane)
     requested_chamber = _normalize(payload.preferred_chamber)
-    current_chamber = requested_chamber if requested_chamber in allowed_chambers else _default_chamber(package_lane, family_exists=bool(context.get("family")))
+    if requested_chamber in allowed_chambers:
+        current_chamber = requested_chamber
+    else:
+        current_chamber = _default_chamber(
+            package_lane,
+            family_exists=bool(context.get("family")),
+        )
 
     now_iso = _now_iso()
     _experience_collection().update_one(

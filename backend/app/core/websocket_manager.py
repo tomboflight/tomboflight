@@ -4,7 +4,7 @@ import asyncio
 from collections import defaultdict
 from typing import Any
 
-from fastapi import WebSocket
+from fastapi import WebSocket, WebSocketDisconnect
 
 
 class WebSocketManager:
@@ -37,7 +37,7 @@ class WebSocketManager:
         for websocket in connections:
             try:
                 await websocket.send_json(payload)
-            except Exception:
+            except (RuntimeError, WebSocketDisconnect):
                 stale.append(websocket)
 
         if stale:

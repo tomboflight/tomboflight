@@ -7,8 +7,14 @@ from fastapi import HTTPException, WebSocket, status
 from app.core.security import decode_access_token
 from app.core.websocket_manager import websocket_manager
 from app.dependencies.auth import COOKIE_NAME
-from app.services.auth_service import get_user_by_email
+from app.services.auth_service import get_user_by_email, get_user_by_id
 from app.services.workspace_access_service import resolve_workspace_context
+
+
+WS_EXPERIENCE_PATH = "/ws/experience"
+WS_FAMILY_PATH = "/ws/family/{family_id}"
+WS_PROJECT_PATH = "/ws/project/{project_id}"
+WEBSOCKET_PATHS = [WS_EXPERIENCE_PATH, WS_FAMILY_PATH, WS_PROJECT_PATH]
 
 
 def _normalize(value: Any) -> str:
@@ -25,7 +31,7 @@ def _room_name(channel_type: str, channel_id: str = "") -> str:
 
 
 def websocket_paths() -> list[str]:
-    return ["/ws/experience", "/ws/family/{family_id}", "/ws/project/{project_id}"]
+    return list(WEBSOCKET_PATHS)
 
 
 def build_presence_status() -> dict[str, Any]:
@@ -58,16 +64,17 @@ def authenticate_presence_user(token: str) -> dict[str, Any]:
     if payload is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid websocket token.")
 
+    user_id = _normalize(payload.get("user_id") or payload.get("id"))
     email = _normalize(payload.get("sub") or payload.get("email")).lower()
-    user = get_user_by_email(email) if email else None
+
+    user = get_user_by_id(user_id) if user_id else None
+    if user is None and email:
+        user = get_user_by_email(email)
     if user is None:
-        user = {
-            "id": _normalize(payload.get("user_id") or payload.get("id")),
-            "user_id": _normalize(payload.get("user_id") or payload.get("id")),
-            "email": email,
-            "role": _normalize(payload.get("role")) or "user",
-            "status": "active",
-        }
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Websocket user could not be resolved.",
+        )
     return user
 
 

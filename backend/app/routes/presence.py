@@ -8,6 +8,9 @@ from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisco
 from app.dependencies.auth import get_current_user
 from app.schemas.experience import PresenceStatusResponse
 from app.services.presence_service import (
+    WS_EXPERIENCE_PATH,
+    WS_FAMILY_PATH,
+    WS_PROJECT_PATH,
     authenticate_presence_websocket,
     build_presence_overview,
     build_presence_status,
@@ -31,7 +34,7 @@ def get_presence_status_route(
     return build_presence_status()
 
 
-@router.websocket("/ws/experience")
+@router.websocket(WS_EXPERIENCE_PATH)
 async def websocket_experience(websocket: WebSocket):
     try:
         current_user = authenticate_presence_websocket(websocket)
@@ -53,13 +56,13 @@ async def websocket_experience(websocket: WebSocket):
 
     try:
         while True:
-            await websocket.receive_text()
-            await websocket.send_json({"event": "presence.heartbeat", "channel": room, "timestamp": _timestamp()})
+            client_message = await websocket.receive_text()
+            await websocket.send_json({"event": "presence.heartbeat", "channel": room, "received": client_message, "timestamp": _timestamp()})
     except WebSocketDisconnect:
         await disconnect_presence_channel(websocket, room)
 
 
-@router.websocket("/ws/family/{family_id}")
+@router.websocket(WS_FAMILY_PATH)
 async def websocket_family(websocket: WebSocket, family_id: str):
     try:
         current_user = authenticate_presence_websocket(websocket)
@@ -83,13 +86,13 @@ async def websocket_family(websocket: WebSocket, family_id: str):
 
     try:
         while True:
-            await websocket.receive_text()
-            await websocket.send_json({"event": "presence.heartbeat", "channel": room, "timestamp": _timestamp()})
+            client_message = await websocket.receive_text()
+            await websocket.send_json({"event": "presence.heartbeat", "channel": room, "received": client_message, "timestamp": _timestamp()})
     except WebSocketDisconnect:
         await disconnect_presence_channel(websocket, room)
 
 
-@router.websocket("/ws/project/{project_id}")
+@router.websocket(WS_PROJECT_PATH)
 async def websocket_project(websocket: WebSocket, project_id: str):
     try:
         current_user = authenticate_presence_websocket(websocket)
@@ -113,7 +116,7 @@ async def websocket_project(websocket: WebSocket, project_id: str):
 
     try:
         while True:
-            await websocket.receive_text()
-            await websocket.send_json({"event": "presence.heartbeat", "channel": room, "timestamp": _timestamp()})
+            client_message = await websocket.receive_text()
+            await websocket.send_json({"event": "presence.heartbeat", "channel": room, "received": client_message, "timestamp": _timestamp()})
     except WebSocketDisconnect:
         await disconnect_presence_channel(websocket, room)

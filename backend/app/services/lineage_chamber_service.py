@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+import logging
 from typing import Any
 
 from bson import ObjectId
 
 from app.database import get_database
 from app.services.graph_integrity_service import analyze_family_graph_integrity
+
+
+logger = logging.getLogger(__name__)
 
 
 def _normalize(value: Any) -> str:
@@ -111,7 +115,8 @@ def build_lineage_chamber_summary(family_id: str) -> dict[str, Any]:
     try:
         integrity_report = analyze_family_graph_integrity(resolved_family_id)
         orphaned_branches = len(integrity_report.isolated_member_ids)
-    except Exception:
+    except (RuntimeError, ValueError) as exc:
+        logger.warning("Falling back to connected-node orphan calculation for family %s: %s", resolved_family_id, exc)
         orphaned_branches = max(0, len(member_ids - connected_member_ids))
 
     generation_counts: Counter[str] = Counter()
@@ -130,7 +135,10 @@ def build_lineage_chamber_summary(family_id: str) -> dict[str, Any]:
         for generation_key, count in generation_counts.most_common(5)
     ]
 
-    pending_uploads = max(0, len(uploads) - verified_record_count)
+    verification_upload_count = len(
+        [upload for upload in uploads if upload.get("category") == "verification_evidence"]
+    )
+    pending_uploads = verification_upload_count
     unresolved_identity_links = sum(
         1
         for candidate in match_candidates
@@ -144,7 +152,7 @@ def build_lineage_chamber_summary(family_id: str) -> dict[str, Any]:
     )
     certificate_ready_segments = 0
     if verified_record_count and contradictory_record_count == 0:
-        certificate_ready_segments = max(1, min(len(branch_summary) or 1, verified_node_count or 1))
+        certificate_ready_segments = max(1, min(len(branch_summary), verified_node_count))
 
     certificate_ready = bool(
         members
@@ -158,6 +166,8 @@ def build_lineage_chamber_summary(family_id: str) -> dict[str, Any]:
         "member_count": len(members),
         "relationship_count": len(relationships),
         "household_count": len(households),
+        "archive_asset_count": len(uploads),
+        "verification_upload_count": verification_upload_count,
         "verified_records": verified_record_count,
         "pending_records": pending_record_count,
         "contradictory_records": contradictory_record_count,
