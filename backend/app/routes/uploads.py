@@ -475,10 +475,14 @@ def _workspace_storage_used_bytes(*, db: Any, project_id: str, family_id: str) -
         query["family_id"] = family_id
     else:
         return 0
-    total = 0
-    for record in db["uploaded_files"].find(query, {"size_bytes": 1}):
-        total += _as_int(record.get("size_bytes"), 0)
-    return total
+    pipeline = [
+        {"$match": query},
+        {"$group": {"_id": None, "total": {"$sum": {"$ifNull": ["$size_bytes", 0]}}}},
+    ]
+    results = list(db["uploaded_files"].aggregate(pipeline))
+    if not results:
+        return 0
+    return _as_int(results[0].get("total"), 0)
 
 
 def _enforce_workspace_storage_limit(

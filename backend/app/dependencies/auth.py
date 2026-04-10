@@ -756,10 +756,14 @@ def transition_project(
     if not target_state:
         raise HTTPException(status_code=400, detail="to_state is required.")
 
-    if target_state not in WORKFLOW_ALLOWED_TRANSITIONS.get(from_state, set()):
+    allowed_transitions = sorted(WORKFLOW_ALLOWED_TRANSITIONS.get(from_state, set()))
+    if target_state not in set(allowed_transitions):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Invalid transition from '{from_state or 'unknown'}' to '{target_state}'.",
+            detail=(
+                f"Invalid transition from '{from_state or 'unknown'}' to '{target_state}'. "
+                f"Allowed transitions: {allowed_transitions}."
+            ),
         )
 
     actor_user_id = ""

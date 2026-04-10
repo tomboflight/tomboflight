@@ -44,7 +44,7 @@ def _reviewed_by(current_admin: dict[str, Any]) -> str:
     ).strip()
 
 
-def _current_user_id(current_admin: dict[str, Any]) -> str:
+def _admin_user_id(current_admin: dict[str, Any]) -> str:
     return str(
         current_admin.get("id")
         or current_admin.get("_id")
@@ -175,7 +175,7 @@ def provision_admin_intake_build(
         return provision_build_from_submission(
             submission_id=submission_id,
             provisioned_by=_reviewed_by(current_admin),
-            provisioned_by_user_id=_current_user_id(current_admin),
+            provisioned_by_user_id=_admin_user_id(current_admin),
             family_name_override=payload.family_name_override,
             project_name_override=payload.project_name_override,
             production_notes=payload.production_notes,
