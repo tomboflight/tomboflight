@@ -28,8 +28,16 @@ def _normalize(value: str | None) -> str:
 
 
 def _sort_projects(projects: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
-    def _sort_key(item: dict[str, Any]) -> str:
-        return str(item.get("updated_at") or item.get("created_at") or "")
+    def _sort_key(item: dict[str, Any]) -> datetime:
+        value = item.get("updated_at") or item.get("created_at")
+        if isinstance(value, datetime):
+            return value
+        if isinstance(value, str):
+            try:
+                return datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError:
+                pass
+        return datetime.min.replace(tzinfo=UTC)
 
     return sorted(
         projects.values(),

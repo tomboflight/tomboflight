@@ -458,36 +458,35 @@ def ensure_project_workspace_anchor(
             project["family_id"] = family_id
 
     if family_id and primary_member is None:
-        if primary_member is None:
-            household = submission.get("household") if isinstance(submission, dict) else {}
-            primary_contact_name = _normalize_value(
-                household.get("primary_contact_name") if isinstance(household, dict) else ""
-            )
-            first_name, last_name = _split_name(primary_contact_name, owner_email)
+        household = submission.get("household") if isinstance(submission, dict) else {}
+        primary_contact_name = _normalize_value(
+            household.get("primary_contact_name") if isinstance(household, dict) else ""
+        )
+        first_name, last_name = _split_name(primary_contact_name, owner_email)
 
-            member_payload = {
-                "family_id": family_id,
-                "first_name": first_name,
-                "last_name": last_name,
-                "generation": 1,
-                "bio": _build_anchor_description(
-                    lane=lane,
-                    project=project,
-                    submission=submission,
-                ),
-                "owner_user_id": owner_user_id,
-                "owner_email": owner_email,
-                "workspace_lane": lane,
-                "source": "viewer_workspace_anchor",
-                "intake_submission_id": submission_id or None,
-                "is_verified": False,
-                "verification_status": "unverified",
-                "created_at": _now(),
-                "updated_at": _now(),
-            }
-            result = family_members.insert_one(member_payload)
-            member_payload["_id"] = result.inserted_id
-            primary_member = member_payload
+        member_payload = {
+            "family_id": family_id,
+            "first_name": first_name,
+            "last_name": last_name,
+            "generation": 1,
+            "bio": _build_anchor_description(
+                lane=lane,
+                project=project,
+                submission=submission,
+            ),
+            "owner_user_id": owner_user_id,
+            "owner_email": owner_email,
+            "workspace_lane": lane,
+            "source": "viewer_workspace_anchor",
+            "intake_submission_id": submission_id or None,
+            "is_verified": False,
+            "verification_status": "unverified",
+            "created_at": _now(),
+            "updated_at": _now(),
+        }
+        result = family_members.insert_one(member_payload)
+        member_payload["_id"] = result.inserted_id
+        primary_member = member_payload
 
     return family_doc, primary_member, project
 
