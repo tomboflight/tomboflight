@@ -136,21 +136,20 @@
   }
 
   function buildNetworkErrorMessage(apiBaseUrls) {
+    if (!isLocalApp()) {
+      return "Service temporarily unavailable. Please try again in a few minutes.";
+    }
+
     const candidates = uniqueNonEmptyValues(apiBaseUrls);
     const details = [
       "Network error calling API.",
       "",
       `API base candidates: ${candidates.join(", ") || "none configured"}`,
       `Page origin: ${window.location.origin}`,
+      "",
+      "Local frontend should usually run on http://127.0.0.1:5500",
+      "Local backend should usually run on http://127.0.0.1:8000",
     ];
-
-    if (isLocalApp()) {
-      details.push(
-        "",
-        "Local frontend should usually run on http://127.0.0.1:5500",
-        "Local backend should usually run on http://127.0.0.1:8000",
-      );
-    }
 
     return details.join("\n");
   }

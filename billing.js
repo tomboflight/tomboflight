@@ -35,6 +35,13 @@
     return String((error && error.message) || error || "Unknown error");
   }
 
+  function getUserFacingErrorMessage(error) {
+    if (typeof console !== "undefined" && typeof console.error === "function") {
+      console.error("[Billing] Error details:", error);
+    }
+    return getErrorMessage(error);
+  }
+
   function buildSubscriptionCard(item) {
     const productNames = Array.isArray(item.product_names)
       ? item.product_names.join(", ")
@@ -173,7 +180,7 @@
       }
     } catch (error) {
       if (pageStatus) {
-        pageStatus.textContent = getErrorMessage(error) || "Billing profile could not be loaded.";
+        pageStatus.textContent = getUserFacingErrorMessage(error) || "Billing profile could not be loaded.";
       }
       if (cardsStatus) {
         cardsStatus.textContent = "Saved cards could not be loaded.";
@@ -258,7 +265,7 @@
     } catch (error) {
       app.setStatus(
         statusNode,
-        getErrorMessage(error) || "Unable to save card.",
+        getUserFacingErrorMessage(error) || "Unable to save card.",
         "error",
       );
     }
@@ -280,7 +287,7 @@
     } catch (error) {
       app.setStatus(
         pageStatus,
-        getErrorMessage(error) || "Unable to open billing portal.",
+        getUserFacingErrorMessage(error) || "Unable to open billing portal.",
         "error",
       );
     }
@@ -296,7 +303,7 @@
     } catch (error) {
       app.setStatus(
         statusNode,
-        getErrorMessage(error) || "Unable to update card.",
+        getUserFacingErrorMessage(error) || "Unable to update card.",
         "error",
       );
     }
