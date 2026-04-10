@@ -9,6 +9,7 @@ from app.database import close_mongo_connection, connect_to_mongo, get_database
 from app.routes.admin_intake_submissions import (
     router as admin_intake_submissions_router,
 )
+from app.routes.admin_maintenance import router as admin_maintenance_router
 from app.routes.audit_logs import router as audit_logs_router
 from app.routes.auth import router as auth_router
 from app.routes.billing import router as billing_router
@@ -158,6 +159,7 @@ app.include_router(households_router)
 app.include_router(household_links_router)
 app.include_router(relationships_router)
 app.include_router(db_bootstrap_router)
+app.include_router(admin_maintenance_router)
 app.include_router(graph_integrity_router)
 app.include_router(orders_router)
 app.include_router(package_catalog_router)
@@ -247,6 +249,9 @@ def root():
             "/projects/{project_id}/mint-records",
             "/projects/{project_id}/mint-status",
             "/admin/mint-records/maintenance/backfill",
+            "/admin/maintenance/drop-legacy-indexes",
+            "/admin/maintenance/backfill-project-members",
+            "/admin/maintenance/backfill-workspace-anchors",
             "/mint-jobs/run-next",
             "/tokens/{public_token_id}",
             "/link-keys/my-list",
