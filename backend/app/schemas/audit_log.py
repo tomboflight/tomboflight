@@ -45,7 +45,7 @@ def build_audit_log_response(data: dict) -> AuditLogResponse:
 
     return AuditLogResponse(
         id=str(data.get("_id", "")),
-        action=data["action"],
+        action=data.get("action") or data.get("event") or "unknown_action",
         entity_type=str(data.get("entity_type") or target_type),
         entity_id=str(data.get("entity_id") or target_id),
         target_type=str(target_type),

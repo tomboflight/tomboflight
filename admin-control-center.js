@@ -493,30 +493,64 @@
     `;
   }
 
+  function buildStatusChip(value, chipClass) {
+    if (!value) return "";
+    return `<span class="admin-status-chip admin-status-chip--${escapeHtml(chipClass || "default")}">${escapeHtml(value)}</span>`;
+  }
+
+  function buildLaneChip(lane) {
+    const laneMap = {
+      portrait: "Portrait",
+      household: "Household",
+      network: "Network",
+      organization: "Organization",
+    };
+    const label = laneMap[String(lane || "").toLowerCase()] || lane || "—";
+    const cls = laneMap[String(lane || "").toLowerCase()] ? lane.toLowerCase() : "default";
+    return `<span class="admin-lane-chip admin-lane-chip--${escapeHtml(cls)}">${escapeHtml(label)}</span>`;
+  }
+
+  function shortId(id) {
+    if (!id) return "—";
+    const s = String(id);
+    return s.length > 12 ? `…${s.slice(-8)}` : s;
+  }
+
   function buildOrderCard(item) {
+    const projectDisplay = item.project_id
+      ? shortId(item.project_id)
+      : "No project linked";
     return `
-      <div class="family-record-card">
-        <div class="card-number">O</div>
-        <h3>${escapeHtml(item.package_name || item.package_code || "Order")}</h3>
-        <p class="card-copy"><strong>Email:</strong> ${escapeHtml(item.email || "—")}</p>
-        <p class="card-copy"><strong>Status:</strong> ${escapeHtml(item.status || "—")}</p>
-        <p class="card-copy"><strong>Billing:</strong> ${escapeHtml(item.billing_plan || "—")}</p>
-        <p class="card-copy"><strong>Project:</strong> ${escapeHtml(item.project_id || "—")}</p>
-        <p class="card-copy"><strong>Created:</strong> ${escapeHtml(formatDate(item.created_at))}</p>
+      <div class="family-record-card admin-card">
+        <div class="admin-card-header">
+          <span class="admin-card-badge">O</span>
+          <h3 class="admin-card-title">${escapeHtml(item.package_name || item.package_code || "Order")}</h3>
+        </div>
+        <div class="admin-card-meta">
+          <p class="card-copy"><strong>Email:</strong> ${escapeHtml(item.email || "—")}</p>
+          <p class="card-copy"><strong>Status:</strong> ${buildStatusChip(item.status, item.status === "paid" ? "success" : "default")}</p>
+          <p class="card-copy"><strong>Plan:</strong> ${escapeHtml(item.billing_plan || "—")}</p>
+          <p class="card-copy"><strong>Project:</strong> <span class="admin-id-ref">${escapeHtml(projectDisplay)}</span></p>
+          <p class="card-copy"><strong>Created:</strong> ${escapeHtml(formatDate(item.created_at))}</p>
+        </div>
       </div>
     `;
   }
 
   function buildEntitlementCard(item) {
     return `
-      <div class="family-record-card">
-        <div class="card-number">E</div>
-        <h3>${escapeHtml(item.package_name || item.package_code || "Entitlement")}</h3>
-        <p class="card-copy"><strong>Project:</strong> ${escapeHtml(item.project_id || "—")}</p>
-        <p class="card-copy"><strong>User:</strong> ${escapeHtml(item.user_id || "—")}</p>
-        <p class="card-copy"><strong>Status:</strong> ${escapeHtml(item.status || "—")}</p>
-        <p class="card-copy"><strong>Maintenance:</strong> ${escapeHtml(item.maintenance_status || "—")}</p>
-        <p class="card-copy"><strong>Updated:</strong> ${escapeHtml(formatDate(item.updated_at))}</p>
+      <div class="family-record-card admin-card">
+        <div class="admin-card-header">
+          <span class="admin-card-badge">E</span>
+          <h3 class="admin-card-title">${escapeHtml(item.package_name || item.package_code || "Entitlement")}</h3>
+        </div>
+        <div class="admin-card-meta">
+          <p class="card-copy"><strong>Project:</strong> <span class="admin-id-ref">${escapeHtml(shortId(item.project_id))}</span></p>
+          <p class="card-copy"><strong>User:</strong> <span class="admin-id-ref">${escapeHtml(shortId(item.user_id))}</span></p>
+          <p class="card-copy"><strong>Status:</strong> ${buildStatusChip(item.status, item.status === "active" ? "success" : "default")}</p>
+          <p class="card-copy"><strong>Maintenance:</strong> ${escapeHtml(item.maintenance_status || "—")}</p>
+          <p class="card-copy"><strong>Updated:</strong> ${escapeHtml(formatDate(item.updated_at))}</p>
+        </div>
       </div>
     `;
   }
@@ -527,14 +561,18 @@
       : "";
 
     return `
-      <div class="family-record-card">
-        <div class="card-number">P</div>
-        <h3>${escapeHtml(item.name || "Project")}</h3>
-        <p class="card-copy"><strong>Owner:</strong> ${escapeHtml(item.owner_email || "—")}</p>
-        <p class="card-copy"><strong>Package:</strong> ${escapeHtml(item.package_name || item.package_code || "—")}</p>
-        <p class="card-copy"><strong>Status:</strong> ${escapeHtml(item.status || "—")}</p>
-        <p class="card-copy"><strong>Phase:</strong> ${escapeHtml(item.phase || "—")}</p>
-        <p class="card-copy"><strong>Lane:</strong> ${escapeHtml(item.project_lane || "—")}</p>
+      <div class="family-record-card admin-card">
+        <div class="admin-card-header">
+          <span class="admin-card-badge">P</span>
+          <h3 class="admin-card-title">${escapeHtml(item.name || "Project")}</h3>
+        </div>
+        <div class="admin-card-meta">
+          <p class="card-copy"><strong>Owner:</strong> ${escapeHtml(item.owner_email || "—")}</p>
+          <p class="card-copy"><strong>Package:</strong> ${escapeHtml(item.package_name || item.package_code || "—")}</p>
+          <p class="card-copy"><strong>Status:</strong> ${buildStatusChip(item.status, item.status === "purchased" || item.status === "delivered" ? "success" : "default")}</p>
+          <p class="card-copy"><strong>Phase:</strong> ${escapeHtml(item.phase || "—")}</p>
+          <p class="card-copy"><strong>Lane:</strong> ${buildLaneChip(item.project_lane)}</p>
+        </div>
         <div class="inline-actions" style="margin-top: 1rem;">
           ${
             familyHref
@@ -548,15 +586,19 @@
 
   function buildUserCard(item) {
     return `
-      <div class="family-record-card">
-        <div class="card-number">U</div>
-        <h3>${escapeHtml(item.full_name || `${item.first_name || ""} ${item.last_name || ""}`.trim() || item.email || "User")}</h3>
-        <p class="card-copy"><strong>Email:</strong> ${escapeHtml(item.email || "—")}</p>
-        <p class="card-copy"><strong>Role:</strong> ${escapeHtml(item.role || "—")}</p>
-        <p class="card-copy"><strong>Status:</strong> ${escapeHtml(item.status || "—")}</p>
-        <p class="card-copy"><strong>Last Login:</strong> ${escapeHtml(formatDate(item.last_login_at))}</p>
-        <p class="card-copy"><strong>Reset Requested:</strong> ${escapeHtml(formatDate(item.password_reset_requested_at))}</p>
-        <p class="card-copy"><strong>Created:</strong> ${escapeHtml(formatDate(item.created_at))}</p>
+      <div class="family-record-card admin-card">
+        <div class="admin-card-header">
+          <span class="admin-card-badge">U</span>
+          <h3 class="admin-card-title">${escapeHtml(item.full_name || `${item.first_name || ""} ${item.last_name || ""}`.trim() || item.email || "User")}</h3>
+        </div>
+        <div class="admin-card-meta">
+          <p class="card-copy"><strong>Email:</strong> ${escapeHtml(item.email || "—")}</p>
+          <p class="card-copy"><strong>Role:</strong> ${buildStatusChip(item.role, "role")}</p>
+          <p class="card-copy"><strong>Status:</strong> ${buildStatusChip(item.status, item.status === "active" ? "success" : "default")}</p>
+          <p class="card-copy"><strong>Last Login:</strong> ${escapeHtml(formatDate(item.last_login_at))}</p>
+          <p class="card-copy"><strong>Reset Requested:</strong> ${escapeHtml(formatDate(item.password_reset_requested_at))}</p>
+          <p class="card-copy"><strong>Created:</strong> ${escapeHtml(formatDate(item.created_at))}</p>
+        </div>
         <div class="inline-actions" style="margin-top: 1rem;">
           <button class="btn btn-secondary" type="button" data-admin-password-reset="${escapeHtml(item.id || "")}">
             Issue Reset Link
@@ -567,13 +609,19 @@
   }
 
   function buildAuditCard(item) {
+    const action = item.action || item.event || item.entity_type || "Audit Event";
     return `
-      <div class="family-record-card">
-        <div class="card-number">A</div>
-        <h3>${escapeHtml(item.action || "Audit Event")}</h3>
-        <p class="card-copy"><strong>Entity:</strong> ${escapeHtml(item.entity_type || "—")} / ${escapeHtml(item.entity_id || "—")}</p>
-        <p class="card-copy"><strong>Actor:</strong> ${escapeHtml(item.actor_email || item.actor_name || item.actor_user_id || "—")}</p>
-        <p class="card-copy"><strong>Created:</strong> ${escapeHtml(formatDate(item.created_at))}</p>
+      <div class="family-record-card admin-card">
+        <div class="admin-card-header">
+          <span class="admin-card-badge">A</span>
+          <h3 class="admin-card-title">${escapeHtml(action)}</h3>
+        </div>
+        <div class="admin-card-meta">
+          <p class="card-copy"><strong>Target:</strong> ${escapeHtml(item.target_type || item.entity_type || "—")} / <span class="admin-id-ref">${escapeHtml(shortId(item.target_id || item.entity_id))}</span></p>
+          <p class="card-copy"><strong>Actor:</strong> ${escapeHtml(item.actor_email || item.actor_name || shortId(item.actor_user_id) || "—")}</p>
+          <p class="card-copy"><strong>Result:</strong> ${buildStatusChip(item.result, item.result === "success" ? "success" : item.result === "failure" ? "error" : "default")}</p>
+          <p class="card-copy"><strong>When:</strong> ${escapeHtml(formatDate(item.created_at || item.timestamp))}</p>
+        </div>
       </div>
     `;
   }
