@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from app.config import settings
 from app.core.package_catalog import get_package
 from app.core.security import decode_access_token
 from app.services.auth_service import get_user_by_email
@@ -24,13 +25,6 @@ INTERNAL_ADMIN_KEYS = {
     "operations",
     "finance",
     "marketing",
-}
-
-ALLOWED_COOKIE_AUTH_ORIGINS = {
-    "https://tomboflight.com",
-    "https://www.tomboflight.com",
-    "http://127.0.0.1:5500",
-    "http://localhost:5500",
 }
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -72,6 +66,10 @@ def _extract_request_origin(request: Request) -> str:
     return ""
 
 
+def _normalize_origin(value: Any) -> str:
+    return str(value or "").strip().rstrip("/")
+
+
 def _is_unsafe_method(method: str) -> bool:
     return method.upper() in {"POST", "PUT", "PATCH", "DELETE"}
 
@@ -84,6 +82,26 @@ def _is_public_password_reset_route(request: Request) -> bool:
     }
 
 
+def _allowed_cookie_auth_origins() -> set[str]:
+    configured = settings.allowed_origins_list or []
+    normalized = {
+        _normalize_origin(origin)
+        for origin in configured
+        if _normalize_origin(origin)
+    }
+    normalized.discard("*")
+
+    if normalized:
+        return normalized
+
+    return {
+        "https://tomboflight.com",
+        "https://www.tomboflight.com",
+        "http://127.0.0.1:5500",
+        "http://localhost:5500",
+    }
+
+
 def _enforce_cookie_auth_origin(request: Request) -> None:
     if not _is_unsafe_method(request.method):
         return
@@ -93,8 +111,8 @@ def _enforce_cookie_auth_origin(request: Request) -> None:
     if _is_public_password_reset_route(request):
         return
 
-    origin = _extract_request_origin(request)
-    if not origin or origin not in ALLOWED_COOKIE_AUTH_ORIGINS:
+    origin = _normalize_origin(_extract_request_origin(request))
+    if not origin or origin not in _allowed_cookie_auth_origins():
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Origin is not allowed for cookie-authenticated request.",

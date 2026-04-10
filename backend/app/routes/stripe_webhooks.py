@@ -83,7 +83,8 @@ async def stripe_webhook(request: Request) -> Dict[str, Any]:
 
     order_result: Dict[str, Any] = {"order_id": None}
 
-    if event_type in {"checkout.session.completed", "payment_intent.succeeded"}:
+    # Order upsert currently maps Stripe Checkout sessions to orders.
+    if event_type == "checkout.session.completed":
         try:
             order_result = upsert_order_from_stripe_event(event)
         except Exception as e:

@@ -58,7 +58,7 @@ PHOTO_ALLOWED_EXTENSIONS = {
     ".png",
     ".webp",
 }
-PHOTO_MAX_BYTES = 10 * 1024 * 1024
+PHOTO_MAX_BYTES = settings.upload_max_image_bytes
 
 EVIDENCE_ALLOWED_CONTENT_TYPES = {
     "application/pdf",
@@ -73,7 +73,7 @@ EVIDENCE_ALLOWED_EXTENSIONS = {
     ".png",
     ".webp",
 }
-EVIDENCE_MAX_BYTES = 20 * 1024 * 1024
+EVIDENCE_MAX_BYTES = settings.upload_max_document_bytes
 
 ALLOWED_VERIFICATION_TYPES = {
     "government_id",
@@ -344,7 +344,9 @@ def _absolute_upload_path(relative_path: str) -> Path:
     root = Path(settings.upload_root_path).resolve()
     candidate = (root / relative_path).resolve()
 
-    if not str(candidate).startswith(str(root)):
+    try:
+        candidate.relative_to(root)
+    except ValueError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Resolved upload path is invalid.",
