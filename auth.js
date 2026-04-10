@@ -1677,21 +1677,31 @@
   }
 
   function bindLogoutButtons() {
-    document.querySelectorAll("[data-logout-btn]").forEach(function (button) {
-      button.addEventListener("click", async function () {
-        try {
-          if (app.logoutUser) {
-            await app.logoutUser();
-          } else {
-            app.clearSession();
-          }
-        } catch (error) {
+    if (bindLogoutButtons._bound) return;
+    bindLogoutButtons._bound = true;
+
+    document.addEventListener("click", async function (event) {
+      const button = event.target.closest("[data-logout-btn]");
+      if (!button) return;
+
+      event.preventDefault();
+      if (button.dataset.logoutPending === "true") return;
+      button.dataset.logoutPending = "true";
+
+      try {
+        if (app.logoutUser) {
+          await app.logoutUser();
+        } else {
           app.clearSession();
         }
+      } catch (error) {
+        app.clearSession();
+      } finally {
+        button.dataset.logoutPending = "false";
+      }
 
-        clearCachedDashboardContext();
-        window.location.href = "signin.html";
-      });
+      clearCachedDashboardContext();
+      window.location.href = "signin.html";
     });
   }
 

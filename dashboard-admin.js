@@ -45,11 +45,14 @@
 
   function getInternalRoleKey(me) {
     const signals = getRoleSignals(me);
-    return (
-      signals.find(function (value) {
-        return INTERNAL_ROLE_KEYS.has(value);
-      }) || ""
-    );
+    const matched = signals.find(function (value) {
+      return INTERNAL_ROLE_KEYS.has(value);
+    });
+    if (matched) return matched;
+    if (app && typeof app.isInternalRole === "function" && app.isInternalRole(me)) {
+      return "admin";
+    }
+    return "";
   }
 
   // Use the canonical check from app.js when available, falling back to the

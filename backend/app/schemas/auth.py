@@ -59,6 +59,8 @@ class UserResponse(BaseModel):
     email: EmailStr
     full_name: str
     role: str
+    access_tier: Optional[str] = None
+    department_role: Optional[str] = None
     status: str
     created_at: str
 

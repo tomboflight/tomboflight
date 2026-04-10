@@ -104,11 +104,14 @@
 
   function getInternalRoleKey(me) {
     const signals = getRoleSignals(me);
-    return (
-      signals.find(function (value) {
-        return INTERNAL_ROLE_KEYS.has(value);
-      }) || ""
-    );
+    const matched = signals.find(function (value) {
+      return INTERNAL_ROLE_KEYS.has(value);
+    });
+    if (matched) return matched;
+    if (app && typeof app.isInternalRole === "function" && app.isInternalRole(me)) {
+      return "admin";
+    }
+    return "";
   }
 
   function getRoleTitle(roleKey) {
@@ -351,6 +354,19 @@
     const node = sectionListNode(sectionKey);
     if (!node) return;
     node.innerHTML = cardsMarkup;
+  }
+
+  function markAllSectionsUnavailable(message) {
+    Object.keys(SECTION_LOADERS).forEach(function (sectionKey) {
+      if (!canAccessSection(sectionKey)) return;
+      const title = sectionKey.charAt(0).toUpperCase() + sectionKey.slice(1);
+      updateSectionSnapshot(sectionKey, { items: [], state: "error" });
+      renderSectionCards(
+        sectionKey,
+        emptyCard(`${title} unavailable`, message),
+      );
+      setSectionStatus(sectionKey, message, "error");
+    });
   }
 
   async function fetchJson(path) {
@@ -1018,7 +1034,12 @@
   document.addEventListener("DOMContentLoaded", function () {
     setupPage().catch(function (error) {
       console.error("Failed to load admin control center:", error);
-      setPageStatus(error.message || "Unable to load internal control center.", "error");
+      const message = safeErrorMessage(
+        error,
+        "Unable to load internal control center.",
+      );
+      markAllSectionsUnavailable(message);
+      setPageStatus(message, "error");
     });
   });
 })();
