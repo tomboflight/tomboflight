@@ -91,6 +91,7 @@ def upsert_permission(
         "permission_name": _normalize(permission_name) or permission_code.replace("_", " ").title(),
         "description": _normalize(description),
         "status": _normalize(status).lower() or "active",
+        "updated_at": _utc_now_iso(),
     }
     payload = apply_update_metadata(payload, actor_user_id)
 
@@ -283,6 +284,7 @@ def set_tool_status(
         "severity": _normalize(severity).lower() or "info",
         "message": _normalize(message),
         "context": context or {},
+        "updated_at": _utc_now_iso(),
     }
     payload = apply_update_metadata(payload, actor_user_id)
 
