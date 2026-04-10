@@ -223,3 +223,55 @@ def ensure_project_owner_membership(project: dict[str, Any]) -> dict[str, Any] |
         member_role="owner",
         status="active",
     )
+
+
+def backfill_all_project_members(limit: int = 500) -> dict[str, Any]:
+    db = get_database()
+    if db is None:
+        return {
+            "scanned": 0,
+            "backfilled": 0,
+            "already_present": 0,
+            "skipped": 0,
+        }
+
+    scanned = 0
+    backfilled = 0
+    already_present = 0
+    skipped = 0
+
+    cursor = db["projects"].find({}, {"_id": 1, "owner_user_id": 1, "owner_email": 1}).limit(
+        max(1, min(limit, 5000))
+    )
+    for project in cursor:
+        scanned += 1
+        project_id = _normalize_value(project.get("_id"))
+        owner_user_id = _normalize_value(project.get("owner_user_id"))
+        owner_email = _normalize_email(project.get("owner_email"))
+
+        if not project_id or (not owner_user_id and not owner_email):
+            skipped += 1
+            continue
+
+        existing = get_project_member(
+            project_id,
+            user_id=owner_user_id,
+            email=owner_email,
+            active_only=False,
+        )
+        if existing is not None:
+            already_present += 1
+            continue
+
+        result = ensure_project_owner_membership(project)
+        if result is not None:
+            backfilled += 1
+        else:
+            skipped += 1
+
+    return {
+        "scanned": scanned,
+        "backfilled": backfilled,
+        "already_present": already_present,
+        "skipped": skipped,
+    }

@@ -2,7 +2,12 @@ from pymongo import ASCENDING, DESCENDING
 from pymongo.errors import OperationFailure
 
 from app.database import get_database
-from app.schemas.db_bootstrap import BootstrapResponse, CollectionStatus
+from app.schemas.db_bootstrap import (
+    BootstrapResponse,
+    CollectionStatus,
+    DropLegacyIndexesResponse,
+    LegacyIndexDropResult,
+)
 
 
 CORE_COLLECTIONS: dict[str, list[tuple[list[tuple[str, int]], dict]]] = {
@@ -345,4 +350,57 @@ def bootstrap_core_collections() -> BootstrapResponse:
         message="Core Tomb of Light collections and indexes processed successfully.",
         database_name=db.name,
         collections=results,
+    )
+
+
+_CANONICAL_INDEX_NAMES: dict[str, set[str]] = {
+    collection_name: {opts.get("name", "") for _, opts in index_defs}
+    for collection_name, index_defs in CORE_COLLECTIONS.items()
+}
+
+
+def drop_legacy_indexes() -> DropLegacyIndexesResponse:
+    db = get_database()
+
+    if db is None:
+        raise ValueError("Database is not connected.")
+
+    results: list[LegacyIndexDropResult] = []
+    total_dropped = 0
+
+    for collection_name, canonical_names in _CANONICAL_INDEX_NAMES.items():
+        if collection_name not in set(db.list_collection_names()):
+            continue
+
+        collection = db[collection_name]
+        existing_indexes = collection.index_information()
+
+        dropped: list[str] = []
+        skipped: list[str] = []
+
+        for index_name in list(existing_indexes.keys()):
+            if index_name == "_id_":
+                continue
+            if index_name in canonical_names:
+                continue
+            try:
+                collection.drop_index(index_name)
+                dropped.append(index_name)
+            except OperationFailure:
+                skipped.append(index_name)
+
+        total_dropped += len(dropped)
+        results.append(
+            LegacyIndexDropResult(
+                collection=collection_name,
+                dropped=dropped,
+                skipped=skipped,
+            )
+        )
+
+    return DropLegacyIndexesResponse(
+        message="Legacy index cleanup completed.",
+        database_name=db.name,
+        results=results,
+        total_dropped=total_dropped,
     )
