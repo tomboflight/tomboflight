@@ -133,7 +133,7 @@ def get_project_access_snapshot(
             "accessible": True,
             "via": "project_members",
             "member_role": normalize_project_member_role(membership.get("member_role"), default="viewer"),
-            "member_status": _normalize_value(membership.get("status") or "active") or "active",
+            "member_status": _normalize_value(membership.get("status") or "active"),
             "owner_user_id": owner_user_id,
             "owner_email": owner_email,
             "membership": membership,
