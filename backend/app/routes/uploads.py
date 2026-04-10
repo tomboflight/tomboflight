@@ -285,17 +285,14 @@ def _require_upload_access(
             detail="Upload does not belong to the current workspace.",
         )
 
-    if not context.get("is_admin"):
-        if bool(upload_record.get("internal_only")):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="This file is internal only and cannot be accessed by customers.",
-            )
-        if not bool(upload_record.get("customer_visible")):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="This file is not customer visible.",
-            )
+    if not context.get("is_admin") and (
+        bool(upload_record.get("internal_only"))
+        or not bool(upload_record.get("customer_visible"))
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This file is not visible to customers.",
+        )
 
     return upload_record, context
 
@@ -501,6 +498,13 @@ def _enforce_workspace_storage_limit(
         used_bytes + max(incoming_size_bytes, 0),
         context=context,
     )
+
+
+def _apply_customer_visibility_filter(query: dict[str, Any], *, is_admin: bool) -> None:
+    if is_admin:
+        return
+    query["internal_only"] = {"$ne": True}
+    query["customer_visible"] = True
 
 
 @router.get("/admin/review")
@@ -722,9 +726,7 @@ def list_member_uploads(
         "family_id": _normalize_value((family or {}).get("_id")),
         "project_id": _normalize_value((project or {}).get("_id")),
     }
-    if not context.get("is_admin"):
-        query["internal_only"] = {"$ne": True}
-        query["customer_visible"] = True
+    _apply_customer_visibility_filter(query, is_admin=bool(context.get("is_admin")))
     if normalized_category:
         query["category"] = normalized_category
 
@@ -761,9 +763,7 @@ def list_family_uploads(
         "family_id": _normalize_value((family or {}).get("_id")),
         "project_id": _normalize_value((project or {}).get("_id")),
     }
-    if not context.get("is_admin"):
-        query["internal_only"] = {"$ne": True}
-        query["customer_visible"] = True
+    _apply_customer_visibility_filter(query, is_admin=bool(context.get("is_admin")))
     if normalized_category:
         query["category"] = normalized_category
 

@@ -718,7 +718,7 @@ def enforce_limit(
         max_allowed = int(entitlements.get("max_uploads") or 0)
     elif normalized_limit == "family_members":
         max_allowed = int(entitlements.get("max_members") or 0)
-    elif normalized_limit in {"vault_storage", "vault_storage_bytes"}:
+    elif normalized_limit == "vault_storage_bytes":
         max_allowed = int(float(entitlements.get("max_storage_gb") or 0) * 1024 * 1024 * 1024)
     else:
         raise ValueError(f"Unsupported limit type: {limit_type}")
@@ -779,7 +779,6 @@ def transition_project(
     required_permissions = {
         "project.workflow.transition",
         f"project.workflow.transition.{target_state}",
-        "admin.access",
     }
     if "*" not in permission_pool and permission_pool.isdisjoint(required_permissions):
         raise HTTPException(
