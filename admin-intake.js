@@ -187,6 +187,14 @@
     node.dataset.state = "";
   }
 
+  function getUserFacingErrorMessage(error, fallback) {
+    const local = typeof app.isLocalApp === "function" && app.isLocalApp();
+    if (local && error && error.message) {
+      return String(error.message);
+    }
+    return fallback || "Unable to load data right now.";
+  }
+
   function valueLine(label, value) {
     return `<p class="card-copy"><strong>${escapeHtml(label)}:</strong> ${escapeHtml(value || "—")}</p>`;
   }
@@ -225,6 +233,10 @@
   }
 
   function ensureAdminAccess(me) {
+    if (app && typeof app.isInternalRole === "function" && app.isInternalRole(me)) {
+      return;
+    }
+
     const values = [
       normalizeValue(me && me.role),
       normalizeValue(me && me.access_tier),
@@ -538,7 +550,7 @@
 
       setStatus(
         actionNode,
-        error.message || "Unable to load intake submissions.",
+        getUserFacingErrorMessage(error, "Unable to load intake submissions."),
         "error",
       );
     }
@@ -709,7 +721,7 @@
       console.error("Admin intake detail load failed:", error);
       setStatus(
         statusNode,
-        error.message || "Unable to load the intake submission.",
+        getUserFacingErrorMessage(error, "Unable to load the intake submission."),
         "error",
       );
     }
@@ -839,7 +851,11 @@
       setStatus(statusNode, label, "success");
     } catch (error) {
       console.error("Admin action failed:", error);
-      setStatus(statusNode, error.message || "Admin action failed.", "error");
+      setStatus(
+        statusNode,
+        getUserFacingErrorMessage(error, "Admin action failed."),
+        "error",
+      );
     } finally {
       setReviewButtonsDisabled(false);
     }
@@ -872,7 +888,11 @@
       if (redirectCustomerToDashboard(error)) return;
 
       const node = document.querySelector("[data-admin-queue-action-status]");
-      setStatus(node, error.message || "Admin access is required.", "error");
+      setStatus(
+        node,
+        getUserFacingErrorMessage(error, "Admin access is required."),
+        "error",
+      );
 
       const hero = document.querySelector("[data-admin-queue-status]");
       if (hero) {
@@ -936,7 +956,11 @@
       if (redirectCustomerToDashboard(error)) return;
 
       const node = document.querySelector("[data-admin-review-action-status]");
-      setStatus(node, error.message || "Admin access is required.", "error");
+      setStatus(
+        node,
+        getUserFacingErrorMessage(error, "Admin access is required."),
+        "error",
+      );
 
       const hero = document.querySelector("[data-admin-review-page-status]");
       if (hero) {

@@ -92,6 +92,8 @@ def build_user_response(user: dict) -> dict:
         "email": user["email"],
         "full_name": user["full_name"],
         "role": user.get("role", "user"),
+        "access_tier": user.get("access_tier"),
+        "department_role": user.get("department_role"),
         "status": user.get("status", "active"),
         "created_at": user["created_at"],
         "policy_version": user.get("policy_version"),

@@ -5,6 +5,7 @@
   const POST_LOGIN_REDIRECT = "dashboard.html";
   const SIGNUP_POLICY_VERSION = "2026-03-26";
   const DASHBOARD_CONTEXT_STORAGE_KEY = "tol_dashboard_context_v1";
+  let hasLogoutBinding = false;
 
   const LINK_KEY_ENABLED_PACKAGES = new Set([
     "digital_legacy_portrait",
@@ -1677,21 +1678,29 @@
   }
 
   function bindLogoutButtons() {
-    document.querySelectorAll("[data-logout-btn]").forEach(function (button) {
-      button.addEventListener("click", async function () {
-        try {
-          if (app.logoutUser) {
-            await app.logoutUser();
-          } else {
-            app.clearSession();
-          }
-        } catch (error) {
+    if (hasLogoutBinding) return;
+    hasLogoutBinding = true;
+
+    document.addEventListener("click", async function (event) {
+      const button = event.target.closest("[data-logout-btn]");
+      if (!button) return;
+
+      event.preventDefault();
+      if (button.disabled) return;
+      button.disabled = true;
+
+      try {
+        if (app.logoutUser) {
+          await app.logoutUser();
+        } else {
           app.clearSession();
         }
+      } catch (error) {
+        app.clearSession();
+      }
 
-        clearCachedDashboardContext();
-        window.location.href = "signin.html";
-      });
+      clearCachedDashboardContext();
+      window.location.href = "signin.html";
     });
   }
 
