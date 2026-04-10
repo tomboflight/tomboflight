@@ -12,19 +12,6 @@
   let currentContext = null;
   let stripeClient = null;
   let stripeCardElement = null;
-  const INTERNAL_ROLE_KEYS = new Set([
-    "admin",
-    "super_admin",
-    "root_admin",
-    "platform_admin",
-    "operations_admin",
-    "finance_admin",
-    "marketing_admin",
-    "executive_technology",
-    "operations",
-    "finance",
-    "marketing",
-  ]);
 
   function escapeHtml(value) {
     return String(value ?? "")
@@ -48,26 +35,15 @@
     return String((error && error.message) || error || "Unknown error");
   }
 
-  function normalizeValue(value) {
-    return String(value || "")
-      .trim()
-      .toLowerCase();
-  }
-
   function isInternalUser(user) {
+    // Prefer the canonical check from app.js, then the TOLAuthPages export.
+    if (app && typeof app.isInternalRole === "function") {
+      return app.isInternalRole(user);
+    }
     if (authPages && typeof authPages.isInternalRole === "function") {
       return Boolean(authPages.isInternalRole(user));
     }
-
-    const roleSignals = [
-      normalizeValue(user && user.role),
-      normalizeValue(user && user.access_tier),
-      normalizeValue(user && user.department_role),
-    ];
-
-    return roleSignals.some(function (value) {
-      return INTERNAL_ROLE_KEYS.has(value);
-    });
+    return false;
   }
 
   function isProductionUi() {

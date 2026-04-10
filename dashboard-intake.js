@@ -67,6 +67,15 @@
   }
 
   function isInternalRole(userOrRole, accessTier, departmentRole) {
+    // Prefer the canonical check from app.js.
+    if (app && typeof app.isInternalRole === "function") {
+      const user =
+        userOrRole && typeof userOrRole === "object"
+          ? userOrRole
+          : { role: userOrRole, access_tier: accessTier, department_role: departmentRole };
+      return app.isInternalRole(user);
+    }
+
     const values =
       userOrRole && typeof userOrRole === "object"
         ? [
@@ -1376,6 +1385,11 @@
   }
 
   async function getCurrentUser() {
+    // Use the user already resolved by auth.js when available so that
+    // dashboard-intake.js does not make a redundant /auth/me request.
+    if (window.TOLResolvedUser) {
+      return window.TOLResolvedUser;
+    }
     return await app.apiRequest("/auth/me", { method: "GET" });
   }
 

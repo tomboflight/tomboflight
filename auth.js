@@ -6,20 +6,6 @@
   const SIGNUP_POLICY_VERSION = "2026-03-26";
   const DASHBOARD_CONTEXT_STORAGE_KEY = "tol_dashboard_context_v1";
 
-  const INTERNAL_ROLE_KEYS = new Set([
-    "admin",
-    "super_admin",
-    "root_admin",
-    "platform_admin",
-    "operations_admin",
-    "finance_admin",
-    "marketing_admin",
-    "executive_technology",
-    "operations",
-    "finance",
-    "marketing",
-  ]);
-
   const LINK_KEY_ENABLED_PACKAGES = new Set([
     "digital_legacy_portrait",
     "household_foundation",
@@ -51,13 +37,9 @@
   }
 
   function isInternalRole(user) {
-    const role = normalizeValue(user && user.role);
-    const accessTier = normalizeValue(user && user.access_tier);
-    const departmentRole = normalizeValue(user && user.department_role);
-
-    return [role, accessTier, departmentRole].some(function (value) {
-      return INTERNAL_ROLE_KEYS.has(value);
-    });
+    return Boolean(app && typeof app.isInternalRole === "function"
+      ? app.isInternalRole(user)
+      : false);
   }
 
   function getAccessTokenFromResponse(loginData) {
@@ -1447,6 +1429,11 @@
     const savedUser = app.getSavedUser();
     if (savedUser) {
       populateUserFields(savedUser, refs);
+      // Pre-apply admin portal mode from cached user so CSS can hide customer
+      // sections before [data-auth-required] is revealed, preventing FOUC.
+      if (isInternalRole(savedUser)) {
+        document.body.dataset.portalMode = "admin";
+      }
       if (authRequired) authRequired.style.display = "block";
     }
 
@@ -1463,9 +1450,16 @@
 
       populateUserFields(me, refs);
 
-      if (authRequired) authRequired.style.display = "block";
+      // Publish the resolved user for co-loaded scripts (e.g. dashboard-admin.js)
+      // so they do not need to make a duplicate /auth/me request.
+      window.TOLResolvedUser = me;
+      window.dispatchEvent(
+        new CustomEvent("tol:user-resolved", { detail: { user: me } }),
+      );
 
       if (isInternalRole(me)) {
+        document.body.dataset.portalMode = "admin";
+        if (authRequired) authRequired.style.display = "block";
         app.setStatus(
           statusNode,
           "You are signed in to the Tomb of Light internal operations portal.",
@@ -1474,6 +1468,9 @@
         return;
       }
 
+      // Customer path: reveal portal content after confirming role.
+      document.body.dataset.portalMode = "customer";
+      if (authRequired) authRequired.style.display = "block";
       app.setStatus(
         statusNode,
         "You are signed in and connected to the Tomb of Light platform.",
