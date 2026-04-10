@@ -3,7 +3,9 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.dependencies.auth import get_current_user, require_permission
+from app.schemas.experience import ExperienceLaneResponse
 from app.schemas.project import ProjectCreate, ProjectResponse, build_project_response
+from app.services.access_context_service import describe_project_experience_lane
 from app.services.project_service import create_project, list_projects
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
@@ -81,3 +83,14 @@ def create_project_route(
     del current_user
     project = create_project(payload)
     return build_project_response(project)
+
+
+@router.get("/{project_id}/experience-lane", response_model=ExperienceLaneResponse)
+def get_project_experience_lane(
+    project_id: str,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    try:
+        return describe_project_experience_lane(current_user, project_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
