@@ -178,7 +178,13 @@
   function formatSectionTitle(sectionKey) {
     const normalized = String(sectionKey || "").trim();
     if (!normalized) return "Section";
-    return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+    return normalized
+      .split(/[_-]+/)
+      .filter(Boolean)
+      .map(function (part) {
+        return part.charAt(0).toUpperCase() + part.slice(1);
+      })
+      .join(" ");
   }
 
   function emptyCard(title, copy) {
