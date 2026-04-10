@@ -34,3 +34,32 @@ def create_user(payload: UserCreate) -> dict:
     result = db.users.insert_one(data)
     data["_id"] = result.inserted_id
     return data
+
+
+
+def update_user_profile(user_id: str, *, full_name: str) -> dict | None:
+    db = get_database()
+    if db is None:
+        return None
+
+    normalized_name = str(full_name or '').strip()
+    if not normalized_name:
+        raise ValueError('full_name is required.')
+
+    try:
+        from bson import ObjectId
+
+        object_id = ObjectId(user_id)
+    except Exception:
+        return None
+
+    db.users.update_one(
+        {'_id': object_id},
+        {
+            '$set': {
+                'full_name': normalized_name,
+                'updated_at': datetime.now(UTC).isoformat(),
+            }
+        },
+    )
+    return db.users.find_one({'_id': object_id})
