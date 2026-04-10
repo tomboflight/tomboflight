@@ -1,8 +1,9 @@
+import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.dependencies.auth import get_current_user, require_permission
+from app.dependencies.auth import require_permission
 from app.schemas.db_bootstrap import (
     DropLegacyIndexesResponse,
     ProjectMembersBackfillResponse,
@@ -15,6 +16,8 @@ from app.services.viewer_manifest_service import (
     load_project_workspace_anchor,
 )
 from app.database import get_database
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/admin/maintenance",
@@ -115,7 +118,13 @@ def run_backfill_workspace_anchors(
                     provisioned += 1
                 else:
                     skipped += 1
-            except Exception:
+            except Exception as exc:
+                project_id_str = str(project.get("_id", ""))
+                logger.warning(
+                    "workspace anchor backfill failed for project %s: %s",
+                    project_id_str,
+                    exc,
+                )
                 skipped += 1
 
     except Exception as exc:
