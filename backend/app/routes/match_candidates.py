@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.metadata import apply_update_metadata
 from app.database import get_database
-from app.dependencies.auth import require_admin
+from app.dependencies.auth import require_permission
 from app.services.approval import ApprovalError, approve_match_candidate
 from app.services.audit_log_service import create_audit_log
 
@@ -11,7 +11,7 @@ router = APIRouter(prefix="/match-candidates", tags=["match_candidates"])
 
 
 @router.get("")
-def list_match_candidates(current_user: dict = Depends(require_admin)):
+def list_match_candidates(current_user: dict = Depends(require_permission("admin.access"))):
     db = get_database()
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")
@@ -26,7 +26,7 @@ def list_match_candidates(current_user: dict = Depends(require_admin)):
 
 
 @router.post("/{candidate_id}/approve")
-def approve_candidate(candidate_id: str, current_user: dict = Depends(require_admin)):
+def approve_candidate(candidate_id: str, current_user: dict = Depends(require_permission("admin.access"))):
     user_id = str(current_user.get("_id")) if current_user.get("_id") else None
 
     try:
@@ -37,7 +37,7 @@ def approve_candidate(candidate_id: str, current_user: dict = Depends(require_ad
 
 
 @router.post("/{candidate_id}/reject")
-def reject_candidate(candidate_id: str, notes: dict | None = None, current_user: dict = Depends(require_admin)):
+def reject_candidate(candidate_id: str, notes: dict | None = None, current_user: dict = Depends(require_permission("admin.access"))):
     db = get_database()
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")

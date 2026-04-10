@@ -2,7 +2,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.dependencies.auth import get_current_user
+from app.dependencies.auth import get_current_user, require_permission
 from app.schemas.project import ProjectCreate, ProjectResponse, build_project_response
 from app.services.project_service import create_project, list_projects
 
@@ -76,19 +76,8 @@ def get_projects(current_user: dict[str, Any] = Depends(get_current_user)):
 @router.post("/", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
 def create_project_route(
     payload: ProjectCreate,
-    current_user: dict[str, Any] = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(require_permission("projects.create")),
 ):
-    current_user_id = _current_user_id(current_user)
-    current_user_email = _current_user_email(current_user)
-
-    if not _is_admin(current_user):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=(
-                "Projects are provisioned through paid packages and approved "
-                "intake. Customer accounts cannot create projects directly."
-            ),
-        )
-
+    del current_user
     project = create_project(payload)
     return build_project_response(project)

@@ -4,7 +4,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.dependencies.auth import get_current_user, require_admin
+from app.dependencies.auth import get_current_user, require_permission
 from app.schemas.link_key import LinkKeyResponse, build_link_key_response
 from app.services.link_key_service import (
     generate_link_key,

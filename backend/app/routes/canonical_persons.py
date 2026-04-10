@@ -2,7 +2,7 @@ from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.database import get_database
-from app.dependencies.auth import require_admin
+from app.dependencies.auth import require_permission
 from app.schemas.canonical_person import (
     CanonicalPersonCreate,
     CanonicalPersonResponse,
@@ -33,7 +33,7 @@ def serialize_member(member: dict) -> dict:
 
 
 @router.get("/", response_model=list[CanonicalPersonResponse])
-def get_canonical_persons(current_user: dict = Depends(require_admin)):
+def get_canonical_persons(current_user: dict = Depends(require_permission("admin.access"))):
     persons = list_canonical_persons()
     return [build_canonical_person_response(person) for person in persons]
 
@@ -41,7 +41,7 @@ def get_canonical_persons(current_user: dict = Depends(require_admin)):
 @router.get("/{canonical_person_id}", response_model=CanonicalPersonResponse)
 def get_canonical_person(
     canonical_person_id: str,
-    current_user: dict = Depends(require_admin),
+    current_user: dict = Depends(require_permission("admin.access")),
 ):
     db = get_database()
     if db is None:
@@ -69,7 +69,7 @@ def get_canonical_person(
 @router.get("/{canonical_person_id}/members")
 def get_canonical_person_members(
     canonical_person_id: str,
-    current_user: dict = Depends(require_admin),
+    current_user: dict = Depends(require_permission("admin.access")),
 ):
     db = get_database()
     if db is None:
@@ -116,7 +116,7 @@ def get_canonical_person_members(
 @router.post("/", response_model=CanonicalPersonResponse, status_code=status.HTTP_201_CREATED)
 def create_canonical_person_route(
     payload: CanonicalPersonCreate,
-    current_user: dict = Depends(require_admin),
+    current_user: dict = Depends(require_permission("admin.access")),
 ):
     person = create_canonical_person(payload)
     return build_canonical_person_response(person)
