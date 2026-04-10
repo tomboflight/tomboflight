@@ -345,7 +345,7 @@ def _absolute_upload_path(relative_path: str) -> Path:
     candidate = (root / relative_path).resolve()
 
     try:
-        candidate.relative_to(root)
+        _ = candidate.relative_to(root)
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

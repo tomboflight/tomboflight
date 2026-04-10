@@ -107,7 +107,7 @@ def _enforce_cookie_auth_origin(request: Request) -> None:
     if _is_public_password_reset_route(request):
         return
 
-    origin = _extract_request_origin(request).rstrip("/")
+    origin = (_extract_request_origin(request) or "").rstrip("/")
     if not origin or origin not in _allowed_cookie_auth_origins():
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
