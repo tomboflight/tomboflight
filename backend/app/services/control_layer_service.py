@@ -254,11 +254,21 @@ def create_vault_file(
 
     if payload["vault_id"]:
         object_id = _object_id_or_none(payload["vault_id"])
+        vault_query: dict[str, Any]
         if object_id is not None:
-            _collection("vaults").update_one(
-                {"_id": object_id},
-                {"$inc": {"storage_used_bytes": payload["size_bytes"]}},
-            )
+            vault_query = {"_id": object_id}
+        else:
+            vault_query = {
+                "$or": [
+                    {"vault_code": payload["vault_id"]},
+                    {"vault_id": payload["vault_id"]},
+                ]
+            }
+
+        _collection("vaults").update_one(
+            vault_query,
+            {"$inc": {"storage_used_bytes": payload["size_bytes"]}},
+        )
 
     return _serialize(_collection("vault_files").find_one({"_id": result.inserted_id}))
 

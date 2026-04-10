@@ -5,8 +5,8 @@ from pydantic import BaseModel, Field
 
 class AuditLogCreate(BaseModel):
     action: str = Field(..., min_length=1, max_length=100)
-    entity_type: str = Field(default="system", min_length=1, max_length=100)
-    entity_id: str = Field(default="unknown", min_length=1)
+    entity_type: str = Field(..., min_length=1, max_length=100)
+    entity_id: str = Field(..., min_length=1)
     actor_user_id: str | None = None
     actor_email: str | None = None
     actor_name: str | None = None
