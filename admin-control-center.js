@@ -175,6 +175,12 @@
     return document.querySelector(`[data-section-list="${sectionKey}"]`);
   }
 
+  function formatSectionTitle(sectionKey) {
+    const normalized = String(sectionKey || "").trim();
+    if (!normalized) return "Section";
+    return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+  }
+
   function emptyCard(title, copy) {
     return `
       <div class="family-record-card">
@@ -218,7 +224,7 @@
           ? "Live"
           : "Loading";
     const total = Array.isArray(snapshot.items) ? snapshot.items.length : 0;
-    const title = sectionKey.charAt(0).toUpperCase() + sectionKey.slice(1);
+    const title = formatSectionTitle(sectionKey);
     const updated = snapshot.updatedAt
       ? new Date(snapshot.updatedAt).toLocaleTimeString()
       : "—";
@@ -359,7 +365,7 @@
   function markAllSectionsUnavailable(message) {
     Object.keys(SECTION_LOADERS).forEach(function (sectionKey) {
       if (!canAccessSection(sectionKey)) return;
-      const title = sectionKey.charAt(0).toUpperCase() + sectionKey.slice(1);
+      const title = formatSectionTitle(sectionKey);
       updateSectionSnapshot(sectionKey, { items: [], state: "error" });
       renderSectionCards(
         sectionKey,
