@@ -9,6 +9,7 @@ from app.database import close_mongo_connection, connect_to_mongo, get_database
 from app.routes.admin_intake_submissions import (
     router as admin_intake_submissions_router,
 )
+from app.routes.admin_control_center import router as admin_control_center_router
 from app.routes.admin_maintenance import router as admin_maintenance_router
 from app.routes.audit_logs import router as audit_logs_router
 from app.routes.auth import router as auth_router
@@ -144,6 +145,7 @@ app.include_router(billing_router)
 app.include_router(intake_router)
 app.include_router(intake_submissions_router)
 app.include_router(admin_intake_submissions_router)
+app.include_router(admin_control_center_router)
 app.include_router(projects_router)
 app.include_router(project_entitlements_router)
 app.include_router(experience_router)

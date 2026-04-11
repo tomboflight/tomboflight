@@ -415,6 +415,137 @@ PACKAGE_CATALOG: dict[str, dict[str, Any]] = {
     },
 }
 
+PACKAGE_CONTROL_POLICY: dict[str, dict[str, Any]] = {
+    "legacy_snapshot": {
+        "anchor_type": None,
+        "launch_policy": {
+            "allows_automatic_anchor": False,
+            "requires_runtime_flag_for_auto_mint": True,
+        },
+        "maintenance_default": "monthly",
+        "mint_policy": {
+            "product_includes_onchain_anchor": False,
+            "auto_mint_enabled": False,
+            "opt_in_only": False,
+            "token_type": None,
+            "included_anchor_count": 0,
+            "requires_customer_public_safe_approval": False,
+        },
+    },
+    "legacy_portrait_intro": {
+        "anchor_type": None,
+        "launch_policy": {
+            "allows_automatic_anchor": False,
+            "requires_runtime_flag_for_auto_mint": True,
+        },
+        "maintenance_default": "monthly",
+        "mint_policy": {
+            "product_includes_onchain_anchor": False,
+            "auto_mint_enabled": False,
+            "opt_in_only": False,
+            "token_type": None,
+            "included_anchor_count": 0,
+            "requires_customer_public_safe_approval": False,
+        },
+    },
+    "digital_legacy_portrait": {
+        "anchor_type": "portrait_anchor",
+        "launch_policy": {
+            "allows_automatic_anchor": True,
+            "requires_runtime_flag_for_auto_mint": True,
+        },
+        "maintenance_default": "monthly",
+        "mint_policy": {
+            "product_includes_onchain_anchor": True,
+            "auto_mint_enabled": True,
+            "opt_in_only": False,
+            "token_type": "portrait_anchor",
+            "included_anchor_count": 1,
+            "requires_customer_public_safe_approval": True,
+        },
+    },
+    "household_foundation": {
+        "anchor_type": "household_anchor",
+        "launch_policy": {
+            "allows_automatic_anchor": True,
+            "requires_runtime_flag_for_auto_mint": True,
+        },
+        "maintenance_default": "monthly",
+        "mint_policy": {
+            "product_includes_onchain_anchor": True,
+            "auto_mint_enabled": True,
+            "opt_in_only": False,
+            "token_type": "household_anchor",
+            "included_anchor_count": 1,
+            "requires_customer_public_safe_approval": True,
+        },
+    },
+    "heirloom_legacy_tree": {
+        "anchor_type": "household_anchor",
+        "launch_policy": {
+            "allows_automatic_anchor": True,
+            "requires_runtime_flag_for_auto_mint": True,
+        },
+        "maintenance_default": "monthly",
+        "mint_policy": {
+            "product_includes_onchain_anchor": True,
+            "auto_mint_enabled": True,
+            "opt_in_only": False,
+            "token_type": "household_anchor",
+            "included_anchor_count": 1,
+            "requires_customer_public_safe_approval": True,
+        },
+    },
+    "legacy_plus": {
+        "anchor_type": "household_anchor",
+        "launch_policy": {
+            "allows_automatic_anchor": True,
+            "requires_runtime_flag_for_auto_mint": True,
+        },
+        "maintenance_default": "monthly",
+        "mint_policy": {
+            "product_includes_onchain_anchor": True,
+            "auto_mint_enabled": True,
+            "opt_in_only": False,
+            "token_type": "household_anchor",
+            "included_anchor_count": 1,
+            "requires_customer_public_safe_approval": True,
+        },
+    },
+    "family_estate_concierge": {
+        "anchor_type": "branch_anchor",
+        "launch_policy": {
+            "allows_automatic_anchor": True,
+            "requires_runtime_flag_for_auto_mint": True,
+        },
+        "maintenance_default": "monthly",
+        "mint_policy": {
+            "product_includes_onchain_anchor": True,
+            "auto_mint_enabled": True,
+            "opt_in_only": False,
+            "token_type": "branch_anchor",
+            "included_anchor_count": 3,
+            "requires_customer_public_safe_approval": True,
+        },
+    },
+    "command_structure_network": {
+        "anchor_type": "organization_anchor",
+        "launch_policy": {
+            "allows_automatic_anchor": True,
+            "requires_runtime_flag_for_auto_mint": True,
+        },
+        "maintenance_default": "monthly",
+        "mint_policy": {
+            "product_includes_onchain_anchor": True,
+            "auto_mint_enabled": False,
+            "opt_in_only": True,
+            "token_type": "organization_anchor",
+            "included_anchor_count": 1,
+            "requires_customer_public_safe_approval": True,
+        },
+    },
+}
+
 ADDON_CATALOG: dict[str, dict[str, Any]] = {
     "extra_upload_pack": {
         "addon_code": "extra_upload_pack",
@@ -584,6 +715,53 @@ def get_package(package_code: str) -> dict[str, Any] | None:
         return None
     value = PACKAGE_CATALOG.get(normalized)
     return _copy_package(value) if value else None
+
+
+def get_package_control_profile(package_code: str) -> dict[str, Any] | None:
+    package = get_package(package_code)
+    if not package:
+        return None
+
+    normalized_code = str(package.get("package_code") or "").strip()
+    policy = deepcopy(PACKAGE_CONTROL_POLICY.get(normalized_code) or {})
+    launch_policy = dict(policy.get("launch_policy") or {})
+    mint_policy = dict(policy.get("mint_policy") or {})
+
+    return {
+        "package_code": normalized_code,
+        "package_slug": normalized_code,
+        "display_name": package.get("display_name"),
+        "package_lane": package.get("package_lane"),
+        "anchor_type": policy.get("anchor_type"),
+        "launch_policy": {
+            "allows_automatic_anchor": bool(launch_policy.get("allows_automatic_anchor")),
+            "requires_runtime_flag_for_auto_mint": bool(
+                launch_policy.get("requires_runtime_flag_for_auto_mint", True)
+            ),
+        },
+        "maintenance_default": str(policy.get("maintenance_default") or "monthly"),
+        "mint_policy": {
+            "product_includes_onchain_anchor": bool(
+                mint_policy.get("product_includes_onchain_anchor")
+            ),
+            "auto_mint_enabled": bool(mint_policy.get("auto_mint_enabled")),
+            "opt_in_only": bool(mint_policy.get("opt_in_only")),
+            "token_type": mint_policy.get("token_type"),
+            "included_anchor_count": int(mint_policy.get("included_anchor_count") or 0),
+            "requires_customer_public_safe_approval": bool(
+                mint_policy.get("requires_customer_public_safe_approval")
+            ),
+        },
+    }
+
+
+def list_package_control_profiles() -> list[dict[str, Any]]:
+    profiles: list[dict[str, Any]] = []
+    for package_code in PACKAGE_CATALOG:
+        profile = get_package_control_profile(package_code)
+        if profile is not None:
+            profiles.append(profile)
+    return profiles
 
 
 def get_addon(addon_code: str) -> dict[str, Any] | None:

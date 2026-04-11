@@ -8,7 +8,7 @@
       name="description"
       content="Internal control center for Tomb of Light uploads, minting, orders, entitlements, users, and audit review."
     />
-    <link rel="stylesheet" href="styles.css?v=20260330-1" />
+    <link rel="stylesheet" href="styles.css?v=20260411-1" />
   </head>
   <body>
     <div class="page-wrap">
@@ -126,6 +126,11 @@
               <p class="card-copy">
                 Live review visibility across uploads, mint queue, orders, entitlements, and internal audit signals.
               </p>
+              <div class="admin-console-summary-bar" data-admin-top-summary></div>
+              <div class="admin-console-priority" style="margin-top: 1rem">
+                <h3>Priority Repairs</h3>
+                <div class="grid-3" data-admin-priority-repairs></div>
+              </div>
               <div class="grid-3" data-admin-ops-summary>
                 <div>
                   <div class="card-number">1</div>
@@ -140,6 +145,37 @@
                 style="display: none; margin-top: 1rem"
               ></div>
               <div class="grid-3" data-admin-priority-feed style="margin-top: 1rem"></div>
+            </div>
+
+            <div class="form-panel admin-console-shell">
+              <aside class="admin-console-rail">
+                <h3>Operations</h3>
+                <nav class="admin-console-nav" aria-label="Admin console navigation">
+                  <a href="#overview">Overview</a>
+                  <a href="#orders">Orders</a>
+                  <a href="#projects">Projects</a>
+                  <a href="#entitlements">Entitlements</a>
+                  <a href="#mint-queue">Mint Queue</a>
+                  <a href="#upload-review">Upload Review</a>
+                  <a href="#users">Users</a>
+                  <a href="#audit">Audit</a>
+                  <a href="#system-health">System Health</a>
+                </nav>
+              </aside>
+              <section class="admin-console-workspace">
+                <span class="eyebrow">Main Operations Workspace</span>
+                <p class="card-copy">Select a project to open the command panel.</p>
+                <div class="grid-3" data-admin-project-workspace-list></div>
+                <div data-admin-project-workspace style="margin-top: 1rem">
+                  <div class="family-record-card">
+                    <div class="card-number">⚙</div>
+                    <h3>No project selected</h3>
+                    <p class="card-copy">
+                      Choose a project to run Sync Package, Assign Lane, Link Order, Generate Entitlement, Refresh Readiness, and Queue for Mint Review.
+                    </p>
+                  </div>
+                </div>
+              </section>
             </div>
 
             <div class="form-panel" data-control-section="uploads">
@@ -279,6 +315,6 @@
     <script src="config.js?v=20260329-1"></script>
     <script src="app.js?v=20260410-1"></script>
     <script src="auth.js?v=20260410-2"></script>
-    <script src="admin-control-center.js?v=20260410-2"></script>
+    <script src="admin-control-center.js?v=20260411-1"></script>
   </body>
 </html>

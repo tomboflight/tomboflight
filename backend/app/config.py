@@ -121,6 +121,10 @@ class Settings(BaseSettings):
         default=False,
         validation_alias=AliasChoices("NFT_ORG_MINT_ENABLED"),
     )
+    nft_auto_mint_on_review_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("NFT_AUTO_MINT_ON_REVIEW_ENABLED"),
+    )
     nft_token_name_prefix: str = Field(
         default="Tomb of Light Legacy Anchor",
         validation_alias=AliasChoices("NFT_TOKEN_NAME_PREFIX"),

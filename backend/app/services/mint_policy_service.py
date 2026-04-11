@@ -5,7 +5,11 @@ from typing import Any
 from bson import ObjectId
 
 from app.config import settings
-from app.core.package_catalog import get_package, get_package_catalog
+from app.core.package_catalog import (
+    get_package,
+    get_package_catalog,
+    get_package_control_profile,
+)
 from app.database import get_database
 
 BUILD_READY_STATUSES = {
@@ -24,74 +28,6 @@ BUILD_READY_PHASES = {
     "delivered",
     "archived",
 }
-
-PACKAGE_MINT_POLICIES: dict[str, dict[str, Any]] = {
-    "legacy_snapshot": {
-        "product_includes_onchain_anchor": False,
-        "auto_mint_enabled": False,
-        "opt_in_only": False,
-        "token_type": None,
-        "included_anchor_count": 0,
-        "requires_customer_public_safe_approval": False,
-    },
-    "legacy_portrait_intro": {
-        "product_includes_onchain_anchor": False,
-        "auto_mint_enabled": False,
-        "opt_in_only": False,
-        "token_type": None,
-        "included_anchor_count": 0,
-        "requires_customer_public_safe_approval": False,
-    },
-    "digital_legacy_portrait": {
-        "product_includes_onchain_anchor": True,
-        "auto_mint_enabled": True,
-        "opt_in_only": False,
-        "token_type": "portrait_anchor",
-        "included_anchor_count": 1,
-        "requires_customer_public_safe_approval": True,
-    },
-    "household_foundation": {
-        "product_includes_onchain_anchor": True,
-        "auto_mint_enabled": True,
-        "opt_in_only": False,
-        "token_type": "household_anchor",
-        "included_anchor_count": 1,
-        "requires_customer_public_safe_approval": True,
-    },
-    "heirloom_legacy_tree": {
-        "product_includes_onchain_anchor": True,
-        "auto_mint_enabled": True,
-        "opt_in_only": False,
-        "token_type": "household_anchor",
-        "included_anchor_count": 1,
-        "requires_customer_public_safe_approval": True,
-    },
-    "legacy_plus": {
-        "product_includes_onchain_anchor": True,
-        "auto_mint_enabled": True,
-        "opt_in_only": False,
-        "token_type": "household_anchor",
-        "included_anchor_count": 1,
-        "requires_customer_public_safe_approval": True,
-    },
-    "family_estate_concierge": {
-        "product_includes_onchain_anchor": True,
-        "auto_mint_enabled": True,
-        "opt_in_only": False,
-        "token_type": "branch_anchor",
-        "included_anchor_count": 3,
-        "requires_customer_public_safe_approval": True,
-    },
-    "command_structure_network": {
-        "product_includes_onchain_anchor": True,
-        "auto_mint_enabled": False,
-        "opt_in_only": True,
-        "token_type": "organization_anchor",
-        "included_anchor_count": 1,
-        "requires_customer_public_safe_approval": True,
-    },
-}
-
 
 def _normalize(value: Any) -> str:
     return str(value or "").strip()
@@ -149,25 +85,25 @@ def get_package_mint_policy(package_code: str) -> dict[str, Any]:
     )
     package_name = _normalize((package or {}).get("display_name")) or normalized_code
     package_lane = _normalize((package or {}).get("package_lane"))
-
-    base_policy = PACKAGE_MINT_POLICIES.get(
-        normalized_code,
-        {
-            "product_includes_onchain_anchor": False,
-            "auto_mint_enabled": False,
-            "opt_in_only": False,
-            "token_type": None,
-            "included_anchor_count": 0,
-            "requires_customer_public_safe_approval": False,
-        },
-    )
+    control_profile = get_package_control_profile(normalized_code) or {}
+    base_policy = dict(control_profile.get("mint_policy") or {})
+    launch_policy = dict(control_profile.get("launch_policy") or {})
 
     token_type = base_policy.get("token_type")
 
     return {
         "package_code": normalized_code,
+        "package_slug": normalized_code,
         "package_name": package_name,
         "package_lane": package_lane,
+        "anchor_type": control_profile.get("anchor_type"),
+        "launch_policy": {
+            "allows_automatic_anchor": bool(launch_policy.get("allows_automatic_anchor")),
+            "requires_runtime_flag_for_auto_mint": bool(
+                launch_policy.get("requires_runtime_flag_for_auto_mint", True)
+            ),
+        },
+        "maintenance_default": control_profile.get("maintenance_default") or "monthly",
         "token_type": token_type,
         "product_includes_onchain_anchor": bool(
             base_policy.get("product_includes_onchain_anchor")

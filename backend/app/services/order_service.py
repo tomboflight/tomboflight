@@ -1,5 +1,5 @@
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Optional, cast
 
 import stripe
@@ -14,6 +14,8 @@ from app.services.project_service import (
     apply_package_purchase_to_project,
     create_project_from_paid_order,
 )
+from app.services.project_entitlement_service import update_project_entitlement_maintenance
+from app.services.project_entitlement_service import MAINTENANCE_START_DELAY_DAYS
 
 
 def _get_orders_collection() -> Collection:
@@ -181,6 +183,21 @@ def create_order_for_user(user: dict[str, Any], payload: Any) -> dict[str, Any]:
                 {"$set": {"project_id": project.get("_id")}},
             )
             order_doc["project_id"] = project.get("_id")
+    elif order_doc["item_type"] == "maintenance":
+        target_project_id = _normalize(getattr(payload, "project_id", None))
+        if target_project_id:
+            project_value: Any = target_project_id
+            if ObjectId.is_valid(target_project_id):
+                project_value = ObjectId(target_project_id)
+            orders.update_one(
+                {"_id": result.inserted_id},
+                {"$set": {"project_id": project_value}},
+            )
+            order_doc["project_id"] = project_value
+            _schedule_maintenance_start(
+                project_id=target_project_id,
+                billing_plan=order_doc.get("billing_plan", "monthly"),
+            )
 
     return _serialize_order(order_doc)
 
@@ -362,6 +379,30 @@ def _format_price_label(amount_subtotal: Any, billing_plan: str) -> str:
         return f"${amount:,.2f}/year"
 
     return f"${amount:,.2f}"
+
+
+def _schedule_maintenance_start(
+    *,
+    project_id: str,
+    billing_plan: str,
+    stripe_subscription_id: str | None = None,
+    stripe_customer_id: str | None = None,
+) -> None:
+    plan = _normalize(billing_plan).lower()
+    if plan not in {"monthly", "yearly"}:
+        return
+
+    now = datetime.now(UTC)
+    start_at = now + timedelta(days=MAINTENANCE_START_DELAY_DAYS)
+    update_project_entitlement_maintenance(
+        project_id=project_id,
+        maintenance_plan=plan,
+        maintenance_status="scheduled",
+        maintenance_scheduled_start_at=start_at,
+        maintenance_stripe_subscription_id=_normalize(stripe_subscription_id) or None,
+        maintenance_stripe_customer_id=_normalize(stripe_customer_id) or None,
+        maintenance_stripe_status="incomplete",
+    )
 
 
 def _extract_target_project_id(session: dict[str, Any]) -> str:
@@ -630,6 +671,23 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
                 {"$set": {"project_id": project.get("_id")}},
             )
             order_doc["project_id"] = project.get("_id")
+    elif item_type == "maintenance":
+        target_project_id = _extract_target_project_id(session)
+        if target_project_id:
+            project_value: Any = target_project_id
+            if ObjectId.is_valid(target_project_id):
+                project_value = ObjectId(target_project_id)
+            orders.update_one(
+                {"_id": result.inserted_id},
+                {"$set": {"project_id": project_value}},
+            )
+            order_doc["project_id"] = project_value
+            _schedule_maintenance_start(
+                project_id=target_project_id,
+                billing_plan=billing_plan,
+                stripe_subscription_id=_normalize(session.get("subscription")) or None,
+                stripe_customer_id=_normalize(session.get("customer")) or None,
+            )
 
     return {
         "order_id": str(result.inserted_id),
