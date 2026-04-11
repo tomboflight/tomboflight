@@ -1,4 +1,5 @@
 import re
+import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any, Optional, cast
 
@@ -9,13 +10,18 @@ from pymongo.database import Database
 from pymongo.errors import OperationFailure
 
 from app.database import get_database
+from app.core.package_mapping import resolve_package_identity
 from app.services.billing_service import store_stripe_customer_reference
+from app.services.package_provisioning_service import auto_provision_paid_order
 from app.services.project_service import (
     apply_package_purchase_to_project,
     create_project_from_paid_order,
 )
 from app.services.project_entitlement_service import update_project_entitlement_maintenance
 from app.services.project_entitlement_service import MAINTENANCE_START_DELAY_DAYS
+
+
+logger = logging.getLogger(__name__)
 
 
 def _get_orders_collection() -> Collection:
@@ -39,74 +45,27 @@ def _normalize_email(value: Optional[str]) -> Optional[str]:
 
 
 def _normalize_package_code(value: Optional[str]) -> str:
-    normalized = _normalize(value).lower()
-
-    mapping = {
-        "legacy-snapshot": "legacy_snapshot",
-        "legacy_snapshot": "legacy_snapshot",
-        "legacy-portrait-intro": "legacy_portrait_intro",
-        "legacy_portrait_intro": "legacy_portrait_intro",
-        "digital-legacy-portrait": "digital_legacy_portrait",
-        "digital_legacy_portrait": "digital_legacy_portrait",
-        "starter-family-tree": "household_foundation",
-        "starter_family_tree": "household_foundation",
-        "household-foundation": "household_foundation",
-        "household_foundation": "household_foundation",
-        "heirloom-legacy-tree": "heirloom_legacy_tree",
-        "heirloom_legacy_tree": "heirloom_legacy_tree",
-        "legacy-plus": "legacy_plus",
-        "legacy_plus": "legacy_plus",
-        "family-estate-concierge": "family_estate_concierge",
-        "family_estate_concierge": "family_estate_concierge",
-        "command-structure-network": "command_structure_network",
-        "command_structure_network": "command_structure_network",
-        "extra-upload-pack": "extra_upload_pack",
-        "extra_upload_pack": "extra_upload_pack",
-        "extra-storage": "extra_storage",
-        "extra_storage": "extra_storage",
-        "portrait-polish": "portrait_polish",
-        "portrait_polish": "portrait_polish",
-        "tribute-narration": "tribute_narration",
-        "tribute_narration": "tribute_narration",
-        "extra-mapped-person": "extra_mapped_person",
-        "extra_mapped_person": "extra_mapped_person",
-        "extra-zoom-layer": "extra_zoom_layer",
-        "extra_zoom_layer": "extra_zoom_layer",
-        "additional-narration-minute": "additional_narration_minute",
-        "additional_narration_minute": "additional_narration_minute",
-        "on-site-photo-scanning": "on_site_photo_scanning",
-        "on_site_photo_scanning": "on_site_photo_scanning",
-        "extra-linked-household": "extra_linked_household",
-        "extra_linked_household": "extra_linked_household",
-        "extra-branch": "extra_branch",
-        "extra_branch": "extra_branch",
-        "white-glove-archive-support": "white_glove_archive_support",
-        "white_glove_archive_support": "white_glove_archive_support",
-        "extra-organization-node": "extra_org_node",
-        "extra_org_node": "extra_org_node",
-        "extra-organization-level": "extra_org_level",
-        "extra_org_level": "extra_org_level",
-        "extra-admin-seat": "extra_admin_seat",
-        "extra_admin_seat": "extra_admin_seat",
-        "command-report-add-on": "command_report_addon",
-        "command_report_addon": "command_report_addon",
-    }
-
-    return mapping.get(normalized, normalized or "unknown")
+    identity = resolve_package_identity(value)
+    return _normalize(identity.get("package_code")) or _normalize(value) or "unknown"
 
 
 def _serialize_order(order: dict[str, Any]) -> dict[str, Any]:
-    package_code = _normalize_package_code(
+    package_identity = resolve_package_identity(
+        order.get("package_slug") or order.get("package_code"),
+        package_name=order.get("package_name"),
+    )
+    package_code = _normalize(package_identity.get("package_code")) or _normalize_package_code(
         order.get("package_code") or order.get("package_slug")
     )
+    package_slug = _normalize(package_identity.get("package_slug")) or _normalize(order.get("package_slug")) or package_code
 
     return {
         "id": str(order["_id"]),
         "user_id": str(order["user_id"]),
         "email": order["email"],
         "package_code": package_code,
-        "package_slug": package_code,
-        "package_name": order.get("package_name", ""),
+        "package_slug": package_slug,
+        "package_name": package_identity.get("display_name") or order.get("package_name", ""),
         "price_label": order.get("price_label", ""),
         "item_type": order.get("item_type", "package"),
         "billing_plan": order.get("billing_plan", "one_time"),
@@ -122,9 +81,18 @@ def _serialize_order(order: dict[str, Any]) -> dict[str, Any]:
 def create_order_for_user(user: dict[str, Any], payload: Any) -> dict[str, Any]:
     orders = _get_orders_collection()
 
-    package_code = _normalize_package_code(
+    package_identity = resolve_package_identity(
         getattr(payload, "package_code", None) or getattr(payload, "package_slug", None)
     )
+    package_code = _normalize(package_identity.get("package_code")) or "unknown"
+    package_slug = _normalize(package_identity.get("package_slug")) or package_code
+    package_name = (
+        _normalize(getattr(payload, "package_name", None))
+        or _normalize(package_identity.get("display_name"))
+        or "Unknown Package"
+    )
+    if not package_identity.get("known"):
+        logger.warning("Unknown package on create_order_for_user: %s", getattr(payload, "package_code", None) or getattr(payload, "package_slug", None))
 
     existing = orders.find_one(
         {
@@ -136,14 +104,18 @@ def create_order_for_user(user: dict[str, Any], payload: Any) -> dict[str, Any]:
     )
 
     if existing:
+        try:
+            auto_provision_paid_order(existing)
+        except Exception:
+            logger.exception("Auto provisioning failed for existing order %s", str(existing.get("_id") or ""))
         return _serialize_order(existing)
 
     order_doc = {
         "user_id": ObjectId(str(user["_id"])),
         "email": user["email"],
         "package_code": package_code,
-        "package_slug": package_code,
-        "package_name": payload.package_name,
+        "package_slug": package_slug,
+        "package_name": package_name,
         "price_label": payload.price_label,
         "item_type": getattr(payload, "item_type", "package"),
         "billing_plan": getattr(payload, "billing_plan", "one_time"),
@@ -165,18 +137,27 @@ def create_order_for_user(user: dict[str, Any], payload: Any) -> dict[str, Any]:
                 user=user,
                 project_id=target_project_id,
                 package_code=package_code,
-                package_name=payload.package_name,
+                package_name=package_name,
                 stripe_session_id=payload.stripe_session_id,
                 stripe_payment_link_id=payload.stripe_payment_link_id,
             )
         else:
-            project = create_project_from_paid_order(
-                user=user,
-                package_code=package_code,
-                package_name=payload.package_name,
-                stripe_session_id=payload.stripe_session_id,
-                stripe_payment_link_id=payload.stripe_payment_link_id,
-            )
+            auto_result = auto_provision_paid_order(order_doc)
+            linked_project_id = _normalize(order_doc.get("project_id"))
+            project = None
+            if auto_result.get("order_linked") and linked_project_id and ObjectId.is_valid(linked_project_id):
+                project = cast(
+                    dict[str, Any] | None,
+                    _get_orders_collection().database["projects"].find_one({"_id": ObjectId(linked_project_id)}),
+                )
+            if project is None:
+                project = create_project_from_paid_order(
+                    user=user,
+                    package_code=package_code,
+                    package_name=package_name,
+                    stripe_session_id=payload.stripe_session_id,
+                    stripe_payment_link_id=payload.stripe_payment_link_id,
+                )
         if project:
             orders.update_one(
                 {"_id": result.inserted_id},
@@ -198,6 +179,11 @@ def create_order_for_user(user: dict[str, Any], payload: Any) -> dict[str, Any]:
                 project_id=target_project_id,
                 billing_plan=order_doc.get("billing_plan", "monthly"),
             )
+
+    try:
+        auto_provision_paid_order(order_doc)
+    except Exception:
+        logger.exception("Auto provisioning failed for order %s", str(order_doc.get("_id") or ""))
 
     return _serialize_order(order_doc)
 
@@ -625,12 +611,18 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
         }
 
     item_type, package_code, package_name, price_label, billing_plan = _infer_purchase_fields(session)
+    package_identity = resolve_package_identity(package_code, package_name=package_name)
+    package_code = _normalize(package_identity.get("package_code")) or package_code
+    package_slug = _normalize(package_identity.get("package_slug")) or package_code
+    package_name = _normalize(package_identity.get("display_name")) or package_name
+    if not package_identity.get("known"):
+        logger.warning("Unknown package on stripe webhook session=%s value=%s", session_id, package_code)
 
     order_doc = {
         "user_id": ObjectId(str(user["_id"])),
         "email": email,
         "package_code": package_code,
-        "package_slug": package_code,
+        "package_slug": package_slug,
         "package_name": package_name,
         "price_label": price_label,
         "item_type": item_type,
@@ -658,13 +650,22 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
                 stripe_payment_link_id=session.get("payment_link"),
             )
         else:
-            project = create_project_from_paid_order(
-                user=user,
-                package_code=package_code,
-                package_name=package_name,
-                stripe_session_id=session_id,
-                stripe_payment_link_id=session.get("payment_link"),
-            )
+            auto_result = auto_provision_paid_order(order_doc)
+            linked_project_id = _normalize(order_doc.get("project_id"))
+            project = None
+            if auto_result.get("order_linked") and linked_project_id and ObjectId.is_valid(linked_project_id):
+                project = cast(
+                    dict[str, Any] | None,
+                    _get_orders_collection().database["projects"].find_one({"_id": ObjectId(linked_project_id)}),
+                )
+            if project is None:
+                project = create_project_from_paid_order(
+                    user=user,
+                    package_code=package_code,
+                    package_name=package_name,
+                    stripe_session_id=session_id,
+                    stripe_payment_link_id=session.get("payment_link"),
+                )
         if project:
             orders.update_one(
                 {"_id": result.inserted_id},
@@ -688,6 +689,11 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
                 stripe_subscription_id=_normalize(session.get("subscription")) or None,
                 stripe_customer_id=_normalize(session.get("customer")) or None,
             )
+
+    try:
+        auto_provision_paid_order(order_doc)
+    except Exception:
+        logger.exception("Auto provisioning failed for stripe order %s", str(order_doc.get("_id") or ""))
 
     return {
         "order_id": str(result.inserted_id),

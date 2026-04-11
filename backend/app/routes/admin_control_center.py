@@ -11,7 +11,10 @@ from app.services.admin_control_service import (
     assign_lane,
     enable_mint_review,
     generate_entitlement,
+    link_all_unlinked_paid_orders,
     link_order_to_project,
+    repair_all_missing_entitlements,
+    repair_all_missing_lanes,
     repair_record,
     project_workspace_snapshot,
     run_readiness_check,
@@ -40,6 +43,10 @@ class EnableMintReviewPayload(BaseModel):
 
 class RepairRecordPayload(BaseModel):
     order_id: str = Field(default="")
+
+
+class BulkRepairPayload(BaseModel):
+    limit: int = Field(default=200, ge=1, le=1000)
 
 
 @router.get("/overview")
@@ -161,3 +168,30 @@ def repair_project_record(
         return repair_record(project_id=project_id, order_id=(payload.order_id if payload else ""))
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/repairs/missing-entitlements")
+def repair_missing_entitlements_bulk(
+    payload: BulkRepairPayload | None = None,
+    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+):
+    del current_user
+    return repair_all_missing_entitlements(limit=int(payload.limit) if payload else 200)
+
+
+@router.post("/repairs/missing-lanes")
+def repair_missing_lanes_bulk(
+    payload: BulkRepairPayload | None = None,
+    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+):
+    del current_user
+    return repair_all_missing_lanes(limit=int(payload.limit) if payload else 200)
+
+
+@router.post("/repairs/unlinked-paid-orders")
+def link_unlinked_paid_orders_bulk(
+    payload: BulkRepairPayload | None = None,
+    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+):
+    del current_user
+    return link_all_unlinked_paid_orders(limit=int(payload.limit) if payload else 200)

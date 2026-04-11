@@ -3,6 +3,11 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
+from app.core.package_mapping import (
+    normalize_package_code as normalize_package_map_code,
+    package_code_to_slug,
+    resolve_package_identity,
+)
 from app.core.package_type_catalog import normalize_package_type
 
 
@@ -696,10 +701,7 @@ def get_addon_catalog() -> dict[str, dict[str, Any]]:
 
 
 def normalize_package_code(package_code: str) -> str:
-    return PACKAGE_CODE_ALIASES.get(
-        str(package_code or "").strip(),
-        str(package_code or "").strip(),
-    )
+    return normalize_package_map_code(package_code)
 
 
 def normalize_addon_code(addon_code: str) -> str:
@@ -718,28 +720,34 @@ def get_package(package_code: str) -> dict[str, Any] | None:
 
 
 def get_package_control_profile(package_code: str) -> dict[str, Any] | None:
-    package = get_package(package_code)
-    if not package:
+    package_identity = resolve_package_identity(package_code)
+    if not package_identity.get("known"):
         return None
 
-    normalized_code = str(package.get("package_code") or "").strip()
+    normalized_code = str(package_identity.get("package_code") or "").strip()
+    package = get_package(normalized_code) or {}
     policy = deepcopy(PACKAGE_CONTROL_POLICY.get(normalized_code) or {})
     launch_policy = dict(policy.get("launch_policy") or {})
-    mint_policy = dict(policy.get("mint_policy") or {})
+    mapped_mint_policy = dict(package_identity.get("mint_policy") or {})
+    mint_policy = dict(policy.get("mint_policy") or mapped_mint_policy)
 
     return {
         "package_code": normalized_code,
-        "package_slug": normalized_code,
-        "display_name": package.get("display_name"),
-        "package_lane": package.get("package_lane"),
-        "anchor_type": policy.get("anchor_type"),
+        "package_slug": package_code_to_slug(normalized_code) or normalized_code,
+        "display_name": package_identity.get("display_name") or package.get("display_name"),
+        "package_lane": package_identity.get("lane") or package.get("package_lane"),
+        "anchor_type": policy.get("anchor_type") or package_identity.get("anchor_type"),
         "launch_policy": {
             "allows_automatic_anchor": bool(launch_policy.get("allows_automatic_anchor")),
             "requires_runtime_flag_for_auto_mint": bool(
                 launch_policy.get("requires_runtime_flag_for_auto_mint", True)
             ),
         },
-        "maintenance_default": str(policy.get("maintenance_default") or "monthly"),
+        "maintenance_default": str(
+            policy.get("maintenance_default")
+            or package_identity.get("maintenance_default")
+            or "monthly"
+        ),
         "mint_policy": {
             "product_includes_onchain_anchor": bool(
                 mint_policy.get("product_includes_onchain_anchor")

@@ -7,6 +7,7 @@ from app.core.package_catalog import (
     get_package_catalog,
     list_package_control_profiles,
 )
+from app.core.package_mapping import list_package_map
 from app.services.entitlement_service import (
     can_purchase_addon,
     can_upgrade,
@@ -21,6 +22,7 @@ router = APIRouter(prefix="/packages", tags=["Packages"])
 def get_package_catalog_route():
     return {
         "packages": get_package_catalog(),
+        "package_map": list_package_map(),
         "addons": get_addon_catalog(),
         "control_profiles": list_package_control_profiles(),
     }

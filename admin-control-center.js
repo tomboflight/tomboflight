@@ -387,7 +387,16 @@
           </div>
         `;
       })
-      .join("");
+      .join("") + `
+      <div class="family-record-card admin-card" style="grid-column: 1 / -1;">
+        <h3>Bulk Repair Actions</h3>
+        <div class="inline-actions" style="margin-top: 0.5rem; flex-wrap: wrap">
+          <button class="btn btn-secondary" type="button" data-admin-bulk-action="missing-entitlements">Repair All Missing Entitlements</button>
+          <button class="btn btn-secondary" type="button" data-admin-bulk-action="missing-lanes">Repair All Missing Lanes</button>
+          <button class="btn btn-secondary" type="button" data-admin-bulk-action="unlinked-paid-orders">Link All Unlinked Paid Orders</button>
+        </div>
+      </div>
+    `;
   }
 
   async function loadConsoleOverview() {
@@ -469,6 +478,7 @@
           `
             <p class="card-copy"><strong>Package:</strong> ${escapeHtml(project.package_name || project.package_code || "—")}</p>
             <p class="card-copy"><strong>Lane:</strong> ${buildLaneChip(project.project_lane)}</p>
+            <p class="card-copy"><strong>Package Normalized:</strong> ${yesNoBadge(readiness.package_normalized)}</p>
             <p class="card-copy"><strong>Package Synced:</strong> ${yesNoBadge(readiness.package_synced)}</p>
           `,
         )}
@@ -503,6 +513,7 @@
           "Mint Readiness",
           workspaceHealth(readiness, "mint_eligible"),
           `
+            <p class="card-copy"><strong>Readiness Computed:</strong> ${yesNoBadge(readiness.mint_readiness_computed)}</p>
             <p class="card-copy"><strong>Mint Review Ready:</strong> ${yesNoBadge(readiness.mint_review_ready)}</p>
             <p class="card-copy"><strong>Mint Eligible:</strong> ${yesNoBadge(readiness.mint_eligible)}</p>
             <p class="card-copy"><strong>Policy:</strong> ${escapeHtml(((readiness.mint_policy || {}).token_type) || "—")}</p>
@@ -1205,6 +1216,28 @@
         setPageStatus("Admin operation completed.", "success");
       } catch (error) {
         setPageStatus(error.message || "Unable to run admin operation.", "error");
+      }
+      return;
+    }
+
+    const bulkActionButton = event.target.closest("[data-admin-bulk-action]");
+    if (bulkActionButton) {
+      const action = bulkActionButton.getAttribute("data-admin-bulk-action");
+      try {
+        if (action === "missing-entitlements") {
+          setPageStatus("Repairing all missing entitlements...", "info");
+          await postJson("/admin/control-center/repairs/missing-entitlements", { limit: 500 });
+        } else if (action === "missing-lanes") {
+          setPageStatus("Repairing all missing lanes...", "info");
+          await postJson("/admin/control-center/repairs/missing-lanes", { limit: 500 });
+        } else if (action === "unlinked-paid-orders") {
+          setPageStatus("Linking all unlinked paid orders...", "info");
+          await postJson("/admin/control-center/repairs/unlinked-paid-orders", { limit: 500 });
+        }
+        await Promise.allSettled([loadConsoleOverview(), loadProjects(), selectedProjectId ? loadWorkspace(selectedProjectId) : Promise.resolve()]);
+        setPageStatus("Bulk repair operation completed.", "success");
+      } catch (error) {
+        setPageStatus(error.message || "Unable to run bulk repair operation.", "error");
       }
       return;
     }

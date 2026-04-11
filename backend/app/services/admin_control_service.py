@@ -7,9 +7,16 @@ from typing import Any
 from bson import ObjectId
 
 from app.config import settings
+from app.core.package_mapping import resolve_package_identity
 from app.core.package_catalog import get_package, get_package_control_profile, normalize_package_code
 from app.database import get_database
 from app.services.mint_policy_service import describe_project_mint_eligibility
+from app.services.package_provisioning_service import (
+    auto_provision_paid_order_by_id,
+    link_unlinked_paid_orders,
+    repair_missing_entitlements,
+    repair_missing_lanes,
+)
 from app.services.project_entitlement_service import (
     get_project_entitlement,
     upsert_project_entitlement,
@@ -271,21 +278,27 @@ def _package_fields_from_context(project: dict[str, Any], order: dict[str, Any] 
         or (order or {}).get("package_code")
         or (order or {}).get("package_slug")
     )
-    normalized_code = normalize_package_code(raw_code)
+    package_identity = resolve_package_identity(
+        raw_code,
+        package_name=project.get("package_name") or (order or {}).get("package_name"),
+    )
+    normalized_code = _normalize(package_identity.get("package_code")) or normalize_package_code(raw_code)
+    package_slug = _normalize(package_identity.get("package_slug")) or normalized_code
     package = get_package(normalized_code) or {}
-    lane = _normalize(package.get("package_lane") or project.get("project_lane"))
+    lane = _normalize(package_identity.get("lane") or package.get("package_lane") or project.get("project_lane"))
     if lane not in ALLOWED_LANES:
         lane = "unknown"
 
     package_name = _normalize(
-        project.get("package_name")
+        package_identity.get("display_name")
+        or project.get("package_name")
         or (order or {}).get("package_name")
         or package.get("display_name")
         or normalized_code
     )
     return {
         "package_code": normalized_code or "unknown",
-        "package_slug": normalized_code or "unknown",
+        "package_slug": package_slug or normalized_code or "unknown",
         "package_name": package_name or "Unknown Package",
         "project_lane": lane,
     }
@@ -434,6 +447,10 @@ def link_order_to_project(*, order_id: str, project_id: str = "") -> dict[str, A
     if project_oid is not None:
         project_value = project_oid
     db["orders"].update_one({"_id": order["_id"]}, {"$set": {"project_id": project_value}})
+    try:
+        auto_provision_paid_order_by_id(_normalize(order.get("_id")))
+    except Exception:
+        pass
 
     return {
         "order_id": _normalize(order.get("_id")),
@@ -580,10 +597,13 @@ def run_readiness_check(*, project_id: str, order_id: str = "") -> dict[str, Any
     project_id_str = _normalize(project.get("_id"))
     entitlement = get_project_entitlement(project_id_str)
     package_fields = _package_fields_from_context(project, order)
+    project_identity = resolve_package_identity(project.get("package_slug") or project.get("package_code"))
+    order_identity = resolve_package_identity((order or {}).get("package_slug") or (order or {}).get("package_code"))
+    entitlement_identity = resolve_package_identity((entitlement or {}).get("package_code"))
 
-    project_package_code = normalize_package_code(_normalize(project.get("package_code") or project.get("package_slug")))
-    order_package_code = normalize_package_code(_normalize((order or {}).get("package_code") or (order or {}).get("package_slug")))
-    entitlement_package_code = normalize_package_code(_normalize((entitlement or {}).get("package_code")))
+    project_package_code = _normalize(project_identity.get("package_code")) or normalize_package_code(_normalize(project.get("package_code") or project.get("package_slug")))
+    order_package_code = _normalize(order_identity.get("package_code")) or normalize_package_code(_normalize((order or {}).get("package_code") or (order or {}).get("package_slug")))
+    entitlement_package_code = _normalize(entitlement_identity.get("package_code")) or normalize_package_code(_normalize((entitlement or {}).get("package_code")))
     package_synced = bool(project_package_code and order_package_code and project_package_code == order_package_code == package_fields["package_code"])
     if entitlement:
         package_synced = package_synced and entitlement_package_code == package_fields["package_code"]
@@ -616,9 +636,15 @@ def run_readiness_check(*, project_id: str, order_id: str = "") -> dict[str, Any
         and entitlement_exists
     )
     mint_eligible = bool(mint_eligibility.get("eligible") and mint_review_ready and uploads_present)
+    package_normalized = bool(
+        package_fields["package_code"] != "unknown"
+        and _normalize(project.get("package_slug"))
+        and _normalize(project.get("package_code"))
+    )
 
     return {
         "project_id": project_id_str,
+        "package_normalized": package_normalized,
         "package_synced": package_synced,
         "lane_assigned": lane_assigned,
         "order_linked": order_linked,
@@ -628,7 +654,9 @@ def run_readiness_check(*, project_id: str, order_id: str = "") -> dict[str, Any
         "intake_approved": phase_ready,
         "mint_review_ready": mint_review_ready,
         "mint_eligible": mint_eligible,
+        "mint_readiness_computed": True,
         "summary": {
+            "package_normalized": "yes" if package_normalized else "no",
             "package_synced": "yes" if package_synced else "no",
             "lane_assigned": "yes" if lane_assigned else "no",
             "order_linked": "yes" if order_linked else "no",
@@ -638,6 +666,18 @@ def run_readiness_check(*, project_id: str, order_id: str = "") -> dict[str, Any
         "mint_policy": mint_eligibility.get("mint_policy"),
         "mint_reasons": mint_eligibility.get("reasons") or [],
     }
+
+
+def repair_all_missing_entitlements(*, limit: int = 200) -> dict[str, Any]:
+    return repair_missing_entitlements(limit=limit)
+
+
+def repair_all_missing_lanes(*, limit: int = 200) -> dict[str, Any]:
+    return repair_missing_lanes(limit=limit)
+
+
+def link_all_unlinked_paid_orders(*, limit: int = 200) -> dict[str, Any]:
+    return link_unlinked_paid_orders(limit=limit)
 
 
 def enable_mint_review(*, project_id: str, order_id: str = "") -> dict[str, Any]:

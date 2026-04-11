@@ -6,6 +6,7 @@ from typing import Any, cast
 
 from pymongo.collection import Collection
 
+from app.core.package_mapping import resolve_package_identity
 from app.core.package_catalog import get_package_control_profile
 from app.database import get_database
 from app.services.project_membership_service import list_accessible_project_ids
@@ -31,7 +32,12 @@ def _serialize(document: dict[str, Any] | None) -> dict[str, Any] | None:
     if not document:
         return None
 
-    package_code = str(document.get("package_code") or "").strip()
+    package_identity = resolve_package_identity(
+        document.get("package_slug") or document.get("package_code"),
+        package_name=document.get("package_name"),
+    )
+    package_code = str(package_identity.get("package_code") or document.get("package_code") or "").strip()
+    package_lane = str(package_identity.get("lane") or document.get("package_lane") or "").strip()
     active_addons = list(document.get("active_addons", []))
 
     try:
@@ -44,8 +50,8 @@ def _serialize(document: dict[str, Any] | None) -> dict[str, Any] | None:
         "project_id": document.get("project_id"),
         "user_id": document.get("user_id"),
         "package_code": package_code or document.get("package_code"),
-        "package_name": document.get("package_name") or resolved.get("display_name"),
-        "package_lane": document.get("package_lane"),
+        "package_name": package_identity.get("display_name") or document.get("package_name") or resolved.get("display_name"),
+        "package_lane": package_lane,
         "active_addons": active_addons,
         "maintenance_plan": document.get("maintenance_plan"),
         "maintenance_status": document.get("maintenance_status"),
@@ -111,8 +117,10 @@ def upsert_project_entitlement(
 ) -> dict[str, Any] | None:
     collection = _collection()
 
-    resolved = resolve_project_entitlements(package_code, active_addons or [])
-    maintenance_defaults = get_package_control_profile(package_code) or {}
+    package_identity = resolve_package_identity(package_code)
+    normalized_package_code = str(package_identity.get("package_code") or package_code).strip()
+    resolved = resolve_project_entitlements(normalized_package_code, active_addons or [])
+    maintenance_defaults = get_package_control_profile(normalized_package_code) or {}
     normalized_plan = str(maintenance_plan or "").strip().lower() or str(
         maintenance_defaults.get("maintenance_default") or "none"
     )
@@ -131,9 +139,9 @@ def upsert_project_entitlement(
     document: dict[str, Any] = {
         "project_id": project_id,
         "user_id": user_id,
-        "package_code": resolved.get("package_code") or package_code,
-        "package_name": resolved.get("display_name") or package_code,
-        "package_lane": resolved.get("package_lane"),
+        "package_code": resolved.get("package_code") or normalized_package_code,
+        "package_name": package_identity.get("display_name") or resolved.get("display_name") or normalized_package_code,
+        "package_lane": package_identity.get("lane") or resolved.get("package_lane"),
         "active_addons": active_addons or [],
         "maintenance_plan": normalized_plan,
         "maintenance_status": maintenance_status,

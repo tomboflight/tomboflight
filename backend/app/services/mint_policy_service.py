@@ -5,6 +5,7 @@ from typing import Any
 from bson import ObjectId
 
 from app.config import settings
+from app.core.package_mapping import package_code_to_slug, resolve_package_identity
 from app.core.package_catalog import (
     get_package,
     get_package_catalog,
@@ -41,17 +42,15 @@ def _get_project(project_id: str) -> dict[str, Any] | None:
 
 
 def _package_code_from_project(project: dict[str, Any]) -> str:
-    package = get_package(
+    package_identity = resolve_package_identity(
         _normalize(
-            project.get("package_code")
-            or project.get("package_slug")
+            project.get("package_slug")
+            or project.get("package_code")
             or project.get("package_type")
         )
     )
-    return _normalize((package or {}).get("package_code")) or _normalize(
-        project.get("package_code")
-        or project.get("package_slug")
-        or project.get("package_type")
+    return _normalize(package_identity.get("package_code")) or _normalize(
+        project.get("package_code") or project.get("package_slug") or project.get("package_type")
     )
 
 
@@ -79,12 +78,11 @@ def _project_has_build_state(project: dict[str, Any]) -> bool:
 
 
 def get_package_mint_policy(package_code: str) -> dict[str, Any]:
-    package = get_package(package_code)
-    normalized_code = _normalize((package or {}).get("package_code")) or _normalize(
-        package_code
-    )
-    package_name = _normalize((package or {}).get("display_name")) or normalized_code
-    package_lane = _normalize((package or {}).get("package_lane"))
+    package_identity = resolve_package_identity(package_code)
+    package = get_package(package_identity.get("package_code") or package_code)
+    normalized_code = _normalize((package_identity or {}).get("package_code")) or _normalize((package or {}).get("package_code")) or _normalize(package_code)
+    package_name = _normalize((package_identity or {}).get("display_name")) or _normalize((package or {}).get("display_name")) or normalized_code
+    package_lane = _normalize((package_identity or {}).get("lane")) or _normalize((package or {}).get("package_lane"))
     control_profile = get_package_control_profile(normalized_code) or {}
     base_policy = dict(control_profile.get("mint_policy") or {})
     launch_policy = dict(control_profile.get("launch_policy") or {})
@@ -93,7 +91,7 @@ def get_package_mint_policy(package_code: str) -> dict[str, Any]:
 
     return {
         "package_code": normalized_code,
-        "package_slug": normalized_code,
+        "package_slug": package_code_to_slug(normalized_code) or normalized_code,
         "package_name": package_name,
         "package_lane": package_lane,
         "anchor_type": control_profile.get("anchor_type"),
