@@ -122,6 +122,12 @@ def _project_id_candidates(project_id: str) -> list[Any]:
     return values
 
 
+def _project_is_approved(project: dict[str, Any]) -> bool:
+    status_value = _normalize(project.get("status")).lower()
+    phase_value = _normalize(project.get("phase")).lower()
+    return status_value in BUILD_READY_STATUSES or phase_value in INTAKE_APPROVED_PHASES
+
+
 def _is_paid_package_order(order: dict[str, Any] | None) -> bool:
     if not isinstance(order, dict):
         return False
@@ -227,8 +233,19 @@ def _repair_entitlement_document(
         return {"found": False, "updated_fields": []}
 
     updates: dict[str, Any] = {}
-    if _normalize(entitlement.get("project_id")) != project_id_text:
-        updates["project_id"] = project_id_text
+    project_oid = _to_object_id(project_id_text)
+    existing_project_oid = _to_object_id(_normalize(entitlement.get("project_id")))
+    if (
+        project_oid is not None
+        and (existing_project_oid != project_oid or not isinstance(entitlement.get("project_id"), ObjectId))
+    ):
+        updates["project_id"] = project_oid
+
+    existing_user_id = entitlement.get("user_id")
+    if not isinstance(existing_user_id, ObjectId):
+        user_oid = _to_object_id(_normalize(existing_user_id))
+        if user_oid is not None:
+            updates["user_id"] = user_oid
 
     entitlement_lane = _normalize(entitlement.get("package_lane")).lower()
     if entitlement_lane not in ALLOWED_LANES and lane in ALLOWED_LANES:
@@ -289,6 +306,27 @@ def _package_fields_from_context(project: dict[str, Any], order: dict[str, Any] 
         "package_name": package_name or "Unknown Package",
         "project_lane": lane,
     }
+
+
+def _resolve_entitlement_user_id(project: dict[str, Any], order: dict[str, Any] | None) -> str:
+    candidate_values = [
+        project.get("owner_user_id"),
+        (order or {}).get("user_id"),
+    ]
+    for value in candidate_values:
+        oid = _to_object_id(_normalize(value))
+        if oid is not None:
+            return str(oid)
+
+    owner_email = _normalize_email(project.get("owner_email"))
+    if owner_email:
+        user = _db()["users"].find_one({"email": owner_email}, {"_id": 1})
+        if user and user.get("_id"):
+            oid = _to_object_id(user.get("_id"))
+            if oid is not None:
+                return str(oid)
+
+    return ""
 
 
 def _serialize_order(order: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -388,8 +426,9 @@ def assign_lane(*, project_id: str) -> dict[str, Any]:
 
     entitlement = get_project_entitlement(_normalize(project.get("_id")))
     if entitlement:
+        project_id_filter = {"$in": _project_id_candidates(_normalize(project.get("_id")))}
         db["project_entitlements"].update_one(
-            {"project_id": _normalize(project.get("_id"))},
+            {"project_id": project_id_filter},
             {"$set": {"package_lane": lane, "updated_at": _now()}},
         )
 
@@ -406,16 +445,7 @@ def link_order_to_project(*, order_id: str, project_id: str = "") -> dict[str, A
     if project_id:
         project = _project_by_id(project_id)
     else:
-        email = _normalize_email(order.get("email"))
-        user_id = _normalize(order.get("user_id"))
-        filters: list[dict[str, Any]] = []
-        if email:
-            filters.append({"owner_email": email})
-        if user_id:
-            filters.append({"owner_user_id": user_id})
-        if not filters:
-            raise ValueError("Order has no identity fields for project matching.")
-        project = db["projects"].find_one({"$or": filters}, sort=[("updated_at", -1)])
+        project = _find_matching_approved_project_for_order(order)
 
     if project is None:
         raise ValueError("Matching project not found.")
@@ -463,11 +493,13 @@ def generate_entitlement(*, project_id: str, order_id: str = "", force: bool = T
 
     delivered_at = project.get("updated_at") if _normalize(project.get("status")).lower() == "delivered" else None
     purchased_at = (order or {}).get("created_at")
-    user_id = _normalize(project.get("owner_user_id") or (order or {}).get("user_id"))
+    user_id = _resolve_entitlement_user_id(project, order)
+    if not _to_object_id(user_id):
+        raise ValueError("Unable to resolve a valid user_id for entitlement generation.")
 
     entitlement = upsert_project_entitlement(
         project_id=project_id_str,
-        user_id=user_id or "unknown",
+        user_id=user_id,
         package_code=package_fields["package_code"],
         active_addons=list((existing or {}).get("active_addons") or []),
         maintenance_plan=maintenance_plan,
@@ -476,8 +508,9 @@ def generate_entitlement(*, project_id: str, order_id: str = "", force: bool = T
         status="active",
     )
     if entitlement:
+        project_id_filter = {"$in": _project_id_candidates(project_id_str)}
         _db()["project_entitlements"].update_one(
-            {"project_id": project_id_str},
+            {"project_id": project_id_filter},
             {"$set": {"package_lane": package_fields["project_lane"], "updated_at": _now()}},
         )
 
@@ -765,4 +798,177 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
             "mint_eligible_blocked": priority_repairs["mint_eligible_blocked"][:limit],
         },
         "mismatches": mismatches[:limit],
+    }
+
+
+def _find_matching_approved_project_for_order(order: dict[str, Any]) -> dict[str, Any] | None:
+    db = _db()
+    email = _normalize_email(order.get("email"))
+    user_id = _normalize(order.get("user_id"))
+    user_oid = _to_object_id(user_id)
+
+    filters: list[dict[str, Any]] = []
+    if email:
+        filters.append({"owner_email": email})
+    if user_id:
+        filters.append({"owner_user_id": user_id})
+    if user_oid is not None:
+        filters.append({"owner_user_id": str(user_oid)})
+
+    if not filters:
+        return None
+
+    for project in db["projects"].find({"$or": filters}).sort("updated_at", -1).limit(100):
+        if _project_is_approved(project):
+            return project
+    return None
+
+
+def _order_has_project_link(order: dict[str, Any]) -> bool:
+    project_ref = _normalize(order.get("project_id"))
+    return bool(_to_object_id(project_ref))
+
+
+def _link_order_to_project_document(order: dict[str, Any], project: dict[str, Any]) -> bool:
+    db = _db()
+    project_id_str = _normalize(project.get("_id") or project.get("id"))
+    project_oid = _to_object_id(project_id_str)
+    if project_oid is None:
+        return False
+
+    db["orders"].update_one(
+        {"_id": order["_id"]},
+        {"$set": {"project_id": project_oid}},
+    )
+    return True
+
+
+def link_unlinked_paid_orders(*, limit: int = 500) -> dict[str, Any]:
+    db = _db()
+    scanned = 0
+    linked = 0
+    skipped = 0
+    failures = 0
+    linked_order_ids: list[str] = []
+
+    cursor = db["orders"].find({"status": {"$in": list(PAID_ORDER_STATUSES)}}).sort("created_at", -1).limit(max(1, min(limit, 5000)))
+    for order in cursor:
+        if not _is_paid_package_order(order):
+            skipped += 1
+            continue
+        scanned += 1
+        if _order_has_project_link(order):
+            skipped += 1
+            continue
+
+        project = _find_matching_approved_project_for_order(order)
+        if project is None:
+            skipped += 1
+            continue
+
+        if _link_order_to_project_document(order, project):
+            linked += 1
+            linked_order_ids.append(_normalize(order.get("_id")))
+        else:
+            failures += 1
+
+    return {
+        "action": "link_unlinked_paid_orders",
+        "scanned": scanned,
+        "linked": linked,
+        "skipped": skipped,
+        "failed": failures,
+        "order_ids": linked_order_ids[:50],
+    }
+
+
+def assign_missing_lanes(*, limit: int = 500) -> dict[str, Any]:
+    db = _db()
+    scanned = 0
+    assigned = 0
+    skipped = 0
+    failures = 0
+    project_ids: list[str] = []
+
+    cursor = db["projects"].find({}).sort("updated_at", -1).limit(max(1, min(limit, 5000)))
+    for project in cursor:
+        scanned += 1
+        if not _project_is_approved(project):
+            skipped += 1
+            continue
+
+        lane = _normalize(project.get("project_lane")).lower()
+        if lane in ALLOWED_LANES:
+            skipped += 1
+            continue
+
+        project_id = _normalize(project.get("_id"))
+        order = _latest_linked_order(project_id) or _latest_user_order_for_project(project)
+        if order is None or not _is_paid_package_order(order):
+            skipped += 1
+            continue
+
+        try:
+            assign_lane(project_id=project_id)
+            assigned += 1
+            project_ids.append(project_id)
+        except Exception:
+            failures += 1
+
+    return {
+        "action": "assign_missing_lanes",
+        "scanned": scanned,
+        "assigned": assigned,
+        "skipped": skipped,
+        "failed": failures,
+        "project_ids": project_ids[:50],
+    }
+
+
+def repair_missing_entitlements(*, limit: int = 500) -> dict[str, Any]:
+    db = _db()
+    scanned = 0
+    repaired = 0
+    skipped = 0
+    failures = 0
+    project_ids: list[str] = []
+
+    cursor = db["projects"].find({}).sort("updated_at", -1).limit(max(1, min(limit, 5000)))
+    for project in cursor:
+        scanned += 1
+        if not _project_is_approved(project):
+            skipped += 1
+            continue
+
+        project_id = _normalize(project.get("_id"))
+        if get_project_entitlement(project_id) is not None:
+            skipped += 1
+            continue
+
+        order = _latest_linked_order(project_id) or _latest_user_order_for_project(project)
+        if order is None or not _is_paid_package_order(order):
+            skipped += 1
+            continue
+
+        if not _order_has_project_link(order):
+            _link_order_to_project_document(order, project)
+
+        try:
+            generate_entitlement(
+                project_id=project_id,
+                order_id=_normalize(order.get("_id")),
+                force=False,
+            )
+            repaired += 1
+            project_ids.append(project_id)
+        except Exception:
+            failures += 1
+
+    return {
+        "action": "repair_missing_entitlements",
+        "scanned": scanned,
+        "repaired": repaired,
+        "skipped": skipped,
+        "failed": failures,
+        "project_ids": project_ids[:50],
     }

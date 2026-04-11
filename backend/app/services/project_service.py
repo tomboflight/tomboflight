@@ -182,15 +182,16 @@ def create_project_from_paid_order(
     ensure_project_owner_membership(project_doc)
 
     try:
-        upsert_project_entitlement(
-            project_id=str(project_doc["_id"]),
-            user_id=user_id,
-            package_code=package_code,
-            active_addons=[],
-            maintenance_plan="not_started",
-            delivered_at=None,
-            status="active",
-        )
+        if ObjectId.is_valid(user_id):
+            upsert_project_entitlement(
+                project_id=str(project_doc["_id"]),
+                user_id=user_id,
+                package_code=package_code,
+                active_addons=[],
+                maintenance_plan="not_started",
+                delivered_at=None,
+                status="active",
+            )
     except Exception:
         pass
 
@@ -286,9 +287,16 @@ def apply_package_purchase_to_project(
     delivered_at = current_entitlement.get("delivered_at")
 
     try:
+        entitlement_user_id = ""
+        if ObjectId.is_valid(owner_user_id):
+            entitlement_user_id = owner_user_id
+        elif ObjectId.is_valid(user_id):
+            entitlement_user_id = user_id
+        if not entitlement_user_id:
+            return refreshed
         upsert_project_entitlement(
             project_id=project_id,
-            user_id=owner_user_id or user_id,
+            user_id=entitlement_user_id,
             package_code=package_code,
             active_addons=existing_addons,
             maintenance_plan=maintenance_plan,
