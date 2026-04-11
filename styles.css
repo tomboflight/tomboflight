@@ -4228,6 +4228,14 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
   color: var(--muted);
 }
 
+.admin-record-list > span {
+  color: var(--muted-2);
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
 .admin-record-list strong {
   color: var(--text);
 }
