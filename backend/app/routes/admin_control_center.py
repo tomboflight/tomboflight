@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from app.dependencies.auth import require_permission
+from app.services.audit_log_service import write_audit_log
 from app.services.admin_control_service import (
     MAX_BULK_ACTION_LIMIT,
     admin_console_overview,
@@ -32,6 +33,40 @@ from app.services.admin_control_service import (
 
 router = APIRouter(prefix="/admin/control-center", tags=["Admin Control Center"])
 BULK_ACTION_DEFAULT_LIMIT = 500
+
+
+def _string_value(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _audit_bulk_action(
+    *,
+    current_user: dict[str, Any],
+    action: str,
+    result_payload: dict[str, Any],
+) -> None:
+    try:
+        first_name = _string_value(current_user.get("first_name"))
+        last_name = _string_value(current_user.get("last_name"))
+        actor_name = _string_value(current_user.get("full_name")) or " ".join(
+            [first_name, last_name]
+        ).strip()
+        write_audit_log(
+            actor_user_id=_string_value(
+                current_user.get("_id") or current_user.get("id") or current_user.get("user_id")
+            )
+            or None,
+            actor_email=_string_value(current_user.get("email")).lower() or None,
+            actor_name=actor_name or None,
+            action=f"admin_control_center.bulk.{action}",
+            target_type="bulk_repair",
+            target_id=action,
+            after=result_payload,
+            context={"admin_surface": "customer_operations_workspace"},
+            result="success",
+        )
+    except Exception:
+        return
 
 
 class SyncPackagePayload(BaseModel):
@@ -105,9 +140,13 @@ async def run_customer_case_action(
     action: str,
     current_user: dict[str, Any] = Depends(require_permission("admin.access")),
 ):
-    del current_user
     try:
-        return await asyncio.to_thread(execute_case_action, case_id=case_id, action=action)
+        return await asyncio.to_thread(
+            execute_case_action,
+            case_id=case_id,
+            action=action,
+            actor=current_user,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
@@ -226,8 +265,9 @@ def bulk_repair_entitlements(
     payload: BulkRepairPayload | None = None,
     current_user: dict[str, Any] = Depends(require_permission("admin.access")),
 ):
-    del current_user
-    return repair_missing_entitlements(limit=(payload.limit if payload else BULK_ACTION_DEFAULT_LIMIT))
+    result = repair_missing_entitlements(limit=(payload.limit if payload else BULK_ACTION_DEFAULT_LIMIT))
+    _audit_bulk_action(current_user=current_user, action="repair_missing_entitlements", result_payload=result)
+    return result
 
 
 @router.post("/bulk/assign-missing-lanes")
@@ -235,8 +275,9 @@ def bulk_assign_lanes(
     payload: BulkRepairPayload | None = None,
     current_user: dict[str, Any] = Depends(require_permission("admin.access")),
 ):
-    del current_user
-    return assign_missing_lanes(limit=(payload.limit if payload else BULK_ACTION_DEFAULT_LIMIT))
+    result = assign_missing_lanes(limit=(payload.limit if payload else BULK_ACTION_DEFAULT_LIMIT))
+    _audit_bulk_action(current_user=current_user, action="assign_missing_lanes", result_payload=result)
+    return result
 
 
 @router.post("/bulk/link-unlinked-paid-orders")
@@ -244,8 +285,9 @@ def bulk_link_paid_orders(
     payload: BulkRepairPayload | None = None,
     current_user: dict[str, Any] = Depends(require_permission("admin.access")),
 ):
-    del current_user
-    return link_unlinked_paid_orders(limit=(payload.limit if payload else BULK_ACTION_DEFAULT_LIMIT))
+    result = link_unlinked_paid_orders(limit=(payload.limit if payload else BULK_ACTION_DEFAULT_LIMIT))
+    _audit_bulk_action(current_user=current_user, action="link_unlinked_paid_orders", result_payload=result)
+    return result
 
 
 @router.post("/bulk/normalize-broken-package-records")
@@ -253,8 +295,9 @@ def bulk_normalize_package_records(
     payload: BulkRepairPayload | None = None,
     current_user: dict[str, Any] = Depends(require_permission("admin.access")),
 ):
-    del current_user
-    return normalize_broken_package_records(limit=(payload.limit if payload else BULK_ACTION_DEFAULT_LIMIT))
+    result = normalize_broken_package_records(limit=(payload.limit if payload else BULK_ACTION_DEFAULT_LIMIT))
+    _audit_bulk_action(current_user=current_user, action="normalize_broken_package_records", result_payload=result)
+    return result
 
 
 @router.post("/bulk/refresh-mint-readiness")
@@ -262,8 +305,9 @@ def bulk_refresh_mint_readiness(
     payload: BulkRepairPayload | None = None,
     current_user: dict[str, Any] = Depends(require_permission("admin.access")),
 ):
-    del current_user
-    return refresh_mint_readiness(limit=(payload.limit if payload else BULK_ACTION_DEFAULT_LIMIT))
+    result = refresh_mint_readiness(limit=(payload.limit if payload else BULK_ACTION_DEFAULT_LIMIT))
+    _audit_bulk_action(current_user=current_user, action="refresh_mint_readiness", result_payload=result)
+    return result
 
 
 @router.post("/bulk/repair-selected-records")
@@ -271,8 +315,9 @@ def bulk_repair_selected_records(
     payload: RepairSelectedPayload,
     current_user: dict[str, Any] = Depends(require_permission("admin.access")),
 ):
-    del current_user
-    return repair_selected_records(project_ids=payload.project_ids, order_ids=payload.order_ids)
+    result = repair_selected_records(project_ids=payload.project_ids, order_ids=payload.order_ids)
+    _audit_bulk_action(current_user=current_user, action="repair_selected_records", result_payload=result)
+    return result
 
 
 @router.post("/bulk/repair-all-safe-records")
@@ -280,5 +325,6 @@ def bulk_repair_all_safe_records(
     payload: BulkRepairPayload | None = None,
     current_user: dict[str, Any] = Depends(require_permission("admin.access")),
 ):
-    del current_user
-    return repair_all_safe_records(limit=(payload.limit if payload else BULK_ACTION_DEFAULT_LIMIT))
+    result = repair_all_safe_records(limit=(payload.limit if payload else BULK_ACTION_DEFAULT_LIMIT))
+    _audit_bulk_action(current_user=current_user, action="repair_all_safe_records", result_payload=result)
+    return result
