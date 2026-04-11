@@ -12,6 +12,7 @@ from app.services.admin_control_service import (
     enable_mint_review,
     generate_entitlement,
     link_order_to_project,
+    repair_record,
     project_workspace_snapshot,
     run_readiness_check,
     sync_package,
@@ -34,6 +35,10 @@ class GenerateEntitlementPayload(BaseModel):
 
 
 class EnableMintReviewPayload(BaseModel):
+    order_id: str = Field(default="")
+
+
+class RepairRecordPayload(BaseModel):
     order_id: str = Field(default="")
 
 
@@ -143,3 +148,16 @@ def queue_project_for_mint_review(
         return enable_mint_review(project_id=project_id, order_id=(payload.order_id if payload else ""))
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+
+@router.post("/projects/{project_id}/repair-record")
+def repair_project_record(
+    project_id: str,
+    payload: RepairRecordPayload | None = None,
+    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+):
+    del current_user
+    try:
+        return repair_record(project_id=project_id, order_id=(payload.order_id if payload else ""))
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc

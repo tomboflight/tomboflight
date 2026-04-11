@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from typing import Any
 
@@ -19,6 +20,7 @@ ALLOWED_LANES = {"portrait", "household", "network", "organization"}
 BUILD_READY_STATUSES = {"build_ready", "in_production", "qa_review", "client_review", "delivered", "archived"}
 INTAKE_APPROVED_PHASES = {"intake_approved", "build_started", "quality_review", "client_review", "delivery_complete", "delivered", "archived"}
 PAID_ORDER_STATUSES = {"paid", "succeeded", "complete", "completed"}
+OBJECT_ID_WRAPPER_PATTERN = re.compile(r"""^ObjectId\((["']?)([0-9a-fA-F]{24})\1\)$""")
 
 
 def _normalize(value: Any) -> str:
@@ -41,10 +43,55 @@ def _db():
 
 
 def _to_object_id(value: str) -> ObjectId | None:
-    try:
-        return ObjectId(str(value))
-    except Exception:
+    if isinstance(value, ObjectId):
+        return value
+    normalized = _normalize(value)
+    if not normalized:
         return None
+    if ObjectId.is_valid(normalized):
+        return ObjectId(normalized)
+    wrapped = OBJECT_ID_WRAPPER_PATTERN.match(normalized)
+    if wrapped and ObjectId.is_valid(wrapped.group(2)):
+        return ObjectId(wrapped.group(2))
+    return None
+
+
+def _normalize_object_id(value: Any) -> str:
+    if isinstance(value, ObjectId):
+        return str(value)
+    normalized = _normalize(value)
+    if not normalized:
+        return ""
+    if ObjectId.is_valid(normalized):
+        return str(ObjectId(normalized))
+    wrapped = OBJECT_ID_WRAPPER_PATTERN.match(normalized)
+    if wrapped and ObjectId.is_valid(wrapped.group(2)):
+        return str(ObjectId(wrapped.group(2)))
+    return normalized
+
+
+def _coerce_datetime(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, (int, float)):
+        try:
+            return datetime.fromtimestamp(float(value), tz=UTC)
+        except Exception:
+            return None
+    if isinstance(value, str):
+        candidate = value.strip()
+        if not candidate:
+            return None
+        if candidate.endswith("Z"):
+            candidate = f"{candidate[:-1]}+00:00"
+        try:
+            parsed = datetime.fromisoformat(candidate)
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=UTC)
+            return parsed.astimezone(UTC)
+        except ValueError:
+            return None
+    return None
 
 
 def _project_by_id(project_id: str) -> dict[str, Any] | None:
@@ -70,6 +117,9 @@ def _project_id_candidates(project_id: str) -> list[Any]:
     oid = _to_object_id(project_id)
     if oid is not None:
         values.append(oid)
+        oid_text = str(oid)
+        values.append(f'ObjectId("{oid_text}")')
+        values.append(f"ObjectId('{oid_text}')")
     return values
 
 
@@ -128,6 +178,92 @@ def _resolve_project_order_context(project_id: str, preferred_order_id: str = ""
     return project, order
 
 
+def _repair_order_document(
+    *,
+    order: dict[str, Any],
+    project_id_text: str,
+) -> dict[str, Any]:
+    db = _db()
+    updates: dict[str, Any] = {}
+
+    project_oid = _to_object_id(project_id_text)
+    if project_oid is not None:
+        existing_project_oid = _to_object_id(_normalize(order.get("project_id")))
+        if existing_project_oid != project_oid or not isinstance(order.get("project_id"), ObjectId):
+            updates["project_id"] = project_oid
+
+    existing_user_id = order.get("user_id")
+    if not isinstance(existing_user_id, ObjectId):
+        coerced_user_id = _to_object_id(_normalize(existing_user_id))
+        if coerced_user_id is not None:
+            updates["user_id"] = coerced_user_id
+
+    for field_name in ("created_at", "updated_at"):
+        raw_value = order.get(field_name)
+        if isinstance(raw_value, datetime):
+            continue
+        coerced = _coerce_datetime(raw_value)
+        if coerced is not None:
+            updates[field_name] = coerced
+
+    if updates:
+        db["orders"].update_one({"_id": order.get("_id")}, {"$set": updates})
+        order.update(updates)
+
+    return {
+        "order_id": _normalize(order.get("_id")),
+        "updated_fields": sorted(updates.keys()),
+    }
+
+
+def _repair_entitlement_document(
+    *,
+    project_id_text: str,
+    lane: str,
+) -> dict[str, Any]:
+    db = _db()
+    collection = db["project_entitlements"]
+    entitlement = collection.find_one({"project_id": {"$in": _project_id_candidates(project_id_text)}})
+    if entitlement is None:
+        return {"found": False, "updated_fields": []}
+
+    updates: dict[str, Any] = {}
+    if _normalize(entitlement.get("project_id")) != project_id_text:
+        updates["project_id"] = project_id_text
+
+    entitlement_lane = _normalize(entitlement.get("package_lane")).lower()
+    if entitlement_lane not in ALLOWED_LANES and lane in ALLOWED_LANES:
+        updates["package_lane"] = lane
+
+    datetime_fields = (
+        "purchased_at",
+        "delivered_at",
+        "created_at",
+        "updated_at",
+        "maintenance_scheduled_start_at",
+        "maintenance_started_at",
+        "maintenance_renews_at",
+        "maintenance_current_period_start",
+        "maintenance_current_period_end",
+    )
+    for field_name in datetime_fields:
+        raw_value = entitlement.get(field_name)
+        if isinstance(raw_value, datetime):
+            continue
+        coerced = _coerce_datetime(raw_value)
+        if coerced is not None:
+            updates[field_name] = coerced
+
+    if updates:
+        updates["updated_at"] = _now()
+        collection.update_one({"_id": entitlement["_id"]}, {"$set": updates})
+
+    return {
+        "found": True,
+        "updated_fields": sorted(updates.keys()),
+    }
+
+
 def _package_fields_from_context(project: dict[str, Any], order: dict[str, Any] | None) -> dict[str, Any]:
     raw_code = _normalize(
         project.get("package_code")
@@ -162,11 +298,11 @@ def _serialize_order(order: dict[str, Any] | None) -> dict[str, Any] | None:
     return {
         "id": _normalize(order.get("_id")),
         "email": _normalize(order.get("email")) or None,
-        "user_id": _normalize(order.get("user_id")) or None,
+        "user_id": _normalize_object_id(order.get("user_id")) or None,
         "status": _normalize(order.get("status")) or None,
         "package_code": normalize_package_code(_normalize(order.get("package_code") or order.get("package_slug"))),
         "package_name": _normalize(order.get("package_name")) or None,
-        "project_id": _normalize(order.get("project_id")) or None,
+        "project_id": _normalize_object_id(order.get("project_id")) or None,
         "billing_plan": _normalize(order.get("billing_plan")) or "one_time",
         "created_at": order.get("created_at"),
     }
@@ -353,6 +489,93 @@ def generate_entitlement(*, project_id: str, order_id: str = "", force: bool = T
     }
 
 
+def repair_record(*, project_id: str, order_id: str = "") -> dict[str, Any]:
+    db = _db()
+    project, order = _resolve_project_order_context(project_id, preferred_order_id=order_id)
+    project_id_str = _normalize(project.get("_id") or project.get("id"))
+    if not project_id_str:
+        raise ValueError("Project id is invalid.")
+
+    project_doc_id = _to_object_id(project_id_str)
+    if project_doc_id is None:
+        raise ValueError("Project id is invalid.")
+
+    package_fields = _package_fields_from_context(project, order)
+    lane = package_fields["project_lane"]
+
+    project_updates: dict[str, Any] = {
+        "package_code": package_fields["package_code"],
+        "package_slug": package_fields["package_slug"],
+        "package_type": package_fields["package_code"],
+        "package_name": package_fields["package_name"],
+        "updated_at": _now(),
+    }
+    if lane in ALLOWED_LANES:
+        project_updates["project_lane"] = lane
+
+    for field_name in ("created_at", "updated_at"):
+        raw_value = project.get(field_name)
+        if isinstance(raw_value, datetime):
+            continue
+        coerced = _coerce_datetime(raw_value)
+        if coerced is not None:
+            project_updates[field_name] = coerced
+
+    db["projects"].update_one({"_id": project_doc_id}, {"$set": project_updates})
+
+    order_repair: dict[str, Any] = {"updated_fields": []}
+    if order is not None and _is_paid_package_order(order):
+        order_repair = _repair_order_document(
+            order=order,
+            project_id_text=project_id_str,
+        )
+    elif order is not None:
+        order_repair = {
+            "order_id": _normalize(order.get("_id")),
+            "updated_fields": [],
+            "skipped_reason": "order_not_paid_package",
+        }
+
+    entitlement_repair = _repair_entitlement_document(
+        project_id_text=project_id_str,
+        lane=lane,
+    )
+    entitlement_before = get_project_entitlement(project_id_str)
+    entitlement_generation = {"created": False, "regenerated": False}
+    if entitlement_before is None:
+        generated = generate_entitlement(
+            project_id=project_id_str,
+            order_id=_normalize((order or {}).get("_id")),
+            force=False,
+        )
+        entitlement_generation = {
+            "created": bool(generated.get("created")),
+            "regenerated": bool(generated.get("regenerated")),
+        }
+
+    refreshed_project, refreshed_order = _resolve_project_order_context(
+        project_id_str,
+        preferred_order_id=_normalize((order or {}).get("_id")),
+    )
+    readiness = run_readiness_check(
+        project_id=project_id_str,
+        order_id=_normalize((refreshed_order or {}).get("_id")),
+    )
+
+    return {
+        "project": _serialize_project(refreshed_project),
+        "order": _serialize_order(refreshed_order),
+        "entitlement": get_project_entitlement(project_id_str),
+        "repairs": {
+            "project_updated_fields": sorted(project_updates.keys()),
+            "order": order_repair,
+            "entitlement_record": entitlement_repair,
+            "entitlement_generation": entitlement_generation,
+        },
+        "readiness": readiness,
+    }
+
+
 def run_readiness_check(*, project_id: str, order_id: str = "") -> dict[str, Any]:
     project, order = _resolve_project_order_context(project_id, preferred_order_id=order_id)
     project_id_str = _normalize(project.get("_id"))
@@ -370,8 +593,8 @@ def run_readiness_check(*, project_id: str, order_id: str = "") -> dict[str, Any
     entitlement_lane = _normalize((entitlement or {}).get("package_lane")).lower()
     lane_assigned = lane_value in ALLOWED_LANES and (not entitlement or entitlement_lane == lane_value)
 
-    linked_project_id = _normalize((order or {}).get("project_id"))
-    order_linked = bool(order and linked_project_id and linked_project_id == project_id_str)
+    linked_project_id = _normalize_object_id((order or {}).get("project_id"))
+    order_linked = bool(order and linked_project_id and linked_project_id == _normalize_object_id(project_id_str))
     entitlement_exists = entitlement is not None
 
     upload_count = count_workspace_uploads(project_id=project_id_str)
