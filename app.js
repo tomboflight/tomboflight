@@ -5,11 +5,17 @@
 
   const DEFAULT_LOCAL_API_BASE_URL = "http://127.0.0.1:8000";
   const DEFAULT_LIVE_API_BASE_URL = "https://tomboflight-api.onrender.com";
+  const DEFAULT_LIVE_API_BASE_URLS = [
+    "https://api.tomboflight.com",
+    DEFAULT_LIVE_API_BASE_URL,
+  ];
 
   const TOKEN_KEY = "tol_access_token";
   const USER_KEY = "tol_user";
   const COOKIE_CHOICE_KEY = "tol_cookie_choice";
   const PENDING_CHECKOUT_KEY = "tol_pending_checkout";
+  const API_BASE_URL_STORAGE_KEY = "tol_api_base_url";
+  const API_REQUEST_TIMEOUT_MS = 15000;
 
   const ADDON_OR_EXTRA_SLUGS = new Set([
     "extra_upload_pack",
@@ -29,23 +35,161 @@
     "command_report_addon",
   ]);
 
+  // Canonical set of internal-role values shared across all modules.
+  // Any module needing role gating should call app.isInternalRole() rather
+  // than maintaining its own copy of this set.
+  const INTERNAL_ROLE_KEYS = new Set([
+    "admin",
+    "super_admin",
+    "root_admin",
+    "platform_admin",
+    "operations_admin",
+    "finance_admin",
+    "marketing_admin",
+    "executive_technology",
+    "operations",
+    "finance",
+    "marketing",
+  ]);
+
+  function isInternalRole(user) {
+    if (!user || typeof user !== "object") return false;
+    return [
+      String(user.role || "").trim().toLowerCase(),
+      String(user.access_tier || "").trim().toLowerCase(),
+      String(user.department_role || "").trim().toLowerCase(),
+    ].some(function (v) {
+      return v && INTERNAL_ROLE_KEYS.has(v);
+    });
+  }
+
   function isLocalApp() {
     return LOCAL_HOSTS.has(window.location.hostname);
   }
 
-  function getApiBaseUrl() {
-    const configured =
+  function uniqueNonEmptyValues(values) {
+    return Array.from(
+      new Set(
+        (Array.isArray(values) ? values : [])
+          .map(function (value) {
+            return typeof value === "string" ? value.trim().replace(/\/+$/, "") : "";
+          })
+          .filter(Boolean),
+      ),
+    );
+  }
+
+  function getConfiguredApiBaseUrls() {
+    const configuredList =
+      window.TOL_CONFIG && Array.isArray(window.TOL_CONFIG.API_BASE_URLS)
+        ? window.TOL_CONFIG.API_BASE_URLS
+        : [];
+    const configuredSingle =
       window.TOL_CONFIG && typeof window.TOL_CONFIG.API_BASE_URL === "string"
-        ? window.TOL_CONFIG.API_BASE_URL.trim()
+        ? window.TOL_CONFIG.API_BASE_URL
         : "";
 
-    if (configured) {
+    const configured = uniqueNonEmptyValues([
+      ...configuredList,
+      configuredSingle,
+    ]);
+    if (configured.length) {
       return configured;
     }
 
     return isLocalApp()
-      ? DEFAULT_LOCAL_API_BASE_URL
-      : DEFAULT_LIVE_API_BASE_URL;
+      ? [DEFAULT_LOCAL_API_BASE_URL]
+      : DEFAULT_LIVE_API_BASE_URLS.slice();
+  }
+
+  function getSavedApiBaseUrl() {
+    try {
+      const value = sessionStorage.getItem(API_BASE_URL_STORAGE_KEY);
+      return typeof value === "string" ? value.trim().replace(/\/+$/, "") : "";
+    } catch (_error) {
+      return "";
+    }
+  }
+
+  function saveApiBaseUrl(value) {
+    try {
+      if (typeof value === "string" && value.trim()) {
+        sessionStorage.setItem(
+          API_BASE_URL_STORAGE_KEY,
+          value.trim().replace(/\/+$/, ""),
+        );
+      }
+    } catch (_error) {
+      // Ignore storage errors.
+    }
+  }
+
+  function getApiBaseUrls() {
+    const configured = getConfiguredApiBaseUrls();
+    const saved = getSavedApiBaseUrl();
+    if (saved && configured.includes(saved)) {
+      return [saved].concat(
+        configured.filter(function (item) {
+          return item !== saved;
+        }),
+      );
+    }
+    return configured;
+  }
+
+  function getApiBaseUrl() {
+    const configured = getApiBaseUrls();
+    const saved = getSavedApiBaseUrl();
+    if (saved && configured.includes(saved)) {
+      return saved;
+    }
+    return configured[0] || "";
+  }
+
+  async function discoverApiBaseUrl(candidates) {
+    const urls = uniqueNonEmptyValues(candidates);
+    const failures = [];
+    for (const apiBaseUrl of urls) {
+      try {
+        const response = await fetch(`${apiBaseUrl}/health`, {
+          method: "GET",
+          headers: { Accept: "application/json" },
+          credentials: "include",
+        });
+        if (response && response.ok) {
+          saveApiBaseUrl(apiBaseUrl);
+          return apiBaseUrl;
+        }
+        failures.push(`${apiBaseUrl} returned ${response.status}`);
+      } catch (_error) {
+        failures.push(`${apiBaseUrl} could not be reached`);
+      }
+    }
+
+    if (failures.length) {
+      console.warn("Tomb of Light API discovery failed:", failures.join("; "));
+    }
+
+    return urls[0] || "";
+  }
+
+  function buildNetworkErrorMessage(apiBaseUrls) {
+    if (!isLocalApp()) {
+      return "Service temporarily unavailable. Please try again in a few minutes.";
+    }
+
+    const candidates = uniqueNonEmptyValues(apiBaseUrls);
+    const details = [
+      "Network error calling API.",
+      "",
+      `API base candidates: ${candidates.join(", ") || "none configured"}`,
+      `Page origin: ${window.location.origin}`,
+      "",
+      "Local frontend should usually run on http://127.0.0.1:5500",
+      "Local backend should usually run on http://127.0.0.1:8000",
+    ];
+
+    return details.join("\n");
   }
 
   function getPaymentLinks() {
@@ -135,7 +279,8 @@
   }
 
   async function apiRequest(path, options = {}) {
-    const apiBaseUrl = getApiBaseUrl();
+    const configuredApiBaseUrls = getApiBaseUrls();
+    const savedApiBaseUrl = getSavedApiBaseUrl();
     const token = getToken();
 
     const headers = {
@@ -151,22 +296,93 @@
       headers.Authorization = `Bearer ${token}`;
     }
 
-    let response;
+    const preferredApiBaseUrl =
+      savedApiBaseUrl && configuredApiBaseUrls.includes(savedApiBaseUrl)
+        ? savedApiBaseUrl
+        : configuredApiBaseUrls.length > 1
+        ? await discoverApiBaseUrl(configuredApiBaseUrls)
+        : configuredApiBaseUrls[0] || "";
+    const apiBaseUrls = uniqueNonEmptyValues([
+      preferredApiBaseUrl,
+      ...configuredApiBaseUrls,
+    ]);
 
-    try {
-      response = await fetch(`${apiBaseUrl}${path}`, {
-        ...options,
-        headers,
-        credentials: "include",
-      });
-    } catch (networkError) {
-      throw new Error(
-        `Network error calling API.\n\n` +
-          `API_BASE_URL: ${apiBaseUrl}\n` +
-          `Page origin: ${window.location.origin}\n\n` +
-          `Local frontend should usually run on http://127.0.0.1:5500\n` +
-          `Local backend should usually run on http://127.0.0.1:8000`,
-      );
+    let response = null;
+    let lastNetworkError = null;
+
+    for (let index = 0; index < apiBaseUrls.length; index += 1) {
+      const apiBaseUrl = apiBaseUrls[index];
+      const hasFallbackCandidate = index < apiBaseUrls.length - 1;
+      let timeoutId = null;
+      let signalHandler = null;
+      try {
+        const requestOptions = {
+          ...options,
+          headers,
+          credentials: "include",
+        };
+
+        if (typeof AbortController === "function") {
+          const controller = new AbortController();
+          requestOptions.signal = controller.signal;
+
+          timeoutId = window.setTimeout(function () {
+            controller.abort();
+          }, API_REQUEST_TIMEOUT_MS);
+
+          if (options.signal) {
+            if (options.signal.aborted) {
+              controller.abort();
+            } else {
+              signalHandler = function () {
+                controller.abort();
+              };
+              options.signal.addEventListener("abort", signalHandler, {
+                once: true,
+              });
+            }
+          }
+        }
+
+        response = await fetch(`${apiBaseUrl}${path}`, requestOptions);
+        if (
+          response &&
+          response.status === 404 &&
+          hasFallbackCandidate &&
+          String(path || "").startsWith("/admin/control-center")
+        ) {
+          continue;
+        }
+        saveApiBaseUrl(apiBaseUrl);
+        break;
+      } catch (networkError) {
+        if (
+          networkError &&
+          networkError.name === "AbortError" &&
+          !response
+        ) {
+          lastNetworkError = new Error(
+            "Request timed out. Please try again in a moment.",
+          );
+        } else {
+          lastNetworkError = networkError;
+        }
+      } finally {
+        if (timeoutId) {
+          window.clearTimeout(timeoutId);
+        }
+        if (options.signal && signalHandler) {
+          options.signal.removeEventListener("abort", signalHandler);
+        }
+      }
+    }
+
+    if (!response) {
+      const error = new Error(buildNetworkErrorMessage(apiBaseUrls));
+      if (lastNetworkError) {
+        error.cause = lastNetworkError;
+      }
+      throw error;
     }
 
     const contentType = response.headers.get("content-type") || "";
@@ -197,14 +413,17 @@
   }
 
   async function logoutUser() {
+    // Clear the local session immediately so the caller is not blocked on the
+    // network round-trip.  The backend call is best-effort: we still attempt it
+    // so the server-side httpOnly auth cookie is revoked, but a slow or failing
+    // backend cannot prevent the user from being logged out locally.
+    clearSession();
     try {
       await apiRequest("/auth/logout", {
         method: "POST",
       });
-    } catch (error) {
-      // Ignore logout errors and still clear local session.
-    } finally {
-      clearSession();
+    } catch (_error) {
+      // Ignore – local session already cleared above.
     }
   }
 
@@ -470,6 +689,7 @@
 
   const sharedApi = {
     isLocalApp,
+    isInternalRole,
     getApiBaseUrl,
     getPaymentLinks,
     saveToken,

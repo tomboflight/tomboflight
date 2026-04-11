@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from app.core.package_catalog import get_addon_catalog, get_package_catalog
+from app.core.package_catalog import (
+    get_addon_catalog,
+    get_package_catalog,
+    list_package_control_profiles,
+)
 from app.services.entitlement_service import (
     can_purchase_addon,
     compute_upgrade_quote,
@@ -17,6 +21,7 @@ def get_package_catalog_route():
     return {
         "packages": get_package_catalog(),
         "addons": get_addon_catalog(),
+        "control_profiles": list_package_control_profiles(),
     }
 
 

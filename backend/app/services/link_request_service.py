@@ -12,7 +12,7 @@ from app.services.link_key_service import (
     get_active_key_doc_for_project,
     get_key_doc_by_value,
     get_project_summary,
-    list_owned_project_ids,
+    list_accessible_link_key_project_ids,
     project_supports_link_keys,
     user_can_access_project,
 )
@@ -80,16 +80,17 @@ def list_link_requests() -> list[dict]:
 def list_link_requests_for_user(
     user_id: str,
     *,
+    user_email: str = "",
     project_id: str | None = None,
     direction: str = "all",
     status: str | None = None,
 ) -> list[dict]:
     if project_id:
-        if not user_can_access_project(project_id, user_id):
+        if not user_can_access_project(project_id, user_id, user_email):
             return []
         owned_project_ids = [str(project_id)]
     else:
-        owned_project_ids = list_owned_project_ids(user_id)
+        owned_project_ids = list_accessible_link_key_project_ids(user_id, user_email)
 
     if not owned_project_ids:
         return []
@@ -119,11 +120,16 @@ def create_link_request(
     *,
     requested_by: str,
     requested_by_user_id: str,
+    requested_by_user_email: str = "",
 ) -> dict:
     source_project_id = str(payload.source_project_id or "").strip()
     target_key = str(payload.target_key or "").strip()
 
-    if not user_can_access_project(source_project_id, requested_by_user_id):
+    if not user_can_access_project(
+        source_project_id,
+        requested_by_user_id,
+        requested_by_user_email,
+    ):
         raise PermissionError("Not authorized to create a link request for this project.")
 
     if not project_supports_link_keys(source_project_id):
@@ -228,16 +234,24 @@ def get_link_request_by_id(request_id: str) -> dict | None:
     return _enrich_request(request)
 
 
-def _can_manage_request(request: dict[str, Any], user_id: str, *, side: str) -> bool:
+def _can_manage_request(
+    request: dict[str, Any],
+    user_id: str,
+    *,
+    user_email: str = "",
+    side: str,
+) -> bool:
     source_project_id = str(request.get("source_project_id") or "")
     target_project_id = str(request.get("target_project_id") or "")
 
     if side == "source":
-        return user_can_access_project(source_project_id, user_id)
+        return user_can_access_project(source_project_id, user_id, user_email)
     if side == "target":
-        return user_can_access_project(target_project_id, user_id)
-    return user_can_access_project(source_project_id, user_id) or user_can_access_project(
-        target_project_id, user_id
+        return user_can_access_project(target_project_id, user_id, user_email)
+    return user_can_access_project(source_project_id, user_id, user_email) or user_can_access_project(
+        target_project_id,
+        user_id,
+        user_email,
     )
 
 
@@ -272,6 +286,7 @@ def approve_link_request(
     *,
     approved_by: str,
     approver_user_id: str,
+    approver_user_email: str = "",
     approval_notes: str | None = None,
     is_admin: bool = False,
 ) -> dict | None:
@@ -283,7 +298,12 @@ def approve_link_request(
     if request is None:
         return None
 
-    if not is_admin and not _can_manage_request(request, approver_user_id, side="target"):
+    if not is_admin and not _can_manage_request(
+        request,
+        approver_user_id,
+        user_email=approver_user_email,
+        side="target",
+    ):
         raise PermissionError("Not authorized to approve this link request.")
 
     if str(request.get("status") or "").strip().lower() == "approved":
@@ -367,6 +387,7 @@ def reject_link_request(
     *,
     rejected_by: str,
     rejector_user_id: str,
+    rejector_user_email: str = "",
     rejection_notes: str | None = None,
     is_admin: bool = False,
 ) -> dict | None:
@@ -378,7 +399,12 @@ def reject_link_request(
     if request is None:
         return None
 
-    if not is_admin and not _can_manage_request(request, rejector_user_id, side="target"):
+    if not is_admin and not _can_manage_request(
+        request,
+        rejector_user_id,
+        user_email=rejector_user_email,
+        side="target",
+    ):
         raise PermissionError("Not authorized to reject this link request.")
 
     current_status = str(request.get("status") or "").strip().lower()
@@ -422,6 +448,7 @@ def revoke_link_request(
     *,
     revoked_by: str,
     revoker_user_id: str,
+    revoker_user_email: str = "",
     revoke_notes: str | None = None,
     is_admin: bool = False,
 ) -> dict | None:
@@ -433,7 +460,12 @@ def revoke_link_request(
     if request is None:
         return None
 
-    if not is_admin and not _can_manage_request(request, revoker_user_id, side="either"):
+    if not is_admin and not _can_manage_request(
+        request,
+        revoker_user_id,
+        user_email=revoker_user_email,
+        side="either",
+    ):
         raise PermissionError("Not authorized to revoke this link request.")
 
     current_status = str(request.get("status") or "").strip().lower()

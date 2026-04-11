@@ -2,7 +2,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 
-from app.dependencies.auth import require_admin
+from app.dependencies.auth import require_permission
 from app.schemas.narrative_record import (
     NarrativeRecordCreate,
     NarrativeRecordResponse,
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/narrative-records", tags=["Narrative Records"])
 
 
 @router.get("/", response_model=list[NarrativeRecordResponse])
-def get_narrative_records(current_user: dict[str, Any] = Depends(require_admin)):
+def get_narrative_records(current_user: dict[str, Any] = Depends(require_permission("admin.access"))):
     records = list_narrative_records()
     return [build_narrative_record_response(record) for record in records]
 
@@ -25,7 +25,7 @@ def get_narrative_records(current_user: dict[str, Any] = Depends(require_admin))
 @router.post("/", response_model=NarrativeRecordResponse)
 def create_narrative_record_route(
     payload: NarrativeRecordCreate,
-    current_user: dict[str, Any] = Depends(require_admin),
+    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
 ):
     record = create_narrative_record(payload)
     return build_narrative_record_response(record)

@@ -7,7 +7,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from app.dependencies.auth import (
     get_current_user,
     has_internal_admin_access,
-    require_admin,
 )
 from app.schemas.link_key import LinkKeyResponse, build_link_key_response
 from app.services.link_key_service import (
@@ -30,6 +29,10 @@ def _current_user_id(user: dict[str, Any]) -> str:
     return str(raw_id)
 
 
+def _current_user_email(user: dict[str, Any]) -> str:
+    return str(user.get("email") or "").strip().lower()
+
+
 def _is_admin(user: dict[str, Any]) -> bool:
     return has_internal_admin_access(user)
 
@@ -40,7 +43,13 @@ def list_my_link_keys(
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
     user_id = _current_user_id(current_user)
-    items = list_link_keys_for_user(user_id, project_id=project_id, include_revoked=True)
+    user_email = _current_user_email(current_user)
+    items = list_link_keys_for_user(
+        user_id,
+        user_email=user_email,
+        project_id=project_id,
+        include_revoked=True,
+    )
     return {"items": [build_link_key_response(item) for item in items]}
 
 
@@ -50,9 +59,10 @@ def get_my_active_link_key(
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
     user_id = _current_user_id(current_user)
+    user_email = _current_user_email(current_user)
     allow_admin = _is_admin(current_user)
 
-    if not allow_admin and not user_can_access_project(project_id, user_id):
+    if not allow_admin and not user_can_access_project(project_id, user_id, user_email):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to access this project link key.",
@@ -74,12 +84,14 @@ def generate_project_link_key(
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
     user_id = _current_user_id(current_user)
+    user_email = _current_user_email(current_user)
     allow_admin = _is_admin(current_user)
 
     try:
         item = generate_link_key(
             project_id=project_id,
             user_id=user_id,
+            user_email=user_email,
             allow_admin=allow_admin,
         )
         return build_link_key_response(item)
@@ -101,12 +113,14 @@ def revoke_project_link_key(
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
     user_id = _current_user_id(current_user)
+    user_email = _current_user_email(current_user)
     allow_admin = _is_admin(current_user)
 
     try:
         item = revoke_link_key(
             key_id=key_id,
             actor_user_id=user_id,
+            actor_user_email=user_email,
             allow_admin=allow_admin,
         )
     except PermissionError as exc:

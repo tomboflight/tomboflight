@@ -121,6 +121,10 @@ class Settings(BaseSettings):
         default=False,
         validation_alias=AliasChoices("NFT_ORG_MINT_ENABLED"),
     )
+    nft_auto_mint_on_review_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("NFT_AUTO_MINT_ON_REVIEW_ENABLED"),
+    )
     nft_token_name_prefix: str = Field(
         default="Tomb of Light Legacy Anchor",
         validation_alias=AliasChoices("NFT_TOKEN_NAME_PREFIX"),
@@ -241,6 +245,32 @@ class Settings(BaseSettings):
     public_storage_dir: str = Field(
         default="storage/public",
         validation_alias=AliasChoices("PUBLIC_STORAGE_DIR"),
+    )
+
+    # Email / SMTP
+    email_sender: str = Field(
+        default="admin@tomboflight.com",
+        validation_alias=AliasChoices("EMAIL_SENDER"),
+    )
+    smtp_host: str = Field(
+        default="",
+        validation_alias=AliasChoices("SMTP_HOST"),
+    )
+    smtp_port: int = Field(
+        default=0,
+        validation_alias=AliasChoices("SMTP_PORT"),
+    )
+    smtp_username: str = Field(
+        default="",
+        validation_alias=AliasChoices("SMTP_USERNAME"),
+    )
+    smtp_password: str = Field(
+        default="",
+        validation_alias=AliasChoices("SMTP_PASSWORD"),
+    )
+    smtp_use_tls: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("SMTP_USE_TLS"),
     )
 
     allowed_origins: str = Field(

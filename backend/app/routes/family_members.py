@@ -5,7 +5,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.core.metadata import apply_create_metadata, apply_update_metadata
 from app.database import get_database
-from app.dependencies.auth import get_current_user, has_internal_admin_access
+from app.dependencies.auth import (
+    enforce_limit,
+    get_current_user,
+    has_internal_admin_access,
+)
 from app.services.audit_log_service import create_audit_log
 from app.services.matching import generate_match_candidates_for_member
 from app.services.workspace_access_service import (
@@ -240,20 +244,10 @@ def create_family_member(
     payload = dict(payload)
     payload["family_id"] = str(context["family"].get("_id"))
 
-    entitlements = context.get("resolved_entitlements") or {}
-    max_members = _as_int(entitlements.get("max_members"), 0)
-    if max_members > 0:
-        current_member_count = db.family_members.count_documents(
-            {"family_id": {"$in": _family_id_candidates(payload["family_id"])}}
-        )
-        if current_member_count >= max_members:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=(
-                    "This workspace has reached the member limit for the active package. "
-                    "Upgrade or add member capacity before creating another member."
-                ),
-            )
+    current_member_count = db.family_members.count_documents(
+        {"family_id": {"$in": _family_id_candidates(payload["family_id"])}}
+    )
+    enforce_limit("family_members", current_member_count + 1, context=context)
 
     payload = apply_create_metadata(payload, user_id)
     result = db.family_members.insert_one(payload)

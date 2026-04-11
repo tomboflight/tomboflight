@@ -1,9 +1,10 @@
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException
 
+from app.core.state_catalog import normalize_approval_state
 from app.core.metadata import apply_update_metadata
 from app.database import get_database
-from app.dependencies.auth import require_admin
+from app.dependencies.auth import require_permission
 from app.services.approval import ApprovalError, approve_match_candidate
 from app.services.audit_log_service import create_audit_log
 
@@ -11,7 +12,7 @@ router = APIRouter(prefix="/match-candidates", tags=["match_candidates"])
 
 
 @router.get("")
-def list_match_candidates(current_user: dict = Depends(require_admin)):
+def list_match_candidates(current_user: dict = Depends(require_permission("admin.access"))):
     db = get_database()
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")
@@ -26,7 +27,7 @@ def list_match_candidates(current_user: dict = Depends(require_admin)):
 
 
 @router.post("/{candidate_id}/approve")
-def approve_candidate(candidate_id: str, current_user: dict = Depends(require_admin)):
+def approve_candidate(candidate_id: str, current_user: dict = Depends(require_permission("admin.access"))):
     user_id = str(current_user.get("_id")) if current_user.get("_id") else None
 
     try:
@@ -37,7 +38,7 @@ def approve_candidate(candidate_id: str, current_user: dict = Depends(require_ad
 
 
 @router.post("/{candidate_id}/reject")
-def reject_candidate(candidate_id: str, notes: dict | None = None, current_user: dict = Depends(require_admin)):
+def reject_candidate(candidate_id: str, notes: dict | None = None, current_user: dict = Depends(require_permission("admin.access"))):
     db = get_database()
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")
@@ -49,13 +50,13 @@ def reject_candidate(candidate_id: str, notes: dict | None = None, current_user:
     if not candidate:
         raise HTTPException(status_code=404, detail="Match candidate not found.")
 
-    if candidate.get("status") != "pending":
+    if normalize_approval_state(candidate.get("status")) != "pending":
         raise HTTPException(status_code=400, detail="Only pending match candidates can be rejected.")
 
     user_id = str(current_user.get("_id")) if current_user.get("_id") else None
 
     update_data = {
-        "status": "rejected",
+        "status": normalize_approval_state("rejected"),
         "rejected_by": user_id,
         "review_notes": (notes or {}).get("review_notes", ""),
     }

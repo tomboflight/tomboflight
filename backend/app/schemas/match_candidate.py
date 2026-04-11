@@ -1,12 +1,14 @@
 from datetime import UTC, datetime
 from pydantic import BaseModel, Field
 
+from app.core.state_catalog import normalize_approval_state
+
 
 class MatchCandidateCreate(BaseModel):
     member_id_a: str = Field(..., min_length=1)
     member_id_b: str = Field(..., min_length=1)
     score: float = Field(..., ge=0, le=100)
-    status: str = Field(default="pending_review", min_length=1, max_length=50)
+    status: str = Field(default="pending", min_length=1, max_length=50)
     reasons: list[str] = []
     canonical_person_id: str | None = None
 
@@ -32,7 +34,7 @@ def build_match_candidate_response(data: dict) -> MatchCandidateResponse:
         member_id_a=data["member_id_a"],
         member_id_b=data["member_id_b"],
         score=data["score"],
-        status=data.get("status", "pending_review"),
+        status=normalize_approval_state(data.get("status"), default="pending"),
         reasons=data.get("reasons", []),
         canonical_person_id=data.get("canonical_person_id"),
         approved_by=data.get("approved_by"),

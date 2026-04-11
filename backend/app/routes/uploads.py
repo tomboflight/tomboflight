@@ -19,7 +19,13 @@ from fastapi.responses import FileResponse
 
 from app.config import settings
 from app.database import get_database
-from app.dependencies.auth import get_current_user, has_internal_admin_access, require_admin
+from app.dependencies.auth import (
+    enforce_limit,
+    get_current_user,
+    has_internal_admin_access,
+    require_entitlement,
+    require_permission,
+)
 from app.services.upload_service import (
     serialize_upload_record,
     store_member_photo_upload,
@@ -44,7 +50,7 @@ PHOTO_ALLOWED_EXTENSIONS = {
     ".png",
     ".webp",
 }
-PHOTO_MAX_BYTES = 10 * 1024 * 1024
+PHOTO_MAX_BYTES = settings.upload_max_image_bytes
 
 EVIDENCE_ALLOWED_CONTENT_TYPES = {
     "application/pdf",
@@ -59,7 +65,7 @@ EVIDENCE_ALLOWED_EXTENSIONS = {
     ".png",
     ".webp",
 }
-EVIDENCE_MAX_BYTES = 20 * 1024 * 1024
+EVIDENCE_MAX_BYTES = settings.upload_max_document_bytes
 
 ALLOWED_VERIFICATION_TYPES = {
     "government_id",
@@ -261,6 +267,15 @@ def _require_upload_access(
             detail="Upload does not belong to the current workspace.",
         )
 
+    if not context.get("is_admin") and (
+        bool(upload_record.get("internal_only"))
+        or not bool(upload_record.get("customer_visible"))
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This file is not visible to customers.",
+        )
+
     return upload_record, context
 
 
@@ -325,7 +340,9 @@ def _absolute_upload_path(relative_path: str) -> Path:
     root = Path(settings.upload_root_path).resolve()
     candidate = (root / relative_path).resolve()
 
-    if not str(candidate).startswith(str(root)):
+    try:
+        candidate.relative_to(root)
+    except ValueError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Resolved upload path is invalid.",
@@ -428,14 +445,53 @@ def _enforce_workspace_upload_limit(context: dict[str, Any]) -> None:
     family_id = _normalize_value((context.get("family") or {}).get("_id"))
     project_id = _normalize_value((context.get("project") or {}).get("_id"))
     current_count = count_workspace_uploads(family_id=family_id, project_id=project_id)
-    if current_count >= max_uploads:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "This workspace has reached its upload limit for the active package. "
-                "Upgrade or add upload capacity before uploading more files."
-            ),
-        )
+    enforce_limit("uploads", current_count + 1, context=context)
+
+
+def _workspace_storage_used_bytes(*, db: Any, project_id: str, family_id: str) -> int:
+    """Return cumulative uploaded size for a project/family, treating missing size as zero."""
+    query: dict[str, Any] = {}
+    if project_id:
+        query["project_id"] = project_id
+    elif family_id:
+        query["family_id"] = family_id
+    else:
+        return 0
+    pipeline = [
+        {"$match": query},
+        {"$group": {"_id": None, "total": {"$sum": {"$ifNull": ["$size_bytes", 0]}}}},
+    ]
+    results = list(db["uploaded_files"].aggregate(pipeline))
+    if not results:
+        return 0
+    return _as_int(results[0].get("total"), 0)
+
+
+def _enforce_workspace_storage_limit(
+    *,
+    context: dict[str, Any],
+    db: Any,
+    incoming_size_bytes: int,
+) -> None:
+    family_id = _normalize_value((context.get("family") or {}).get("_id"))
+    project_id = _normalize_value((context.get("project") or {}).get("_id"))
+    used_bytes = _workspace_storage_used_bytes(
+        db=db,
+        project_id=project_id,
+        family_id=family_id,
+    )
+    enforce_limit(
+        "vault_storage_bytes",
+        used_bytes + max(incoming_size_bytes, 0),
+        context=context,
+    )
+
+
+def _apply_customer_visibility_filter(query: dict[str, Any], *, is_admin: bool) -> None:
+    if is_admin:
+        return
+    query["internal_only"] = {"$ne": True}
+    query["customer_visible"] = True
 
 
 @router.get("/admin/review")
@@ -446,7 +502,7 @@ def list_admin_uploads(
     member_id: str = Query(default=""),
     search: str = Query(default=""),
     limit: int = Query(default=100, ge=1, le=500),
-    current_user: dict[str, Any] = Depends(require_admin),
+    current_user: dict[str, Any] = Depends(require_permission("uploads.admin.review")),
 ):
     del current_user
 
@@ -531,6 +587,11 @@ async def upload_member_photo(
         )
 
     _enforce_workspace_upload_limit(context)
+    _enforce_workspace_storage_limit(
+        context=context,
+        db=db,
+        incoming_size_bytes=_upload_size_bytes(file),
+    )
 
     upload_record = await store_member_photo_upload(
         db=db,
@@ -598,6 +659,11 @@ async def upload_verification_evidence(
         )
 
     _enforce_workspace_upload_limit(context)
+    _enforce_workspace_storage_limit(
+        context=context,
+        db=db,
+        incoming_size_bytes=_upload_size_bytes(file),
+    )
 
     upload_record = await store_verification_evidence_upload(
         db=db,
@@ -623,7 +689,7 @@ async def upload_verification_evidence(
 def list_member_uploads(
     member_id: str,
     category: Optional[str] = Query(default=None),
-    current_user: dict[str, Any] = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(require_entitlement("can_upload_portraits")),
 ):
     context = require_workspace_capability(
         current_user,
@@ -647,6 +713,7 @@ def list_member_uploads(
         "family_id": _normalize_value((family or {}).get("_id")),
         "project_id": _normalize_value((project or {}).get("_id")),
     }
+    _apply_customer_visibility_filter(query, is_admin=bool(context.get("is_admin")))
     if normalized_category:
         query["category"] = normalized_category
 
@@ -662,7 +729,7 @@ def list_member_uploads(
 def list_family_uploads(
     family_id: str,
     category: Optional[str] = Query(default=None),
-    current_user: dict[str, Any] = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(require_entitlement("can_upload_portraits")),
 ):
     context = require_workspace_capability(
         current_user,
@@ -683,6 +750,7 @@ def list_family_uploads(
         "family_id": _normalize_value((family or {}).get("_id")),
         "project_id": _normalize_value((project or {}).get("_id")),
     }
+    _apply_customer_visibility_filter(query, is_admin=bool(context.get("is_admin")))
     if normalized_category:
         query["category"] = normalized_category
 

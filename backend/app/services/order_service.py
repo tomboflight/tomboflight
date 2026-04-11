@@ -1,5 +1,5 @@
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Optional, cast
 
 import stripe
@@ -16,6 +16,8 @@ from app.services.project_service import (
     apply_package_purchase_to_project,
     create_project_from_paid_order,
 )
+from app.services.project_entitlement_service import update_project_entitlement_maintenance
+from app.services.project_entitlement_service import MAINTENANCE_START_DELAY_DAYS
 
 AUTHORITATIVE_ORDER_SOURCES = {
     "stripe_webhook",
@@ -125,49 +127,6 @@ def _set_if_present(target: dict[str, Any], key: str, value: Any) -> None:
         target[key] = value
 
 
-def _attach_project_to_paid_package_order(
-    *,
-    order_id: ObjectId,
-    order_doc: dict[str, Any],
-    user: dict[str, Any],
-    package_code: str,
-    package_name: str,
-    target_project_id: str = "",
-    stripe_session_id: str | None = None,
-    stripe_payment_link_id: str | None = None,
-) -> dict[str, Any]:
-    if _normalize_status(order_doc.get("item_type") or "package") != "package":
-        return order_doc
-
-    project = None
-    if target_project_id:
-        project = apply_package_purchase_to_project(
-            user=user,
-            project_id=target_project_id,
-            package_code=package_code,
-            package_name=package_name,
-            stripe_session_id=stripe_session_id,
-            stripe_payment_link_id=stripe_payment_link_id,
-        )
-    else:
-        project = create_project_from_paid_order(
-            user=user,
-            package_code=package_code,
-            package_name=package_name,
-            stripe_session_id=stripe_session_id,
-            stripe_payment_link_id=stripe_payment_link_id,
-        )
-
-    if project:
-        _get_orders_collection().update_one(
-            {"_id": order_id},
-            {"$set": {"project_id": project.get("_id")}},
-        )
-        order_doc["project_id"] = project.get("_id")
-
-    return order_doc
-
-
 def _coerce_object_id(value: Any) -> ObjectId | None:
     if isinstance(value, ObjectId):
         return value
@@ -176,6 +135,70 @@ def _coerce_object_id(value: Any) -> ObjectId | None:
     if ObjectId.is_valid(normalized):
         return ObjectId(normalized)
 
+    return None
+
+
+def _to_object_id(value: Any) -> ObjectId | None:
+    return _coerce_object_id(value)
+
+
+APPROVED_PROJECT_PHASES = {
+    "intake_approved",
+    "build_started",
+    "quality_review",
+    "client_review",
+    "delivery_complete",
+    "delivered",
+    "archived",
+}
+APPROVED_PROJECT_STATUSES = {
+    "build_ready",
+    "in_production",
+    "qa_review",
+    "client_review",
+    "delivered",
+    "archived",
+}
+
+
+def _project_is_approved(project: dict[str, Any]) -> bool:
+    status_value = _normalize(project.get("status")).lower()
+    phase_value = _normalize(project.get("phase")).lower()
+    return (
+        status_value in APPROVED_PROJECT_STATUSES
+        or phase_value in APPROVED_PROJECT_PHASES
+    )
+
+
+def _find_matching_approved_project(
+    *,
+    user: dict[str, Any],
+    email: str | None = None,
+) -> Optional[dict[str, Any]]:
+    db = cast(Database, get_database())
+    projects = db.get_collection("projects")
+
+    owner_email = _normalize_email(email or str(user.get("email") or ""))
+    user_id_text = _normalize(
+        str(user.get("_id") or user.get("id") or user.get("user_id") or "")
+    )
+    user_oid = _coerce_object_id(user_id_text)
+
+    filters: list[dict[str, Any]] = []
+    if owner_email:
+        filters.append({"owner_email": owner_email})
+    if user_id_text:
+        filters.append({"owner_user_id": user_id_text})
+    if user_oid is not None:
+        filters.append({"owner_user_id": str(user_oid)})
+
+    if not filters:
+        return None
+
+    cursor = projects.find({"$or": filters}).sort("updated_at", -1).limit(100)
+    for project in cursor:
+        if _project_is_approved(project):
+            return cast(dict[str, Any], project)
     return None
 
 
@@ -242,6 +265,81 @@ def _find_existing_project_for_paid_order(
         {"$and": [{"$or": owner_filters}, {"$or": package_filters}]},
         sort=[("created_at", -1)],
     )
+
+
+def _link_order_to_project(
+    *,
+    orders: Collection,
+    order_id: ObjectId,
+    order_doc: dict[str, Any],
+    project: dict[str, Any] | None,
+) -> None:
+    if not project:
+        return
+    project_oid = _coerce_object_id(project.get("_id") or project.get("id"))
+    if project_oid is None:
+        return
+    orders.update_one(
+        {"_id": order_id},
+        {"$set": {"project_id": project_oid}},
+    )
+    order_doc["project_id"] = project_oid
+
+
+def _attach_project_to_paid_package_order(
+    *,
+    order_id: ObjectId,
+    order_doc: dict[str, Any],
+    user: dict[str, Any],
+    package_code: str,
+    package_name: str,
+    target_project_id: str = "",
+    stripe_session_id: str | None = None,
+    stripe_payment_link_id: str | None = None,
+) -> dict[str, Any]:
+    if _normalize_status(order_doc.get("item_type") or "package") != "package":
+        return order_doc
+
+    project = None
+    if target_project_id:
+        project = apply_package_purchase_to_project(
+            user=user,
+            project_id=target_project_id,
+            package_code=package_code,
+            package_name=package_name,
+            stripe_session_id=stripe_session_id,
+            stripe_payment_link_id=stripe_payment_link_id,
+        )
+    else:
+        project = _find_matching_approved_project(
+            user=user,
+            email=order_doc.get("email"),
+        )
+        if project:
+            project = apply_package_purchase_to_project(
+                user=user,
+                project_id=str(project.get("_id") or ""),
+                package_code=package_code,
+                package_name=package_name,
+                stripe_session_id=stripe_session_id,
+                stripe_payment_link_id=stripe_payment_link_id,
+            )
+        else:
+            project = create_project_from_paid_order(
+                user=user,
+                package_code=package_code,
+                package_name=package_name,
+                stripe_session_id=stripe_session_id,
+                stripe_payment_link_id=stripe_payment_link_id,
+            )
+
+    _link_order_to_project(
+        orders=_get_orders_collection(),
+        order_id=order_id,
+        order_doc=order_doc,
+        project=project,
+    )
+    return order_doc
 
 
 def _serialize_order(order: dict[str, Any]) -> dict[str, Any]:
@@ -332,6 +430,20 @@ def create_order_for_user(user: dict[str, Any], payload: Any) -> dict[str, Any]:
             stripe_session_id=payload.stripe_session_id,
             stripe_payment_link_id=payload.stripe_payment_link_id,
         )
+    elif order_doc["item_type"] == "maintenance":
+        target_project_id = _normalize(getattr(payload, "project_id", None))
+        if target_project_id:
+            project_oid = _to_object_id(target_project_id)
+            if project_oid is not None:
+                orders.update_one(
+                    {"_id": result.inserted_id},
+                    {"$set": {"project_id": project_oid}},
+                )
+                order_doc["project_id"] = project_oid
+                _schedule_maintenance_start(
+                    project_id=str(project_oid),
+                    billing_plan=order_doc.get("billing_plan", "monthly"),
+                )
 
     return _serialize_order(order_doc)
 
@@ -664,6 +776,30 @@ def _format_price_label(amount_subtotal: Any, billing_plan: str) -> str:
     return f"${amount:,.2f}"
 
 
+def _schedule_maintenance_start(
+    *,
+    project_id: str,
+    billing_plan: str,
+    stripe_subscription_id: str | None = None,
+    stripe_customer_id: str | None = None,
+) -> None:
+    plan = _normalize(billing_plan).lower()
+    if plan not in {"monthly", "yearly"}:
+        return
+
+    now = datetime.now(UTC)
+    start_at = now + timedelta(days=MAINTENANCE_START_DELAY_DAYS)
+    update_project_entitlement_maintenance(
+        project_id=project_id,
+        maintenance_plan=plan,
+        maintenance_status="scheduled",
+        maintenance_scheduled_start_at=start_at,
+        maintenance_stripe_subscription_id=_normalize(stripe_subscription_id) or None,
+        maintenance_stripe_customer_id=_normalize(stripe_customer_id) or None,
+        maintenance_stripe_status="incomplete",
+    )
+
+
 def _extract_target_project_id(session: dict[str, Any]) -> str:
     metadata = session.get("metadata") or {}
     return _normalize(
@@ -958,6 +1094,22 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
             stripe_session_id=session_id,
             stripe_payment_link_id=stripe_payment_link_id,
         )
+    elif item_type == "maintenance":
+        target_project_id = _extract_target_project_id(session)
+        if target_project_id:
+            project_oid = _to_object_id(target_project_id)
+            if project_oid is not None:
+                orders.update_one(
+                    {"_id": result.inserted_id},
+                    {"$set": {"project_id": project_oid}},
+                )
+                order_doc["project_id"] = project_oid
+                _schedule_maintenance_start(
+                    project_id=str(project_oid),
+                    billing_plan=billing_plan,
+                    stripe_subscription_id=_normalize(session.get("subscription")) or None,
+                    stripe_customer_id=_normalize(session.get("customer")) or None,
+                )
 
     return {
         "order_id": str(result.inserted_id),

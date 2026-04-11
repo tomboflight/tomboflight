@@ -140,7 +140,19 @@
     node.textContent = "";
   }
 
+  function getUserFacingErrorMessage(error, fallback) {
+    const local = typeof app.isLocalApp === "function" && app.isLocalApp();
+    if (local && error && error.message) {
+      return String(error.message);
+    }
+    return fallback || "Unable to load data right now.";
+  }
+
   function ensureAdminAccess(me) {
+    if (app && typeof app.isInternalRole === "function" && app.isInternalRole(me)) {
+      return;
+    }
+
     const values = [
       normalizeValue(me && me.role),
       normalizeValue(me && me.access_tier),
@@ -702,7 +714,10 @@
       }
       setStatus(
         actionNode,
-        error.message || "Unable to load provisioned family builds.",
+        getUserFacingErrorMessage(
+          error,
+          "Unable to load provisioned family builds.",
+        ),
         "error",
       );
     }
@@ -752,7 +767,7 @@
       console.error("Family graph load failed:", error);
       setStatus(
         actionNode,
-        error.message || "Unable to load family graph.",
+        getUserFacingErrorMessage(error, "Unable to load family graph."),
         "error",
       );
     }
@@ -793,7 +808,7 @@
       console.error("Load member uploads failed:", error);
       setStatus(
         actionNode,
-        error.message || "Unable to load member uploads.",
+        getUserFacingErrorMessage(error, "Unable to load member uploads."),
         "error",
       );
     }
@@ -854,7 +869,7 @@
       console.error("Create member failed:", error);
       setStatus(
         actionNode,
-        error.message || "Unable to create family member.",
+        getUserFacingErrorMessage(error, "Unable to create family member."),
         "error",
       );
     }
@@ -915,7 +930,7 @@
       console.error("Create relationship failed:", error);
       setStatus(
         actionNode,
-        error.message || "Unable to create relationship.",
+        getUserFacingErrorMessage(error, "Unable to create relationship."),
         "error",
       );
     }
@@ -965,7 +980,7 @@
       console.error("Member photo upload failed:", error);
       setStatus(
         actionNode,
-        error.message || "Unable to upload member photo.",
+        getUserFacingErrorMessage(error, "Unable to upload member photo."),
         "error",
       );
     }
@@ -1030,7 +1045,10 @@
       console.error("Verification evidence upload failed:", error);
       setStatus(
         actionNode,
-        error.message || "Unable to upload verification evidence.",
+        getUserFacingErrorMessage(
+          error,
+          "Unable to upload verification evidence.",
+        ),
         "error",
       );
     }
@@ -1067,7 +1085,7 @@
       console.error("Delete relationship failed:", error);
       setStatus(
         actionNode,
-        error.message || "Unable to delete relationship.",
+        getUserFacingErrorMessage(error, "Unable to delete relationship."),
         "error",
       );
     }
@@ -1101,7 +1119,7 @@
       console.error("Delete member failed:", error);
       setStatus(
         actionNode,
-        error.message || "Unable to delete family member.",
+        getUserFacingErrorMessage(error, "Unable to delete family member."),
         "error",
       );
     }
@@ -1210,7 +1228,7 @@
       console.error("Update member failed:", error);
       setStatus(
         actionNode,
-        error.message || "Unable to update family member.",
+        getUserFacingErrorMessage(error, "Unable to update family member."),
         "error",
       );
     }
@@ -1261,7 +1279,7 @@
       console.error("Download upload failed:", error);
       setStatus(
         actionNode,
-        error.message || "Unable to download upload.",
+        getUserFacingErrorMessage(error, "Unable to download upload."),
         "error",
       );
     }
@@ -1296,7 +1314,7 @@
       console.error("Delete upload failed:", error);
       setStatus(
         actionNode,
-        error.message || "Unable to delete upload.",
+        getUserFacingErrorMessage(error, "Unable to delete upload."),
         "error",
       );
     }
@@ -1375,7 +1393,7 @@
       console.error("Verification action failed:", error);
       setStatus(
         actionNode,
-        error.message || "Unable to update verification state.",
+        getUserFacingErrorMessage(error, "Unable to update verification state."),
         "error",
       );
     }
@@ -1535,7 +1553,7 @@
 
       setStatus(
         actionNode,
-        error.message || "Admin access is required.",
+        getUserFacingErrorMessage(error, "Admin access is required."),
         "error",
       );
     }

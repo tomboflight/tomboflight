@@ -9,6 +9,8 @@ from app.database import close_mongo_connection, connect_to_mongo, get_database
 from app.routes.admin_intake_submissions import (
     router as admin_intake_submissions_router,
 )
+from app.routes.admin_control_center import router as admin_control_center_router
+from app.routes.admin_maintenance import router as admin_maintenance_router
 from app.routes.audit_logs import router as audit_logs_router
 from app.routes.auth import router as auth_router
 from app.routes.billing import router as billing_router
@@ -25,6 +27,7 @@ from app.routes.health import router as health_router
 from app.routes.household_links import router as household_links_router
 from app.routes.households import router as households_router
 from app.routes.identity_anchor import router as identity_anchor_router
+from app.routes.experience import router as experience_router
 from app.routes.identity_links import router as identity_links_router
 from app.routes.intake import router as intake_router
 from app.routes.intake_submissions import router as intake_submissions_router
@@ -44,6 +47,7 @@ from app.routes.mint_records import router as mint_records_router
 from app.routes.narrative_records import router as narrative_records_router
 from app.routes.orders import router as orders_router
 from app.routes.package_catalog import router as package_catalog_router
+from app.routes.presence import router as presence_router
 from app.routes.projects import router as projects_router
 from app.routes.project_entitlements import router as project_entitlements_router
 from app.routes.relationships import router as relationships_router
@@ -141,8 +145,11 @@ app.include_router(billing_router)
 app.include_router(intake_router)
 app.include_router(intake_submissions_router)
 app.include_router(admin_intake_submissions_router)
+app.include_router(admin_control_center_router)
 app.include_router(projects_router)
 app.include_router(project_entitlements_router)
+app.include_router(experience_router)
+app.include_router(presence_router)
 app.include_router(families_router)
 app.include_router(family_graph_router)
 app.include_router(users_router)
@@ -154,6 +161,7 @@ app.include_router(households_router)
 app.include_router(household_links_router)
 app.include_router(relationships_router)
 app.include_router(db_bootstrap_router)
+app.include_router(admin_maintenance_router)
 app.include_router(graph_integrity_router)
 app.include_router(orders_router)
 app.include_router(package_catalog_router)
@@ -232,11 +240,20 @@ def root():
             "/uploads/{upload_id}/download",
             "/viewer/manifest",
             "/mint-policy/packages",
+            "/projects/{project_id}/experience-lane",
+            "/experience/chamber/{project_id}",
+            "/experience/session",
+            "/lineage-chamber/{family_id}/summary",
+            "/experience-story/family/{family_id}",
+            "/presence/status",
             "/projects/{project_id}/mint-eligibility",
             "/projects/{project_id}/mint-records/prepare",
             "/projects/{project_id}/mint-records",
             "/projects/{project_id}/mint-status",
             "/admin/mint-records/maintenance/backfill",
+            "/admin/maintenance/drop-legacy-indexes",
+            "/admin/maintenance/backfill-project-members",
+            "/admin/maintenance/backfill-workspace-anchors",
             "/mint-jobs/run-next",
             "/tokens/{public_token_id}",
             "/link-keys/my-list",

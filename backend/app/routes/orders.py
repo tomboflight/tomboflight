@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query, status
 
-from app.dependencies.auth import get_current_user, require_admin
+from app.dependencies.auth import get_current_user, require_permission
 from app.schemas.order import OrderCreate, OrderResponse
 from app.services.order_service import (
     create_order_for_user,
@@ -40,7 +40,7 @@ def list_all_orders_admin(
     limit: int = Query(default=100, ge=1, le=500),
     status_filter: str = Query(default="", alias="status"),
     search: str = Query(default=""),
-    current_user: dict = Depends(require_admin),
+    current_user: dict = Depends(require_permission("admin.access")),
 ):
     del current_user
     return {
@@ -55,7 +55,7 @@ def list_all_orders_admin(
 @router.post("/admin/repair-paid-package-access")
 def repair_paid_package_access_admin(
     limit: int = Query(default=500, ge=1, le=1000),
-    current_user: dict = Depends(require_admin),
+    current_user: dict = Depends(require_permission("admin.access")),
 ):
     del current_user
     return repair_paid_package_order_access(limit=limit)

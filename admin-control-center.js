@@ -2,9 +2,7 @@
   "use strict";
 
   const app = window.TOLApp || window.TOLAuth;
-  if (!app || typeof app.apiRequest !== "function") {
-    return;
-  }
+  if (!app || typeof app.apiRequest !== "function") return;
 
   const INTERNAL_ROLE_KEYS = new Set([
     "admin",
@@ -20,54 +18,22 @@
     "marketing",
   ]);
 
-  const FULL_CONTROL_KEYS = new Set([
-    "root_admin",
-    "super_admin",
-    "admin",
-    "platform_admin",
-    "executive_technology",
-  ]);
-
-  const SECTION_ACCESS = {
-    uploads: new Set([
-      "operations_admin",
-      "operations",
-      "finance_admin",
-      "finance",
-    ]),
-    mints: new Set([
-      "operations_admin",
-      "operations",
-      "finance_admin",
-      "finance",
-    ]),
-    orders: new Set(["finance_admin", "finance"]),
-    entitlements: new Set(["finance_admin", "finance"]),
-    projects: new Set([
-      "operations_admin",
-      "operations",
-      "marketing_admin",
-      "marketing",
-    ]),
-    users: new Set(["marketing_admin", "marketing"]),
-    audit: new Set(["operations_admin", "operations", "finance_admin", "finance", "marketing_admin", "marketing"]),
+  const state = {
+    currentUser: null,
+    roleKey: "",
+    queue: "overview",
+    selectedCaseId: "",
+    selectedTab: "identity",
+    cases: [],
+    workspace: null,
   };
-
-  const SECTION_LOADERS = {
-    uploads: loadUploads,
-    mints: loadMints,
-    orders: loadOrders,
-    entitlements: loadEntitlements,
-    projects: loadProjects,
-    users: loadUsers,
-    audit: loadAuditLogs,
-  };
-
-  let currentUser = null;
-  let currentRoleKey = "";
 
   function normalizeValue(value) {
-    return String(value || "").trim().toLowerCase();
+    return String(value || "").trim();
+  }
+
+  function normalizeLower(value) {
+    return normalizeValue(value).toLowerCase();
   }
 
   function escapeHtml(value) {
@@ -88,748 +54,533 @@
     }
   }
 
-  function getRoleSignals(me) {
-    return [
-      normalizeValue(me && me.role),
-      normalizeValue(me && me.access_tier),
-      normalizeValue(me && me.department_role),
-    ].filter(Boolean);
+  function setPageStatus(message, type) {
+    app.setStatus(document.querySelector("[data-admin-control-action-status]"), message, type);
+  }
+
+  function clearPageStatus() {
+    app.clearStatus(document.querySelector("[data-admin-control-action-status]"));
+  }
+
+  function getSearchValue() {
+    const node = document.querySelector("[data-admin-case-search]");
+    return normalizeValue(node && node.value);
   }
 
   function getInternalRoleKey(me) {
-    const signals = getRoleSignals(me);
-    return (
-      signals.find(function (value) {
-        return INTERNAL_ROLE_KEYS.has(value);
-      }) || ""
-    );
-  }
-
-  function getRoleTitle(roleKey) {
-    if (roleKey === "root_admin") return "Company Root Control";
-    if (roleKey === "super_admin") return "Executive Control";
-    if (roleKey === "admin") return "Administrative Control";
-    if (roleKey === "platform_admin" || roleKey === "executive_technology") {
-      return "Platform Control";
-    }
-    if (roleKey === "operations_admin" || roleKey === "operations") {
-      return "Operations Control";
-    }
-    if (roleKey === "finance_admin" || roleKey === "finance") {
-      return "Finance Control";
-    }
-    if (roleKey === "marketing_admin" || roleKey === "marketing") {
-      return "Marketing Control";
-    }
-    return "Internal Control";
-  }
-
-  function canAccessSection(sectionKey) {
-    if (FULL_CONTROL_KEYS.has(currentRoleKey)) return true;
-    const allowed = SECTION_ACCESS[sectionKey];
-    return Boolean(allowed && allowed.has(currentRoleKey));
-  }
-
-  SECTION_ACCESS.users = new Set([
-    "operations_admin",
-    "operations",
-    "finance_admin",
-    "finance",
-    "marketing_admin",
-    "marketing",
-  ]);
-
-  function getSearchValue() {
-    const node = document.querySelector("[data-admin-control-search]");
-    return String((node && node.value) || "").trim();
-  }
-
-  function setPageStatus(message, type) {
-    app.setStatus(
-      document.querySelector("[data-admin-control-action-status]"),
-      message,
-      type,
-    );
-  }
-
-  function setSectionStatus(sectionKey, message, type) {
-    const node = document.querySelector(`[data-section-status="${sectionKey}"]`);
-    app.setStatus(node, message, type);
-  }
-
-  function clearSectionStatus(sectionKey) {
-    const node = document.querySelector(`[data-section-status="${sectionKey}"]`);
-    app.clearStatus(node);
-  }
-
-  function sectionListNode(sectionKey) {
-    return document.querySelector(`[data-section-list="${sectionKey}"]`);
-  }
-
-  function emptyCard(title, copy) {
-    return `
-      <div class="family-record-card">
-        <div class="card-number">•</div>
-        <h3>${escapeHtml(title)}</h3>
-        <p class="card-copy">${escapeHtml(copy)}</p>
-      </div>
-    `;
-  }
-
-  function updateRoleSummary() {
-    const roleTitle = getRoleTitle(currentRoleKey);
-    const visibleSections = Object.keys(SECTION_ACCESS).filter(canAccessSection);
-
-    const titleNode = document.querySelector("[data-admin-control-title]");
-    const statusNode = document.querySelector("[data-admin-control-status]");
-    const roleNode = document.querySelector("[data-admin-control-role]");
-    const laneNode = document.querySelector("[data-admin-control-lane]");
-    const toolsNode = document.querySelector("[data-admin-control-tools]");
-
-    if (titleNode) titleNode.textContent = roleTitle;
-    if (statusNode) {
-      statusNode.textContent =
-        "Internal controls are live for uploads, records, entitlements, mint review, and troubleshooting based on your role.";
-    }
-    if (roleNode) roleNode.textContent = roleTitle;
-    if (laneNode) laneNode.textContent = currentRoleKey || "internal";
-    if (toolsNode) {
-      toolsNode.textContent = visibleSections.length
-        ? `${visibleSections.length} section(s) published`
-        : "No browser tools published for this role yet";
-    }
-  }
-
-  function applySectionVisibility() {
-    document.querySelectorAll("[data-control-section]").forEach(function (node) {
-      const sectionKey = node.getAttribute("data-control-section") || "";
-      node.style.display = canAccessSection(sectionKey) ? "" : "none";
+    const values = [
+      normalizeLower(me && me.role),
+      normalizeLower(me && me.access_tier),
+      normalizeLower(me && me.department_role),
+    ].filter(Boolean);
+    const direct = values.find(function (value) {
+      return INTERNAL_ROLE_KEYS.has(value);
     });
+    if (direct) return direct;
+    if (typeof app.isInternalRole === "function" && app.isInternalRole(me)) return "admin";
+    return "";
   }
 
-  function renderSectionCards(sectionKey, cardsMarkup) {
-    const node = sectionListNode(sectionKey);
-    if (!node) return;
-    node.innerHTML = cardsMarkup;
+  function shortId(value) {
+    const id = normalizeValue(value);
+    if (!id) return "—";
+    return id.length > 13 ? `…${id.slice(-10)}` : id;
+  }
+
+  function laneChip(lane) {
+    const normalized = normalizeLower(lane);
+    const cls = ["portrait", "household", "network", "organization"].includes(normalized)
+      ? normalized
+      : "default";
+    return `<span class="admin-lane-chip admin-lane-chip--${escapeHtml(cls)}">${escapeHtml(normalized || "unknown")}</span>`;
+  }
+
+  function statusChip(label, cls) {
+    return `<span class="admin-status-chip admin-status-chip--${escapeHtml(cls || "default")}">${escapeHtml(label || "unknown")}</span>`;
   }
 
   async function fetchJson(path) {
     return app.apiRequest(path, { method: "GET" });
   }
 
-  async function downloadUpload(uploadId, originalFilename) {
-    const token = typeof app.getToken === "function" ? app.getToken() : "";
-    const response = await fetch(
-      `${app.getApiBaseUrl()}/uploads/${encodeURIComponent(uploadId)}/download`,
-      {
-        method: "GET",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        credentials: "include",
-      },
-    );
-
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(text || "Unable to download upload.");
-    }
-
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = originalFilename || "download";
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(url);
-  }
-
-  function buildUploadCard(item) {
-    const familyHref = item.family_id
-      ? `admin-family-manager.html?family_id=${encodeURIComponent(item.family_id)}`
-      : "";
-
-    return `
-      <div class="family-record-card">
-        <div class="card-number">U</div>
-        <h3>${escapeHtml(item.original_filename || "Uploaded File")}</h3>
-        <p class="card-copy"><strong>Category:</strong> ${escapeHtml(item.category || "—")}</p>
-        <p class="card-copy"><strong>Project:</strong> ${escapeHtml(item.project_name || item.project_id || "—")}</p>
-        <p class="card-copy"><strong>Family:</strong> ${escapeHtml(item.family_name || item.family_id || "—")}</p>
-        <p class="card-copy"><strong>Member:</strong> ${escapeHtml(item.member_name || item.member_id || "—")}</p>
-        <p class="card-copy"><strong>Uploaded By:</strong> ${escapeHtml(item.uploaded_by || "—")}</p>
-        <p class="card-copy"><strong>Created:</strong> ${escapeHtml(formatDate(item.created_at))}</p>
-        <div class="inline-actions" style="margin-top: 1rem;">
-          ${
-            familyHref
-              ? `<a class="btn btn-secondary" href="${escapeHtml(familyHref)}">Open Family</a>`
-              : ""
-          }
-          <button class="btn btn-secondary" type="button" data-upload-download="${escapeHtml(item.id || "")}" data-upload-name="${escapeHtml(item.original_filename || "download")}">Download</button>
-          <button class="btn btn-secondary" type="button" data-upload-delete="${escapeHtml(item.id || "")}">Delete</button>
-        </div>
-      </div>
-    `;
-  }
-
-  function buildMintCard(item) {
-    const latest = item.latest_mint_record || null;
-    const policy = (item.eligibility || {}).mint_policy || {};
-    const isEligible = Boolean((item.eligibility || {}).eligible);
-    const pendingApprovals = Array.isArray((latest || {}).pending_approvals)
-      ? latest.pending_approvals
-      : [];
-    const canPrepare = Boolean(policy.product_includes_onchain_anchor);
-    const prepareLabel = latest ? "Prepare New Version" : "Prepare Mint";
-
-    return `
-      <div class="family-record-card">
-        <div class="card-number">M</div>
-        <h3>${escapeHtml(item.project_name || item.project_id || "Workspace")}</h3>
-        <p class="card-copy"><strong>Owner:</strong> ${escapeHtml(item.owner_email || "—")}</p>
-        <p class="card-copy"><strong>Package:</strong> ${escapeHtml(item.package_name || item.package_code || "—")}</p>
-        <p class="card-copy"><strong>Build:</strong> ${escapeHtml(item.status || "—")} / ${escapeHtml(item.phase || "—")}</p>
-        <p class="card-copy"><strong>Eligibility:</strong> ${escapeHtml((item.eligibility || {}).eligible ? "Ready" : ((item.eligibility || {}).reasons || []).join(", ") || "Not ready")}</p>
-        <p class="card-copy"><strong>Latest Mint:</strong> ${escapeHtml((latest || {}).mint_status || "none")}</p>
-        <p class="card-copy"><strong>Pending Approvals:</strong> ${escapeHtml(pendingApprovals.join(", ") || "none")}</p>
-        <p class="card-copy"><strong>Token:</strong> ${escapeHtml((latest || {}).token_id || "—")}</p>
-        <p class="card-copy"><strong>Error:</strong> ${escapeHtml((latest || {}).error_message || "—")}</p>
-        <div class="inline-actions" style="margin-top: 1rem;">
-          ${
-            canPrepare
-              ? `<button class="btn btn-secondary" type="button" data-mint-prepare="${escapeHtml(item.project_id || "")}">${escapeHtml(prepareLabel)}</button>`
-              : ""
-          }
-          ${
-            latest && pendingApprovals.includes("admin_final")
-              ? `<button class="btn btn-secondary" type="button" data-mint-approve-admin="${escapeHtml(item.project_id || "")}" data-mint-record-id="${escapeHtml(latest.id || "")}">Approve Admin</button>`
-              : ""
-          }
-          ${
-            latest && pendingApprovals.includes("customer_public_safe")
-              ? `<button class="btn btn-secondary" type="button" data-mint-approve-customer="${escapeHtml(item.project_id || "")}" data-mint-record-id="${escapeHtml(latest.id || "")}">Approve Customer Override</button>`
-              : ""
-          }
-          ${
-            latest && isEligible && ["approved", "queued"].includes(String(latest.mint_status || ""))
-              ? `<button class="btn btn-secondary" type="button" data-mint-queue="${escapeHtml(item.project_id || "")}" data-mint-record-id="${escapeHtml(latest.id || "")}">Queue Mint</button>`
-              : ""
-          }
-          ${
-            latest && latest.id
-              ? `<button class="btn btn-secondary" type="button" data-mint-sync="${escapeHtml(latest.id || "")}">Sync Receipt</button>`
-              : ""
-          }
-        </div>
-      </div>
-    `;
-  }
-
-  function buildOrderCard(item) {
-    return `
-      <div class="family-record-card">
-        <div class="card-number">O</div>
-        <h3>${escapeHtml(item.package_name || item.package_code || "Order")}</h3>
-        <p class="card-copy"><strong>Email:</strong> ${escapeHtml(item.email || "—")}</p>
-        <p class="card-copy"><strong>Status:</strong> ${escapeHtml(item.status || "—")}</p>
-        <p class="card-copy"><strong>Billing:</strong> ${escapeHtml(item.billing_plan || "—")}</p>
-        <p class="card-copy"><strong>Project:</strong> ${escapeHtml(item.project_id || "—")}</p>
-        <p class="card-copy"><strong>Created:</strong> ${escapeHtml(formatDate(item.created_at))}</p>
-      </div>
-    `;
-  }
-
-  function buildEntitlementCard(item) {
-    return `
-      <div class="family-record-card">
-        <div class="card-number">E</div>
-        <h3>${escapeHtml(item.package_name || item.package_code || "Entitlement")}</h3>
-        <p class="card-copy"><strong>Project:</strong> ${escapeHtml(item.project_id || "—")}</p>
-        <p class="card-copy"><strong>User:</strong> ${escapeHtml(item.user_id || "—")}</p>
-        <p class="card-copy"><strong>Status:</strong> ${escapeHtml(item.status || "—")}</p>
-        <p class="card-copy"><strong>Maintenance:</strong> ${escapeHtml(item.maintenance_status || "—")}</p>
-        <p class="card-copy"><strong>Updated:</strong> ${escapeHtml(formatDate(item.updated_at))}</p>
-      </div>
-    `;
-  }
-
-  function buildProjectCard(item) {
-    const familyHref = item.family_id
-      ? `admin-family-manager.html?family_id=${encodeURIComponent(item.family_id)}`
-      : "";
-
-    return `
-      <div class="family-record-card">
-        <div class="card-number">P</div>
-        <h3>${escapeHtml(item.name || "Project")}</h3>
-        <p class="card-copy"><strong>Owner:</strong> ${escapeHtml(item.owner_email || "—")}</p>
-        <p class="card-copy"><strong>Package:</strong> ${escapeHtml(item.package_name || item.package_code || "—")}</p>
-        <p class="card-copy"><strong>Status:</strong> ${escapeHtml(item.status || "—")}</p>
-        <p class="card-copy"><strong>Phase:</strong> ${escapeHtml(item.phase || "—")}</p>
-        <p class="card-copy"><strong>Lane:</strong> ${escapeHtml(item.project_lane || "—")}</p>
-        <div class="inline-actions" style="margin-top: 1rem;">
-          ${
-            familyHref
-              ? `<a class="btn btn-secondary" href="${escapeHtml(familyHref)}">Open Family</a>`
-              : ""
-          }
-        </div>
-      </div>
-    `;
-  }
-
-  function buildUserCard(item) {
-    return `
-      <div class="family-record-card">
-        <div class="card-number">U</div>
-        <h3>${escapeHtml(item.full_name || `${item.first_name || ""} ${item.last_name || ""}`.trim() || item.email || "User")}</h3>
-        <p class="card-copy"><strong>Email:</strong> ${escapeHtml(item.email || "—")}</p>
-        <p class="card-copy"><strong>Role:</strong> ${escapeHtml(item.role || "—")}</p>
-        <p class="card-copy"><strong>Status:</strong> ${escapeHtml(item.status || "—")}</p>
-        <p class="card-copy"><strong>Last Login:</strong> ${escapeHtml(formatDate(item.last_login_at))}</p>
-        <p class="card-copy"><strong>Reset Requested:</strong> ${escapeHtml(formatDate(item.password_reset_requested_at))}</p>
-        <p class="card-copy"><strong>Created:</strong> ${escapeHtml(formatDate(item.created_at))}</p>
-        <div class="inline-actions" style="margin-top: 1rem;">
-          <button class="btn btn-secondary" type="button" data-admin-password-reset="${escapeHtml(item.id || "")}">
-            Issue Reset Link
-          </button>
-        </div>
-      </div>
-    `;
-  }
-
-  function buildAuditCard(item) {
-    return `
-      <div class="family-record-card">
-        <div class="card-number">A</div>
-        <h3>${escapeHtml(item.action || "Audit Event")}</h3>
-        <p class="card-copy"><strong>Entity:</strong> ${escapeHtml(item.entity_type || "—")} / ${escapeHtml(item.entity_id || "—")}</p>
-        <p class="card-copy"><strong>Actor:</strong> ${escapeHtml(item.actor_email || item.actor_name || item.actor_user_id || "—")}</p>
-        <p class="card-copy"><strong>Created:</strong> ${escapeHtml(formatDate(item.created_at))}</p>
-      </div>
-    `;
-  }
-
-  async function loadUploads() {
-    const sectionKey = "uploads";
-    try {
-      setSectionStatus(sectionKey, "Loading uploaded file review...", "info");
-      const payload = await fetchJson(
-        `/uploads/admin/review?limit=24&search=${encodeURIComponent(getSearchValue())}`,
-      );
-      const items = Array.isArray(payload.items) ? payload.items : [];
-      renderSectionCards(
-        sectionKey,
-        items.length
-          ? items.map(buildUploadCard).join("")
-          : emptyCard("No uploads found", "No customer uploads matched the current filters."),
-      );
-      clearSectionStatus(sectionKey);
-    } catch (error) {
-      renderSectionCards(
-        sectionKey,
-        emptyCard("Upload review unavailable", error.message || "Unable to load uploads."),
-      );
-      setSectionStatus(sectionKey, error.message || "Unable to load uploads.", "error");
-    }
-  }
-
-  async function loadMints() {
-    const sectionKey = "mints";
-    try {
-      setSectionStatus(sectionKey, "Loading mint controls...", "info");
-      const payload = await fetchJson(
-        `/admin/mint-records/overview?limit=24&search=${encodeURIComponent(getSearchValue())}&mintable_only=true`,
-      );
-      const items = Array.isArray(payload.items) ? payload.items : [];
-      renderSectionCards(
-        sectionKey,
-        items.length
-          ? items.map(buildMintCard).join("")
-          : emptyCard("No mint records found", "No mint-eligible projects matched the current filters."),
-      );
-      clearSectionStatus(sectionKey);
-    } catch (error) {
-      renderSectionCards(
-        sectionKey,
-        emptyCard("Mint controls unavailable", error.message || "Unable to load mint controls."),
-      );
-      setSectionStatus(sectionKey, error.message || "Unable to load mint controls.", "error");
-    }
-  }
-
-  async function loadOrders() {
-    const sectionKey = "orders";
-    try {
-      setSectionStatus(sectionKey, "Loading order records...", "info");
-      const payload = await fetchJson(
-        `/orders/admin/all?limit=24&search=${encodeURIComponent(getSearchValue())}`,
-      );
-      const items = Array.isArray(payload.items) ? payload.items : [];
-      renderSectionCards(
-        sectionKey,
-        items.length
-          ? items.map(buildOrderCard).join("")
-          : emptyCard("No orders found", "No orders matched the current filters."),
-      );
-      clearSectionStatus(sectionKey);
-    } catch (error) {
-      renderSectionCards(
-        sectionKey,
-        emptyCard("Orders unavailable", error.message || "Unable to load orders."),
-      );
-      setSectionStatus(sectionKey, error.message || "Unable to load orders.", "error");
-    }
-  }
-
-  async function loadEntitlements() {
-    const sectionKey = "entitlements";
-    try {
-      setSectionStatus(sectionKey, "Loading project entitlements...", "info");
-      const payload = await fetchJson(
-        `/project-entitlements/admin/list?limit=24&search=${encodeURIComponent(getSearchValue())}`,
-      );
-      const items = Array.isArray(payload.items) ? payload.items : [];
-      renderSectionCards(
-        sectionKey,
-        items.length
-          ? items.map(buildEntitlementCard).join("")
-          : emptyCard("No entitlements found", "No project entitlements matched the current filters."),
-      );
-      clearSectionStatus(sectionKey);
-    } catch (error) {
-      renderSectionCards(
-        sectionKey,
-        emptyCard("Entitlements unavailable", error.message || "Unable to load entitlements."),
-      );
-      setSectionStatus(sectionKey, error.message || "Unable to load entitlements.", "error");
-    }
-  }
-
-  async function loadProjects() {
-    const sectionKey = "projects";
-    try {
-      setSectionStatus(sectionKey, "Loading project records...", "info");
-      const items = await fetchJson("/projects");
-      const filtered = Array.isArray(items)
-        ? items.filter(function (item) {
-            const haystack = [
-              item.id,
-              item.name,
-              item.owner_email,
-              item.package_code,
-              item.package_name,
-              item.project_lane,
-            ]
-              .join(" ")
-              .toLowerCase();
-            const search = getSearchValue().toLowerCase();
-            return !search || haystack.includes(search);
-          })
-        : [];
-      renderSectionCards(
-        sectionKey,
-        filtered.length
-          ? filtered.slice(0, 24).map(buildProjectCard).join("")
-          : emptyCard("No projects found", "No projects matched the current filters."),
-      );
-      clearSectionStatus(sectionKey);
-    } catch (error) {
-      renderSectionCards(
-        sectionKey,
-        emptyCard("Projects unavailable", error.message || "Unable to load projects."),
-      );
-      setSectionStatus(sectionKey, error.message || "Unable to load projects.", "error");
-    }
-  }
-
-  async function loadUsers() {
-    const sectionKey = "users";
-    try {
-      setSectionStatus(sectionKey, "Loading user directory...", "info");
-      const items = await fetchJson("/users/");
-      const filtered = Array.isArray(items)
-        ? items.filter(function (item) {
-          const haystack = [
-              item.full_name,
-              item.first_name,
-              item.last_name,
-              item.email,
-              item.role,
-              item.status,
-            ]
-              .join(" ")
-              .toLowerCase();
-            const search = getSearchValue().toLowerCase();
-            return !search || haystack.includes(search);
-          })
-        : [];
-      renderSectionCards(
-        sectionKey,
-        filtered.length
-          ? filtered.slice(0, 24).map(buildUserCard).join("")
-          : emptyCard("No users found", "No users matched the current filters."),
-      );
-      clearSectionStatus(sectionKey);
-    } catch (error) {
-      renderSectionCards(
-        sectionKey,
-        emptyCard("Users unavailable", error.message || "Unable to load users."),
-      );
-      setSectionStatus(sectionKey, error.message || "Unable to load users.", "error");
-    }
-  }
-
-  async function loadAuditLogs() {
-    const sectionKey = "audit";
-    try {
-      setSectionStatus(sectionKey, "Loading audit trail...", "info");
-      const items = await fetchJson("/audit-logs/");
-      const filtered = Array.isArray(items)
-        ? items.filter(function (item) {
-            const haystack = [
-              item.action,
-              item.entity_type,
-              item.entity_id,
-              item.actor_email,
-              item.actor_name,
-            ]
-              .join(" ")
-              .toLowerCase();
-            const search = getSearchValue().toLowerCase();
-            return !search || haystack.includes(search);
-          })
-        : [];
-      renderSectionCards(
-        sectionKey,
-        filtered.length
-          ? filtered.slice(0, 24).map(buildAuditCard).join("")
-          : emptyCard("No audit logs found", "No audit logs matched the current filters."),
-      );
-      clearSectionStatus(sectionKey);
-    } catch (error) {
-      renderSectionCards(
-        sectionKey,
-        emptyCard("Audit logs unavailable", error.message || "Unable to load audit logs."),
-      );
-      setSectionStatus(sectionKey, error.message || "Unable to load audit logs.", "error");
-    }
-  }
-
-  async function loadVisibleSections() {
-    const sectionKeys = Object.keys(SECTION_LOADERS).filter(canAccessSection);
-    for (const sectionKey of sectionKeys) {
-      await SECTION_LOADERS[sectionKey]();
-    }
-  }
-
-  async function runMintAction(path, body, message) {
-    setPageStatus(message, "info");
-    await app.apiRequest(path, {
+  async function postJson(path, body) {
+    return app.apiRequest(path, {
       method: "POST",
       body: JSON.stringify(body || {}),
     });
-    setPageStatus("Mint control updated successfully.", "success");
-    await loadMints();
   }
 
-  async function handleClick(event) {
-    const downloadButton = event.target.closest("[data-upload-download]");
-    if (downloadButton) {
-      try {
-        setPageStatus("Downloading upload...", "info");
-        await downloadUpload(
-          downloadButton.getAttribute("data-upload-download"),
-          downloadButton.getAttribute("data-upload-name"),
-        );
-        setPageStatus("Upload downloaded successfully.", "success");
-      } catch (error) {
-        setPageStatus(error.message || "Unable to download upload.", "error");
-      }
-      return;
-    }
+  function renderTopSummary(summary) {
+    const node = document.querySelector("[data-admin-top-summary]");
+    if (!node) return;
+    const cards = [
+      ["Total Users", summary.total_users],
+      ["Active Projects", summary.total_active_projects],
+      ["Paid Orders", summary.paid_orders],
+      ["Missing Entitlements", summary.missing_entitlements],
+      ["Mint-Ready Projects", summary.mint_ready_projects],
+      ["Data Mismatches", summary.projects_with_data_mismatch],
+    ];
+    node.innerHTML = cards
+      .map(function (item, index) {
+        return `
+          <div class="family-record-card admin-card">
+            <div class="card-number">${index + 1}</div>
+            <h3>${escapeHtml(item[0])}</h3>
+            <p class="card-copy">${escapeHtml(String(item[1] ?? 0))}</p>
+          </div>
+        `;
+      })
+      .join("");
+  }
 
-    const deleteButton = event.target.closest("[data-upload-delete]");
-    if (deleteButton) {
-      const uploadId = deleteButton.getAttribute("data-upload-delete");
-      if (!uploadId) return;
-      if (!window.confirm("Delete this upload? This action cannot be undone.")) {
-        return;
-      }
-      try {
-        setPageStatus("Deleting upload...", "info");
-        await app.apiRequest(`/uploads/${encodeURIComponent(uploadId)}`, {
-          method: "DELETE",
-        });
-        setPageStatus("Upload deleted successfully.", "success");
-        await loadUploads();
-      } catch (error) {
-        setPageStatus(error.message || "Unable to delete upload.", "error");
-      }
-      return;
-    }
+  function renderPriorityRepairs(priority) {
+    const node = document.querySelector("[data-admin-priority-repairs]");
+    if (!node) return;
+    const cards = [
+      ["Paid order without project link", (priority.paid_order_without_project_link || []).length],
+      ["Project without entitlement", (priority.project_without_entitlement || []).length],
+      ["Package without lane", (priority.package_without_lane || []).length],
+      ["Mint-eligible blocked", (priority.mint_eligible_blocked || []).length],
+    ];
+    node.innerHTML = cards
+      .map(function (item) {
+        return `
+          <div class="family-record-card admin-card">
+            <div class="card-number">!</div>
+            <h3>${escapeHtml(item[0])}</h3>
+            <p class="card-copy">${escapeHtml(String(item[1]))}</p>
+          </div>
+        `;
+      })
+      .join("");
+  }
 
-    const prepareButton = event.target.closest("[data-mint-prepare]");
-    if (prepareButton) {
-      const projectId = prepareButton.getAttribute("data-mint-prepare");
-      if (!projectId) return;
-      await runMintAction(
-        `/projects/${encodeURIComponent(projectId)}/mint-records/prepare`,
-        {
-          version_strategy: "new_version_if_needed",
-          poster_style: "abstract_cover",
-          public_title_opt_in: false,
-          public_title: "",
-          public_title_kind: "none",
-        },
-        "Preparing mint record...",
-      );
-      return;
-    }
-
-    const approveAdminButton = event.target.closest("[data-mint-approve-admin]");
-    if (approveAdminButton) {
-      const projectId = approveAdminButton.getAttribute("data-mint-approve-admin");
-      const mintRecordId = approveAdminButton.getAttribute("data-mint-record-id");
-      if (!projectId || !mintRecordId) return;
-      await runMintAction(
-        `/projects/${encodeURIComponent(projectId)}/mint-records/${encodeURIComponent(mintRecordId)}/approve-admin`,
-        { notes: "Approved through the internal control center." },
-        "Approving admin mint step...",
-      );
-      return;
-    }
-
-    const approveCustomerButton = event.target.closest("[data-mint-approve-customer]");
-    if (approveCustomerButton) {
-      const projectId = approveCustomerButton.getAttribute("data-mint-approve-customer");
-      const mintRecordId = approveCustomerButton.getAttribute("data-mint-record-id");
-      if (!projectId || !mintRecordId) return;
-      await runMintAction(
-        `/projects/${encodeURIComponent(projectId)}/mint-records/${encodeURIComponent(mintRecordId)}/approve-customer-admin`,
-        {
-          notes: "Approved by internal admin override for troubleshooting or managed delivery.",
-          wallet_address: "",
-          approved_poster_opt_in: false,
-          public_title_opt_in: false,
-          public_title: "",
-          public_title_kind: "none",
-        },
-        "Approving customer public-safe step...",
-      );
-      return;
-    }
-
-    const queueButton = event.target.closest("[data-mint-queue]");
-    if (queueButton) {
-      const projectId = queueButton.getAttribute("data-mint-queue");
-      const mintRecordId = queueButton.getAttribute("data-mint-record-id");
-      if (!projectId || !mintRecordId) return;
-      await runMintAction(
-        `/projects/${encodeURIComponent(projectId)}/mint-records/${encodeURIComponent(mintRecordId)}/queue`,
-        {},
-        "Queueing mint job...",
-      );
-      return;
-    }
-
-    const syncButton = event.target.closest("[data-mint-sync]");
-    if (syncButton) {
-      const mintRecordId = syncButton.getAttribute("data-mint-sync");
-      if (!mintRecordId) return;
-      await runMintAction(
-        `/mint-records/${encodeURIComponent(mintRecordId)}/sync`,
-        {},
-        "Syncing mint receipt...",
-      );
-      return;
-    }
-
-    const passwordResetButton = event.target.closest("[data-admin-password-reset]");
-    if (passwordResetButton) {
-      const userId = passwordResetButton.getAttribute("data-admin-password-reset");
-      if (!userId) return;
-      try {
-        setPageStatus("Issuing password reset link...", "info");
-        const payload = await app.apiRequest(
-          `/auth/admin/users/${encodeURIComponent(userId)}/password-reset`,
-          {
-            method: "POST",
-          },
-        );
-        const resetUrl = String(payload && payload.reset_url ? payload.reset_url : "").trim();
-        if (resetUrl && navigator.clipboard && navigator.clipboard.writeText) {
-          try {
-            await navigator.clipboard.writeText(resetUrl);
-            setPageStatus("Password reset link issued and copied to clipboard.", "success");
-          } catch (_error) {
-            setPageStatus("Password reset link issued. Copy it from the dialog.", "success");
-          }
-        } else {
-          setPageStatus("Password reset link issued successfully.", "success");
-        }
-
-        if (resetUrl) {
-          window.prompt("Share this secure reset link with the user:", resetUrl);
-        }
-        await loadUsers();
-      } catch (error) {
-        setPageStatus(error.message || "Unable to issue password reset link.", "error");
-      }
+  async function loadOverview() {
+    try {
+      const payload = await fetchJson("/admin/control-center/overview?limit=24");
+      renderTopSummary(payload.summary || {});
+      renderPriorityRepairs(payload.priority_repairs || {});
+    } catch (error) {
+      console.error("Overview load failed:", error);
+      renderTopSummary({});
+      renderPriorityRepairs({});
     }
   }
 
-  function bindRefreshButtons() {
-    document.querySelectorAll("[data-section-refresh]").forEach(function (button) {
-      button.addEventListener("click", async function () {
-        const sectionKey = button.getAttribute("data-section-refresh") || "";
-        const loader = SECTION_LOADERS[sectionKey];
-        if (!loader || !canAccessSection(sectionKey)) return;
-        await loader();
-      });
+  function renderCaseList() {
+    const node = document.querySelector("[data-admin-case-list]");
+    if (!node) return;
+    const cases = Array.isArray(state.cases) ? state.cases : [];
+    if (!cases.length) {
+      node.innerHTML = `
+        <div class="family-record-card admin-card">
+          <div class="card-number">•</div>
+          <h3>No case results</h3>
+          <p class="card-copy">No customer cases matched this queue/search.</p>
+        </div>
+      `;
+      return;
+    }
+
+    node.innerHTML = cases
+      .map(function (item) {
+        const alerts = Array.isArray(item.alerts) ? item.alerts : [];
+        const isSelected = state.selectedCaseId === item.case_id;
+        return `
+          <article class="family-record-card admin-card admin-case-row ${isSelected ? "is-selected" : ""}" data-case-row="${escapeHtml(item.case_id || "")}">
+            <div class="admin-card-header">
+              <span class="admin-card-badge">C</span>
+              <h3 class="admin-card-title">${escapeHtml(item.name || "Customer Case")}</h3>
+            </div>
+            <div class="admin-card-meta">
+              <p class="card-copy"><strong>Email:</strong> ${escapeHtml(item.email || "—")}</p>
+              <p class="card-copy"><strong>Role:</strong> ${escapeHtml(item.role || "customer")}</p>
+              <p class="card-copy"><strong>Project:</strong> ${escapeHtml(item.project || "—")}</p>
+              <p class="card-copy"><strong>Package:</strong> ${escapeHtml(item.package || "—")}</p>
+              <p class="card-copy"><strong>Lane:</strong> ${laneChip(item.lane)}</p>
+              <p class="card-copy"><strong>Status:</strong> ${statusChip(item.status || "unknown", item.status === "paid" || item.status === "delivered" ? "success" : "default")}</p>
+              <p class="card-copy"><strong>Alerts:</strong> ${alerts.length ? alerts.map(function (alert) { return statusChip(alert.replaceAll("_", " "), "error"); }).join(" ") : statusChip("none", "success")}</p>
+              <p class="card-copy"><strong>Updated:</strong> ${escapeHtml(formatDate(item.updated_at))}</p>
+            </div>
+            <div class="inline-actions" style="margin-top: 0.8rem; flex-wrap: wrap">
+              <label class="card-copy" style="display:inline-flex;align-items:center;gap:0.4rem;margin:0;">
+                <input type="checkbox" data-case-select="${escapeHtml(item.case_id || "")}" />
+                Select for bulk repair
+              </label>
+              <button class="btn btn-secondary" type="button" data-open-case="${escapeHtml(item.case_id || "")}">Open Case</button>
+            </div>
+          </article>
+        `;
+      })
+      .join("");
+  }
+
+  function summarizeTabValue(value) {
+    if (value == null) return "—";
+    if (Array.isArray(value)) return `${value.length} item(s)`;
+    if (typeof value === "object") return `${Object.keys(value).length} fields`;
+    return String(value);
+  }
+
+  function renderObjectRows(objectValue) {
+    const entries = Object.entries(objectValue || {});
+    if (!entries.length) {
+      return `<p class="card-copy">No data.</p>`;
+    }
+    return entries
+      .map(function (entry) {
+        const key = String(entry[0]).replaceAll("_", " ");
+        const value = entry[1];
+        if (Array.isArray(value)) {
+          return `<p class="card-copy"><strong>${escapeHtml(key)}:</strong> ${escapeHtml(value.join(", ") || "—")}</p>`;
+        }
+        if (value && typeof value === "object") {
+          return `<p class="card-copy"><strong>${escapeHtml(key)}:</strong> ${escapeHtml(JSON.stringify(value))}</p>`;
+        }
+        return `<p class="card-copy"><strong>${escapeHtml(key)}:</strong> ${escapeHtml(summarizeTabValue(value))}</p>`;
+      })
+      .join("");
+  }
+
+  function renderWorkspaceTab() {
+    const node = document.querySelector("[data-admin-case-workspace]");
+    if (!node) return;
+    const workspace = state.workspace;
+    if (!workspace || !workspace.tabs) {
+      node.innerHTML = `
+        <div class="family-record-card admin-card">
+          <div class="card-number">⚙</div>
+          <h3>No case selected</h3>
+          <p class="card-copy">Select a customer case to open the workspace.</p>
+        </div>
+      `;
+      return;
+    }
+
+    const tab = state.selectedTab;
+    const tabData = workspace.tabs[tab];
+
+    if (tab === "audit_timeline") {
+      const timeline = Array.isArray(tabData) ? tabData : Array.isArray(workspace.audit_timeline) ? workspace.audit_timeline : [];
+      node.innerHTML = timeline.length
+        ? timeline
+            .map(function (item) {
+              return `
+                <article class="family-record-card admin-card">
+                  <div class="admin-card-header">
+                    <span class="admin-card-badge">A</span>
+                    <h3 class="admin-card-title">${escapeHtml(item.action || "Audit Event")}</h3>
+                  </div>
+                  <div class="admin-card-meta">
+                    <p class="card-copy"><strong>Target:</strong> ${escapeHtml(item.target_type || "—")} / <span class="admin-id-ref">${escapeHtml(shortId(item.target_id))}</span></p>
+                    <p class="card-copy"><strong>Actor:</strong> ${escapeHtml(item.actor_email || item.actor_name || "—")}</p>
+                    <p class="card-copy"><strong>Result:</strong> ${statusChip(item.result || "success", item.result === "success" ? "success" : "error")}</p>
+                    <p class="card-copy"><strong>When:</strong> ${escapeHtml(formatDate(item.timestamp))}</p>
+                  </div>
+                </article>
+              `;
+            })
+            .join("")
+        : `<div class="family-record-card admin-card"><h3>No audit timeline</h3><p class="card-copy">No audit events were found for this case context.</p></div>`;
+      return;
+    }
+
+    if (tab === "orders_billing") {
+      const primaryOrder = tabData && tabData.primary_order ? tabData.primary_order : {};
+      const related = Array.isArray(tabData && tabData.related_orders) ? tabData.related_orders : [];
+      node.innerHTML = `
+        <article class="family-record-card admin-card">
+          <div class="admin-card-header"><span class="admin-card-badge">O</span><h3 class="admin-card-title">Primary Order</h3></div>
+          <div class="admin-card-meta">${renderObjectRows(primaryOrder)}</div>
+        </article>
+        <article class="family-record-card admin-card">
+          <div class="admin-card-header"><span class="admin-card-badge">R</span><h3 class="admin-card-title">Related Orders (${related.length})</h3></div>
+          <div class="admin-card-meta">
+            ${related.length ? related.map(function (order) { return `<p class="card-copy"><strong>${escapeHtml(shortId(order.id))}</strong> · ${escapeHtml(order.status || "unknown")} · ${escapeHtml(order.package_name || order.package_code || "—")} · ${escapeHtml(formatDate(order.created_at))}</p>`; }).join("") : '<p class="card-copy">No related orders.</p>'}
+          </div>
+        </article>
+      `;
+      return;
+    }
+
+    if (tab === "uploads_verification") {
+      const uploads = tabData && Array.isArray(tabData.items) ? tabData.items : [];
+      node.innerHTML = `
+        <article class="family-record-card admin-card">
+          <div class="admin-card-header"><span class="admin-card-badge">U</span><h3 class="admin-card-title">Upload & Verification Records (${uploads.length})</h3></div>
+          <div class="admin-card-meta">
+            ${uploads.length ? uploads.map(function (upload) { return `<p class="card-copy"><strong>${escapeHtml(upload.filename || shortId(upload.id))}</strong> · ${escapeHtml(upload.category || "upload")} · ${escapeHtml(formatDate(upload.created_at))}</p>`; }).join("") : '<p class="card-copy">No uploads found for this case.</p>'}
+          </div>
+        </article>
+      `;
+      return;
+    }
+
+    node.innerHTML = `
+      <article class="family-record-card admin-card">
+        <div class="admin-card-header">
+          <span class="admin-card-badge">${escapeHtml(tab.charAt(0).toUpperCase())}</span>
+          <h3 class="admin-card-title">${escapeHtml(tab.replaceAll("_", " "))}</h3>
+        </div>
+        <div class="admin-card-meta">${renderObjectRows(tabData || {})}</div>
+      </article>
+    `;
+  }
+
+  function renderCaseContext() {
+    const node = document.querySelector("[data-admin-case-context]");
+    if (!node) return;
+    const selected = (state.cases || []).find(function (item) {
+      return item.case_id === state.selectedCaseId;
     });
 
-    const refreshAllButton = document.querySelector("[data-admin-control-refresh]");
-    if (refreshAllButton) {
-      refreshAllButton.addEventListener("click", async function () {
-        setPageStatus("Refreshing internal console...", "info");
-        await loadVisibleSections();
-        setPageStatus("Internal control center refreshed.", "success");
+    if (!selected) {
+      node.innerHTML = `
+        <div class="family-record-card admin-card">
+          <h3>Context panel</h3>
+          <p class="card-copy">Select a case to see alerts, blocking reasons, and contextual status.</p>
+        </div>
+      `;
+      return;
+    }
+
+    const blocking = Array.isArray(selected.mint_blocking_reasons) ? selected.mint_blocking_reasons : [];
+    node.innerHTML = `
+      <div class="family-record-card admin-card">
+        <h3>${escapeHtml(selected.name || "Selected Case")}</h3>
+        <p class="card-copy"><strong>Case:</strong> <span class="admin-id-ref">${escapeHtml(shortId(selected.case_id))}</span></p>
+        <p class="card-copy"><strong>Alerts:</strong> ${selected.alerts && selected.alerts.length ? selected.alerts.map(function (alert) { return statusChip(alert.replaceAll("_", " "), "error"); }).join(" ") : statusChip("none", "success")}</p>
+        <p class="card-copy"><strong>Mint Blocking Reasons:</strong> ${blocking.length ? escapeHtml(blocking.join(", ")) : "none"}</p>
+      </div>
+    `;
+  }
+
+  function applyRailSelection() {
+    document.querySelectorAll("[data-case-queue]").forEach(function (button) {
+      const queue = button.getAttribute("data-case-queue") || "";
+      button.classList.toggle("is-active", queue === state.queue);
+    });
+  }
+
+  function applyTabSelection() {
+    document.querySelectorAll("[data-admin-case-tab]").forEach(function (button) {
+      const tab = button.getAttribute("data-admin-case-tab") || "";
+      button.classList.toggle("is-active", tab === state.selectedTab);
+    });
+  }
+
+  async function loadCaseWorkspace(caseId) {
+    if (!caseId) return;
+    state.selectedCaseId = caseId;
+    applyTabSelection();
+    renderWorkspaceTab();
+    try {
+      const payload = await fetchJson(`/admin/control-center/cases/${encodeURIComponent(caseId)}`);
+      state.workspace = payload || null;
+      renderWorkspaceTab();
+      renderCaseContext();
+    } catch (error) {
+      setPageStatus(error.message || "Unable to load case workspace.", "error");
+    }
+  }
+
+  async function loadCases() {
+    setPageStatus("Loading customer cases...", "info");
+    try {
+      const payload = await fetchJson(
+        `/admin/control-center/cases?queue=${encodeURIComponent(state.queue)}&limit=80&search=${encodeURIComponent(getSearchValue())}`,
+      );
+      state.cases = Array.isArray(payload.items) ? payload.items : [];
+      renderCaseList();
+      if (!state.selectedCaseId && state.cases.length) {
+        await loadCaseWorkspace(state.cases[0].case_id);
+      } else if (state.selectedCaseId) {
+        const stillExists = state.cases.find(function (item) {
+          return item.case_id === state.selectedCaseId;
+        });
+        if (stillExists) {
+          await loadCaseWorkspace(state.selectedCaseId);
+        } else if (state.cases.length) {
+          await loadCaseWorkspace(state.cases[0].case_id);
+        }
+      }
+      renderCaseContext();
+      clearPageStatus();
+    } catch (error) {
+      console.error("Case load failed:", error);
+      setPageStatus(error.message || "Unable to load customer cases.", "error");
+    }
+  }
+
+  function selectedRepairIds() {
+    const projectIds = [];
+    const orderIds = [];
+    document.querySelectorAll("[data-case-select]").forEach(function (checkbox) {
+      if (!checkbox.checked) return;
+      const caseId = checkbox.getAttribute("data-case-select") || "";
+      const caseRow = state.cases.find(function (item) {
+        return item.case_id === caseId;
+      });
+      if (!caseRow) return;
+      if (caseRow.project_id) projectIds.push(caseRow.project_id);
+      if (caseRow.order_id) orderIds.push(caseRow.order_id);
+    });
+    return { project_ids: projectIds, order_ids: orderIds };
+  }
+
+  async function runBulkAction(action) {
+    const endpointMap = {
+      "repair-missing-entitlements": "/admin/control-center/bulk/repair-missing-entitlements",
+      "assign-missing-lanes": "/admin/control-center/bulk/assign-missing-lanes",
+      "link-unlinked-paid-orders": "/admin/control-center/bulk/link-unlinked-paid-orders",
+      "normalize-broken-package-records": "/admin/control-center/bulk/normalize-broken-package-records",
+      "refresh-mint-readiness": "/admin/control-center/bulk/refresh-mint-readiness",
+      "repair-selected-records": "/admin/control-center/bulk/repair-selected-records",
+      "repair-all-safe-records": "/admin/control-center/bulk/repair-all-safe-records",
+    };
+    const endpoint = endpointMap[action];
+    if (!endpoint) return;
+
+    const body = action === "repair-selected-records" ? selectedRepairIds() : { limit: 500 };
+    if (
+      action === "repair-selected-records" &&
+      (!body.project_ids.length && !body.order_ids.length)
+    ) {
+      setPageStatus("Select one or more cases before running Repair Selected Records.", "error");
+      return;
+    }
+
+    setPageStatus("Running bulk action...", "info");
+    try {
+      await postJson(endpoint, body);
+      await Promise.allSettled([loadOverview(), loadCases()]);
+      setPageStatus("Bulk action completed.", "success");
+    } catch (error) {
+      setPageStatus(error.message || "Bulk action failed.", "error");
+    }
+  }
+
+  async function runCaseAction(action) {
+    if (!state.selectedCaseId) {
+      setPageStatus("Select a case first.", "error");
+      return;
+    }
+    setPageStatus("Running case action...", "info");
+    try {
+      await postJson(
+        `/admin/control-center/cases/${encodeURIComponent(state.selectedCaseId)}/actions/${encodeURIComponent(action)}`,
+        {},
+      );
+      await Promise.allSettled([loadOverview(), loadCases(), loadCaseWorkspace(state.selectedCaseId)]);
+      setPageStatus("Case action completed.", "success");
+    } catch (error) {
+      setPageStatus(error.message || "Case action failed.", "error");
+    }
+  }
+
+  function bindEvents() {
+    document.addEventListener("click", function (event) {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+
+      const queueButton = target.closest("[data-case-queue]");
+      if (queueButton) {
+        state.queue = queueButton.getAttribute("data-case-queue") || "overview";
+        applyRailSelection();
+        loadCases();
+        return;
+      }
+
+      const openCaseButton = target.closest("[data-open-case]");
+      if (openCaseButton) {
+        const caseId = openCaseButton.getAttribute("data-open-case");
+        if (caseId) loadCaseWorkspace(caseId);
+        return;
+      }
+
+      const caseRow = target.closest("[data-case-row]");
+      if (caseRow && !target.closest("[data-case-select]")) {
+        const caseId = caseRow.getAttribute("data-case-row");
+        if (caseId) loadCaseWorkspace(caseId);
+        return;
+      }
+
+      const caseActionButton = target.closest("[data-admin-case-action]");
+      if (caseActionButton) {
+        const action = caseActionButton.getAttribute("data-admin-case-action");
+        if (action) runCaseAction(action);
+        return;
+      }
+
+      const bulkActionButton = target.closest("[data-admin-bulk-action]");
+      if (bulkActionButton) {
+        const action = bulkActionButton.getAttribute("data-admin-bulk-action");
+        if (action) runBulkAction(action);
+        return;
+      }
+
+      const tabButton = target.closest("[data-admin-case-tab]");
+      if (tabButton) {
+        state.selectedTab = tabButton.getAttribute("data-admin-case-tab") || "identity";
+        applyTabSelection();
+        renderWorkspaceTab();
+      }
+    });
+
+    const searchInput = document.querySelector("[data-admin-case-search]");
+    if (searchInput) {
+      searchInput.addEventListener("change", loadCases);
+      searchInput.addEventListener("keydown", function (event) {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          loadCases();
+        }
       });
     }
 
-    const searchNode = document.querySelector("[data-admin-control-search]");
-    if (searchNode) {
-      searchNode.addEventListener("change", loadVisibleSections);
+    const refreshButton = document.querySelector("[data-admin-refresh-cases]");
+    if (refreshButton) {
+      refreshButton.addEventListener("click", async function () {
+        setPageStatus("Refreshing customer case console...", "info");
+        await Promise.allSettled([loadOverview(), loadCases()]);
+        setPageStatus("Customer case console refreshed.", "success");
+      });
+    }
+  }
+
+  function updateRoleSummary() {
+    const titleNode = document.querySelector("[data-admin-control-title]");
+    const statusNode = document.querySelector("[data-admin-control-status]");
+    if (titleNode) {
+      titleNode.textContent = "Customer Case Command Console";
+    }
+    if (statusNode) {
+      statusNode.textContent = `Internal premium operations controls are active for role: ${state.roleKey || "admin"}.`;
     }
   }
 
   async function setupPage() {
-    currentUser = await app.requireSession("signin.html");
-    if (!currentUser) return;
+    state.currentUser = await app.requireSession("signin.html");
+    if (!state.currentUser) return;
 
-    currentRoleKey = getInternalRoleKey(currentUser);
-    if (!currentRoleKey) {
+    state.roleKey = getInternalRoleKey(state.currentUser);
+    if (!state.roleKey) {
       window.location.href = "dashboard.html";
       return;
     }
 
     updateRoleSummary();
-    applySectionVisibility();
-    bindRefreshButtons();
-    document.addEventListener("click", function (event) {
-      handleClick(event).catch(function (error) {
-        setPageStatus(error.message || "Unable to complete that action.", "error");
-      });
-    });
-
-    await loadVisibleSections();
+    bindEvents();
+    applyRailSelection();
+    applyTabSelection();
+    await Promise.allSettled([loadOverview(), loadCases()]);
   }
 
   document.addEventListener("DOMContentLoaded", function () {
     setupPage().catch(function (error) {
-      console.error("Failed to load admin control center:", error);
-      setPageStatus(error.message || "Unable to load internal control center.", "error");
+      console.error("Failed to initialize admin control center:", error);
+      setPageStatus(error.message || "Unable to initialize admin console.", "error");
     });
   });
 })();

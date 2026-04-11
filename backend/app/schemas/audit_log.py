@@ -11,6 +11,12 @@ class AuditLogCreate(BaseModel):
     actor_email: str | None = None
     actor_name: str | None = None
     details: dict = Field(default_factory=dict)
+    target_type: str | None = None
+    target_id: str | None = None
+    before: dict | None = None
+    after: dict | None = None
+    context: dict = Field(default_factory=dict)
+    result: str = "success"
 
 
 class AuditLogResponse(BaseModel):
@@ -18,10 +24,17 @@ class AuditLogResponse(BaseModel):
     action: str
     entity_type: str
     entity_id: str
+    target_type: str
+    target_id: str
     actor_user_id: str | None = None
     actor_email: str | None = None
     actor_name: str | None = None
     details: dict
+    before: dict
+    after: dict
+    context: dict
+    result: str
+    timestamp: str
     created_at: str
 
 
@@ -74,20 +87,37 @@ def _details(data: dict) -> dict:
 
 def build_audit_log_response(data: dict) -> AuditLogResponse:
     legacy_entity_type, legacy_entity_id = _legacy_entity_fields(data)
+    timestamp = data.get("timestamp") or data.get("created_at")
+    target_type = _as_string(
+        data.get("target_type") or data.get("entity_type"),
+        legacy_entity_type or "system",
+    )
+    target_id = _as_string(
+        data.get("target_id") or data.get("entity_id"),
+        legacy_entity_id or "unknown",
+    )
+    actor_name = (
+        _as_string(data.get("actor_name"))
+        or _as_string(data.get("created_by"))
+        or _as_string(data.get("deleted_by"))
+        or None
+    )
 
     return AuditLogResponse(
         id=str(data.get("_id", "")),
         action=_as_string(data.get("action") or data.get("event"), "legacy_event"),
-        entity_type=_as_string(data.get("entity_type"), legacy_entity_type),
-        entity_id=_as_string(data.get("entity_id"), legacy_entity_id),
+        entity_type=_as_string(data.get("entity_type"), target_type),
+        entity_id=_as_string(data.get("entity_id"), target_id),
+        target_type=target_type,
+        target_id=target_id,
         actor_user_id=_as_string(data.get("actor_user_id")) or None,
         actor_email=_as_string(data.get("actor_email")) or None,
-        actor_name=(
-            _as_string(data.get("actor_name"))
-            or _as_string(data.get("created_by"))
-            or _as_string(data.get("deleted_by"))
-            or None
-        ),
+        actor_name=actor_name,
         details=_details(data),
-        created_at=_serialize_created_at(data.get("created_at")),
+        before=data.get("before", {}) or {},
+        after=data.get("after", {}) or {},
+        context=data.get("context", {}) or {},
+        result=str(data.get("result") or "success"),
+        timestamp=_serialize_created_at(timestamp),
+        created_at=_serialize_created_at(data.get("created_at") or timestamp),
     )

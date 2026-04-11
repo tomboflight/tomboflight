@@ -2132,6 +2132,28 @@ textarea {
   background: rgba(255, 255, 255, 0.03);
 }
 
+/*
+ * CSS-first admin/customer dashboard split.
+ *
+ * auth.js sets body[data-portal-mode] before revealing [data-auth-required],
+ * so these rules eliminate the flash of customer "Loading…" sections that
+ * admin users would otherwise see while the second (now removed) /auth/me
+ * call resolved.
+ *
+ * - portal-mode="admin"    → hide customer-only sections declaratively
+ * - portal-mode="customer" → hide admin-only sections declaratively
+ *
+ * Until portal-mode is set (page just loaded), [data-auth-required] is
+ * display:none via its inline style, so nothing is revealed prematurely.
+ */
+body[data-portal-mode="admin"] [data-dashboard-customer-only] {
+  display: none;
+}
+
+body[data-portal-mode="customer"] [data-dashboard-admin-only] {
+  display: none;
+}
+
 @keyframes portalSpin {
   from {
     transform: rotate(0deg);
@@ -3358,5 +3380,336 @@ textarea {
 
   .platform-prototype-frame {
     width: min(100%, 360px);
+  }
+}
+
+/* ──────────────────────────────────────────────────────────
+   Admin Control Center — Enhanced Card System
+   ────────────────────────────────────────────────────────── */
+
+.admin-card {
+  border-left: 3px solid rgba(50, 140, 255, 0.35);
+  background: linear-gradient(135deg, #03080f 0%, #050e1a 100%);
+}
+
+.admin-card:hover {
+  border-left-color: rgba(50, 140, 255, 0.7);
+  box-shadow: 0 6px 24px rgba(50, 140, 255, 0.12);
+}
+
+.admin-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+}
+
+.admin-card-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: rgba(50, 140, 255, 0.18);
+  color: #4fa8ff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border: 1px solid rgba(50, 140, 255, 0.25);
+  flex-shrink: 0;
+}
+
+.admin-card-title {
+  font-size: 0.97rem;
+  font-weight: 600;
+  color: #e8f0fe;
+  margin: 0;
+  line-height: 1.35;
+}
+
+.admin-card-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+}
+
+/* Status chips */
+.admin-status-chip {
+  display: inline-block;
+  padding: 0.18em 0.6em;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+.admin-status-chip--success {
+  background: rgba(52, 211, 153, 0.12);
+  color: #34d399;
+  border: 1px solid rgba(52, 211, 153, 0.3);
+}
+
+.admin-status-chip--error {
+  background: rgba(248, 113, 113, 0.12);
+  color: #f87171;
+  border: 1px solid rgba(248, 113, 113, 0.3);
+}
+
+.admin-status-chip--role {
+  background: rgba(167, 139, 250, 0.12);
+  color: #a78bfa;
+  border: 1px solid rgba(167, 139, 250, 0.3);
+}
+
+.admin-status-chip--default {
+  background: rgba(148, 163, 184, 0.1);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+/* Lane chips */
+.admin-lane-chip {
+  display: inline-block;
+  padding: 0.18em 0.6em;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+.admin-lane-chip--portrait {
+  background: rgba(96, 165, 250, 0.12);
+  color: #60a5fa;
+  border: 1px solid rgba(96, 165, 250, 0.3);
+}
+
+.admin-lane-chip--household {
+  background: rgba(52, 211, 153, 0.12);
+  color: #34d399;
+  border: 1px solid rgba(52, 211, 153, 0.3);
+}
+
+.admin-lane-chip--network {
+  background: rgba(251, 191, 36, 0.12);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.3);
+}
+
+.admin-lane-chip--organization {
+  background: rgba(167, 139, 250, 0.12);
+  color: #a78bfa;
+  border: 1px solid rgba(167, 139, 250, 0.3);
+}
+
+.admin-lane-chip--default {
+  background: rgba(148, 163, 184, 0.1);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+/* Truncated ID reference */
+.admin-id-ref {
+  font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+  font-size: 0.78em;
+  color: #6b7f9e;
+  letter-spacing: 0.02em;
+}
+
+.admin-console-summary-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.8rem;
+  margin: 0.8rem 0 1rem;
+}
+
+.admin-console-shell {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 1rem;
+}
+
+.admin-console-rail {
+  border: 1px solid rgba(120, 140, 190, 0.22);
+  border-radius: 12px;
+  padding: 0.9rem;
+  background: linear-gradient(180deg, rgba(10, 16, 26, 0.94), rgba(6, 10, 18, 0.96));
+}
+
+.admin-console-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.admin-console-nav a {
+  color: #9fc7ff;
+  text-decoration: none;
+  font-size: 0.86rem;
+}
+
+.admin-console-nav a:hover {
+  color: #d9eaff;
+}
+
+.admin-console-workspace {
+  min-width: 0;
+}
+
+/* ──────────────────────────────────────────────────────────
+   Admin Control Center — Case Console (2050 premium ops)
+   ────────────────────────────────────────────────────────── */
+
+.admin-command-bar {
+  border: 1px solid rgba(120, 165, 235, 0.22);
+  background: linear-gradient(135deg, rgba(6, 12, 22, 0.96), rgba(8, 16, 29, 0.98));
+}
+
+.admin-case-console-shell {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr) 320px;
+  gap: 1rem;
+  align-items: start;
+}
+
+.admin-case-rail {
+  border: 1px solid rgba(120, 140, 190, 0.22);
+  border-radius: 12px;
+  padding: 0.9rem;
+  background: linear-gradient(180deg, rgba(10, 16, 26, 0.94), rgba(6, 10, 18, 0.96));
+  position: sticky;
+  top: 1rem;
+}
+
+.admin-case-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.admin-case-nav button {
+  background: rgba(22, 34, 55, 0.75);
+  color: #a8cbff;
+  border: 1px solid rgba(94, 124, 175, 0.25);
+  border-radius: 9px;
+  text-align: left;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: all 160ms ease;
+}
+
+.admin-case-nav button:hover {
+  color: #e2f0ff;
+  border-color: rgba(115, 172, 255, 0.44);
+}
+
+.admin-case-nav button.is-active {
+  background: linear-gradient(120deg, rgba(42, 96, 165, 0.24), rgba(58, 126, 218, 0.2));
+  color: #eef6ff;
+  border-color: rgba(123, 186, 255, 0.5);
+}
+
+.admin-case-center {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(280px, 36%) minmax(0, 1fr);
+  gap: 1rem;
+}
+
+.admin-case-list-panel,
+.admin-case-workspace-panel,
+.admin-case-context-panel {
+  border: 1px solid rgba(120, 160, 220, 0.19);
+  border-radius: 14px;
+  padding: 0.9rem;
+  background: linear-gradient(155deg, rgba(8, 15, 27, 0.96), rgba(6, 11, 20, 0.98));
+}
+
+.admin-case-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+  max-height: 72vh;
+  overflow: auto;
+  padding-right: 0.2rem;
+}
+
+.admin-case-row.is-selected {
+  border-left-color: rgba(106, 189, 255, 0.76);
+  box-shadow: 0 8px 26px rgba(60, 129, 255, 0.13);
+}
+
+.admin-case-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin: 0.9rem 0 1rem;
+}
+
+.admin-case-tabs button {
+  border: 1px solid rgba(115, 150, 205, 0.3);
+  background: rgba(18, 31, 52, 0.8);
+  color: #a9cfff;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  padding: 0.35rem 0.7rem;
+  cursor: pointer;
+}
+
+.admin-case-tabs button:hover {
+  color: #ebf6ff;
+  border-color: rgba(128, 182, 255, 0.5);
+}
+
+.admin-case-tabs button.is-active {
+  background: linear-gradient(120deg, rgba(55, 128, 220, 0.24), rgba(70, 160, 255, 0.2));
+  border-color: rgba(141, 197, 255, 0.55);
+  color: #f1f8ff;
+}
+
+.admin-case-tab-content {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+  min-height: 44vh;
+}
+
+.admin-case-context-panel {
+  position: sticky;
+  top: 1rem;
+}
+
+.admin-case-context {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+  margin-top: 0.85rem;
+}
+
+@media (max-width: 920px) {
+  .admin-console-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-console-rail {
+    order: 2;
+  }
+
+  .admin-case-console-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-case-center {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-case-rail,
+  .admin-case-context-panel {
+    position: static;
   }
 }

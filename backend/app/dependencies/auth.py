@@ -1,37 +1,34 @@
+from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlparse
 
+from bson import ObjectId
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from app.config import settings
 from app.core.package_catalog import get_package
+from app.core.role_catalog import (
+    INTERNAL_ADMIN_ROLE_CODES,
+    collect_role_codes,
+    has_internal_admin_role,
+    normalize_role_code,
+)
 from app.core.security import decode_access_token
+from app.database import get_database
+from app.services.audit_log_service import write_audit_log
 from app.services.auth_service import get_user_by_email
+from app.services.control_layer_service import create_workflow_event
 from app.services.order_service import get_orders_for_user
 from app.services.project_entitlement_service import list_user_project_entitlements
+from app.services.project_membership_service import (
+    get_project_access_snapshot,
+    list_accessible_project_ids,
+)
 
 COOKIE_NAME = "tol_access_token"
 
-INTERNAL_ADMIN_KEYS = {
-    "admin",
-    "super_admin",
-    "root_admin",
-    "platform_admin",
-    "operations_admin",
-    "finance_admin",
-    "marketing_admin",
-    "executive_technology",
-    "operations",
-    "finance",
-    "marketing",
-}
-
-ALLOWED_COOKIE_AUTH_ORIGINS = {
-    "https://tomboflight.com",
-    "https://www.tomboflight.com",
-    "http://127.0.0.1:5500",
-    "http://localhost:5500",
-}
+INTERNAL_ADMIN_KEYS = set(INTERNAL_ADMIN_ROLE_CODES)
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -72,16 +69,53 @@ def _extract_request_origin(request: Request) -> str:
     return ""
 
 
+def _normalize_origin(value: Any) -> str:
+    return str(value or "").strip().rstrip("/")
+
+
 def _is_unsafe_method(method: str) -> bool:
     return method.upper() in {"POST", "PUT", "PATCH", "DELETE"}
+
+
+def _is_public_password_reset_route(request: Request) -> bool:
+    path = str(request.url.path or "").rstrip("/")
+    return path in {
+        "/auth/password-reset/request",
+        "/auth/password-reset/confirm",
+    }
+
+
+def _allowed_cookie_auth_origins() -> set[str]:
+    configured = settings.allowed_origins_list or []
+    normalized = {
+        _normalize_origin(origin)
+        for origin in configured
+        if _normalize_origin(origin)
+    }
+    normalized.discard("*")
+
+    if normalized:
+        return normalized
+
+    return {
+        "https://tomboflight.com",
+        "https://www.tomboflight.com",
+        "http://127.0.0.1:5500",
+        "http://localhost:5500",
+    }
 
 
 def _enforce_cookie_auth_origin(request: Request) -> None:
     if not _is_unsafe_method(request.method):
         return
 
-    origin = _extract_request_origin(request)
-    if not origin or origin not in ALLOWED_COOKIE_AUTH_ORIGINS:
+    # Public password-reset routes must remain accessible even when a stale
+    # auth cookie is present in the browser.
+    if _is_public_password_reset_route(request):
+        return
+
+    origin = _normalize_origin(_extract_request_origin(request))
+    if not origin or origin not in _allowed_cookie_auth_origins():
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Origin is not allowed for cookie-authenticated request.",
@@ -103,12 +137,13 @@ def _get_token_from_request(
 
 
 def _has_internal_admin_access(user: dict[str, Any]) -> bool:
-    values = {
-        _normalize_value(user.get("role")),
-        _normalize_value(user.get("access_tier")),
-        _normalize_value(user.get("department_role")),
-    }
-    return any(value in INTERNAL_ADMIN_KEYS for value in values if value)
+    return has_internal_admin_role(
+        (
+            user.get("role"),
+            user.get("access_tier"),
+            user.get("department_role"),
+        )
+    )
 
 
 def has_internal_admin_access(user: dict[str, Any]) -> bool:
@@ -332,3 +367,469 @@ def require_admin(current_user: dict[str, Any] = Depends(get_current_user)) -> d
             detail="Admin access required.",
         )
     return current_user
+
+
+LEGACY_ROLE_PERMISSIONS: dict[str, set[str]] = {
+    "admin": {
+        "admin.access",
+        "projects.create",
+        "verification.review",
+        "uploads.admin.review",
+        "project.workflow.transition",
+    },
+    "super_admin": {"*"},
+    "root_admin": {"*"},
+    "platform_admin": {"*"},
+    "operations_admin": {
+        "admin.access",
+        "verification.review",
+        "uploads.admin.review",
+        "project.workflow.transition",
+    },
+    "finance_admin": {"admin.access"},
+    "marketing_admin": {"admin.access"},
+    "executive_technology": {"*"},
+    "operations": {"admin.access", "verification.review", "uploads.admin.review"},
+    "finance": {"admin.access"},
+    "marketing": {"admin.access"},
+    "user": {"projects.read", "uploads.read", "uploads.write"},
+}
+
+WORKFLOW_ALLOWED_TRANSITIONS: dict[str, set[str]] = {
+    "": {"draft", "purchased", "build_ready"},
+    "draft": {"purchased", "build_ready"},
+    "purchased": {"build_ready"},
+    "build_ready": {"in_production", "archived"},
+    "in_production": {"qa_review", "client_review", "archived"},
+    "qa_review": {"client_review", "in_production", "archived"},
+    "client_review": {"delivered", "in_production", "archived"},
+    "delivered": {"archived"},
+    "archived": set(),
+}
+
+WORKFLOW_PHASE_BY_STATE: dict[str, str] = {
+    "draft": "created",
+    "purchased": "checkout_completed",
+    "build_ready": "intake_approved",
+    "in_production": "build_started",
+    "qa_review": "quality_review",
+    "client_review": "client_review",
+    "delivered": "delivery_complete",
+    "archived": "archived",
+}
+
+BYTES_PER_GB = 1024 * 1024 * 1024
+
+
+def _db():
+    db = get_database()
+    if db is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Database is not connected.",
+        )
+    return db
+
+
+def _extract_project_id_from_request(request: Request) -> str | None:
+    candidates = [
+        request.path_params.get("project_id"),
+        request.query_params.get("project_id"),
+    ]
+    for candidate in candidates:
+        normalized = _normalize_value(candidate)
+        if normalized:
+            return normalized
+    return None
+
+
+def _extract_workspace_identifiers(request: Request) -> tuple[str, str, str]:
+    return (
+        _normalize_value(
+            request.path_params.get("project_id") or request.query_params.get("project_id")
+        ),
+        _normalize_value(
+            request.path_params.get("family_id") or request.query_params.get("family_id")
+        ),
+        _normalize_value(
+            request.path_params.get("member_id") or request.query_params.get("member_id")
+        ),
+    )
+
+
+def _load_user_by_id(user_id: str) -> dict[str, Any] | None:
+    if not user_id:
+        return None
+    db = _db()
+    users = db["users"]
+    if ObjectId.is_valid(user_id):
+        user = users.find_one({"_id": ObjectId(user_id)})
+        if user is not None:
+            return user
+    return users.find_one({"$or": [{"id": user_id}, {"user_id": user_id}]})
+
+
+def _collect_role_codes_for_user(user: dict[str, Any]) -> set[str]:
+    role_codes = collect_role_codes(
+        user.get(field_name) for field_name in ("role", "access_tier", "department_role")
+    )
+
+    user_id = _current_user_id(user)
+    if user_id:
+        assignments = _db()["user_role_assignments"].find(
+            {"user_id": user_id, "status": {"$in": ["active", "enabled", ""]}}
+        )
+        for assignment in assignments:
+            role_code = normalize_role_code(assignment.get("role_code"))
+            if role_code:
+                role_codes.add(role_code)
+    return role_codes
+
+
+def _collect_permissions_for_roles(role_codes: set[str]) -> set[str]:
+    permissions: set[str] = set()
+    if not role_codes:
+        return permissions
+
+    for role_code in role_codes:
+        permissions.update(LEGACY_ROLE_PERMISSIONS.get(role_code, set()))
+
+    docs = _db()["role_permissions"].find(
+        {
+            "role_code": {"$in": list(role_codes)},
+            "status": {"$in": ["active", "enabled", ""]},
+        }
+    )
+    for doc in docs:
+        permission_code = _normalize_value(doc.get("permission_code"))
+        if permission_code:
+            permissions.add(permission_code)
+
+    return permissions
+
+
+def _resolve_project_scope(user: dict[str, Any], project_id: str | None = None) -> dict[str, Any]:
+    db = _db()
+    projects = db["projects"]
+
+    if project_id:
+        project = None
+        if ObjectId.is_valid(project_id):
+            project = projects.find_one({"_id": ObjectId(project_id)})
+        if project is None:
+            project = projects.find_one({"id": project_id})
+        if project is None:
+            return {"project_id": project_id, "accessible": False}
+
+        access_snapshot = get_project_access_snapshot(
+            project,
+            user_id=_current_user_id(user),
+            email=_current_user_email(user),
+        )
+        return {
+            "project_id": str(project.get("_id")),
+            "accessible": bool(
+                has_internal_admin_access(user) or access_snapshot.get("accessible")
+            ),
+            "owner_user_id": access_snapshot.get("owner_user_id"),
+            "owner_email": access_snapshot.get("owner_email"),
+            "access_via": access_snapshot.get("via"),
+            "member_role": access_snapshot.get("member_role"),
+        }
+
+    if has_internal_admin_access(user):
+        return {"scope": "all", "project_count": int(projects.count_documents({}))}
+
+    user_id = _current_user_id(user)
+    user_email = _current_user_email(user)
+    project_ids = set(list_accessible_project_ids(user_id=user_id, email=user_email))
+
+    filters: list[dict[str, Any]] = []
+    if user_id:
+        filters.append({"owner_user_id": user_id})
+    if user_email:
+        filters.append({"owner_email": user_email})
+
+    if filters:
+        docs = projects.find({"$or": filters}, {"_id": 1})
+        project_ids.update(str(doc.get("_id")) for doc in docs if doc.get("_id") is not None)
+
+    if not project_ids:
+        return {"scope": "owned", "project_ids": []}
+
+    return {"scope": "owned", "project_ids": sorted(project_ids)}
+
+
+def _resolve_workflow_state(project_id: str | None) -> dict[str, Any]:
+    if not project_id:
+        return {"state": None, "phase": None}
+
+    db = _db()
+    projects = db["projects"]
+    project = None
+    if ObjectId.is_valid(project_id):
+        project = projects.find_one({"_id": ObjectId(project_id)})
+    if project is None:
+        return {"state": None, "phase": None}
+
+    project_id_value = str(project.get("_id"))
+    workflow_query: dict[str, Any] = {"project_id": project_id_value}
+    if ObjectId.is_valid(project_id_value):
+        workflow_query = {"project_id": {"$in": [project_id_value, ObjectId(project_id_value)]}}
+    latest_event = db["workflow_events"].find_one(workflow_query, sort=[("created_at", -1)])
+    return {
+        "state": _normalize_value(project.get("status")) or None,
+        "phase": _normalize_value(project.get("phase")) or None,
+        "latest_transition": {
+            "from_state": _normalize_value((latest_event or {}).get("from_state")) or None,
+            "to_state": _normalize_value((latest_event or {}).get("to_state")) or None,
+            "created_at": (latest_event or {}).get("created_at"),
+        } if latest_event else None,
+    }
+
+
+def resolve_access_context(user_id: str, project_id: str | None = None) -> dict[str, Any]:
+    user = _load_user_by_id(user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found for access context.",
+        )
+
+    role_codes = _collect_role_codes_for_user(user)
+    if has_internal_admin_access(user):
+        role_codes.add("admin")
+
+    permissions = _collect_permissions_for_roles(role_codes)
+    if has_internal_admin_access(user):
+        permissions.add("*")
+
+    entitlements = list_user_project_entitlements(user_id, active_only=True)
+    if project_id:
+        entitlements = [
+            entitlement
+            for entitlement in entitlements
+            if _normalize_value(entitlement.get("project_id")) == _normalize_value(project_id)
+        ]
+
+    return {
+        "role_codes": sorted(role_codes),
+        "permissions": sorted(permissions),
+        "entitlements": entitlements,
+        "project_scope": _resolve_project_scope(user, project_id),
+        "workflow_state": _resolve_workflow_state(project_id),
+    }
+
+
+def require_permission(permission_code: str):
+    normalized_permission = _normalize_value(permission_code)
+    if not normalized_permission:
+        raise ValueError("permission_code is required.")
+
+    def _dependency(
+        request: Request,
+        current_user: dict[str, Any] = Depends(get_current_user),
+    ) -> dict[str, Any]:
+        user_id = _current_user_id(current_user)
+        context = resolve_access_context(
+            user_id,
+            project_id=_extract_project_id_from_request(request),
+        )
+        permissions = set(context.get("permissions") or [])
+        if "*" not in permissions and normalized_permission not in permissions:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Permission '{normalized_permission}' is required.",
+            )
+        current_user["_access_context"] = context
+        return current_user
+
+    return _dependency
+
+
+def require_any_permission(permission_codes: list[str]):
+    normalized_permissions = [
+        _normalize_value(code) for code in permission_codes if _normalize_value(code)
+    ]
+    if not normalized_permissions:
+        raise ValueError("At least one permission code is required.")
+
+    def _dependency(
+        request: Request,
+        current_user: dict[str, Any] = Depends(get_current_user),
+    ) -> dict[str, Any]:
+        user_id = _current_user_id(current_user)
+        context = resolve_access_context(
+            user_id,
+            project_id=_extract_project_id_from_request(request),
+        )
+        permissions = set(context.get("permissions") or [])
+        if "*" not in permissions and not any(
+            code in permissions for code in normalized_permissions
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="At least one required permission is missing.",
+            )
+        current_user["_access_context"] = context
+        return current_user
+
+    return _dependency
+
+
+def require_entitlement(capability: str):
+    normalized_capability = _normalize_value(capability)
+    if not normalized_capability:
+        raise ValueError("capability is required.")
+
+    def _dependency(
+        request: Request,
+        current_user: dict[str, Any] = Depends(get_current_user),
+    ) -> dict[str, Any]:
+        if has_internal_admin_access(current_user):
+            return current_user
+
+        project_id, family_id, member_id = _extract_workspace_identifiers(request)
+
+        from app.services.workspace_access_service import resolve_workspace_context
+
+        context = resolve_workspace_context(
+            current_user,
+            project_id=project_id,
+            family_id=family_id,
+            member_id=member_id,
+        )
+        entitlements = context.get("resolved_entitlements") or {}
+        if not bool(entitlements.get(normalized_capability)):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Entitlement '{normalized_capability}' is required.",
+            )
+        current_user["_workspace_context"] = context
+        return current_user
+
+    return _dependency
+
+
+def enforce_limit(
+    limit_type: str,
+    value: int | float,
+    *,
+    context: dict[str, Any],
+) -> None:
+    normalized_limit = _normalize_value(limit_type)
+    entitlements = context.get("resolved_entitlements") or {}
+
+    if normalized_limit == "uploads":
+        max_allowed = int(entitlements.get("max_uploads") or 0)
+    elif normalized_limit == "family_members":
+        max_allowed = int(entitlements.get("max_members") or 0)
+    elif normalized_limit == "vault_storage_bytes":
+        max_allowed = int(float(entitlements.get("max_storage_gb") or 0) * BYTES_PER_GB)
+    else:
+        raise ValueError(f"Unsupported limit type: {limit_type}")
+
+    if max_allowed <= 0:
+        return
+
+    if float(value) > float(max_allowed):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Limit exceeded for '{normalized_limit}'.",
+        )
+
+
+def transition_project(
+    project_id: str,
+    to_state: str,
+    actor: dict[str, Any] | str,
+) -> dict[str, Any]:
+    db = _db()
+    projects = db["projects"]
+
+    if not ObjectId.is_valid(project_id):
+        raise HTTPException(status_code=400, detail="Invalid project id.")
+
+    project = projects.find_one({"_id": ObjectId(project_id)})
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found.")
+
+    from_state = _normalize_value(project.get("status"))
+    target_state = _normalize_value(to_state)
+    if not target_state:
+        raise HTTPException(status_code=400, detail="to_state is required.")
+
+    allowed_transitions = sorted(WORKFLOW_ALLOWED_TRANSITIONS.get(from_state, set()))
+    if target_state not in set(allowed_transitions):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Invalid transition from '{from_state or 'unknown'}' to '{target_state}'. "
+                f"Allowed transitions: {allowed_transitions}."
+            ),
+        )
+
+    actor_user_id = ""
+    actor_email = ""
+    actor_name = ""
+    if isinstance(actor, dict):
+        actor_user_id = _normalize_value(
+            actor.get("id") or actor.get("_id") or actor.get("user_id")
+        )
+        actor_email = _normalize_value(actor.get("email"))
+        actor_name = _normalize_value(actor.get("full_name") or actor.get("name"))
+    else:
+        actor_user_id = _normalize_value(actor)
+
+    if not actor_user_id:
+        raise HTTPException(status_code=400, detail="Actor user id is required.")
+
+    access_context = resolve_access_context(actor_user_id, project_id=project_id)
+    permission_pool = set(access_context.get("permissions") or [])
+    required_permissions = {
+        "project.workflow.transition",
+        f"project.workflow.transition.{target_state}",
+    }
+    if "*" not in permission_pool and permission_pool.isdisjoint(required_permissions):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Actor is not permitted to transition this project.",
+        )
+
+    next_phase = WORKFLOW_PHASE_BY_STATE.get(target_state, _normalize_value(project.get("phase")))
+    now = datetime.now(timezone.utc)
+    projects.update_one(
+        {"_id": ObjectId(project_id)},
+        {
+            "$set": {
+                "status": target_state,
+                "phase": next_phase,
+                "updated_at": now,
+            }
+        },
+    )
+    updated_project = projects.find_one({"_id": ObjectId(project_id)}) or project
+
+    role_codes = access_context.get("role_codes") or []
+    create_workflow_event(
+        project_id=project_id,
+        from_state=from_state,
+        to_state=target_state,
+        status="recorded",
+        actor_user_id=actor_user_id,
+        actor_role_code=str(role_codes[0] if role_codes else ""),
+        context={"phase": next_phase},
+    )
+    write_audit_log(
+        actor_user_id=actor_user_id or None,
+        actor_email=actor_email or None,
+        actor_name=actor_name or None,
+        action="project_workflow_transition",
+        target_type="project",
+        target_id=project_id,
+        before={"status": from_state, "phase": _normalize_value(project.get("phase"))},
+        after={"status": target_state, "phase": next_phase},
+        context={"required_permissions": sorted(required_permissions)},
+        result="success",
+    )
+    return updated_project

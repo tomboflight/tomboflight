@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 
-from app.dependencies.auth import require_admin
+from app.dependencies.auth import require_permission
 from app.schemas.family_network import (
     FamilyNetworkCreate,
     FamilyNetworkResponse,
@@ -15,7 +15,7 @@ router = APIRouter(prefix="/family-networks", tags=["Family Networks"])
 
 
 @router.get("/", response_model=list[FamilyNetworkResponse])
-def get_family_networks(current_user: dict = Depends(require_admin)):
+def get_family_networks(current_user: dict = Depends(require_permission("admin.access"))):
     networks = list_family_networks()
     return [build_family_network_response(network) for network in networks]
 
@@ -23,7 +23,7 @@ def get_family_networks(current_user: dict = Depends(require_admin)):
 @router.post("/", response_model=FamilyNetworkResponse)
 def create_family_network_route(
     payload: FamilyNetworkCreate,
-    current_user: dict = Depends(require_admin),
+    current_user: dict = Depends(require_permission("admin.access")),
 ):
     network = create_family_network(payload)
     return build_family_network_response(network)

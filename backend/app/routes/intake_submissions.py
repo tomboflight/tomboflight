@@ -2,7 +2,11 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.dependencies.auth import get_current_user, has_internal_admin_access, require_admin
+from app.dependencies.auth import (
+    get_current_user,
+    has_internal_admin_access,
+    require_permission,
+)
 from app.schemas.intake_submission import (
     IntakeSubmissionCreate,
     IntakeSubmissionListItem,
@@ -88,7 +92,7 @@ def my_submission_list(
 def admin_list_submissions(
     limit: int = Query(default=50, ge=1, le=200),
     status_filter: Optional[str] = Query(default=None, alias="status"),
-    _admin_user: dict = Depends(require_admin),
+    _admin_user: dict = Depends(require_permission("admin.access")),
 ):
     return list_all(limit=limit, status=status_filter)
 
@@ -114,7 +118,7 @@ def get_submission(
 def admin_update_submission_status(
     submission_id: str,
     payload: IntakeSubmissionStatusUpdate,
-    admin_user: dict = Depends(require_admin),
+    admin_user: dict = Depends(require_permission("admin.access")),
 ):
     try:
         return update_status(
