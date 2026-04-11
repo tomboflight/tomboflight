@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import logging
 from datetime import UTC, datetime
 from typing import Any
 
@@ -28,6 +29,7 @@ BUILD_READY_STATUSES = {"build_ready", "in_production", "qa_review", "client_rev
 INTAKE_APPROVED_PHASES = {"intake_approved", "build_started", "quality_review", "client_review", "delivery_complete", "delivered", "archived"}
 PAID_ORDER_STATUSES = {"paid", "succeeded", "complete", "completed"}
 OBJECT_ID_WRAPPER_PATTERN = re.compile(r"""^ObjectId\((["']?)([0-9a-fA-F]{24})\1\)$""")
+logger = logging.getLogger(__name__)
 
 
 def _normalize(value: Any) -> str:
@@ -450,7 +452,7 @@ def link_order_to_project(*, order_id: str, project_id: str = "") -> dict[str, A
     try:
         auto_provision_paid_order_by_id(_normalize(order.get("_id")))
     except Exception:
-        pass
+        logger.exception("Auto provisioning failed after link_order_to_project.")
 
     return {
         "order_id": _normalize(order.get("_id")),

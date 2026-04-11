@@ -264,14 +264,7 @@ def auto_provision_paid_order(order: dict[str, Any]) -> dict[str, Any]:
     except Exception:
         mint_readiness_computed = False
 
-    logger.info(
-        "auto_provision_paid_order package_normalized=%s lane_assigned=%s order_linked=%s entitlement_present=%s mint_readiness_computed=%s",
-        package_normalized,
-        lane_assigned,
-        order_linked,
-        entitlement_present,
-        mint_readiness_computed,
-    )
+    logger.info("auto_provision_paid_order completed.")
 
     return {
         "package_normalized": package_normalized,

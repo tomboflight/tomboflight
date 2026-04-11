@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+import logging
 from typing import Any
 
 from bson import ObjectId
@@ -19,6 +20,8 @@ from app.services.project_entitlement_service import (
     get_project_entitlement,
     upsert_project_entitlement,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _now() -> datetime:
@@ -142,7 +145,7 @@ def create_project(payload: ProjectCreate) -> dict[str, Any]:
         try:
             auto_provision_paid_order(order)
         except Exception:
-            pass
+            logger.exception("Auto provisioning failed during project create reconciliation.")
     return data
 
 
