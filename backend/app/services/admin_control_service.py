@@ -1609,12 +1609,13 @@ def refresh_mint_readiness(*, limit: int = 500) -> dict[str, Any]:
 def repair_selected_records(*, project_ids: list[str], order_ids: list[str]) -> dict[str, Any]:
     repaired: list[dict[str, Any]] = []
     failures: list[dict[str, Any]] = []
+    generic_failure_message = "repair_failed"
 
     for project_id in [pid for pid in project_ids if _normalize(pid)]:
         try:
             repaired.append(repair_record(project_id=_normalize(project_id)))
-        except Exception as exc:
-            failures.append({"project_id": _normalize(project_id), "error": str(exc)})
+        except Exception:
+            failures.append({"project_id": _normalize(project_id), "error": generic_failure_message})
 
     for order_id in [oid for oid in order_ids if _normalize(oid)]:
         try:
@@ -1627,8 +1628,8 @@ def repair_selected_records(*, project_ids: list[str], order_ids: list[str]) -> 
                 failures.append({"order_id": _normalize(order_id), "error": "Matching project not found."})
                 continue
             repaired.append(repair_record(project_id=_normalize(project.get("_id")), order_id=_normalize(order_id)))
-        except Exception as exc:
-            failures.append({"order_id": _normalize(order_id), "error": str(exc)})
+        except Exception:
+            failures.append({"order_id": _normalize(order_id), "error": generic_failure_message})
 
     return {
         "action": "repair_selected_records",
