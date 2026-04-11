@@ -51,7 +51,7 @@ def _normalize_object_id(value: Any) -> str:
     if isinstance(value, ObjectId):
         return str(value)
     normalized = _normalize(value)
-    object_id_hex = _extract_object_id_hex(value)
+    object_id_hex = _extract_object_id_hex(normalized)
     return object_id_hex or normalized
 
 
