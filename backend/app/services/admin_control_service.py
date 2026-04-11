@@ -7,8 +7,14 @@ from typing import Any, Callable
 from bson import ObjectId
 
 from app.config import settings
-from app.core.package_catalog import get_package, get_package_control_profile, normalize_package_code
+from app.core.package_catalog import (
+    canonicalize_package_identifier,
+    get_package,
+    get_package_control_profile,
+    normalize_package_code,
+)
 from app.database import get_database
+from app.services.audit_log_service import write_audit_log
 from app.services.mint_policy_service import describe_project_mint_eligibility
 from app.services.project_entitlement_service import (
     get_project_entitlement,
@@ -36,6 +42,128 @@ INTERNAL_ROLE_KEYS = {
     "marketing",
 }
 
+GUIDANCE_RULE_ALIASES = {
+    "lane_not_assigned": "lane_unknown",
+    "order_not_linked": "paid_order_not_linked",
+    "uploads_missing": "upload_review_pending",
+    "package_not_synced": "package_normalization_needed",
+}
+
+OPERATOR_GUIDANCE_RULES = {
+    "missing_entitlement": {
+        "title": "Entitlement record is missing",
+        "rule": "Every approved project must have a project entitlement tied to its canonical package and lane.",
+        "next_action": "Generate Entitlement",
+        "recommended_action": "generate_entitlement",
+        "severity": "critical",
+    },
+    "lane_unknown": {
+        "title": "Lane is not assigned",
+        "rule": "Mint, maintenance, and entitlement policy require a canonical lane: portrait, household, network, or organization.",
+        "next_action": "Assign Lane",
+        "recommended_action": "assign_lane",
+        "severity": "critical",
+    },
+    "paid_order_not_linked": {
+        "title": "Paid order is not linked to the project",
+        "rule": "A paid package order must resolve to the live project before billing, entitlement, or mint readiness can be trusted.",
+        "next_action": "Link Order to Project",
+        "recommended_action": "link_order_to_project",
+        "severity": "critical",
+    },
+    "package_normalization_needed": {
+        "title": "Package values need normalization",
+        "rule": "Admin display uses project first, then reconciles order and entitlement against the shared package catalog.",
+        "next_action": "Sync Package",
+        "recommended_action": "sync_package",
+        "severity": "warning",
+    },
+    "package_unknown": {
+        "title": "Package is not recognized",
+        "rule": "Package slug, code, and display name must map to a known Tomb of Light package.",
+        "next_action": "Normalize Package",
+        "recommended_action": "normalize_package",
+        "severity": "critical",
+    },
+    "package_missing_on_project": {
+        "title": "Project package source is missing",
+        "rule": "The linked project is the primary admin display source and must carry the canonical package fields.",
+        "next_action": "Sync Package",
+        "recommended_action": "sync_package",
+        "severity": "warning",
+    },
+    "package_mismatch_order": {
+        "title": "Project and order packages disagree",
+        "rule": "The project remains primary, but the linked order must reconcile to the same package code.",
+        "next_action": "Sync Package",
+        "recommended_action": "sync_package",
+        "severity": "critical",
+    },
+    "package_mismatch_entitlement": {
+        "title": "Project and entitlement packages disagree",
+        "rule": "Entitlement package code must match the canonical linked project package.",
+        "next_action": "Refresh Entitlement",
+        "recommended_action": "refresh_entitlement",
+        "severity": "critical",
+    },
+    "lane_mismatch_entitlement": {
+        "title": "Project and entitlement lanes disagree",
+        "rule": "Entitlement package lane must match the canonical project lane.",
+        "next_action": "Refresh Entitlement",
+        "recommended_action": "refresh_entitlement",
+        "severity": "critical",
+    },
+    "maintenance_not_started": {
+        "title": "Maintenance billing has not started",
+        "rule": "Packages with maintenance defaults need a started or scheduled maintenance state after entitlement is resolved.",
+        "next_action": "Repair Record",
+        "recommended_action": "repair_record",
+        "severity": "warning",
+    },
+    "duplicate_admin_user_identity": {
+        "title": "Customer identity overlaps with an admin identity",
+        "rule": "Case selection prefers the customer record; duplicate internal identities are surfaced for audit review.",
+        "next_action": "Repair Record",
+        "recommended_action": "repair_record",
+        "severity": "warning",
+    },
+    "upload_review_pending": {
+        "title": "Upload review is pending",
+        "rule": "Mint eligibility requires customer files to be present and reviewable before the case can advance.",
+        "next_action": "Review Uploads",
+        "recommended_action": "run_readiness_check",
+        "severity": "warning",
+    },
+    "mint_blocked": {
+        "title": "Mint is blocked",
+        "rule": "Mint can only proceed after package, lane, order, entitlement, project phase, and upload gates pass together.",
+        "next_action": "Run Readiness Check",
+        "recommended_action": "run_readiness_check",
+        "severity": "critical",
+    },
+    "mint_runtime_disabled": {
+        "title": "Mint runtime is disabled",
+        "rule": "The runtime flag is off, so this case can be prepared but cannot execute automatic minting.",
+        "next_action": "Queue for Mint Review",
+        "recommended_action": "queue_for_mint_review",
+        "severity": "warning",
+    },
+    "project_not_build_ready": {
+        "title": "Project is not build-ready",
+        "rule": "Mint review requires the project status to be in an approved build-ready state.",
+        "next_action": "Run Readiness Check",
+        "recommended_action": "run_readiness_check",
+        "severity": "info",
+    },
+    "project_not_intake_approved": {
+        "title": "Project intake is not approved",
+        "rule": "Mint review requires the project phase to pass intake approval.",
+        "next_action": "Run Readiness Check",
+        "recommended_action": "run_readiness_check",
+        "severity": "info",
+    },
+}
+
 
 def _normalize(value: Any) -> str:
     return str(value or "").strip()
@@ -47,6 +175,54 @@ def _normalize_email(value: Any) -> str:
 
 def _now() -> datetime:
     return datetime.now(UTC)
+
+
+def _actor_snapshot(actor: dict[str, Any] | None) -> dict[str, str | None]:
+    if not isinstance(actor, dict):
+        return {"actor_user_id": None, "actor_email": None, "actor_name": None}
+
+    first_name = _normalize(actor.get("first_name"))
+    last_name = _normalize(actor.get("last_name"))
+    actor_name = _normalize(actor.get("full_name")) or " ".join(
+        [first_name, last_name]
+    ).strip()
+    return {
+        "actor_user_id": _normalize_object_id(actor.get("_id") or actor.get("id") or actor.get("user_id")) or None,
+        "actor_email": _normalize_email(actor.get("email")) or None,
+        "actor_name": actor_name or None,
+    }
+
+
+def _write_admin_action_audit(
+    *,
+    actor: dict[str, Any] | None,
+    action: str,
+    target_type: str,
+    target_id: str,
+    result: str = "success",
+    before: dict[str, Any] | None = None,
+    after: dict[str, Any] | None = None,
+    context: dict[str, Any] | None = None,
+    details: dict[str, Any] | None = None,
+) -> None:
+    actor_fields = _actor_snapshot(actor)
+    try:
+        write_audit_log(
+            actor_user_id=actor_fields["actor_user_id"],
+            actor_email=actor_fields["actor_email"],
+            actor_name=actor_fields["actor_name"],
+            action=f"admin_control_center.{action}",
+            target_type=target_type,
+            target_id=target_id,
+            before=before or {},
+            after=after or {},
+            context=context or {},
+            details=details or {},
+            result=result,
+        )
+    except Exception:
+        # Admin repairs should not fail solely because audit persistence is unavailable.
+        return
 
 
 def _db():
@@ -248,6 +424,7 @@ def _repair_entitlement_document(
     *,
     project_id_text: str,
     lane: str,
+    user_id_text: str = "",
 ) -> dict[str, Any]:
     db = _db()
     collection = db["project_entitlements"]
@@ -264,11 +441,16 @@ def _repair_entitlement_document(
     ):
         updates["project_id"] = project_oid
 
+    user_oid = _to_object_id(_normalize(user_id_text))
     existing_user_id = entitlement.get("user_id")
-    if not isinstance(existing_user_id, ObjectId):
-        user_oid = _to_object_id(_normalize(existing_user_id))
-        if user_oid is not None:
+    existing_user_oid = _to_object_id(_normalize(existing_user_id))
+    if user_oid is not None:
+        if existing_user_oid != user_oid or not isinstance(existing_user_id, ObjectId):
             updates["user_id"] = user_oid
+    elif not isinstance(existing_user_id, ObjectId):
+        coerced_user_oid = _to_object_id(_normalize(existing_user_id))
+        if coerced_user_oid is not None:
+            updates["user_id"] = coerced_user_oid
 
     entitlement_lane = _normalize(entitlement.get("package_lane")).lower()
     if entitlement_lane not in ALLOWED_LANES and lane in ALLOWED_LANES:
@@ -303,31 +485,137 @@ def _repair_entitlement_document(
     }
 
 
-def _package_fields_from_context(project: dict[str, Any], order: dict[str, Any] | None) -> dict[str, Any]:
-    raw_code = _normalize(
-        project.get("package_code")
-        or project.get("package_slug")
-        or project.get("package_type")
-        or (order or {}).get("package_code")
-        or (order or {}).get("package_slug")
+def _source_package_snapshot(
+    source: str,
+    values: list[Any],
+    *,
+    lane: Any = "",
+) -> dict[str, Any]:
+    raw_values = [_normalize(value) for value in values if _normalize(value)]
+    chosen = canonicalize_package_identifier(raw_values[0] if raw_values else "")
+    for raw_value in raw_values:
+        candidate = canonicalize_package_identifier(raw_value)
+        if candidate.get("is_known"):
+            chosen = candidate
+            break
+
+    package_lane = _normalize(chosen.get("package_lane")).lower()
+    explicit_lane = _normalize(lane).lower()
+    resolved_lane = explicit_lane if explicit_lane in ALLOWED_LANES else package_lane
+    if resolved_lane not in ALLOWED_LANES:
+        resolved_lane = "unknown"
+
+    return {
+        "source": source,
+        "raw_values": raw_values,
+        "package_code": _normalize(chosen.get("package_code")),
+        "package_slug": _normalize(chosen.get("package_slug")),
+        "package_name": _normalize(chosen.get("package_name")),
+        "package_lane": package_lane or None,
+        "lane": resolved_lane,
+        "normalization_status": _normalize(chosen.get("normalization_status")) or "unknown",
+        "is_known": bool(chosen.get("is_known")),
+    }
+
+
+def _project_lane_value(project: dict[str, Any]) -> str:
+    for key in ("project_lane", "lane", "package_lane"):
+        lane = _normalize(project.get(key)).lower()
+        if lane in ALLOWED_LANES:
+            return lane
+    return ""
+
+
+def _package_fields_from_context(
+    project: dict[str, Any],
+    order: dict[str, Any] | None,
+    entitlement: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    project_source = _source_package_snapshot(
+        "project",
+        [
+            project.get("package_code"),
+            project.get("package_slug"),
+            project.get("package_type"),
+            project.get("package_name"),
+        ],
+        lane=_project_lane_value(project),
     )
-    normalized_code = normalize_package_code(raw_code)
-    package = get_package(normalized_code) or {}
-    lane = _normalize(package.get("package_lane") or project.get("project_lane"))
+    order_source = _source_package_snapshot(
+        "order",
+        [
+            (order or {}).get("package_code"),
+            (order or {}).get("package_slug"),
+            (order or {}).get("package_type"),
+            (order or {}).get("package_name"),
+        ],
+    )
+    entitlement_source = _source_package_snapshot(
+        "entitlement",
+        [
+            (entitlement or {}).get("package_code"),
+            (entitlement or {}).get("package_slug"),
+            (entitlement or {}).get("package_name"),
+        ],
+        lane=(entitlement or {}).get("package_lane"),
+    )
+
+    sources = {
+        "project": project_source,
+        "order": order_source,
+        "entitlement": entitlement_source,
+    }
+    chosen = next(
+        (
+            source
+            for source in (project_source, order_source, entitlement_source)
+            if source.get("is_known")
+        ),
+        project_source,
+    )
+
+    package_code = _normalize(chosen.get("package_code"))
+    package = get_package(package_code) or {}
+    package_lane = _normalize(package.get("package_lane") or chosen.get("package_lane")).lower()
+    explicit_project_lane = _project_lane_value(project)
+    lane = explicit_project_lane or package_lane or _normalize(chosen.get("lane")).lower()
     if lane not in ALLOWED_LANES:
         lane = "unknown"
 
-    package_name = _normalize(
-        project.get("package_name")
-        or (order or {}).get("package_name")
-        or package.get("display_name")
-        or normalized_code
-    )
+    package_name = _normalize(package.get("display_name") or chosen.get("package_name") or package_code)
+    warnings: list[str] = []
+    if not project_source.get("is_known") and (order_source.get("is_known") or entitlement_source.get("is_known")):
+        warnings.append("package_missing_on_project")
+
+    for source in (order_source, entitlement_source):
+        source_code = _normalize(source.get("package_code"))
+        if source.get("is_known") and package_code and source_code != package_code:
+            warnings.append(f"package_mismatch_{source['source']}")
+
+    for source in (entitlement_source,):
+        source_lane = _normalize(source.get("lane")).lower()
+        if source.get("is_known") and source_lane in ALLOWED_LANES and lane in ALLOWED_LANES and source_lane != lane:
+            warnings.append(f"lane_mismatch_{source['source']}")
+
+    normalization_status = _normalize(chosen.get("normalization_status")) or "unknown"
+    if chosen is order_source and project_source.get("is_known") is False:
+        normalization_status = "recovered_from_order"
+    if chosen is entitlement_source and project_source.get("is_known") is False:
+        normalization_status = "recovered_from_entitlement"
+
     return {
-        "package_code": normalized_code or "unknown",
-        "package_slug": normalized_code or "unknown",
+        "package_code": package_code or "unknown",
+        "package_slug": package_code or "unknown",
         "package_name": package_name or "Unknown Package",
+        "lane": lane,
         "project_lane": lane,
+        "package_lane": package_lane or lane,
+        "source": _normalize(chosen.get("source")) or None,
+        "raw_value": (chosen.get("raw_values") or [None])[0],
+        "normalization_status": normalization_status,
+        "is_known": bool(chosen.get("is_known")),
+        "warnings": list(dict.fromkeys(warnings)),
+        "sources": sources,
     }
 
 
@@ -343,7 +631,7 @@ def _resolve_entitlement_user_id(project: dict[str, Any], order: dict[str, Any] 
 
     owner_email = _normalize_email(project.get("owner_email"))
     if owner_email:
-        user = _db()["users"].find_one({"email": owner_email}, {"_id": 1})
+        user = _find_case_user(email=owner_email)
         if user and user.get("_id"):
             oid = _to_object_id(user.get("_id"))
             if oid is not None:
@@ -361,9 +649,15 @@ def _serialize_order(order: dict[str, Any] | None) -> dict[str, Any] | None:
         "user_id": _normalize_object_id(order.get("user_id")) or None,
         "status": _normalize(order.get("status")) or None,
         "package_code": normalize_package_code(_normalize(order.get("package_code") or order.get("package_slug"))),
+        "package_slug": normalize_package_code(_normalize(order.get("package_slug") or order.get("package_code"))),
         "package_name": _normalize(order.get("package_name")) or None,
+        "lane": _normalize(order.get("lane") or order.get("package_lane")) or None,
         "project_id": _normalize_object_id(order.get("project_id")) or None,
         "billing_plan": _normalize(order.get("billing_plan")) or "one_time",
+        "stripe_session_id": _normalize(order.get("stripe_session_id") or order.get("session_id")) or None,
+        "payment_link_id": _normalize(order.get("stripe_payment_link_id") or order.get("payment_link_id")) or None,
+        "subscription_id": _normalize(order.get("stripe_subscription_id") or order.get("subscription_id")) or None,
+        "next_charge_date": _serialize_datetime(order.get("next_charge_date") or order.get("current_period_end")),
         "created_at": order.get("created_at"),
     }
 
@@ -377,10 +671,14 @@ def _serialize_project(project: dict[str, Any]) -> dict[str, Any]:
         "package_code": normalize_package_code(_normalize(project.get("package_code") or project.get("package_slug"))),
         "package_slug": normalize_package_code(_normalize(project.get("package_slug") or project.get("package_code"))),
         "package_name": _normalize(project.get("package_name")) or None,
+        "lane": _normalize(project.get("lane") or project.get("project_lane")) or None,
         "project_lane": _normalize(project.get("project_lane")) or None,
         "status": _normalize(project.get("status")) or None,
         "phase": _normalize(project.get("phase")) or None,
+        "source": _normalize(project.get("source") or project.get("provisioning_source")) or None,
+        "intake_status": _normalize(project.get("intake_status") or project.get("intake_readiness")) or None,
         "family_id": _normalize(project.get("family_id")) or None,
+        "household_id": _normalize(project.get("household_id")) or None,
         "updated_at": project.get("updated_at"),
     }
 
@@ -388,23 +686,23 @@ def _serialize_project(project: dict[str, Any]) -> dict[str, Any]:
 def sync_package(*, project_id: str, order_id: str = "") -> dict[str, Any]:
     db = _db()
     project, order = _resolve_project_order_context(project_id, preferred_order_id=order_id)
-    package_fields = _package_fields_from_context(project, order)
+    entitlement = get_project_entitlement(_normalize(project.get("_id")))
+    package_fields = _package_fields_from_context(project, order, entitlement)
     project_doc_id = _to_object_id(_normalize(project.get("_id")))
     if project_doc_id is None:
         raise ValueError("Invalid project identifier.")
 
-    db["projects"].update_one(
-        {"_id": project_doc_id},
-        {
-            "$set": {
-                "package_code": package_fields["package_code"],
-                "package_slug": package_fields["package_slug"],
-                "package_type": package_fields["package_code"],
-                "package_name": package_fields["package_name"],
-                "updated_at": _now(),
-            }
-        },
-    )
+    project_updates = {
+        "package_code": package_fields["package_code"],
+        "package_slug": package_fields["package_slug"],
+        "package_type": package_fields["package_code"],
+        "package_name": package_fields["package_name"],
+        "updated_at": _now(),
+    }
+    if package_fields["project_lane"] in ALLOWED_LANES:
+        project_updates["project_lane"] = package_fields["project_lane"]
+
+    db["projects"].update_one({"_id": project_doc_id}, {"$set": project_updates})
     if order is not None:
         db["orders"].update_one(
             {"_id": order["_id"]},
@@ -434,7 +732,8 @@ def assign_lane(*, project_id: str) -> dict[str, Any]:
     if project is None:
         raise ValueError("Project not found.")
 
-    package_fields = _package_fields_from_context(project, None)
+    entitlement = get_project_entitlement(_normalize(project.get("_id")))
+    package_fields = _package_fields_from_context(project, None, entitlement)
     lane = package_fields["project_lane"]
     if lane not in ALLOWED_LANES:
         raise ValueError("Unable to resolve lane for the project package.")
@@ -453,6 +752,11 @@ def assign_lane(*, project_id: str) -> dict[str, Any]:
         db["project_entitlements"].update_one(
             {"project_id": project_id_filter},
             {"$set": {"package_lane": lane, "updated_at": _now()}},
+        )
+        _repair_entitlement_document(
+            project_id_text=_normalize(project.get("_id")),
+            lane=lane,
+            user_id_text=_resolve_entitlement_user_id(project, None),
         )
 
     return {"project_id": _normalize(project.get("_id")), "project_lane": lane, "entitlement_updated": bool(entitlement)}
@@ -499,10 +803,22 @@ def generate_entitlement(*, project_id: str, order_id: str = "", force: bool = T
     project, order = _resolve_project_order_context(project_id, preferred_order_id=order_id)
     project_id_str = _normalize(project.get("_id"))
     existing = get_project_entitlement(project_id_str)
+    package_fields = _package_fields_from_context(project, order, existing)
     if existing and not force:
-        return {"entitlement": existing, "created": False, "regenerated": False}
+        lane = package_fields["project_lane"]
+        user_id = _resolve_entitlement_user_id(project, order)
+        entitlement_repair = _repair_entitlement_document(
+            project_id_text=project_id_str,
+            lane=lane,
+            user_id_text=user_id,
+        )
+        return {
+            "entitlement": get_project_entitlement(project_id_str),
+            "created": False,
+            "regenerated": False,
+            "normalized_ids": entitlement_repair,
+        }
 
-    package_fields = _package_fields_from_context(project, order)
     control_profile = get_package_control_profile(package_fields["package_code"]) or {}
     plan_default = _normalize(control_profile.get("maintenance_default")) or "none"
 
@@ -555,7 +871,8 @@ def repair_record(*, project_id: str, order_id: str = "") -> dict[str, Any]:
     if project_doc_id is None:
         raise ValueError("Project id is invalid.")
 
-    package_fields = _package_fields_from_context(project, order)
+    entitlement_before = get_project_entitlement(project_id_str)
+    package_fields = _package_fields_from_context(project, order, entitlement_before)
     lane = package_fields["project_lane"]
 
     project_updates: dict[str, Any] = {
@@ -594,8 +911,8 @@ def repair_record(*, project_id: str, order_id: str = "") -> dict[str, Any]:
     entitlement_repair = _repair_entitlement_document(
         project_id_text=project_id_str,
         lane=lane,
+        user_id_text=_resolve_entitlement_user_id(project, order),
     )
-    entitlement_before = get_project_entitlement(project_id_str)
     entitlement_generation = {"created": False, "regenerated": False}
     if entitlement_before is None:
         generated = generate_entitlement(
@@ -635,7 +952,7 @@ def run_readiness_check(*, project_id: str, order_id: str = "") -> dict[str, Any
     project, order = _resolve_project_order_context(project_id, preferred_order_id=order_id)
     project_id_str = _normalize(project.get("_id"))
     entitlement = get_project_entitlement(project_id_str)
-    package_fields = _package_fields_from_context(project, order)
+    package_fields = _package_fields_from_context(project, order, entitlement)
 
     project_package_code = normalize_package_code(_normalize(project.get("package_code") or project.get("package_slug")))
     order_package_code = normalize_package_code(_normalize((order or {}).get("package_code") or (order or {}).get("package_slug")))
@@ -691,6 +1008,10 @@ def run_readiness_check(*, project_id: str, order_id: str = "") -> dict[str, Any
         normalized_reason = _normalize(reason)
         if normalized_reason and normalized_reason not in blocking_reasons:
             blocking_reasons.append(normalized_reason)
+    for warning in package_fields.get("warnings") or []:
+        normalized_warning = _normalize(warning)
+        if normalized_warning and normalized_warning not in blocking_reasons:
+            blocking_reasons.append(normalized_warning)
 
     return {
         "project_id": project_id_str,
@@ -713,6 +1034,8 @@ def run_readiness_check(*, project_id: str, order_id: str = "") -> dict[str, Any
         "mint_policy": mint_eligibility.get("mint_policy"),
         "mint_reasons": mint_eligibility.get("reasons") or [],
         "blocking_reasons": blocking_reasons,
+        "package": package_fields,
+        "warnings": package_fields.get("warnings") or [],
     }
 
 
@@ -750,6 +1073,7 @@ def project_workspace_snapshot(project_id: str) -> dict[str, Any]:
     project, order = _resolve_project_order_context(project_id)
     project_id_str = _normalize(project.get("_id"))
     entitlement = get_project_entitlement(project_id_str)
+    package_fields = _package_fields_from_context(project, order, entitlement)
     readiness = run_readiness_check(project_id=project_id_str)
 
     related_orders = []
@@ -762,6 +1086,8 @@ def project_workspace_snapshot(project_id: str) -> dict[str, Any]:
     return {
         "project": _serialize_project(project),
         "order": _serialize_order(order),
+        "package": package_fields,
+        "warnings": package_fields.get("warnings") or [],
         "entitlement": entitlement,
         "readiness": readiness,
         "related_orders": related_orders,
@@ -849,6 +1175,9 @@ def _find_matching_approved_project_for_order(order: dict[str, Any]) -> dict[str
     email = _normalize_email(order.get("email"))
     user_id = _normalize(order.get("user_id"))
     user_oid = _to_object_id(user_id)
+    order_package = normalize_package_code(
+        _normalize(order.get("package_code") or order.get("package_slug") or order.get("package_type"))
+    )
 
     filters: list[dict[str, Any]] = []
     if email:
@@ -861,10 +1190,24 @@ def _find_matching_approved_project_for_order(order: dict[str, Any]) -> dict[str
     if not filters:
         return None
 
+    ranked: list[tuple[int, datetime, dict[str, Any]]] = []
     for project in db["projects"].find({"$or": filters}).sort("updated_at", -1).limit(100):
         if _project_is_approved(project):
-            return project
-    return None
+            project_package = normalize_package_code(
+                _normalize(project.get("package_code") or project.get("package_slug") or project.get("package_type"))
+            )
+            score = 10
+            if order_package and project_package == order_package:
+                score += 20
+            if _normalize(project.get("owner_email")).lower() == email:
+                score += 5
+            updated_at = _coerce_datetime(project.get("updated_at")) or datetime.min.replace(tzinfo=UTC)
+            ranked.append((score, updated_at, project))
+
+    if not ranked:
+        return None
+    ranked.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    return ranked[0][2]
 
 
 def _order_has_project_link(order: dict[str, Any]) -> bool:
@@ -951,11 +1294,6 @@ def assign_missing_lanes(*, limit: int = 500) -> dict[str, Any]:
             continue
 
         project_id = _normalize(project.get("_id"))
-        order = _latest_linked_order(project_id) or _latest_user_order_for_project(project)
-        if order is None or not _is_paid_package_order(order):
-            skipped += 1
-            continue
-
         try:
             assign_lane(project_id=project_id)
             assigned += 1
@@ -1040,32 +1378,51 @@ def _search_regex(search: str) -> dict[str, Any] | None:
     return {"$regex": re.escape(normalized), "$options": "i"}
 
 
+def _flexible_name_regex(search: str) -> dict[str, Any] | None:
+    parts = [part for part in re.split(r"\s+", _normalize(search)) if part]
+    if not parts:
+        return None
+    return {"$regex": r"\s+".join(re.escape(part) for part in parts), "$options": "i"}
+
+
 def _search_seed_sets(search: str) -> tuple[set[str], set[str], set[str], set[str]]:
     db = _db()
     regex = _search_regex(search)
     if regex is None:
         return set(), set(), set(), set()
+    flexible_name_regex = _flexible_name_regex(search) or regex
+    name_parts = [part for part in re.split(r"\s+", _normalize(search)) if part]
+    first_last_filter: dict[str, Any] | None = None
+    if len(name_parts) >= 2:
+        first_last_filter = {
+            "$and": [
+                {"first_name": {"$regex": re.escape(name_parts[0]), "$options": "i"}},
+                {"last_name": {"$regex": re.escape(name_parts[-1]), "$options": "i"}},
+            ]
+        }
 
     user_emails: set[str] = set()
     user_ids: set[str] = set()
     family_ids: set[str] = set()
     project_ids_from_mint: set[str] = set()
 
+    user_search_filters: list[dict[str, Any]] = [
+        {"email": regex},
+        {"first_name": regex},
+        {"last_name": regex},
+        {"full_name": flexible_name_regex},
+        {"birthday": regex},
+        {"birth_date": regex},
+        {"date_of_birth": regex},
+        {"dob": regex},
+        {"id_last4": regex},
+        {"government_id_last4": regex},
+    ]
+    if first_last_filter:
+        user_search_filters.append(first_last_filter)
+
     for user in db["users"].find(
-        {
-            "$or": [
-                {"email": regex},
-                {"first_name": regex},
-                {"last_name": regex},
-                {"full_name": regex},
-                {"birthday": regex},
-                {"birth_date": regex},
-                {"date_of_birth": regex},
-                {"dob": regex},
-                {"id_last4": regex},
-                {"government_id_last4": regex},
-            ]
-        },
+        {"$or": user_search_filters},
         {"_id": 1, "email": 1},
     ).limit(300):
         user_email = _normalize_email(user.get("email"))
@@ -1216,6 +1573,62 @@ def _case_alerts(
     return alerts
 
 
+def _humanize_code(value: Any) -> str:
+    words = re.sub(r"[_\-]+", " ", _normalize(value)).strip()
+    return words.title() if words else "Operational guidance"
+
+
+def _operator_guidance_item(code: str) -> dict[str, Any]:
+    normalized_code = GUIDANCE_RULE_ALIASES.get(_normalize(code).lower(), _normalize(code).lower())
+    rule = OPERATOR_GUIDANCE_RULES.get(normalized_code)
+    if not rule:
+        rule = {
+            "title": _humanize_code(normalized_code),
+            "rule": "The case has a state that should be reviewed before the next operation.",
+            "next_action": "Run Readiness Check",
+            "recommended_action": "run_readiness_check",
+            "severity": "info",
+        }
+    return {
+        "code": normalized_code,
+        "title": rule["title"],
+        "rule": rule["rule"],
+        "next_action": rule["next_action"],
+        "recommended_action": rule["recommended_action"],
+        "severity": rule["severity"],
+    }
+
+
+def _operator_guidance_items(
+    *,
+    alerts: list[str] | None = None,
+    readiness: dict[str, Any] | None = None,
+    warnings: list[str] | None = None,
+    include_mint_runtime: bool = False,
+) -> list[dict[str, Any]]:
+    codes: list[str] = []
+    if readiness:
+        codes.extend([_normalize(value) for value in readiness.get("blocking_reasons") or []])
+        if readiness.get("mint_review_ready") and not readiness.get("mint_eligible"):
+            codes.append("mint_blocked")
+        if include_mint_runtime and not settings.nft_auto_mint_on_review_enabled:
+            codes.append("mint_runtime_disabled")
+
+    codes.extend([_normalize(value) for value in alerts or []])
+    codes.extend([_normalize(value) for value in warnings or []])
+
+    unique_codes: list[str] = []
+    for code in codes:
+        normalized_code = GUIDANCE_RULE_ALIASES.get(_normalize(code).lower(), _normalize(code).lower())
+        if normalized_code and normalized_code not in unique_codes:
+            unique_codes.append(normalized_code)
+
+    severity_order = {"critical": 0, "warning": 1, "info": 2}
+    items = [_operator_guidance_item(code) for code in unique_codes]
+    items.sort(key=lambda item: severity_order.get(_normalize(item.get("severity")).lower(), 3))
+    return items[:8]
+
+
 def _case_queue_match(queue: str, alerts: list[str]) -> bool:
     normalized = _normalize(queue).lower()
     if normalized in {"", "all", "overview", "customer_cases", "projects", "system_health"}:
@@ -1333,6 +1746,144 @@ def _workspace_uploads_snapshot(project_id: str, owner_email: str) -> dict[str, 
     return {"count": len(items), "items": items}
 
 
+def _is_internal_user_document(user: dict[str, Any] | None) -> bool:
+    if not user:
+        return False
+    values = {
+        _normalize(user.get("role")).lower(),
+        _normalize(user.get("access_tier")).lower(),
+        _normalize(user.get("department_role")).lower(),
+    }
+    return any(value in INTERNAL_ROLE_KEYS for value in values if value)
+
+
+def _find_case_user(*, email: str = "", user_id: str = "") -> dict[str, Any] | None:
+    db = _db()
+    normalized_user_id = _normalize(user_id)
+    user_oid = _to_object_id(normalized_user_id)
+    projection = {
+        "_id": 1,
+        "email": 1,
+        "full_name": 1,
+        "first_name": 1,
+        "last_name": 1,
+        "birthday": 1,
+        "birth_date": 1,
+        "date_of_birth": 1,
+        "dob": 1,
+        "role": 1,
+        "access_tier": 1,
+        "department_role": 1,
+    }
+
+    if user_oid is not None:
+        user = db["users"].find_one({"_id": user_oid}, projection)
+        if user:
+            return user
+    if normalized_user_id:
+        user = db["users"].find_one({"_id": normalized_user_id}, projection)
+        if user:
+            return user
+
+    normalized_email = _normalize_email(email)
+    if not normalized_email:
+        return None
+
+    users = list(db["users"].find({"email": normalized_email}, projection).limit(20))
+    customer_users = [user for user in users if not _is_internal_user_document(user)]
+    return (customer_users or users or [None])[0]
+
+
+def _user_identity_snapshot(*, email: str = "", user_id: str = "") -> dict[str, Any]:
+    normalized_email = _normalize_email(email)
+    normalized_user_id = _normalize(user_id)
+    user = _find_case_user(email=normalized_email, user_id=normalized_user_id)
+    if not user:
+        return {
+            "user_id": normalized_user_id or None,
+            "full_name": None,
+            "email": normalized_email or None,
+            "birthday": None,
+            "role": "customer",
+            "admin_user_relationship": "customer_record",
+        }
+
+    full_name = _normalize(user.get("full_name")) or " ".join(
+        [_normalize(user.get("first_name")), _normalize(user.get("last_name"))]
+    ).strip()
+    role = _normalize(user.get("role") or user.get("access_tier") or user.get("department_role")) or "customer"
+    return {
+        "user_id": _normalize_object_id(user.get("_id")) or normalized_user_id or None,
+        "full_name": full_name or None,
+        "first_name": _normalize(user.get("first_name")) or None,
+        "last_name": _normalize(user.get("last_name")) or None,
+        "email": _normalize_email(user.get("email")) or normalized_email or None,
+        "birthday": _serialize_datetime(
+            user.get("birthday") or user.get("birth_date") or user.get("date_of_birth") or user.get("dob")
+        ),
+        "role": role,
+        "admin_user_relationship": "internal_admin_identity"
+        if role.lower() in INTERNAL_ROLE_KEYS
+        else "customer_record",
+    }
+
+
+def _linked_family_snapshot(project: dict[str, Any] | None) -> dict[str, Any]:
+    if not project:
+        return {"family_id": None, "household_id": None, "family_name": None, "household_name": None}
+
+    db = _db()
+    family_id = _normalize((project or {}).get("family_id"))
+    household_id = _normalize((project or {}).get("household_id"))
+    family: dict[str, Any] | None = None
+    household: dict[str, Any] | None = None
+
+    if family_id:
+        family_oid = _to_object_id(family_id)
+        family = db["families"].find_one({"_id": family_oid}) if family_oid else None
+        family = family or db["families"].find_one({"_id": family_id})
+        family = family or db["families"].find_one({"id": family_id})
+    if household_id:
+        household_oid = _to_object_id(household_id)
+        household = db["households"].find_one({"_id": household_oid}) if household_oid else None
+        household = household or db["households"].find_one({"_id": household_id})
+        household = household or db["households"].find_one({"id": household_id})
+
+    return {
+        "family_id": family_id or None,
+        "household_id": household_id or None,
+        "family_name": _normalize((family or {}).get("family_name") or (family or {}).get("name")) or None,
+        "household_name": _normalize((household or {}).get("household_name") or (household or {}).get("name")) or None,
+    }
+
+
+def _mint_record_snapshot(project_id: str) -> dict[str, Any]:
+    if not project_id:
+        return {}
+
+    db = _db()
+    query = {"project_id": {"$in": _project_id_candidates(project_id)}}
+    item = db["mint_records"].find_one(query, sort=[("created_at", -1)])
+    if not item:
+        return {
+            "token_id": None,
+            "tx_hash": None,
+            "wallet_address": None,
+            "error_state": None,
+            "mint_queue_status": "not_queued",
+        }
+
+    return {
+        "mint_record_id": _normalize(item.get("_id")) or None,
+        "token_id": _normalize(item.get("token_id") or item.get("public_token_id")) or None,
+        "tx_hash": _normalize(item.get("tx_hash") or item.get("transaction_hash")) or None,
+        "wallet_address": _normalize(item.get("wallet_address")) or None,
+        "error_state": _normalize(item.get("error") or item.get("error_state")) or None,
+        "mint_queue_status": _normalize(item.get("status") or item.get("queue_status")) or "not_queued",
+        "created_at": _serialize_datetime(item.get("created_at")),
+    }
+
+
 def list_customer_cases(*, search: str = "", limit: int = 50, queue: str = "customer_cases") -> dict[str, Any]:
     db = _db()
     safe_limit = max(1, min(limit, 200))
@@ -1353,6 +1904,7 @@ def list_customer_cases(*, search: str = "", limit: int = 50, queue: str = "cust
         project_id = _normalize(project.get("_id") or project.get("id"))
         order = _latest_linked_order(project_id) or _latest_user_order_for_project(project)
         entitlement = get_project_entitlement(project_id)
+        package_fields = _package_fields_from_context(project, order, entitlement)
         readiness = run_readiness_check(project_id=project_id, order_id=_normalize((order or {}).get("_id")))
         upload_count = count_workspace_uploads(project_id=project_id)
         duplicate_identity = _find_duplicate_identity(_normalize_email(project.get("owner_email")))
@@ -1364,11 +1916,23 @@ def list_customer_cases(*, search: str = "", limit: int = 50, queue: str = "cust
             upload_count=upload_count,
             duplicate_identity=duplicate_identity,
         )
+        package_status = _normalize(package_fields.get("normalization_status"))
+        if package_status == "unknown":
+            alerts.append("package_unknown")
+        elif package_status in {"alias_mapped", "recovered_from_order", "recovered_from_entitlement"}:
+            alerts.append("package_normalization_needed")
+        alerts.extend(package_fields.get("warnings") or [])
+        alerts = list(dict.fromkeys(alerts))
+        operator_guidance = _operator_guidance_items(
+            alerts=alerts,
+            readiness=readiness,
+            warnings=package_fields.get("warnings") or [],
+        )
         if not _case_queue_match(queue, alerts):
             continue
 
         owner_email = _normalize_email(project.get("owner_email"))
-        user = db["users"].find_one({"email": owner_email}, {"_id": 1, "full_name": 1, "first_name": 1, "last_name": 1, "role": 1})
+        user = _find_case_user(email=owner_email, user_id=_normalize(project.get("owner_user_id")))
         user_name = _normalize((user or {}).get("full_name")) or " ".join(
             [
                 _normalize((user or {}).get("first_name")),
@@ -1385,10 +1949,20 @@ def list_customer_cases(*, search: str = "", limit: int = 50, queue: str = "cust
                 "email": owner_email or None,
                 "role": _normalize((user or {}).get("role")) or "customer",
                 "project": _normalize(project.get("name") or project.get("project_name")) or "Project",
-                "package": _normalize(project.get("package_name") or project.get("package_code")) or "Unknown Package",
-                "lane": _normalize(project.get("project_lane")) or "unknown",
+                "package": _normalize(package_fields.get("package_name")) or "Unknown Package",
+                "package_name": _normalize(package_fields.get("package_name")) or "Unknown Package",
+                "package_slug": _normalize(package_fields.get("package_slug")) or "unknown",
+                "package_code": _normalize(package_fields.get("package_code")) or "unknown",
+                "package_normalization_status": package_status or "unknown",
+                "lane": _normalize(package_fields.get("lane")) or "unknown",
+                "project_lane": _normalize(package_fields.get("project_lane")) or "unknown",
+                "lane_source": "project"
+                if _project_lane_value(project)
+                else _normalize(package_fields.get("source")) or "package_policy",
+                "warnings": package_fields.get("warnings") or [],
                 "status": _normalize(project.get("status")) or "unknown",
                 "alerts": alerts,
+                "operator_guidance": operator_guidance,
                 "quick_actions": [
                     "sync_package",
                     "normalize_package",
@@ -1417,7 +1991,19 @@ def list_customer_cases(*, search: str = "", limit: int = 50, queue: str = "cust
 
             order_id = _normalize(order.get("_id"))
             project = _find_matching_approved_project_for_order(order)
+            package_fields = _package_fields_from_context(project or {}, order)
             alerts = ["paid_order_not_linked"]
+            package_status = _normalize(package_fields.get("normalization_status"))
+            if package_status == "unknown":
+                alerts.append("package_unknown")
+            elif package_status in {"alias_mapped", "recovered_from_order", "recovered_from_entitlement"}:
+                alerts.append("package_normalization_needed")
+            alerts.extend(package_fields.get("warnings") or [])
+            alerts = list(dict.fromkeys(alerts))
+            operator_guidance = _operator_guidance_items(
+                alerts=alerts,
+                warnings=package_fields.get("warnings") or [],
+            )
             if not _case_queue_match(queue, alerts):
                 continue
 
@@ -1430,10 +2016,20 @@ def list_customer_cases(*, search: str = "", limit: int = 50, queue: str = "cust
                     "email": _normalize_email(order.get("email")) or None,
                     "role": "customer",
                     "project": _normalize((project or {}).get("name") or (project or {}).get("project_name")) or "No linked project",
-                    "package": _normalize(order.get("package_name") or order.get("package_code")) or "Unknown Package",
-                    "lane": _normalize((project or {}).get("project_lane")) or "unknown",
+                    "package": _normalize(package_fields.get("package_name")) or "Unknown Package",
+                    "package_name": _normalize(package_fields.get("package_name")) or "Unknown Package",
+                    "package_slug": _normalize(package_fields.get("package_slug")) or "unknown",
+                    "package_code": _normalize(package_fields.get("package_code")) or "unknown",
+                    "package_normalization_status": package_status or "unknown",
+                    "lane": _normalize(package_fields.get("lane")) or "unknown",
+                    "project_lane": _normalize(package_fields.get("project_lane")) or "unknown",
+                    "lane_source": "matched_project"
+                    if _project_lane_value(project or {})
+                    else _normalize(package_fields.get("source")) or "package_policy",
+                    "warnings": package_fields.get("warnings") or [],
                     "status": _normalize(order.get("status")) or "unknown",
                     "alerts": alerts,
+                    "operator_guidance": operator_guidance,
                     "quick_actions": [
                         "link_order_to_project",
                         "normalize_package",
@@ -1449,6 +2045,206 @@ def list_customer_cases(*, search: str = "", limit: int = 50, queue: str = "cust
     return {"items": cases[:safe_limit]}
 
 
+def _build_case_workspace_payload(
+    *,
+    case_id: str,
+    project: dict[str, Any] | None,
+    order: dict[str, Any] | None,
+) -> dict[str, Any]:
+    db = _db()
+    project_id = _normalize((project or {}).get("_id") or (project or {}).get("id"))
+    order_id = _normalize((order or {}).get("_id"))
+    owner_email = _normalize_email((project or {}).get("owner_email") or (order or {}).get("email"))
+    owner_user_id = _normalize((project or {}).get("owner_user_id") or (order or {}).get("user_id"))
+
+    readiness = run_readiness_check(project_id=project_id, order_id=order_id) if project_id else {}
+    entitlement = get_project_entitlement(project_id) if project_id else None
+    package_fields = _package_fields_from_context(project or {}, order, entitlement)
+    control_profile = get_package_control_profile(package_fields["package_code"]) or {}
+    uploads = _workspace_uploads_snapshot(project_id, owner_email)
+    audit = _workspace_audit_timeline(
+        project_id=project_id,
+        order_id=order_id,
+        owner_email=owner_email,
+    )
+    identity = _user_identity_snapshot(email=owner_email, user_id=owner_user_id)
+    family = _linked_family_snapshot(project)
+    mint_record = _mint_record_snapshot(project_id)
+
+    related_orders = []
+    if owner_email:
+        cursor = db["orders"].find({"email": owner_email}).sort("created_at", -1).limit(10)
+        related_orders = [_serialize_order(item) for item in cursor if _serialize_order(item)]
+
+    project_snapshot = _serialize_project(project) if project else None
+    order_snapshot = _serialize_order(order)
+    entitlement_exists = entitlement is not None
+    upload_categories = sorted(
+        {
+            _normalize(item.get("category"))
+            for item in uploads.get("items", [])
+            if _normalize(item.get("category"))
+        }
+    )
+    workspace_alerts = _case_alerts(
+        project=project,
+        order=order,
+        entitlement=entitlement,
+        readiness=readiness,
+        upload_count=int(uploads.get("count", 0) or 0),
+        duplicate_identity=_find_duplicate_identity(owner_email),
+    )
+    package_status = _normalize(package_fields.get("normalization_status"))
+    if package_status == "unknown":
+        workspace_alerts.append("package_unknown")
+    elif package_status in {"alias_mapped", "recovered_from_order", "recovered_from_entitlement"}:
+        workspace_alerts.append("package_normalization_needed")
+    workspace_alerts.extend(package_fields.get("warnings") or [])
+    workspace_alerts = list(dict.fromkeys(workspace_alerts))
+    operator_guidance = _operator_guidance_items(
+        alerts=workspace_alerts,
+        readiness=readiness,
+        warnings=package_fields.get("warnings") or [],
+        include_mint_runtime=True,
+    )
+    mint_guidance = _operator_guidance_items(
+        alerts=["mint_blocked"] if readiness.get("mint_review_ready") and not readiness.get("mint_eligible") else [],
+        readiness=readiness,
+        warnings=package_fields.get("warnings") or [],
+        include_mint_runtime=True,
+    )
+    next_mint_action = (
+        "Queue for Mint Review"
+        if readiness.get("mint_review_ready")
+        else ((mint_guidance[0] or {}).get("next_action") if mint_guidance else "Run Readiness Check")
+    )
+
+    display_name = (
+        identity.get("full_name")
+        or _normalize((order or {}).get("full_name") or (order or {}).get("customer_name"))
+        or _normalize((project or {}).get("name") or (project or {}).get("project_name"))
+        or "Customer Case"
+    )
+
+    return {
+        "case_id": case_id,
+        "project": project_snapshot,
+        "order": order_snapshot,
+        "package": package_fields,
+        "entitlement": entitlement,
+        "readiness": readiness,
+        "uploads": uploads,
+        "audit_timeline": audit,
+        "alerts": workspace_alerts,
+        "operator_guidance": operator_guidance,
+        "warnings": package_fields.get("warnings") or [],
+        "tabs": {
+            "identity": {
+                "full_name": display_name,
+                "email": identity.get("email") or owner_email or None,
+                "birthday": identity.get("birthday"),
+                "role": identity.get("role") or "customer",
+                "admin_user_relationship": identity.get("admin_user_relationship") or "customer_record",
+                "household_name": family.get("household_name"),
+                "family_name": family.get("family_name"),
+                "user_id": identity.get("user_id") or owner_user_id or None,
+            },
+            "package_lane": {
+                "package_slug": package_fields.get("package_slug"),
+                "package_name": package_fields.get("package_name"),
+                "package_code": package_fields.get("package_code"),
+                "lane": package_fields.get("project_lane"),
+                "project_lane": package_fields.get("project_lane"),
+                "warnings": package_fields.get("warnings") or [],
+                "package_policy_summary": {
+                    "anchor_type": control_profile.get("anchor_type"),
+                    "allows_automatic_anchor": (control_profile.get("launch_policy") or {}).get("allows_automatic_anchor"),
+                    "auto_mint_enabled": (control_profile.get("mint_policy") or {}).get("auto_mint_enabled"),
+                },
+                "maintenance_defaults": control_profile.get("maintenance_default"),
+                "package_normalization_status": package_fields.get("normalization_status"),
+                "source": package_fields.get("source"),
+                "raw_value": package_fields.get("raw_value"),
+                "sources": package_fields.get("sources") or {},
+            },
+            "orders_billing": {
+                "package_slug": package_fields.get("package_slug"),
+                "package_name": package_fields.get("package_name"),
+                "package_code": package_fields.get("package_code"),
+                "lane": package_fields.get("lane"),
+                "warnings": package_fields.get("warnings") or [],
+                "order_status": (order_snapshot or {}).get("status"),
+                "paid": bool(order and _is_paid_package_order(order)),
+                "stripe_session_id": (order_snapshot or {}).get("stripe_session_id"),
+                "payment_link_id": (order_snapshot or {}).get("payment_link_id"),
+                "project_link_status": "linked" if (order_snapshot or {}).get("project_id") else "not_linked",
+                "subscription": (order_snapshot or {}).get("subscription_id"),
+                "maintenance_state": (entitlement or {}).get("maintenance_status"),
+                "next_charge_date": (order_snapshot or {}).get("next_charge_date")
+                or _serialize_datetime((entitlement or {}).get("maintenance_renews_at")),
+                "primary_order": order_snapshot,
+                "related_orders": related_orders,
+            },
+            "project": {
+                "project_name": (project_snapshot or {}).get("name"),
+                "project_id": project_id or None,
+                "package_slug": package_fields.get("package_slug"),
+                "package_name": package_fields.get("package_name"),
+                "package_code": package_fields.get("package_code"),
+                "lane": package_fields.get("lane"),
+                "project_lane": package_fields.get("project_lane"),
+                "warnings": package_fields.get("warnings") or [],
+                "build_status": (project_snapshot or {}).get("status"),
+                "phase": (project_snapshot or {}).get("phase"),
+                "source": (project_snapshot or {}).get("source"),
+                "intake_readiness": (project_snapshot or {}).get("intake_status")
+                or ("ready" if readiness.get("intake_approved") else "not_ready"),
+                "linked_family": family,
+                "uploads_summary": {
+                    "count": uploads.get("count", 0),
+                    "categories": upload_categories,
+                },
+            },
+            "entitlements": {
+                "entitlement_status": "exists" if entitlement_exists else "missing",
+                "package_code": (entitlement or {}).get("package_code") or package_fields.get("package_code"),
+                "package_lane": (entitlement or {}).get("package_lane") or package_fields.get("project_lane"),
+                "maintenance_plan": (entitlement or {}).get("maintenance_plan"),
+                "maintenance_status": (entitlement or {}).get("maintenance_status"),
+                "resolved_entitlements": (entitlement or {}).get("resolved_entitlements") or {},
+            },
+            "uploads_verification": {
+                "uploaded_files": uploads.get("count", 0),
+                "file_categories": upload_categories,
+                "review_status": "pending" if uploads.get("count", 0) <= 0 else "files_present",
+                "verification_readiness": "ready" if uploads.get("count", 0) > 0 else "waiting_for_uploads",
+                "items": uploads.get("items", []),
+            },
+            "mint_readiness": {
+                "package_mint_policy": readiness.get("mint_policy") or (control_profile.get("mint_policy") or {}),
+                "eligibility": "eligible" if readiness.get("mint_eligible") else "blocked",
+                "runtime": "enabled" if settings.nft_auto_mint_on_review_enabled else "disabled",
+                "current_state": "mint_ready" if readiness.get("mint_eligible") else "blocked",
+                "decision": "Ready for mint review" if readiness.get("mint_review_ready") else "Readiness gates are still blocking mint review",
+                "next_admin_action": next_mint_action,
+                "approvals": {
+                    "customer_public_safe_approval_required": (
+                        (control_profile.get("mint_policy") or {}).get("requires_customer_public_safe_approval")
+                    ),
+                    "mint_review_ready": readiness.get("mint_review_ready"),
+                },
+                "token_id": mint_record.get("token_id"),
+                "tx_hash": mint_record.get("tx_hash"),
+                "error_state": mint_record.get("error_state"),
+                "mint_queue_status": mint_record.get("mint_queue_status"),
+                "blocking_reasons": readiness.get("blocking_reasons") or [],
+                "guidance": mint_guidance,
+            },
+            "audit_timeline": audit,
+        },
+    }
+
+
 def customer_case_workspace(case_id: str) -> dict[str, Any]:
     normalized_case_id = _normalize(case_id)
     if not normalized_case_id:
@@ -1460,84 +2256,18 @@ def customer_case_workspace(case_id: str) -> dict[str, Any]:
         if order is None:
             raise ValueError("Order case not found.")
         project = _project_by_id(_normalize(order.get("project_id"))) or _find_matching_approved_project_for_order(order)
-        project_id = _normalize((project or {}).get("_id"))
-        readiness = run_readiness_check(project_id=project_id, order_id=order_id) if project_id else {}
-        entitlement = get_project_entitlement(project_id) if project_id else None
-        uploads = _workspace_uploads_snapshot(project_id, _normalize_email((project or {}).get("owner_email") or order.get("email")))
-        audit = _workspace_audit_timeline(
-            project_id=project_id,
-            order_id=order_id,
-            owner_email=_normalize_email((project or {}).get("owner_email") or order.get("email")),
+        return _build_case_workspace_payload(
+            case_id=normalized_case_id,
+            project=project,
+            order=order,
         )
-        return {
-            "case_id": normalized_case_id,
-            "project": _serialize_project(project) if project else None,
-            "order": _serialize_order(order),
-            "entitlement": entitlement,
-            "readiness": readiness,
-            "uploads": uploads,
-            "audit_timeline": audit,
-            "tabs": {
-                "identity": {
-                    "name": _normalize(order.get("full_name") or order.get("customer_name")) or "Order customer",
-                    "email": _normalize_email(order.get("email")) or None,
-                    "role": "customer",
-                },
-                "package_lane": {
-                    "package_code": normalize_package_code(_normalize(order.get("package_code") or order.get("package_slug"))),
-                    "package_name": _normalize(order.get("package_name")) or None,
-                    "project_lane": _normalize((project or {}).get("project_lane")) or "unknown",
-                },
-                "orders_billing": {"primary_order": _serialize_order(order), "related_orders": []},
-                "project": _serialize_project(project) if project else None,
-                "entitlements": entitlement,
-                "uploads_verification": uploads,
-                "mint_readiness": readiness,
-                "audit_timeline": audit,
-            },
-        }
 
-    snapshot = project_workspace_snapshot(normalized_case_id)
-    project = snapshot.get("project") or {}
-    order = snapshot.get("order") or {}
-    project_id = _normalize(project.get("id"))
-    owner_email = _normalize_email(project.get("owner_email"))
-    uploads = _workspace_uploads_snapshot(project_id, owner_email)
-    audit = _workspace_audit_timeline(
-        project_id=project_id,
-        order_id=_normalize(order.get("id")),
-        owner_email=owner_email,
+    project, order = _resolve_project_order_context(normalized_case_id)
+    return _build_case_workspace_payload(
+        case_id=normalized_case_id,
+        project=project,
+        order=order,
     )
-
-    related_orders = snapshot.get("related_orders") or []
-    return {
-        "case_id": normalized_case_id,
-        "project": project,
-        "order": order,
-        "entitlement": snapshot.get("entitlement"),
-        "readiness": snapshot.get("readiness"),
-        "uploads": uploads,
-        "audit_timeline": audit,
-        "tabs": {
-            "identity": {
-                "name": _normalize(project.get("name")) or "Project customer",
-                "email": owner_email or None,
-                "user_id": _normalize(project.get("owner_user_id")) or None,
-                "role": "customer",
-            },
-            "package_lane": {
-                "package_code": _normalize(project.get("package_code")) or "unknown",
-                "package_name": _normalize(project.get("package_name")) or None,
-                "project_lane": _normalize(project.get("project_lane")) or "unknown",
-            },
-            "orders_billing": {"primary_order": order, "related_orders": related_orders},
-            "project": project,
-            "entitlements": snapshot.get("entitlement"),
-            "uploads_verification": uploads,
-            "mint_readiness": snapshot.get("readiness"),
-            "audit_timeline": audit,
-        },
-    }
 
 
 def normalize_broken_package_records(*, limit: int = 500) -> dict[str, Any]:
@@ -1666,7 +2396,12 @@ def repair_all_safe_records(*, limit: int = 500) -> dict[str, Any]:
     }
 
 
-def execute_case_action(*, case_id: str, action: str) -> dict[str, Any]:
+def execute_case_action(
+    *,
+    case_id: str,
+    action: str,
+    actor: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     normalized_case_id = _normalize(case_id)
     normalized_action = _normalize(action).lower()
     if not normalized_case_id:
@@ -1684,7 +2419,16 @@ def execute_case_action(*, case_id: str, action: str) -> dict[str, Any]:
             project_id = _normalize(project.get("_id"))
 
     if normalized_action in {"refresh_case_data"}:
-        return customer_case_workspace(normalized_case_id)
+        payload = customer_case_workspace(normalized_case_id)
+        _write_admin_action_audit(
+            actor=actor,
+            action=normalized_action,
+            target_type="customer_case",
+            target_id=normalized_case_id,
+            context={"case_id": normalized_case_id, "project_id": project_id, "order_id": order_id},
+            details={"refreshed": True},
+        )
+        return payload
 
     if not project_id:
         raise ValueError("Action requires a linked project.")
@@ -1710,4 +2454,25 @@ def execute_case_action(*, case_id: str, action: str) -> dict[str, Any]:
         raise ValueError("Unsupported case action.")
     if normalized_action == "link_order_to_project" and not order_id:
         raise ValueError("No order is available to link for this case.")
-    return handler()
+    try:
+        result = handler()
+        _write_admin_action_audit(
+            actor=actor,
+            action=normalized_action,
+            target_type="project",
+            target_id=project_id,
+            after=result,
+            context={"case_id": normalized_case_id, "project_id": project_id, "order_id": order_id},
+        )
+        return result
+    except Exception as exc:
+        _write_admin_action_audit(
+            actor=actor,
+            action=normalized_action,
+            target_type="project",
+            target_id=project_id,
+            result="failed",
+            context={"case_id": normalized_case_id, "project_id": project_id, "order_id": order_id},
+            details={"error": str(exc)},
+        )
+        raise

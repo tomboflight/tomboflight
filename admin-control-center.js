@@ -28,6 +28,57 @@
     workspace: null,
   };
 
+  const QUEUE_META = {
+    overview: ["Overview", "Executive repair posture across active customer operations."],
+    customer_cases: ["Customer Cases", "Search and open the full case workspace."],
+    orders: ["Orders", "Paid orders that need project linkage or billing review."],
+    projects: ["Projects", "Active project records, lanes, phases, and source state."],
+    entitlements: ["Entitlements", "Missing or stale package entitlements."],
+    mint_queue: ["Mint Queue", "Mint-ready and mint-blocked project review."],
+    upload_review: ["Upload Review", "Files, verification readiness, and pending upload cases."],
+    billing_maintenance: ["Billing / Maintenance", "Maintenance defaults, subscriptions, and charge state."],
+    users: ["Users", "Customer/admin identity conflicts and account records."],
+    audit: ["Audit", "Recent action timeline and accountable repair history."],
+    system_health: ["System Health", "Operational mismatches and service repair posture."],
+  };
+
+  const TAB_LABELS = {
+    identity: "Identity",
+    package_lane: "Package & Lane",
+    orders_billing: "Orders & Billing",
+    project: "Project",
+    entitlements: "Entitlements",
+    uploads_verification: "Uploads / Verification",
+    mint_readiness: "Mint Readiness",
+    audit_timeline: "Audit Timeline",
+  };
+
+  const ACTION_AVAILABILITY = {
+    sync_package: ["project_id"],
+    normalize_package: ["project_id"],
+    assign_lane: ["project_id"],
+    link_order_to_project: ["project_id", "order_id"],
+    generate_entitlement: ["project_id"],
+    refresh_entitlement: ["project_id"],
+    run_readiness_check: ["project_id"],
+    queue_for_mint_review: ["project_id"],
+    repair_record: ["project_id"],
+    refresh_case_data: [],
+  };
+
+  const ACTION_TIERS = {
+    sync_package: "primary",
+    repair_record: "primary",
+    queue_for_mint_review: "primary",
+    normalize_package: "secondary",
+    assign_lane: "secondary",
+    link_order_to_project: "secondary",
+    generate_entitlement: "secondary",
+    refresh_entitlement: "secondary",
+    run_readiness_check: "utility",
+    refresh_case_data: "utility",
+  };
+
   function normalizeValue(value) {
     return String(value || "").trim();
   }
@@ -99,6 +150,134 @@
     return `<span class="admin-status-chip admin-status-chip--${escapeHtml(cls || "default")}">${escapeHtml(label || "unknown")}</span>`;
   }
 
+  function humanize(value) {
+    return normalizeValue(value)
+      .replaceAll("_", " ")
+      .replaceAll("-", " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function titleize(value) {
+    const text = humanize(value);
+    if (!text) return "—";
+    return text.replace(/\b\w/g, function (letter) {
+      return letter.toUpperCase();
+    });
+  }
+
+  function chipClassForValue(value) {
+    const normalized = normalizeLower(value);
+    if (["yes", "ready", "linked", "exists", "eligible", "active", "paid", "complete", "completed", "succeeded", "success", "files_present"].includes(normalized)) {
+      return "success";
+    }
+    if (["no", "blocked", "missing", "not_linked", "unknown", "failed", "error", "waiting_for_uploads", "not_ready"].includes(normalized)) {
+      return "error";
+    }
+    return "default";
+  }
+
+  function getSelectedCase() {
+    return (state.cases || []).find(function (item) {
+      return item.case_id === state.selectedCaseId;
+    });
+  }
+
+  function renderScalar(value) {
+    if (value == null || value === "") return "—";
+    if (typeof value === "boolean") return value ? "yes" : "no";
+    return String(value);
+  }
+
+  function renderFieldGrid(fields) {
+    return `
+      <div class="admin-field-grid">
+        ${fields
+          .map(function (field) {
+            const value = field.value;
+            const isChip = field.chip || typeof value === "boolean";
+            return `
+              <div class="admin-field">
+                <span>${escapeHtml(field.label)}</span>
+                <strong class="${field.mono ? "admin-id-ref" : ""}">
+                  ${
+                    isChip
+                      ? statusChip(titleize(renderScalar(value)), chipClassForValue(value))
+                      : escapeHtml(renderScalar(value))
+                  }
+                </strong>
+              </div>
+            `;
+          })
+          .join("")}
+      </div>
+    `;
+  }
+
+  function renderStatusStack(items, emptyLabel) {
+    const values = Array.isArray(items) ? items.filter(Boolean) : [];
+    if (!values.length) {
+      return statusChip(emptyLabel || "none", "success");
+    }
+    return values
+      .map(function (item) {
+        return statusChip(titleize(item), "error");
+      })
+      .join(" ");
+  }
+
+  function renderWarningStrip(warnings) {
+    const values = Array.isArray(warnings) ? warnings.filter(Boolean) : [];
+    if (!values.length) return "";
+    return `
+      <div class="admin-warning-strip">
+        <span>Warnings</span>
+        <div>${renderStatusStack(values)}</div>
+      </div>
+    `;
+  }
+
+  function getGuidanceItems(items) {
+    return Array.isArray(items) ? items.filter(Boolean) : [];
+  }
+
+  function guidanceSeverityClass(value) {
+    const severity = normalizeLower(value);
+    if (["critical", "warning", "info"].includes(severity)) return severity;
+    return "info";
+  }
+
+  function renderGuidanceList(items, emptyTitle, emptyCopy) {
+    const guidance = getGuidanceItems(items);
+    if (!guidance.length) {
+      return `
+        <div class="admin-guidance-empty">
+          <strong>${escapeHtml(emptyTitle || "No active blockers")}</strong>
+          <span>${escapeHtml(emptyCopy || "The selected case has no operational guidance at this moment.")}</span>
+        </div>
+      `;
+    }
+    return `
+      <div class="admin-guidance-list">
+        ${guidance
+          .map(function (item) {
+            const severityClass = guidanceSeverityClass(item.severity);
+            return `
+              <div class="admin-guidance-item admin-guidance-item--${escapeHtml(severityClass)}">
+                <div>
+                  <span>${escapeHtml(titleize(item.severity || "guidance"))}</span>
+                  <strong>${escapeHtml(item.title || "Operator guidance")}</strong>
+                </div>
+                <p>${escapeHtml(item.rule || "Review the case state before proceeding.")}</p>
+                <small>Next admin move: ${escapeHtml(item.next_action || "Run Readiness Check")}</small>
+              </div>
+            `;
+          })
+          .join("")}
+      </div>
+    `;
+  }
+
   async function fetchJson(path) {
     return app.apiRequest(path, { method: "GET" });
   }
@@ -124,10 +303,9 @@
     node.innerHTML = cards
       .map(function (item, index) {
         return `
-          <div class="family-record-card admin-card">
-            <div class="card-number">${index + 1}</div>
-            <h3>${escapeHtml(item[0])}</h3>
-            <p class="card-copy">${escapeHtml(String(item[1] ?? 0))}</p>
+          <div class="admin-summary-tile">
+            <span>${escapeHtml(item[0])}</span>
+            <strong>${escapeHtml(String(item[1] ?? 0))}</strong>
           </div>
         `;
       })
@@ -146,10 +324,9 @@
     node.innerHTML = cards
       .map(function (item) {
         return `
-          <div class="family-record-card admin-card">
-            <div class="card-number">!</div>
-            <h3>${escapeHtml(item[0])}</h3>
-            <p class="card-copy">${escapeHtml(String(item[1]))}</p>
+          <div class="admin-priority-repair-item">
+            <span>${escapeHtml(item[0])}</span>
+            <strong>${escapeHtml(String(item[1]))}</strong>
           </div>
         `;
       })
@@ -174,8 +351,8 @@
     const cases = Array.isArray(state.cases) ? state.cases : [];
     if (!cases.length) {
       node.innerHTML = `
-        <div class="family-record-card admin-card">
-          <div class="card-number">•</div>
+        <div class="admin-empty-state">
+          <div class="card-number">C</div>
           <h3>No case results</h3>
           <p class="card-copy">No customer cases matched this queue/search.</p>
         </div>
@@ -186,30 +363,43 @@
     node.innerHTML = cases
       .map(function (item) {
         const alerts = Array.isArray(item.alerts) ? item.alerts : [];
+        const guidance = getGuidanceItems(item.operator_guidance);
+        const primaryGuidance = guidance[0] || null;
         const isSelected = state.selectedCaseId === item.case_id;
         return `
-          <article class="family-record-card admin-card admin-case-row ${isSelected ? "is-selected" : ""}" data-case-row="${escapeHtml(item.case_id || "")}">
-            <div class="admin-card-header">
-              <span class="admin-card-badge">C</span>
-              <h3 class="admin-card-title">${escapeHtml(item.name || "Customer Case")}</h3>
+          <article class="admin-case-row ${isSelected ? "is-selected" : ""}" data-case-row="${escapeHtml(item.case_id || "")}">
+            <label class="admin-case-select" aria-label="Select ${escapeHtml(item.name || "case")} for bulk repair">
+              <input type="checkbox" data-case-select="${escapeHtml(item.case_id || "")}" />
+            </label>
+            <div class="admin-case-primary">
+              <h3>${escapeHtml(item.name || "Customer Case")}</h3>
+              <p>${escapeHtml(item.email || "No email")} · ${escapeHtml(item.role || "customer")}</p>
             </div>
-            <div class="admin-card-meta">
-              <p class="card-copy"><strong>Email:</strong> ${escapeHtml(item.email || "—")}</p>
-              <p class="card-copy"><strong>Role:</strong> ${escapeHtml(item.role || "customer")}</p>
-              <p class="card-copy"><strong>Project:</strong> ${escapeHtml(item.project || "—")}</p>
-              <p class="card-copy"><strong>Package:</strong> ${escapeHtml(item.package || "—")}</p>
-              <p class="card-copy"><strong>Lane:</strong> ${laneChip(item.lane)}</p>
-              <p class="card-copy"><strong>Status:</strong> ${statusChip(item.status || "unknown", item.status === "paid" || item.status === "delivered" ? "success" : "default")}</p>
-              <p class="card-copy"><strong>Alerts:</strong> ${alerts.length ? alerts.map(function (alert) { return statusChip(alert.replaceAll("_", " "), "error"); }).join(" ") : statusChip("none", "success")}</p>
-              <p class="card-copy"><strong>Updated:</strong> ${escapeHtml(formatDate(item.updated_at))}</p>
+            <div class="admin-case-detail">
+              <span>Project</span>
+              <strong>${escapeHtml(item.project || "No linked project")}</strong>
             </div>
-            <div class="inline-actions" style="margin-top: 0.8rem; flex-wrap: wrap">
-              <label class="card-copy" style="display:inline-flex;align-items:center;gap:0.4rem;margin:0;">
-                <input type="checkbox" data-case-select="${escapeHtml(item.case_id || "")}" />
-                Select for bulk repair
-              </label>
-              <button class="btn btn-secondary" type="button" data-open-case="${escapeHtml(item.case_id || "")}">Open Case</button>
+            <div class="admin-case-detail">
+              <span>Package</span>
+              <strong>${escapeHtml(item.package_name || item.package || "Unknown Package")}</strong>
             </div>
+            <div class="admin-case-detail admin-case-lane">
+              <span>Lane</span>
+              ${laneChip(item.lane)}
+            </div>
+            <div class="admin-case-detail">
+              <span>Status</span>
+              ${statusChip(item.status || "unknown", chipClassForValue(item.status))}
+            </div>
+            <div class="admin-case-alerts">
+              ${alerts.length ? renderStatusStack(alerts) : statusChip("clear", "success")}
+            </div>
+            ${
+              primaryGuidance
+                ? `<div class="admin-case-guidance"><span>Next</span><strong>${escapeHtml(primaryGuidance.next_action || primaryGuidance.title || "Review Case")}</strong></div>`
+                : ""
+            }
+            <button class="btn btn-secondary admin-open-case" type="button" data-open-case="${escapeHtml(item.case_id || "")}">Open</button>
           </article>
         `;
       })
@@ -249,8 +439,8 @@
     const workspace = state.workspace;
     if (!workspace || !workspace.tabs) {
       node.innerHTML = `
-        <div class="family-record-card admin-card">
-          <div class="card-number">⚙</div>
+        <div class="admin-empty-state">
+          <div class="card-number">C</div>
           <h3>No case selected</h3>
           <p class="card-copy">Select a customer case to open the workspace.</p>
         </div>
@@ -260,6 +450,7 @@
 
     const tab = state.selectedTab;
     const tabData = workspace.tabs[tab];
+    const warningMarkup = renderWarningStrip((tabData && tabData.warnings) || workspace.warnings || []);
 
     if (tab === "audit_timeline") {
       const timeline = Array.isArray(tabData) ? tabData : Array.isArray(workspace.audit_timeline) ? workspace.audit_timeline : [];
@@ -267,22 +458,22 @@
         ? timeline
             .map(function (item) {
               return `
-                <article class="family-record-card admin-card">
+                <article class="admin-dossier-card">
                   <div class="admin-card-header">
                     <span class="admin-card-badge">A</span>
                     <h3 class="admin-card-title">${escapeHtml(item.action || "Audit Event")}</h3>
                   </div>
-                  <div class="admin-card-meta">
-                    <p class="card-copy"><strong>Target:</strong> ${escapeHtml(item.target_type || "—")} / <span class="admin-id-ref">${escapeHtml(shortId(item.target_id))}</span></p>
-                    <p class="card-copy"><strong>Actor:</strong> ${escapeHtml(item.actor_email || item.actor_name || "—")}</p>
-                    <p class="card-copy"><strong>Result:</strong> ${statusChip(item.result || "success", item.result === "success" ? "success" : "error")}</p>
-                    <p class="card-copy"><strong>When:</strong> ${escapeHtml(formatDate(item.timestamp))}</p>
-                  </div>
+                  ${renderFieldGrid([
+                    { label: "Target", value: `${item.target_type || "—"} / ${shortId(item.target_id)}` },
+                    { label: "Actor", value: item.actor_email || item.actor_name || "—" },
+                    { label: "Result", value: item.result || "success", chip: true },
+                    { label: "When", value: formatDate(item.timestamp) },
+                  ])}
                 </article>
               `;
             })
             .join("")
-        : `<div class="family-record-card admin-card"><h3>No audit timeline</h3><p class="card-copy">No audit events were found for this case context.</p></div>`;
+        : `<div class="admin-empty-state"><h3>No audit timeline</h3><p class="card-copy">No audit events were found for this case context.</p></div>`;
       return;
     }
 
@@ -290,14 +481,27 @@
       const primaryOrder = tabData && tabData.primary_order ? tabData.primary_order : {};
       const related = Array.isArray(tabData && tabData.related_orders) ? tabData.related_orders : [];
       node.innerHTML = `
-        <article class="family-record-card admin-card">
+        ${warningMarkup}
+        <article class="admin-dossier-card admin-dossier-card--wide">
           <div class="admin-card-header"><span class="admin-card-badge">O</span><h3 class="admin-card-title">Primary Order</h3></div>
-          <div class="admin-card-meta">${renderObjectRows(primaryOrder)}</div>
+          ${renderFieldGrid([
+            { label: "Package", value: tabData.package_name || primaryOrder.package_name },
+            { label: "Package Code", value: tabData.package_code || primaryOrder.package_code, mono: true },
+            { label: "Lane", value: tabData.lane || primaryOrder.lane, chip: true },
+            { label: "Order Status", value: tabData.order_status || primaryOrder.status, chip: true },
+            { label: "Paid", value: tabData.paid, chip: true },
+            { label: "Stripe Session", value: tabData.stripe_session_id || primaryOrder.stripe_session_id, mono: true },
+            { label: "Payment Link", value: tabData.payment_link_id || primaryOrder.payment_link_id, mono: true },
+            { label: "Project Link", value: tabData.project_link_status, chip: true },
+            { label: "Subscription", value: tabData.subscription || primaryOrder.subscription_id, mono: true },
+            { label: "Maintenance", value: tabData.maintenance_state, chip: true },
+            { label: "Next Charge", value: formatDate(tabData.next_charge_date) },
+          ])}
         </article>
-        <article class="family-record-card admin-card">
+        <article class="admin-dossier-card">
           <div class="admin-card-header"><span class="admin-card-badge">R</span><h3 class="admin-card-title">Related Orders (${related.length})</h3></div>
-          <div class="admin-card-meta">
-            ${related.length ? related.map(function (order) { return `<p class="card-copy"><strong>${escapeHtml(shortId(order.id))}</strong> · ${escapeHtml(order.status || "unknown")} · ${escapeHtml(order.package_name || order.package_code || "—")} · ${escapeHtml(formatDate(order.created_at))}</p>`; }).join("") : '<p class="card-copy">No related orders.</p>'}
+          <div class="admin-record-list">
+            ${related.length ? related.map(function (order) { return `<p><strong>${escapeHtml(shortId(order.id))}</strong><span>${escapeHtml(order.status || "unknown")} · ${escapeHtml(order.package_name || order.package_code || "—")} · ${escapeHtml(formatDate(order.created_at))}</span></p>`; }).join("") : '<p>No related orders.</p>'}
           </div>
         </article>
       `;
@@ -307,37 +511,121 @@
     if (tab === "uploads_verification") {
       const uploads = tabData && Array.isArray(tabData.items) ? tabData.items : [];
       node.innerHTML = `
-        <article class="family-record-card admin-card">
+        ${warningMarkup}
+        <article class="admin-dossier-card admin-dossier-card--wide">
           <div class="admin-card-header"><span class="admin-card-badge">U</span><h3 class="admin-card-title">Upload & Verification Records (${uploads.length})</h3></div>
-          <div class="admin-card-meta">
-            ${uploads.length ? uploads.map(function (upload) { return `<p class="card-copy"><strong>${escapeHtml(upload.filename || shortId(upload.id))}</strong> · ${escapeHtml(upload.category || "upload")} · ${escapeHtml(formatDate(upload.created_at))}</p>`; }).join("") : '<p class="card-copy">No uploads found for this case.</p>'}
+          ${renderFieldGrid([
+            { label: "Uploaded Files", value: tabData.uploaded_files },
+            { label: "Categories", value: (tabData.file_categories || []).join(", ") || "—" },
+            { label: "Review Status", value: tabData.review_status, chip: true },
+            { label: "Verification", value: tabData.verification_readiness, chip: true },
+          ])}
+          <div class="admin-record-list">
+            ${uploads.length ? uploads.map(function (upload) { return `<p><strong>${escapeHtml(upload.filename || shortId(upload.id))}</strong><span>${escapeHtml(upload.category || "upload")} · ${escapeHtml(upload.status || "received")} · ${escapeHtml(formatDate(upload.created_at))}</span></p>`; }).join("") : '<p>No uploads found for this case.</p>'}
           </div>
         </article>
       `;
       return;
     }
 
+    if (tab === "mint_readiness") {
+      const guidance = getGuidanceItems(tabData && tabData.guidance);
+      const currentState = tabData.current_state || tabData.eligibility || "blocked";
+      const decision = tabData.decision || (tabData.eligibility === "eligible" ? "Ready for mint review" : "Readiness gates are still blocking mint review");
+      const nextAction = tabData.next_admin_action || (guidance[0] && guidance[0].next_action) || "Run Readiness Check";
+      node.innerHTML = `
+        ${warningMarkup}
+        <article class="admin-dossier-card admin-dossier-card--wide admin-mint-decision-card">
+          <div class="admin-card-header"><span class="admin-card-badge">M</span><h3 class="admin-card-title">Mint Decision</h3></div>
+          <div class="admin-decision-grid">
+            <div>
+              <span>Current Mint State</span>
+              <strong>${statusChip(titleize(currentState), chipClassForValue(currentState))}</strong>
+            </div>
+            <div>
+              <span>Operational Decision</span>
+              <strong>${escapeHtml(decision)}</strong>
+            </div>
+            <div>
+              <span>Next Admin Move</span>
+              <strong>${escapeHtml(nextAction)}</strong>
+            </div>
+          </div>
+        </article>
+        <article class="admin-dossier-card admin-dossier-card--wide">
+          <div class="admin-card-header"><span class="admin-card-badge">R</span><h3 class="admin-card-title">Readiness Gates</h3></div>
+          ${renderFieldGrid([
+            { label: "Eligibility", value: tabData.eligibility, chip: true },
+            { label: "Runtime", value: tabData.runtime, chip: true },
+            { label: "Review Ready", value: tabData.approvals && tabData.approvals.mint_review_ready, chip: true },
+            { label: "Public Approval Required", value: tabData.approvals && tabData.approvals.customer_public_safe_approval_required, chip: true },
+            { label: "Token ID", value: tabData.token_id, mono: true },
+            { label: "Transaction", value: tabData.tx_hash, mono: true },
+            { label: "Queue Status", value: tabData.mint_queue_status, chip: true },
+            { label: "Error State", value: tabData.error_state || "none", chip: true },
+          ])}
+          <div class="admin-blocking-reasons">
+            <span>Blocking Reasons</span>
+            <div>${renderStatusStack(tabData.blocking_reasons || [], "none")}</div>
+          </div>
+        </article>
+        <article class="admin-dossier-card admin-dossier-card--wide">
+          <div class="admin-card-header"><span class="admin-card-badge">G</span><h3 class="admin-card-title">Operator Guidance</h3></div>
+          ${renderGuidanceList(guidance, "Mint path is clear", "No active mint blockers were returned for this case.")}
+        </article>
+      `;
+      return;
+    }
+
+    const flatFields = Object.entries(tabData || {}).filter(function (entry) {
+      return !entry[1] || typeof entry[1] !== "object" || Array.isArray(entry[1]);
+    });
+    const objectFields = Object.entries(tabData || {}).filter(function (entry) {
+      return entry[1] && typeof entry[1] === "object" && !Array.isArray(entry[1]);
+    });
     node.innerHTML = `
-      <article class="family-record-card admin-card">
+      ${warningMarkup}
+      <article class="admin-dossier-card admin-dossier-card--wide">
         <div class="admin-card-header">
           <span class="admin-card-badge">${escapeHtml(tab.charAt(0).toUpperCase())}</span>
-          <h3 class="admin-card-title">${escapeHtml(tab.replaceAll("_", " "))}</h3>
+          <h3 class="admin-card-title">${escapeHtml(TAB_LABELS[tab] || titleize(tab))}</h3>
         </div>
-        <div class="admin-card-meta">${renderObjectRows(tabData || {})}</div>
+        ${renderFieldGrid(
+          flatFields.map(function (entry) {
+            return {
+              label: titleize(entry[0]),
+              value: Array.isArray(entry[1]) ? entry[1].join(", ") : entry[1],
+              chip: ["status", "state", "readiness", "paid", "exists"].some(function (key) {
+                return entry[0].includes(key);
+              }),
+            };
+          }),
+        )}
       </article>
+      ${objectFields
+        .map(function (entry) {
+          return `
+            <article class="admin-dossier-card">
+              <div class="admin-card-header">
+                <span class="admin-card-badge">${escapeHtml(entry[0].charAt(0).toUpperCase())}</span>
+                <h3 class="admin-card-title">${escapeHtml(titleize(entry[0]))}</h3>
+              </div>
+              ${renderObjectRows(entry[1])}
+            </article>
+          `;
+        })
+        .join("")}
     `;
   }
 
   function renderCaseContext() {
     const node = document.querySelector("[data-admin-case-context]");
     if (!node) return;
-    const selected = (state.cases || []).find(function (item) {
-      return item.case_id === state.selectedCaseId;
-    });
+    const selected = getSelectedCase();
 
     if (!selected) {
       node.innerHTML = `
-        <div class="family-record-card admin-card">
+        <div class="admin-context-card">
           <h3>Context panel</h3>
           <p class="card-copy">Select a case to see alerts, blocking reasons, and contextual status.</p>
         </div>
@@ -346,12 +634,22 @@
     }
 
     const blocking = Array.isArray(selected.mint_blocking_reasons) ? selected.mint_blocking_reasons : [];
+    const guidance = getGuidanceItems((state.workspace && state.workspace.operator_guidance) || selected.operator_guidance);
     node.innerHTML = `
-      <div class="family-record-card admin-card">
+      <div class="admin-context-card">
         <h3>${escapeHtml(selected.name || "Selected Case")}</h3>
         <p class="card-copy"><strong>Case:</strong> <span class="admin-id-ref">${escapeHtml(shortId(selected.case_id))}</span></p>
-        <p class="card-copy"><strong>Alerts:</strong> ${selected.alerts && selected.alerts.length ? selected.alerts.map(function (alert) { return statusChip(alert.replaceAll("_", " "), "error"); }).join(" ") : statusChip("none", "success")}</p>
-        <p class="card-copy"><strong>Mint Blocking Reasons:</strong> ${blocking.length ? escapeHtml(blocking.join(", ")) : "none"}</p>
+        <p class="card-copy"><strong>Package:</strong> ${escapeHtml(selected.package_name || selected.package || "—")} ${selected.package_code ? `<span class="admin-id-ref">${escapeHtml(selected.package_code)}</span>` : ""}</p>
+        <p class="card-copy"><strong>Lane:</strong> ${laneChip(selected.lane)}</p>
+        <div class="admin-context-chip-row">${renderStatusStack(selected.alerts || [], "none")}</div>
+        <div class="admin-context-guidance">
+          <span>Operator Guidance</span>
+          ${renderGuidanceList(guidance, "No active repair guidance", "This case is not reporting a repair blocker in the selected queue.")}
+        </div>
+        <div class="admin-blocking-reasons">
+          <span>Mint Blocking Reasons</span>
+          <div>${renderStatusStack(blocking, "none")}</div>
+        </div>
       </div>
     `;
   }
@@ -361,25 +659,74 @@
       const queue = button.getAttribute("data-case-queue") || "";
       button.classList.toggle("is-active", queue === state.queue);
     });
+    const meta = QUEUE_META[state.queue] || QUEUE_META.customer_cases;
+    const title = document.querySelector("[data-admin-list-title]");
+    const subtitle = document.querySelector("[data-admin-list-subtitle]");
+    if (title) title.textContent = meta[0];
+    if (subtitle) subtitle.textContent = meta[1];
   }
 
   function applyTabSelection() {
     document.querySelectorAll("[data-admin-case-tab]").forEach(function (button) {
       const tab = button.getAttribute("data-admin-case-tab") || "";
       button.classList.toggle("is-active", tab === state.selectedTab);
+      button.setAttribute("aria-selected", tab === state.selectedTab ? "true" : "false");
+    });
+  }
+
+  function renderCaseHeader() {
+    const heading = document.querySelector("[data-admin-case-heading]");
+    const meta = document.querySelector("[data-admin-case-meta]");
+    const selected = getSelectedCase();
+    if (!heading || !meta) return;
+    if (!selected) {
+      heading.textContent = "No case selected";
+      meta.textContent = "Open a customer or project to isolate the record.";
+      return;
+    }
+    heading.textContent = selected.name || selected.project || "Customer Case";
+    meta.innerHTML = `${escapeHtml(selected.email || "No email")} · ${escapeHtml(selected.project || "No project")} · ${laneChip(selected.lane)} · ${statusChip(selected.status || "unknown", chipClassForValue(selected.status))}`;
+  }
+
+  function updateActionAvailability() {
+    const selected = getSelectedCase();
+    document.querySelectorAll("[data-admin-case-action]").forEach(function (button) {
+      const action = button.getAttribute("data-admin-case-action") || "";
+      const tier = ACTION_TIERS[action] || "utility";
+      const requirements = ACTION_AVAILABILITY[action] || [];
+      const allowedByCase =
+        selected && (!Array.isArray(selected.quick_actions) || selected.quick_actions.includes(action));
+      const hasRequirements = requirements.every(function (key) {
+        return selected && selected[key];
+      });
+      const available = Boolean(selected && allowedByCase && hasRequirements);
+      button.disabled = !available;
+      button.classList.toggle("is-disabled", !available);
+      button.setAttribute("data-action-tier", tier);
+      button.classList.toggle("admin-action-tier--primary", tier === "primary");
+      button.classList.toggle("admin-action-tier--secondary", tier === "secondary");
+      button.classList.toggle("admin-action-tier--utility", tier === "utility");
+      button.setAttribute("aria-disabled", available ? "false" : "true");
     });
   }
 
   async function loadCaseWorkspace(caseId) {
     if (!caseId) return;
     state.selectedCaseId = caseId;
+    state.workspace = null;
     applyTabSelection();
+    renderCaseList();
+    renderCaseHeader();
+    renderCaseContext();
+    updateActionAvailability();
     renderWorkspaceTab();
     try {
       const payload = await fetchJson(`/admin/control-center/cases/${encodeURIComponent(caseId)}`);
       state.workspace = payload || null;
       renderWorkspaceTab();
+      renderCaseHeader();
       renderCaseContext();
+      updateActionAvailability();
     } catch (error) {
       setPageStatus(error.message || "Unable to load case workspace.", "error");
     }
@@ -392,6 +739,10 @@
         `/admin/control-center/cases?queue=${encodeURIComponent(state.queue)}&limit=80&search=${encodeURIComponent(getSearchValue())}`,
       );
       state.cases = Array.isArray(payload.items) ? payload.items : [];
+      if (!state.cases.length) {
+        state.selectedCaseId = "";
+        state.workspace = null;
+      }
       renderCaseList();
       if (!state.selectedCaseId && state.cases.length) {
         await loadCaseWorkspace(state.cases[0].case_id);
@@ -406,6 +757,9 @@
         }
       }
       renderCaseContext();
+      renderCaseHeader();
+      updateActionAvailability();
+      if (!state.cases.length) renderWorkspaceTab();
       clearPageStatus();
     } catch (error) {
       console.error("Case load failed:", error);
@@ -466,13 +820,18 @@
       setPageStatus("Select a case first.", "error");
       return;
     }
+    const caseId = state.selectedCaseId;
     setPageStatus("Running case action...", "info");
     try {
       await postJson(
-        `/admin/control-center/cases/${encodeURIComponent(state.selectedCaseId)}/actions/${encodeURIComponent(action)}`,
+        `/admin/control-center/cases/${encodeURIComponent(caseId)}/actions/${encodeURIComponent(action)}`,
         {},
       );
-      await Promise.allSettled([loadOverview(), loadCases(), loadCaseWorkspace(state.selectedCaseId)]);
+      await loadOverview();
+      await loadCases();
+      if (state.selectedCaseId === caseId) {
+        await loadCaseWorkspace(caseId);
+      }
       setPageStatus("Case action completed.", "success");
     } catch (error) {
       setPageStatus(error.message || "Case action failed.", "error");
@@ -500,7 +859,7 @@
       }
 
       const caseRow = target.closest("[data-case-row]");
-      if (caseRow && !target.closest("[data-case-select]")) {
+      if (caseRow && !target.closest("[data-case-select]") && !target.closest(".admin-case-select")) {
         const caseId = caseRow.getAttribute("data-case-row");
         if (caseId) loadCaseWorkspace(caseId);
         return;
@@ -508,6 +867,7 @@
 
       const caseActionButton = target.closest("[data-admin-case-action]");
       if (caseActionButton) {
+        if (caseActionButton.disabled || caseActionButton.classList.contains("is-disabled")) return;
         const action = caseActionButton.getAttribute("data-admin-case-action");
         if (action) runCaseAction(action);
         return;
@@ -530,10 +890,22 @@
 
     const searchInput = document.querySelector("[data-admin-case-search]");
     if (searchInput) {
+      let searchTimer = 0;
+      searchInput.addEventListener("input", function () {
+        window.clearTimeout(searchTimer);
+        searchTimer = window.setTimeout(function () {
+          state.selectedCaseId = "";
+          state.workspace = null;
+          loadCases();
+        }, 280);
+      });
       searchInput.addEventListener("change", loadCases);
       searchInput.addEventListener("keydown", function (event) {
         if (event.key === "Enter") {
           event.preventDefault();
+          window.clearTimeout(searchTimer);
+          state.selectedCaseId = "";
+          state.workspace = null;
           loadCases();
         }
       });
@@ -553,10 +925,10 @@
     const titleNode = document.querySelector("[data-admin-control-title]");
     const statusNode = document.querySelector("[data-admin-control-status]");
     if (titleNode) {
-      titleNode.textContent = "Customer Case Command Console";
+      titleNode.textContent = "Customer Operations Workspace";
     }
     if (statusNode) {
-      statusNode.textContent = `Internal premium operations controls are active for role: ${state.roleKey || "admin"}.`;
+      statusNode.textContent = `Search-first case operations are active for role: ${state.roleKey || "admin"}.`;
     }
   }
 
@@ -574,6 +946,8 @@
     bindEvents();
     applyRailSelection();
     applyTabSelection();
+    renderCaseHeader();
+    updateActionAvailability();
     await Promise.allSettled([loadOverview(), loadCases()]);
   }
 

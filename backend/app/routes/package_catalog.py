@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 
 from app.core.package_catalog import (
     get_addon_catalog,
+    get_package_identifier_map,
     get_package_catalog,
     list_package_control_profiles,
 )
@@ -21,6 +22,7 @@ def get_package_catalog_route():
     return {
         "packages": get_package_catalog(),
         "addons": get_addon_catalog(),
+        "package_identifier_map": get_package_identifier_map(),
         "control_profiles": list_package_control_profiles(),
     }
 

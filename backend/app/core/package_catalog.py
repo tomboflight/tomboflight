@@ -9,22 +9,31 @@ from app.core.package_type_catalog import normalize_package_type
 PACKAGE_CODE_ALIASES: dict[str, str] = {
     "legacy-snapshot": "legacy_snapshot",
     "legacy_snapshot": "legacy_snapshot",
+    "legacy snapshot": "legacy_snapshot",
     "legacy-portrait-intro": "legacy_portrait_intro",
     "legacy_portrait_intro": "legacy_portrait_intro",
+    "legacy portrait intro": "legacy_portrait_intro",
     "digital-legacy-portrait": "digital_legacy_portrait",
     "digital_legacy_portrait": "digital_legacy_portrait",
+    "digital legacy portrait": "digital_legacy_portrait",
     "starter-family-tree": "household_foundation",
     "starter_family_tree": "household_foundation",
+    "starter family tree": "household_foundation",
     "household-foundation": "household_foundation",
     "household_foundation": "household_foundation",
+    "household foundation": "household_foundation",
     "heirloom-legacy-tree": "heirloom_legacy_tree",
     "heirloom_legacy_tree": "heirloom_legacy_tree",
+    "heirloom legacy tree": "heirloom_legacy_tree",
     "legacy-plus": "legacy_plus",
     "legacy_plus": "legacy_plus",
+    "legacy plus": "legacy_plus",
     "family-estate-concierge": "family_estate_concierge",
     "family_estate_concierge": "family_estate_concierge",
+    "family estate concierge": "family_estate_concierge",
     "command-structure-network": "command_structure_network",
     "command_structure_network": "command_structure_network",
+    "command structure network": "command_structure_network",
 }
 
 ADDON_CODE_ALIASES: dict[str, str] = {
@@ -701,6 +710,46 @@ def normalize_package_code(package_code: str) -> str:
         raw,
         raw,
     )
+
+
+def canonicalize_package_identifier(value: Any) -> dict[str, Any]:
+    raw = str(value or "").strip()
+    normalized = normalize_package_code(raw)
+    package = PACKAGE_CATALOG.get(normalized)
+    if not raw:
+        status = "missing"
+    elif package and raw.lower() == normalized:
+        status = "canonical"
+    elif package:
+        status = "alias_mapped"
+    else:
+        status = "unknown"
+
+    return {
+        "raw_value": raw,
+        "package_code": normalized or "",
+        "package_slug": normalized or "",
+        "package_name": (package or {}).get("display_name") or raw or "",
+        "package_lane": normalize_package_type((package or {}).get("package_lane")),
+        "normalization_status": status,
+        "is_known": package is not None,
+    }
+
+
+def get_package_identifier_map() -> dict[str, Any]:
+    return {
+        "aliases": deepcopy(PACKAGE_CODE_ALIASES),
+        "packages": {
+            package_code: {
+                "package_code": package["package_code"],
+                "package_slug": package["package_code"],
+                "package_name": package["display_name"],
+                "package_lane": normalize_package_type(package["package_lane"]),
+                "status": package.get("status", "active"),
+            }
+            for package_code, package in PACKAGE_CATALOG.items()
+        },
+    }
 
 
 def normalize_addon_code(addon_code: str) -> str:
