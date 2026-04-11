@@ -5,6 +5,7 @@ Endpoint:
   POST /webhooks/stripe
 """
 
+import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
@@ -27,6 +28,7 @@ except Exception:  # pragma: no cover
 
 
 router = APIRouter(prefix="/webhooks", tags=["Stripe Webhooks"])
+logger = logging.getLogger(__name__)
 
 
 def _require_setting(value: str, name: str) -> str:
@@ -93,12 +95,14 @@ async def stripe_webhook(request: Request) -> Dict[str, Any]:
     if event_type == "checkout.session.completed":
         try:
             order_result = upsert_order_from_stripe_event(event)
-        except Exception as e:
-            order_result = {"order_id": None, "error": str(e), "type": event_type}
+        except Exception:
+            logger.error("Stripe checkout order upsert failed", exc_info=True)
+            order_result = {"order_id": None, "error": "order_upsert_failed", "type": event_type}
         try:
             maintenance_result = sync_maintenance_checkout_event(event)
-        except Exception as e:
-            maintenance_result = {"updated": False, "error": str(e), "type": event_type}
+        except Exception:
+            logger.error("Stripe checkout maintenance sync failed", exc_info=True)
+            maintenance_result = {"updated": False, "error": "maintenance_checkout_sync_failed", "type": event_type}
 
     if event_type in {
         "customer.subscription.created",
@@ -107,14 +111,16 @@ async def stripe_webhook(request: Request) -> Dict[str, Any]:
     }:
         try:
             maintenance_result = sync_maintenance_subscription_event(event)
-        except Exception as e:
-            maintenance_result = {"updated": False, "error": str(e), "type": event_type}
+        except Exception:
+            logger.error("Stripe subscription maintenance sync failed", exc_info=True)
+            maintenance_result = {"updated": False, "error": "maintenance_subscription_sync_failed", "type": event_type}
 
     if event_type in {"invoice.paid", "invoice.payment_failed"}:
         try:
             maintenance_result = sync_maintenance_invoice_event(event)
-        except Exception as e:
-            maintenance_result = {"updated": False, "error": str(e), "type": event_type}
+        except Exception:
+            logger.error("Stripe invoice maintenance sync failed", exc_info=True)
+            maintenance_result = {"updated": False, "error": "maintenance_invoice_sync_failed", "type": event_type}
 
     print(
         "[stripe_webhook]",

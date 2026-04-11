@@ -14,6 +14,9 @@ from app.services.entitlement_service import (
     resolve_project_entitlements,
 )
 
+MAINTENANCE_START_DELAY_DAYS = 30
+MAINTENANCE_MONTHLY_PERIOD_DAYS = 30
+
 
 def _collection() -> Collection[dict[str, Any]]:
     db = get_database()
@@ -77,7 +80,7 @@ def _compute_maintenance_fields(
         return "not_started", None, None, None, None
 
     start_basis = purchased_at or _utcnow()
-    scheduled_start = start_basis + timedelta(days=30)
+    scheduled_start = start_basis + timedelta(days=MAINTENANCE_START_DELAY_DAYS)
     now = _utcnow()
     if now < scheduled_start:
         return "scheduled", scheduled_start, None, None, None
@@ -86,7 +89,7 @@ def _compute_maintenance_fields(
     if plan == "yearly":
         period_end = period_start + timedelta(days=365)
     else:
-        period_end = period_start + timedelta(days=30)
+        period_end = period_start + timedelta(days=MAINTENANCE_MONTHLY_PERIOD_DAYS)
     return "active", scheduled_start, period_start, period_end, period_end
 
 

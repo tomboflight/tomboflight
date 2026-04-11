@@ -395,7 +395,8 @@
       const payload = await fetchJson("/admin/control-center/overview?limit=24");
       renderTopSummary(payload.summary || {});
       renderPriorityRepairs(payload.priority_repairs || {});
-    } catch (_error) {
+    } catch (error) {
+      console.error("Unable to load admin control overview:", error);
       renderTopSummary({});
       renderPriorityRepairs({});
     }

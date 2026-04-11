@@ -15,6 +15,7 @@ from app.services.project_service import (
     create_project_from_paid_order,
 )
 from app.services.project_entitlement_service import update_project_entitlement_maintenance
+from app.services.project_entitlement_service import MAINTENANCE_START_DELAY_DAYS
 
 
 def _get_orders_collection() -> Collection:
@@ -196,7 +197,6 @@ def create_order_for_user(user: dict[str, Any], payload: Any) -> dict[str, Any]:
             _schedule_maintenance_start(
                 project_id=target_project_id,
                 billing_plan=order_doc.get("billing_plan", "monthly"),
-                stripe_subscription_id=order_doc.get("stripe_session_id"),
             )
 
     return _serialize_order(order_doc)
@@ -393,7 +393,7 @@ def _schedule_maintenance_start(
         return
 
     now = datetime.now(UTC)
-    start_at = now + timedelta(days=30)
+    start_at = now + timedelta(days=MAINTENANCE_START_DELAY_DAYS)
     update_project_entitlement_maintenance(
         project_id=project_id,
         maintenance_plan=plan,

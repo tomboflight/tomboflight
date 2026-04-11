@@ -4,7 +4,10 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from app.database import get_database
-from app.services.project_entitlement_service import update_project_entitlement_maintenance
+from app.services.project_entitlement_service import (
+    MAINTENANCE_START_DELAY_DAYS,
+    update_project_entitlement_maintenance,
+)
 
 
 def _normalize(value: Any) -> str:
@@ -28,6 +31,23 @@ def _metadata_project_id(payload: dict[str, Any]) -> str:
         or metadata.get("existing_project_id")
         or metadata.get("target_project_id")
     )
+
+
+def _subscription_interval(payload: dict[str, Any]) -> str:
+    try:
+        items = ((payload.get("items") or {}).get("data")) or []
+        if items:
+            first = items[0] or {}
+            recurring = ((first.get("price") or {}).get("recurring")) or {}
+            interval = _normalize(recurring.get("interval"))
+            if interval:
+                return interval
+            interval = _normalize((first.get("plan") or {}).get("interval"))
+            if interval:
+                return interval
+    except Exception:
+        pass
+    return "month"
 
 
 def _find_project_id_by_subscription_id(subscription_id: str) -> str:
@@ -58,11 +78,11 @@ def sync_maintenance_checkout_event(event: dict[str, Any]) -> dict[str, Any]:
     subscription_id = _normalize(payload.get("subscription"))
     customer_id = _normalize(payload.get("customer"))
     created_at = _to_datetime(payload.get("created")) or datetime.now(UTC)
-    scheduled_start = created_at + timedelta(days=30)
+    scheduled_start = created_at + timedelta(days=MAINTENANCE_START_DELAY_DAYS)
 
     updated = update_project_entitlement_maintenance(
         project_id=project_id,
-        maintenance_plan="monthly",
+        maintenance_plan="yearly" if _subscription_interval(payload) == "year" else "monthly",
         maintenance_status="scheduled",
         maintenance_scheduled_start_at=scheduled_start,
         maintenance_stripe_subscription_id=subscription_id or None,
@@ -109,7 +129,7 @@ def sync_maintenance_subscription_event(event: dict[str, Any]) -> dict[str, Any]
 
     updated = update_project_entitlement_maintenance(
         project_id=project_id,
-        maintenance_plan="yearly" if _normalize(payload.get("interval")) == "year" else "monthly",
+        maintenance_plan="yearly" if _subscription_interval(payload) == "year" else "monthly",
         maintenance_status=maintenance_status,
         maintenance_started_at=current_period_start,
         maintenance_current_period_start=current_period_start,
