@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from app.dependencies.auth import require_permission
 from app.services.admin_control_service import (
+    MAX_BULK_ACTION_LIMIT,
     admin_console_overview,
     assign_lane,
     assign_missing_lanes,
@@ -47,7 +48,7 @@ class RepairRecordPayload(BaseModel):
 
 
 class BulkRepairPayload(BaseModel):
-    limit: int = Field(default=BULK_ACTION_DEFAULT_LIMIT, ge=1, le=5000)
+    limit: int = Field(default=BULK_ACTION_DEFAULT_LIMIT, ge=1, le=MAX_BULK_ACTION_LIMIT)
 
 
 @router.get("/overview")

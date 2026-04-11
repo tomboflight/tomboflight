@@ -129,6 +129,15 @@ def _project_is_approved(project: dict[str, Any]) -> bool:
     return status_value in BUILD_READY_STATUSES or phase_value in INTAKE_APPROVED_PHASES
 
 
+def _approved_project_query() -> dict[str, Any]:
+    return {
+        "$or": [
+            {"status": {"$in": list(BUILD_READY_STATUSES)}},
+            {"phase": {"$in": list(INTAKE_APPROVED_PHASES)}},
+        ]
+    }
+
+
 def _is_paid_package_order(order: dict[str, Any] | None) -> bool:
     if not isinstance(order, dict):
         return False
@@ -891,7 +900,12 @@ def assign_missing_lanes(*, limit: int = 500) -> dict[str, Any]:
     failures = 0
     project_ids: list[str] = []
 
-    cursor = db["projects"].find({}).sort("updated_at", -1).limit(max(1, min(limit, MAX_BULK_ACTION_LIMIT)))
+    cursor = (
+        db["projects"]
+        .find(_approved_project_query())
+        .sort("updated_at", -1)
+        .limit(max(1, min(limit, MAX_BULK_ACTION_LIMIT)))
+    )
     for project in cursor:
         scanned += 1
         if not _project_is_approved(project):
@@ -934,7 +948,12 @@ def repair_missing_entitlements(*, limit: int = 500) -> dict[str, Any]:
     failures = 0
     project_ids: list[str] = []
 
-    cursor = db["projects"].find({}).sort("updated_at", -1).limit(max(1, min(limit, MAX_BULK_ACTION_LIMIT)))
+    cursor = (
+        db["projects"]
+        .find(_approved_project_query())
+        .sort("updated_at", -1)
+        .limit(max(1, min(limit, MAX_BULK_ACTION_LIMIT)))
+    )
     for project in cursor:
         scanned += 1
         if not _project_is_approved(project):
