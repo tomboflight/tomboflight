@@ -92,7 +92,7 @@ def create_order_for_user(user: dict[str, Any], payload: Any) -> dict[str, Any]:
         or "Unknown Package"
     )
     if not package_identity.get("known"):
-        logger.warning("Unknown package on create_order_for_user: %s", getattr(payload, "package_code", None) or getattr(payload, "package_slug", None))
+        logger.warning("Unknown package encountered during create_order_for_user normalization.")
 
     existing = orders.find_one(
         {
@@ -107,7 +107,7 @@ def create_order_for_user(user: dict[str, Any], payload: Any) -> dict[str, Any]:
         try:
             auto_provision_paid_order(existing)
         except Exception:
-            logger.exception("Auto provisioning failed for existing order %s", str(existing.get("_id") or ""))
+            logger.exception("Auto provisioning failed for existing order.")
         return _serialize_order(existing)
 
     order_doc = {
@@ -183,7 +183,7 @@ def create_order_for_user(user: dict[str, Any], payload: Any) -> dict[str, Any]:
     try:
         auto_provision_paid_order(order_doc)
     except Exception:
-        logger.exception("Auto provisioning failed for order %s", str(order_doc.get("_id") or ""))
+        logger.exception("Auto provisioning failed for newly created order.")
 
     return _serialize_order(order_doc)
 
@@ -616,7 +616,7 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
     package_slug = _normalize(package_identity.get("package_slug")) or package_code
     package_name = _normalize(package_identity.get("display_name")) or package_name
     if not package_identity.get("known"):
-        logger.warning("Unknown package on stripe webhook session=%s value=%s", session_id, package_code)
+        logger.warning("Unknown package encountered during stripe webhook normalization.")
 
     order_doc = {
         "user_id": ObjectId(str(user["_id"])),
@@ -693,7 +693,7 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
     try:
         auto_provision_paid_order(order_doc)
     except Exception:
-        logger.exception("Auto provisioning failed for stripe order %s", str(order_doc.get("_id") or ""))
+        logger.exception("Auto provisioning failed for stripe order.")
 
     return {
         "order_id": str(result.inserted_id),

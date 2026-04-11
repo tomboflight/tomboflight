@@ -82,7 +82,7 @@ def _normalize_order_document(order: dict[str, Any]) -> tuple[dict[str, Any], bo
     }
     unknown = not bool(identity.get("known"))
     if unknown:
-        logger.warning("Unknown package value for order %s: %s", _normalize(order.get("_id")), order.get("package_slug") or order.get("package_code"))
+        logger.warning("Unknown package value encountered while normalizing an order document.")
     changed = False
     for key, value in updates.items():
         if _normalize(order.get(key)) != _normalize(value):
@@ -117,7 +117,7 @@ def _normalize_project_document(
     }
     unknown = not bool(identity.get("known"))
     if unknown:
-        logger.warning("Unknown package value for project %s: %s", _normalize(project.get("_id")), preferred_package_value or project.get("package_slug") or project.get("package_code"))
+        logger.warning("Unknown package value encountered while normalizing a project document.")
     changed = False
     for key, value in updates.items():
         if _normalize(project.get(key)) != _normalize(value):
@@ -265,8 +265,7 @@ def auto_provision_paid_order(order: dict[str, Any]) -> dict[str, Any]:
         mint_readiness_computed = False
 
     logger.info(
-        "auto_provision_paid_order order_id=%s package_normalized=%s lane_assigned=%s order_linked=%s entitlement_present=%s mint_readiness_computed=%s",
-        _normalize(order.get("_id")),
+        "auto_provision_paid_order package_normalized=%s lane_assigned=%s order_linked=%s entitlement_present=%s mint_readiness_computed=%s",
         package_normalized,
         lane_assigned,
         order_linked,
@@ -294,16 +293,20 @@ def auto_provision_paid_order_by_id(order_id: str) -> dict[str, Any]:
 
 
 def repair_missing_lanes(*, limit: int = 200) -> dict[str, Any]:
+    """Repair projects with missing/unknown lane and return scan + repaired ids."""
     db = _db()
     repaired_project_ids: list[str] = []
+    scanned = 0
     for project in db["projects"].find({"$or": [{"project_lane": {"$exists": False}}, {"project_lane": ""}, {"project_lane": "unknown"}, {"project_lane": None}]}).limit(max(1, min(limit, 1000))):
+        scanned += 1
         _, changed = _normalize_project_document(project)
         if changed:
             repaired_project_ids.append(_normalize(project.get("_id")))
-    return {"scanned": len(repaired_project_ids), "repaired_project_ids": repaired_project_ids}
+    return {"scanned": scanned, "repaired_project_ids": repaired_project_ids}
 
 
 def link_unlinked_paid_orders(*, limit: int = 200) -> dict[str, Any]:
+    """Link unlinked paid package orders and return scan + linked order ids."""
     db = _db()
     linked_order_ids: list[str] = []
     processed = 0
@@ -323,6 +326,7 @@ def link_unlinked_paid_orders(*, limit: int = 200) -> dict[str, Any]:
 
 
 def repair_missing_entitlements(*, limit: int = 200) -> dict[str, Any]:
+    """Backfill missing project entitlements and return scan + repaired project ids."""
     db = _db()
     entitlement_project_ids = {
         _normalize(item.get("project_id"))
