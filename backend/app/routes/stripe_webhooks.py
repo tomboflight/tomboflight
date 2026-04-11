@@ -13,6 +13,11 @@ from fastapi import APIRouter, HTTPException, Request, status
 
 from app.config import settings
 from app.database import get_database
+from app.services.maintenance_subscription_service import (
+    sync_maintenance_checkout_event,
+    sync_maintenance_invoice_event,
+    sync_maintenance_subscription_event,
+)
 from app.services.order_service import upsert_order_from_stripe_event
 
 try:
@@ -82,6 +87,7 @@ async def stripe_webhook(request: Request) -> Dict[str, Any]:
             )
 
     order_result: Dict[str, Any] = {"order_id": None}
+    maintenance_result: Dict[str, Any] = {"updated": False}
 
     # Order upsert currently maps Stripe Checkout sessions to orders.
     if event_type == "checkout.session.completed":
@@ -89,6 +95,26 @@ async def stripe_webhook(request: Request) -> Dict[str, Any]:
             order_result = upsert_order_from_stripe_event(event)
         except Exception as e:
             order_result = {"order_id": None, "error": str(e), "type": event_type}
+        try:
+            maintenance_result = sync_maintenance_checkout_event(event)
+        except Exception as e:
+            maintenance_result = {"updated": False, "error": str(e), "type": event_type}
+
+    if event_type in {
+        "customer.subscription.created",
+        "customer.subscription.updated",
+        "customer.subscription.deleted",
+    }:
+        try:
+            maintenance_result = sync_maintenance_subscription_event(event)
+        except Exception as e:
+            maintenance_result = {"updated": False, "error": str(e), "type": event_type}
+
+    if event_type in {"invoice.paid", "invoice.payment_failed"}:
+        try:
+            maintenance_result = sync_maintenance_invoice_event(event)
+        except Exception as e:
+            maintenance_result = {"updated": False, "error": str(e), "type": event_type}
 
     print(
         "[stripe_webhook]",
@@ -96,6 +122,7 @@ async def stripe_webhook(request: Request) -> Dict[str, Any]:
             "event_id": event_id,
             "event_type": event_type,
             "order_result": order_result,
+            "maintenance_result": maintenance_result,
         },
     )
 
@@ -103,4 +130,5 @@ async def stripe_webhook(request: Request) -> Dict[str, Any]:
         "received": True,
         "type": event_type,
         "order": order_result,
+        "maintenance": maintenance_result,
     }

@@ -71,6 +71,7 @@
   let currentUser = null;
   let currentRoleKey = "";
   const sectionSnapshots = {};
+  let selectedProjectId = "";
 
   function normalizeValue(value) {
     return String(value || "").trim().toLowerCase();
@@ -331,6 +332,201 @@
     app.setStatus(feedStatusNode, `Priority items: ${alerts.length}`, "info");
   }
 
+  function renderTopSummary(summary) {
+    const node = document.querySelector("[data-admin-top-summary]");
+    if (!node) return;
+    const cards = [
+      ["Total Users", summary.total_users],
+      ["Active Projects", summary.total_active_projects],
+      ["Paid Orders", summary.paid_orders],
+      ["Missing Entitlements", summary.missing_entitlements],
+      ["Mint-Ready Projects", summary.mint_ready_projects],
+      ["Data Mismatches", summary.projects_with_data_mismatch],
+    ];
+    node.innerHTML = cards
+      .map(function (item, index) {
+        return `
+          <div class="family-record-card admin-card">
+            <div class="card-number">${index + 1}</div>
+            <h3>${escapeHtml(item[0])}</h3>
+            <p class="card-copy">${escapeHtml(String(item[1] ?? 0))}</p>
+          </div>
+        `;
+      })
+      .join("");
+  }
+
+  function renderPriorityRepairs(priority) {
+    const node = document.querySelector("[data-admin-priority-repairs]");
+    if (!node) return;
+    const cards = [
+      {
+        title: "Paid order without project link",
+        value: (priority.paid_order_without_project_link || []).length,
+      },
+      {
+        title: "Project without entitlement",
+        value: (priority.project_without_entitlement || []).length,
+      },
+      {
+        title: "Package without lane",
+        value: (priority.package_without_lane || []).length,
+      },
+      {
+        title: "Mint-eligible blocked",
+        value: (priority.mint_eligible_blocked || []).length,
+      },
+    ];
+    node.innerHTML = cards
+      .map(function (item) {
+        return `
+          <div class="family-record-card admin-card">
+            <div class="card-number">!</div>
+            <h3>${escapeHtml(item.title)}</h3>
+            <p class="card-copy">${escapeHtml(String(item.value))}</p>
+          </div>
+        `;
+      })
+      .join("");
+  }
+
+  async function loadConsoleOverview() {
+    try {
+      const payload = await fetchJson("/admin/control-center/overview?limit=24");
+      renderTopSummary(payload.summary || {});
+      renderPriorityRepairs(payload.priority_repairs || {});
+    } catch (_error) {
+      renderTopSummary({});
+      renderPriorityRepairs({});
+    }
+  }
+
+  function workspaceStatusBadge(status) {
+    const normalized = normalizeValue(status);
+    const label = normalized || "unknown";
+    const map = {
+      healthy: "success",
+      warning: "default",
+      missing: "error",
+      blocked: "error",
+      ready: "success",
+    };
+    return buildStatusChip(label, map[normalized] || "default");
+  }
+
+  function buildWorkspaceSection(title, status, body) {
+    return `
+      <div class="family-record-card admin-card">
+        <div class="admin-card-header">
+          <span class="admin-card-badge">${escapeHtml(title.charAt(0))}</span>
+          <h3 class="admin-card-title">${escapeHtml(title)}</h3>
+        </div>
+        <p class="card-copy"><strong>Status:</strong> ${workspaceStatusBadge(status)}</p>
+        ${body}
+      </div>
+    `;
+  }
+
+  function workspaceHealth(readiness, key) {
+    if (!readiness) return "missing";
+    if (key === "mint_review_ready") return readiness.mint_review_ready ? "ready" : "blocked";
+    if (key === "mint_eligible") return readiness.mint_eligible ? "ready" : "blocked";
+    return readiness[key] ? "healthy" : "missing";
+  }
+
+  function renderWorkspaceSnapshot(payload) {
+    const node = document.querySelector("[data-admin-project-workspace]");
+    if (!node) return;
+    const project = payload.project || {};
+    const order = payload.order || null;
+    const entitlement = payload.entitlement || null;
+    const readiness = payload.readiness || {};
+
+    node.innerHTML = `
+      <div class="inline-actions" style="margin-bottom: 1rem; flex-wrap: wrap">
+        <button class="btn btn-secondary" type="button" data-admin-workspace-action="sync-package">Sync Package</button>
+        <button class="btn btn-secondary" type="button" data-admin-workspace-action="assign-lane">Assign Lane</button>
+        <button class="btn btn-secondary" type="button" data-admin-workspace-action="link-order">Link Order</button>
+        <button class="btn btn-secondary" type="button" data-admin-workspace-action="generate-entitlement">Generate Entitlement</button>
+        <button class="btn btn-secondary" type="button" data-admin-workspace-action="refresh-readiness">Refresh Readiness</button>
+        <button class="btn btn-primary" type="button" data-admin-workspace-action="enable-mint-review">Queue for Mint Review</button>
+      </div>
+      <div class="grid-3">
+        ${buildWorkspaceSection(
+          "Identity",
+          "healthy",
+          `
+            <p class="card-copy"><strong>Project:</strong> ${escapeHtml(project.name || "—")}</p>
+            <p class="card-copy"><strong>Owner:</strong> ${escapeHtml(project.owner_email || "—")}</p>
+            <p class="card-copy"><strong>Project ID:</strong> <span class="admin-id-ref">${escapeHtml(shortId(project.id))}</span></p>
+          `,
+        )}
+        ${buildWorkspaceSection(
+          "Package & Lane",
+          workspaceHealth(readiness, "lane_assigned"),
+          `
+            <p class="card-copy"><strong>Package:</strong> ${escapeHtml(project.package_name || project.package_code || "—")}</p>
+            <p class="card-copy"><strong>Lane:</strong> ${buildLaneChip(project.project_lane)}</p>
+            <p class="card-copy"><strong>Package Synced:</strong> ${yesNoBadge(readiness.package_synced)}</p>
+          `,
+        )}
+        ${buildWorkspaceSection(
+          "Order Link",
+          workspaceHealth(readiness, "order_linked"),
+          `
+            <p class="card-copy"><strong>Order:</strong> <span class="admin-id-ref">${escapeHtml(shortId((order || {}).id))}</span></p>
+            <p class="card-copy"><strong>Order Status:</strong> ${buildStatusChip((order || {}).status || "none", (order || {}).status === "paid" ? "success" : "default")}</p>
+            <p class="card-copy"><strong>Linked:</strong> ${yesNoBadge(readiness.order_linked)}</p>
+          `,
+        )}
+        ${buildWorkspaceSection(
+          "Entitlement",
+          workspaceHealth(readiness, "entitlement_exists"),
+          `
+            <p class="card-copy"><strong>Exists:</strong> ${yesNoBadge(readiness.entitlement_exists)}</p>
+            <p class="card-copy"><strong>Plan:</strong> ${escapeHtml((entitlement || {}).maintenance_plan || "—")}</p>
+            <p class="card-copy"><strong>Status:</strong> ${escapeHtml((entitlement || {}).maintenance_status || "—")}</p>
+          `,
+        )}
+        ${buildWorkspaceSection(
+          "Uploads / Intake",
+          readiness.uploads_present && readiness.intake_approved ? "healthy" : "warning",
+          `
+            <p class="card-copy"><strong>Uploads Present:</strong> ${yesNoBadge(readiness.uploads_present)}</p>
+            <p class="card-copy"><strong>Build Ready:</strong> ${yesNoBadge(readiness.build_ready)}</p>
+            <p class="card-copy"><strong>Intake Approved:</strong> ${yesNoBadge(readiness.intake_approved)}</p>
+          `,
+        )}
+        ${buildWorkspaceSection(
+          "Mint Readiness",
+          workspaceHealth(readiness, "mint_eligible"),
+          `
+            <p class="card-copy"><strong>Mint Review Ready:</strong> ${yesNoBadge(readiness.mint_review_ready)}</p>
+            <p class="card-copy"><strong>Mint Eligible:</strong> ${yesNoBadge(readiness.mint_eligible)}</p>
+            <p class="card-copy"><strong>Policy:</strong> ${escapeHtml(((readiness.mint_policy || {}).token_type) || "—")}</p>
+          `,
+        )}
+      </div>
+    `;
+  }
+
+  async function loadWorkspace(projectId) {
+    if (!projectId) return;
+    selectedProjectId = projectId;
+    const workspaceNode = document.querySelector("[data-admin-project-workspace]");
+    if (workspaceNode) {
+      workspaceNode.innerHTML = emptyCard("Loading workspace...", "Pulling project command panel...");
+    }
+    try {
+      const payload = await fetchJson(`/admin/control-center/projects/${encodeURIComponent(projectId)}/workspace`);
+      renderWorkspaceSnapshot(payload || {});
+    } catch (error) {
+      if (workspaceNode) {
+        workspaceNode.innerHTML = emptyCard("Workspace unavailable", error.message || "Unable to load project workspace.");
+      }
+    }
+  }
+
   function updateRoleSummary() {
     const roleTitle = getRoleTitle(currentRoleKey);
     const visibleSections = Object.keys(SECTION_ACCESS).filter(canAccessSection);
@@ -385,6 +581,13 @@
     return app.apiRequest(path, { method: "GET" });
   }
 
+  async function postJson(path, body) {
+    return app.apiRequest(path, {
+      method: "POST",
+      body: JSON.stringify(body || {}),
+    });
+  }
+
   async function downloadUpload(uploadId, originalFilename) {
     const token = typeof app.getToken === "function" ? app.getToken() : "";
     const response = await fetch(
@@ -428,6 +631,9 @@
         <p class="card-copy"><strong>Uploaded By:</strong> ${escapeHtml(item.uploaded_by || "—")}</p>
         <p class="card-copy"><strong>Created:</strong> ${escapeHtml(formatDate(item.created_at))}</p>
         <div class="inline-actions" style="margin-top: 1rem;">
+          <button class="btn btn-secondary" type="button" data-admin-open-workspace="${escapeHtml(item.id || "")}">
+            Open Ops Panel
+          </button>
           ${
             familyHref
               ? `<a class="btn btn-secondary" href="${escapeHtml(familyHref)}">Open Family</a>`
@@ -514,6 +720,18 @@
     if (!id) return "—";
     const s = String(id);
     return s.length > 12 ? `…${s.slice(-8)}` : s;
+  }
+
+  function yesNoBadge(value) {
+    return buildStatusChip(value ? "yes" : "no", value ? "success" : "error");
+  }
+
+  function statusFromHealth(health) {
+    const normalized = normalizeValue(health);
+    if (normalized === "healthy" || normalized === "ready") return "success";
+    if (normalized === "blocked") return "error";
+    if (normalized === "missing" || normalized === "warning") return "default";
+    return "default";
   }
 
   function buildOrderCard(item) {
@@ -608,6 +826,31 @@
     `;
   }
 
+  function renderWorkspaceProjectList(items) {
+    const node = document.querySelector("[data-admin-project-workspace-list]");
+    if (!node) return;
+    const list = Array.isArray(items) ? items.slice(0, 12) : [];
+    node.innerHTML = list.length
+      ? list
+          .map(function (item) {
+            return `
+              <div class="family-record-card admin-card">
+                <div class="admin-card-header">
+                  <span class="admin-card-badge">P</span>
+                  <h3 class="admin-card-title">${escapeHtml(item.name || "Project")}</h3>
+                </div>
+                <p class="card-copy"><strong>Owner:</strong> ${escapeHtml(item.owner_email || "—")}</p>
+                <p class="card-copy"><strong>Package:</strong> ${escapeHtml(item.package_name || item.package_code || "—")}</p>
+                <button class="btn btn-secondary" type="button" data-admin-open-workspace="${escapeHtml(item.id || "")}">
+                  Open Workspace
+                </button>
+              </div>
+            `;
+          })
+          .join("")
+      : emptyCard("No projects", "No projects available for workspace view.");
+  }
+
   function buildAuditCard(item) {
     const action = item.action || item.event || item.entity_type || "Audit Event";
     return `
@@ -647,6 +890,7 @@
         error,
         "This section is temporarily unavailable.",
       );
+      renderWorkspaceProjectList([]);
       updateSectionSnapshot(sectionKey, { items: [], state: "error" });
       renderSectionCards(
         sectionKey,
@@ -768,12 +1012,16 @@
           })
         : [];
       updateSectionSnapshot(sectionKey, { items: filtered.slice(0, 24), state: "ok" });
+      renderWorkspaceProjectList(filtered);
       renderSectionCards(
         sectionKey,
         filtered.length
           ? filtered.slice(0, 24).map(buildProjectCard).join("")
           : emptyCard("No projects found", "No projects matched the current filters."),
       );
+      if (!selectedProjectId && filtered.length) {
+        await loadWorkspace(filtered[0].id);
+      }
       clearSectionStatus(sectionKey);
     } catch (error) {
       const message = safeErrorMessage(
@@ -900,6 +1148,58 @@
   }
 
   async function handleClick(event) {
+    const openWorkspaceButton = event.target.closest("[data-admin-open-workspace]");
+    if (openWorkspaceButton) {
+      const projectId = openWorkspaceButton.getAttribute("data-admin-open-workspace");
+      if (!projectId) return;
+      await loadWorkspace(projectId);
+      return;
+    }
+
+    const workspaceActionButton = event.target.closest("[data-admin-workspace-action]");
+    if (workspaceActionButton) {
+      if (!selectedProjectId) {
+        setPageStatus("Select a project first.", "error");
+        return;
+      }
+      const action = workspaceActionButton.getAttribute("data-admin-workspace-action");
+      try {
+        if (action === "sync-package") {
+          setPageStatus("Syncing package...", "info");
+          await postJson(`/admin/control-center/projects/${encodeURIComponent(selectedProjectId)}/sync-package`, {});
+        } else if (action === "assign-lane") {
+          setPageStatus("Assigning lane...", "info");
+          await postJson(`/admin/control-center/projects/${encodeURIComponent(selectedProjectId)}/assign-lane`, {});
+        } else if (action === "link-order") {
+          const workspace = await fetchJson(`/admin/control-center/projects/${encodeURIComponent(selectedProjectId)}/workspace`);
+          const orderId = (workspace.order || {}).id;
+          if (!orderId) {
+            throw new Error("No order was found to link.");
+          }
+          setPageStatus("Linking order...", "info");
+          await postJson(`/admin/control-center/orders/${encodeURIComponent(orderId)}/link-project`, {
+            project_id: selectedProjectId,
+          });
+        } else if (action === "generate-entitlement") {
+          setPageStatus("Generating entitlement...", "info");
+          await postJson(`/admin/control-center/projects/${encodeURIComponent(selectedProjectId)}/generate-entitlement`, {
+            force: true,
+          });
+        } else if (action === "refresh-readiness") {
+          setPageStatus("Refreshing readiness...", "info");
+          await fetchJson(`/admin/control-center/projects/${encodeURIComponent(selectedProjectId)}/readiness-check`);
+        } else if (action === "enable-mint-review") {
+          setPageStatus("Queueing mint review readiness...", "info");
+          await postJson(`/admin/control-center/projects/${encodeURIComponent(selectedProjectId)}/enable-mint-review`, {});
+        }
+        await Promise.allSettled([loadWorkspace(selectedProjectId), loadConsoleOverview(), loadProjects()]);
+        setPageStatus("Admin operation completed.", "success");
+      } catch (error) {
+        setPageStatus(error.message || "Unable to run admin operation.", "error");
+      }
+      return;
+    }
+
     const downloadButton = event.target.closest("[data-upload-download]");
     if (downloadButton) {
       try {
@@ -1059,7 +1359,7 @@
     if (refreshAllButton) {
       refreshAllButton.addEventListener("click", async function () {
         setPageStatus("Refreshing internal console...", "info");
-        await loadVisibleSections();
+        await Promise.allSettled([loadVisibleSections(), loadConsoleOverview()]);
         setPageStatus("Internal control center refreshed.", "success");
       });
     }
@@ -1090,7 +1390,7 @@
       });
     });
 
-    await loadVisibleSections();
+    await Promise.allSettled([loadVisibleSections(), loadConsoleOverview()]);
   }
 
   document.addEventListener("DOMContentLoaded", function () {

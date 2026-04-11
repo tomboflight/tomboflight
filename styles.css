@@ -3519,3 +3519,53 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
   color: #6b7f9e;
   letter-spacing: 0.02em;
 }
+
+.admin-console-summary-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.8rem;
+  margin: 0.8rem 0 1rem;
+}
+
+.admin-console-shell {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 1rem;
+}
+
+.admin-console-rail {
+  border: 1px solid rgba(120, 140, 190, 0.22);
+  border-radius: 12px;
+  padding: 0.9rem;
+  background: linear-gradient(180deg, rgba(10, 16, 26, 0.94), rgba(6, 10, 18, 0.96));
+}
+
+.admin-console-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.admin-console-nav a {
+  color: #9fc7ff;
+  text-decoration: none;
+  font-size: 0.86rem;
+}
+
+.admin-console-nav a:hover {
+  color: #d9eaff;
+}
+
+.admin-console-workspace {
+  min-width: 0;
+}
+
+@media (max-width: 920px) {
+  .admin-console-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-console-rail {
+    order: 2;
+  }
+}
