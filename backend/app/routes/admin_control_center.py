@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -11,12 +12,19 @@ from app.services.admin_control_service import (
     admin_console_overview,
     assign_lane,
     assign_missing_lanes,
+    customer_case_workspace,
+    execute_case_action,
     enable_mint_review,
     generate_entitlement,
     link_order_to_project,
     link_unlinked_paid_orders,
+    list_customer_cases,
+    normalize_broken_package_records,
+    refresh_mint_readiness,
     repair_missing_entitlements,
+    repair_all_safe_records,
     repair_record,
+    repair_selected_records,
     project_workspace_snapshot,
     run_readiness_check,
     sync_package,
@@ -51,6 +59,11 @@ class BulkRepairPayload(BaseModel):
     limit: int = Field(default=BULK_ACTION_DEFAULT_LIMIT, ge=1, le=MAX_BULK_ACTION_LIMIT)
 
 
+class RepairSelectedPayload(BaseModel):
+    project_ids: list[str] = Field(default_factory=list)
+    order_ids: list[str] = Field(default_factory=list)
+
+
 @router.get("/overview")
 def get_admin_control_overview(
     limit: int = Query(default=20, ge=1, le=100),
@@ -61,6 +74,42 @@ def get_admin_control_overview(
         return admin_console_overview(limit=limit)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+
+
+@router.get("/cases")
+async def get_customer_cases(
+    search: str = Query(default=""),
+    queue: str = Query(default="customer_cases"),
+    limit: int = Query(default=50, ge=1, le=200),
+    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+):
+    del current_user
+    return await asyncio.to_thread(list_customer_cases, search=search, queue=queue, limit=limit)
+
+
+@router.get("/cases/{case_id}")
+async def get_customer_case_workspace(
+    case_id: str,
+    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+):
+    del current_user
+    try:
+        return await asyncio.to_thread(customer_case_workspace, case_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.post("/cases/{case_id}/actions/{action}")
+async def run_customer_case_action(
+    case_id: str,
+    action: str,
+    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+):
+    del current_user
+    try:
+        return await asyncio.to_thread(execute_case_action, case_id=case_id, action=action)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 @router.get("/projects/{project_id}/workspace")
@@ -197,3 +246,39 @@ def bulk_link_paid_orders(
 ):
     del current_user
     return link_unlinked_paid_orders(limit=(payload.limit if payload else BULK_ACTION_DEFAULT_LIMIT))
+
+
+@router.post("/bulk/normalize-broken-package-records")
+def bulk_normalize_package_records(
+    payload: BulkRepairPayload | None = None,
+    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+):
+    del current_user
+    return normalize_broken_package_records(limit=(payload.limit if payload else BULK_ACTION_DEFAULT_LIMIT))
+
+
+@router.post("/bulk/refresh-mint-readiness")
+def bulk_refresh_mint_readiness(
+    payload: BulkRepairPayload | None = None,
+    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+):
+    del current_user
+    return refresh_mint_readiness(limit=(payload.limit if payload else BULK_ACTION_DEFAULT_LIMIT))
+
+
+@router.post("/bulk/repair-selected-records")
+def bulk_repair_selected_records(
+    payload: RepairSelectedPayload,
+    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+):
+    del current_user
+    return repair_selected_records(project_ids=payload.project_ids, order_ids=payload.order_ids)
+
+
+@router.post("/bulk/repair-all-safe-records")
+def bulk_repair_all_safe_records(
+    payload: BulkRepairPayload | None = None,
+    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+):
+    del current_user
+    return repair_all_safe_records(limit=(payload.limit if payload else BULK_ACTION_DEFAULT_LIMIT))

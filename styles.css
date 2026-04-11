@@ -3560,6 +3560,137 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
   min-width: 0;
 }
 
+/* ──────────────────────────────────────────────────────────
+   Admin Control Center — Case Console (2050 premium ops)
+   ────────────────────────────────────────────────────────── */
+
+.admin-command-bar {
+  border: 1px solid rgba(120, 165, 235, 0.22);
+  background: linear-gradient(135deg, rgba(6, 12, 22, 0.96), rgba(8, 16, 29, 0.98));
+}
+
+.admin-case-console-shell {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr) 320px;
+  gap: 1rem;
+  align-items: start;
+}
+
+.admin-case-rail {
+  border: 1px solid rgba(120, 140, 190, 0.22);
+  border-radius: 12px;
+  padding: 0.9rem;
+  background: linear-gradient(180deg, rgba(10, 16, 26, 0.94), rgba(6, 10, 18, 0.96));
+  position: sticky;
+  top: 1rem;
+}
+
+.admin-case-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.admin-case-nav button {
+  background: rgba(22, 34, 55, 0.75);
+  color: #a8cbff;
+  border: 1px solid rgba(94, 124, 175, 0.25);
+  border-radius: 9px;
+  text-align: left;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: all 160ms ease;
+}
+
+.admin-case-nav button:hover {
+  color: #e2f0ff;
+  border-color: rgba(115, 172, 255, 0.44);
+}
+
+.admin-case-nav button.is-active {
+  background: linear-gradient(120deg, rgba(42, 96, 165, 0.24), rgba(58, 126, 218, 0.2));
+  color: #eef6ff;
+  border-color: rgba(123, 186, 255, 0.5);
+}
+
+.admin-case-center {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(280px, 36%) minmax(0, 1fr);
+  gap: 1rem;
+}
+
+.admin-case-list-panel,
+.admin-case-workspace-panel,
+.admin-case-context-panel {
+  border: 1px solid rgba(120, 160, 220, 0.19);
+  border-radius: 14px;
+  padding: 0.9rem;
+  background: linear-gradient(155deg, rgba(8, 15, 27, 0.96), rgba(6, 11, 20, 0.98));
+}
+
+.admin-case-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+  max-height: 72vh;
+  overflow: auto;
+  padding-right: 0.2rem;
+}
+
+.admin-case-row.is-selected {
+  border-left-color: rgba(106, 189, 255, 0.76);
+  box-shadow: 0 8px 26px rgba(60, 129, 255, 0.13);
+}
+
+.admin-case-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin: 0.9rem 0 1rem;
+}
+
+.admin-case-tabs button {
+  border: 1px solid rgba(115, 150, 205, 0.3);
+  background: rgba(18, 31, 52, 0.8);
+  color: #a9cfff;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  padding: 0.35rem 0.7rem;
+  cursor: pointer;
+}
+
+.admin-case-tabs button:hover {
+  color: #ebf6ff;
+  border-color: rgba(128, 182, 255, 0.5);
+}
+
+.admin-case-tabs button.is-active {
+  background: linear-gradient(120deg, rgba(55, 128, 220, 0.24), rgba(70, 160, 255, 0.2));
+  border-color: rgba(141, 197, 255, 0.55);
+  color: #f1f8ff;
+}
+
+.admin-case-tab-content {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+  min-height: 44vh;
+}
+
+.admin-case-context-panel {
+  position: sticky;
+  top: 1rem;
+}
+
+.admin-case-context {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+  margin-top: 0.85rem;
+}
+
 @media (max-width: 920px) {
   .admin-console-shell {
     grid-template-columns: 1fr;
@@ -3567,5 +3698,18 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
 
   .admin-console-rail {
     order: 2;
+  }
+
+  .admin-case-console-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-case-center {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-case-rail,
+  .admin-case-context-panel {
+    position: static;
   }
 }
