@@ -445,6 +445,7 @@
 
     node.innerHTML = `
       <div class="inline-actions" style="margin-bottom: 1rem; flex-wrap: wrap">
+        <button class="btn btn-primary" type="button" data-admin-workspace-action="repair-record">Repair Record</button>
         <button class="btn btn-secondary" type="button" data-admin-workspace-action="sync-package">Sync Package</button>
         <button class="btn btn-secondary" type="button" data-admin-workspace-action="assign-lane">Assign Lane</button>
         <button class="btn btn-secondary" type="button" data-admin-workspace-action="link-order">Link Order</button>
@@ -1165,7 +1166,14 @@
       }
       const action = workspaceActionButton.getAttribute("data-admin-workspace-action");
       try {
-        if (action === "sync-package") {
+        if (action === "repair-record") {
+          const workspace = await fetchJson(`/admin/control-center/projects/${encodeURIComponent(selectedProjectId)}/workspace`);
+          const orderId = (workspace.order || {}).id;
+          setPageStatus("Repairing workspace record...", "info");
+          await postJson(`/admin/control-center/projects/${encodeURIComponent(selectedProjectId)}/repair-record`, {
+            order_id: orderId || "",
+          });
+        } else if (action === "sync-package") {
           setPageStatus("Syncing package...", "info");
           await postJson(`/admin/control-center/projects/${encodeURIComponent(selectedProjectId)}/sync-package`, {});
         } else if (action === "assign-lane") {
