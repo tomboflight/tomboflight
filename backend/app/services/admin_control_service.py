@@ -43,31 +43,30 @@ def _db():
 
 
 def _to_object_id(value: str) -> ObjectId | None:
-    if isinstance(value, ObjectId):
-        return value
-    normalized = _normalize(value)
-    if not normalized:
-        return None
-    if ObjectId.is_valid(normalized):
-        return ObjectId(normalized)
-    wrapped = OBJECT_ID_WRAPPER_PATTERN.match(normalized)
-    if wrapped and ObjectId.is_valid(wrapped.group(2)):
-        return ObjectId(wrapped.group(2))
-    return None
+    object_id_hex = _extract_object_id_hex(value)
+    return ObjectId(object_id_hex) if object_id_hex else None
 
 
 def _normalize_object_id(value: Any) -> str:
     if isinstance(value, ObjectId):
         return str(value)
     normalized = _normalize(value)
+    object_id_hex = _extract_object_id_hex(value)
+    return object_id_hex or normalized
+
+
+def _extract_object_id_hex(value: Any) -> str | None:
+    if isinstance(value, ObjectId):
+        return str(value)
+    normalized = _normalize(value)
     if not normalized:
-        return ""
+        return None
     if ObjectId.is_valid(normalized):
         return str(ObjectId(normalized))
     wrapped = OBJECT_ID_WRAPPER_PATTERN.match(normalized)
     if wrapped and ObjectId.is_valid(wrapped.group(2)):
         return str(ObjectId(wrapped.group(2)))
-    return normalized
+    return None
 
 
 def _coerce_datetime(value: Any) -> datetime | None:
