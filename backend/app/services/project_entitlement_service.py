@@ -4,6 +4,7 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 
+from bson import ObjectId
 from pymongo.collection import Collection
 
 from app.core.package_catalog import get_package_control_profile
@@ -41,8 +42,8 @@ def _serialize(document: dict[str, Any] | None) -> dict[str, Any] | None:
 
     return {
         "id": str(document.get("_id")),
-        "project_id": document.get("project_id"),
-        "user_id": document.get("user_id"),
+        "project_id": _normalize_identifier(document.get("project_id")),
+        "user_id": _normalize_identifier(document.get("user_id")),
         "package_code": package_code or document.get("package_code"),
         "package_name": document.get("package_name") or resolved.get("display_name"),
         "package_lane": document.get("package_lane"),
@@ -64,6 +65,46 @@ def _serialize(document: dict[str, Any] | None) -> dict[str, Any] | None:
         "created_at": document.get("created_at"),
         "updated_at": document.get("updated_at"),
     }
+
+
+def _normalize_identifier(value: Any) -> str:
+    if isinstance(value, ObjectId):
+        return str(value)
+    return str(value or "").strip()
+
+
+def _coerce_object_id(value: Any) -> ObjectId | None:
+    if isinstance(value, ObjectId):
+        return value
+    normalized = str(value or "").strip()
+    if ObjectId.is_valid(normalized):
+        return ObjectId(normalized)
+    return None
+
+
+def _project_id_candidates(project_id: str) -> list[Any]:
+    normalized = str(project_id or "").strip()
+    candidates: list[Any] = []
+    if normalized:
+        candidates.append(normalized)
+    oid = _coerce_object_id(normalized)
+    if oid is not None:
+        candidates.append(oid)
+        oid_text = str(oid)
+        candidates.append(f'ObjectId("{oid_text}")')
+        candidates.append(f"ObjectId('{oid_text}')")
+    return candidates
+
+
+def _user_id_candidates(user_id: str) -> list[Any]:
+    normalized = str(user_id or "").strip()
+    candidates: list[Any] = []
+    if normalized:
+        candidates.append(normalized)
+    oid = _coerce_object_id(normalized)
+    if oid is not None:
+        candidates.append(oid)
+    return candidates
 
 
 def _compute_maintenance_fields(
@@ -110,6 +151,12 @@ def upsert_project_entitlement(
     maintenance_current_period_end: datetime | None = None,
 ) -> dict[str, Any] | None:
     collection = _collection()
+    project_oid = _coerce_object_id(project_id)
+    user_oid = _coerce_object_id(user_id)
+    if project_oid is None:
+        raise ValueError("project_id must be a valid ObjectId.")
+    if user_oid is None:
+        raise ValueError("user_id must be a valid ObjectId.")
 
     resolved = resolve_project_entitlements(package_code, active_addons or [])
     maintenance_defaults = get_package_control_profile(package_code) or {}
@@ -124,13 +171,13 @@ def upsert_project_entitlement(
 
     existing = cast(
         dict[str, Any] | None,
-        collection.find_one({"project_id": project_id}),
+        collection.find_one({"project_id": {"$in": _project_id_candidates(str(project_oid))}}),
     )
     now = _utcnow()
 
     document: dict[str, Any] = {
-        "project_id": project_id,
-        "user_id": user_id,
+        "project_id": project_oid,
+        "user_id": user_oid,
         "package_code": resolved.get("package_code") or package_code,
         "package_name": resolved.get("display_name") or package_code,
         "package_lane": resolved.get("package_lane"),
@@ -154,7 +201,7 @@ def upsert_project_entitlement(
 
     if existing:
         collection.update_one(
-            {"project_id": project_id},
+            {"_id": existing["_id"]},
             {"$set": document},
         )
     else:
@@ -163,16 +210,19 @@ def upsert_project_entitlement(
 
     saved = cast(
         dict[str, Any] | None,
-        collection.find_one({"project_id": project_id}),
+        collection.find_one({"project_id": {"$in": _project_id_candidates(str(project_oid))}}),
     )
     return _serialize(saved)
 
 
 def get_project_entitlement(project_id: str) -> dict[str, Any] | None:
     collection = _collection()
+    candidates = _project_id_candidates(project_id)
+    if not candidates:
+        return None
     document = cast(
         dict[str, Any] | None,
-        collection.find_one({"project_id": project_id}),
+        collection.find_one({"project_id": {"$in": candidates}}),
     )
     return _serialize(document)
 
@@ -186,10 +236,17 @@ def list_user_project_entitlements(
     project_ids = list_accessible_project_ids(user_id=user_id)
 
     or_filters: list[dict[str, Any]] = []
-    if user_id:
-        or_filters.append({"user_id": user_id})
+    user_id_values = _user_id_candidates(user_id)
+    if user_id_values:
+        or_filters.append({"user_id": {"$in": user_id_values}})
     if project_ids:
-        or_filters.append({"project_id": {"$in": project_ids}})
+        project_id_values: list[Any] = []
+        for project_id in project_ids:
+            for candidate in _project_id_candidates(project_id):
+                if candidate not in project_id_values:
+                    project_id_values.append(candidate)
+        if project_id_values:
+            or_filters.append({"project_id": {"$in": project_id_values}})
 
     if not or_filters:
         return []
@@ -221,13 +278,20 @@ def list_project_entitlements(
 
     if normalized_search:
         regex = {"$regex": re.escape(normalized_search), "$options": "i"}
-        query["$or"] = [
-            {"project_id": regex},
-            {"user_id": regex},
+        search_filters: list[dict[str, Any]] = [
             {"package_code": regex},
             {"package_name": regex},
             {"package_lane": regex},
         ]
+        oid = _coerce_object_id(normalized_search)
+        if oid is not None:
+            search_filters.extend(
+                [
+                    {"project_id": oid},
+                    {"user_id": oid},
+                ]
+            )
+        query["$or"] = search_filters
 
     cursor = collection.find(query).sort("updated_at", -1).limit(max(1, min(limit, 500)))
 
@@ -266,9 +330,12 @@ def update_project_entitlement_maintenance(
     maintenance_stripe_status: str | None = None,
 ) -> dict[str, Any] | None:
     collection = _collection()
+    candidates = _project_id_candidates(project_id)
+    if not candidates:
+        return None
     existing = cast(
         dict[str, Any] | None,
-        collection.find_one({"project_id": project_id}),
+        collection.find_one({"project_id": {"$in": candidates}}),
     )
     if not existing:
         return None
@@ -295,9 +362,9 @@ def update_project_entitlement_maintenance(
     if maintenance_stripe_status is not None:
         updates["maintenance_stripe_status"] = maintenance_stripe_status
 
-    collection.update_one({"project_id": project_id}, {"$set": updates})
+    collection.update_one({"_id": existing["_id"]}, {"$set": updates})
     saved = cast(
         dict[str, Any] | None,
-        collection.find_one({"project_id": project_id}),
+        collection.find_one({"_id": existing["_id"]}),
     )
     return _serialize(saved)

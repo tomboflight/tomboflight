@@ -1150,6 +1150,38 @@
   }
 
   async function handleClick(event) {
+    const bulkActionButton = event.target.closest("[data-admin-bulk-action]");
+    if (bulkActionButton) {
+      const action = bulkActionButton.getAttribute("data-admin-bulk-action") || "";
+      const endpointMap = {
+        "repair-missing-entitlements": "/admin/control-center/bulk/repair-missing-entitlements",
+        "assign-missing-lanes": "/admin/control-center/bulk/assign-missing-lanes",
+        "link-unlinked-paid-orders": "/admin/control-center/bulk/link-unlinked-paid-orders",
+      };
+      const labelMap = {
+        "repair-missing-entitlements": "Repairing missing entitlements...",
+        "assign-missing-lanes": "Assigning missing lanes...",
+        "link-unlinked-paid-orders": "Linking unlinked paid orders...",
+      };
+      const endpoint = endpointMap[action];
+      if (!endpoint) return;
+      try {
+        setPageStatus(labelMap[action] || "Running bulk action...", "info");
+        await postJson(endpoint, { limit: 500 });
+        await Promise.allSettled([
+          loadConsoleOverview(),
+          loadOrders(),
+          loadProjects(),
+          loadEntitlements(),
+          selectedProjectId ? loadWorkspace(selectedProjectId) : Promise.resolve(),
+        ]);
+        setPageStatus("Bulk action completed.", "success");
+      } catch (error) {
+        setPageStatus(error.message || "Unable to run bulk action.", "error");
+      }
+      return;
+    }
+
     const openWorkspaceButton = event.target.closest("[data-admin-open-workspace]");
     if (openWorkspaceButton) {
       const projectId = openWorkspaceButton.getAttribute("data-admin-open-workspace");

@@ -7,11 +7,15 @@ from pydantic import BaseModel, Field
 
 from app.dependencies.auth import require_permission
 from app.services.admin_control_service import (
+    MAX_BULK_ACTION_LIMIT,
     admin_console_overview,
     assign_lane,
+    assign_missing_lanes,
     enable_mint_review,
     generate_entitlement,
     link_order_to_project,
+    link_unlinked_paid_orders,
+    repair_missing_entitlements,
     repair_record,
     project_workspace_snapshot,
     run_readiness_check,
@@ -19,6 +23,7 @@ from app.services.admin_control_service import (
 )
 
 router = APIRouter(prefix="/admin/control-center", tags=["Admin Control Center"])
+BULK_ACTION_DEFAULT_LIMIT = 500
 
 
 class SyncPackagePayload(BaseModel):
@@ -40,6 +45,10 @@ class EnableMintReviewPayload(BaseModel):
 
 class RepairRecordPayload(BaseModel):
     order_id: str = Field(default="")
+
+
+class BulkRepairPayload(BaseModel):
+    limit: int = Field(default=BULK_ACTION_DEFAULT_LIMIT, ge=1, le=MAX_BULK_ACTION_LIMIT)
 
 
 @router.get("/overview")
@@ -161,3 +170,30 @@ def repair_project_record(
         return repair_record(project_id=project_id, order_id=(payload.order_id if payload else ""))
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/bulk/repair-missing-entitlements")
+def bulk_repair_entitlements(
+    payload: BulkRepairPayload | None = None,
+    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+):
+    del current_user
+    return repair_missing_entitlements(limit=(payload.limit if payload else BULK_ACTION_DEFAULT_LIMIT))
+
+
+@router.post("/bulk/assign-missing-lanes")
+def bulk_assign_lanes(
+    payload: BulkRepairPayload | None = None,
+    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+):
+    del current_user
+    return assign_missing_lanes(limit=(payload.limit if payload else BULK_ACTION_DEFAULT_LIMIT))
+
+
+@router.post("/bulk/link-unlinked-paid-orders")
+def bulk_link_paid_orders(
+    payload: BulkRepairPayload | None = None,
+    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+):
+    del current_user
+    return link_unlinked_paid_orders(limit=(payload.limit if payload else BULK_ACTION_DEFAULT_LIMIT))
