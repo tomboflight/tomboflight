@@ -5,8 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.database import get_database
 from app.dependencies.auth import (
-    INTERNAL_ADMIN_KEYS,
     get_current_user,
+    has_internal_admin_access,
     require_any_package_capability,
 )
 from app.schemas.family import FamilyCreate, FamilyResponse, build_family_response
@@ -44,15 +44,7 @@ def _current_user_display_name(user: dict[str, Any]) -> str:
 
 
 def _is_admin(user: dict[str, Any]) -> bool:
-    role = str(user.get("role", "")).strip().lower()
-    access_tier = str(user.get("access_tier", "")).strip().lower()
-    department_role = str(user.get("department_role", "")).strip().lower()
-
-    return (
-        role in INTERNAL_ADMIN_KEYS
-        or access_tier in INTERNAL_ADMIN_KEYS
-        or department_role in INTERNAL_ADMIN_KEYS
-    )
+    return has_internal_admin_access(user)
 
 
 def _family_is_visible_to_user(

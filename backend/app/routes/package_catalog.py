@@ -9,7 +9,6 @@ from app.core.package_catalog import (
 )
 from app.services.entitlement_service import (
     can_purchase_addon,
-    can_upgrade,
     compute_upgrade_quote,
     resolve_project_entitlements,
 )
@@ -63,7 +62,6 @@ def get_upgrade_quote_route(from_package_code: str, to_package_code: str):
 def check_addon_compatibility_route(package_code: str, addon_code: str):
     try:
         allowed = can_purchase_addon(package_code, addon_code)
-        upgradeable = can_upgrade(package_code, package_code)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -74,5 +72,4 @@ def check_addon_compatibility_route(package_code: str, addon_code: str):
         "package_code": package_code,
         "addon_code": addon_code,
         "allowed": allowed,
-        "self_upgrade_check": upgradeable,
     }

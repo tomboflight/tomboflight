@@ -38,26 +38,86 @@ class AuditLogResponse(BaseModel):
     created_at: str
 
 
+def _as_string(value: object, default: str = "") -> str:
+    normalized = str(value or "").strip()
+    return normalized or default
+
+
+def _serialize_created_at(value: object) -> str:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return _as_string(value, datetime.now(UTC).isoformat())
+
+
+def _legacy_entity_fields(data: dict) -> tuple[str, str]:
+    for key in (
+        "relationship_id",
+        "member_id",
+        "family_id",
+        "project_id",
+        "upload_id",
+        "order_id",
+        "user_id",
+    ):
+        value = _as_string(data.get(key))
+        if value:
+            return key.removesuffix("_id"), value
+
+    return "audit_event", _as_string(data.get("_id"))
+
+
+def _details(data: dict) -> dict:
+    details = data.get("details")
+    if isinstance(details, dict):
+        return details
+
+    excluded = {
+        "_id",
+        "action",
+        "event",
+        "entity_type",
+        "entity_id",
+        "actor_user_id",
+        "actor_email",
+        "actor_name",
+        "created_at",
+    }
+    return {key: value for key, value in data.items() if key not in excluded}
+
+
 def build_audit_log_response(data: dict) -> AuditLogResponse:
-    target_type = data.get("target_type") or data.get("entity_type") or "system"
-    target_id = data.get("target_id") or data.get("entity_id") or "unknown"
+    legacy_entity_type, legacy_entity_id = _legacy_entity_fields(data)
     timestamp = data.get("timestamp") or data.get("created_at")
+    target_type = _as_string(
+        data.get("target_type") or data.get("entity_type"),
+        legacy_entity_type or "system",
+    )
+    target_id = _as_string(
+        data.get("target_id") or data.get("entity_id"),
+        legacy_entity_id or "unknown",
+    )
+    actor_name = (
+        _as_string(data.get("actor_name"))
+        or _as_string(data.get("created_by"))
+        or _as_string(data.get("deleted_by"))
+        or None
+    )
 
     return AuditLogResponse(
         id=str(data.get("_id", "")),
-        action=data.get("action") or data.get("event") or "unknown_action",
-        entity_type=str(data.get("entity_type") or target_type),
-        entity_id=str(data.get("entity_id") or target_id),
-        target_type=str(target_type),
-        target_id=str(target_id),
-        actor_user_id=data.get("actor_user_id"),
-        actor_email=data.get("actor_email"),
-        actor_name=data.get("actor_name"),
-        details=data.get("details", {}),
+        action=_as_string(data.get("action") or data.get("event"), "legacy_event"),
+        entity_type=_as_string(data.get("entity_type"), target_type),
+        entity_id=_as_string(data.get("entity_id"), target_id),
+        target_type=target_type,
+        target_id=target_id,
+        actor_user_id=_as_string(data.get("actor_user_id")) or None,
+        actor_email=_as_string(data.get("actor_email")) or None,
+        actor_name=actor_name,
+        details=_details(data),
         before=data.get("before", {}) or {},
         after=data.get("after", {}) or {},
         context=data.get("context", {}) or {},
         result=str(data.get("result") or "success"),
-        timestamp=str(timestamp or datetime.now(UTC).isoformat()),
-        created_at=str(data.get("created_at") or timestamp or datetime.now(UTC).isoformat()),
+        timestamp=_serialize_created_at(timestamp),
+        created_at=_serialize_created_at(data.get("created_at") or timestamp),
     )

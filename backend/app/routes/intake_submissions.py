@@ -88,6 +88,15 @@ def my_submission_list(
     return list_for_user(_current_user_id(current_user), limit=limit)
 
 
+@router.get("/admin/list", response_model=list[IntakeSubmissionListItem])
+def admin_list_submissions(
+    limit: int = Query(default=50, ge=1, le=200),
+    status_filter: Optional[str] = Query(default=None, alias="status"),
+    _admin_user: dict = Depends(require_permission("admin.access")),
+):
+    return list_all(limit=limit, status=status_filter)
+
+
 @router.get("/{submission_id}", response_model=IntakeSubmissionResponse)
 def get_submission(
     submission_id: str,
@@ -103,15 +112,6 @@ def get_submission(
         raise HTTPException(status_code=403, detail="Not authorized to access this intake submission.")
 
     return result
-
-
-@router.get("/admin/list", response_model=list[IntakeSubmissionListItem])
-def admin_list_submissions(
-    limit: int = Query(default=50, ge=1, le=200),
-    status_filter: Optional[str] = Query(default=None, alias="status"),
-    _admin_user: dict = Depends(require_permission("admin.access")),
-):
-    return list_all(limit=limit, status=status_filter)
 
 
 @router.patch("/{submission_id}/status", response_model=IntakeSubmissionResponse)

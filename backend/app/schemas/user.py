@@ -6,7 +6,10 @@ class UserCreate(BaseModel):
     first_name: str = Field(..., min_length=1, max_length=100)
     last_name: str = Field(..., min_length=1, max_length=100)
     email: EmailStr
-    role: str = "client"
+    role: str = "user"
+    access_tier: str | None = None
+    department_role: str | None = None
+    status: str | None = "active"
 
 
 class UserResponse(BaseModel):
@@ -18,6 +21,8 @@ class UserResponse(BaseModel):
     created_at: str
     status: str | None = None
     full_name: str | None = None
+    access_tier: str | None = None
+    department_role: str | None = None
     last_login_at: str | None = None
     password_reset_requested_at: str | None = None
     password_reset_expires_at: str | None = None
@@ -65,10 +70,12 @@ def build_user_response(data: dict) -> UserResponse:
         first_name=first_name,
         last_name=last_name,
         email=_normalize_text(data.get("email")) or "—",
-        role=_normalize_text(data.get("role")) or "client",
+        role=_normalize_text(data.get("role")) or "user",
         created_at=_serialize_created_at(data.get("created_at")),
         status=_normalize_text(data.get("status")) or None,
         full_name=_normalize_text(data.get("full_name")) or None,
+        access_tier=_normalize_text(data.get("access_tier")) or None,
+        department_role=_normalize_text(data.get("department_role")) or None,
         last_login_at=_normalize_text(data.get("last_login_at")) or None,
         password_reset_requested_at=(
             _normalize_text(data.get("password_reset_requested_at")) or None

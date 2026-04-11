@@ -96,6 +96,8 @@ def build_user_response(user: dict) -> dict:
         "department_role": user.get("department_role"),
         "status": user.get("status", "active"),
         "created_at": user["created_at"],
+        "access_tier": user.get("access_tier"),
+        "department_role": user.get("department_role"),
         "policy_version": user.get("policy_version"),
         "terms_accepted_at": user.get("terms_accepted_at"),
         "privacy_accepted_at": user.get("privacy_accepted_at"),
@@ -130,14 +132,38 @@ def register_user(payload: UserCreate) -> dict | None:
             "eligibility_attested_at": now_iso,
         }
 
-    existing = db.users.find_one({"email": payload.email.lower()})
+    normalized_email = payload.email.lower()
+    existing = db.users.find_one({"email": normalized_email})
     if existing is not None:
+        if (
+            not existing.get("password_hash")
+            and str(existing.get("status") or "").strip().lower()
+            in {"pending_activation", "checkout_pending_activation"}
+        ):
+            update_fields = {
+                "full_name": payload.full_name.strip(),
+                "role": existing.get("role") or PUBLIC_SIGNUP_ROLE,
+                "status": "active",
+                "password_hash": hash_password(payload.password),
+                "password_updated_at": now_iso,
+                "activated_at": now_iso,
+                "requires_account_activation": False,
+                "policy_version": payload.policy_version,
+                "terms_accepted_at": now_iso,
+                "privacy_accepted_at": now_iso,
+                "eligibility_attested_at": now_iso,
+                **_clear_password_reset_fields(),
+            }
+            db.users.update_one({"_id": existing["_id"]}, {"$set": update_fields})
+            existing.update(update_fields)
+            return existing
+
         return None
 
     validate_password_strength(payload.password)
 
     user = {
-        "email": payload.email.lower(),
+        "email": normalized_email,
         "full_name": payload.full_name.strip(),
         "role": PUBLIC_SIGNUP_ROLE,
         "status": "active",
@@ -158,6 +184,49 @@ def register_user(payload: UserCreate) -> dict | None:
     return user
 
 
+def create_pending_checkout_user(
+    email: str,
+    *,
+    full_name: str | None = None,
+) -> dict | None:
+    normalized_email = _normalize_text(email).lower()
+    if not normalized_email:
+        return None
+
+    db = get_database()
+    if db is None:
+        return None
+
+    existing = db.users.find_one({"email": normalized_email})
+    if existing is not None:
+        return existing
+
+    now_iso = _now_iso()
+    display_name = _normalize_text(full_name) or normalized_email.split("@")[0]
+    user = {
+        "email": normalized_email,
+        "full_name": display_name,
+        "role": PUBLIC_SIGNUP_ROLE,
+        "status": "pending_activation",
+        "password_hash": None,
+        "password_updated_at": None,
+        "created_at": now_iso,
+        "created_from": "stripe_checkout",
+        "requires_account_activation": True,
+        "last_login_at": None,
+        **_clear_password_reset_fields(),
+        "password_reset_used_at": None,
+        "policy_version": None,
+        "terms_accepted_at": None,
+        "privacy_accepted_at": None,
+        "eligibility_attested_at": None,
+    }
+
+    result = db.users.insert_one(user)
+    user["_id"] = result.inserted_id
+    return user
+
+
 def authenticate_user(email: str, password: str) -> str | None:
     db = _get_database_or_none()
     if db is None:
@@ -170,7 +239,8 @@ def authenticate_user(email: str, password: str) -> str | None:
     if user.get("status") != "active":
         return None
 
-    if not verify_password(password, user["password_hash"]):
+    password_hash = user.get("password_hash")
+    if not password_hash or not verify_password(password, password_hash):
         return None
 
     now_iso = _now_iso()
