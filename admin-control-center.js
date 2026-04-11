@@ -188,7 +188,7 @@
         const alerts = Array.isArray(item.alerts) ? item.alerts : [];
         const isSelected = state.selectedCaseId === item.case_id;
         return `
-          <article class="family-record-card admin-card admin-case-row ${isSelected ? "is-selected" : ""}">
+          <article class="family-record-card admin-card admin-case-row ${isSelected ? "is-selected" : ""}" data-case-row="${escapeHtml(item.case_id || "")}">
             <div class="admin-card-header">
               <span class="admin-card-badge">C</span>
               <h3 class="admin-card-title">${escapeHtml(item.name || "Customer Case")}</h3>
@@ -481,7 +481,10 @@
 
   function bindEvents() {
     document.addEventListener("click", function (event) {
-      const queueButton = event.target.closest("[data-case-queue]");
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+
+      const queueButton = target.closest("[data-case-queue]");
       if (queueButton) {
         state.queue = queueButton.getAttribute("data-case-queue") || "overview";
         applyRailSelection();
@@ -489,28 +492,35 @@
         return;
       }
 
-      const openCaseButton = event.target.closest("[data-open-case]");
+      const openCaseButton = target.closest("[data-open-case]");
       if (openCaseButton) {
         const caseId = openCaseButton.getAttribute("data-open-case");
         if (caseId) loadCaseWorkspace(caseId);
         return;
       }
 
-      const caseActionButton = event.target.closest("[data-admin-case-action]");
+      const caseRow = target.closest("[data-case-row]");
+      if (caseRow && !target.closest("[data-case-select]")) {
+        const caseId = caseRow.getAttribute("data-case-row");
+        if (caseId) loadCaseWorkspace(caseId);
+        return;
+      }
+
+      const caseActionButton = target.closest("[data-admin-case-action]");
       if (caseActionButton) {
         const action = caseActionButton.getAttribute("data-admin-case-action");
         if (action) runCaseAction(action);
         return;
       }
 
-      const bulkActionButton = event.target.closest("[data-admin-bulk-action]");
+      const bulkActionButton = target.closest("[data-admin-bulk-action]");
       if (bulkActionButton) {
         const action = bulkActionButton.getAttribute("data-admin-bulk-action");
         if (action) runBulkAction(action);
         return;
       }
 
-      const tabButton = event.target.closest("[data-admin-case-tab]");
+      const tabButton = target.closest("[data-admin-case-tab]");
       if (tabButton) {
         state.selectedTab = tabButton.getAttribute("data-admin-case-tab") || "identity";
         applyTabSelection();

@@ -310,7 +310,9 @@
     let response = null;
     let lastNetworkError = null;
 
-    for (const apiBaseUrl of apiBaseUrls) {
+    for (let index = 0; index < apiBaseUrls.length; index += 1) {
+      const apiBaseUrl = apiBaseUrls[index];
+      const hasFallbackCandidate = index < apiBaseUrls.length - 1;
       let timeoutId = null;
       let signalHandler = null;
       try {
@@ -343,6 +345,14 @@
         }
 
         response = await fetch(`${apiBaseUrl}${path}`, requestOptions);
+        if (
+          response &&
+          response.status === 404 &&
+          hasFallbackCandidate &&
+          String(path || "").startsWith("/admin/control-center")
+        ) {
+          continue;
+        }
         saveApiBaseUrl(apiBaseUrl);
         break;
       } catch (networkError) {
