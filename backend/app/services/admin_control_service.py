@@ -21,6 +21,7 @@ BUILD_READY_STATUSES = {"build_ready", "in_production", "qa_review", "client_rev
 INTAKE_APPROVED_PHASES = {"intake_approved", "build_started", "quality_review", "client_review", "delivery_complete", "delivered", "archived"}
 PAID_ORDER_STATUSES = {"paid", "succeeded", "complete", "completed"}
 OBJECT_ID_WRAPPER_PATTERN = re.compile(r"""^ObjectId\((["']?)([0-9a-fA-F]{24})\1\)$""")
+MAX_BULK_ACTION_LIMIT = 5000
 
 
 def _normalize(value: Any) -> str:
@@ -495,7 +496,7 @@ def generate_entitlement(*, project_id: str, order_id: str = "", force: bool = T
     purchased_at = (order or {}).get("created_at")
     user_id = _resolve_entitlement_user_id(project, order)
     if not _to_object_id(user_id):
-        raise ValueError("Unable to resolve a valid user_id for entitlement generation.")
+        raise ValueError(f"Unable to resolve a valid user_id for entitlement generation for project {project_id_str}.")
 
     entitlement = upsert_project_entitlement(
         project_id=project_id_str,
@@ -851,7 +852,7 @@ def link_unlinked_paid_orders(*, limit: int = 500) -> dict[str, Any]:
     failures = 0
     linked_order_ids: list[str] = []
 
-    cursor = db["orders"].find({"status": {"$in": list(PAID_ORDER_STATUSES)}}).sort("created_at", -1).limit(max(1, min(limit, 5000)))
+    cursor = db["orders"].find({"status": {"$in": list(PAID_ORDER_STATUSES)}}).sort("created_at", -1).limit(max(1, min(limit, MAX_BULK_ACTION_LIMIT)))
     for order in cursor:
         if not _is_paid_package_order(order):
             skipped += 1
@@ -890,7 +891,7 @@ def assign_missing_lanes(*, limit: int = 500) -> dict[str, Any]:
     failures = 0
     project_ids: list[str] = []
 
-    cursor = db["projects"].find({}).sort("updated_at", -1).limit(max(1, min(limit, 5000)))
+    cursor = db["projects"].find({}).sort("updated_at", -1).limit(max(1, min(limit, MAX_BULK_ACTION_LIMIT)))
     for project in cursor:
         scanned += 1
         if not _project_is_approved(project):
@@ -933,7 +934,7 @@ def repair_missing_entitlements(*, limit: int = 500) -> dict[str, Any]:
     failures = 0
     project_ids: list[str] = []
 
-    cursor = db["projects"].find({}).sort("updated_at", -1).limit(max(1, min(limit, 5000)))
+    cursor = db["projects"].find({}).sort("updated_at", -1).limit(max(1, min(limit, MAX_BULK_ACTION_LIMIT)))
     for project in cursor:
         scanned += 1
         if not _project_is_approved(project):

@@ -22,6 +22,7 @@ from app.services.admin_control_service import (
 )
 
 router = APIRouter(prefix="/admin/control-center", tags=["Admin Control Center"])
+BULK_ACTION_DEFAULT_LIMIT = 500
 
 
 class SyncPackagePayload(BaseModel):
@@ -46,7 +47,7 @@ class RepairRecordPayload(BaseModel):
 
 
 class BulkRepairPayload(BaseModel):
-    limit: int = Field(default=500, ge=1, le=5000)
+    limit: int = Field(default=BULK_ACTION_DEFAULT_LIMIT, ge=1, le=5000)
 
 
 @router.get("/overview")
@@ -176,7 +177,7 @@ def bulk_repair_entitlements(
     current_user: dict[str, Any] = Depends(require_permission("admin.access")),
 ):
     del current_user
-    return repair_missing_entitlements(limit=(payload.limit if payload else 500))
+    return repair_missing_entitlements(limit=(payload.limit if payload else BULK_ACTION_DEFAULT_LIMIT))
 
 
 @router.post("/bulk/assign-missing-lanes")
@@ -185,7 +186,7 @@ def bulk_assign_lanes(
     current_user: dict[str, Any] = Depends(require_permission("admin.access")),
 ):
     del current_user
-    return assign_missing_lanes(limit=(payload.limit if payload else 500))
+    return assign_missing_lanes(limit=(payload.limit if payload else BULK_ACTION_DEFAULT_LIMIT))
 
 
 @router.post("/bulk/link-unlinked-paid-orders")
@@ -194,4 +195,4 @@ def bulk_link_paid_orders(
     current_user: dict[str, Any] = Depends(require_permission("admin.access")),
 ):
     del current_user
-    return link_unlinked_paid_orders(limit=(payload.limit if payload else 500))
+    return link_unlinked_paid_orders(limit=(payload.limit if payload else BULK_ACTION_DEFAULT_LIMIT))
