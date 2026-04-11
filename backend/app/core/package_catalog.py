@@ -554,16 +554,18 @@ def get_addon_catalog() -> dict[str, dict[str, Any]]:
 
 
 def _normalize_package_code(package_code: str) -> str:
+    raw = str(package_code or "").strip().lower()
     return PACKAGE_CODE_ALIASES.get(
-        str(package_code or "").strip(),
-        str(package_code or "").strip(),
+        raw,
+        raw,
     )
 
 
 def _normalize_addon_code(addon_code: str) -> str:
+    raw = str(addon_code or "").strip().lower()
     return ADDON_CODE_ALIASES.get(
-        str(addon_code or "").strip(),
-        str(addon_code or "").strip(),
+        raw,
+        raw,
     )
 
 

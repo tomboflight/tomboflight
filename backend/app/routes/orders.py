@@ -7,6 +7,7 @@ from app.services.order_service import (
     ensure_order_indexes,
     get_orders_for_user,
     list_recent_orders,
+    repair_paid_package_order_access,
 )
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
@@ -49,6 +50,15 @@ def list_all_orders_admin(
             search=search,
         )
     }
+
+
+@router.post("/admin/repair-paid-package-access")
+def repair_paid_package_access_admin(
+    limit: int = Query(default=500, ge=1, le=1000),
+    current_user: dict = Depends(require_admin),
+):
+    del current_user
+    return repair_paid_package_order_access(limit=limit)
 
 
 @router.get("/health")

@@ -4,7 +4,11 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.dependencies.auth import get_current_user, require_admin
+from app.dependencies.auth import (
+    get_current_user,
+    has_internal_admin_access,
+    require_admin,
+)
 from app.schemas.link_key import LinkKeyResponse, build_link_key_response
 from app.services.link_key_service import (
     generate_link_key,
@@ -15,21 +19,6 @@ from app.services.link_key_service import (
 )
 
 router = APIRouter(prefix="/link-keys", tags=["Link Keys"])
-
-INTERNAL_ADMIN_KEYS = {
-    "admin",
-    "super_admin",
-    "root_admin",
-    "platform_admin",
-    "operations_admin",
-    "finance_admin",
-    "marketing_admin",
-    "executive_technology",
-    "operations",
-    "finance",
-    "marketing",
-}
-
 
 def _current_user_id(user: dict[str, Any]) -> str:
     raw_id = user.get("id") or user.get("_id") or user.get("user_id")
@@ -42,14 +31,7 @@ def _current_user_id(user: dict[str, Any]) -> str:
 
 
 def _is_admin(user: dict[str, Any]) -> bool:
-    role = str(user.get("role") or "").strip().lower()
-    access_tier = str(user.get("access_tier") or "").strip().lower()
-    department_role = str(user.get("department_role") or "").strip().lower()
-
-    return any(
-        value in INTERNAL_ADMIN_KEYS
-        for value in (role, access_tier, department_role)
-    )
+    return has_internal_admin_access(user)
 
 
 @router.get("/my-list")

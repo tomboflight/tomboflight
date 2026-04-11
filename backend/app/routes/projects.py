@@ -2,7 +2,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.dependencies.auth import get_current_user
+from app.dependencies.auth import get_current_user, has_internal_admin_access
 from app.schemas.project import ProjectCreate, ProjectResponse, build_project_response
 from app.services.project_service import create_project, list_projects
 
@@ -30,32 +30,7 @@ def _current_user_email(user: dict[str, Any]) -> str:
 
 
 def _is_admin(user: dict[str, Any]) -> bool:
-    role = str(user.get("role", "")).strip().lower()
-    access_tier = str(user.get("access_tier", "")).strip().lower()
-    department_role = str(user.get("department_role", "")).strip().lower()
-
-    return role in {
-        "admin",
-        "super_admin",
-        "root_admin",
-        "platform_admin",
-        "operations_admin",
-        "finance_admin",
-        "marketing_admin",
-    } or access_tier in {
-        "super_admin",
-        "root_admin",
-        "platform_admin",
-        "operations_admin",
-        "finance_admin",
-        "marketing_admin",
-        "executive_technology",
-    } or department_role in {
-        "operations",
-        "finance",
-        "marketing",
-        "executive_technology",
-    }
+    return has_internal_admin_access(user)
 
 
 @router.get("", response_model=list[ProjectResponse], include_in_schema=False)

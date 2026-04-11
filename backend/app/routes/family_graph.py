@@ -10,21 +10,6 @@ from app.services.workspace_access_service import require_workspace_capability
 
 router = APIRouter(prefix="/families", tags=["Family Graph"])
 
-INTERNAL_ADMIN_KEYS = {
-    "admin",
-    "super_admin",
-    "root_admin",
-    "platform_admin",
-    "operations_admin",
-    "finance_admin",
-    "marketing_admin",
-    "executive_technology",
-    "operations",
-    "finance",
-    "marketing",
-}
-
-
 def _current_user_id(user: dict[str, Any]) -> str:
     raw_id = user.get("id") or user.get("_id") or user.get("user_id")
     if raw_id is None:
@@ -50,10 +35,6 @@ def _current_user_display_name(user: dict[str, Any]) -> str:
     return str(raw_name).strip()
 
 
-def _normalize_value(value: Any) -> str:
-    return str(value or "").strip().lower()
-
-
 def _family_id_candidates(family_id: str) -> list[Any]:
     candidates: list[Any] = [family_id]
     if ObjectId.is_valid(family_id):
@@ -62,12 +43,7 @@ def _family_id_candidates(family_id: str) -> list[Any]:
 
 
 def _is_admin(user: dict[str, Any]) -> bool:
-    values = {
-        _normalize_value(user.get("role")),
-        _normalize_value(user.get("access_tier")),
-        _normalize_value(user.get("department_role")),
-    }
-    return any(value in INTERNAL_ADMIN_KEYS for value in values if value)
+    return has_internal_admin_access(user)
 
 
 def _family_is_visible_to_user(

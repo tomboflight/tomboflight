@@ -5,7 +5,11 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
-from app.dependencies.auth import get_current_user, require_admin
+from app.dependencies.auth import (
+    get_current_user,
+    has_internal_admin_access,
+    require_admin,
+)
 from app.schemas.link_request import (
     LinkRequestCreate,
     LinkRequestResponse,
@@ -21,21 +25,6 @@ from app.services.link_request_service import (
 )
 
 router = APIRouter(prefix="/link-requests", tags=["Link Requests"])
-
-INTERNAL_ADMIN_KEYS = {
-    "admin",
-    "super_admin",
-    "root_admin",
-    "platform_admin",
-    "operations_admin",
-    "finance_admin",
-    "marketing_admin",
-    "executive_technology",
-    "operations",
-    "finance",
-    "marketing",
-}
-
 
 class LinkRequestDecision(BaseModel):
     notes: str | None = Field(default=None, max_length=1000)
@@ -59,14 +48,7 @@ def _current_user_display(user: dict[str, Any]) -> str:
 
 
 def _is_admin(user: dict[str, Any]) -> bool:
-    role = str(user.get("role") or "").strip().lower()
-    access_tier = str(user.get("access_tier") or "").strip().lower()
-    department_role = str(user.get("department_role") or "").strip().lower()
-
-    return any(
-        value in INTERNAL_ADMIN_KEYS
-        for value in (role, access_tier, department_role)
-    )
+    return has_internal_admin_access(user)
 
 
 @router.get("/", response_model=list[LinkRequestResponse])

@@ -7,12 +7,12 @@
     "legacy_portrait_intro",
     "digital_legacy_portrait",
   ]);
-  const FAMILY_PACKAGE_CODES = new Set([
+  const HOUSEHOLD_PACKAGE_CODES = new Set([
     "household_foundation",
     "heirloom_legacy_tree",
     "legacy_plus",
-    "family_estate_concierge",
   ]);
+  const NETWORK_PACKAGE_CODES = new Set(["family_estate_concierge"]);
   const ORGANIZATION_PACKAGE_CODES = new Set(["command_structure_network"]);
   const PORTRAIT_FLOW_ADDONS = new Set([
     "extra_upload_pack",
@@ -145,10 +145,11 @@
     const normalizedBase = basePackageCode(packageCode);
 
     if (PORTRAIT_PACKAGE_CODES.has(normalizedBase)) return "portrait";
-    if (FAMILY_PACKAGE_CODES.has(normalizedBase)) return "family";
+    if (HOUSEHOLD_PACKAGE_CODES.has(normalizedBase)) return "household";
+    if (NETWORK_PACKAGE_CODES.has(normalizedBase)) return "network";
     if (ORGANIZATION_PACKAGE_CODES.has(normalizedBase)) return "organization";
     if (PORTRAIT_FLOW_ADDONS.has(normalizedBase)) return "portrait";
-    if (FAMILY_FLOW_EXTRAS.has(normalizedBase)) return "family";
+    if (FAMILY_FLOW_EXTRAS.has(normalizedBase)) return "household";
     if (ORGANIZATION_FLOW_EXTRAS.has(normalizedBase)) return "organization";
     return "general";
   }
@@ -167,7 +168,7 @@
         return "Your organization add-on purchase was received. It will be applied to the correct command structure workspace after payment confirmation.";
       }
 
-      if (lane === "family") {
+      if (lane === "household" || lane === "network") {
         return "Your family build add-on purchase was received. It will be applied to the correct household or network workspace after payment confirmation.";
       }
 
@@ -178,8 +179,12 @@
       return "Your portrait package purchase was received. Continue to your dashboard and upload your portrait and supporting records.";
     }
 
-    if (FAMILY_PACKAGE_CODES.has(normalizedBase)) {
+    if (HOUSEHOLD_PACKAGE_CODES.has(normalizedBase)) {
       return "Your household or family package purchase was received. Continue to your dashboard to begin or continue your family build.";
+    }
+
+    if (NETWORK_PACKAGE_CODES.has(normalizedBase)) {
+      return "Your network package purchase was received. Continue to your dashboard to begin or continue your family estate build.";
     }
 
     if (ORGANIZATION_PACKAGE_CODES.has(normalizedBase)) {
@@ -218,7 +223,7 @@
       };
     }
 
-    if (lane === "family") {
+    if (lane === "household" || lane === "network") {
       return {
         primary,
         secondary: {

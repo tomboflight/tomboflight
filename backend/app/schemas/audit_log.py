@@ -25,15 +25,69 @@ class AuditLogResponse(BaseModel):
     created_at: str
 
 
+def _as_string(value: object, default: str = "") -> str:
+    normalized = str(value or "").strip()
+    return normalized or default
+
+
+def _serialize_created_at(value: object) -> str:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return _as_string(value, datetime.now(UTC).isoformat())
+
+
+def _legacy_entity_fields(data: dict) -> tuple[str, str]:
+    for key in (
+        "relationship_id",
+        "member_id",
+        "family_id",
+        "project_id",
+        "upload_id",
+        "order_id",
+        "user_id",
+    ):
+        value = _as_string(data.get(key))
+        if value:
+            return key.removesuffix("_id"), value
+
+    return "audit_event", _as_string(data.get("_id"))
+
+
+def _details(data: dict) -> dict:
+    details = data.get("details")
+    if isinstance(details, dict):
+        return details
+
+    excluded = {
+        "_id",
+        "action",
+        "event",
+        "entity_type",
+        "entity_id",
+        "actor_user_id",
+        "actor_email",
+        "actor_name",
+        "created_at",
+    }
+    return {key: value for key, value in data.items() if key not in excluded}
+
+
 def build_audit_log_response(data: dict) -> AuditLogResponse:
+    legacy_entity_type, legacy_entity_id = _legacy_entity_fields(data)
+
     return AuditLogResponse(
         id=str(data.get("_id", "")),
-        action=data["action"],
-        entity_type=data["entity_type"],
-        entity_id=data["entity_id"],
-        actor_user_id=data.get("actor_user_id"),
-        actor_email=data.get("actor_email"),
-        actor_name=data.get("actor_name"),
-        details=data.get("details", {}),
-        created_at=data.get("created_at", datetime.now(UTC).isoformat()),
+        action=_as_string(data.get("action") or data.get("event"), "legacy_event"),
+        entity_type=_as_string(data.get("entity_type"), legacy_entity_type),
+        entity_id=_as_string(data.get("entity_id"), legacy_entity_id),
+        actor_user_id=_as_string(data.get("actor_user_id")) or None,
+        actor_email=_as_string(data.get("actor_email")) or None,
+        actor_name=(
+            _as_string(data.get("actor_name"))
+            or _as_string(data.get("created_by"))
+            or _as_string(data.get("deleted_by"))
+            or None
+        ),
+        details=_details(data),
+        created_at=_serialize_created_at(data.get("created_at")),
     )

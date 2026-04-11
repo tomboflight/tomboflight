@@ -1,5 +1,8 @@
-from fastapi import APIRouter, HTTPException
+from typing import Any
 
+from fastapi import APIRouter, Depends, HTTPException
+
+from app.dependencies.auth import require_admin
 from app.schemas.db_bootstrap import BootstrapResponse
 from app.services.db_bootstrap_service import bootstrap_core_collections
 
@@ -10,7 +13,8 @@ router = APIRouter(
 
 
 @router.post("/", response_model=BootstrapResponse)
-def run_db_bootstrap():
+def run_db_bootstrap(current_user: dict[str, Any] = Depends(require_admin)):
+    del current_user
     try:
         return bootstrap_core_collections()
     except ValueError as exc:

@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse
 
 from app.config import settings
 from app.database import get_database
-from app.dependencies.auth import get_current_user, require_admin
+from app.dependencies.auth import get_current_user, has_internal_admin_access, require_admin
 from app.services.upload_service import (
     serialize_upload_record,
     store_member_photo_upload,
@@ -32,20 +32,6 @@ from app.services.workspace_access_service import (
 )
 
 router = APIRouter(prefix="/uploads", tags=["Uploads"])
-
-INTERNAL_ADMIN_KEYS = {
-    "admin",
-    "super_admin",
-    "root_admin",
-    "platform_admin",
-    "operations_admin",
-    "finance_admin",
-    "marketing_admin",
-    "executive_technology",
-    "operations",
-    "finance",
-    "marketing",
-}
 
 PHOTO_ALLOWED_CONTENT_TYPES = {
     "image/jpeg",
@@ -143,12 +129,7 @@ def _actor_label(user: dict[str, Any]) -> str:
 
 
 def _is_admin(user: dict[str, Any]) -> bool:
-    values = {
-        _normalize_value(user.get("role")).lower(),
-        _normalize_value(user.get("access_tier")).lower(),
-        _normalize_value(user.get("department_role")).lower(),
-    }
-    return any(value in INTERNAL_ADMIN_KEYS for value in values if value)
+    return has_internal_admin_access(user)
 
 
 def _family_is_visible_to_user(
