@@ -11,6 +11,8 @@ from app.services.mint_record_service import (
     ACTIVE_MINT_RECORD_STATUSES,
     _normalize_tx_hash,
     get_mint_record,
+    rebuild_mint_summary_for_project,
+    resolve_canonical_mint_status,
 )
 from app.services.public_manifest_service import build_public_manifest
 
@@ -59,7 +61,7 @@ def _supersede_stale_active_records(limit: int) -> dict[str, int]:
     inspected = 0
     active_statuses = set(ACTIVE_MINT_RECORD_STATUSES)
     project_records = _iter_project_records(limit)
-    seen_active_by_project: dict[str, bool] = {}
+    seen_current_by_project: dict[str, str] = {}
 
     for document in project_records:
         project_id = _normalize(document.get("project_id"))
@@ -69,8 +71,12 @@ def _supersede_stale_active_records(limit: int) -> dict[str, int]:
         if status_value not in active_statuses:
             continue
         inspected += 1
-        if not seen_active_by_project.get(project_id):
-            seen_active_by_project[project_id] = True
+        current_id = seen_current_by_project.get(project_id)
+        if not current_id:
+            current = resolve_canonical_mint_status(project_id, include_history=False)
+            current_id = _normalize(current.get("current_mint_record_id"))
+            seen_current_by_project[project_id] = current_id
+        if current_id and _normalize(document.get("_id")) == current_id:
             continue
         _records_collection().update_one(
             {"_id": document["_id"]},
@@ -92,7 +98,7 @@ def _sync_receipts(limit: int) -> dict[str, int]:
     cursor = _records_collection().find(
         {
             "tx_hash": {"$type": "string", "$ne": ""},
-            "mint_status": {"$nin": ["superseded", "cancelled"]},
+            "mint_status": {"$nin": ["superseded", "canceled", "cancelled"]},
         }
     ).sort([("updated_at", -1)]).limit(max(1, int(limit)))
 
@@ -114,6 +120,24 @@ def _sync_receipts(limit: int) -> dict[str, int]:
         else:
             summary["pending"] += 1
 
+    return summary
+
+
+def _rebuild_project_mint_summaries(limit: int) -> dict[str, int]:
+    summary = {"inspected": 0, "rebuilt": 0, "errors": 0}
+    project_ids: list[str] = []
+    for document in _records_collection().find({}, {"project_id": 1}).sort([("updated_at", -1)]).limit(max(1, int(limit))):
+        project_id = _normalize(document.get("project_id"))
+        if project_id and project_id not in project_ids:
+            project_ids.append(project_id)
+
+    for project_id in project_ids:
+        summary["inspected"] += 1
+        try:
+            rebuild_mint_summary_for_project(project_id)
+            summary["rebuilt"] += 1
+        except Exception:
+            summary["errors"] += 1
     return summary
 
 
@@ -178,6 +202,7 @@ def run_mint_maintenance(
         "supersede_stale_records": None,
         "sync_receipts": None,
         "republish_public_artifacts": None,
+        "rebuild_project_mint_summaries": None,
     }
 
     if normalize_tx_hashes:
@@ -188,6 +213,7 @@ def run_mint_maintenance(
         summary["sync_receipts"] = _sync_receipts(limit)
     if republish_public_artifacts:
         summary["republish_public_artifacts"] = _republish_public_artifacts(limit)
+    summary["rebuild_project_mint_summaries"] = _rebuild_project_mint_summaries(limit)
 
     latest_records: list[dict[str, Any]] = []
     for document in _records_collection().find({}).sort([("updated_at", -1)]).limit(10):

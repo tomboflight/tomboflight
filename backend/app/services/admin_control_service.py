@@ -15,7 +15,12 @@ from app.core.package_catalog import (
 )
 from app.database import get_database
 from app.services.audit_log_service import write_audit_log
+from app.services.mint_job_service import sync_receipt_for_mint_record
 from app.services.mint_policy_service import describe_project_mint_eligibility
+from app.services.mint_record_service import (
+    rebuild_mint_summary_for_project,
+    resolve_canonical_mint_status,
+)
 from app.services.project_entitlement_service import (
     get_project_entitlement,
     upsert_project_entitlement,
@@ -933,6 +938,7 @@ def repair_record(*, project_id: str, order_id: str = "") -> dict[str, Any]:
         project_id=project_id_str,
         order_id=_normalize((refreshed_order or {}).get("_id")),
     )
+    mint_repair = rebuild_mint_summary_for_project(project_id_str)
 
     return {
         "project": _serialize_project(refreshed_project),
@@ -943,8 +949,28 @@ def repair_record(*, project_id: str, order_id: str = "") -> dict[str, Any]:
             "order": order_repair,
             "entitlement_record": entitlement_repair,
             "entitlement_generation": entitlement_generation,
+            "mint": mint_repair,
         },
         "readiness": readiness,
+    }
+
+
+def repair_project_mint_status(*, project_id: str) -> dict[str, Any]:
+    if not _normalize(project_id):
+        raise ValueError("Project id is required.")
+    return rebuild_mint_summary_for_project(project_id)
+
+
+def resync_current_mint_receipt(*, project_id: str) -> dict[str, Any]:
+    canonical = resolve_canonical_mint_status(project_id, include_history=False)
+    mint_record_id = _normalize(canonical.get("current_mint_record_id"))
+    if not mint_record_id:
+        raise ValueError("Project has no mint record to sync.")
+    sync_result = sync_receipt_for_mint_record(mint_record_id)
+    return {
+        "project_id": _normalize(project_id),
+        "sync_result": sync_result,
+        "canonical_mint": resolve_canonical_mint_status(project_id, include_history=True),
     }
 
 
@@ -975,6 +1001,8 @@ def run_readiness_check(*, project_id: str, order_id: str = "") -> dict[str, Any
     status_ready = _normalize(project.get("status")).lower() in BUILD_READY_STATUSES
     phase_ready = _normalize(project.get("phase")).lower() in INTAKE_APPROVED_PHASES
     mint_eligibility = describe_project_mint_eligibility(project)
+    canonical_mint = resolve_canonical_mint_status(project_id_str, include_history=False)
+    mint_already_completed = bool(canonical_mint.get("is_minted"))
 
     control_profile = get_package_control_profile(package_fields["package_code"]) or {}
     launch_policy = dict(control_profile.get("launch_policy") or {})
@@ -989,29 +1017,35 @@ def run_readiness_check(*, project_id: str, order_id: str = "") -> dict[str, Any
         and entitlement_exists
     )
     mint_eligible = bool(mint_eligibility.get("eligible") and mint_review_ready and uploads_present)
+    if mint_already_completed:
+        mint_review_ready = True
+        mint_eligible = True
     blocking_reasons: list[str] = []
-    if not package_synced:
+    if mint_already_completed:
+        blocking_reasons = []
+    elif not package_synced:
         blocking_reasons.append("package_not_synced")
-    if not lane_assigned:
+    if not mint_already_completed and not lane_assigned:
         blocking_reasons.append("lane_not_assigned")
-    if not order_linked:
+    if not mint_already_completed and not order_linked:
         blocking_reasons.append("order_not_linked")
-    if not entitlement_exists:
+    if not mint_already_completed and not entitlement_exists:
         blocking_reasons.append("missing_entitlement")
-    if not uploads_present:
+    if not mint_already_completed and not uploads_present:
         blocking_reasons.append("uploads_missing")
-    if not status_ready:
+    if not mint_already_completed and not status_ready:
         blocking_reasons.append("project_not_build_ready")
-    if not phase_ready:
+    if not mint_already_completed and not phase_ready:
         blocking_reasons.append("project_not_intake_approved")
-    for reason in (mint_eligibility.get("reasons") or []):
-        normalized_reason = _normalize(reason)
-        if normalized_reason and normalized_reason not in blocking_reasons:
-            blocking_reasons.append(normalized_reason)
-    for warning in package_fields.get("warnings") or []:
-        normalized_warning = _normalize(warning)
-        if normalized_warning and normalized_warning not in blocking_reasons:
-            blocking_reasons.append(normalized_warning)
+    if not mint_already_completed:
+        for reason in (mint_eligibility.get("reasons") or []):
+            normalized_reason = _normalize(reason)
+            if normalized_reason and normalized_reason not in blocking_reasons:
+                blocking_reasons.append(normalized_reason)
+        for warning in package_fields.get("warnings") or []:
+            normalized_warning = _normalize(warning)
+            if normalized_warning and normalized_warning not in blocking_reasons:
+                blocking_reasons.append(normalized_warning)
 
     return {
         "project_id": project_id_str,
@@ -1024,12 +1058,15 @@ def run_readiness_check(*, project_id: str, order_id: str = "") -> dict[str, Any
         "intake_approved": phase_ready,
         "mint_review_ready": mint_review_ready,
         "mint_eligible": mint_eligible,
+        "mint_already_completed": mint_already_completed,
+        "canonical_mint": canonical_mint,
         "summary": {
             "package_synced": "yes" if package_synced else "no",
             "lane_assigned": "yes" if lane_assigned else "no",
             "order_linked": "yes" if order_linked else "no",
             "entitlement_exists": "yes" if entitlement_exists else "no",
             "mint_eligible": "yes" if mint_eligible else "no",
+            "canonical_mint_status": canonical_mint.get("current_status") or "none",
         },
         "mint_policy": mint_eligibility.get("mint_policy"),
         "mint_reasons": mint_eligibility.get("reasons") or [],
@@ -1042,6 +1079,15 @@ def run_readiness_check(*, project_id: str, order_id: str = "") -> dict[str, Any
 def enable_mint_review(*, project_id: str, order_id: str = "") -> dict[str, Any]:
     db = _db()
     readiness = run_readiness_check(project_id=project_id, order_id=order_id)
+    if readiness.get("mint_already_completed"):
+        return {
+            "project_id": _normalize(project_id),
+            "mint_review_ready": True,
+            "auto_mint_allowed": False,
+            "auto_mint_executed": False,
+            "skipped_reason": "canonical_mint_already_minted",
+            "canonical_mint": readiness.get("canonical_mint"),
+        }
     if not readiness.get("mint_review_ready"):
         raise ValueError("Project is not ready for mint review.")
 
@@ -1547,6 +1593,7 @@ def _case_alerts(
     duplicate_identity: bool,
 ) -> list[str]:
     alerts: list[str] = []
+    mint_already_completed = bool((readiness or {}).get("mint_already_completed"))
     if not entitlement:
         alerts.append("missing_entitlement")
 
@@ -1567,7 +1614,7 @@ def _case_alerts(
     if duplicate_identity:
         alerts.append("duplicate_admin_user_identity")
 
-    if upload_count <= 0:
+    if upload_count <= 0 and not mint_already_completed:
         alerts.append("upload_review_pending")
 
     return alerts
@@ -1611,7 +1658,7 @@ def _operator_guidance_items(
         codes.extend([_normalize(value) for value in readiness.get("blocking_reasons") or []])
         if readiness.get("mint_review_ready") and not readiness.get("mint_eligible"):
             codes.append("mint_blocked")
-        if include_mint_runtime and not settings.nft_auto_mint_on_review_enabled:
+        if include_mint_runtime and not settings.nft_auto_mint_on_review_enabled and not readiness.get("mint_already_completed"):
             codes.append("mint_runtime_disabled")
 
     codes.extend([_normalize(value) for value in alerts or []])
@@ -1861,26 +1908,53 @@ def _mint_record_snapshot(project_id: str) -> dict[str, Any]:
     if not project_id:
         return {}
 
-    db = _db()
-    query = {"project_id": {"$in": _project_id_candidates(project_id)}}
-    item = db["mint_records"].find_one(query, sort=[("created_at", -1)])
-    if not item:
+    canonical = resolve_canonical_mint_status(project_id, include_history=True)
+    current = canonical.get("current_record") or {}
+    if not current:
         return {
+            "mint_record_id": None,
+            "mint_status": "none",
+            "current_status": "none",
             "token_id": None,
             "tx_hash": None,
             "wallet_address": None,
+            "chain": settings.nft_chain,
+            "version_number": None,
             "error_state": None,
             "mint_queue_status": "not_queued",
+            "historical_attempt_count": 0,
         }
 
     return {
-        "mint_record_id": _normalize(item.get("_id")) or None,
-        "token_id": _normalize(item.get("token_id") or item.get("public_token_id")) or None,
-        "tx_hash": _normalize(item.get("tx_hash") or item.get("transaction_hash")) or None,
-        "wallet_address": _normalize(item.get("wallet_address")) or None,
-        "error_state": _normalize(item.get("error") or item.get("error_state")) or None,
-        "mint_queue_status": _normalize(item.get("status") or item.get("queue_status")) or "not_queued",
-        "created_at": _serialize_datetime(item.get("created_at")),
+        "mint_record_id": current.get("id"),
+        "mint_status": canonical.get("current_status"),
+        "current_status": canonical.get("current_status"),
+        "token_id": canonical.get("token_id") or current.get("public_token_id"),
+        "tx_hash": canonical.get("tx_hash"),
+        "wallet_address": canonical.get("wallet") or current.get("wallet_address"),
+        "chain": canonical.get("chain") or settings.nft_chain,
+        "contract_address": canonical.get("contract_address") or settings.nft_contract_address,
+        "version_number": canonical.get("version_number"),
+        "error_state": canonical.get("error_message") if canonical.get("is_current_failed") else None,
+        "error_code": canonical.get("error_code") if canonical.get("is_current_failed") else None,
+        "mint_queue_status": canonical.get("current_status") or "not_queued",
+        "historical_attempt_count": canonical.get("historical_attempt_count", 0),
+        "historical_attempts": [
+            {
+                "mint_record_id": record.get("id"),
+                "status": record.get("canonical_mint_status") or record.get("mint_status"),
+                "version_number": record.get("version_number"),
+                "token_id": record.get("token_id"),
+                "tx_hash": record.get("tx_hash"),
+                "error_code": record.get("error_code"),
+                "error_message": record.get("error_message") if record.get("canonical_mint_status") == "failed" else None,
+                "updated_at": _serialize_datetime(record.get("updated_at")),
+            }
+            for record in canonical.get("history", [])
+            if record.get("is_historical")
+        ],
+        "created_at": _serialize_datetime(current.get("created_at")),
+        "updated_at": _serialize_datetime(current.get("updated_at")),
     }
 
 
@@ -2114,9 +2188,13 @@ def _build_case_workspace_payload(
         include_mint_runtime=True,
     )
     next_mint_action = (
+        "No mint action required"
+        if readiness.get("mint_already_completed")
+        else (
         "Queue for Mint Review"
         if readiness.get("mint_review_ready")
         else ((mint_guidance[0] or {}).get("next_action") if mint_guidance else "Run Readiness Check")
+        )
     )
 
     display_name = (
@@ -2222,10 +2300,10 @@ def _build_case_workspace_payload(
             },
             "mint_readiness": {
                 "package_mint_policy": readiness.get("mint_policy") or (control_profile.get("mint_policy") or {}),
-                "eligibility": "eligible" if readiness.get("mint_eligible") else "blocked",
+                "eligibility": "minted" if readiness.get("mint_already_completed") else "eligible" if readiness.get("mint_eligible") else "blocked",
                 "runtime": "enabled" if settings.nft_auto_mint_on_review_enabled else "disabled",
-                "current_state": "mint_ready" if readiness.get("mint_eligible") else "blocked",
-                "decision": "Ready for mint review" if readiness.get("mint_review_ready") else "Readiness gates are still blocking mint review",
+                "current_state": mint_record.get("current_status") or ("mint_ready" if readiness.get("mint_eligible") else "blocked"),
+                "decision": "Minted successfully" if readiness.get("mint_already_completed") else "Ready for mint review" if readiness.get("mint_review_ready") else "Readiness gates are still blocking mint review",
                 "next_admin_action": next_mint_action,
                 "approvals": {
                     "customer_public_safe_approval_required": (
@@ -2235,8 +2313,13 @@ def _build_case_workspace_payload(
                 },
                 "token_id": mint_record.get("token_id"),
                 "tx_hash": mint_record.get("tx_hash"),
+                "chain": mint_record.get("chain"),
+                "version_number": mint_record.get("version_number"),
+                "wallet": mint_record.get("wallet_address"),
                 "error_state": mint_record.get("error_state"),
                 "mint_queue_status": mint_record.get("mint_queue_status"),
+                "historical_attempt_count": mint_record.get("historical_attempt_count", 0),
+                "historical_attempts": mint_record.get("historical_attempts") or [],
                 "blocking_reasons": readiness.get("blocking_reasons") or [],
                 "guidance": mint_guidance,
             },
@@ -2310,6 +2393,7 @@ def refresh_mint_readiness(*, limit: int = 500) -> dict[str, Any]:
         scanned += 1
         project_id = _normalize(project.get("_id"))
         try:
+            mint_repair = repair_project_mint_status(project_id=project_id)
             readiness = run_readiness_check(project_id=project_id)
             if readiness.get("mint_review_ready"):
                 ready += 1
@@ -2320,6 +2404,8 @@ def refresh_mint_readiness(*, limit: int = 500) -> dict[str, Any]:
                     "project_id": project_id,
                     "mint_review_ready": bool(readiness.get("mint_review_ready")),
                     "mint_eligible": bool(readiness.get("mint_eligible")),
+                    "canonical_mint_status": (readiness.get("canonical_mint") or {}).get("current_status"),
+                    "mint_repair": mint_repair.get("job_cleanup"),
                     "blocking_reasons": list(readiness.get("blocking_reasons") or []),
                 }
             )
@@ -2447,6 +2533,9 @@ def execute_case_action(
         "run_readiness_check": lambda: run_readiness_check(project_id=project_id, order_id=order_id),
         "queue_for_mint_review": lambda: enable_mint_review(project_id=project_id, order_id=order_id),
         "repair_record": lambda: repair_record(project_id=project_id, order_id=order_id),
+        "repair_mint_status": lambda: repair_project_mint_status(project_id=project_id),
+        "rebuild_mint_summary": lambda: repair_project_mint_status(project_id=project_id),
+        "resync_mint_receipt": lambda: resync_current_mint_receipt(project_id=project_id),
     }
 
     handler = action_handlers.get(normalized_action)

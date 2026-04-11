@@ -175,7 +175,7 @@ def list_admin_mint_overview(
         if normalized_search and normalized_search not in haystack:
             continue
 
-        latest_status = _normalize(((item.get("latest_mint_record") or {}).get("mint_status"))).lower()
+        latest_status = _normalize((item.get("mint_status") or {}).get("current_status") or ((item.get("latest_mint_record") or {}).get("mint_status"))).lower()
         if normalized_status and latest_status != normalized_status:
             continue
 
@@ -331,6 +331,13 @@ def queue_project_mint_record(
 ):
     project = _project_for_request(current_user, project_id)
     _require_project_match(project_id, mint_record_id)
+    current_status = build_mint_status(project_id)
+    if _normalize(current_status.get("current_mint_record_id")) == _normalize(mint_record_id) and current_status.get("current_status") == "minted":
+        return {
+            "jobs": [],
+            "skipped_reason": "canonical_mint_already_minted",
+            "mint_status": current_status,
+        }
 
     eligibility = describe_project_mint_eligibility(project)
     if not eligibility.get("eligible"):

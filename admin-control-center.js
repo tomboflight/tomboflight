@@ -168,7 +168,7 @@
 
   function chipClassForValue(value) {
     const normalized = normalizeLower(value);
-    if (["yes", "ready", "linked", "exists", "eligible", "active", "paid", "complete", "completed", "succeeded", "success", "files_present"].includes(normalized)) {
+    if (["yes", "ready", "linked", "exists", "eligible", "minted", "mint_ready", "active", "paid", "complete", "completed", "succeeded", "success", "files_present"].includes(normalized)) {
       return "success";
     }
     if (["no", "blocked", "missing", "not_linked", "unknown", "failed", "error", "waiting_for_uploads", "not_ready"].includes(normalized)) {
@@ -530,6 +530,7 @@
 
     if (tab === "mint_readiness") {
       const guidance = getGuidanceItems(tabData && tabData.guidance);
+      const history = Array.isArray(tabData && tabData.historical_attempts) ? tabData.historical_attempts : [];
       const currentState = tabData.current_state || tabData.eligibility || "blocked";
       const decision = tabData.decision || (tabData.eligibility === "eligible" ? "Ready for mint review" : "Readiness gates are still blocking mint review");
       const nextAction = tabData.next_admin_action || (guidance[0] && guidance[0].next_action) || "Run Readiness Check";
@@ -561,12 +562,28 @@
             { label: "Public Approval Required", value: tabData.approvals && tabData.approvals.customer_public_safe_approval_required, chip: true },
             { label: "Token ID", value: tabData.token_id, mono: true },
             { label: "Transaction", value: tabData.tx_hash, mono: true },
+            { label: "Chain", value: tabData.chain, chip: true },
+            { label: "Version", value: tabData.version_number },
+            { label: "Wallet", value: tabData.wallet, mono: true },
             { label: "Queue Status", value: tabData.mint_queue_status, chip: true },
+            { label: "Historical Attempts", value: tabData.historical_attempt_count },
             { label: "Error State", value: tabData.error_state || "none", chip: true },
           ])}
           <div class="admin-blocking-reasons">
             <span>Blocking Reasons</span>
             <div>${renderStatusStack(tabData.blocking_reasons || [], "none")}</div>
+          </div>
+          <div class="admin-record-list">
+            <span>Historical Mint Attempts</span>
+            ${
+              history.length
+                ? history
+                    .map(function (attempt) {
+                      return `<p><strong>v${escapeHtml(attempt.version_number || "—")} · ${escapeHtml(titleize(attempt.status || "historical"))}</strong><span>${escapeHtml(shortId(attempt.mint_record_id))} · ${escapeHtml(attempt.token_id || "no token")} · ${escapeHtml(attempt.error_message || attempt.error_code || "historical only")}</span></p>`;
+                    })
+                    .join("")
+                : "<p>No historical mint attempts.</p>"
+            }
           </div>
         </article>
         <article class="admin-dossier-card admin-dossier-card--wide">
