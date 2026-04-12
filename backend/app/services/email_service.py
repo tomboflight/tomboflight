@@ -4,6 +4,7 @@ import logging
 from datetime import UTC, datetime
 from email.utils import formataddr
 from html import escape
+from typing import Any
 
 import requests
 from requests import RequestException
@@ -15,6 +16,7 @@ logger = logging.getLogger(__name__)
 POSTMARK_EMAIL_ENDPOINT = "https://api.postmarkapp.com/email"
 POSTMARK_TIMEOUT_SECONDS = 10
 DEFAULT_MESSAGE_STREAM = "outbound"
+MAX_POSTMARK_MESSAGE_LOG_LENGTH = 500
 
 
 def _normalize_text(value: object) -> str:
@@ -45,12 +47,87 @@ def _postmark_from_header() -> str:
     return formataddr((_postmark_from_name(), _postmark_from_email()))
 
 
+def _truncate_log_value(
+    value: object,
+    *,
+    max_length: int = MAX_POSTMARK_MESSAGE_LOG_LENGTH,
+) -> str:
+    normalized = _normalize_text(value)
+    if len(normalized) <= max_length:
+        return normalized
+    return f"{normalized[:max_length]}..."
+
+
+def _postmark_response_details(response: requests.Response | None) -> dict[str, Any]:
+    if response is None:
+        return {
+            "postmark_status_code": "request_error",
+            "postmark_reason": None,
+            "postmark_response_json": None,
+            "postmark_error_code": None,
+            "postmark_error_message": None,
+            "postmark_message_id": None,
+        }
+
+    details: dict[str, Any] = {
+        "postmark_status_code": response.status_code,
+        "postmark_reason": _truncate_log_value(getattr(response, "reason", "")) or None,
+        "postmark_response_json": None,
+        "postmark_error_code": None,
+        "postmark_error_message": None,
+        "postmark_message_id": None,
+    }
+
+    try:
+        payload = response.json()
+    except ValueError:
+        details["postmark_response_json"] = False
+        details["postmark_response_content_type"] = _truncate_log_value(
+            response.headers.get("Content-Type", "")
+        ) or None
+        return details
+
+    details["postmark_response_json"] = True
+    if not isinstance(payload, dict):
+        details["postmark_response_shape"] = type(payload).__name__
+        return details
+
+    details.update(
+        {
+            "postmark_error_code": payload.get("ErrorCode"),
+            "postmark_error_message": _truncate_log_value(payload.get("Message")) or None,
+            "postmark_message_id": _truncate_log_value(payload.get("MessageID")) or None,
+        }
+    )
+    return details
+
+
+def _postmark_log_context(
+    *,
+    email_type: str,
+    to_email: str,
+    subject: str,
+    response: requests.Response | None = None,
+) -> dict[str, Any]:
+    return {
+        "event": "postmark_email_send_failed",
+        "email_provider": "postmark",
+        "email_type": _normalize_text(email_type) or "transactional",
+        "recipient_email": _normalize_email(to_email),
+        "sender_email": _postmark_from_email(),
+        "message_stream": _postmark_message_stream(),
+        "subject": _truncate_log_value(subject),
+        **_postmark_response_details(response),
+    }
+
+
 def _send_email(
     *,
     to_email: str,
     subject: str,
     text_body: str,
     html_body: str | None = None,
+    email_type: str = "transactional",
 ) -> None:
     """Send one transactional email through Postmark. Never raises."""
     normalized_to_email = _normalize_email(to_email)
@@ -59,9 +136,22 @@ def _send_email(
 
     token = _postmark_token()
     if not token:
+        context = {
+            "event": "postmark_email_not_configured",
+            "email_provider": "postmark",
+            "email_type": _normalize_text(email_type) or "transactional",
+            "recipient_email": normalized_to_email,
+            "sender_email": _postmark_from_email(),
+            "message_stream": _postmark_message_stream(),
+            "subject": _truncate_log_value(subject),
+        }
         logger.warning(
-            "Postmark is not configured; skipping email to %s",
+            "Postmark email skipped because server token is not configured: "
+            "email_type=%s recipient=%s message_stream=%s",
+            context["email_type"],
             normalized_to_email,
+            context["message_stream"],
+            extra=context,
         )
         return
 
@@ -95,24 +185,48 @@ def _send_email(
         )
         logger.debug(
             "Postmark email response: recipient=%s subject=%r status_code=%s "
-            "response_body=%s",
+            "message_stream=%s",
             normalized_to_email,
             subject,
             response.status_code,
-            response.text,
+            payload["MessageStream"],
         )
         response.raise_for_status()
     except RequestException as exc:
         response = getattr(exc, "response", None)
-        status_code = getattr(response, "status_code", "request_error")
-        response_body = getattr(response, "text", str(exc))
-        logger.exception(
-            "Failed to send Postmark email: recipient=%s subject=%r "
-            "status_code=%s response_body=%s",
+        context = _postmark_log_context(
+            email_type=email_type,
+            to_email=normalized_to_email,
+            subject=subject,
+            response=response,
+        )
+        logger.error(
+            "Postmark email send failed: email_type=%s recipient=%s "
+            "status_code=%s error_code=%s error_message=%s message_stream=%s",
+            context["email_type"],
             normalized_to_email,
-            subject,
-            status_code,
-            response_body,
+            context["postmark_status_code"],
+            context["postmark_error_code"],
+            context["postmark_error_message"] or type(exc).__name__,
+            context["message_stream"],
+            extra=context,
+            exc_info=True,
+        )
+    except Exception:
+        context = _postmark_log_context(
+            email_type=email_type,
+            to_email=normalized_to_email,
+            subject=subject,
+        )
+        logger.error(
+            "Unexpected Postmark email send failure: email_type=%s recipient=%s "
+            "status_code=%s message_stream=%s",
+            context["email_type"],
+            normalized_to_email,
+            context["postmark_status_code"],
+            context["message_stream"],
+            extra=context,
+            exc_info=True,
         )
 
 
@@ -153,6 +267,7 @@ def send_password_reset_email(
         subject=subject,
         text_body=text_body,
         html_body=html_body,
+        email_type="password_reset",
     )
 
 
@@ -186,4 +301,5 @@ def send_password_changed_email(*, to_email: str) -> None:
         subject=subject,
         text_body=text_body,
         html_body=html_body,
+        email_type="password_changed",
     )
