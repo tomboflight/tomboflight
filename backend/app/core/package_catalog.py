@@ -704,7 +704,7 @@ def get_addon_catalog() -> dict[str, dict[str, Any]]:
     return deepcopy(ADDON_CATALOG)
 
 
-def normalize_package_code(package_code: str) -> str:
+def normalize_package_code(package_code: Any) -> str:
     raw = str(package_code or "").strip().lower()
     return PACKAGE_CODE_ALIASES.get(
         raw,
@@ -752,7 +752,7 @@ def get_package_identifier_map() -> dict[str, Any]:
     }
 
 
-def normalize_addon_code(addon_code: str) -> str:
+def normalize_addon_code(addon_code: Any) -> str:
     raw = str(addon_code or "").strip().lower()
     return ADDON_CODE_ALIASES.get(
         raw,
@@ -760,7 +760,7 @@ def normalize_addon_code(addon_code: str) -> str:
     )
 
 
-def get_package(package_code: str) -> dict[str, Any] | None:
+def get_package(package_code: Any) -> dict[str, Any] | None:
     normalized = normalize_package_code(package_code)
     if not normalized:
         return None

@@ -1,7 +1,8 @@
 import unittest
+from typing import cast
 from unittest.mock import patch
 
-from requests import HTTPError
+from requests import HTTPError, Response
 
 from app.services import email_service
 
@@ -29,7 +30,10 @@ class FakePostmarkResponse:
 
     def raise_for_status(self):
         if self.status_code >= 400:
-            raise HTTPError(f"{self.status_code} Postmark error", response=self)
+            raise HTTPError(
+                f"{self.status_code} Postmark error",
+                response=cast(Response, self),
+            )
 
 
 class PostmarkEmailLoggingTests(unittest.TestCase):
@@ -59,15 +63,15 @@ class PostmarkEmailLoggingTests(unittest.TestCase):
 
         self.assertEqual(len(captured.records), 1)
         record = captured.records[0]
-        self.assertEqual(record.event, "postmark_email_send_failed")
-        self.assertEqual(record.email_provider, "postmark")
-        self.assertEqual(record.email_type, "password_reset")
-        self.assertEqual(record.recipient_email, "user@example.com")
-        self.assertEqual(record.message_stream, "outbound")
-        self.assertEqual(record.postmark_status_code, 422)
-        self.assertEqual(record.postmark_error_code, 300)
+        self.assertEqual(getattr(record, "event"), "postmark_email_send_failed")
+        self.assertEqual(getattr(record, "email_provider"), "postmark")
+        self.assertEqual(getattr(record, "email_type"), "password_reset")
+        self.assertEqual(getattr(record, "recipient_email"), "user@example.com")
+        self.assertEqual(getattr(record, "message_stream"), "outbound")
+        self.assertEqual(getattr(record, "postmark_status_code"), 422)
+        self.assertEqual(getattr(record, "postmark_error_code"), 300)
         self.assertEqual(
-            record.postmark_error_message,
+            getattr(record, "postmark_error_message"),
             "Your Postmark account is pending approval.",
         )
 
@@ -100,8 +104,8 @@ class PostmarkEmailLoggingTests(unittest.TestCase):
             )
 
         record = captured.records[0]
-        self.assertFalse(record.postmark_response_json)
-        self.assertEqual(record.postmark_response_content_type, "text/html")
+        self.assertFalse(getattr(record, "postmark_response_json"))
+        self.assertEqual(getattr(record, "postmark_response_content_type"), "text/html")
 
         logged_output = "\n".join(captured.output)
         self.assertNotIn("raw body", logged_output)
