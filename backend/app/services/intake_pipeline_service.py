@@ -34,7 +34,7 @@ def _normalize_visibility(value: str | None) -> str:
 
 
 def _normalize_package_code(value: str | None) -> str:
-    normalized = normalize_package_code(value)
+    normalized = normalize_package_code(value or "")
     return normalized or "unknown"
 
 
