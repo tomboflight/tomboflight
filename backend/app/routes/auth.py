@@ -170,7 +170,7 @@ def password_change_route(
 def admin_issue_password_reset_route(
     user_id: str,
     response: Response,
-    current_user: dict = Depends(require_permission("admin.access")),
+    current_user: dict = Depends(require_permission("admin.users.write")),
 ):
     try:
         result = admin_issue_password_reset(

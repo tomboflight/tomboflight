@@ -58,7 +58,7 @@ def _admin_user_id(current_admin: dict[str, Any]) -> str:
 def list_admin_intake_submissions(
     status_filter: Optional[str] = Query(default=None, alias="status"),
     limit: int = Query(default=50, ge=1, le=200),
-    current_admin: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_admin: dict[str, Any] = Depends(require_permission("admin.intake.review")),
 ):
     return list_all(limit=limit, status=status_filter)
 
@@ -66,7 +66,7 @@ def list_admin_intake_submissions(
 @router.get("/{submission_id}", response_model=IntakeSubmissionResponse)
 def get_admin_intake_submission(
     submission_id: str,
-    current_admin: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_admin: dict[str, Any] = Depends(require_permission("admin.intake.review")),
 ):
     submission = get_by_id(submission_id)
     if not submission:
@@ -81,7 +81,7 @@ def get_admin_intake_submission(
 def set_admin_intake_submission_status(
     submission_id: str,
     payload: IntakeSubmissionStatusUpdate,
-    current_admin: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_admin: dict[str, Any] = Depends(require_permission("admin.intake.write")),
 ):
     try:
         return update_status(
@@ -103,7 +103,7 @@ def set_admin_intake_submission_status(
 def mark_admin_intake_in_review(
     submission_id: str,
     payload: IntakeAdminNotesPayload,
-    current_admin: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_admin: dict[str, Any] = Depends(require_permission("admin.intake.write")),
 ):
     try:
         return update_status(
@@ -125,7 +125,7 @@ def mark_admin_intake_in_review(
 def approve_admin_intake_submission(
     submission_id: str,
     payload: IntakeAdminNotesPayload,
-    current_admin: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_admin: dict[str, Any] = Depends(require_permission("admin.intake.write")),
 ):
     try:
         return update_status(
@@ -147,7 +147,7 @@ def approve_admin_intake_submission(
 def reject_admin_intake_submission(
     submission_id: str,
     payload: IntakeAdminNotesPayload,
-    current_admin: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_admin: dict[str, Any] = Depends(require_permission("admin.intake.write")),
 ):
     try:
         return update_status(
@@ -169,7 +169,7 @@ def reject_admin_intake_submission(
 def provision_admin_intake_build(
     submission_id: str,
     payload: IntakeProvisionBuildPayload,
-    current_admin: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_admin: dict[str, Any] = Depends(require_permission("admin.intake.write")),
 ):
     try:
         return provision_build_from_submission(

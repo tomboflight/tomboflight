@@ -2014,6 +2014,8 @@ def _user_supports_search(user: dict[str, Any], search: str) -> bool:
 
 def _serialize_user_case(user: dict[str, Any]) -> dict[str, Any]:
     user_id = _normalize_object_id(user.get("_id")) or _normalize(user.get("id"))
+    if not user_id:
+        return {}
     role = _user_role_value(user)
     is_internal = _is_internal_user_document(user)
     status_value = _normalize(user.get("status")) or "active"
@@ -2049,6 +2051,176 @@ def _serialize_user_case(user: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _list_user_account_cases(
+    *,
+    db: Any,
+    search: str,
+    safe_limit: int,
+) -> list[dict[str, Any]]:
+    cases: list[dict[str, Any]] = []
+    cursor = db["users"].find({}).sort("updated_at", -1).limit(max(300, safe_limit * 10))
+    for user in cursor:
+        if not _user_supports_search(user, search):
+            continue
+        serialized = _serialize_user_case(user)
+        if serialized:
+            cases.append(serialized)
+        if len(cases) >= safe_limit:
+            break
+    return cases
+
+
+def _user_id_candidates(user: dict[str, Any]) -> list[Any]:
+    user_id = _normalize_object_id(user.get("_id")) or _normalize(user.get("id"))
+    candidates: list[Any] = []
+    if user_id:
+        candidates.append(user_id)
+    oid = _to_object_id(user_id)
+    if oid is not None:
+        candidates.append(oid)
+    return candidates
+
+
+def _related_projects_for_user(user: dict[str, Any]) -> list[dict[str, Any]]:
+    db = _db()
+    filters: list[dict[str, Any]] = []
+    user_id_values = _user_id_candidates(user)
+    email = _normalize_email(user.get("email"))
+    if user_id_values:
+        filters.append({"owner_user_id": {"$in": user_id_values}})
+    if email:
+        filters.append({"owner_email": email})
+    if not filters:
+        return []
+    cursor = db["projects"].find({"$or": filters}).sort("updated_at", -1).limit(20)
+    return [_serialize_project(project) for project in cursor]
+
+
+def _related_orders_for_user(user: dict[str, Any]) -> list[dict[str, Any]]:
+    db = _db()
+    filters: list[dict[str, Any]] = []
+    user_id_values = _user_id_candidates(user)
+    email = _normalize_email(user.get("email"))
+    if user_id_values:
+        filters.append({"user_id": {"$in": user_id_values}})
+    if email:
+        filters.append({"email": email})
+    if not filters:
+        return []
+    cursor = db["orders"].find({"$or": filters}).sort("created_at", -1).limit(20)
+    return [item for item in (_serialize_order(order) for order in cursor) if item]
+
+
+def _serialize_entitlement_item(entitlement: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": _normalize_object_id(entitlement.get("_id")) or None,
+        "project_id": _normalize_object_id(entitlement.get("project_id")) or None,
+        "user_id": _normalize_object_id(entitlement.get("user_id")) or None,
+        "package_code": _normalize(entitlement.get("package_code")) or None,
+        "package_name": _normalize(entitlement.get("package_name")) or None,
+        "package_lane": _normalize(entitlement.get("package_lane")) or None,
+        "maintenance_plan": _normalize(entitlement.get("maintenance_plan")) or None,
+        "maintenance_status": _normalize(entitlement.get("maintenance_status")) or None,
+        "status": _normalize(entitlement.get("status")) or None,
+        "resolved_entitlements": entitlement.get("resolved_entitlements") or {},
+        "created_at": _serialize_datetime(entitlement.get("created_at")),
+        "updated_at": _serialize_datetime(entitlement.get("updated_at")),
+    }
+
+
+def _related_entitlements_for_user(
+    user: dict[str, Any],
+    project_ids: list[str],
+) -> list[dict[str, Any]]:
+    db = _db()
+    filters: list[dict[str, Any]] = []
+    user_id_values = _user_id_candidates(user)
+    if user_id_values:
+        filters.append({"user_id": {"$in": user_id_values}})
+
+    project_id_values: list[Any] = []
+    for project_id in project_ids:
+        normalized_project_id = _normalize_object_id(project_id)
+        if normalized_project_id:
+            project_id_values.append(normalized_project_id)
+        oid = _to_object_id(normalized_project_id)
+        if oid is not None:
+            project_id_values.append(oid)
+    if project_id_values:
+        filters.append({"project_id": {"$in": project_id_values}})
+    if not filters:
+        return []
+    cursor = db["project_entitlements"].find({"$or": filters}).sort("updated_at", -1).limit(20)
+    return [_serialize_entitlement_item(entitlement) for entitlement in cursor]
+
+
+def _user_uploads_snapshot(user: dict[str, Any], project_ids: list[str]) -> dict[str, Any]:
+    db = _db()
+    filters: list[dict[str, Any]] = []
+    email = _normalize_email(user.get("email"))
+    if email:
+        filters.append({"uploaded_by": email})
+    project_id_values = [_normalize_object_id(project_id) for project_id in project_ids if _normalize_object_id(project_id)]
+    if project_id_values:
+        filters.append({"project_id": {"$in": project_id_values}})
+    if not filters:
+        return {"count": 0, "items": []}
+
+    items: list[dict[str, Any]] = []
+    for item in db["uploaded_files"].find({"$or": filters}).sort("created_at", -1).limit(20):
+        items.append(
+            {
+                "id": _normalize_object_id(item.get("_id")) or None,
+                "project_id": _normalize_object_id(item.get("project_id")) or None,
+                "family_id": _normalize_object_id(item.get("family_id")) or None,
+                "member_id": _normalize_object_id(item.get("member_id")) or None,
+                "filename": _normalize(item.get("original_filename") or item.get("filename")) or None,
+                "category": _normalize(item.get("category")) or None,
+                "uploaded_by": _normalize(item.get("uploaded_by")) or None,
+                "status": _normalize(item.get("status")) or None,
+                "created_at": _serialize_datetime(item.get("created_at")),
+            }
+        )
+    return {"count": len(items), "items": items}
+
+
+def _user_audit_timeline(user: dict[str, Any]) -> list[dict[str, Any]]:
+    db = _db()
+    user_id = _normalize_object_id(user.get("_id")) or _normalize(user.get("id"))
+    email = _normalize_email(user.get("email"))
+    conditions: list[dict[str, Any]] = []
+    if user_id:
+        conditions.extend(
+            [
+                {"actor_user_id": user_id},
+                {"target_id": user_id},
+                {"context.user_id": user_id},
+                {"details.user_id": user_id},
+            ]
+        )
+    if email:
+        conditions.append({"actor_email": email})
+    if not conditions:
+        return []
+
+    timeline: list[dict[str, Any]] = []
+    for item in db["audit_logs"].find({"$or": conditions}).sort("timestamp", -1).limit(40):
+        timeline.append(
+            {
+                "id": _normalize_object_id(item.get("_id")) or None,
+                "action": _normalize(item.get("action") or item.get("event")) or "event",
+                "target_type": _normalize(item.get("target_type") or item.get("entity_type")) or "user",
+                "target_id": _normalize_object_id(item.get("target_id") or item.get("entity_id")) or None,
+                "actor_email": _normalize_email(item.get("actor_email")) or None,
+                "actor_name": _normalize(item.get("actor_name")) or None,
+                "result": _normalize(item.get("result")) or "success",
+                "timestamp": _serialize_datetime(item.get("timestamp") or item.get("created_at")),
+                "details": item.get("details") or {},
+            }
+        )
+    return timeline
+
+
 def _find_case_user(*, email: str = "", user_id: str = "") -> dict[str, Any] | None:
     db = _db()
     normalized_user_id = _normalize(user_id)
@@ -2066,6 +2238,10 @@ def _find_case_user(*, email: str = "", user_id: str = "") -> dict[str, Any] | N
         "role": 1,
         "access_tier": 1,
         "department_role": 1,
+        "status": 1,
+        "created_at": 1,
+        "updated_at": 1,
+        "last_login_at": 1,
     }
 
     if user_oid is not None:
@@ -2203,9 +2379,191 @@ def _mint_record_snapshot(project_id: str) -> dict[str, Any]:
     }
 
 
+def _build_user_workspace_payload(user: dict[str, Any]) -> dict[str, Any]:
+    user_id = _normalize_object_id(user.get("_id")) or _normalize(user.get("id"))
+    if not user_id:
+        raise ValueError("User account not found.")
+
+    role = _user_role_value(user)
+    is_internal = _is_internal_user_document(user)
+    related_projects = _related_projects_for_user(user)
+    related_orders = _related_orders_for_user(user)
+    project_ids = [
+        _normalize_object_id(project.get("id"))
+        for project in related_projects
+        if _normalize_object_id(project.get("id"))
+    ]
+    related_entitlements = _related_entitlements_for_user(user, project_ids)
+    uploads = _user_uploads_snapshot(user, project_ids)
+    audit = _user_audit_timeline(user)
+    primary_project = related_projects[0] if related_projects else {}
+    primary_order = related_orders[0] if related_orders else {}
+    primary_entitlement = related_entitlements[0] if related_entitlements else {}
+
+    package_code = (
+        _normalize(primary_entitlement.get("package_code"))
+        or _normalize(primary_order.get("package_code"))
+        or _normalize(primary_project.get("package_code"))
+        or "account"
+    )
+    package_name = (
+        _normalize(primary_entitlement.get("package_name"))
+        or _normalize(primary_order.get("package_name"))
+        or _normalize(primary_project.get("package_name"))
+        or "Account"
+    )
+    package_lane = (
+        _normalize(primary_entitlement.get("package_lane"))
+        or _normalize(primary_project.get("project_lane"))
+        or _normalize(primary_project.get("lane"))
+        or ("admin" if is_internal else "customer")
+    )
+    upload_categories = sorted(
+        {
+            _normalize(item.get("category"))
+            for item in uploads.get("items", [])
+            if _normalize(item.get("category"))
+        }
+    )
+    alerts: list[str] = []
+    if is_internal:
+        alerts.append("internal_admin_identity")
+    if not related_projects and not is_internal:
+        alerts.append("customer_without_project")
+    operator_guidance = _operator_guidance_items(alerts=alerts)
+    display_name = _user_display_name(user)
+    status_value = _normalize(user.get("status")) or "active"
+
+    return {
+        "case_id": f"user:{user_id}",
+        "project": primary_project or None,
+        "order": primary_order or None,
+        "package": {
+            "package_code": package_code,
+            "package_slug": package_code,
+            "package_name": package_name,
+            "lane": package_lane,
+            "project_lane": package_lane,
+            "source": "user_account",
+            "normalization_status": "not_applicable",
+            "warnings": [],
+        },
+        "entitlement": primary_entitlement or None,
+        "readiness": {
+            "mint_review_ready": False,
+            "mint_eligible": False,
+            "mint_already_completed": False,
+            "blocking_reasons": ["user_account_case"],
+        },
+        "uploads": uploads,
+        "audit_timeline": audit,
+        "alerts": alerts,
+        "operator_guidance": operator_guidance,
+        "warnings": [],
+        "tabs": {
+            "identity": {
+                "user_id": user_id,
+                "full_name": display_name,
+                "first_name": _normalize(user.get("first_name")) or None,
+                "last_name": _normalize(user.get("last_name")) or None,
+                "email": _normalize_email(user.get("email")) or None,
+                "birthday": _serialize_datetime(
+                    user.get("birthday") or user.get("birth_date") or user.get("date_of_birth") or user.get("dob")
+                ),
+                "role": role,
+                "status": status_value,
+                "admin_user_relationship": "internal_admin_identity" if is_internal else "customer_record",
+                "created_at": _serialize_datetime(user.get("created_at")),
+                "updated_at": _serialize_datetime(user.get("updated_at")),
+                "last_login_at": _serialize_datetime(user.get("last_login_at")),
+            },
+            "package_lane": {
+                "package_slug": package_code,
+                "package_name": package_name,
+                "package_code": package_code,
+                "lane": package_lane,
+                "project_lane": package_lane,
+                "source": "user_account",
+                "related_project_count": len(related_projects),
+                "related_order_count": len(related_orders),
+                "entitlement_count": len(related_entitlements),
+                "warnings": [],
+                "package_normalization_status": "not_applicable",
+            },
+            "orders_billing": {
+                "package_slug": package_code,
+                "package_name": package_name,
+                "package_code": package_code,
+                "lane": package_lane,
+                "order_status": primary_order.get("status"),
+                "paid": bool(primary_order and primary_order.get("status") in PAID_ORDER_STATUSES),
+                "project_link_status": "linked" if primary_order.get("project_id") else "not_linked",
+                "maintenance_state": primary_entitlement.get("maintenance_status"),
+                "primary_order": primary_order,
+                "related_orders": related_orders,
+            },
+            "project": {
+                "project_name": primary_project.get("name"),
+                "project_id": primary_project.get("id"),
+                "package_slug": package_code,
+                "package_name": package_name,
+                "package_code": package_code,
+                "lane": package_lane,
+                "project_lane": package_lane,
+                "build_status": primary_project.get("status"),
+                "phase": primary_project.get("phase"),
+                "source": primary_project.get("source"),
+                "related_projects": related_projects,
+                "uploads_summary": {
+                    "count": uploads.get("count", 0),
+                    "categories": upload_categories,
+                },
+            },
+            "entitlements": {
+                "entitlement_status": "exists" if related_entitlements else "missing",
+                "package_code": primary_entitlement.get("package_code") or package_code,
+                "package_lane": primary_entitlement.get("package_lane") or package_lane,
+                "maintenance_plan": primary_entitlement.get("maintenance_plan"),
+                "maintenance_status": primary_entitlement.get("maintenance_status"),
+                "resolved_entitlements": primary_entitlement.get("resolved_entitlements") or {},
+                "items": related_entitlements,
+            },
+            "uploads_verification": {
+                "uploaded_files": uploads.get("count", 0),
+                "file_categories": upload_categories,
+                "review_status": "pending" if uploads.get("count", 0) <= 0 else "files_present",
+                "verification_readiness": "ready" if uploads.get("count", 0) > 0 else "waiting_for_uploads",
+                "items": uploads.get("items", []),
+            },
+            "mint_readiness": {
+                "eligibility": "not_applicable",
+                "runtime": "not_applicable",
+                "current_state": "user_account_case",
+                "decision": "User account cases do not mint directly.",
+                "next_admin_action": "Review linked projects or orders",
+                "blocking_reasons": ["user_account_case"],
+                "guidance": operator_guidance,
+                "historical_attempts": [],
+                "historical_attempt_count": 0,
+            },
+            "audit_timeline": audit,
+        },
+    }
+
+
 def list_customer_cases(*, search: str = "", limit: int = 50, queue: str = "customer_cases") -> dict[str, Any]:
     db = _db()
     safe_limit = max(1, min(limit, 200))
+    normalized_queue = _normalize(queue).lower()
+    if normalized_queue == "users":
+        return {
+            "items": _list_user_account_cases(
+                db=db,
+                search=search,
+                safe_limit=safe_limit,
+            )
+        }
+
     user_emails, user_ids, family_ids, mint_project_ids = _search_seed_sets(search)
 
     cases: list[dict[str, Any]] = []
@@ -2578,6 +2936,13 @@ def customer_case_workspace(case_id: str) -> dict[str, Any]:
     if not normalized_case_id:
         raise ValueError("Case id is required.")
 
+    if normalized_case_id.startswith("user:"):
+        user_id = normalized_case_id.split(":", 1)[1]
+        user = _find_case_user(user_id=user_id)
+        if user is None:
+            raise ValueError("User account case not found.")
+        return _build_user_workspace_payload(user)
+
     if normalized_case_id.startswith("order:"):
         order_id = normalized_case_id.split(":", 1)[1]
         order = _order_by_id(order_id)
@@ -2748,6 +3113,8 @@ def execute_case_action(
         project = _project_by_id(_normalize(order.get("project_id"))) or _find_matching_approved_project_for_order(order)
         if project is not None:
             project_id = _normalize(project.get("_id"))
+    elif normalized_case_id.startswith("user:"):
+        project_id = ""
 
     if normalized_action in {"refresh_case_data"}:
         payload = customer_case_workspace(normalized_case_id)
@@ -2760,6 +3127,9 @@ def execute_case_action(
             details={"refreshed": True},
         )
         return payload
+
+    if normalized_case_id.startswith("user:"):
+        raise ValueError("User account cases only support refresh_case_data.")
 
     if not project_id:
         raise ValueError("Action requires a linked project.")

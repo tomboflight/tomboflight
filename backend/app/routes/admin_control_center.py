@@ -6,10 +6,13 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
-from app.dependencies.auth import require_permission
+from app.dependencies.auth import require_any_permission, require_permission
 from app.services.audit_log_service import write_audit_log
 from app.services.admin_control_service import (
     MAX_BULK_ACTION_LIMIT,
+    admin_control_access_profile,
+    admin_control_action_allowed,
+    admin_control_bulk_action_allowed,
     admin_console_overview,
     assign_lane,
     assign_missing_lanes,
@@ -101,10 +104,26 @@ class RepairSelectedPayload(BaseModel):
     order_ids: list[str] = Field(default_factory=list)
 
 
+def _assert_bulk_action_allowed(current_user: dict[str, Any], action: str) -> None:
+    if admin_control_bulk_action_allowed(current_user, action):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=f"Admin control bulk action '{action}' is not permitted for this role.",
+    )
+
+
+@router.get("/access-profile")
+def get_admin_control_access_profile(
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.view")),
+):
+    return admin_control_access_profile(current_user)
+
+
 @router.get("/overview")
 def get_admin_control_overview(
     limit: int = Query(default=20, ge=1, le=100),
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.view")),
 ):
     del current_user
     try:
@@ -118,7 +137,7 @@ async def get_customer_cases(
     search: str = Query(default=""),
     queue: str = Query(default="customer_cases"),
     limit: int = Query(default=50, ge=1, le=200),
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.view")),
 ):
     del current_user
     return await asyncio.to_thread(list_customer_cases, search=search, queue=queue, limit=limit)
@@ -127,7 +146,7 @@ async def get_customer_cases(
 @router.get("/cases/{case_id}")
 async def get_customer_case_workspace(
     case_id: str,
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.view")),
 ):
     del current_user
     try:
@@ -140,8 +159,13 @@ async def get_customer_case_workspace(
 async def run_customer_case_action(
     case_id: str,
     action: str,
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.view")),
 ):
+    if not admin_control_action_allowed(current_user, action):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Admin control action '{action}' is not permitted for this role.",
+        )
     try:
         return await asyncio.to_thread(
             execute_case_action,
@@ -156,7 +180,7 @@ async def run_customer_case_action(
 @router.get("/projects/{project_id}/workspace")
 def get_project_workspace_snapshot(
     project_id: str,
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.view")),
 ):
     del current_user
     try:
@@ -169,7 +193,7 @@ def get_project_workspace_snapshot(
 def sync_project_package(
     project_id: str,
     payload: SyncPackagePayload | None = None,
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.write")),
 ):
     del current_user
     try:
@@ -181,7 +205,7 @@ def sync_project_package(
 @router.post("/projects/{project_id}/assign-lane")
 def assign_project_lane(
     project_id: str,
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.write")),
 ):
     del current_user
     try:
@@ -194,7 +218,7 @@ def assign_project_lane(
 def link_project_to_order(
     order_id: str,
     payload: LinkOrderPayload | None = None,
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.billing")),
 ):
     del current_user
     try:
@@ -210,7 +234,7 @@ def link_project_to_order(
 def generate_project_entitlement(
     project_id: str,
     payload: GenerateEntitlementPayload | None = None,
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.billing")),
 ):
     del current_user
     try:
@@ -227,7 +251,7 @@ def generate_project_entitlement(
 def get_project_readiness(
     project_id: str,
     order_id: str = Query(default=""),
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.view")),
 ):
     del current_user
     try:
@@ -240,7 +264,7 @@ def get_project_readiness(
 def queue_project_for_mint_review(
     project_id: str,
     payload: EnableMintReviewPayload | None = None,
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.mint")),
 ):
     del current_user
     try:
@@ -253,7 +277,7 @@ def queue_project_for_mint_review(
 def repair_project_record(
     project_id: str,
     payload: RepairRecordPayload | None = None,
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.write")),
 ):
     del current_user
     try:
@@ -265,7 +289,7 @@ def repair_project_record(
 @router.post("/projects/{project_id}/repair-mint-status")
 def repair_project_mint_state(
     project_id: str,
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.mint")),
 ):
     del current_user
     try:
@@ -277,7 +301,7 @@ def repair_project_mint_state(
 @router.post("/projects/{project_id}/resync-mint-receipt")
 def resync_project_mint_receipt(
     project_id: str,
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.mint")),
 ):
     del current_user
     try:
@@ -289,8 +313,9 @@ def resync_project_mint_receipt(
 @router.post("/bulk/repair-missing-entitlements")
 def bulk_repair_entitlements(
     payload: BulkRepairPayload | None = None,
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.view")),
 ):
+    _assert_bulk_action_allowed(current_user, "repair-missing-entitlements")
     result = repair_missing_entitlements(limit=(payload.limit if payload else BULK_ACTION_DEFAULT_LIMIT))
     _audit_bulk_action(current_user=current_user, action="repair_missing_entitlements", result_payload=result)
     return result
@@ -299,8 +324,9 @@ def bulk_repair_entitlements(
 @router.post("/bulk/assign-missing-lanes")
 def bulk_assign_lanes(
     payload: BulkRepairPayload | None = None,
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.view")),
 ):
+    _assert_bulk_action_allowed(current_user, "assign-missing-lanes")
     result = assign_missing_lanes(limit=(payload.limit if payload else BULK_ACTION_DEFAULT_LIMIT))
     _audit_bulk_action(current_user=current_user, action="assign_missing_lanes", result_payload=result)
     return result
@@ -309,8 +335,9 @@ def bulk_assign_lanes(
 @router.post("/bulk/link-unlinked-paid-orders")
 def bulk_link_paid_orders(
     payload: BulkRepairPayload | None = None,
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.view")),
 ):
+    _assert_bulk_action_allowed(current_user, "link-unlinked-paid-orders")
     result = link_unlinked_paid_orders(limit=(payload.limit if payload else BULK_ACTION_DEFAULT_LIMIT))
     _audit_bulk_action(current_user=current_user, action="link_unlinked_paid_orders", result_payload=result)
     return result
@@ -319,8 +346,9 @@ def bulk_link_paid_orders(
 @router.post("/bulk/normalize-broken-package-records")
 def bulk_normalize_package_records(
     payload: BulkRepairPayload | None = None,
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.view")),
 ):
+    _assert_bulk_action_allowed(current_user, "normalize-broken-package-records")
     result = normalize_broken_package_records(limit=(payload.limit if payload else BULK_ACTION_DEFAULT_LIMIT))
     _audit_bulk_action(current_user=current_user, action="normalize_broken_package_records", result_payload=result)
     return result
@@ -329,8 +357,9 @@ def bulk_normalize_package_records(
 @router.post("/bulk/refresh-mint-readiness")
 def bulk_refresh_mint_readiness(
     payload: BulkRepairPayload | None = None,
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.view")),
 ):
+    _assert_bulk_action_allowed(current_user, "refresh-mint-readiness")
     result = refresh_mint_readiness(limit=(payload.limit if payload else BULK_ACTION_DEFAULT_LIMIT))
     _audit_bulk_action(current_user=current_user, action="refresh_mint_readiness", result_payload=result)
     return result
@@ -339,8 +368,9 @@ def bulk_refresh_mint_readiness(
 @router.post("/bulk/repair-selected-records")
 def bulk_repair_selected_records(
     payload: RepairSelectedPayload,
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_any_permission(["admin.control.write", "admin.control.billing"])),
 ):
+    _assert_bulk_action_allowed(current_user, "repair-selected-records")
     result = repair_selected_records(project_ids=payload.project_ids, order_ids=payload.order_ids)
     _audit_bulk_action(current_user=current_user, action="repair_selected_records", result_payload=result)
     return result
@@ -349,8 +379,9 @@ def bulk_repair_selected_records(
 @router.post("/bulk/repair-all-safe-records")
 def bulk_repair_all_safe_records(
     payload: BulkRepairPayload | None = None,
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.view")),
 ):
+    _assert_bulk_action_allowed(current_user, "repair-all-safe-records")
     result = repair_all_safe_records(limit=(payload.limit if payload else BULK_ACTION_DEFAULT_LIMIT))
     _audit_bulk_action(current_user=current_user, action="repair_all_safe_records", result_payload=result)
     return result

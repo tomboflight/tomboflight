@@ -48,7 +48,7 @@ def _is_admin(user: dict[str, Any]) -> bool:
 @router.post("/apply")
 def apply_project_entitlement(
     payload: ApplyProjectEntitlementPayload,
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.entitlements.write")),
 ):
     try:
         return upsert_project_entitlement(
@@ -105,7 +105,7 @@ def list_project_entitlements_admin(
     limit: int = 100,
     active_only: bool = False,
     search: str = "",
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.entitlements.read")),
 ):
     del current_user
     return {

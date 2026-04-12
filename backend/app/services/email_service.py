@@ -82,19 +82,36 @@ def _send_email(
     }
 
     try:
+        logger.debug(
+            "Sending Postmark email: recipient=%s subject=%r",
+            normalized_to_email,
+            subject,
+        )
         response = requests.post(
             POSTMARK_EMAIL_ENDPOINT,
             json=payload,
             headers=headers,
             timeout=POSTMARK_TIMEOUT_SECONDS,
         )
+        logger.debug(
+            "Postmark email response: recipient=%s subject=%r status_code=%s "
+            "response_body=%s",
+            normalized_to_email,
+            subject,
+            response.status_code,
+            response.text,
+        )
         response.raise_for_status()
     except RequestException as exc:
         response = getattr(exc, "response", None)
-        response_body = getattr(response, "text", "")
+        status_code = getattr(response, "status_code", "request_error")
+        response_body = getattr(response, "text", str(exc))
         logger.exception(
-            "Failed to send Postmark email to %s. Response: %s",
+            "Failed to send Postmark email: recipient=%s subject=%r "
+            "status_code=%s response_body=%s",
             normalized_to_email,
+            subject,
+            status_code,
             response_body,
         )
 

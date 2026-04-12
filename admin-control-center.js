@@ -20,7 +20,12 @@
 
   const state = {
     currentUser: null,
+    accessProfile: null,
     roleKey: "",
+    allowedQueues: [],
+    allowedTabs: [],
+    allowedActions: [],
+    allowedBulkActions: [],
     queue: "overview",
     selectedCaseId: "",
     selectedTab: "identity",
@@ -130,6 +135,49 @@
     if (direct) return direct;
     if (typeof app.isInternalRole === "function" && app.isInternalRole(me)) return "admin";
     return "";
+  }
+
+  function normalizeAccessList(values) {
+    return Array.isArray(values)
+      ? values.map(normalizeLower).filter(Boolean)
+      : [];
+  }
+
+  function isAllowedQueue(queue) {
+    const normalized = normalizeLower(queue);
+    return state.allowedQueues.includes(normalized);
+  }
+
+  function isAllowedTab(tab) {
+    const normalized = normalizeLower(tab);
+    return state.allowedTabs.includes(normalized);
+  }
+
+  function isAllowedCaseAction(action) {
+    const normalized = normalizeLower(action);
+    return state.allowedActions.includes(normalized);
+  }
+
+  function isAllowedBulkAction(action) {
+    const normalized = normalizeLower(action);
+    return state.allowedBulkActions.includes(normalized);
+  }
+
+  async function loadAccessProfile() {
+    const profile = await fetchJson("/admin/control-center/access-profile");
+    state.accessProfile = profile || {};
+    state.roleKey = normalizeLower(profile && profile.role_key) || state.roleKey || "admin";
+    state.allowedQueues = normalizeAccessList(profile && profile.allowed_queues);
+    state.allowedTabs = normalizeAccessList(profile && profile.allowed_tabs);
+    state.allowedActions = normalizeAccessList(profile && profile.allowed_actions);
+    state.allowedBulkActions = normalizeAccessList(profile && profile.allowed_bulk_actions);
+
+    if (!isAllowedQueue(state.queue)) {
+      state.queue = state.allowedQueues[0] || "overview";
+    }
+    if (!isAllowedTab(state.selectedTab)) {
+      state.selectedTab = state.allowedTabs[0] || "identity";
+    }
   }
 
   function shortId(value) {
@@ -349,6 +397,7 @@
     const node = document.querySelector("[data-admin-case-list]");
     if (!node) return;
     const cases = Array.isArray(state.cases) ? state.cases : [];
+    const canRepairSelected = isAllowedBulkAction("repair-selected-records");
     if (!cases.length) {
       node.innerHTML = `
         <div class="admin-empty-state">
@@ -368,9 +417,13 @@
         const isSelected = state.selectedCaseId === item.case_id;
         return `
           <article class="admin-case-row ${isSelected ? "is-selected" : ""}" data-case-row="${escapeHtml(item.case_id || "")}">
-            <label class="admin-case-select" aria-label="Select ${escapeHtml(item.name || "case")} for bulk repair">
-              <input type="checkbox" data-case-select="${escapeHtml(item.case_id || "")}" />
-            </label>
+            ${
+              canRepairSelected
+                ? `<label class="admin-case-select" aria-label="Select ${escapeHtml(item.name || "case")} for bulk repair">
+                    <input type="checkbox" data-case-select="${escapeHtml(item.case_id || "")}" />
+                  </label>`
+                : '<span class="admin-case-select" aria-hidden="true"></span>'
+            }
             <div class="admin-case-primary">
               <h3>${escapeHtml(item.name || "Customer Case")}</h3>
               <p>${escapeHtml(item.email || "No email")} · ${escapeHtml(item.role || "customer")}</p>
@@ -674,6 +727,10 @@
   function applyRailSelection() {
     document.querySelectorAll("[data-case-queue]").forEach(function (button) {
       const queue = button.getAttribute("data-case-queue") || "";
+      const allowed = isAllowedQueue(queue);
+      button.hidden = !allowed;
+      button.disabled = !allowed;
+      button.setAttribute("aria-disabled", allowed ? "false" : "true");
       button.classList.toggle("is-active", queue === state.queue);
     });
     const meta = QUEUE_META[state.queue] || QUEUE_META.customer_cases;
@@ -686,8 +743,12 @@
   function applyTabSelection() {
     document.querySelectorAll("[data-admin-case-tab]").forEach(function (button) {
       const tab = button.getAttribute("data-admin-case-tab") || "";
+      const allowed = isAllowedTab(tab);
+      button.hidden = !allowed;
+      button.disabled = !allowed;
       button.classList.toggle("is-active", tab === state.selectedTab);
       button.setAttribute("aria-selected", tab === state.selectedTab ? "true" : "false");
+      button.setAttribute("aria-disabled", allowed ? "false" : "true");
     });
   }
 
@@ -710,13 +771,15 @@
     document.querySelectorAll("[data-admin-case-action]").forEach(function (button) {
       const action = button.getAttribute("data-admin-case-action") || "";
       const tier = ACTION_TIERS[action] || "utility";
+      const allowedByRole = isAllowedCaseAction(action);
       const requirements = ACTION_AVAILABILITY[action] || [];
       const allowedByCase =
         selected && (!Array.isArray(selected.quick_actions) || selected.quick_actions.includes(action));
       const hasRequirements = requirements.every(function (key) {
         return selected && selected[key];
       });
-      const available = Boolean(selected && allowedByCase && hasRequirements);
+      const available = Boolean(selected && allowedByRole && allowedByCase && hasRequirements);
+      button.hidden = !allowedByRole;
       button.disabled = !available;
       button.classList.toggle("is-disabled", !available);
       button.setAttribute("data-action-tier", tier);
@@ -724,6 +787,17 @@
       button.classList.toggle("admin-action-tier--secondary", tier === "secondary");
       button.classList.toggle("admin-action-tier--utility", tier === "utility");
       button.setAttribute("aria-disabled", available ? "false" : "true");
+    });
+  }
+
+  function updateBulkActionAvailability() {
+    document.querySelectorAll("[data-admin-bulk-action]").forEach(function (button) {
+      const action = button.getAttribute("data-admin-bulk-action") || "";
+      const allowed = isAllowedBulkAction(action);
+      button.hidden = !allowed;
+      button.disabled = !allowed;
+      button.classList.toggle("is-disabled", !allowed);
+      button.setAttribute("aria-disabled", allowed ? "false" : "true");
     });
   }
 
@@ -736,6 +810,7 @@
     renderCaseHeader();
     renderCaseContext();
     updateActionAvailability();
+    updateBulkActionAvailability();
     renderWorkspaceTab();
     try {
       const payload = await fetchJson(`/admin/control-center/cases/${encodeURIComponent(caseId)}`);
@@ -744,13 +819,15 @@
       renderCaseHeader();
       renderCaseContext();
       updateActionAvailability();
+      updateBulkActionAvailability();
     } catch (error) {
       setPageStatus(error.message || "Unable to load case workspace.", "error");
     }
   }
 
   async function loadCases() {
-    setPageStatus("Loading customer cases...", "info");
+    const meta = QUEUE_META[state.queue] || QUEUE_META.customer_cases;
+    setPageStatus(`Loading ${meta[0].toLowerCase()}...`, "info");
     try {
       const payload = await fetchJson(
         `/admin/control-center/cases?queue=${encodeURIComponent(state.queue)}&limit=80&search=${encodeURIComponent(getSearchValue())}`,
@@ -776,6 +853,7 @@
       renderCaseContext();
       renderCaseHeader();
       updateActionAvailability();
+      updateBulkActionAvailability();
       if (!state.cases.length) renderWorkspaceTab();
       clearPageStatus();
     } catch (error) {
@@ -801,6 +879,10 @@
   }
 
   async function runBulkAction(action) {
+    if (!isAllowedBulkAction(action)) {
+      setPageStatus("Your role cannot run that bulk action.", "error");
+      return;
+    }
     const endpointMap = {
       "repair-missing-entitlements": "/admin/control-center/bulk/repair-missing-entitlements",
       "assign-missing-lanes": "/admin/control-center/bulk/assign-missing-lanes",
@@ -833,6 +915,10 @@
   }
 
   async function runCaseAction(action) {
+    if (!isAllowedCaseAction(action)) {
+      setPageStatus("Your role cannot run that case action.", "error");
+      return;
+    }
     if (!state.selectedCaseId) {
       setPageStatus("Select a case first.", "error");
       return;
@@ -862,7 +948,9 @@
 
       const queueButton = target.closest("[data-case-queue]");
       if (queueButton) {
-        state.queue = queueButton.getAttribute("data-case-queue") || "overview";
+        const queue = queueButton.getAttribute("data-case-queue") || "overview";
+        if (!isAllowedQueue(queue)) return;
+        state.queue = queue;
         applyRailSelection();
         loadCases();
         return;
@@ -892,6 +980,7 @@
 
       const bulkActionButton = target.closest("[data-admin-bulk-action]");
       if (bulkActionButton) {
+        if (bulkActionButton.disabled || bulkActionButton.classList.contains("is-disabled")) return;
         const action = bulkActionButton.getAttribute("data-admin-bulk-action");
         if (action) runBulkAction(action);
         return;
@@ -899,7 +988,9 @@
 
       const tabButton = target.closest("[data-admin-case-tab]");
       if (tabButton) {
-        state.selectedTab = tabButton.getAttribute("data-admin-case-tab") || "identity";
+        const tab = tabButton.getAttribute("data-admin-case-tab") || "identity";
+        if (!isAllowedTab(tab)) return;
+        state.selectedTab = tab;
         applyTabSelection();
         renderWorkspaceTab();
       }
@@ -945,7 +1036,8 @@
       titleNode.textContent = "Customer Operations Workspace";
     }
     if (statusNode) {
-      statusNode.textContent = `Search-first case operations are active for role: ${state.roleKey || "admin"}.`;
+      const queueCount = Array.isArray(state.allowedQueues) ? state.allowedQueues.length : 0;
+      statusNode.textContent = `Search-first case operations are active for role: ${state.roleKey || "admin"} across ${queueCount} permitted queue${queueCount === 1 ? "" : "s"}.`;
     }
   }
 
@@ -959,12 +1051,14 @@
       return;
     }
 
+    await loadAccessProfile();
     updateRoleSummary();
     bindEvents();
     applyRailSelection();
     applyTabSelection();
     renderCaseHeader();
     updateActionAvailability();
+    updateBulkActionAvailability();
     await Promise.allSettled([loadOverview(), loadCases()]);
   }
 
