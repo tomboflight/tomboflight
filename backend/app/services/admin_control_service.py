@@ -47,6 +47,77 @@ INTERNAL_ROLE_KEYS = {
     "marketing",
 }
 
+ADMIN_CONTROL_QUEUES = [
+    "overview",
+    "customer_cases",
+    "orders",
+    "projects",
+    "entitlements",
+    "mint_queue",
+    "upload_review",
+    "billing_maintenance",
+    "users",
+    "audit",
+    "system_health",
+]
+ADMIN_CONTROL_TABS = [
+    "identity",
+    "package_lane",
+    "orders_billing",
+    "project",
+    "entitlements",
+    "uploads_verification",
+    "mint_readiness",
+    "audit_timeline",
+]
+CASE_ACTION_PERMISSIONS: dict[str, set[str]] = {
+    "sync_package": {"admin.control.write"},
+    "normalize_package": {"admin.control.write"},
+    "assign_lane": {"admin.control.write"},
+    "repair_record": {"admin.control.write"},
+    "link_order_to_project": {"admin.control.billing"},
+    "generate_entitlement": {"admin.control.billing"},
+    "refresh_entitlement": {"admin.control.billing"},
+    "run_readiness_check": {"admin.control.view"},
+    "refresh_case_data": {"admin.control.view"},
+    "queue_for_mint_review": {"admin.control.mint"},
+    "repair_mint_status": {"admin.control.mint"},
+    "rebuild_mint_summary": {"admin.control.mint"},
+    "resync_mint_receipt": {"admin.control.mint"},
+}
+BULK_ACTION_PERMISSIONS: dict[str, set[str]] = {
+    "repair-missing-entitlements": {"admin.control.billing"},
+    "assign-missing-lanes": {"admin.control.write"},
+    "link-unlinked-paid-orders": {"admin.control.billing"},
+    "normalize-broken-package-records": {"admin.control.write"},
+    "refresh-mint-readiness": {"admin.control.mint"},
+    "repair-selected-records": {"admin.control.write", "admin.control.billing"},
+    "repair-all-safe-records": {"admin.control.write"},
+}
+QUEUE_PERMISSIONS: dict[str, set[str]] = {
+    "overview": {"admin.control.view"},
+    "customer_cases": {"admin.control.view"},
+    "projects": {"admin.control.view"},
+    "system_health": {"admin.control.view"},
+    "orders": {"admin.control.billing", "admin.orders.read"},
+    "billing_maintenance": {"admin.control.billing"},
+    "entitlements": {"admin.control.billing", "admin.entitlements.read"},
+    "mint_queue": {"admin.control.mint"},
+    "upload_review": {"uploads.admin.review", "verification.review"},
+    "users": {"admin.users.read"},
+    "audit": {"admin.audit.read"},
+}
+TAB_PERMISSIONS: dict[str, set[str]] = {
+    "identity": {"admin.control.view"},
+    "package_lane": {"admin.control.view"},
+    "project": {"admin.control.view"},
+    "orders_billing": {"admin.control.billing", "admin.orders.read"},
+    "entitlements": {"admin.control.billing", "admin.entitlements.read"},
+    "uploads_verification": {"uploads.admin.review", "verification.review"},
+    "mint_readiness": {"admin.control.mint"},
+    "audit_timeline": {"admin.audit.read"},
+}
+
 GUIDANCE_RULE_ALIASES = {
     "lane_not_assigned": "lane_unknown",
     "order_not_linked": "paid_order_not_linked",
@@ -178,6 +249,96 @@ def _normalize_email(value: Any) -> str:
     return _normalize(value).lower()
 
 
+def _has_any_permission(
+    permissions: set[str],
+    required: set[str] | list[str] | tuple[str, ...],
+) -> bool:
+    required_set = {
+        _normalize(permission).lower()
+        for permission in required
+        if _normalize(permission)
+    }
+    if not required_set:
+        return True
+    return "*" in permissions or not permissions.isdisjoint(required_set)
+
+
+def admin_control_access_profile(current_user: dict[str, Any]) -> dict[str, Any]:
+    access_context = current_user.get("_access_context") or {}
+    role_codes = [
+        _normalize(role).lower()
+        for role in (access_context.get("role_codes") or [])
+        if _normalize(role)
+    ]
+    if not role_codes:
+        role_codes = [
+            _normalize(current_user.get(field_name)).lower()
+            for field_name in ("role", "access_tier", "department_role")
+            if _normalize(current_user.get(field_name))
+        ]
+
+    permissions = {
+        _normalize(permission).lower()
+        for permission in (access_context.get("permissions") or [])
+        if _normalize(permission)
+    }
+
+    allowed_queues = [
+        queue
+        for queue in ADMIN_CONTROL_QUEUES
+        if _has_any_permission(permissions, QUEUE_PERMISSIONS.get(queue, {"admin.control.view"}))
+    ]
+    allowed_tabs = [
+        tab
+        for tab in ADMIN_CONTROL_TABS
+        if _has_any_permission(permissions, TAB_PERMISSIONS.get(tab, {"admin.control.view"}))
+    ]
+    allowed_actions = [
+        action
+        for action in sorted(CASE_ACTION_PERMISSIONS)
+        if _has_any_permission(permissions, CASE_ACTION_PERMISSIONS[action])
+    ]
+    allowed_bulk_actions = [
+        action
+        for action in sorted(BULK_ACTION_PERMISSIONS)
+        if _has_any_permission(permissions, BULK_ACTION_PERMISSIONS[action])
+    ]
+
+    primary_role = next(
+        (role for role in role_codes if role in INTERNAL_ROLE_KEYS),
+        role_codes[0] if role_codes else _normalize(current_user.get("role")).lower() or "user",
+    )
+
+    return {
+        "role_key": primary_role,
+        "role_codes": role_codes,
+        "permissions": sorted(permissions),
+        "allowed_queues": allowed_queues,
+        "allowed_tabs": allowed_tabs,
+        "allowed_actions": allowed_actions,
+        "allowed_bulk_actions": allowed_bulk_actions,
+        "is_wildcard": "*" in permissions,
+    }
+
+
+def admin_control_action_allowed(
+    current_user: dict[str, Any],
+    action: str,
+) -> bool:
+    normalized_action = _normalize(action).lower()
+    profile = admin_control_access_profile(current_user)
+    return normalized_action in set(profile.get("allowed_actions") or [])
+
+
+def admin_control_bulk_action_allowed(
+    current_user: dict[str, Any],
+    action: str,
+) -> bool:
+    normalized_action = _normalize(action).lower()
+    profile = admin_control_access_profile(current_user)
+    return normalized_action in set(profile.get("allowed_bulk_actions") or [])
+
+
 def _now() -> datetime:
     return datetime.now(UTC)
 
@@ -237,7 +398,7 @@ def _db():
     return db
 
 
-def _to_object_id(value: str) -> ObjectId | None:
+def _to_object_id(value: Any) -> ObjectId | None:
     object_id_hex = _extract_object_id_hex(value)
     return ObjectId(object_id_hex) if object_id_hex else None
 
@@ -637,8 +798,9 @@ def _resolve_entitlement_user_id(project: dict[str, Any], order: dict[str, Any] 
     owner_email = _normalize_email(project.get("owner_email"))
     if owner_email:
         user = _find_case_user(email=owner_email)
-        if user and user.get("_id"):
-            oid = _to_object_id(user.get("_id"))
+        if user is not None:
+            user_id = user.get("_id")
+            oid = _to_object_id(user_id)
             if oid is not None:
                 return str(oid)
 
@@ -1802,6 +1964,89 @@ def _is_internal_user_document(user: dict[str, Any] | None) -> bool:
         _normalize(user.get("department_role")).lower(),
     }
     return any(value in INTERNAL_ROLE_KEYS for value in values if value)
+
+
+def _user_display_name(user: dict[str, Any]) -> str:
+    full_name = _normalize(user.get("full_name") or user.get("name"))
+    if full_name:
+        return full_name
+    first_name = _normalize(user.get("first_name"))
+    last_name = _normalize(user.get("last_name"))
+    joined = " ".join([first_name, last_name]).strip()
+    if joined:
+        return joined
+    email = _normalize_email(user.get("email"))
+    return email.split("@")[0].replace(".", " ").replace("_", " ").title() if email else "Unknown User"
+
+
+def _user_role_value(user: dict[str, Any]) -> str:
+    return (
+        _normalize(user.get("role"))
+        or _normalize(user.get("access_tier"))
+        or _normalize(user.get("department_role"))
+        or "user"
+    )
+
+
+def _user_supports_search(user: dict[str, Any], search: str) -> bool:
+    normalized_search = _normalize(search).lower()
+    if not normalized_search:
+        return True
+    haystack = " ".join(
+        [
+            _normalize(user.get("_id")),
+            _normalize(user.get("email")),
+            _normalize(user.get("full_name")),
+            _normalize(user.get("first_name")),
+            _normalize(user.get("last_name")),
+            _normalize(user.get("role")),
+            _normalize(user.get("access_tier")),
+            _normalize(user.get("department_role")),
+            _normalize(user.get("status")),
+            _normalize(user.get("birthday")),
+            _normalize(user.get("birth_date")),
+            _normalize(user.get("date_of_birth")),
+            _normalize(user.get("dob")),
+        ]
+    ).lower()
+    return normalized_search in haystack
+
+
+def _serialize_user_case(user: dict[str, Any]) -> dict[str, Any]:
+    user_id = _normalize_object_id(user.get("_id")) or _normalize(user.get("id"))
+    role = _user_role_value(user)
+    is_internal = _is_internal_user_document(user)
+    status_value = _normalize(user.get("status")) or "active"
+    alerts: list[str] = []
+    if status_value not in {"active", "enabled", ""}:
+        alerts.append("user_inactive")
+    if is_internal:
+        alerts.append("internal_admin_identity")
+
+    return {
+        "case_id": f"user:{user_id}",
+        "project_id": None,
+        "order_id": None,
+        "name": _user_display_name(user),
+        "email": _normalize_email(user.get("email")) or None,
+        "role": role,
+        "project": "User account",
+        "package": "Account",
+        "package_name": "Account",
+        "package_slug": "account",
+        "package_code": "account",
+        "package_normalization_status": "not_applicable",
+        "lane": "admin" if is_internal else "customer",
+        "project_lane": "admin" if is_internal else "customer",
+        "lane_source": "user_role",
+        "warnings": [],
+        "status": status_value,
+        "alerts": alerts,
+        "operator_guidance": _operator_guidance_items(alerts=alerts),
+        "quick_actions": ["refresh_case_data"],
+        "mint_blocking_reasons": [],
+        "updated_at": _serialize_datetime(user.get("updated_at") or user.get("last_login_at") or user.get("created_at")),
+    }
 
 
 def _find_case_user(*, email: str = "", user_id: str = "") -> dict[str, Any] | None:
