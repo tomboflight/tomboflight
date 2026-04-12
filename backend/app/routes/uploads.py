@@ -689,7 +689,9 @@ async def upload_verification_evidence(
 def list_member_uploads(
     member_id: str,
     category: Optional[str] = Query(default=None),
-    current_user: dict[str, Any] = Depends(require_entitlement("can_upload_portraits")),
+    current_user: dict[str, Any] = Depends(
+        require_entitlement("can_upload_portraits", allow_internal_admin=True)
+    ),
 ):
     context = require_workspace_capability(
         current_user,
@@ -729,7 +731,9 @@ def list_member_uploads(
 def list_family_uploads(
     family_id: str,
     category: Optional[str] = Query(default=None),
-    current_user: dict[str, Any] = Depends(require_entitlement("can_upload_portraits")),
+    current_user: dict[str, Any] = Depends(
+        require_entitlement("can_upload_portraits", allow_internal_admin=True)
+    ),
 ):
     context = require_workspace_capability(
         current_user,

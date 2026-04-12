@@ -150,6 +150,10 @@ def has_internal_admin_access(user: dict[str, Any]) -> bool:
     return _has_internal_admin_access(user)
 
 
+def is_customer_account(user: dict[str, Any]) -> bool:
+    return not has_internal_admin_access(user)
+
+
 def _current_user_id(user: dict[str, Any]) -> str:
     raw_id = user.get("id") or user.get("_id") or user.get("user_id")
     return str(raw_id or "").strip()
@@ -209,10 +213,11 @@ def _list_active_entitlements_for_user(user_id: str) -> list[dict[str, Any]]:
 
 
 def get_user_package_capabilities(user: dict[str, Any]) -> set[str]:
-    if has_internal_admin_access(user):
-        return {"*"}
-
     capabilities: set[str] = set()
+
+    if not is_customer_account(user):
+        return capabilities
+
     user_id = _current_user_id(user)
 
     if user_id:
@@ -241,18 +246,30 @@ def get_user_package_capabilities(user: dict[str, Any]) -> set[str]:
     return capabilities
 
 
-def has_package_capability(user: dict[str, Any], capability: str) -> bool:
-    if has_internal_admin_access(user):
+def has_package_capability(
+    user: dict[str, Any],
+    capability: str,
+    *,
+    allow_internal_admin: bool = False,
+) -> bool:
+    if allow_internal_admin and has_internal_admin_access(user):
         return True
 
     normalized_capability = _normalize_value(capability)
     if not normalized_capability:
         return False
 
+    if not is_customer_account(user):
+        return False
+
     return normalized_capability in get_user_package_capabilities(user)
 
 
-def has_any_package_capability(user: dict[str, Any], *capabilities: str) -> bool:
+def has_any_package_capability(
+    user: dict[str, Any],
+    *capabilities: str,
+    allow_internal_admin: bool = False,
+) -> bool:
     normalized_capabilities = [
         _normalize_value(capability)
         for capability in capabilities
@@ -261,8 +278,11 @@ def has_any_package_capability(user: dict[str, Any], *capabilities: str) -> bool
     if not normalized_capabilities:
         return False
 
-    if has_internal_admin_access(user):
+    if allow_internal_admin and has_internal_admin_access(user):
         return True
+
+    if not is_customer_account(user):
+        return False
 
     user_capabilities = get_user_package_capabilities(user)
     return any(capability in user_capabilities for capability in normalized_capabilities)
@@ -273,8 +293,13 @@ def require_package_capability(
     capability: str,
     *,
     detail: str = "Your active package does not include this feature.",
+    allow_internal_admin: bool = False,
 ) -> dict[str, Any]:
-    if not has_package_capability(user, capability):
+    if not has_package_capability(
+        user,
+        capability,
+        allow_internal_admin=allow_internal_admin,
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=detail,
@@ -286,8 +311,13 @@ def require_any_package_capability(
     user: dict[str, Any],
     *capabilities: str,
     detail: str = "Your active package does not include this feature.",
+    allow_internal_admin: bool = False,
 ) -> dict[str, Any]:
-    if not has_any_package_capability(user, *capabilities):
+    if not has_any_package_capability(
+        user,
+        *capabilities,
+        allow_internal_admin=allow_internal_admin,
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=detail,
@@ -741,7 +771,11 @@ def require_any_permission(permission_codes: list[str]):
     return _dependency
 
 
-def require_entitlement(capability: str):
+def require_entitlement(
+    capability: str,
+    *,
+    allow_internal_admin: bool = False,
+):
     normalized_capability = _normalize_value(capability)
     if not normalized_capability:
         raise ValueError("capability is required.")
@@ -751,7 +785,12 @@ def require_entitlement(capability: str):
         current_user: dict[str, Any] = Depends(get_current_user),
     ) -> dict[str, Any]:
         if has_internal_admin_access(current_user):
-            return current_user
+            if allow_internal_admin:
+                return current_user
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Customer package entitlement is required.",
+            )
 
         project_id, family_id, member_id = _extract_workspace_identifiers(request)
 

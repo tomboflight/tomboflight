@@ -59,6 +59,10 @@ class UserResponse(BaseModel):
     email: EmailStr
     full_name: str
     role: str
+    account_type: Optional[str] = None
+    business_title: Optional[str] = None
+    prototype_key: Optional[str] = None
+    creator_credit: Optional[str] = None
     access_tier: Optional[str] = None
     department_role: Optional[str] = None
     status: str

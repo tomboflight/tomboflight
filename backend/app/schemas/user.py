@@ -21,6 +21,10 @@ class UserResponse(BaseModel):
     created_at: str
     status: str | None = None
     full_name: str | None = None
+    account_type: str | None = None
+    business_title: str | None = None
+    prototype_key: str | None = None
+    creator_credit: str | None = None
     access_tier: str | None = None
     department_role: str | None = None
     last_login_at: str | None = None
@@ -74,6 +78,10 @@ def build_user_response(data: dict) -> UserResponse:
         created_at=_serialize_created_at(data.get("created_at")),
         status=_normalize_text(data.get("status")) or None,
         full_name=_normalize_text(data.get("full_name")) or None,
+        account_type=_normalize_text(data.get("account_type")) or None,
+        business_title=_normalize_text(data.get("business_title")) or None,
+        prototype_key=_normalize_text(data.get("prototype_key")) or None,
+        creator_credit=_normalize_text(data.get("creator_credit")) or None,
         access_tier=_normalize_text(data.get("access_tier")) or None,
         department_role=_normalize_text(data.get("department_role")) or None,
         last_login_at=_normalize_text(data.get("last_login_at")) or None,
