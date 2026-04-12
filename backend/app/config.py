@@ -76,11 +76,6 @@ class Settings(BaseSettings):
         default="https://tomboflight.com/account-security.html",
         validation_alias=AliasChoices("PASSWORD_RESET_BASE_URL"),
     )
-    password_reset_preview_enabled: bool = Field(
-        default=False,
-        validation_alias=AliasChoices("PASSWORD_RESET_PREVIEW_ENABLED"),
-    )
-
     nft_chain: str = Field(
         default="base-mainnet",
         validation_alias=AliasChoices("NFT_CHAIN"),
@@ -247,30 +242,22 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("PUBLIC_STORAGE_DIR"),
     )
 
-    # Email / SMTP
-    email_sender: str = Field(
+    # Email / Postmark
+    postmark_server_token: str = Field(
+        default="",
+        validation_alias=AliasChoices("POSTMARK_SERVER_TOKEN"),
+    )
+    postmark_from_email: str = Field(
         default="admin@tomboflight.com",
-        validation_alias=AliasChoices("EMAIL_SENDER"),
+        validation_alias=AliasChoices("POSTMARK_FROM_EMAIL"),
     )
-    smtp_host: str = Field(
-        default="",
-        validation_alias=AliasChoices("SMTP_HOST"),
+    postmark_from_name: str = Field(
+        default="Tomb of Light Security",
+        validation_alias=AliasChoices("POSTMARK_FROM_NAME"),
     )
-    smtp_port: int = Field(
-        default=0,
-        validation_alias=AliasChoices("SMTP_PORT"),
-    )
-    smtp_username: str = Field(
-        default="",
-        validation_alias=AliasChoices("SMTP_USERNAME"),
-    )
-    smtp_password: str = Field(
-        default="",
-        validation_alias=AliasChoices("SMTP_PASSWORD"),
-    )
-    smtp_use_tls: bool = Field(
-        default=True,
-        validation_alias=AliasChoices("SMTP_USE_TLS"),
+    postmark_message_stream: str = Field(
+        default="outbound",
+        validation_alias=AliasChoices("POSTMARK_MESSAGE_STREAM"),
     )
 
     allowed_origins: str = Field(

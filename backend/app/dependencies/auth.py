@@ -372,6 +372,19 @@ def require_admin(current_user: dict[str, Any] = Depends(get_current_user)) -> d
 LEGACY_ROLE_PERMISSIONS: dict[str, set[str]] = {
     "admin": {
         "admin.access",
+        "admin.audit.read",
+        "admin.control.view",
+        "admin.control.write",
+        "admin.control.billing",
+        "admin.control.mint",
+        "admin.entitlements.read",
+        "admin.entitlements.write",
+        "admin.intake.review",
+        "admin.intake.write",
+        "admin.orders.read",
+        "admin.orders.repair",
+        "admin.users.read",
+        "admin.users.write",
         "projects.create",
         "verification.review",
         "uploads.admin.review",
@@ -382,16 +395,69 @@ LEGACY_ROLE_PERMISSIONS: dict[str, set[str]] = {
     "platform_admin": {"*"},
     "operations_admin": {
         "admin.access",
+        "admin.audit.read",
+        "admin.control.view",
+        "admin.control.write",
+        "admin.control.mint",
+        "admin.entitlements.read",
+        "admin.entitlements.write",
+        "admin.intake.review",
+        "admin.intake.write",
+        "admin.orders.read",
         "verification.review",
         "uploads.admin.review",
         "project.workflow.transition",
     },
-    "finance_admin": {"admin.access"},
-    "marketing_admin": {"admin.access"},
+    "finance_admin": {
+        "admin.access",
+        "admin.audit.read",
+        "admin.control.view",
+        "admin.control.billing",
+        "admin.entitlements.read",
+        "admin.entitlements.write",
+        "admin.orders.read",
+        "admin.orders.repair",
+    },
+    "marketing_admin": {
+        "admin.access",
+        "admin.audit.read",
+        "admin.control.view",
+        "admin.users.read",
+        "admin.orders.read",
+    },
     "executive_technology": {"*"},
-    "operations": {"admin.access", "verification.review", "uploads.admin.review"},
-    "finance": {"admin.access"},
-    "marketing": {"admin.access"},
+    "operations": {
+        "admin.access",
+        "admin.audit.read",
+        "admin.control.view",
+        "admin.control.write",
+        "admin.control.mint",
+        "admin.entitlements.read",
+        "admin.entitlements.write",
+        "admin.intake.review",
+        "admin.intake.write",
+        "admin.orders.read",
+        "verification.review",
+        "uploads.admin.review",
+        "project.workflow.transition",
+    },
+    "finance": {
+        "admin.access",
+        "admin.audit.read",
+        "admin.control.view",
+        "admin.control.billing",
+        "admin.entitlements.read",
+        "admin.entitlements.write",
+        "admin.orders.read",
+        "admin.orders.repair",
+    },
+    "marketing": {
+        "admin.access",
+        "admin.audit.read",
+        "admin.control.view",
+        "admin.users.read",
+        "admin.orders.read",
+    },
     "user": {"projects.read", "uploads.read", "uploads.write"},
 }
 
@@ -597,12 +663,10 @@ def resolve_access_context(user_id: str, project_id: str | None = None) -> dict[
         )
 
     role_codes = _collect_role_codes_for_user(user)
-    if has_internal_admin_access(user):
+    if has_internal_admin_access(user) and not role_codes:
         role_codes.add("admin")
 
     permissions = _collect_permissions_for_roles(role_codes)
-    if has_internal_admin_access(user):
-        permissions.add("*")
 
     entitlements = list_user_project_entitlements(user_id, active_only=True)
     if project_id:

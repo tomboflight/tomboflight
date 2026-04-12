@@ -29,6 +29,12 @@ def _as_datetime_string(value: Any) -> str:
     return datetime.now(UTC).isoformat()
 
 
+def _as_context(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    return {str(key): item for key, item in value.items()}
+
+
 class RoleResponse(BaseModel):
     id: str
     role_code: str
@@ -77,7 +83,7 @@ class WorkflowEventResponse(BaseModel):
     status: str
     actor_user_id: str | None = None
     actor_role_code: str | None = None
-    context: dict = Field(default_factory=dict)
+    context: dict[str, Any] = Field(default_factory=dict)
     created_at: str
     updated_at: str | None = None
 
@@ -121,7 +127,7 @@ class ToolStatusResponse(BaseModel):
     status: str
     severity: str
     message: str = ""
-    context: dict = Field(default_factory=dict)
+    context: dict[str, Any] = Field(default_factory=dict)
     created_at: str
     updated_at: str | None = None
 
@@ -197,7 +203,7 @@ def build_workflow_event_response(data: dict[str, Any]) -> WorkflowEventResponse
         status=_as_string(data.get("status"), "recorded"),
         actor_user_id=_as_string(data.get("actor_user_id")) or None,
         actor_role_code=_as_string(data.get("actor_role_code")) or None,
-        context=data.get("context") if isinstance(data.get("context"), dict) else {},
+        context=_as_context(data.get("context")),
         created_at=_as_datetime_string(data.get("created_at")),
         updated_at=_as_datetime_string(data.get("updated_at")) if data.get("updated_at") else None,
     )
@@ -247,7 +253,7 @@ def build_tool_status_response(data: dict[str, Any]) -> ToolStatusResponse:
         status=_as_string(data.get("status"), "ok"),
         severity=_as_string(data.get("severity"), "info"),
         message=_as_string(data.get("message")),
-        context=data.get("context") if isinstance(data.get("context"), dict) else {},
+        context=_as_context(data.get("context")),
         created_at=_as_datetime_string(data.get("created_at")),
         updated_at=_as_datetime_string(data.get("updated_at")) if data.get("updated_at") else None,
     )

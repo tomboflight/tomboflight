@@ -52,27 +52,14 @@ def _hash_password_reset_token(token: str) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
-def _build_password_reset_url(token: str, email: str) -> str:
+def _build_password_reset_url(token: str) -> str:
     base_url = (
         settings.password_reset_base_url_clean
         or "https://tomboflight.com/account-security.html"
     )
     encoded_token = quote(_normalize_text(token), safe="")
-    encoded_email = quote(_normalize_text(email).lower(), safe="")
     joiner = "&" if "?" in base_url else "?"
-    return f"{base_url}{joiner}mode=reset&token={encoded_token}&email={encoded_email}"
-
-
-def _should_expose_password_reset_preview() -> bool:
-    if bool(settings.password_reset_preview_enabled):
-        return True
-
-    return _normalize_text(settings.environment).lower() in {
-        "development",
-        "dev",
-        "local",
-        "test",
-    }
+    return f"{base_url}{joiner}mode=reset&token={encoded_token}"
 
 
 def _clear_password_reset_fields() -> dict[str, object]:
@@ -349,7 +336,7 @@ def request_password_reset(
     except Exception:
         pass
 
-    reset_url = _build_password_reset_url(token, normalized_email)
+    reset_url = _build_password_reset_url(token)
 
     # Send reset email (best-effort; never blocks the auth flow).
     if not bool(expose_token):
@@ -362,8 +349,7 @@ def request_password_reset(
         except Exception:
             pass
 
-    should_expose = bool(expose_token) or _should_expose_password_reset_preview()
-    if should_expose:
+    if bool(expose_token):
         generic_response["reset_token"] = token
         generic_response["reset_url"] = reset_url
         generic_response["expires_at"] = expires_at

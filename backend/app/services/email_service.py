@@ -1,86 +1,172 @@
-"""Best-effort SMTP email helpers for Tomb of Light auth flows.
-
-SMTP settings are read from app.config.settings.  If SMTP is not configured
-the helpers log silently and return without raising so that auth flows are
-never blocked by email delivery failures.
-"""
+"""Postmark API email helpers for Tomb of Light auth flows."""
 
 import logging
-import smtplib
-from email.message import EmailMessage
+from datetime import UTC, datetime
+from email.utils import formataddr
+from html import escape
+
+import requests
+from requests import RequestException
 
 from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_SENDER = "admin@tomboflight.com"
+POSTMARK_EMAIL_ENDPOINT = "https://api.postmarkapp.com/email"
+POSTMARK_TIMEOUT_SECONDS = 10
+DEFAULT_MESSAGE_STREAM = "outbound"
 
 
-def _smtp_enabled() -> bool:
-    host = str(settings.smtp_host or "").strip()
-    port = int(settings.smtp_port or 0)
-    return bool(host) and port > 0
+def _normalize_text(value: object) -> str:
+    return str(value or "").strip()
 
 
-def _send_email(*, to_email: str, subject: str, text_body: str) -> None:
-    """Internal best-effort email sender. Never raises."""
-    to_email = str(to_email or "").strip().lower()
-    if not to_email:
+def _normalize_email(value: object) -> str:
+    return _normalize_text(value).lower()
+
+
+def _postmark_token() -> str:
+    return _normalize_text(settings.postmark_server_token)
+
+
+def _postmark_from_email() -> str:
+    return _normalize_email(settings.postmark_from_email) or "admin@tomboflight.com"
+
+
+def _postmark_from_name() -> str:
+    return _normalize_text(settings.postmark_from_name) or "Tomb of Light Security"
+
+
+def _postmark_message_stream() -> str:
+    return _normalize_text(settings.postmark_message_stream) or DEFAULT_MESSAGE_STREAM
+
+
+def _postmark_from_header() -> str:
+    return formataddr((_postmark_from_name(), _postmark_from_email()))
+
+
+def _send_email(
+    *,
+    to_email: str,
+    subject: str,
+    text_body: str,
+    html_body: str | None = None,
+) -> None:
+    """Send one transactional email through Postmark. Never raises."""
+    normalized_to_email = _normalize_email(to_email)
+    if not normalized_to_email:
         return
 
-    if not _smtp_enabled():
-        logger.debug("SMTP not configured; skipping email to %s", to_email)
+    token = _postmark_token()
+    if not token:
+        logger.warning(
+            "Postmark is not configured; skipping email to %s",
+            normalized_to_email,
+        )
         return
 
-    msg = EmailMessage()
-    msg["From"] = str(settings.email_sender or _DEFAULT_SENDER).strip() or _DEFAULT_SENDER
-    msg["To"] = to_email
-    msg["Subject"] = subject
-    msg.set_content(text_body)
+    payload = {
+        "From": _postmark_from_header(),
+        "To": normalized_to_email,
+        "Subject": subject,
+        "TextBody": text_body,
+        "MessageStream": _postmark_message_stream(),
+    }
+    if html_body:
+        payload["HtmlBody"] = html_body
 
-    host = str(settings.smtp_host).strip()
-    port = int(settings.smtp_port)
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "X-Postmark-Server-Token": token,
+    }
 
     try:
-        with smtplib.SMTP(host, port, timeout=10) as server:
-            if settings.smtp_use_tls:
-                server.starttls()
+        response = requests.post(
+            POSTMARK_EMAIL_ENDPOINT,
+            json=payload,
+            headers=headers,
+            timeout=POSTMARK_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+    except RequestException as exc:
+        response = getattr(exc, "response", None)
+        response_body = getattr(response, "text", "")
+        logger.exception(
+            "Failed to send Postmark email to %s. Response: %s",
+            normalized_to_email,
+            response_body,
+        )
 
-            username = str(settings.smtp_username or "").strip()
-            password = str(settings.smtp_password or "").strip()
-            if username and password:
-                server.login(username, password)
 
-            server.send_message(msg)
-    except Exception:
-        logger.exception("Failed to send email to %s", to_email)
-
-
-def send_password_reset_email(*, to_email: str, reset_url: str, expires_at: str) -> None:
+def send_password_reset_email(
+    *,
+    to_email: str,
+    reset_url: str,
+    expires_at: str,
+) -> None:
     """Send a password-reset link email to *to_email*."""
+    safe_reset_url = escape(_normalize_text(reset_url), quote=True)
+    safe_expires_at = escape(_normalize_text(expires_at), quote=True)
+
     subject = "Reset your Tomb of Light password"
-    body = (
+    text_body = (
         "Hello,\n\n"
         "We received a request to reset the password for your Tomb of Light account.\n\n"
-        f"Reset your password using this secure link (expires at {expires_at}):\n"
-        f"{reset_url}\n\n"
+        f"Reset your password using this secure link:\n{reset_url}\n\n"
+        f"This link expires at {expires_at}.\n\n"
         "If you did not request this reset, you can safely ignore this email.\n"
-        "Someone may have entered your email address by mistake.\n"
         "If you believe this was unauthorized activity, please contact support immediately.\n\n"
-        "— Tomb of Light Security\n"
+        "Tomb of Light Security\n"
     )
-    _send_email(to_email=to_email, subject=subject, text_body=body)
+    html_body = (
+        "<p>Hello,</p>"
+        "<p>We received a request to reset the password for your Tomb of Light "
+        "account.</p>"
+        f'<p><a href="{safe_reset_url}">Reset your password</a></p>'
+        f"<p>This link expires at {safe_expires_at}.</p>"
+        "<p>If you did not request this reset, you can safely ignore this email. "
+        "If you believe this was unauthorized activity, please contact support "
+        "immediately.</p>"
+        "<p>Tomb of Light Security</p>"
+    )
+
+    _send_email(
+        to_email=to_email,
+        subject=subject,
+        text_body=text_body,
+        html_body=html_body,
+    )
 
 
 def send_password_changed_email(*, to_email: str) -> None:
     """Send a password-change confirmation email to *to_email*."""
+    changed_at = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+    safe_changed_at = escape(changed_at, quote=True)
+
     subject = "Your Tomb of Light password was changed"
-    body = (
+    text_body = (
         "Hello,\n\n"
         "This is a confirmation that the password for your Tomb of Light account "
         "was successfully changed.\n\n"
-        "If you did not perform this action, please reset your password immediately "
-        "and contact support.\n\n"
-        "— Tomb of Light Security\n"
+        f"Security notice time: {changed_at}.\n\n"
+        "If you made this change, no further action is needed. If you did not "
+        "perform this action, reset your password immediately and contact support.\n\n"
+        "Tomb of Light Security\n"
     )
-    _send_email(to_email=to_email, subject=subject, text_body=body)
+    html_body = (
+        "<p>Hello,</p>"
+        "<p>This is a confirmation that the password for your Tomb of Light account "
+        "was successfully changed.</p>"
+        f"<p><strong>Security notice time:</strong> {safe_changed_at}.</p>"
+        "<p>If you made this change, no further action is needed. If you did not "
+        "perform this action, reset your password immediately and contact support.</p>"
+        "<p>Tomb of Light Security</p>"
+    )
+
+    _send_email(
+        to_email=to_email,
+        subject=subject,
+        text_body=text_body,
+        html_body=html_body,
+    )

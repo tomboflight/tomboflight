@@ -19,6 +19,26 @@
     return String((error && error.message) || error || "Unknown error");
   }
 
+  function focusResetConfirmFromLink() {
+    const mode = query("mode").toLowerCase();
+    const token = query("token");
+    if (mode !== "reset" || !token) {
+      return;
+    }
+
+    const panel = document.getElementById("reset-confirm");
+    const tokenField = document.querySelector(
+      '[data-password-reset-confirm-form] input[name="token"]',
+    );
+
+    if (panel && typeof panel.scrollIntoView === "function") {
+      panel.scrollIntoView({ block: "start" });
+    }
+    if (tokenField && typeof tokenField.focus === "function") {
+      tokenField.focus();
+    }
+  }
+
   async function populateSignedInState() {
     const introNode = document.querySelector("[data-password-change-intro]");
     try {
@@ -67,11 +87,7 @@
           (payload && payload.message) ||
             "Password reset request created successfully.",
         );
-        const resetUrl = String((payload && payload.reset_url) || "").trim();
         app.setStatus(statusNode, message, "success");
-        if (resetUrl) {
-          window.prompt("Local reset preview link:", resetUrl);
-        }
         form.reset();
       } catch (error) {
         app.setStatus(
@@ -194,5 +210,6 @@
     setupResetRequestForm();
     setupResetConfirmForm();
     setupPasswordChangeForm();
+    focusResetConfirmFromLink();
   });
 })();
