@@ -766,6 +766,8 @@ def create_mint_record(
 
     existing_summary = resolve_canonical_mint_status(project_id, include_history=False)
     existing = existing_summary.get("current_record")
+    if not isinstance(existing, dict):
+        existing = None
     explicit_new_version = version_strategy in REQUEUE_VERSION_STRATEGIES
     if (
         version_strategy == "new_version_if_needed"
@@ -776,6 +778,8 @@ def create_mint_record(
     ):
         return existing
     if existing_summary.get("is_minted") and not explicit_new_version:
+        if existing is None:
+            raise ValueError("Canonical mint summary is missing the current mint record.")
         return existing
 
     version_number = _next_version_number(project_id)
