@@ -220,6 +220,9 @@ CORE_COLLECTIONS: dict[str, list[tuple[list[tuple[str, int]], dict]]] = {
     "verification_records": [
         ([("family_id", ASCENDING)], {"name": "idx_verification_records_family_id"}),
         ([("member_id", ASCENDING)], {"name": "idx_verification_records_member_id"}),
+        ([("verification_status", ASCENDING)], {"name": "idx_verification_records_status"}),
+        ([("created_at", DESCENDING)], {"name": "idx_verification_records_created_at"}),
+        ([("evidence_upload_ids", ASCENDING)], {"name": "idx_verification_records_evidence_upload_ids"}),
     ],
     "narrative_records": [
         ([("family_id", ASCENDING)], {"name": "idx_narrative_records_family_id"}),

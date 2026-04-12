@@ -91,7 +91,11 @@ def build_lineage_chamber_summary(family_id: str) -> dict[str, Any]:
     pending_record_count = 0
     contradictory_record_count = 0
     for record in verification_records:
-        status_value = _normalize_status(record.get("status") or record.get("review_status"))
+        status_value = _normalize_status(
+            record.get("verification_status")
+            or record.get("status")
+            or record.get("review_status")
+        )
         if status_value in verified_statuses:
             verified_record_count += 1
         elif status_value in contradictory_statuses:
