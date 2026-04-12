@@ -1707,6 +1707,7 @@ textarea {
 .portal-command-bar,
 .portal-metric-card,
 .portal-signal-card,
+.portal-visual,
 .portal-core-visual {
   position: relative;
   overflow: hidden;

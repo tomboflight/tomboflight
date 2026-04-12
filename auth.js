@@ -656,12 +656,78 @@
     window.location.href = POST_LOGIN_REDIRECT;
   }
 
+  function getRoleSignals(user) {
+    return [
+      normalizeValue(user?.role),
+      normalizeValue(user?.access_tier),
+      normalizeValue(user?.department_role),
+    ].filter(Boolean);
+  }
+
+  function getBusinessTitle(user) {
+    const explicitTitle = String(user?.business_title || "").trim();
+    if (explicitTitle) return explicitTitle;
+
+    const signals = getRoleSignals(user);
+    if (
+      signals.includes("super_admin") ||
+      signals.includes("root_admin") ||
+      signals.includes("executive_technology")
+    ) {
+      return "CEO / Super Admin";
+    }
+    if (signals.includes("finance_admin") || signals.includes("finance")) {
+      return "CFO";
+    }
+    if (signals.includes("operations_admin") || signals.includes("operations")) {
+      return "COO";
+    }
+    if (signals.includes("marketing_admin") || signals.includes("marketing")) {
+      return "CMO";
+    }
+    return "Internal Admin";
+  }
+
+  function isPrototypeCustomer(user) {
+    return (
+      normalizeValue(user?.account_type) === "prototype_customer" ||
+      normalizeValue(user?.prototype_key) === "genesis_prototype" ||
+      normalizeValue(user?.email) === "larry.frontend.test2@tomboflight.com"
+    );
+  }
+
+  function getCustomerAccountLabel(user, packageName) {
+    const packageLabel = String(packageName || "").trim();
+    const baseLabel = isPrototypeCustomer(user)
+      ? "Genesis Prototype Customer"
+      : "Customer Account";
+    return packageLabel ? `${baseLabel} - ${packageLabel}` : baseLabel;
+  }
+
+  function getAccountDisplayLabel(user) {
+    if (isInternalRole(user)) {
+      return getBusinessTitle(user);
+    }
+    return getCustomerAccountLabel(user);
+  }
+
   function populateUserFields(user, refs) {
     if (!user || !refs) return;
 
     if (refs.userName) refs.userName.textContent = user.full_name || "User";
     if (refs.userEmail) refs.userEmail.textContent = user.email || "";
-    if (refs.userRole) refs.userRole.textContent = user.role || "user";
+    if (refs.userRole) refs.userRole.textContent = getAccountDisplayLabel(user);
+  }
+
+  function updateCustomerProfileFields(context, refs) {
+    if (!context || !refs || !refs.userRole || isInternalRole(context.user)) {
+      return;
+    }
+
+    refs.userRole.textContent = getCustomerAccountLabel(
+      context.user,
+      context.packageName,
+    );
   }
 
   async function fetchOrders() {
@@ -1524,6 +1590,7 @@
 
       const context = await getDashboardContext(me, orders);
       updateAccessState(context);
+      updateCustomerProfileFields(context, refs);
       publishDashboardContext(context);
 
       if (!context.hasPackageAccess) {
@@ -1615,6 +1682,7 @@
       );
 
       if (isInternalRole(me)) {
+        window.location.href = "dashboard.html?admin_workspace=1";
         return;
       }
 

@@ -78,22 +78,25 @@
   }
 
   function getRoleTitle(me) {
+    const explicitTitle = String(me?.business_title || "").trim();
+    if (explicitTitle) return explicitTitle;
+
     const roleKey = getInternalRoleKey(me);
 
-    if (roleKey === "root_admin") return "Company Root Control";
-    if (roleKey === "super_admin") return "Executive Control";
+    if (roleKey === "root_admin") return "CEO / Super Admin";
+    if (roleKey === "super_admin") return "CEO / Super Admin";
     if (roleKey === "admin") return "Administrative Control";
     if (roleKey === "operations_admin" || roleKey === "operations") {
-      return "Operations Control";
+      return "COO";
     }
     if (roleKey === "finance_admin" || roleKey === "finance") {
-      return "Finance Control";
+      return "CFO";
     }
     if (roleKey === "marketing_admin" || roleKey === "marketing") {
-      return "Marketing Control";
+      return "CMO";
     }
     if (roleKey === "platform_admin" || roleKey === "executive_technology") {
-      return "Platform Control";
+      return "CEO / Super Admin";
     }
     return "Internal Control";
   }
