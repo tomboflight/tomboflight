@@ -7,7 +7,6 @@ from fastapi import HTTPException, status
 
 from app.core.package_catalog import get_package, normalize_package_code
 from app.database import get_database
-from app.dependencies.auth import has_internal_admin_access
 from app.services.entitlement_service import resolve_project_entitlements
 from app.services.project_membership_service import get_project_access_snapshot
 
@@ -16,6 +15,15 @@ PAID_PACKAGE_STATUSES = {
     "complete",
     "completed",
     "succeeded",
+}
+WORKSPACE_ADMIN_ROLE_KEYS = {
+    "admin",
+    "super_admin",
+    "root_admin",
+    "platform_admin",
+    "operations_admin",
+    "executive_technology",
+    "operations",
 }
 
 
@@ -37,6 +45,15 @@ def _current_user_email(user: dict[str, Any]) -> str:
 
 def _current_user_name(user: dict[str, Any]) -> str:
     return _normalize_value(user.get("full_name") or user.get("name"))
+
+
+def _has_workspace_admin_access(user: dict[str, Any]) -> bool:
+    role_values = {
+        _normalize_value(user.get("role")).lower(),
+        _normalize_value(user.get("access_tier")).lower(),
+        _normalize_value(user.get("department_role")).lower(),
+    }
+    return any(value in WORKSPACE_ADMIN_ROLE_KEYS for value in role_values if value)
 
 
 def _to_object_id(value: str) -> ObjectId | None:
@@ -263,7 +280,7 @@ def _project_is_visible_to_user(
     family: dict[str, Any] | None,
     current_user: dict[str, Any],
 ) -> bool:
-    if has_internal_admin_access(current_user):
+    if _has_workspace_admin_access(current_user):
         return True
 
     current_user_id = _current_user_id(current_user)
@@ -393,7 +410,7 @@ def resolve_workspace_context(
         "resolved_entitlements": entitlement_map.get("resolved_entitlements") or {},
         "entitlement": entitlement_map.get("entitlement"),
         "paid_order": entitlement_map.get("paid_order"),
-        "is_admin": has_internal_admin_access(current_user),
+        "is_admin": _has_workspace_admin_access(current_user),
     }
 
 
@@ -438,7 +455,7 @@ def list_accessible_families_for_user(
     capabilities: Iterable[str] = (),
 ) -> list[dict[str, Any]]:
     db = _require_database()
-    if has_internal_admin_access(current_user):
+    if _has_workspace_admin_access(current_user):
         return list(db["families"].find().sort("created_at", -1))
 
     normalized_capabilities = [

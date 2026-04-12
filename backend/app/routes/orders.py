@@ -40,7 +40,7 @@ def list_all_orders_admin(
     limit: int = Query(default=100, ge=1, le=500),
     status_filter: str = Query(default="", alias="status"),
     search: str = Query(default=""),
-    current_user: dict = Depends(require_permission("admin.access")),
+    current_user: dict = Depends(require_permission("admin.orders.read")),
 ):
     del current_user
     return {
@@ -55,7 +55,7 @@ def list_all_orders_admin(
 @router.post("/admin/repair-paid-package-access")
 def repair_paid_package_access_admin(
     limit: int = Query(default=500, ge=1, le=1000),
-    current_user: dict = Depends(require_permission("admin.access")),
+    current_user: dict = Depends(require_permission("admin.orders.repair")),
 ):
     del current_user
     return repair_paid_package_order_access(limit=limit)

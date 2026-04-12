@@ -7,18 +7,14 @@
     return;
   }
 
-  const INTERNAL_ROLE_KEYS = new Set([
+  const INTAKE_REVIEW_ROLE_KEYS = new Set([
     "admin",
     "super_admin",
     "root_admin",
     "platform_admin",
     "operations_admin",
-    "finance_admin",
-    "marketing_admin",
     "executive_technology",
     "operations",
-    "finance",
-    "marketing",
   ]);
 
   const LINK_KEY_ENABLED_PACKAGES = new Set([
@@ -233,10 +229,6 @@
   }
 
   function ensureAdminAccess(me) {
-    if (app && typeof app.isInternalRole === "function" && app.isInternalRole(me)) {
-      return;
-    }
-
     const values = [
       normalizeValue(me && me.role),
       normalizeValue(me && me.access_tier),
@@ -244,7 +236,7 @@
     ];
 
     const hasAccess = values.some(function (value) {
-      return INTERNAL_ROLE_KEYS.has(value);
+      return INTAKE_REVIEW_ROLE_KEYS.has(value);
     });
 
     if (!hasAccess) {
