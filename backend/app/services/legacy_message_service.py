@@ -102,7 +102,7 @@ def update_legacy_message(
     if current_status != "draft":
         raise ValueError("Only draft messages can be updated.")
 
-    update_data = {k: v for k, v in updates.model_dump(exclude_unset=True).items()}
+    update_data = updates.model_dump(exclude_unset=True)
     update_data["updated_at"] = _now()
 
     col = _col("legacy_messages")

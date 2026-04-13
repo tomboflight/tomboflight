@@ -187,10 +187,11 @@ def get_package_summary_route(
     for target_code in upgrade_targets:
         target_pkg = all_packages.get(target_code)
         if target_pkg:
+            display_name = target_pkg.get("display_name", target_code)
             upgrade_options.append({
                 "package_code": target_code,
-                "display_name": target_pkg.get("display_name", target_code),
-                "description": target_pkg.get("description") or f"Upgrade to {target_pkg.get('display_name', target_code)}",
+                "display_name": display_name,
+                "description": target_pkg.get("description") or f"Upgrade to {display_name}",
             })
 
     return {

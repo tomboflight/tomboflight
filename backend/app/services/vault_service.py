@@ -110,7 +110,7 @@ def update_vault_item(
         if not grant:
             raise PermissionError("Only the owner or steward can update this item.")
 
-    update_data = {k: v for k, v in updates.model_dump(exclude_unset=True).items()}
+    update_data = updates.model_dump(exclude_unset=True)
     update_data["updated_at"] = _now()
 
     col = _col("vault_items")
