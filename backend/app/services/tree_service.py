@@ -144,7 +144,7 @@ def _linked_household_ids(db, household_id: str) -> set[str]:
                         {"source_household_id": current},
                         {"target_household_id": current},
                     ],
-                    "link_status": {"$in": ["approved", "", None]},
+                    "link_status": "approved",
                 }
             )
         )
@@ -301,6 +301,19 @@ def get_filtered_family_tree(family_id: str, mode: str) -> dict:
 
 
 def get_linked_family_tree(family_id: str, mode: str = "default") -> dict:
+    """Build a linked family graph spanning approved household links.
+
+    Args:
+        family_id: Root family identifier for the caller's workspace.
+        mode: Graph filter mode. Supported values:
+            - "default": all members/relationships from linked families
+            - "verified": relationships marked verified
+            - "narrative": verified + narrative relationships
+            - "private": verified + narrative + private/unknown relationships
+
+    Returns:
+        A tree payload with members, nodes, relationships, edges, and linked_family_ids.
+    """
     db = get_database()
     if db is None:
         return {

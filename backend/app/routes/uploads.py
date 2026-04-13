@@ -106,7 +106,7 @@ class UploadPrivacyUpdatePayload(BaseModel):
     customer_visible: bool | None = None
     internal_only: bool | None = None
     share_with_linked_families: bool | None = None
-    notes: str = Field(default="", max_length=500)
+    privacy_notes: str = Field(default="", max_length=500, alias="notes")
 
 
 def _normalize_value(value: Any) -> str:
@@ -448,15 +448,32 @@ def _normalize_visibility_scope(value: Any, default: str = "private") -> str:
     return normalized if normalized in ALLOWED_VISIBILITY_SCOPE else default
 
 
-def _visibility_flags(scope: str) -> tuple[bool, bool, bool]:
+def _visibility_flags(scope: str) -> dict[str, bool]:
+    """Return default privacy flags for a given visibility scope."""
     normalized_scope = _normalize_visibility_scope(scope, default="private")
     if normalized_scope == "internal_only":
-        return False, True, False
+        return {
+            "customer_visible": False,
+            "internal_only": True,
+            "share_with_linked_families": False,
+        }
     if normalized_scope == "private":
-        return False, False, False
+        return {
+            "customer_visible": False,
+            "internal_only": False,
+            "share_with_linked_families": False,
+        }
     if normalized_scope == "linked_family_shared":
-        return True, False, True
-    return True, False, False
+        return {
+            "customer_visible": True,
+            "internal_only": False,
+            "share_with_linked_families": True,
+        }
+    return {
+        "customer_visible": True,
+        "internal_only": False,
+        "share_with_linked_families": False,
+    }
 
 
 def _validate_upload_file(
@@ -866,7 +883,10 @@ def list_family_vault_items(
     base_family_id = _normalize_value((context.get("family") or {}).get("_id"))
     family_ids = [base_family_id]
     if include_linked_families:
-        if not bool((context.get("resolved_entitlements") or {}).get("can_link_households")) and not context.get("is_admin"):
+        has_link_capability = bool(context.get("is_admin")) or bool(
+            (context.get("resolved_entitlements") or {}).get("can_link_households")
+        )
+        if not has_link_capability:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Your active package does not include linked family vault access.",
@@ -874,7 +894,7 @@ def list_family_vault_items(
         family_ids = list_linked_family_ids(base_family_id)
 
     query: dict[str, Any] = {
-        "family_id": {"$in": [family_id for family_id in family_ids if family_id]},
+        "family_id": {"$in": [family_id_item for family_id_item in family_ids if family_id_item]},
     }
     normalized_scope = _normalize_vault_scope(vault_scope, default="")
     if normalized_scope:
@@ -921,7 +941,10 @@ def update_upload_privacy(
         if payload.visibility_scope is not None
         else current_scope
     )
-    customer_visible, internal_only, share_with_linked = _visibility_flags(visibility_scope)
+    flag_defaults = _visibility_flags(visibility_scope)
+    customer_visible = flag_defaults["customer_visible"]
+    internal_only = flag_defaults["internal_only"]
+    share_with_linked = flag_defaults["share_with_linked_families"]
 
     if payload.customer_visible is not None:
         customer_visible = bool(payload.customer_visible)
@@ -949,7 +972,7 @@ def update_upload_privacy(
                 "customer_visible": customer_visible,
                 "internal_only": internal_only,
                 "share_with_linked_families": share_with_linked,
-                "privacy_notes": _normalize_value(payload.notes),
+                "privacy_notes": _normalize_value(payload.privacy_notes),
             }
         },
     )
