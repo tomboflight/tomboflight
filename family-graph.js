@@ -59,10 +59,6 @@
           return;
         }
 
-        if (_linkedNetworkMode && _activeProjectId) {
-          return;
-        }
-
         await loadGraphForFamily(familyId, statusNode, summaryNode, membersNode, relationshipsNode);
       });
     }

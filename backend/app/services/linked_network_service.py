@@ -60,12 +60,12 @@ def build_linked_network(
     relationships_col = _col("relationships")
 
     # Find all households for the starting project
+    pid_candidates: list[Any] = [project_id]
+    if ObjectId.is_valid(project_id):
+        pid_candidates.append(ObjectId(project_id))
     seed_households = list(
-        households_col.find({"project_id": {"$in": [project_id, ObjectId(project_id) if ObjectId.is_valid(project_id) else None]}})
+        households_col.find({"project_id": {"$in": pid_candidates}})
     )
-    if not seed_households:
-        # Try string match only
-        seed_households = list(households_col.find({"project_id": project_id}))
 
     visited_household_ids: set[str] = set()
     all_households: list[dict[str, Any]] = []
@@ -121,14 +121,14 @@ def build_linked_network(
         hh_name = str(hh.get("household_name") or hh.get("name") or hh_id)
         is_own_household = hh_id in user_household_ids
 
-        # Find associated family
+        # Find associated family by project_id
         family = None
         if hh_project_id:
-            family = families_col.find_one(
-                {"$or": [{"project_id": hh_project_id}, {"project_id": hh_id}]}
-            )
-        if not family and hh_project_id:
             family = families_col.find_one({"project_id": hh_project_id})
+        if not family and hh_project_id:
+            oid = ObjectId(hh_project_id) if ObjectId.is_valid(hh_project_id) else None
+            if oid:
+                family = families_col.find_one({"project_id": oid})
 
         family_id: str | None = None
         if family:

@@ -190,7 +190,7 @@ def get_package_summary_route(
             upgrade_options.append({
                 "package_code": target_code,
                 "display_name": target_pkg.get("display_name", target_code),
-                "description": "Adds household linking, narration, and more",
+                "description": target_pkg.get("description") or f"Upgrade to {target_pkg.get('display_name', target_code)}",
             })
 
     return {

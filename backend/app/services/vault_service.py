@@ -110,7 +110,7 @@ def update_vault_item(
         if not grant:
             raise PermissionError("Only the owner or steward can update this item.")
 
-    update_data = {k: v for k, v in updates.model_dump().items() if v is not None}
+    update_data = {k: v for k, v in updates.model_dump(exclude_unset=True).items()}
     update_data["updated_at"] = _now()
 
     col = _col("vault_items")
@@ -147,12 +147,6 @@ def list_vault_items(
     vault_scope: str | None = None,
 ) -> list[dict[str, Any]]:
     col = _col("vault_items")
-    query: dict[str, Any] = {
-        "$or": [
-            {"owner_user_id": requesting_user_id, "project_id": project_id},
-            {"vault_item_id": {"$exists": True}},
-        ]
-    }
 
     # Items owned by user for this project
     owned_query: dict[str, Any] = {"owner_user_id": requesting_user_id, "project_id": project_id}
