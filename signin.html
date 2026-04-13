@@ -8,7 +8,7 @@
       name="description"
       content="Enter your private Tomb of Light customer or operations workspace."
     />
-    <link rel="stylesheet" href="styles.css?v=20260412-1" />
+    <link rel="stylesheet" href="styles.css?v=20260413-1" />
   </head>
   <body class="portal-login-body">
     <a href="#main-content" class="skip-to-content">Skip to main content</a>
@@ -183,6 +183,176 @@
                 </div>
               </form>
 
+              <section
+                class="portal-mfa-panel"
+                data-mfa-enrollment-panel
+                hidden
+                aria-label="Authenticator enrollment"
+              >
+                <div data-mfa-enrollment-setup>
+                  <div class="portal-mfa-top">
+                    <span class="eyebrow">Operations Verification</span>
+                    <h3>Set up your authenticator.</h3>
+                    <p>
+                      Add Tomb of Light to your authenticator app, then enter
+                      the first code it creates for this account.
+                    </p>
+                  </div>
+
+                  <div class="portal-mfa-secret-card">
+                    <span>Manual setup key</span>
+                    <code data-mfa-enrollment-secret></code>
+                  </div>
+
+                  <label class="portal-mfa-url-field">
+                    Authenticator setup URL
+                    <textarea
+                      data-mfa-otpauth-url
+                      rows="3"
+                      readonly
+                    ></textarea>
+                  </label>
+
+                  <div class="inline-actions">
+                    <button class="btn btn-secondary" type="button" data-mfa-reset>
+                      Use Another Account
+                    </button>
+                  </div>
+                </div>
+
+                <div
+                  class="helper"
+                  data-mfa-enrollment-status
+                  aria-live="polite"
+                  style="display: none"
+                ></div>
+
+                <form
+                  class="form-grid portal-mfa-form"
+                  data-mfa-enrollment-form
+                  data-mfa-enrollment-verify-area
+                  hidden
+                  novalidate
+                >
+                  <label>
+                    First Authenticator Code
+                    <input
+                      type="text"
+                      name="code"
+                      placeholder="123456"
+                      inputmode="numeric"
+                      autocomplete="one-time-code"
+                      pattern="[0-9]{6,12}"
+                      maxlength="12"
+                      required
+                    />
+                  </label>
+
+                  <div class="inline-actions">
+                    <button class="btn btn-primary" type="submit" data-submit-btn>
+                      Activate MFA
+                    </button>
+                    <button class="btn btn-secondary" type="button" data-mfa-reset>
+                      Use Another Account
+                    </button>
+                  </div>
+                </form>
+
+                <div
+                  class="portal-mfa-backup"
+                  data-mfa-backup-codes-panel
+                  hidden
+                >
+                  <div class="portal-mfa-top">
+                    <span class="eyebrow">Recovery Access</span>
+                    <h3>Save these recovery codes now.</h3>
+                    <p>
+                      Each code can unlock this operations account once if your
+                      authenticator is unavailable. Tomb of Light will not show
+                      them again.
+                    </p>
+                  </div>
+
+                  <ol class="portal-mfa-code-list" data-mfa-backup-codes></ol>
+
+                  <div class="inline-actions">
+                    <button
+                      class="btn btn-primary"
+                      type="button"
+                      data-mfa-continue-dashboard
+                    >
+                      Continue to Dashboard
+                    </button>
+                  </div>
+                </div>
+              </section>
+
+              <section
+                class="portal-mfa-panel"
+                data-mfa-verification-panel
+                hidden
+                aria-label="Authenticator verification"
+              >
+                <div class="portal-mfa-top">
+                  <span class="eyebrow">Operations Verification</span>
+                  <h3>Verify your secure access.</h3>
+                  <p>
+                    Enter a current authenticator code, or use one recovery code
+                    to open your internal workspace.
+                  </p>
+                </div>
+
+                <form
+                  class="form-grid portal-mfa-form"
+                  data-mfa-verification-form
+                  novalidate
+                >
+                  <label>
+                    Authenticator Code
+                    <input
+                      type="text"
+                      name="code"
+                      placeholder="123456"
+                      inputmode="numeric"
+                      autocomplete="one-time-code"
+                      pattern="[0-9]{6,12}"
+                      maxlength="12"
+                    />
+                  </label>
+
+                  <div class="portal-mfa-choice" aria-hidden="true">
+                    or use a recovery code
+                  </div>
+
+                  <label>
+                    Recovery Code
+                    <input
+                      type="text"
+                      name="recovery_code"
+                      placeholder="Enter recovery code"
+                      autocomplete="one-time-code"
+                      maxlength="64"
+                    />
+                  </label>
+
+                  <div
+                    class="helper"
+                    data-mfa-verification-status
+                    aria-live="polite"
+                    style="display: none"
+                  ></div>
+
+                  <div class="inline-actions">
+                    <button class="btn btn-primary" type="submit" data-submit-btn>
+                      Verify and Enter Portal
+                    </button>
+                    <button class="btn btn-secondary" type="button" data-mfa-reset>
+                      Use Another Account
+                    </button>
+                  </div>
+                </form>
+              </section>
+
               <div class="portal-access-footer">
                 <div class="portal-access-note">
                   <strong>Customer access:</strong> portrait, household,
@@ -269,6 +439,6 @@
 
     <script src="config.js?v=20260328-8"></script>
     <script src="app.js?v=20260410-1"></script>
-    <script src="auth.js?v=20260410-2"></script>
+    <script src="auth.js?v=20260413-1"></script>
   </body>
 </html>
