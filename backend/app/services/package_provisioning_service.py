@@ -89,7 +89,9 @@ def _normalize_order_document(order: dict[str, Any]) -> tuple[dict[str, Any], bo
             changed = True
             order[key] = value
     if changed:
-        _db()["orders"].update_one({"_id": order["_id"]}, {"$set": updates})
+        order_id = order.get("_id")
+        if order_id is not None:
+            _db()["orders"].update_one({"_id": order_id}, {"$set": updates})
     return identity, changed
 
 
@@ -200,7 +202,9 @@ def _link_order_to_project(order: dict[str, Any], project: dict[str, Any]) -> bo
     oid = _to_object_id(project_id)
     if oid is not None:
         value = oid
-    _db()["orders"].update_one({"_id": order["_id"]}, {"$set": {"project_id": value}})
+    order_id = order.get("_id")
+    if order_id is not None:
+        _db()["orders"].update_one({"_id": order_id}, {"$set": {"project_id": value}})
     order["project_id"] = value
     return True
 
