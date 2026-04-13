@@ -116,7 +116,7 @@ class RateLimitAndLockoutTests(unittest.TestCase):
 
 
 class AuthMfaTests(unittest.TestCase):
-    def test_internal_admin_requires_mfa_enrollment(self):
+    def test_internal_admin_without_mfa_can_authenticate(self):
         user_id = ObjectId()
         db = FakeDatabase(
             {
@@ -135,7 +135,29 @@ class AuthMfaTests(unittest.TestCase):
         )
         with patch.object(auth_service, "_get_database_or_none", return_value=db):
             result = auth_service.authenticate_user("admin@example.com", "StrongPass!123")
-        self.assertEqual(result["status"], "mfa_enrollment_required")
+        self.assertEqual(result["status"], "authenticated")
+        self.assertTrue(result.get("access_token"))
+
+    def test_mfa_enabled_user_requires_verification(self):
+        user_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "users": [
+                    {
+                        "_id": user_id,
+                        "email": "admin@example.com",
+                        "status": "active",
+                        "password_hash": auth_service.hash_password("StrongPass!123"),
+                        "role": "admin",
+                        "mfa_enabled": True,
+                        "session_token_version": 0,
+                    }
+                ]
+            }
+        )
+        with patch.object(auth_service, "_get_database_or_none", return_value=db):
+            result = auth_service.authenticate_user("admin@example.com", "StrongPass!123")
+        self.assertEqual(result["status"], "mfa_required")
         self.assertTrue(result.get("mfa_challenge_token"))
 
 
