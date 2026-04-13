@@ -6,28 +6,29 @@
   const SIGNUP_POLICY_VERSION = "2026-03-26";
   const DASHBOARD_CONTEXT_STORAGE_KEY = "tol_dashboard_context_v1";
   let hasLogoutBinding = false;
-
-  const LINK_KEY_ENABLED_PACKAGES = new Set([
-    "digital_legacy_portrait",
-    "household_foundation",
-    "heirloom_legacy_tree",
-    "legacy_plus",
-    "family_estate_concierge",
-  ]);
-
-  const NARRATION_ENABLED_PACKAGES = new Set([
-    "heirloom_legacy_tree",
-    "legacy_plus",
-    "family_estate_concierge",
-  ]);
-
-  const HOUSEHOLD_LINK_ENABLED_PACKAGES = new Set([
+  const HOUSEHOLD_LINK_PACKAGE_CODES = new Set([
     "legacy_plus",
     "family_estate_concierge",
   ]);
 
   if (!app) {
     console.error("auth.js requires app.js to be loaded first.");
+    return;
+  }
+  const requiredPackageHelpers = [
+    "normalizePackageCode",
+    "stripMaintenanceSuffix",
+    "resolvePackageLane",
+    "resolvePackageDisplayName",
+    "packageSupportsLinkKeys",
+    "getPackageProfile",
+  ];
+  if (
+    requiredPackageHelpers.some(function (helperName) {
+      return typeof app[helperName] !== "function";
+    })
+  ) {
+    console.error("auth.js requires package helper exports from app.js.");
     return;
   }
 
@@ -109,118 +110,78 @@
   }
 
   function normalizePackageCode(value) {
-    const normalized = normalizeValue(value);
-
-    const mapping = {
-      "legacy-snapshot": "legacy_snapshot",
-      legacy_snapshot: "legacy_snapshot",
-
-      "legacy-portrait-intro": "legacy_portrait_intro",
-      legacy_portrait_intro: "legacy_portrait_intro",
-
-      "digital-legacy-portrait": "digital_legacy_portrait",
-      digital_legacy_portrait: "digital_legacy_portrait",
-
-      "starter-family-tree": "household_foundation",
-      starter_family_tree: "household_foundation",
-      "household-foundation": "household_foundation",
-      household_foundation: "household_foundation",
-
-      "heirloom-legacy-tree": "heirloom_legacy_tree",
-      heirloom_legacy_tree: "heirloom_legacy_tree",
-
-      "legacy-plus": "legacy_plus",
-      legacy_plus: "legacy_plus",
-
-      "family-estate-concierge": "family_estate_concierge",
-      family_estate_concierge: "family_estate_concierge",
-
-      "command-structure-network": "command_structure_network",
-      command_structure_network: "command_structure_network",
-    };
-
-    return mapping[normalized] || normalized;
+    return app.normalizePackageCode(value);
   }
 
   function stripMaintenanceSuffix(packageCode) {
-    return normalizePackageCode(packageCode)
-      .replace(/_maintenance_monthly$/, "")
-      .replace(/_maintenance_yearly$/, "");
+    return app.stripMaintenanceSuffix(packageCode);
   }
 
   function resolvePackageLane(packageCode) {
-    const normalized = stripMaintenanceSuffix(packageCode);
-
-    if (
-      normalized === "legacy_snapshot" ||
-      normalized === "legacy_portrait_intro" ||
-      normalized === "digital_legacy_portrait"
-    ) {
-      return "portrait";
-    }
-
-    if (
-      normalized === "household_foundation" ||
-      normalized === "heirloom_legacy_tree" ||
-      normalized === "legacy_plus"
-    ) {
-      return "household";
-    }
-
-    if (normalized === "family_estate_concierge") {
-      return "network";
-    }
-
-    if (normalized === "command_structure_network") {
-      return "organization";
-    }
-
-    return "unknown";
+    return app.resolvePackageLane(packageCode);
   }
 
   function resolvePackageDisplayName(packageCode) {
-    const normalized = stripMaintenanceSuffix(packageCode);
-
-    const mapping = {
-      legacy_snapshot: "Legacy Snapshot",
-      legacy_portrait_intro: "Legacy Portrait Intro",
-      digital_legacy_portrait: "Digital Legacy Portrait",
-      household_foundation: "Household Foundation",
-      heirloom_legacy_tree: "Heirloom Legacy Tree",
-      legacy_plus: "Legacy Plus",
-      family_estate_concierge: "Family Estate Concierge",
-      command_structure_network: "Command Structure Network",
-    };
-
-    return mapping[normalized] || normalized || "Package";
+    return app.resolvePackageDisplayName(packageCode);
   }
 
   function packageSupportsLinkKeys(packageCode) {
-    return LINK_KEY_ENABLED_PACKAGES.has(stripMaintenanceSuffix(packageCode));
+    return app.packageSupportsLinkKeys(packageCode);
   }
 
   function buildFallbackEntitlements(packageCode, packageLane) {
     const normalizedCode = stripMaintenanceSuffix(packageCode);
+    const profile = app.getPackageProfile(normalizedCode);
     const lane =
-      normalizeValue(packageLane) || resolvePackageLane(normalizedCode);
+      normalizeValue(packageLane) ||
+      normalizeValue(profile?.package_lane) ||
+      resolvePackageLane(normalizedCode);
 
     return {
       package_code: normalizedCode,
       package_lane: lane,
-      can_upload_portraits: true,
-      can_upload_verification_docs: true,
-      can_build_household: lane === "household" || lane === "network",
-      can_build_family_tree: lane === "household" || lane === "network",
-      can_build_org_chart: lane === "organization",
-      can_link_households: HOUSEHOLD_LINK_ENABLED_PACKAGES.has(normalizedCode),
-      can_link_org_units: lane === "organization",
-      can_use_viewer: true,
-      can_use_narration: NARRATION_ENABLED_PACKAGES.has(normalizedCode),
-      can_use_lineage_certificate: lane === "household" || lane === "network",
-      can_open_family_intake: lane === "household" || lane === "network",
-      can_open_org_intake: lane === "organization",
+      can_upload_portraits: Boolean(profile?.can_upload_portraits ?? true),
+      can_upload_verification_docs: Boolean(
+        profile?.can_upload_verification_docs ?? true,
+      ),
+      can_build_household:
+        typeof profile?.can_build_household === "boolean"
+          ? profile.can_build_household
+          : lane === "household" || lane === "network",
+      can_build_family_tree:
+        typeof profile?.can_build_family_tree === "boolean"
+          ? profile.can_build_family_tree
+          : lane === "household" || lane === "network",
+      can_build_org_chart:
+        typeof profile?.can_build_org_chart === "boolean"
+          ? profile.can_build_org_chart
+          : lane === "organization",
+      can_link_households:
+        typeof profile?.can_link_households === "boolean"
+          ? profile.can_link_households
+          : HOUSEHOLD_LINK_PACKAGE_CODES.has(normalizedCode),
+      can_link_org_units:
+        typeof profile?.can_link_org_units === "boolean"
+          ? profile.can_link_org_units
+          : lane === "organization",
+      can_use_viewer: Boolean(profile?.can_use_viewer ?? true),
+      can_use_narration: Boolean(profile?.can_use_narration ?? false),
+      can_use_lineage_certificate:
+        typeof profile?.can_use_lineage_certificate === "boolean"
+          ? profile.can_use_lineage_certificate
+          : lane === "household" || lane === "network",
+      can_open_family_intake:
+        typeof profile?.can_open_family_intake === "boolean"
+          ? profile.can_open_family_intake
+          : lane === "household" || lane === "network",
+      can_open_org_intake:
+        typeof profile?.can_open_org_intake === "boolean"
+          ? profile.can_open_org_intake
+          : lane === "organization",
       can_use_link_keys: packageSupportsLinkKeys(normalizedCode),
-      can_manage_link_keys: packageSupportsLinkKeys(normalizedCode),
+      can_manage_link_keys: Boolean(
+        profile?.can_manage_link_keys ?? packageSupportsLinkKeys(normalizedCode),
+      ),
       allowed_addons: [],
       upgrade_targets: [],
     };
