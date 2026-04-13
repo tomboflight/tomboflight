@@ -53,6 +53,30 @@
     );
   }
 
+  function getMfaChallengeToken(loginData) {
+    return String(
+      loginData?.mfa_challenge_token || loginData?.mfaChallengeToken || "",
+    ).trim();
+  }
+
+  function isTruthyFlag(value) {
+    return value === true || value === 1 || value === "true" || value === "1";
+  }
+
+  function isMfaEnrollmentChallenge(loginData) {
+    return Boolean(
+      isTruthyFlag(loginData?.mfa_required) &&
+        isTruthyFlag(loginData?.mfa_enrollment_required) &&
+        getMfaChallengeToken(loginData),
+    );
+  }
+
+  function isMfaVerificationChallenge(loginData) {
+    return Boolean(
+      isTruthyFlag(loginData?.mfa_required) && getMfaChallengeToken(loginData),
+    );
+  }
+
   function getErrorMessage(error) {
     if (!error) return "Unknown error";
     if (typeof error === "string") return error;
@@ -592,12 +616,7 @@
     return user;
   }
 
-  async function handleLogin(email, password) {
-    const loginData = await app.apiRequest("/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ email, password }),
-    });
-
+  async function completeAuthenticatedLogin(loginData) {
     const token = getAccessTokenFromResponse(loginData);
 
     if (!token) {
@@ -610,7 +629,73 @@
     const me = await fetchCurrentUserWithToken(token);
     app.saveUser(me);
 
-    return { loginData, me };
+    return { status: "authenticated", loginData, me };
+  }
+
+  async function handleLogin(email, password) {
+    const loginData = await app.apiRequest("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    });
+
+    if (getAccessTokenFromResponse(loginData)) {
+      return await completeAuthenticatedLogin(loginData);
+    }
+
+    if (isMfaEnrollmentChallenge(loginData)) {
+      clearCachedDashboardContext();
+      app.clearSession();
+      return {
+        status: "mfa_enrollment_required",
+        loginData,
+        mfaChallengeToken: getMfaChallengeToken(loginData),
+      };
+    }
+
+    if (isMfaVerificationChallenge(loginData)) {
+      clearCachedDashboardContext();
+      app.clearSession();
+      return {
+        status: "mfa_required",
+        loginData,
+        mfaChallengeToken: getMfaChallengeToken(loginData),
+      };
+    }
+
+    throw new Error("Login succeeded but no access token was returned.");
+  }
+
+  async function beginMfaEnrollment(mfaChallengeToken) {
+    return await app.apiRequest("/auth/mfa/enroll/begin", {
+      method: "POST",
+      body: JSON.stringify({ mfa_challenge_token: mfaChallengeToken }),
+    });
+  }
+
+  async function verifyMfaEnrollment(setupToken, code) {
+    const loginData = await app.apiRequest("/auth/mfa/enroll/verify", {
+      method: "POST",
+      body: JSON.stringify({ setup_token: setupToken, code }),
+    });
+
+    return await completeAuthenticatedLogin(loginData);
+  }
+
+  async function verifyMfaLogin(mfaChallengeToken, code, recoveryCode) {
+    const payload = { mfa_challenge_token: mfaChallengeToken };
+    if (code) {
+      payload.code = code;
+    }
+    if (recoveryCode) {
+      payload.recovery_code = recoveryCode;
+    }
+
+    const loginData = await app.apiRequest("/auth/mfa/login/verify", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+
+    return await completeAuthenticatedLogin(loginData);
   }
 
   function redirectAfterLogin() {
@@ -1365,7 +1450,12 @@
           "success",
         );
 
-        await handleLogin(email, password);
+        const loginResult = await handleLogin(email, password);
+        if (loginResult.status !== "authenticated") {
+          throw new Error(
+            "Account created. Please sign in to complete secure verification.",
+          );
+        }
         redirectAfterLogin();
       } catch (error) {
         app.setStatus(
@@ -1392,6 +1482,226 @@
       (submitBtn && submitBtn.textContent
         ? submitBtn.textContent.trim()
         : "") || "Enter Portal";
+    const enrollmentPanel = document.querySelector(
+      "[data-mfa-enrollment-panel]",
+    );
+    const enrollmentSetup = document.querySelector(
+      "[data-mfa-enrollment-setup]",
+    );
+    const enrollmentVerifyArea = document.querySelector(
+      "[data-mfa-enrollment-verify-area]",
+    );
+    const enrollmentForm = document.querySelector(
+      "[data-mfa-enrollment-form]",
+    );
+    const enrollmentStatus = document.querySelector(
+      "[data-mfa-enrollment-status]",
+    );
+    const enrollmentSubmitBtn =
+      enrollmentForm && enrollmentForm.querySelector("[data-submit-btn]");
+    const enrollmentSecretNode = document.querySelector(
+      "[data-mfa-enrollment-secret]",
+    );
+    const enrollmentOtpauthNode = document.querySelector(
+      "[data-mfa-otpauth-url]",
+    );
+    const enrollmentOtpauthLink = document.querySelector(
+      "[data-mfa-otpauth-link]",
+    );
+    const backupCodesPanel = document.querySelector(
+      "[data-mfa-backup-codes-panel]",
+    );
+    const backupCodesList = document.querySelector("[data-mfa-backup-codes]");
+    const continueDashboardBtn = document.querySelector(
+      "[data-mfa-continue-dashboard]",
+    );
+    const verificationPanel = document.querySelector(
+      "[data-mfa-verification-panel]",
+    );
+    const verificationForm = document.querySelector(
+      "[data-mfa-verification-form]",
+    );
+    const verificationStatus = document.querySelector(
+      "[data-mfa-verification-status]",
+    );
+    const verificationSubmitBtn =
+      verificationForm && verificationForm.querySelector("[data-submit-btn]");
+    const resetButtons = document.querySelectorAll("[data-mfa-reset]");
+    let activeMfaChallengeToken = "";
+    let activeMfaSetupToken = "";
+
+    function setHidden(element, hidden) {
+      if (element) {
+        element.hidden = Boolean(hidden);
+      }
+    }
+
+    function normalizeMfaEntry(value) {
+      return String(value || "")
+        .trim()
+        .replace(/\s+/g, "");
+    }
+
+    function focusFirstInput(container) {
+      if (!container) return;
+      const input = container.querySelector("input, textarea, button, a");
+      if (input && typeof input.focus === "function") {
+        input.focus();
+      }
+    }
+
+    function setBusy(button, busy, busyLabel, defaultLabel) {
+      if (!button) return;
+      button.disabled = Boolean(busy);
+      button.textContent = busy ? busyLabel : defaultLabel;
+    }
+
+    function setMfaFlowVisible(flowName) {
+      const isEnrollment = flowName === "enrollment";
+      const isVerification = flowName === "verification";
+      form.hidden = isEnrollment || isVerification;
+      setHidden(enrollmentPanel, !isEnrollment);
+      setHidden(verificationPanel, !isVerification);
+      app.clearStatus(statusNode);
+    }
+
+    function resetMfaFlow() {
+      activeMfaChallengeToken = "";
+      activeMfaSetupToken = "";
+      form.hidden = false;
+      if (typeof form.reset === "function") {
+        form.reset();
+      }
+      if (enrollmentForm && typeof enrollmentForm.reset === "function") {
+        enrollmentForm.reset();
+      }
+      if (verificationForm && typeof verificationForm.reset === "function") {
+        verificationForm.reset();
+      }
+      if (enrollmentSecretNode) {
+        enrollmentSecretNode.textContent = "";
+      }
+      if (enrollmentOtpauthNode) {
+        enrollmentOtpauthNode.value = "";
+      }
+      if (enrollmentOtpauthLink) {
+        enrollmentOtpauthLink.removeAttribute("href");
+      }
+      if (backupCodesList) {
+        backupCodesList.innerHTML = "";
+      }
+      setHidden(enrollmentPanel, true);
+      setHidden(verificationPanel, true);
+      setHidden(enrollmentSetup, false);
+      setHidden(enrollmentVerifyArea, true);
+      setHidden(backupCodesPanel, true);
+      app.clearStatus(statusNode);
+      app.clearStatus(enrollmentStatus);
+      app.clearStatus(verificationStatus);
+      setBusy(submitBtn, false, "Signing In...", defaultSubmitLabel);
+      setBusy(
+        enrollmentSubmitBtn,
+        false,
+        "Verifying...",
+        "Activate MFA",
+      );
+      setBusy(
+        verificationSubmitBtn,
+        false,
+        "Verifying...",
+        "Verify and Enter Portal",
+      );
+    }
+
+    async function startMfaEnrollment(mfaChallengeToken) {
+      activeMfaChallengeToken = mfaChallengeToken;
+      activeMfaSetupToken = "";
+      setMfaFlowVisible("enrollment");
+      setHidden(enrollmentSetup, false);
+      setHidden(enrollmentVerifyArea, true);
+      setHidden(backupCodesPanel, true);
+      app.setStatus(
+        enrollmentStatus,
+        "Preparing your authenticator setup...",
+        "info",
+      );
+
+      try {
+        const setupData = await beginMfaEnrollment(activeMfaChallengeToken);
+        activeMfaSetupToken = String(setupData?.setup_token || "").trim();
+        if (!activeMfaSetupToken) {
+          throw new Error("MFA setup could not be started.");
+        }
+
+        const secret = String(setupData?.secret || "").trim();
+        const otpauthUrl = String(setupData?.otpauth_url || "").trim();
+        if (enrollmentSecretNode) {
+          enrollmentSecretNode.textContent = secret || "Unavailable";
+        }
+        if (enrollmentOtpauthNode) {
+          enrollmentOtpauthNode.value = otpauthUrl;
+        }
+        if (enrollmentOtpauthLink && otpauthUrl) {
+          enrollmentOtpauthLink.href = otpauthUrl;
+        }
+
+        setHidden(enrollmentVerifyArea, false);
+        app.setStatus(
+          enrollmentStatus,
+          "Add this key to your authenticator app, then enter the first code it creates.",
+          "info",
+        );
+        focusFirstInput(enrollmentVerifyArea);
+      } catch (error) {
+        app.setStatus(
+          enrollmentStatus,
+          getErrorMessage(error) || "MFA enrollment could not be started.",
+          "error",
+        );
+      }
+    }
+
+    function startMfaVerification(mfaChallengeToken) {
+      activeMfaChallengeToken = mfaChallengeToken;
+      setMfaFlowVisible("verification");
+      app.setStatus(
+        verificationStatus,
+        "Enter an authenticator code or one recovery code to continue.",
+        "info",
+      );
+      focusFirstInput(verificationPanel);
+    }
+
+    function showBackupCodes(backupCodes) {
+      const codes = Array.isArray(backupCodes) ? backupCodes : [];
+      if (backupCodesList) {
+        backupCodesList.innerHTML = "";
+        if (codes.length) {
+          codes.forEach(function (code) {
+            const item = document.createElement("li");
+            item.textContent = code;
+            backupCodesList.appendChild(item);
+          });
+        } else {
+          const item = document.createElement("li");
+          item.textContent =
+            "No backup codes were returned for this session.";
+          backupCodesList.appendChild(item);
+        }
+      }
+
+      setHidden(enrollmentSetup, true);
+      setHidden(enrollmentVerifyArea, true);
+      setHidden(backupCodesPanel, false);
+      app.setStatus(
+        enrollmentStatus,
+        "MFA is active. Keep these recovery codes before opening the dashboard.",
+        "success",
+      );
+      if (continueDashboardBtn && typeof continueDashboardBtn.focus === "function") {
+        continueDashboardBtn.focus();
+      }
+    }
 
     form.addEventListener("submit", async function (event) {
       event.preventDefault();
@@ -1422,9 +1732,24 @@
       }
 
       try {
-        await handleLogin(email, password);
-        app.setStatus(statusNode, "Portal access granted.", "success");
-        redirectAfterLogin();
+        const loginResult = await handleLogin(email, password);
+        if (loginResult.status === "authenticated") {
+          app.setStatus(statusNode, "Portal access granted.", "success");
+          redirectAfterLogin();
+          return;
+        }
+
+        if (loginResult.status === "mfa_enrollment_required") {
+          await startMfaEnrollment(loginResult.mfaChallengeToken);
+          return;
+        }
+
+        if (loginResult.status === "mfa_required") {
+          startMfaVerification(loginResult.mfaChallengeToken);
+          return;
+        }
+
+        throw new Error("Login could not be completed.");
       } catch (error) {
         app.setStatus(
           statusNode,
@@ -1438,6 +1763,135 @@
         }
       }
     });
+
+    if (enrollmentForm) {
+      enrollmentForm.addEventListener("submit", async function (event) {
+        event.preventDefault();
+        app.clearStatus(enrollmentStatus);
+
+        if (
+          typeof enrollmentForm.reportValidity === "function" &&
+          !enrollmentForm.reportValidity()
+        ) {
+          return;
+        }
+
+        const formData = new FormData(enrollmentForm);
+        const code = normalizeMfaEntry(formData.get("code"));
+
+        if (!activeMfaSetupToken) {
+          app.setStatus(
+            enrollmentStatus,
+            "MFA setup has expired. Please sign in again.",
+            "error",
+          );
+          return;
+        }
+
+        if (!code) {
+          app.setStatus(
+            enrollmentStatus,
+            "Enter the code from your authenticator app.",
+            "error",
+          );
+          return;
+        }
+
+        setBusy(enrollmentSubmitBtn, true, "Verifying...", "Activate MFA");
+
+        try {
+          const result = await verifyMfaEnrollment(activeMfaSetupToken, code);
+          showBackupCodes(result.loginData?.backup_codes);
+        } catch (error) {
+          app.setStatus(
+            enrollmentStatus,
+            getErrorMessage(error) || "MFA enrollment could not be verified.",
+            "error",
+          );
+        } finally {
+          setBusy(enrollmentSubmitBtn, false, "Verifying...", "Activate MFA");
+        }
+      });
+    }
+
+    if (verificationForm) {
+      verificationForm.addEventListener("submit", async function (event) {
+        event.preventDefault();
+        app.clearStatus(verificationStatus);
+
+        if (
+          typeof verificationForm.reportValidity === "function" &&
+          !verificationForm.reportValidity()
+        ) {
+          return;
+        }
+
+        const formData = new FormData(verificationForm);
+        const code = normalizeMfaEntry(formData.get("code"));
+        const recoveryCode = normalizeMfaEntry(formData.get("recovery_code"));
+
+        if (!activeMfaChallengeToken) {
+          app.setStatus(
+            verificationStatus,
+            "MFA verification has expired. Please sign in again.",
+            "error",
+          );
+          return;
+        }
+
+        if (!code && !recoveryCode) {
+          app.setStatus(
+            verificationStatus,
+            "Enter an authenticator code or recovery code.",
+            "error",
+          );
+          return;
+        }
+
+        if (code && recoveryCode) {
+          app.setStatus(
+            verificationStatus,
+            "Use either an authenticator code or a recovery code.",
+            "error",
+          );
+          return;
+        }
+
+        setBusy(
+          verificationSubmitBtn,
+          true,
+          "Verifying...",
+          "Verify and Enter Portal",
+        );
+
+        try {
+          await verifyMfaLogin(activeMfaChallengeToken, code, recoveryCode);
+          app.setStatus(verificationStatus, "Portal access granted.", "success");
+          redirectAfterLogin();
+        } catch (error) {
+          app.setStatus(
+            verificationStatus,
+            getErrorMessage(error) || "MFA verification failed.",
+            "error",
+          );
+        } finally {
+          setBusy(
+            verificationSubmitBtn,
+            false,
+            "Verifying...",
+            "Verify and Enter Portal",
+          );
+        }
+      });
+    }
+
+    resetButtons.forEach(function (button) {
+      button.addEventListener("click", resetMfaFlow);
+    });
+
+    if (continueDashboardBtn) {
+      continueDashboardBtn.addEventListener("click", redirectAfterLogin);
+    }
   }
 
   async function setupDashboard() {
