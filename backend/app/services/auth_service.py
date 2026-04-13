@@ -209,8 +209,6 @@ def build_user_response(user: dict) -> dict:
         "department_role": user.get("department_role"),
         "status": user.get("status", "active"),
         "created_at": user["created_at"],
-        "access_tier": user.get("access_tier"),
-        "department_role": user.get("department_role"),
         "policy_version": user.get("policy_version"),
         "terms_accepted_at": user.get("terms_accepted_at"),
         "privacy_accepted_at": user.get("privacy_accepted_at"),

@@ -672,9 +672,13 @@
     if (
       signals.includes("super_admin") ||
       signals.includes("root_admin") ||
+      signals.includes("platform_admin") ||
       signals.includes("executive_technology")
     ) {
       return "CEO / Super Admin";
+    }
+    if (signals.includes("admin")) {
+      return "Administrative Control";
     }
     if (signals.includes("finance_admin") || signals.includes("finance")) {
       return "CFO";
