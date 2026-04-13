@@ -39,16 +39,9 @@ def reconcile_paid_orders_and_projects(*, limit: int = 500) -> dict[str, Any]:
     }
 
 
-def provision_after_order_change(*, order_id: str = "", limit: int = 200) -> dict[str, Any]:
-    result = reconcile_paid_orders_and_projects(limit=limit)
-    if order_id:
-        result["order_id"] = order_id
-    return result
+def provision_after_order_change(*, limit: int = 200) -> dict[str, Any]:
+    return reconcile_paid_orders_and_projects(limit=limit)
 
 
-def provision_after_project_change(*, project_id: str = "", limit: int = 200) -> dict[str, Any]:
-    result = reconcile_paid_orders_and_projects(limit=limit)
-    if project_id:
-        result["project_id"] = project_id
-    return result
-
+def provision_after_project_change(*, limit: int = 200) -> dict[str, Any]:
+    return reconcile_paid_orders_and_projects(limit=limit)

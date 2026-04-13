@@ -1,4 +1,5 @@
 import re
+import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any, Optional, cast
 
@@ -27,6 +28,7 @@ AUTHORITATIVE_ORDER_SOURCES = {
 }
 
 PAID_ORDER_STATUSES = {"paid", "complete", "completed", "succeeded"}
+logger = logging.getLogger(__name__)
 
 
 def _get_orders_collection() -> Collection:
@@ -51,9 +53,7 @@ def _normalize_email(value: Optional[str]) -> Optional[str]:
 
 def _normalize_package_code(value: Optional[str]) -> str:
     normalized = normalize_mapped_package_code(value)
-    if normalized:
-        return normalized
-    return _normalize(value).lower().replace("-", "_") or "unknown"
+    return normalized or "unknown"
 
 
 def _normalize_status(value: Any) -> str:
@@ -78,21 +78,15 @@ def _set_if_present(target: dict[str, Any], key: str, value: Any) -> None:
         target[key] = value
 
 
-def _trigger_package_provisioning(*, order_id: str = "", project_id: str = "") -> None:
+def _trigger_package_provisioning() -> None:
     try:
         from app.services.package_provisioning_service import (
             provision_after_order_change,
         )
 
-        provision_after_order_change(order_id=order_id, limit=200)
-        if project_id:
-            from app.services.package_provisioning_service import (
-                provision_after_project_change,
-            )
-
-            provision_after_project_change(project_id=project_id, limit=200)
-    except Exception:
-        return
+        provision_after_order_change(limit=25)
+    except Exception as exc:
+        logger.warning("package_provisioning_order_reconcile_failed", exc_info=exc)
 
 
 def _coerce_object_id(value: Any) -> ObjectId | None:
@@ -414,10 +408,7 @@ def create_order_for_user(user: dict[str, Any], payload: Any) -> dict[str, Any]:
                 )
 
     if order_doc["item_type"] == "package":
-        _trigger_package_provisioning(
-            order_id=str(order_doc.get("_id") or result.inserted_id),
-            project_id=str(order_doc.get("project_id") or ""),
-        )
+        _trigger_package_provisioning()
 
     return _serialize_order(order_doc)
 
@@ -1025,10 +1016,7 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
                 stripe_payment_link_id=stripe_payment_link_id,
             )
         if item_type == "package":
-            _trigger_package_provisioning(
-                order_id=str(order_doc.get("_id") or existing["_id"]),
-                project_id=str(order_doc.get("project_id") or ""),
-            )
+            _trigger_package_provisioning()
 
         return {
             "order_id": str(existing["_id"]),
@@ -1090,10 +1078,7 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
                     stripe_customer_id=_normalize(session.get("customer")) or None,
                 )
     if item_type == "package":
-        _trigger_package_provisioning(
-            order_id=str(order_doc.get("_id") or result.inserted_id),
-            project_id=str(order_doc.get("project_id") or ""),
-        )
+        _trigger_package_provisioning()
 
     return {
         "order_id": str(result.inserted_id),

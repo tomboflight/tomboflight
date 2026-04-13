@@ -10,6 +10,8 @@ from app.core.package_catalog import (
 )
 from app.core.package_type_catalog import normalize_package_type
 
+DEFAULT_MAINTENANCE_PLAN = "monthly"
+
 
 def _normalize(value: Any) -> str:
     return str(value or "").strip()
@@ -94,7 +96,7 @@ def resolve_package_identity(value: Any) -> dict[str, Any]:
             "package_lane": "",
             "anchor_type": None,
             "mint_policy": {},
-            "maintenance_default": "monthly",
+            "maintenance_default": DEFAULT_MAINTENANCE_PLAN,
             "normalization_status": "missing" if not raw_value else "unknown",
         }
 
@@ -116,7 +118,7 @@ def resolve_package_identity(value: Any) -> dict[str, Any]:
         "package_lane": normalized_lane,
         "anchor_type": policy.get("anchor_type"),
         "mint_policy": mint_policy,
-        "maintenance_default": str(policy.get("maintenance_default") or "monthly"),
+        "maintenance_default": str(policy.get("maintenance_default") or DEFAULT_MAINTENANCE_PLAN),
         "normalization_status": status,
     }
 
@@ -139,4 +141,3 @@ def get_canonical_package_map() -> dict[str, Any]:
         "code_to_slug": _code_to_slug_map(),
         "slug_to_code": _slug_to_code_map(),
     }
-

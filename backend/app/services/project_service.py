@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime
 from typing import Any
 
@@ -18,6 +19,9 @@ from app.services.project_entitlement_service import (
     get_project_entitlement,
     upsert_project_entitlement,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 def _now() -> datetime:
@@ -112,7 +116,7 @@ def create_project(payload: ProjectCreate) -> dict[str, Any]:
     )
     data["package_slug"] = identity.get("package_slug") or canonical_code
     data["package_type"] = canonical_code
-    data["package_name"] = data.get("package_name") or identity.get("display_name") or data.get("package_code")
+    data["package_name"] = data.get("package_name") or identity.get("display_name") or "Unknown Package"
 
     if db is None:
         data["_id"] = "local-project-preview"
@@ -124,9 +128,9 @@ def create_project(payload: ProjectCreate) -> dict[str, Any]:
     try:
         from app.services.package_provisioning_service import provision_after_project_change
 
-        provision_after_project_change(project_id=str(data["_id"]), limit=200)
-    except Exception:
-        pass
+        provision_after_project_change(limit=25)
+    except Exception as exc:
+        logger.warning("package_provisioning_project_reconcile_failed", exc_info=exc)
     return data
 
 
