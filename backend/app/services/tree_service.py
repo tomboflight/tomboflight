@@ -121,6 +121,70 @@ def _find_relationships(db, family_id: str, member_ids: set[str]) -> list[dict]:
     )
 
 
+def _find_family_household_id(db, family_id: str) -> str:
+    family = _find_family(db, family_id) or {}
+    return str(family.get("household_id") or "").strip()
+
+
+def _linked_household_ids(db, household_id: str) -> set[str]:
+    if not household_id:
+        return set()
+    queue = [household_id]
+    visited: set[str] = set()
+
+    while queue:
+        current = queue.pop(0)
+        if not current or current in visited:
+            continue
+        visited.add(current)
+        docs = list(
+            db.household_links.find(
+                {
+                    "$or": [
+                        {"source_household_id": current},
+                        {"target_household_id": current},
+                    ],
+                    "link_status": {"$in": ["approved", "", None]},
+                }
+            )
+        )
+        for doc in docs:
+            source_id = str(doc.get("source_household_id") or "").strip()
+            target_id = str(doc.get("target_household_id") or "").strip()
+            if source_id and source_id not in visited:
+                queue.append(source_id)
+            if target_id and target_id not in visited:
+                queue.append(target_id)
+
+    return visited
+
+
+def list_linked_family_ids(family_id: str) -> list[str]:
+    db = get_database()
+    if db is None:
+        return [family_id]
+    household_id = _find_family_household_id(db, family_id)
+    if not household_id:
+        return [family_id]
+
+    household_ids = _linked_household_ids(db, household_id)
+    if not household_ids:
+        return [family_id]
+
+    family_docs = list(
+        db.families.find(
+            {
+                "household_id": {"$in": list(household_ids)},
+            },
+            {"_id": 1},
+        )
+    )
+    family_ids = {str(item.get("_id")) for item in family_docs if item.get("_id")}
+    if not family_ids:
+        return [family_id]
+    return sorted(family_ids)
+
+
 def get_family_tree(family_id: str) -> dict:
     db = get_database()
     if db is None:
@@ -233,4 +297,97 @@ def get_filtered_family_tree(family_id: str, mode: str) -> dict:
         "nodes": [_serialize_node(node) for node in filtered_nodes],
         "relationships": [_serialize_relationship(rel) for rel in filtered_relationships],
         "edges": _build_edges(filtered_relationships),
+    }
+
+
+def get_linked_family_tree(family_id: str, mode: str = "default") -> dict:
+    db = get_database()
+    if db is None:
+        return {
+            "family_id": family_id,
+            "mode": mode,
+            "family": None,
+            "members": [],
+            "nodes": [],
+            "relationships": [],
+            "edges": [],
+            "linked_family_ids": [],
+        }
+
+    linked_family_ids = list_linked_family_ids(family_id)
+    if family_id not in linked_family_ids:
+        linked_family_ids.insert(0, family_id)
+    seen_family_ids = list(dict.fromkeys(linked_family_ids))
+
+    members: list[dict] = []
+    nodes: list[dict] = []
+    relationships: list[dict] = []
+    family = _find_family(db, family_id)
+    member_ids: set[str] = set()
+
+    for linked_family_id in seen_family_ids:
+        linked_members = _find_members(db, linked_family_id)
+        linked_nodes = _find_nodes(db, linked_family_id)
+        members.extend(linked_members)
+        nodes.extend(linked_nodes)
+        member_ids.update(str(member.get("_id")) for member in linked_members if member.get("_id"))
+
+    for linked_family_id in seen_family_ids:
+        relationships.extend(_find_relationships(db, linked_family_id, member_ids))
+
+    relationships = [
+        rel
+        for rel in relationships
+        if (
+            rel.get("source_member_id") in member_ids
+            or rel.get("target_member_id") in member_ids
+        )
+    ]
+
+    if mode == "verified":
+        allowed_markers = {"Verified"}
+        allowed_modes = {"verified"}
+    elif mode == "narrative":
+        allowed_markers = {"Verified", "Narrative"}
+        allowed_modes = {"verified", "narrative"}
+    elif mode == "private":
+        allowed_markers = {"Verified", "Narrative", "Private", "Unknown"}
+        allowed_modes = {"verified", "narrative", "private", "unknown"}
+    else:
+        allowed_markers = set()
+        allowed_modes = set()
+
+    if allowed_markers:
+        relationships = [
+            rel
+            for rel in relationships
+            if rel.get("status_marker") in allowed_markers
+            or rel.get("relationship_mode") in allowed_modes
+        ]
+        connected_member_ids = set()
+        for rel in relationships:
+            if rel.get("source_member_id"):
+                connected_member_ids.add(rel.get("source_member_id"))
+            if rel.get("target_member_id"):
+                connected_member_ids.add(rel.get("target_member_id"))
+        members = [
+            member
+            for member in members
+            if str(member.get("_id")) in connected_member_ids
+        ]
+        nodes = [
+            node
+            for node in nodes
+            if node.get("member_id") in connected_member_ids
+        ]
+
+    return {
+        "family_id": family_id,
+        "mode": mode,
+        "family": family,
+        "members": [_serialize_member(member) for member in members],
+        "nodes": [_serialize_node(node) for node in nodes],
+        "relationships": [_serialize_relationship(rel) for rel in relationships],
+        "edges": _build_edges(relationships),
+        "linked_family_ids": seen_family_ids,
     }

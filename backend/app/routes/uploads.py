@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from bson import ObjectId
 from fastapi import (
@@ -16,6 +16,7 @@ from fastapi import (
     status,
 )
 from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
 
 from app.config import settings
 from app.database import get_database
@@ -31,6 +32,7 @@ from app.services.upload_service import (
     store_member_photo_upload,
     store_verification_evidence_upload,
 )
+from app.services.tree_service import list_linked_family_ids
 from app.services.workspace_access_service import (
     count_workspace_uploads,
     require_workspace_capability,
@@ -89,6 +91,22 @@ ALLOWED_QUERY_CATEGORIES = {
     "member_photo",
     "verification_evidence",
 }
+ALLOWED_VAULT_SCOPE = {"personal", "family_shared"}
+ALLOWED_VISIBILITY_SCOPE = {"private", "family_shared", "linked_family_shared", "internal_only"}
+
+
+class UploadPrivacyUpdatePayload(BaseModel):
+    vault_scope: Literal["personal", "family_shared"] | None = None
+    visibility_scope: Literal[
+        "private",
+        "family_shared",
+        "linked_family_shared",
+        "internal_only",
+    ] | None = None
+    customer_visible: bool | None = None
+    internal_only: bool | None = None
+    share_with_linked_families: bool | None = None
+    notes: str = Field(default="", max_length=500)
 
 
 def _normalize_value(value: Any) -> str:
@@ -267,13 +285,52 @@ def _require_upload_access(
             detail="Upload does not belong to the current workspace.",
         )
 
-    if not context.get("is_admin") and (
-        bool(upload_record.get("internal_only"))
-        or not bool(upload_record.get("customer_visible"))
-    ):
+    if not context.get("is_admin"):
+        current_user_id = _current_user_id(current_user)
+        uploaded_by_user_id = _normalize_value(upload_record.get("uploaded_by_user_id"))
+        owns_record = bool(current_user_id and uploaded_by_user_id and current_user_id == uploaded_by_user_id)
+        if (
+            bool(upload_record.get("internal_only"))
+            or (not bool(upload_record.get("customer_visible")) and not owns_record)
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="This file is not visible to customers.",
+            )
+
+    return upload_record, context
+
+
+def _require_upload_management_access(
+    upload_id: str,
+    db: Any,
+    current_user: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    if not ObjectId.is_valid(upload_id):
+        raise HTTPException(status_code=400, detail="Invalid upload id.")
+
+    upload_record = db["uploaded_files"].find_one({"_id": ObjectId(upload_id)})
+    if not upload_record:
+        raise HTTPException(status_code=404, detail="Upload not found.")
+
+    family_id = _normalize_value(upload_record.get("family_id"))
+    project_id = _normalize_value(upload_record.get("project_id"))
+    context = resolve_workspace_context(
+        current_user,
+        project_id=project_id,
+        family_id=family_id,
+    )
+
+    if context.get("is_admin"):
+        return upload_record, context
+
+    current_user_id = _current_user_id(current_user)
+    uploaded_by_user_id = _normalize_value(upload_record.get("uploaded_by_user_id"))
+    project_owner_user_id = _normalize_value((context.get("project") or {}).get("owner_user_id"))
+    if current_user_id not in {uploaded_by_user_id, project_owner_user_id}:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="This file is not visible to customers.",
+            detail="Not authorized to manage this upload.",
         )
 
     return upload_record, context
@@ -379,6 +436,27 @@ def _validate_category_filter(category: Optional[str]) -> Optional[str]:
         )
 
     return normalized
+
+
+def _normalize_vault_scope(value: Any, default: str = "personal") -> str:
+    normalized = _normalize_value(value).lower()
+    return normalized if normalized in ALLOWED_VAULT_SCOPE else default
+
+
+def _normalize_visibility_scope(value: Any, default: str = "private") -> str:
+    normalized = _normalize_value(value).lower()
+    return normalized if normalized in ALLOWED_VISIBILITY_SCOPE else default
+
+
+def _visibility_flags(scope: str) -> tuple[bool, bool, bool]:
+    normalized_scope = _normalize_visibility_scope(scope, default="private")
+    if normalized_scope == "internal_only":
+        return False, True, False
+    if normalized_scope == "private":
+        return False, False, False
+    if normalized_scope == "linked_family_shared":
+        return True, False, True
+    return True, False, False
 
 
 def _validate_upload_file(
@@ -763,6 +841,122 @@ def list_family_uploads(
         "family_id": _normalize_value((family or {}).get("_id")),
         "count": len(records),
         "uploads": _serialize_uploads(records),
+    }
+
+
+@router.get("/vault/family/{family_id}")
+def list_family_vault_items(
+    family_id: str,
+    include_linked_families: bool = Query(default=False),
+    vault_scope: Optional[str] = Query(default=None),
+    visibility_scope: Optional[str] = Query(default=None),
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    context = require_workspace_capability(
+        current_user,
+        family_id=family_id,
+        capabilities=("can_upload_verification_docs", "can_upload_portraits"),
+        detail="Your active package does not include vault access.",
+    )
+
+    db = get_database()
+    if db is None:
+        raise HTTPException(status_code=500, detail="Database is not connected.")
+
+    base_family_id = _normalize_value((context.get("family") or {}).get("_id"))
+    family_ids = [base_family_id]
+    if include_linked_families:
+        if not bool((context.get("resolved_entitlements") or {}).get("can_link_households")) and not context.get("is_admin"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Your active package does not include linked family vault access.",
+            )
+        family_ids = list_linked_family_ids(base_family_id)
+
+    query: dict[str, Any] = {
+        "family_id": {"$in": [family_id for family_id in family_ids if family_id]},
+    }
+    normalized_scope = _normalize_vault_scope(vault_scope, default="")
+    if normalized_scope:
+        query["vault_scope"] = normalized_scope
+    normalized_visibility = _normalize_visibility_scope(visibility_scope, default="")
+    if normalized_visibility:
+        query["visibility_scope"] = normalized_visibility
+
+    current_user_id = _current_user_id(current_user)
+    if not context.get("is_admin"):
+        query["$or"] = [
+            {"uploaded_by_user_id": current_user_id},
+            {"customer_visible": True, "internal_only": {"$ne": True}},
+        ]
+
+    records = list(db["uploaded_files"].find(query).sort("created_at", -1))
+    return {
+        "family_id": base_family_id,
+        "linked_family_ids": family_ids,
+        "count": len(records),
+        "items": _serialize_uploads(records),
+    }
+
+
+@router.patch("/{upload_id}/privacy")
+def update_upload_privacy(
+    upload_id: str,
+    payload: UploadPrivacyUpdatePayload,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    db = get_database()
+    if db is None:
+        raise HTTPException(status_code=500, detail="Database is not connected.")
+
+    upload_record, context = _require_upload_management_access(
+        upload_id,
+        db,
+        current_user,
+    )
+
+    current_scope = _normalize_visibility_scope(upload_record.get("visibility_scope"), "private")
+    visibility_scope = (
+        _normalize_visibility_scope(payload.visibility_scope, current_scope)
+        if payload.visibility_scope is not None
+        else current_scope
+    )
+    customer_visible, internal_only, share_with_linked = _visibility_flags(visibility_scope)
+
+    if payload.customer_visible is not None:
+        customer_visible = bool(payload.customer_visible)
+    if payload.internal_only is not None:
+        internal_only = bool(payload.internal_only)
+    if payload.share_with_linked_families is not None:
+        share_with_linked = bool(payload.share_with_linked_families)
+    if internal_only:
+        customer_visible = False
+        visibility_scope = "internal_only"
+
+    current_vault_scope = _normalize_vault_scope(upload_record.get("vault_scope"), "personal")
+    next_vault_scope = (
+        _normalize_vault_scope(payload.vault_scope, current_vault_scope)
+        if payload.vault_scope is not None
+        else current_vault_scope
+    )
+
+    db["uploaded_files"].update_one(
+        {"_id": ObjectId(upload_id)},
+        {
+            "$set": {
+                "vault_scope": next_vault_scope,
+                "visibility_scope": visibility_scope,
+                "customer_visible": customer_visible,
+                "internal_only": internal_only,
+                "share_with_linked_families": share_with_linked,
+                "privacy_notes": _normalize_value(payload.notes),
+            }
+        },
+    )
+    updated = db["uploaded_files"].find_one({"_id": ObjectId(upload_id)}) or upload_record
+    return {
+        "upload": _public_upload_record(updated),
+        "workspace_project_id": _normalize_value((context.get("project") or {}).get("_id")) or None,
     }
 
 
