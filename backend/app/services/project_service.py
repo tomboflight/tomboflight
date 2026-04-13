@@ -1,9 +1,11 @@
+import logging
 from datetime import UTC, datetime
 from typing import Any
 
 from bson import ObjectId
 
 from app.core.package_catalog import get_package, normalize_package_code
+from app.core.package_mapping import resolve_package_identity
 from app.core.package_type_catalog import normalize_package_type
 from app.database import get_database
 from app.schemas.project import ProjectCreate
@@ -17,6 +19,9 @@ from app.services.project_entitlement_service import (
     get_project_entitlement,
     upsert_project_entitlement,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 def _now() -> datetime:
@@ -102,10 +107,16 @@ def create_project(payload: ProjectCreate) -> dict[str, Any]:
     data["created_at"] = now
     data["updated_at"] = now
     data["project_name"] = data["name"]
-    data["package_code"] = normalize_package_code(data["package_code"])
-    data["project_lane"] = normalize_package_type(data["project_lane"], default="portrait")
-    data["package_slug"] = data["package_code"]
-    data["package_type"] = data["package_code"]
+    identity = resolve_package_identity(data["package_code"])
+    canonical_code = identity.get("package_code") or normalize_package_code(data["package_code"])
+    data["package_code"] = canonical_code
+    data["project_lane"] = normalize_package_type(
+        identity.get("lane") or data["project_lane"],
+        default="portrait",
+    )
+    data["package_slug"] = identity.get("package_slug") or canonical_code
+    data["package_type"] = canonical_code
+    data["package_name"] = data.get("package_name") or identity.get("display_name") or "Unknown Package"
 
     if db is None:
         data["_id"] = "local-project-preview"
@@ -114,6 +125,12 @@ def create_project(payload: ProjectCreate) -> dict[str, Any]:
     result = db.projects.insert_one(data)
     data["_id"] = result.inserted_id
     ensure_project_owner_membership(data)
+    try:
+        from app.services.package_provisioning_service import provision_after_project_change
+
+        provision_after_project_change(limit=25)
+    except Exception as exc:
+        logger.warning("package_provisioning_project_reconcile_failed", exc_info=exc)
     return data
 
 
@@ -129,12 +146,13 @@ def create_project_from_paid_order(
     if db is None:
         return None
 
-    package_code = normalize_package_code(package_code)
+    identity = resolve_package_identity(package_code)
+    package_code = identity.get("package_code") or normalize_package_code(package_code)
     package = get_package(package_code)
     if not package:
         return None
 
-    package_lane = normalize_package_type(package.get("package_lane"))
+    package_lane = normalize_package_type(identity.get("lane") or package.get("package_lane"))
     if package_lane not in {"portrait", "household", "network", "organization"}:
         return None
 
@@ -158,9 +176,9 @@ def create_project_from_paid_order(
         "owner_user_id": user_id,
         "owner_email": owner_email,
         "package_code": package_code,
-        "package_slug": package_code,
+        "package_slug": identity.get("package_slug") or package_code,
         "package_type": package_code,
-        "package_name": package_name,
+        "package_name": package_name or identity.get("display_name") or package_code,
         "item_type": "package",
         "billing_plan": "one_time",
         "status": "purchased",
@@ -214,7 +232,8 @@ def apply_package_purchase_to_project(
     if not ObjectId.is_valid(project_id):
         return None
 
-    package_code = normalize_package_code(package_code)
+    identity = resolve_package_identity(package_code)
+    package_code = identity.get("package_code") or normalize_package_code(package_code)
     package = get_package(package_code)
     if not package:
         return None
@@ -254,13 +273,13 @@ def apply_package_purchase_to_project(
     now = _now()
     updated_fields: dict[str, Any] = {
         "project_lane": normalize_package_type(
-            package.get("package_lane") or project.get("project_lane"),
+            identity.get("lane") or package.get("package_lane") or project.get("project_lane"),
             default=_normalize(project.get("project_lane")) or "portrait",
         ),
         "package_code": package_code,
-        "package_slug": package_code,
+        "package_slug": identity.get("package_slug") or package_code,
         "package_type": package_code,
-        "package_name": package_name,
+        "package_name": package_name or identity.get("display_name") or package_code,
         "item_type": "package",
         "billing_plan": "one_time",
         "status": project.get("status") or "purchased",

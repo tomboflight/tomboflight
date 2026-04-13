@@ -8,6 +8,7 @@ from app.core.package_catalog import (
     get_package_catalog,
     list_package_control_profiles,
 )
+from app.core.package_mapping import get_canonical_package_map
 from app.services.entitlement_service import (
     can_purchase_addon,
     compute_upgrade_quote,
@@ -22,6 +23,7 @@ def get_package_catalog_route():
     return {
         "packages": get_package_catalog(),
         "addons": get_addon_catalog(),
+        "package_map": get_canonical_package_map(),
         "package_identifier_map": get_package_identifier_map(),
         "control_profiles": list_package_control_profiles(),
     }

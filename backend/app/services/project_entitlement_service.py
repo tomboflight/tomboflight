@@ -8,6 +8,7 @@ from bson import ObjectId
 from pymongo.collection import Collection
 
 from app.core.package_catalog import get_package_control_profile
+from app.core.package_mapping import resolve_package_identity
 from app.database import get_database
 from app.services.project_membership_service import list_accessible_project_ids
 from app.services.entitlement_service import (
@@ -158,8 +159,10 @@ def upsert_project_entitlement(
     if user_oid is None:
         raise ValueError("user_id must be a valid ObjectId.")
 
-    resolved = resolve_project_entitlements(package_code, active_addons or [])
-    maintenance_defaults = get_package_control_profile(package_code) or {}
+    identity = resolve_package_identity(package_code)
+    canonical_package_code = str(identity.get("package_code") or package_code).strip()
+    resolved = resolve_project_entitlements(canonical_package_code, active_addons or [])
+    maintenance_defaults = get_package_control_profile(canonical_package_code) or {}
     normalized_plan = str(maintenance_plan or "").strip().lower() or str(
         maintenance_defaults.get("maintenance_default") or "none"
     )
@@ -178,9 +181,9 @@ def upsert_project_entitlement(
     document: dict[str, Any] = {
         "project_id": project_oid,
         "user_id": user_oid,
-        "package_code": resolved.get("package_code") or package_code,
-        "package_name": resolved.get("display_name") or package_code,
-        "package_lane": resolved.get("package_lane"),
+        "package_code": resolved.get("package_code") or canonical_package_code,
+        "package_name": resolved.get("display_name") or identity.get("display_name") or canonical_package_code,
+        "package_lane": resolved.get("package_lane") or identity.get("lane"),
         "active_addons": active_addons or [],
         "maintenance_plan": normalized_plan,
         "maintenance_status": maintenance_status,

@@ -321,6 +321,14 @@ def bulk_repair_entitlements(
     return result
 
 
+@router.post("/repairs/missing-entitlements")
+def repair_missing_entitlements_route(
+    payload: BulkRepairPayload | None = None,
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.view")),
+):
+    return bulk_repair_entitlements(payload=payload, current_user=current_user)
+
+
 @router.post("/bulk/assign-missing-lanes")
 def bulk_assign_lanes(
     payload: BulkRepairPayload | None = None,
@@ -332,6 +340,14 @@ def bulk_assign_lanes(
     return result
 
 
+@router.post("/repairs/missing-lanes")
+def repair_missing_lanes_route(
+    payload: BulkRepairPayload | None = None,
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.view")),
+):
+    return bulk_assign_lanes(payload=payload, current_user=current_user)
+
+
 @router.post("/bulk/link-unlinked-paid-orders")
 def bulk_link_paid_orders(
     payload: BulkRepairPayload | None = None,
@@ -341,6 +357,14 @@ def bulk_link_paid_orders(
     result = link_unlinked_paid_orders(limit=(payload.limit if payload else BULK_ACTION_DEFAULT_LIMIT))
     _audit_bulk_action(current_user=current_user, action="link_unlinked_paid_orders", result_payload=result)
     return result
+
+
+@router.post("/repairs/unlinked-paid-orders")
+def link_unlinked_paid_orders_route(
+    payload: BulkRepairPayload | None = None,
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.view")),
+):
+    return bulk_link_paid_orders(payload=payload, current_user=current_user)
 
 
 @router.post("/bulk/normalize-broken-package-records")
