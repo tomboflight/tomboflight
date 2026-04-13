@@ -359,9 +359,9 @@ def sync_package(*, project_id: str, order_id: str = "") -> dict[str, Any]:
             }
         },
     )
-    if order is not None:
+    if order is not None and order.get("_id") is not None:
         db["orders"].update_one(
-            {"_id": order["_id"]},
+            {"_id": order.get("_id")},
             {
                 "$set": {
                     "package_code": package_fields["package_code"],
@@ -448,7 +448,9 @@ def link_order_to_project(*, order_id: str, project_id: str = "") -> dict[str, A
     project_oid = _to_object_id(project_id_str)
     if project_oid is not None:
         project_value = project_oid
-    db["orders"].update_one({"_id": order["_id"]}, {"$set": {"project_id": project_value}})
+    order_id = order.get("_id")
+    if order_id is not None:
+        db["orders"].update_one({"_id": order_id}, {"$set": {"project_id": project_value}})
     try:
         auto_provision_paid_order_by_id(_normalize(order.get("_id")))
     except Exception:
