@@ -1,4 +1,5 @@
 from typing import Any
+from collections import deque
 
 from bson import ObjectId
 
@@ -129,11 +130,11 @@ def _find_family_household_id(db, family_id: str) -> str:
 def _linked_household_ids(db, household_id: str) -> set[str]:
     if not household_id:
         return set()
-    queue = [household_id]
+    queue = deque([household_id])
     visited: set[str] = set()
 
     while queue:
-        current = queue.pop(0)
+        current = queue.popleft()
         if not current or current in visited:
             continue
         visited.add(current)

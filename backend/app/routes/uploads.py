@@ -106,7 +106,7 @@ class UploadPrivacyUpdatePayload(BaseModel):
     customer_visible: bool | None = None
     internal_only: bool | None = None
     share_with_linked_families: bool | None = None
-    privacy_notes: str = Field(default="", max_length=500, alias="notes")
+    privacy_notes: str = Field(default="", max_length=500)
 
 
 def _normalize_value(value: Any) -> str:
@@ -894,7 +894,7 @@ def list_family_vault_items(
         family_ids = list_linked_family_ids(base_family_id)
 
     query: dict[str, Any] = {
-        "family_id": {"$in": [family_id_item for family_id_item in family_ids if family_id_item]},
+        "family_id": {"$in": [fid for fid in family_ids if fid]},
     }
     normalized_scope = _normalize_vault_scope(vault_scope, default="")
     if normalized_scope:
