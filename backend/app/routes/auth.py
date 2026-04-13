@@ -3,7 +3,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from app.config import settings
-from app.core.security import create_csrf_token
+from app.core.security import create_csrf_token, decode_access_token
 from app.dependencies.auth import COOKIE_NAME, get_current_user, require_permission
 from app.schemas.auth import (
     MfaDisableRequest,
@@ -201,7 +201,7 @@ def login(payload: UserLogin, request: Request, response: Response):
     token = str(login_result.get("access_token") or "")
     _set_auth_cookie(response, request, token)
     csrf_token = create_csrf_token(
-        _normalize_text_from_token(token),
+        _extract_user_id_from_token(token),
         ttl_minutes=max(1, int(settings.csrf_token_expire_minutes or 120)),
     )
     _set_csrf_cookie(response, request, csrf_token)
@@ -273,7 +273,7 @@ def mfa_enroll_verify(
     token = str(result.get("access_token") or "")
     _set_auth_cookie(response, request, token)
     user_csrf = create_csrf_token(
-        _normalize_text_from_token(token),
+        _extract_user_id_from_token(token),
         ttl_minutes=max(1, int(settings.csrf_token_expire_minutes or 120)),
     )
     _set_csrf_cookie(response, request, user_csrf)
@@ -285,11 +285,9 @@ def mfa_enroll_verify(
     )
 
 
-def _normalize_text_from_token(token: str) -> str:
-    from app.core.security import decode_access_token
-
+def _extract_user_id_from_token(token: str) -> str:
     payload = decode_access_token(token) or {}
-    return str(payload.get("user_id") or payload.get("sub") or "").strip().lower()
+    return str(payload.get("user_id") or payload.get("sub") or "").strip()
 
 
 @router.post("/mfa/login/verify", response_model=TokenResponse)
@@ -325,7 +323,7 @@ def mfa_login_verify(
     token = str(result.get("access_token") or "")
     _set_auth_cookie(response, request, token)
     user_csrf = create_csrf_token(
-        _normalize_text_from_token(token),
+        _extract_user_id_from_token(token),
         ttl_minutes=max(1, int(settings.csrf_token_expire_minutes or 120)),
     )
     _set_csrf_cookie(response, request, user_csrf)
@@ -459,7 +457,7 @@ def admin_issue_password_reset_route(
 
 
 @router.post("/admin/users/{user_id}/security-reset")
-def admin_user_security_reset_route(
+def admin_security_reset_route(
     user_id: str,
     response: Response,
     current_user: dict = Depends(require_permission("admin.users.write")),

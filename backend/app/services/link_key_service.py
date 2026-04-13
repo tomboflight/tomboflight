@@ -63,10 +63,8 @@ def _hash_link_key(raw_value: str) -> str:
 
 
 def _link_key_preview(raw_value: str) -> str:
-    normalized = _normalize_value(raw_value)
-    if len(normalized) <= 4:
-        return "****"
-    return f"****{normalized[-4:]}"
+    del raw_value
+    return "********"
 
 
 def _is_expired(document: dict[str, Any]) -> bool:
@@ -352,6 +350,7 @@ def get_key_doc_by_value(key_value: str) -> dict[str, Any] | None:
                     "$set": {
                         "key_hash": key_hash,
                         "key_preview": _link_key_preview(normalized),
+                        "key_value": None,
                         "updated_at": now,
                     }
                 },

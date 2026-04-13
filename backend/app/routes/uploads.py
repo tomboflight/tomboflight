@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import secrets
 import shutil
 from pathlib import Path
 from typing import Any, Literal, Optional
@@ -468,7 +469,14 @@ def _absolute_upload_path(relative_path: str) -> Path:
 def _quarantine_path_for_upload(relative_path: str) -> Path:
     quarantine_root = Path(settings.upload_quarantine_dir).resolve()
     quarantine_root.mkdir(parents=True, exist_ok=True)
-    candidate = (quarantine_root / Path(relative_path).name).resolve()
+    safe_name = "".join(
+        character
+        for character in Path(relative_path).name
+        if character.isalnum() or character in {"-", "_"}
+    ).strip("_")
+    safe_name = safe_name or "upload_quarantine_item"
+    safe_name = f"{safe_name}-{secrets.token_hex(4)}"
+    candidate = (quarantine_root / safe_name).resolve()
     try:
         candidate.relative_to(quarantine_root)
     except ValueError:
@@ -485,18 +493,25 @@ def _scan_and_quarantine_upload(*, db: Any, upload_record: dict[str, Any]) -> di
     result = scan_uploaded_file(str(absolute_path))
     if result.status in {"infected", "error"}:
         quarantine_path = _quarantine_path_for_upload(relative_path)
+        quarantined = False
+        quarantine_detail = result.detail[:500] or result.status
         if absolute_path.exists():
-            quarantine_path.parent.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(absolute_path), str(quarantine_path))
+            try:
+                quarantine_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(absolute_path), str(quarantine_path))
+                quarantined = True
+            except OSError as exc:
+                del exc
+                quarantine_detail = f"{quarantine_detail}; move_failed"
         db["uploaded_files"].update_one(
             {"_id": ObjectId(upload_id)},
             {
                 "$set": {
                     "scan_status": result.status,
-                    "scan_detail": result.detail[:500],
-                    "quarantined": True,
-                    "quarantine_reason": result.detail[:500] or result.status,
-                    "quarantine_path": str(quarantine_path),
+                    "scan_detail": quarantine_detail,
+                    "quarantined": quarantined,
+                    "quarantine_reason": quarantine_detail,
+                    "quarantine_path": str(quarantine_path) if quarantined else "",
                 }
             },
         )
@@ -608,6 +623,8 @@ def _can_access_classification(
     upload_record: dict[str, Any],
     current_user: dict[str, Any],
 ) -> bool:
+    # Workspace admins intentionally bypass classification gating so support/security
+    # workflows can still operate across all vault privacy classes.
     if context.get("is_admin"):
         return True
     normalized = _normalize_privacy_classification(classification, fallback="owner_only")
@@ -737,7 +754,7 @@ def _apply_customer_visibility_filter(query: dict[str, Any], *, is_admin: bool) 
         return
     query["internal_only"] = {"$ne": True}
     query["customer_visible"] = True
-    query["privacy_classification"] = {"$ne": "admin_only"}
+    query["privacy_classification"] = {"$nin": ["admin_only"]}
 
 
 @router.get("/admin/review")

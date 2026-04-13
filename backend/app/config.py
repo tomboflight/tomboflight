@@ -99,6 +99,10 @@ class Settings(BaseSettings):
         default="",
         validation_alias=AliasChoices("UPLOAD_SCAN_COMMAND"),
     )
+    upload_scan_hook: str = Field(
+        default="",
+        validation_alias=AliasChoices("UPLOAD_SCAN_HOOK"),
+    )
     upload_scan_fail_closed: bool = Field(
         default=False,
         validation_alias=AliasChoices("UPLOAD_SCAN_FAIL_CLOSED"),

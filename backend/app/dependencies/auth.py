@@ -422,10 +422,13 @@ def get_current_user(
 
     payload_token_version = _normalize_value(payload.get("tv"))
     user_token_version = _normalize_value(normalized_user.get("session_token_version") or 0)
-    if (
-        payload_token_version != user_token_version
-        and (payload_token_version or user_token_version != "0")
-    ):
+    # Backward compatibility: legacy tokens issued before token-version support
+    # may not include "tv". We only permit missing version when the account has
+    # never been version-bumped (still at zero).
+    token_version_missing_for_legacy_user = (
+        payload_token_version == "" and user_token_version == "0"
+    )
+    if payload_token_version != user_token_version and not token_version_missing_for_legacy_user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Session has been revoked. Please log in again.",

@@ -9,6 +9,7 @@ from typing import Any
 from urllib.parse import quote
 
 from bson import ObjectId
+from cryptography.fernet import Fernet, InvalidToken
 
 from app.config import settings
 from app.core.password_policy import validate_password_strength
@@ -63,10 +64,10 @@ def _hash_password_reset_token(token: str) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
-def _hash_recovery_code(code: str) -> str:
-    payload = f"{settings.secret_key}:mfa-recovery:{_normalize_text(code).lower()}".encode(
-        "utf-8"
-    )
+def _hash_recovery_code(code: str, *, user_id: str) -> str:
+    payload = (
+        f"{settings.secret_key}:mfa-recovery:{_normalize_text(user_id)}:{_normalize_text(code).lower()}"
+    ).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()
 
 
@@ -89,24 +90,26 @@ def _is_internal_admin_user(user: dict) -> bool:
 
 
 def _mfa_encrypt_secret(secret: str, *, user_id: str) -> str:
-    key = hashlib.sha256(
+    key_material = hashlib.sha256(
         f"{settings.secret_key}:mfa:{_normalize_text(user_id)}".encode("utf-8")
     ).digest()
-    plaintext = _normalize_text(secret).encode("utf-8")
-    encrypted = bytes(value ^ key[index % len(key)] for index, value in enumerate(plaintext))
-    return base64.urlsafe_b64encode(encrypted).decode("utf-8")
+    fernet_key = base64.urlsafe_b64encode(key_material)
+    encrypted = Fernet(fernet_key).encrypt(_normalize_text(secret).encode("utf-8"))
+    return encrypted.decode("utf-8")
 
 
 def _mfa_decrypt_secret(secret_ciphertext: str, *, user_id: str) -> str:
     try:
-        encrypted = base64.urlsafe_b64decode(_normalize_text(secret_ciphertext).encode("utf-8"))
-    except Exception:
+        key_material = hashlib.sha256(
+            f"{settings.secret_key}:mfa:{_normalize_text(user_id)}".encode("utf-8")
+        ).digest()
+        fernet_key = base64.urlsafe_b64encode(key_material)
+        plaintext = Fernet(fernet_key).decrypt(
+            _normalize_text(secret_ciphertext).encode("utf-8")
+        )
+        return plaintext.decode("utf-8", errors="ignore").strip()
+    except (InvalidToken, ValueError, TypeError):
         return ""
-    key = hashlib.sha256(
-        f"{settings.secret_key}:mfa:{_normalize_text(user_id)}".encode("utf-8")
-    ).digest()
-    plaintext = bytes(value ^ key[index % len(key)] for index, value in enumerate(encrypted))
-    return plaintext.decode("utf-8", errors="ignore").strip()
 
 
 def _generate_totp_secret() -> str:
@@ -442,7 +445,7 @@ def _consume_recovery_code(user: dict, code: str) -> bool:
     if not normalized:
         return False
     hashes = list(user.get("mfa_backup_code_hashes") or [])
-    target_hash = _hash_recovery_code(normalized)
+    target_hash = _hash_recovery_code(normalized, user_id=str(user.get("_id") or ""))
     if target_hash not in hashes:
         return False
     hashes.remove(target_hash)
@@ -511,8 +514,11 @@ def verify_mfa_enrollment(setup_token: str, code: str) -> dict[str, Any]:
     if not _verify_totp(pending_secret, code):
         raise ValueError("Invalid MFA code.")
     backup_code_count = max(4, int(settings.mfa_backup_code_count or 8))
-    backup_codes = [secrets.token_hex(4) for _ in range(backup_code_count)]
-    backup_hashes = [_hash_recovery_code(value) for value in backup_codes]
+    backup_codes = [secrets.token_hex(8) for _ in range(backup_code_count)]
+    backup_hashes = [
+        _hash_recovery_code(value, user_id=user_id)
+        for value in backup_codes
+    ]
     now_iso = _now_iso()
     db = get_database()
     db.users.update_one(
@@ -610,6 +616,10 @@ def disable_mfa_for_user(
     recovery_code: str | None,
     actor_user_id: str,
 ) -> None:
+    if _is_internal_admin_user(user):
+        raise ValueError(
+            "Internal admin MFA cannot be self-disabled. Use an authorized admin security reset."
+        )
     password_hash = _normalize_text(user.get("password_hash"))
     if not verify_password(current_password, password_hash):
         raise ValueError("Current password is incorrect.")
