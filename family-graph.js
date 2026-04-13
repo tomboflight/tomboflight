@@ -1,6 +1,9 @@
 (function () {
   'use strict';
 
+  let _linkedNetworkMode = false;
+  let _activeProjectId = null;
+
   async function setupFamilyGraphPage() {
     if (!window.TOLAuth) return;
 
@@ -29,9 +32,14 @@
     }
 
     await loadFamilyOptions(familySelect, statusNode);
+    await checkLinkedNetworkEntitlement(statusNode);
 
     if (loadBtn) {
       loadBtn.addEventListener('click', async function () {
+        if (_linkedNetworkMode && _activeProjectId) {
+          await loadLinkedNetwork(_activeProjectId, statusNode, summaryNode, membersNode, relationshipsNode);
+          return;
+        }
         const familyId = familySelect ? familySelect.value : '';
         if (!familyId) {
           showStatus(statusNode, 'Please select a family first.', 'error');
@@ -51,9 +59,123 @@
           return;
         }
 
+        if (_linkedNetworkMode && _activeProjectId) {
+          return;
+        }
+
         await loadGraphForFamily(familyId, statusNode, summaryNode, membersNode, relationshipsNode);
       });
     }
+  }
+
+  async function checkLinkedNetworkEntitlement(statusNode) {
+    if (!window.TOLAuth) return;
+    try {
+      const result = await window.TOLAuth.apiRequest('/project-entitlements/my-active', { method: 'GET' });
+      const items = Array.isArray(result && result.items) ? result.items : [];
+      for (const entitlement of items) {
+        const resolved = entitlement.resolved_entitlements || {};
+        if (resolved.can_link_households === true && entitlement.project_id) {
+          _activeProjectId = entitlement.project_id;
+          injectLinkedNetworkToggle(statusNode);
+          break;
+        }
+      }
+    } catch (_err) {
+      // Entitlement check is best-effort; continue without linked network
+    }
+  }
+
+  function injectLinkedNetworkToggle(statusNode) {
+    const graphPage = document.querySelector('[data-family-graph-page]');
+    if (!graphPage) return;
+
+    const existing = document.querySelector('[data-linked-network-toggle]');
+    if (existing) return;
+
+    const btn = document.createElement('button');
+    btn.setAttribute('data-linked-network-toggle', '');
+    btn.textContent = 'Switch to Linked Network View';
+    btn.style.cssText = 'margin: 0.5rem 0; padding: 0.5rem 1rem; cursor: pointer;';
+
+    btn.addEventListener('click', async function () {
+      _linkedNetworkMode = !_linkedNetworkMode;
+      btn.textContent = _linkedNetworkMode ? 'Switch to Single Family View' : 'Switch to Linked Network View';
+
+      const summaryNode = document.querySelector('[data-graph-summary]');
+      const membersNode = document.querySelector('[data-graph-members]');
+      const relationshipsNode = document.querySelector('[data-graph-relationships]');
+      clearGraph(summaryNode, membersNode, relationshipsNode);
+
+      if (_linkedNetworkMode && _activeProjectId) {
+        await loadLinkedNetwork(_activeProjectId, statusNode, summaryNode, membersNode, relationshipsNode);
+      }
+    });
+
+    const insertTarget = statusNode ? statusNode.parentNode : graphPage;
+    if (insertTarget) {
+      insertTarget.insertBefore(btn, statusNode ? statusNode.nextSibling : insertTarget.firstChild);
+    }
+  }
+
+  async function loadLinkedNetwork(projectId, statusNode, summaryNode, membersNode, relationshipsNode) {
+    if (!window.TOLAuth) return;
+    showStatus(statusNode, 'Loading linked network...', 'info');
+    clearGraph(summaryNode, membersNode, relationshipsNode);
+    try {
+      const data = await window.TOLAuth.apiRequest(`/projects/${projectId}/linked-network`, { method: 'GET' });
+      renderNetworkSummary(data.network_summary, data.households || [], summaryNode);
+      renderNetworkMembers(data.nodes || [], membersNode);
+      renderRelationships(data.edges || [], relationshipsNode, data.nodes || []);
+      showStatus(statusNode, 'Linked network loaded successfully.', 'success');
+    } catch (error) {
+      showStatus(statusNode, error.message || 'Failed to load linked network.', 'error');
+    }
+  }
+
+  function renderNetworkSummary(summary, households, node) {
+    if (!node) return;
+    const householdList = (households || []).map(function (hh) {
+      return `<li>${escapeHtml(hh.household_name || hh.household_id)} &ndash; ${escapeHtml(String(hh.member_count || 0))} members${hh.is_own_household ? ' <em>(your household)</em>' : ''}</li>`;
+    }).join('');
+    node.innerHTML = `
+      <div class="family-record-card">
+        <div class="card-number">N</div>
+        <h3>Network Summary</h3>
+        <p class="card-copy"><strong>Total Households:</strong> ${escapeHtml(String((summary && summary.total_households) || 0))}</p>
+        <p class="card-copy"><strong>Total Members:</strong> ${escapeHtml(String((summary && summary.total_members) || 0))}</p>
+        <p class="card-copy"><strong>Total Relationships:</strong> ${escapeHtml(String((summary && summary.total_relationships) || 0))}</p>
+        <p class="card-copy"><strong>Linked Households:</strong></p>
+        <ul>${householdList}</ul>
+      </div>
+    `;
+  }
+
+  function renderNetworkMembers(nodes, membersNode) {
+    if (!membersNode) return;
+    if (!Array.isArray(nodes) || nodes.length === 0) {
+      membersNode.innerHTML = `
+        <div class="family-record-card">
+          <div class="card-number">0</div>
+          <h3>No Members Found</h3>
+          <p class="card-copy">No visible members in this network.</p>
+        </div>
+      `;
+      return;
+    }
+    membersNode.innerHTML = nodes.map(function (member, index) {
+      return `
+        <div class="family-record-card">
+          <div class="card-number">${index + 1}</div>
+          <h3>${escapeHtml(member.display_name || `${member.first_name || ''} ${member.last_name || ''}`.trim())}</h3>
+          <p class="card-copy"><strong>Birth Year:</strong> ${escapeHtml(member.birth_year ? String(member.birth_year) : 'Unknown')}</p>
+          <p class="card-copy"><strong>Generation:</strong> ${escapeHtml(String(member.generation ?? 'Unknown'))}</p>
+          <p class="card-copy"><strong>Bio:</strong> ${escapeHtml(member.bio || 'No bio provided.')}</p>
+          <p class="card-copy"><strong>Source:</strong> ${escapeHtml(member.source_household_name || member.source_household_id || 'Unknown')}</p>
+          <p class="card-copy"><strong>Visibility:</strong> ${escapeHtml(member.visibility_scope || 'linked')}</p>
+        </div>
+      `;
+    }).join('');
   }
 
   async function loadFamilyOptions(selectNode, statusNode) {
