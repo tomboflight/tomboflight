@@ -99,8 +99,6 @@ class UserResponse(BaseModel):
     department_role: Optional[str] = None
     status: str
     created_at: str
-    access_tier: Optional[str] = None
-    department_role: Optional[str] = None
 
     policy_version: Optional[str] = None
     terms_accepted_at: Optional[str] = None

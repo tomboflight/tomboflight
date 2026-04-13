@@ -1054,9 +1054,17 @@
       return;
     }
 
-    await loadAccessProfile();
-    updateRoleSummary();
+    // Bind event handlers immediately so button clicks are never silently
+    // ignored regardless of whether the async profile/data loads succeed.
     bindEvents();
+
+    try {
+      await loadAccessProfile();
+    } catch (error) {
+      setPageStatus(error.message || "Unable to load access profile.", "error");
+    }
+
+    updateRoleSummary();
     applyRailSelection();
     applyTabSelection();
     renderCaseHeader();

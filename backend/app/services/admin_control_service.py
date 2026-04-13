@@ -85,6 +85,18 @@ CASE_ACTION_PERMISSIONS: dict[str, set[str]] = {
     "rebuild_mint_summary": {"admin.control.mint"},
     "resync_mint_receipt": {"admin.control.mint"},
 }
+# Actions that can benefit from an order resolved from the project owner when
+# no order is directly linked to the project yet.
+ACTIONS_REQUIRING_ORDER_FALLBACK: frozenset[str] = frozenset({
+    "sync_package",
+    "normalize_package",
+    "generate_entitlement",
+    "refresh_entitlement",
+    "run_readiness_check",
+    "queue_for_mint_review",
+    "repair_record",
+    "link_order_to_project",
+})
 BULK_ACTION_PERMISSIONS: dict[str, set[str]] = {
     "repair-missing-entitlements": {"admin.control.billing"},
     "assign-missing-lanes": {"admin.control.write"},
@@ -3140,6 +3152,10 @@ def execute_case_action(
 
     if not order_id:
         linked = _latest_linked_order(project_id)
+        if linked is None and normalized_action in ACTIONS_REQUIRING_ORDER_FALLBACK:
+            project_doc = _project_by_id(project_id)
+            if project_doc is not None:
+                linked = _latest_user_order_for_project(project_doc)
         order_id = _normalize((linked or {}).get("_id"))
 
     action_handlers: dict[str, Callable[[], dict[str, Any]]] = {
