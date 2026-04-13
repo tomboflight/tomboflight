@@ -208,3 +208,17 @@ def upload_text(
         cache_control="public, max-age=300",
         publish=publish,
     )
+
+
+def generate_private_download_url(*, key: str, expires_seconds: int = 120) -> str | None:
+    bucket = _private_bucket()
+    if not r2_is_configured() or not bucket:
+        return None
+    client = _lazy_s3_client()
+    return str(
+        client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": bucket, "Key": key.lstrip("/")},
+            ExpiresIn=max(30, int(expires_seconds)),
+        )
+    )

@@ -214,6 +214,16 @@ app.include_router(audit_logs_router)
 
 @app.get("/")
 def root():
+    environment = str(settings.environment or "development").strip().lower()
+    is_production = environment in {"production", "prod"}
+    if is_production:
+        return {
+            "message": "Tomb of Light backend is running.",
+            "app_name": settings.app_name,
+            "version": settings.app_version,
+            "environment": settings.environment,
+            "status": "ok",
+        }
     return {
         "message": "Tomb of Light backend is running.",
         "app_name": settings.app_name,

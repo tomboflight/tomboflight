@@ -43,6 +43,78 @@ class Settings(BaseSettings):
         default=60,
         validation_alias=AliasChoices("ACCESS_TOKEN_EXPIRE_MINUTES"),
     )
+    csrf_token_expire_minutes: int = Field(
+        default=120,
+        validation_alias=AliasChoices("CSRF_TOKEN_EXPIRE_MINUTES"),
+    )
+    auth_rate_limit_window_seconds: int = Field(
+        default=60,
+        validation_alias=AliasChoices("AUTH_RATE_LIMIT_WINDOW_SECONDS"),
+    )
+    auth_login_rate_limit: int = Field(
+        default=10,
+        validation_alias=AliasChoices("AUTH_LOGIN_RATE_LIMIT"),
+    )
+    auth_password_reset_request_rate_limit: int = Field(
+        default=5,
+        validation_alias=AliasChoices("AUTH_PASSWORD_RESET_REQUEST_RATE_LIMIT"),
+    )
+    auth_password_reset_confirm_rate_limit: int = Field(
+        default=10,
+        validation_alias=AliasChoices("AUTH_PASSWORD_RESET_CONFIRM_RATE_LIMIT"),
+    )
+    auth_mfa_verify_rate_limit: int = Field(
+        default=10,
+        validation_alias=AliasChoices("AUTH_MFA_VERIFY_RATE_LIMIT"),
+    )
+    auth_failure_lockout_threshold: int = Field(
+        default=5,
+        validation_alias=AliasChoices("AUTH_FAILURE_LOCKOUT_THRESHOLD"),
+    )
+    auth_failure_lockout_seconds: int = Field(
+        default=300,
+        validation_alias=AliasChoices("AUTH_FAILURE_LOCKOUT_SECONDS"),
+    )
+    mfa_totp_issuer: str = Field(
+        default="Tomb of Light",
+        validation_alias=AliasChoices("MFA_TOTP_ISSUER"),
+    )
+    mfa_challenge_expire_minutes: int = Field(
+        default=10,
+        validation_alias=AliasChoices("MFA_CHALLENGE_EXPIRE_MINUTES"),
+    )
+    mfa_backup_code_count: int = Field(
+        default=8,
+        validation_alias=AliasChoices("MFA_BACKUP_CODE_COUNT"),
+    )
+    mfa_totp_window: int = Field(
+        default=1,
+        validation_alias=AliasChoices("MFA_TOTP_WINDOW"),
+    )
+    link_key_expire_hours: int = Field(
+        default=0,
+        validation_alias=AliasChoices("LINK_KEY_EXPIRE_HOURS"),
+    )
+    upload_scan_command: str = Field(
+        default="",
+        validation_alias=AliasChoices("UPLOAD_SCAN_COMMAND"),
+    )
+    upload_scan_hook: str = Field(
+        default="",
+        validation_alias=AliasChoices("UPLOAD_SCAN_HOOK"),
+    )
+    upload_scan_fail_closed: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("UPLOAD_SCAN_FAIL_CLOSED"),
+    )
+    upload_quarantine_dir: str = Field(
+        default="storage/quarantine",
+        validation_alias=AliasChoices("UPLOAD_QUARANTINE_DIR"),
+    )
+    upload_allow_admin_quarantine_override: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("UPLOAD_ALLOW_ADMIN_QUARANTINE_OVERRIDE"),
+    )
 
     stripe_secret_key: str = Field(
         default="",

@@ -145,6 +145,16 @@ def create_link_request(
 
     target_key_doc = get_key_doc_by_value(target_key)
     if target_key_doc is None:
+        try:
+            create_audit_log(
+                "link_key_failed_use",
+                str(requested_by_user_id or "").strip() or None,
+                "project_link_key",
+                _normalize_value(target_key)[:24],
+                {"source_project_id": source_project_id},
+            )
+        except Exception:
+            pass
         raise ValueError("Target link key was not found or is no longer active.")
 
     target_project_id = str(target_key_doc.get("project_id") or "").strip()
@@ -186,6 +196,8 @@ def create_link_request(
         "target_household_id": target_project.get("household_id"),
         "source_key": str(source_key_doc.get("key_value") or ""),
         "target_key": str(target_key_doc.get("key_value") or ""),
+        "source_key_hash": _normalize_value(source_key_doc.get("key_hash")),
+        "target_key_hash": _normalize_value(target_key_doc.get("key_hash")),
         "status": "pending",
         "requested_by": str(requested_by or "").strip() or "Unknown User",
         "requested_by_user_id": str(requested_by_user_id or "").strip(),
@@ -260,22 +272,29 @@ def _validate_active_handshake_keys(request: dict[str, Any]) -> None:
     target_project_id = _normalize_value(request.get("target_project_id"))
     source_key = _normalize_value(request.get("source_key"))
     target_key = _normalize_value(request.get("target_key"))
+    source_key_hash = _normalize_value(request.get("source_key_hash"))
+    target_key_hash = _normalize_value(request.get("target_key_hash"))
 
     active_source_key = get_active_key_doc_for_project(source_project_id)
     active_target_key = get_active_key_doc_for_project(target_project_id)
 
-    if (
-        active_source_key is None
-        or _normalize_value(active_source_key.get("key_value")) != source_key
-    ):
+    active_source_hash = _normalize_value(active_source_key.get("key_hash")) if active_source_key else ""
+    active_target_hash = _normalize_value(active_target_key.get("key_hash")) if active_target_key else ""
+
+    source_matches_hash = bool(source_key_hash and active_source_hash and source_key_hash == active_source_hash)
+    source_matches_legacy = bool(
+        source_key and active_source_key and _normalize_value(active_source_key.get("key_value")) == source_key
+    )
+    if active_source_key is None or not (source_matches_hash or source_matches_legacy):
         raise ValueError(
             "The requesting workspace must still present the same active link key to complete the handshake."
         )
 
-    if (
-        active_target_key is None
-        or _normalize_value(active_target_key.get("key_value")) != target_key
-    ):
+    target_matches_hash = bool(target_key_hash and active_target_hash and target_key_hash == active_target_hash)
+    target_matches_legacy = bool(
+        target_key and active_target_key and _normalize_value(active_target_key.get("key_value")) == target_key
+    )
+    if active_target_key is None or not (target_matches_hash or target_matches_legacy):
         raise ValueError(
             "The receiving workspace must still present the same active link key to complete the handshake."
         )

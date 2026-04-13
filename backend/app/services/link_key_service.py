@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import hashlib
 import secrets
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from bson import ObjectId
 
+from app.config import settings
 from app.core.package_catalog import get_package
 from app.database import get_database
+from app.services.audit_log_service import create_audit_log
 from app.services.entitlement_service import resolve_project_entitlements
 from app.services.project_membership_service import (
     get_project_access_snapshot,
@@ -50,6 +53,31 @@ def _normalize_value(value: Any) -> str:
     return str(value or "").strip()
 
 
+def _utcnow() -> datetime:
+    return datetime.now(UTC)
+
+
+def _hash_link_key(raw_value: str) -> str:
+    payload = f"{settings.secret_key}:link-key:{_normalize_value(raw_value)}".encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _link_key_preview(raw_value: str) -> str:
+    del raw_value
+    return "********"
+
+
+def _is_expired(document: dict[str, Any]) -> bool:
+    expires_at = _normalize_value(document.get("expires_at"))
+    if not expires_at:
+        return False
+    try:
+        expires_dt = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+    except Exception:
+        return False
+    return expires_dt < _utcnow()
+
+
 def _project_id_candidates(project_id: str) -> list[Any]:
     values: list[Any] = [str(project_id)]
     oid = _to_object_id(project_id)
@@ -89,6 +117,10 @@ def _serialize_key(document: dict[str, Any] | None) -> dict[str, Any] | None:
     if not document:
         return None
 
+    key_value = document.get("key_value")
+    key_preview = document.get("key_preview")
+    if not key_preview and key_value:
+        key_preview = _link_key_preview(str(key_value))
     return {
         "_id": document.get("_id"),
         "id": str(document.get("_id")),
@@ -97,11 +129,15 @@ def _serialize_key(document: dict[str, Any] | None) -> dict[str, Any] | None:
         "package_code": document.get("package_code"),
         "package_name": document.get("package_name"),
         "package_lane": document.get("package_lane"),
-        "key_value": document.get("key_value"),
+        "key_value": str(key_value or ""),
+        "key_preview": _normalize_value(key_preview) or None,
+        "key_hash": _normalize_value(document.get("key_hash")) or None,
         "status": document.get("status", "active"),
         "created_at": document.get("created_at"),
         "updated_at": document.get("updated_at"),
         "revoked_at": document.get("revoked_at"),
+        "expires_at": document.get("expires_at"),
+        "expired_at": document.get("expired_at"),
     }
 
 
@@ -267,13 +303,31 @@ def list_accessible_link_key_project_ids(
 
 
 def get_active_key_doc_for_project(project_id: str) -> dict[str, Any] | None:
-    return _keys_collection().find_one(
+    active = _keys_collection().find_one(
         {
             "project_id": str(project_id),
             "status": "active",
         },
         sort=[("created_at", -1)],
     )
+    if active and _is_expired(active):
+        now = _utcnow_iso()
+        _keys_collection().update_one(
+            {"_id": active["_id"]},
+            {"$set": {"status": "expired", "expired_at": now, "updated_at": now}},
+        )
+        try:
+            create_audit_log(
+                "link_key_expired",
+                None,
+                "project_link_key",
+                str(active.get("_id")),
+                {"project_id": _normalize_value(active.get("project_id"))},
+            )
+        except Exception:
+            pass
+        return None
+    return active
 
 
 def get_active_key_for_project(project_id: str) -> dict[str, Any] | None:
@@ -281,12 +335,46 @@ def get_active_key_for_project(project_id: str) -> dict[str, Any] | None:
 
 
 def get_key_doc_by_value(key_value: str) -> dict[str, Any] | None:
-    return _keys_collection().find_one(
-        {
-            "key_value": str(key_value or "").strip(),
-            "status": "active",
-        }
-    )
+    normalized = str(key_value or "").strip()
+    if not normalized:
+        return None
+    key_hash = _hash_link_key(normalized)
+    document = _keys_collection().find_one({"key_hash": key_hash, "status": "active"})
+    if document is None:
+        document = _keys_collection().find_one({"key_value": normalized, "status": "active"})
+        if document is not None:
+            now = _utcnow_iso()
+            _keys_collection().update_one(
+                {"_id": document["_id"]},
+                {
+                    "$set": {
+                        "key_hash": key_hash,
+                        "key_preview": _link_key_preview(normalized),
+                        "key_value": None,
+                        "updated_at": now,
+                    }
+                },
+            )
+            document["key_hash"] = key_hash
+            document["key_preview"] = _link_key_preview(normalized)
+    if document is not None and _is_expired(document):
+        now = _utcnow_iso()
+        _keys_collection().update_one(
+            {"_id": document["_id"]},
+            {"$set": {"status": "expired", "expired_at": now, "updated_at": now}},
+        )
+        try:
+            create_audit_log(
+                "link_key_expired",
+                None,
+                "project_link_key",
+                str(document.get("_id")),
+                {"project_id": _normalize_value(document.get("project_id"))},
+            )
+        except Exception:
+            pass
+        return None
+    return document
 
 
 def list_link_keys_for_user(
@@ -355,16 +443,38 @@ def generate_link_key(
         "package_code": project_summary.get("package_code"),
         "package_name": project_summary.get("package_name"),
         "package_lane": project_summary.get("package_lane"),
-        "key_value": _generate_raw_link_key(),
+        "key_value": None,
+        "key_hash": None,
+        "key_preview": None,
         "status": "active",
         "created_at": now,
         "updated_at": now,
         "revoked_at": None,
+        "expires_at": None,
+        "expired_at": None,
     }
+    raw_key = _generate_raw_link_key()
+    document["key_hash"] = _hash_link_key(raw_key)
+    document["key_preview"] = _link_key_preview(raw_key)
+    expiration_hours = max(0, int(settings.link_key_expire_hours or 0))
+    if expiration_hours > 0:
+        document["expires_at"] = (_utcnow() + timedelta(hours=expiration_hours)).isoformat()
 
     result = keys.insert_one(document)
     document["_id"] = result.inserted_id
-    return _serialize_key(document) or {}
+    try:
+        create_audit_log(
+            "link_key_created",
+            str(user_id or "") or None,
+            "project_link_key",
+            str(result.inserted_id),
+            {"project_id": str(project_id)},
+        )
+    except Exception:
+        pass
+    serialized = _serialize_key(document) or {}
+    serialized["key_value"] = raw_key
+    return serialized
 
 
 def revoke_link_key(
@@ -404,4 +514,14 @@ def revoke_link_key(
     )
 
     updated = keys.find_one({"_id": oid})
+    try:
+        create_audit_log(
+            "link_key_revoked",
+            str(actor_user_id or "") or None,
+            "project_link_key",
+            str(oid),
+            {"project_id": project_id},
+        )
+    except Exception:
+        pass
     return _serialize_key(updated)
