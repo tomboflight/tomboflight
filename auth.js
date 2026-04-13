@@ -6,9 +6,29 @@
   const SIGNUP_POLICY_VERSION = "2026-03-26";
   const DASHBOARD_CONTEXT_STORAGE_KEY = "tol_dashboard_context_v1";
   let hasLogoutBinding = false;
+  const HOUSEHOLD_LINK_PACKAGE_CODES = new Set([
+    "legacy_plus",
+    "family_estate_concierge",
+  ]);
 
   if (!app) {
     console.error("auth.js requires app.js to be loaded first.");
+    return;
+  }
+  const requiredPackageHelpers = [
+    "normalizePackageCode",
+    "stripMaintenanceSuffix",
+    "resolvePackageLane",
+    "resolvePackageDisplayName",
+    "packageSupportsLinkKeys",
+    "getPackageProfile",
+  ];
+  if (
+    requiredPackageHelpers.some(function (helperName) {
+      return typeof app[helperName] !== "function";
+    })
+  ) {
+    console.error("auth.js requires package helper exports from app.js.");
     return;
   }
 
@@ -90,50 +110,28 @@
   }
 
   function normalizePackageCode(value) {
-    if (app && typeof app.normalizePackageCode === "function") {
-      return app.normalizePackageCode(value);
-    }
-    return normalizeValue(value);
+    return app.normalizePackageCode(value);
   }
 
   function stripMaintenanceSuffix(packageCode) {
-    const normalized =
-      app && typeof app.stripMaintenanceSuffix === "function"
-        ? app.stripMaintenanceSuffix(packageCode)
-        : normalizePackageCode(packageCode);
-    return normalized
-      .replace(/_maintenance_monthly$/, "")
-      .replace(/_maintenance_yearly$/, "");
+    return app.stripMaintenanceSuffix(packageCode);
   }
 
   function resolvePackageLane(packageCode) {
-    if (app && typeof app.resolvePackageLane === "function") {
-      return app.resolvePackageLane(packageCode);
-    }
-    return "unknown";
+    return app.resolvePackageLane(packageCode);
   }
 
   function resolvePackageDisplayName(packageCode) {
-    if (app && typeof app.resolvePackageDisplayName === "function") {
-      return app.resolvePackageDisplayName(packageCode);
-    }
-    const normalized = stripMaintenanceSuffix(packageCode);
-    return normalized || "Package";
+    return app.resolvePackageDisplayName(packageCode);
   }
 
   function packageSupportsLinkKeys(packageCode) {
-    if (app && typeof app.packageSupportsLinkKeys === "function") {
-      return app.packageSupportsLinkKeys(packageCode);
-    }
-    return false;
+    return app.packageSupportsLinkKeys(packageCode);
   }
 
   function buildFallbackEntitlements(packageCode, packageLane) {
     const normalizedCode = stripMaintenanceSuffix(packageCode);
-    const profile =
-      app && typeof app.getPackageProfile === "function"
-        ? app.getPackageProfile(normalizedCode)
-        : null;
+    const profile = app.getPackageProfile(normalizedCode);
     const lane =
       normalizeValue(packageLane) ||
       normalizeValue(profile?.package_lane) ||
@@ -161,7 +159,7 @@
       can_link_households:
         typeof profile?.can_link_households === "boolean"
           ? profile.can_link_households
-          : lane === "network",
+          : HOUSEHOLD_LINK_PACKAGE_CODES.has(normalizedCode),
       can_link_org_units:
         typeof profile?.can_link_org_units === "boolean"
           ? profile.can_link_org_units

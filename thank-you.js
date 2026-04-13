@@ -2,6 +2,14 @@
   "use strict";
 
   const app = window.TOLApp || window.TOLAuth;
+  if (
+    !app ||
+    typeof app.normalizePackageCode !== "function" ||
+    typeof app.resolvePackageLane !== "function"
+  ) {
+    console.error("thank-you.js requires package helpers from app.js.");
+    return;
+  }
   const PENDING_CHECKOUT_KEY = "tol_pending_checkout";
   const PORTRAIT_PACKAGE_CODES = new Set([
     "legacy_snapshot",
@@ -71,12 +79,7 @@
   }
 
   function normalizePackageCode(packageCode) {
-    if (app && typeof app.normalizePackageCode === "function") {
-      return app.normalizePackageCode(packageCode);
-    }
-    return String(packageCode || "")
-      .trim()
-      .toLowerCase();
+    return app.normalizePackageCode(packageCode);
   }
 
   function inferType(type, packageCode) {
@@ -147,11 +150,9 @@
 
   function packageLane(packageCode) {
     const normalizedBase = basePackageCode(packageCode);
-    if (app && typeof app.resolvePackageLane === "function") {
-      const resolvedLane = app.resolvePackageLane(normalizedBase);
-      if (resolvedLane && resolvedLane !== "unknown") {
-        return resolvedLane;
-      }
+    const resolvedLane = app.resolvePackageLane(normalizedBase);
+    if (resolvedLane && resolvedLane !== "unknown") {
+      return resolvedLane;
     }
 
     if (PORTRAIT_PACKAGE_CODES.has(normalizedBase)) return "portrait";
