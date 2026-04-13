@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import shutil
 from pathlib import Path
 from typing import Any, Literal, Optional
 
@@ -15,7 +16,7 @@ from fastapi import (
     UploadFile,
     status,
 )
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, Field
 
 from app.config import settings
@@ -32,6 +33,9 @@ from app.services.upload_service import (
     store_member_photo_upload,
     store_verification_evidence_upload,
 )
+from app.services.r2_storage_service import generate_private_download_url
+from app.services.upload_scan_service import scan_uploaded_file
+from app.services.audit_log_service import create_audit_log
 from app.services.tree_service import list_linked_family_ids
 from app.services.workspace_access_service import (
     count_workspace_uploads,
@@ -93,6 +97,13 @@ ALLOWED_QUERY_CATEGORIES = {
 }
 ALLOWED_VAULT_SCOPE = {"personal", "family_shared"}
 ALLOWED_VISIBILITY_SCOPE = {"private", "family_shared", "linked_family_shared", "internal_only"}
+ALLOWED_PRIVACY_CLASSIFICATION = {
+    "public",
+    "shared",
+    "household_only",
+    "owner_only",
+    "admin_only",
+}
 
 
 class UploadPrivacyUpdatePayload(BaseModel):
@@ -107,6 +118,13 @@ class UploadPrivacyUpdatePayload(BaseModel):
     internal_only: bool | None = None
     share_with_linked_families: bool | None = None
     privacy_notes: str = Field(default="", max_length=500)
+    privacy_classification: Literal[
+        "public",
+        "shared",
+        "household_only",
+        "owner_only",
+        "admin_only",
+    ] | None = None
 
 
 def _normalize_value(value: Any) -> str:
@@ -293,9 +311,48 @@ def _require_upload_access(
             bool(upload_record.get("internal_only"))
             or (not bool(upload_record.get("customer_visible")) and not owns_record)
         ):
+            try:
+                create_audit_log(
+                    "private_file_access_denied",
+                    current_user_id or None,
+                    "upload",
+                    upload_id,
+                    {"reason": "visibility_policy"},
+                )
+            except Exception:
+                pass
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="This file is not visible to customers.",
+            )
+
+        classification = _normalize_privacy_classification(
+            upload_record.get("privacy_classification"),
+            fallback=_classification_from_flags(
+                visibility_scope=_normalize_visibility_scope(upload_record.get("visibility_scope"), "private"),
+                internal_only=bool(upload_record.get("internal_only")),
+                customer_visible=bool(upload_record.get("customer_visible")),
+            ),
+        )
+        if not _can_access_classification(
+            classification,
+            context=context,
+            upload_record=upload_record,
+            current_user=current_user,
+        ):
+            try:
+                create_audit_log(
+                    "private_file_access_denied",
+                    current_user_id or None,
+                    "upload",
+                    upload_id,
+                    {"reason": "privacy_classification", "privacy_classification": classification},
+                )
+            except Exception:
+                pass
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied for this file privacy classification.",
             )
 
     return upload_record, context
@@ -408,6 +465,50 @@ def _absolute_upload_path(relative_path: str) -> Path:
     return candidate
 
 
+def _quarantine_path_for_upload(relative_path: str) -> Path:
+    quarantine_root = Path(settings.upload_quarantine_dir).resolve()
+    quarantine_root.mkdir(parents=True, exist_ok=True)
+    candidate = (quarantine_root / Path(relative_path).name).resolve()
+    try:
+        candidate.relative_to(quarantine_root)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Resolved quarantine path is invalid.")
+    return candidate
+
+
+def _scan_and_quarantine_upload(*, db: Any, upload_record: dict[str, Any]) -> dict[str, Any]:
+    upload_id = str(upload_record.get("id") or upload_record.get("_id") or "")
+    relative_path = _normalize_value(upload_record.get("relative_path"))
+    if not upload_id or not relative_path:
+        return upload_record
+    absolute_path = _absolute_upload_path(relative_path)
+    result = scan_uploaded_file(str(absolute_path))
+    if result.status in {"infected", "error"}:
+        quarantine_path = _quarantine_path_for_upload(relative_path)
+        if absolute_path.exists():
+            quarantine_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(absolute_path), str(quarantine_path))
+        db["uploaded_files"].update_one(
+            {"_id": ObjectId(upload_id)},
+            {
+                "$set": {
+                    "scan_status": result.status,
+                    "scan_detail": result.detail[:500],
+                    "quarantined": True,
+                    "quarantine_reason": result.detail[:500] or result.status,
+                    "quarantine_path": str(quarantine_path),
+                }
+            },
+        )
+    else:
+        db["uploaded_files"].update_one(
+            {"_id": ObjectId(upload_id)},
+            {"$set": {"scan_status": result.status, "scan_detail": result.detail[:500], "quarantined": False}},
+        )
+    refreshed = db["uploaded_files"].find_one({"_id": ObjectId(upload_id)})
+    return refreshed or upload_record
+
+
 def _file_extension(filename: str) -> str:
     return Path(filename or "").suffix.lower()
 
@@ -474,6 +575,55 @@ def _visibility_flags(scope: str) -> dict[str, bool]:
         "internal_only": False,
         "share_with_linked_families": False,
     }
+
+
+def _classification_from_flags(
+    *,
+    visibility_scope: str,
+    internal_only: bool,
+    customer_visible: bool,
+) -> str:
+    if internal_only or visibility_scope == "internal_only":
+        return "admin_only"
+    if visibility_scope == "private":
+        return "owner_only"
+    if visibility_scope == "linked_family_shared":
+        return "shared"
+    if customer_visible:
+        return "household_only"
+    return "owner_only"
+
+
+def _normalize_privacy_classification(value: Any, *, fallback: str) -> str:
+    normalized = _normalize_value(value).lower()
+    if normalized in ALLOWED_PRIVACY_CLASSIFICATION:
+        return normalized
+    return fallback
+
+
+def _can_access_classification(
+    classification: str,
+    *,
+    context: dict[str, Any],
+    upload_record: dict[str, Any],
+    current_user: dict[str, Any],
+) -> bool:
+    if context.get("is_admin"):
+        return True
+    normalized = _normalize_privacy_classification(classification, fallback="owner_only")
+    user_id = _current_user_id(current_user)
+    uploaded_by_user_id = _normalize_value(upload_record.get("uploaded_by_user_id"))
+    if normalized == "public":
+        return True
+    if normalized == "shared":
+        return not bool(upload_record.get("internal_only"))
+    if normalized == "household_only":
+        return bool(upload_record.get("customer_visible")) and not bool(upload_record.get("internal_only"))
+    if normalized == "owner_only":
+        return bool(user_id and uploaded_by_user_id and user_id == uploaded_by_user_id)
+    if normalized == "admin_only":
+        return False
+    return False
 
 
 def _validate_upload_file(
@@ -587,6 +737,7 @@ def _apply_customer_visibility_filter(query: dict[str, Any], *, is_admin: bool) 
         return
     query["internal_only"] = {"$ne": True}
     query["customer_visible"] = True
+    query["privacy_classification"] = {"$ne": "admin_only"}
 
 
 @router.get("/admin/review")
@@ -697,6 +848,7 @@ async def upload_member_photo(
         uploaded_by=_actor_label(current_user),
         uploaded_by_user_id=_current_user_id(current_user),
     )
+    upload_record = _scan_and_quarantine_upload(db=db, upload_record=upload_record)
 
     return {
         "message": "Member photo uploaded successfully.",
@@ -771,6 +923,7 @@ async def upload_verification_evidence(
         uploaded_by=_actor_label(current_user),
         uploaded_by_user_id=_current_user_id(current_user),
     )
+    upload_record = _scan_and_quarantine_upload(db=db, upload_record=upload_record)
 
     return {
         "message": "Verification evidence uploaded successfully.",
@@ -907,7 +1060,12 @@ def list_family_vault_items(
     if not context.get("is_admin"):
         query["$or"] = [
             {"uploaded_by_user_id": current_user_id},
-            {"customer_visible": True, "internal_only": {"$ne": True}},
+            {
+                "customer_visible": True,
+                "internal_only": {"$ne": True},
+                "privacy_classification": {"$nin": ["owner_only", "admin_only"]},
+            },
+            {"privacy_classification": "public"},
         ]
 
     records = list(db["uploaded_files"].find(query).sort("created_at", -1))
@@ -962,6 +1120,20 @@ def update_upload_privacy(
         if payload.vault_scope is not None
         else current_vault_scope
     )
+    next_classification = _normalize_privacy_classification(
+        payload.privacy_classification,
+        fallback=_classification_from_flags(
+            visibility_scope=visibility_scope,
+            internal_only=internal_only,
+            customer_visible=customer_visible,
+        ),
+    )
+    if next_classification == "admin_only":
+        internal_only = True
+        customer_visible = False
+        visibility_scope = "internal_only"
+    elif next_classification == "owner_only":
+        customer_visible = False
 
     db["uploaded_files"].update_one(
         {"_id": ObjectId(upload_id)},
@@ -973,6 +1145,7 @@ def update_upload_privacy(
                 "internal_only": internal_only,
                 "share_with_linked_families": share_with_linked,
                 "privacy_notes": _normalize_value(payload.privacy_notes),
+                "privacy_classification": next_classification,
             }
         },
     )
@@ -986,6 +1159,7 @@ def update_upload_privacy(
 @router.get("/{upload_id}/download")
 def download_upload(
     upload_id: str,
+    admin_override: bool = Query(default=False),
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
     db = get_database()
@@ -998,6 +1172,42 @@ def download_upload(
         current_user,
         detail="Your active package does not include upload access.",
     )
+    if bool(upload_record.get("quarantined")):
+        is_admin = _is_admin(current_user)
+        if not (
+            is_admin
+            and admin_override
+            and bool(settings.upload_allow_admin_quarantine_override)
+        ):
+            try:
+                create_audit_log(
+                    "private_file_access_denied",
+                    _current_user_id(current_user),
+                    "upload",
+                    upload_id,
+                    {"reason": "quarantined"},
+                )
+            except Exception:
+                pass
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="This file is quarantined and cannot be downloaded.",
+            )
+
+    if _normalize_value(upload_record.get("storage_provider")).lower() == "r2":
+        storage_key = _normalize_value(upload_record.get("storage_key") or upload_record.get("relative_path"))
+        signed_url = generate_private_download_url(key=storage_key, expires_seconds=120)
+        if not signed_url:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Private object storage is unavailable for this upload.",
+            )
+        response = RedirectResponse(url=signed_url, status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        return response
 
     relative_path = _normalize_value(upload_record.get("relative_path"))
     if not relative_path:

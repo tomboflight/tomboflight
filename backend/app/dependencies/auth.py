@@ -14,7 +14,7 @@ from app.core.role_catalog import (
     has_internal_admin_role,
     normalize_role_code,
 )
-from app.core.security import decode_access_token
+from app.core.security import decode_access_token, verify_csrf_token
 from app.database import get_database
 from app.services.audit_log_service import write_audit_log
 from app.services.auth_service import get_user_by_email
@@ -27,6 +27,7 @@ from app.services.project_membership_service import (
 )
 
 COOKIE_NAME = "tol_access_token"
+CSRF_COOKIE_NAME = "tol_csrf_token"
 
 INTERNAL_ADMIN_KEYS = set(INTERNAL_ADMIN_ROLE_CODES)
 
@@ -85,6 +86,19 @@ def _is_public_password_reset_route(request: Request) -> bool:
     }
 
 
+def _is_cookie_csrf_exempt_route(request: Request) -> bool:
+    path = str(request.url.path or "").rstrip("/")
+    return path in {
+        "/auth/logout",
+        "/auth/mfa/enroll/begin",
+        "/auth/mfa/enroll/verify",
+        "/auth/mfa/login/verify",
+        "/auth/password-reset/request",
+        "/auth/password-reset/confirm",
+        "/webhooks/stripe",
+    }
+
+
 def _allowed_cookie_auth_origins() -> set[str]:
     configured = settings.allowed_origins_list or []
     normalized = {
@@ -119,6 +133,25 @@ def _enforce_cookie_auth_origin(request: Request) -> None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Origin is not allowed for cookie-authenticated request.",
+        )
+
+
+def _enforce_cookie_auth_csrf(request: Request, *, user_id: str) -> None:
+    if not _is_unsafe_method(request.method):
+        return
+    if _is_cookie_csrf_exempt_route(request):
+        return
+    header_token = str(request.headers.get("x-csrf-token") or "").strip()
+    cookie_token = str(request.cookies.get(CSRF_COOKIE_NAME) or "").strip()
+    if not header_token or not cookie_token or header_token != cookie_token:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="CSRF validation failed for cookie-authenticated request.",
+        )
+    if not verify_csrf_token(cookie_token, user_id=user_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="CSRF token is invalid or expired.",
         )
 
 
@@ -385,6 +418,35 @@ def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User is inactive.",
+        )
+
+    payload_token_version = _normalize_value(payload.get("tv"))
+    user_token_version = _normalize_value(normalized_user.get("session_token_version") or 0)
+    if (
+        payload_token_version != user_token_version
+        and (payload_token_version or user_token_version != "0")
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session has been revoked. Please log in again.",
+        )
+
+    if _has_internal_admin_access(normalized_user):
+        if not bool(normalized_user.get("mfa_enabled")):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="MFA enrollment is required for internal admin access.",
+            )
+        if not bool(payload.get("mfa")):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="MFA verification is required for this session.",
+            )
+
+    if source == "cookie":
+        _enforce_cookie_auth_csrf(
+            request,
+            user_id=_current_user_id(normalized_user) or _current_user_email(normalized_user),
         )
 
     return normalized_user

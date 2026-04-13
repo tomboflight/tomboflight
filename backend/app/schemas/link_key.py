@@ -13,10 +13,13 @@ class LinkKeyResponse(BaseModel):
     package_name: str | None = None
     package_lane: str | None = None
     key_value: str
+    key_preview: str | None = None
     status: str
     created_at: str
     updated_at: str | None = None
     revoked_at: str | None = None
+    expires_at: str | None = None
+    expired_at: str | None = None
 
 
 def build_link_key_response(data: dict[str, Any]) -> LinkKeyResponse:
@@ -27,8 +30,11 @@ def build_link_key_response(data: dict[str, Any]) -> LinkKeyResponse:
         package_name=(str(data.get("package_name")) if data.get("package_name") else None),
         package_lane=(str(data.get("package_lane")) if data.get("package_lane") else None),
         key_value=str(data.get("key_value") or ""),
+        key_preview=(str(data.get("key_preview")) if data.get("key_preview") else None),
         status=str(data.get("status") or "active"),
         created_at=str(data.get("created_at") or datetime.now(UTC).isoformat()),
         updated_at=(str(data.get("updated_at")) if data.get("updated_at") else None),
         revoked_at=(str(data.get("revoked_at")) if data.get("revoked_at") else None),
+        expires_at=(str(data.get("expires_at")) if data.get("expires_at") else None),
+        expired_at=(str(data.get("expired_at")) if data.get("expired_at") else None),
     )
