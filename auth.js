@@ -44,25 +44,94 @@
       : false;
   }
 
+  function parseEmbeddedPayload(value) {
+    if (typeof value !== "string") return value;
+
+    const trimmed = value.trim();
+    if (!trimmed || !["{", "["].includes(trimmed.charAt(0))) {
+      return value;
+    }
+
+    try {
+      return JSON.parse(trimmed);
+    } catch (error) {
+      return value;
+    }
+  }
+
+  function collectLoginPayloads(value, seen) {
+    const parsedValue = parseEmbeddedPayload(value);
+    if (!parsedValue || typeof parsedValue !== "object") return [];
+
+    const visited = seen || new Set();
+    if (visited.has(parsedValue)) return [];
+    visited.add(parsedValue);
+
+    const payloads = [parsedValue];
+    [
+      "data",
+      "detail",
+      "result",
+      "payload",
+      "response",
+      "auth",
+      "login",
+      "mfa",
+      "totp",
+      "two_factor",
+      "twoFactor",
+    ].forEach(function (key) {
+      if (Object.prototype.hasOwnProperty.call(parsedValue, key)) {
+        payloads.push(
+          ...collectLoginPayloads(parsedValue[key], visited),
+        );
+      }
+    });
+
+    return payloads;
+  }
+
+  function getFirstResponseValue(loginData, keys) {
+    const payloads = collectLoginPayloads(loginData);
+    for (const payload of payloads) {
+      for (const key of keys) {
+        if (!Object.prototype.hasOwnProperty.call(payload, key)) continue;
+        const value = parseEmbeddedPayload(payload[key]);
+        if (value === null || typeof value === "undefined") continue;
+        if (typeof value === "string" && !value.trim()) continue;
+        return value;
+      }
+    }
+
+    return null;
+  }
+
+  function getFirstResponseString(loginData, keys) {
+    const value = getFirstResponseValue(loginData, keys);
+    if (value === null || typeof value === "undefined") return "";
+    if (typeof value === "object") return "";
+    return String(value).trim();
+  }
+
   function getAccessTokenFromResponse(loginData) {
-    return (
-      loginData?.access_token ||
-      loginData?.token ||
-      loginData?.accessToken ||
-      null
-    );
+    return getFirstResponseString(loginData, [
+      "access_token",
+      "accessToken",
+      "token",
+      "jwt",
+    ]);
   }
 
   function getMfaChallengeToken(loginData) {
-    return String(
-      loginData?.mfa_challenge_token ||
-        loginData?.mfaChallengeToken ||
-        loginData?.challenge_token ||
-        loginData?.challengeToken ||
-        loginData?.mfa_token ||
-        loginData?.mfaToken ||
-        "",
-    ).trim();
+    return getFirstResponseString(loginData, [
+      "mfa_challenge_token",
+      "mfaChallengeToken",
+      "challenge_token",
+      "challengeToken",
+      "mfa_token",
+      "mfaToken",
+      "challenge",
+    ]);
   }
 
   function isTruthyFlag(value) {
@@ -73,7 +142,12 @@
   }
 
   function getLoginStatus(loginData) {
-    return String(loginData?.status || loginData?.auth_status || "")
+    return getFirstResponseString(loginData, [
+      "status",
+      "auth_status",
+      "authStatus",
+      "state",
+    ])
       .trim()
       .toLowerCase();
   }
@@ -81,19 +155,47 @@
   function isMfaRequired(loginData) {
     const status = getLoginStatus(loginData);
     return Boolean(
-      isTruthyFlag(loginData?.mfa_required) ||
-        isTruthyFlag(loginData?.mfaRequired) ||
+      isTruthyFlag(
+        getFirstResponseValue(loginData, [
+          "mfa_required",
+          "mfaRequired",
+          "requires_mfa",
+          "requiresMfa",
+          "two_factor_required",
+          "twoFactorRequired",
+          "totp_required",
+          "totpRequired",
+          "required",
+        ]),
+      ) ||
         status === "mfa_required" ||
         status === "mfa_login_required" ||
-        status === "mfa_enrollment_required",
+        status === "mfa_enrollment_required" ||
+        status === "mfa_setup_required" ||
+        status === "two_factor_required" ||
+        status === "totp_required",
     );
   }
 
   function isMfaEnrollmentRequired(loginData) {
     return Boolean(
-      isTruthyFlag(loginData?.mfa_enrollment_required) ||
-        isTruthyFlag(loginData?.mfaEnrollmentRequired) ||
-        getLoginStatus(loginData) === "mfa_enrollment_required",
+      isTruthyFlag(
+        getFirstResponseValue(loginData, [
+          "mfa_enrollment_required",
+          "mfaEnrollmentRequired",
+          "enrollment_required",
+          "enrollmentRequired",
+          "requires_mfa_enrollment",
+          "requiresMfaEnrollment",
+          "setup_required",
+          "setupRequired",
+          "enroll_required",
+          "enrollRequired",
+        ]),
+      ) ||
+        ["mfa_enrollment_required", "mfa_setup_required"].includes(
+          getLoginStatus(loginData),
+        ),
     );
   }
 
@@ -110,6 +212,18 @@
       isMfaRequired(loginData) &&
         !isMfaEnrollmentRequired(loginData) &&
         getMfaChallengeToken(loginData),
+    );
+  }
+
+  function looksLikeMfaResponse(loginData) {
+    const status = getLoginStatus(loginData);
+    return Boolean(
+      isMfaRequired(loginData) ||
+        isMfaEnrollmentRequired(loginData) ||
+        getMfaChallengeToken(loginData) ||
+        status.includes("mfa") ||
+        status.includes("totp") ||
+        status.includes("two_factor"),
     );
   }
 
@@ -698,13 +812,15 @@
       };
     }
 
-    if (isMfaRequired(loginData)) {
+    if (looksLikeMfaResponse(loginData)) {
       throw new Error(
         "Secure verification could not be started. Please try signing in again.",
       );
     }
 
-    throw new Error("Login succeeded but no access token was returned.");
+    throw new Error(
+      "Secure sign-in could not be completed. Please refresh and try again.",
+    );
   }
 
   async function beginMfaEnrollment(mfaChallengeToken) {
