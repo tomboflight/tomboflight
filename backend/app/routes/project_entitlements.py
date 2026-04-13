@@ -11,6 +11,8 @@ from app.dependencies.auth import (
     has_internal_admin_access,
     require_permission,
 )
+from app.core.package_catalog import get_package, get_package_catalog
+from app.services.entitlement_service import resolve_project_entitlements
 from app.services.project_entitlement_service import (
     get_project_entitlement,
     get_upgrade_quote_for_project,
@@ -145,3 +147,81 @@ def get_project_upgrade_quote_route(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
         ) from exc
+
+
+@router.get("/project/{project_id}/package-summary")
+def get_package_summary_route(
+    project_id: str,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    entitlement = get_project_entitlement(project_id)
+    if not entitlement:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project entitlement not found.",
+        )
+
+    current_user_id = _current_user_id(current_user)
+    if not _is_admin(current_user) and entitlement.get("user_id") != current_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to view this project package summary.",
+        )
+
+    package_code = str(entitlement.get("package_code") or "").strip()
+    active_addons = list(entitlement.get("active_addons") or [])
+
+    try:
+        resolved = resolve_project_entitlements(package_code, active_addons)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Could not resolve entitlements: {exc}",
+        ) from exc
+
+    package_data = get_package(package_code) or {}
+    upgrade_targets: list[str] = list(package_data.get("upgrade_targets") or [])
+    all_packages = get_package_catalog()
+
+    upgrade_options = []
+    for target_code in upgrade_targets:
+        target_pkg = all_packages.get(target_code)
+        if target_pkg:
+            display_name = target_pkg.get("display_name", target_code)
+            upgrade_options.append({
+                "package_code": target_code,
+                "display_name": display_name,
+                "description": target_pkg.get("description") or f"Upgrade to {display_name}",
+            })
+
+    return {
+        "package": {
+            "name": resolved.get("display_name") or entitlement.get("package_name") or package_code,
+            "lane": resolved.get("package_lane") or entitlement.get("package_lane") or "",
+            "active_addons": active_addons,
+            "maintenance_status": entitlement.get("maintenance_status") or "not_started",
+        },
+        "capabilities": {
+            "build_family_tree": bool(resolved.get("can_build_family_tree", False)),
+            "link_households": bool(resolved.get("can_link_households", False)),
+            "use_narration": bool(resolved.get("can_use_narration", False)),
+            "use_certificates": bool(resolved.get("can_use_lineage_certificate", False)),
+            "storage_gb": resolved.get("max_storage_gb", 0),
+            "max_uploads": resolved.get("max_uploads", 0),
+            "max_zoom_layers": resolved.get("max_zoom_layers", 0),
+            "max_members": resolved.get("max_members", 0),
+        },
+        "sharing": {
+            "private_account": "Personal vault items, private living-person records, private notes, unapproved uploads",
+            "your_household": "Family tree visible to household members",
+            "approved_linked_families": "Shared lineage visible to linked households (if enabled)",
+            "public_memorial": "Public memorial content only (deceased/memorial nodes)",
+        },
+        "not_shared": [
+            "Personal vault items",
+            "Private living-person records",
+            "Private notes",
+            "Unapproved uploads",
+        ],
+        "upgrade_options": upgrade_options,
+    }

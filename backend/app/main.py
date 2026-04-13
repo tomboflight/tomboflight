@@ -37,8 +37,11 @@ from app.routes.lineage_graph import router as lineage_graph_router
 from app.routes.lineage_nodes import router as lineage_nodes_router
 from app.routes.lineage_proof import router as lineage_proof_router
 from app.routes.lineage_query import router as lineage_query_router
+from app.routes.legacy_messages import router as legacy_messages_router
 from app.routes.link_keys import router as link_keys_router
 from app.routes.link_requests import router as link_requests_router
+from app.routes.linked_network import router as linked_network_router
+from app.routes.vault import router as vault_router
 from app.routes.match_candidates import router as match_candidates_router
 from app.routes.match_generation import router as match_generation_router
 from app.routes.mint_jobs import router as mint_jobs_router
@@ -194,6 +197,9 @@ app.include_router(narrative_records_router)
 # ----------------------------
 app.include_router(link_keys_router)
 app.include_router(link_requests_router)
+app.include_router(linked_network_router)
+app.include_router(vault_router)
+app.include_router(legacy_messages_router)
 
 # ----------------------------
 # Intelligence
