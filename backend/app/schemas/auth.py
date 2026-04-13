@@ -98,6 +98,8 @@ class UserResponse(BaseModel):
     access_tier: Optional[str] = None
     department_role: Optional[str] = None
     status: str
+    mfa_enabled: bool = False
+    mfa_enrolled_at: Optional[str] = None
     created_at: str
 
     policy_version: Optional[str] = None

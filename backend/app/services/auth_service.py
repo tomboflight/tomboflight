@@ -19,7 +19,6 @@ from app.core.security import (
     hash_password,
     verify_password,
 )
-from app.core.role_catalog import has_internal_admin_role
 from app.database import get_database
 from app.schemas.auth import UserCreate
 from app.services.audit_log_service import create_audit_log
@@ -76,17 +75,6 @@ def _session_version(user: dict) -> int:
         return max(0, int(user.get("session_token_version") or 0))
     except Exception:
         return 0
-
-
-def _is_internal_admin_user(user: dict) -> bool:
-    return has_internal_admin_role(
-        (
-            user.get("role"),
-            user.get("access_tier"),
-            user.get("department_role"),
-            user.get("account_type"),
-        )
-    )
 
 
 def _mfa_encrypt_secret(secret: str, *, user_id: str) -> str:
@@ -208,6 +196,8 @@ def build_user_response(user: dict) -> dict:
         "access_tier": user.get("access_tier"),
         "department_role": user.get("department_role"),
         "status": user.get("status", "active"),
+        "mfa_enabled": bool(user.get("mfa_enabled")),
+        "mfa_enrolled_at": user.get("mfa_enrolled_at"),
         "created_at": user["created_at"],
         "policy_version": user.get("policy_version"),
         "terms_accepted_at": user.get("terms_accepted_at"),
@@ -371,23 +361,7 @@ def authenticate_user(email: str, password: str) -> dict[str, Any] | None:
     if not password_hash or not verify_password(password, password_hash):
         return None
 
-    is_internal_admin = _is_internal_admin_user(user)
     mfa_enabled = bool(user.get("mfa_enabled"))
-    if is_internal_admin and not mfa_enabled:
-        challenge = create_access_token(
-            {
-                "sub": user["email"],
-                "user_id": str(user["_id"]),
-                "purpose": "mfa_enroll",
-                "tv": _session_version(user),
-            },
-            expires_minutes=max(2, int(settings.mfa_challenge_expire_minutes or 10)),
-        )
-        return {
-            "status": "mfa_enrollment_required",
-            "mfa_challenge_token": challenge,
-        }
-
     if mfa_enabled:
         challenge = create_access_token(
             {
@@ -455,16 +429,17 @@ def _consume_recovery_code(user: dict, code: str) -> bool:
     return True
 
 
-def begin_mfa_enrollment(challenge_token: str) -> dict[str, Any]:
-    payload = decode_access_token(_normalize_text(challenge_token))
-    if not payload or _normalize_text(payload.get("purpose")) != "mfa_enroll":
-        raise ValueError("Invalid MFA challenge token.")
-    user = get_user_by_email(_normalize_text(payload.get("sub")).lower())
+def _begin_mfa_enrollment_for_user_document(user: dict) -> dict[str, Any]:
     if not user:
         raise ValueError("User not found.")
-    user_id = str(user.get("_id") or "")
-    if _normalize_text(payload.get("user_id")) != user_id:
-        raise ValueError("Invalid MFA challenge token.")
+    if bool(user.get("mfa_enabled")):
+        raise ValueError("MFA is already enabled for this account.")
+
+    user_id = _current_user_id_from_doc(user)
+    email = _normalize_text(user.get("email")).lower()
+    if not user_id or not email:
+        raise ValueError("User account is incomplete.")
+
     secret = _generate_totp_secret()
     now_iso = _now_iso()
     db = get_database()
@@ -479,7 +454,7 @@ def begin_mfa_enrollment(challenge_token: str) -> dict[str, Any]:
     )
     setup_token = create_access_token(
         {
-            "sub": user["email"],
+            "sub": email,
             "user_id": user_id,
             "purpose": "mfa_enroll_verify",
             "tv": _session_version(user),
@@ -489,8 +464,25 @@ def begin_mfa_enrollment(challenge_token: str) -> dict[str, Any]:
     return {
         "setup_token": setup_token,
         "secret": secret,
-        "otpauth_url": _build_mfa_otpauth_uri(secret, email=user["email"]),
+        "otpauth_url": _build_mfa_otpauth_uri(secret, email=email),
     }
+
+
+def begin_mfa_enrollment(challenge_token: str) -> dict[str, Any]:
+    payload = decode_access_token(_normalize_text(challenge_token))
+    if not payload or _normalize_text(payload.get("purpose")) != "mfa_enroll":
+        raise ValueError("Invalid MFA challenge token.")
+    user = get_user_by_email(_normalize_text(payload.get("sub")).lower())
+    if not user:
+        raise ValueError("User not found.")
+    user_id = str(user.get("_id") or "")
+    if _normalize_text(payload.get("user_id")) != user_id:
+        raise ValueError("Invalid MFA challenge token.")
+    return _begin_mfa_enrollment_for_user_document(user)
+
+
+def begin_mfa_enrollment_for_user(user: dict) -> dict[str, Any]:
+    return _begin_mfa_enrollment_for_user_document(user)
 
 
 def verify_mfa_enrollment(setup_token: str, code: str) -> dict[str, Any]:
@@ -614,10 +606,6 @@ def disable_mfa_for_user(
     recovery_code: str | None,
     actor_user_id: str,
 ) -> None:
-    if _is_internal_admin_user(user):
-        raise ValueError(
-            "Internal admin MFA cannot be self-disabled. Use an authorized admin security reset."
-        )
     password_hash = _normalize_text(user.get("password_hash"))
     if not verify_password(current_password, password_hash):
         raise ValueError("Current password is incorrect.")

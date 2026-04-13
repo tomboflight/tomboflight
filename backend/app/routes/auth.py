@@ -24,6 +24,7 @@ from app.services.auth_service import (
     admin_issue_password_reset,
     authenticate_user,
     begin_mfa_enrollment,
+    begin_mfa_enrollment_for_user,
     build_user_response,
     change_password,
     disable_mfa_for_user,
@@ -233,6 +234,22 @@ def issue_csrf_token(request: Request, response: Response, current_user: dict = 
 def mfa_enroll_begin(payload: MfaEnrollmentBeginRequest, response: Response):
     try:
         result = begin_mfa_enrollment(payload.mfa_challenge_token)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    _apply_no_store(response)
+    return result
+
+
+@router.post("/mfa/enroll/begin-session")
+def mfa_enroll_begin_session(
+    response: Response,
+    current_user: dict = Depends(get_current_user),
+):
+    user = get_user_by_id(_current_user_id(current_user))
+    if not user:
+        raise HTTPException(status_code=404, detail="User account not found.")
+    try:
+        result = begin_mfa_enrollment_for_user(user)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     _apply_no_store(response)
