@@ -55,25 +55,61 @@
 
   function getMfaChallengeToken(loginData) {
     return String(
-      loginData?.mfa_challenge_token || loginData?.mfaChallengeToken || "",
+      loginData?.mfa_challenge_token ||
+        loginData?.mfaChallengeToken ||
+        loginData?.challenge_token ||
+        loginData?.challengeToken ||
+        loginData?.mfa_token ||
+        loginData?.mfaToken ||
+        "",
     ).trim();
   }
 
   function isTruthyFlag(value) {
-    return value === true || value === 1 || value === "true" || value === "1";
+    if (value === true || value === 1) return true;
+    if (typeof value !== "string") return false;
+
+    return ["true", "1", "yes"].includes(value.trim().toLowerCase());
+  }
+
+  function getLoginStatus(loginData) {
+    return String(loginData?.status || loginData?.auth_status || "")
+      .trim()
+      .toLowerCase();
+  }
+
+  function isMfaRequired(loginData) {
+    const status = getLoginStatus(loginData);
+    return Boolean(
+      isTruthyFlag(loginData?.mfa_required) ||
+        isTruthyFlag(loginData?.mfaRequired) ||
+        status === "mfa_required" ||
+        status === "mfa_login_required" ||
+        status === "mfa_enrollment_required",
+    );
+  }
+
+  function isMfaEnrollmentRequired(loginData) {
+    return Boolean(
+      isTruthyFlag(loginData?.mfa_enrollment_required) ||
+        isTruthyFlag(loginData?.mfaEnrollmentRequired) ||
+        getLoginStatus(loginData) === "mfa_enrollment_required",
+    );
   }
 
   function isMfaEnrollmentChallenge(loginData) {
     return Boolean(
-      isTruthyFlag(loginData?.mfa_required) &&
-        isTruthyFlag(loginData?.mfa_enrollment_required) &&
+      isMfaRequired(loginData) &&
+        isMfaEnrollmentRequired(loginData) &&
         getMfaChallengeToken(loginData),
     );
   }
 
   function isMfaVerificationChallenge(loginData) {
     return Boolean(
-      isTruthyFlag(loginData?.mfa_required) && getMfaChallengeToken(loginData),
+      isMfaRequired(loginData) &&
+        !isMfaEnrollmentRequired(loginData) &&
+        getMfaChallengeToken(loginData),
     );
   }
 
@@ -660,6 +696,12 @@
         loginData,
         mfaChallengeToken: getMfaChallengeToken(loginData),
       };
+    }
+
+    if (isMfaRequired(loginData)) {
+      throw new Error(
+        "Secure verification could not be started. Please try signing in again.",
+      );
     }
 
     throw new Error("Login succeeded but no access token was returned.");
