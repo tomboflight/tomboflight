@@ -9,6 +9,7 @@ from pymongo.database import Database
 from pymongo.errors import OperationFailure
 
 from app.core.package_catalog import get_package
+from app.core.package_mapping import normalize_package_code as normalize_mapped_package_code
 from app.database import get_database
 from app.services.auth_service import create_pending_checkout_user
 from app.services.billing_service import store_stripe_customer_reference
@@ -49,60 +50,10 @@ def _normalize_email(value: Optional[str]) -> Optional[str]:
 
 
 def _normalize_package_code(value: Optional[str]) -> str:
-    normalized = _normalize(value).lower()
-
-    mapping = {
-        "legacy-snapshot": "legacy_snapshot",
-        "legacy_snapshot": "legacy_snapshot",
-        "legacy-portrait-intro": "legacy_portrait_intro",
-        "legacy_portrait_intro": "legacy_portrait_intro",
-        "digital-legacy-portrait": "digital_legacy_portrait",
-        "digital_legacy_portrait": "digital_legacy_portrait",
-        "starter-family-tree": "household_foundation",
-        "starter_family_tree": "household_foundation",
-        "household-foundation": "household_foundation",
-        "household_foundation": "household_foundation",
-        "heirloom-legacy-tree": "heirloom_legacy_tree",
-        "heirloom_legacy_tree": "heirloom_legacy_tree",
-        "legacy-plus": "legacy_plus",
-        "legacy_plus": "legacy_plus",
-        "family-estate-concierge": "family_estate_concierge",
-        "family_estate_concierge": "family_estate_concierge",
-        "command-structure-network": "command_structure_network",
-        "command_structure_network": "command_structure_network",
-        "extra-upload-pack": "extra_upload_pack",
-        "extra_upload_pack": "extra_upload_pack",
-        "extra-storage": "extra_storage",
-        "extra_storage": "extra_storage",
-        "portrait-polish": "portrait_polish",
-        "portrait_polish": "portrait_polish",
-        "tribute-narration": "tribute_narration",
-        "tribute_narration": "tribute_narration",
-        "extra-mapped-person": "extra_mapped_person",
-        "extra_mapped_person": "extra_mapped_person",
-        "extra-zoom-layer": "extra_zoom_layer",
-        "extra_zoom_layer": "extra_zoom_layer",
-        "additional-narration-minute": "additional_narration_minute",
-        "additional_narration_minute": "additional_narration_minute",
-        "on-site-photo-scanning": "on_site_photo_scanning",
-        "on_site_photo_scanning": "on_site_photo_scanning",
-        "extra-linked-household": "extra_linked_household",
-        "extra_linked_household": "extra_linked_household",
-        "extra-branch": "extra_branch",
-        "extra_branch": "extra_branch",
-        "white-glove-archive-support": "white_glove_archive_support",
-        "white_glove_archive_support": "white_glove_archive_support",
-        "extra-organization-node": "extra_org_node",
-        "extra_org_node": "extra_org_node",
-        "extra-organization-level": "extra_org_level",
-        "extra_org_level": "extra_org_level",
-        "extra-admin-seat": "extra_admin_seat",
-        "extra_admin_seat": "extra_admin_seat",
-        "command-report-add-on": "command_report_addon",
-        "command_report_addon": "command_report_addon",
-    }
-
-    return mapping.get(normalized, normalized or "unknown")
+    normalized = normalize_mapped_package_code(value)
+    if normalized:
+        return normalized
+    return _normalize(value).lower().replace("-", "_") or "unknown"
 
 
 def _normalize_status(value: Any) -> str:
@@ -125,6 +76,23 @@ def _public_checkout_status(source: Any, requested_status: Any) -> str:
 def _set_if_present(target: dict[str, Any], key: str, value: Any) -> None:
     if value is not None and _normalize(str(value)):
         target[key] = value
+
+
+def _trigger_package_provisioning(*, order_id: str = "", project_id: str = "") -> None:
+    try:
+        from app.services.package_provisioning_service import (
+            provision_after_order_change,
+        )
+
+        provision_after_order_change(order_id=order_id, limit=200)
+        if project_id:
+            from app.services.package_provisioning_service import (
+                provision_after_project_change,
+            )
+
+            provision_after_project_change(project_id=project_id, limit=200)
+    except Exception:
+        return
 
 
 def _coerce_object_id(value: Any) -> ObjectId | None:
@@ -444,6 +412,12 @@ def create_order_for_user(user: dict[str, Any], payload: Any) -> dict[str, Any]:
                     project_id=str(project_oid),
                     billing_plan=order_doc.get("billing_plan", "monthly"),
                 )
+
+    if order_doc["item_type"] == "package":
+        _trigger_package_provisioning(
+            order_id=str(order_doc.get("_id") or result.inserted_id),
+            project_id=str(order_doc.get("project_id") or ""),
+        )
 
     return _serialize_order(order_doc)
 
@@ -1050,6 +1024,11 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
                 stripe_session_id=session_id,
                 stripe_payment_link_id=stripe_payment_link_id,
             )
+        if item_type == "package":
+            _trigger_package_provisioning(
+                order_id=str(order_doc.get("_id") or existing["_id"]),
+                project_id=str(order_doc.get("project_id") or ""),
+            )
 
         return {
             "order_id": str(existing["_id"]),
@@ -1110,6 +1089,11 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
                     stripe_subscription_id=_normalize(session.get("subscription")) or None,
                     stripe_customer_id=_normalize(session.get("customer")) or None,
                 )
+    if item_type == "package":
+        _trigger_package_provisioning(
+            order_id=str(order_doc.get("_id") or result.inserted_id),
+            project_id=str(order_doc.get("project_id") or ""),
+        )
 
     return {
         "order_id": str(result.inserted_id),

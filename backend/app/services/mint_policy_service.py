@@ -6,10 +6,10 @@ from bson import ObjectId
 
 from app.config import settings
 from app.core.package_catalog import (
-    get_package,
     get_package_catalog,
     get_package_control_profile,
 )
+from app.core.package_mapping import resolve_package_identity
 from app.database import get_database
 
 BUILD_READY_STATUSES = {
@@ -41,14 +41,14 @@ def _get_project(project_id: str) -> dict[str, Any] | None:
 
 
 def _package_code_from_project(project: dict[str, Any]) -> str:
-    package = get_package(
+    identity = resolve_package_identity(
         _normalize(
             project.get("package_code")
             or project.get("package_slug")
             or project.get("package_type")
         )
     )
-    return _normalize((package or {}).get("package_code")) or _normalize(
+    return _normalize(identity.get("package_code")) or _normalize(
         project.get("package_code")
         or project.get("package_slug")
         or project.get("package_type")
@@ -56,10 +56,8 @@ def _package_code_from_project(project: dict[str, Any]) -> str:
 
 
 def _package_lane_from_project(project: dict[str, Any]) -> str:
-    package = get_package(_package_code_from_project(project))
-    return _normalize((package or {}).get("package_lane")) or _normalize(
-        project.get("project_lane")
-    )
+    identity = resolve_package_identity(_package_code_from_project(project))
+    return _normalize(identity.get("lane")) or _normalize(project.get("project_lane"))
 
 
 def _runtime_enabled(token_type: str | None) -> bool:
@@ -79,12 +77,10 @@ def _project_has_build_state(project: dict[str, Any]) -> bool:
 
 
 def get_package_mint_policy(package_code: str) -> dict[str, Any]:
-    package = get_package(package_code)
-    normalized_code = _normalize((package or {}).get("package_code")) or _normalize(
-        package_code
-    )
-    package_name = _normalize((package or {}).get("display_name")) or normalized_code
-    package_lane = _normalize((package or {}).get("package_lane"))
+    identity = resolve_package_identity(package_code)
+    normalized_code = _normalize(identity.get("package_code")) or _normalize(package_code)
+    package_name = _normalize(identity.get("display_name")) or normalized_code
+    package_lane = _normalize(identity.get("lane"))
     control_profile = get_package_control_profile(normalized_code) or {}
     base_policy = dict(control_profile.get("mint_policy") or {})
     launch_policy = dict(control_profile.get("launch_policy") or {})
