@@ -8,7 +8,11 @@ from app.dependencies.auth import (
     get_current_user,
 )
 from app.services.workspace_access_service import require_workspace_capability
-from app.services.tree_service import get_family_tree, get_filtered_family_tree
+from app.services.tree_service import (
+    get_family_tree,
+    get_filtered_family_tree,
+    get_linked_family_tree,
+)
 
 router = APIRouter(prefix="/tree", tags=["Tree"])
 
@@ -102,3 +106,22 @@ def get_private_tree(
     )
     tree = get_filtered_family_tree(str(context["family"].get("_id")), "private")
     return tree
+
+
+@router.get("/{family_id}/linked")
+def get_linked_tree(
+    family_id: str,
+    mode: str = "default",
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    context = require_workspace_capability(
+        current_user,
+        family_id=family_id,
+        capabilities=("can_link_households",),
+        detail="Your active package does not include linked family graph access.",
+    )
+    resolved_family_id = str(context["family"].get("_id"))
+    normalized_mode = str(mode or "default").strip().lower()
+    if normalized_mode not in {"default", "verified", "narrative", "private"}:
+        raise HTTPException(status_code=400, detail="Invalid linked tree mode.")
+    return get_linked_family_tree(resolved_family_id, normalized_mode)

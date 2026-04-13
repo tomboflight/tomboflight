@@ -263,6 +263,7 @@
           statusNode,
           detailPanel,
           detailEmpty,
+          currentContext,
         );
       });
     }
@@ -283,6 +284,7 @@
         statusNode,
         detailPanel,
         detailEmpty,
+        currentContext,
       );
     }
   }
@@ -364,6 +366,7 @@
     statusNode,
     detailPanel,
     detailEmpty,
+    context,
   ) {
     if (!canvas || !window.TOLAuth) return;
 
@@ -371,17 +374,19 @@
     canvas.innerHTML = "";
 
     try {
-      const graph = await window.TOLAuth.apiRequest(
-        `/families/${familyId}/graph`,
-        {
-          method: "GET",
-        },
-      );
+      const resolved = context?.resolvedEntitlements || {};
+      const canTraverseLinked = Boolean(resolved.can_link_households);
+      const endpoint = canTraverseLinked
+        ? `/tree/${familyId}/linked?mode=private`
+        : `/tree/${familyId}/private`;
+      const graph = await window.TOLAuth.apiRequest(endpoint, { method: "GET" });
 
       renderStructuredTree(graph, canvas, detailPanel, detailEmpty);
       showStatus(
         statusNode,
-        "Visual family tree loaded successfully. Use the zoom controls for larger families.",
+        canTraverseLinked
+          ? "Linked family graph loaded successfully."
+          : "Visual family tree loaded successfully. Use the zoom controls for larger families.",
         "success",
       );
     } catch (error) {

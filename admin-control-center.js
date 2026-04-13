@@ -775,9 +775,12 @@
       const requirements = ACTION_AVAILABILITY[action] || [];
       const allowedByCase =
         selected && (!Array.isArray(selected.quick_actions) || selected.quick_actions.includes(action));
-      const hasRequirements = requirements.every(function (key) {
-        return selected && selected[key];
-      });
+      const hasRequirements =
+        action === "link_order_to_project"
+          ? Boolean(selected && (selected.project_id || selected.order_id))
+          : requirements.every(function (key) {
+              return selected && selected[key];
+            });
       const available = Boolean(selected && allowedByRole && allowedByCase && hasRequirements);
       button.hidden = !allowedByRole;
       button.disabled = !available;
