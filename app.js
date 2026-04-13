@@ -35,6 +35,223 @@
     "command_report_addon",
   ]);
 
+  const PACKAGE_CODE_ALIASES = {
+    "legacy-snapshot": "legacy_snapshot",
+    legacy_snapshot: "legacy_snapshot",
+    "legacy snapshot": "legacy_snapshot",
+    "legacy-portrait-intro": "legacy_portrait_intro",
+    legacy_portrait_intro: "legacy_portrait_intro",
+    "legacy portrait intro": "legacy_portrait_intro",
+    "digital-legacy-portrait": "digital_legacy_portrait",
+    digital_legacy_portrait: "digital_legacy_portrait",
+    "digital legacy portrait": "digital_legacy_portrait",
+    "starter-family-tree": "household_foundation",
+    starter_family_tree: "household_foundation",
+    "starter family tree": "household_foundation",
+    "household-foundation": "household_foundation",
+    household_foundation: "household_foundation",
+    "household foundation": "household_foundation",
+    "heirloom-legacy-tree": "heirloom_legacy_tree",
+    heirloom_legacy_tree: "heirloom_legacy_tree",
+    "heirloom legacy tree": "heirloom_legacy_tree",
+    "legacy-plus": "legacy_plus",
+    legacy_plus: "legacy_plus",
+    "legacy plus": "legacy_plus",
+    "family-estate-concierge": "family_estate_concierge",
+    family_estate_concierge: "family_estate_concierge",
+    "family estate concierge": "family_estate_concierge",
+    "command-structure-network": "command_structure_network",
+    command_structure_network: "command_structure_network",
+    "command structure network": "command_structure_network",
+  };
+
+  const PACKAGE_PROFILES = {
+    legacy_snapshot: {
+      display_name: "Legacy Snapshot",
+      package_lane: "portrait",
+      can_build_household: false,
+      can_build_family_tree: false,
+      can_build_org_chart: false,
+      can_link_households: false,
+      can_link_org_units: false,
+      can_upload_portraits: true,
+      can_upload_verification_docs: true,
+      can_use_viewer: true,
+      can_use_narration: false,
+      can_use_lineage_certificate: false,
+      can_open_family_intake: false,
+      can_open_org_intake: false,
+      can_use_link_keys: false,
+      can_manage_link_keys: false,
+    },
+    legacy_portrait_intro: {
+      display_name: "Legacy Portrait Intro",
+      package_lane: "portrait",
+      can_build_household: false,
+      can_build_family_tree: false,
+      can_build_org_chart: false,
+      can_link_households: false,
+      can_link_org_units: false,
+      can_upload_portraits: true,
+      can_upload_verification_docs: true,
+      can_use_viewer: true,
+      can_use_narration: false,
+      can_use_lineage_certificate: false,
+      can_open_family_intake: false,
+      can_open_org_intake: false,
+      can_use_link_keys: false,
+      can_manage_link_keys: false,
+    },
+    digital_legacy_portrait: {
+      display_name: "Digital Legacy Portrait",
+      package_lane: "portrait",
+      can_build_household: false,
+      can_build_family_tree: false,
+      can_build_org_chart: false,
+      can_link_households: false,
+      can_link_org_units: false,
+      can_upload_portraits: true,
+      can_upload_verification_docs: true,
+      can_use_viewer: true,
+      can_use_narration: false,
+      can_use_lineage_certificate: false,
+      can_open_family_intake: false,
+      can_open_org_intake: false,
+      can_use_link_keys: true,
+      can_manage_link_keys: true,
+    },
+    household_foundation: {
+      display_name: "Household Foundation",
+      package_lane: "household",
+      can_build_household: true,
+      can_build_family_tree: true,
+      can_build_org_chart: false,
+      can_link_households: false,
+      can_link_org_units: false,
+      can_upload_portraits: true,
+      can_upload_verification_docs: true,
+      can_use_viewer: true,
+      can_use_narration: false,
+      can_use_lineage_certificate: true,
+      can_open_family_intake: true,
+      can_open_org_intake: false,
+      can_use_link_keys: true,
+      can_manage_link_keys: true,
+    },
+    heirloom_legacy_tree: {
+      display_name: "Heirloom Legacy Tree",
+      package_lane: "household",
+      can_build_household: true,
+      can_build_family_tree: true,
+      can_build_org_chart: false,
+      can_link_households: false,
+      can_link_org_units: false,
+      can_upload_portraits: true,
+      can_upload_verification_docs: true,
+      can_use_viewer: true,
+      can_use_narration: true,
+      can_use_lineage_certificate: true,
+      can_open_family_intake: true,
+      can_open_org_intake: false,
+      can_use_link_keys: true,
+      can_manage_link_keys: true,
+    },
+    legacy_plus: {
+      display_name: "Legacy Plus",
+      package_lane: "household",
+      can_build_household: true,
+      can_build_family_tree: true,
+      can_build_org_chart: false,
+      can_link_households: true,
+      can_link_org_units: false,
+      can_upload_portraits: true,
+      can_upload_verification_docs: true,
+      can_use_viewer: true,
+      can_use_narration: true,
+      can_use_lineage_certificate: true,
+      can_open_family_intake: true,
+      can_open_org_intake: false,
+      can_use_link_keys: true,
+      can_manage_link_keys: true,
+    },
+    family_estate_concierge: {
+      display_name: "Family Estate Concierge",
+      package_lane: "network",
+      can_build_household: true,
+      can_build_family_tree: true,
+      can_build_org_chart: false,
+      can_link_households: true,
+      can_link_org_units: false,
+      can_upload_portraits: true,
+      can_upload_verification_docs: true,
+      can_use_viewer: true,
+      can_use_narration: true,
+      can_use_lineage_certificate: true,
+      can_open_family_intake: true,
+      can_open_org_intake: false,
+      can_use_link_keys: true,
+      can_manage_link_keys: true,
+    },
+    command_structure_network: {
+      display_name: "Command Structure Network",
+      package_lane: "organization",
+      can_build_household: false,
+      can_build_family_tree: false,
+      can_build_org_chart: true,
+      can_link_households: false,
+      can_link_org_units: true,
+      can_upload_portraits: true,
+      can_upload_verification_docs: true,
+      can_use_viewer: true,
+      can_use_narration: false,
+      can_use_lineage_certificate: false,
+      can_open_family_intake: false,
+      can_open_org_intake: true,
+      can_use_link_keys: false,
+      can_manage_link_keys: false,
+    },
+  };
+
+  function normalizePackageCode(packageCode) {
+    const normalized = String(packageCode || "")
+      .trim()
+      .toLowerCase();
+    return PACKAGE_CODE_ALIASES[normalized] || normalized;
+  }
+
+  function stripMaintenanceSuffix(packageCode) {
+    return normalizePackageCode(packageCode)
+      .replace(/_maintenance_monthly$/, "")
+      .replace(/_maintenance_yearly$/, "");
+  }
+
+  function getPackageProfile(packageCode) {
+    const normalized = stripMaintenanceSuffix(packageCode);
+    const profile = PACKAGE_PROFILES[normalized];
+    return profile ? Object.assign({ package_code: normalized }, profile) : null;
+  }
+
+  function resolvePackageLane(packageCode) {
+    const profile = getPackageProfile(packageCode);
+    return profile && profile.package_lane ? profile.package_lane : "unknown";
+  }
+
+  function resolvePackageDisplayName(packageCode) {
+    const profile = getPackageProfile(packageCode);
+    if (profile && profile.display_name) return profile.display_name;
+    const normalized = stripMaintenanceSuffix(packageCode);
+    return normalized
+      ? normalized.replaceAll("_", " ").replace(/\b\w/g, function (char) {
+          return char.toUpperCase();
+        })
+      : "Package";
+  }
+
+  function packageSupportsLinkKeys(packageCode) {
+    const profile = getPackageProfile(packageCode);
+    return Boolean(profile && profile.can_use_link_keys);
+  }
+
   // Canonical set of internal-role values shared across all modules.
   // Any module needing role gating should call app.isInternalRole() rather
   // than maintaining its own copy of this set.
@@ -705,6 +922,12 @@
     requireSession,
     setStatus,
     clearStatus,
+    normalizePackageCode,
+    stripMaintenanceSuffix,
+    getPackageProfile,
+    resolvePackageLane,
+    resolvePackageDisplayName,
+    packageSupportsLinkKeys,
     inferPurchaseTypeFromSlug,
     savePendingCheckout,
   };

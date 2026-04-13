@@ -1,6 +1,7 @@
 (function () {
   "use strict";
 
+  const app = window.TOLApp || window.TOLAuth;
   const PENDING_CHECKOUT_KEY = "tol_pending_checkout";
   const PORTRAIT_PACKAGE_CODES = new Set([
     "legacy_snapshot",
@@ -70,6 +71,9 @@
   }
 
   function normalizePackageCode(packageCode) {
+    if (app && typeof app.normalizePackageCode === "function") {
+      return app.normalizePackageCode(packageCode);
+    }
     return String(packageCode || "")
       .trim()
       .toLowerCase();
@@ -143,6 +147,12 @@
 
   function packageLane(packageCode) {
     const normalizedBase = basePackageCode(packageCode);
+    if (app && typeof app.resolvePackageLane === "function") {
+      const resolvedLane = app.resolvePackageLane(normalizedBase);
+      if (resolvedLane && resolvedLane !== "unknown") {
+        return resolvedLane;
+      }
+    }
 
     if (PORTRAIT_PACKAGE_CODES.has(normalizedBase)) return "portrait";
     if (HOUSEHOLD_PACKAGE_CODES.has(normalizedBase)) return "household";
@@ -156,7 +166,6 @@
 
   function nextStepMessage(type, packageCode) {
     const normalizedType = inferType(type, packageCode);
-    const normalizedBase = basePackageCode(packageCode);
     const lane = packageLane(packageCode);
 
     if (normalizedType === "maintenance") {
@@ -175,19 +184,19 @@
       return "Your add-on purchase was received. It will be applied to the correct Tomb of Light project or package workflow.";
     }
 
-    if (PORTRAIT_PACKAGE_CODES.has(normalizedBase)) {
+    if (lane === "portrait") {
       return "Your portrait package purchase was received. Continue to your dashboard and upload your portrait and supporting records.";
     }
 
-    if (HOUSEHOLD_PACKAGE_CODES.has(normalizedBase)) {
+    if (lane === "household") {
       return "Your household or family package purchase was received. Continue to your dashboard to begin or continue your family build.";
     }
 
-    if (NETWORK_PACKAGE_CODES.has(normalizedBase)) {
+    if (lane === "network") {
       return "Your network package purchase was received. Continue to your dashboard to begin or continue your family estate build.";
     }
 
-    if (ORGANIZATION_PACKAGE_CODES.has(normalizedBase)) {
+    if (lane === "organization") {
       return "Your organizational package purchase was received. Continue to your dashboard to begin your command or leadership structure build.";
     }
 
