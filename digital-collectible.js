@@ -719,12 +719,33 @@
       fallbackText: "Loading poster preview…",
     });
 
+    const previewLoadToken = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    posterBlock.setAttribute("data-poster-load-token", previewLoadToken);
+
     function clearPosterImageHandlers() {
       posterImg.onload = null;
       posterImg.onerror = null;
     }
 
+    function isCurrentLoadToken() {
+      return posterBlock.getAttribute("data-poster-load-token") === previewLoadToken;
+    }
+
     posterImg.onload = function () {
+      if (!isCurrentLoadToken()) return;
+      const hasRenderableImage =
+        Number.isFinite(posterImg.naturalWidth) &&
+        Number.isFinite(posterImg.naturalHeight) &&
+        posterImg.naturalWidth > 1 &&
+        posterImg.naturalHeight > 1;
+      if (!hasRenderableImage) {
+        setPosterState("unavailable", {
+          href: "",
+          fallbackText: "Poster preview unavailable.",
+        });
+        clearPosterImageHandlers();
+        return;
+      }
       setPosterState("ready", {
         href: posterUrl,
       });
@@ -732,6 +753,7 @@
     };
 
     posterImg.onerror = function () {
+      if (!isCurrentLoadToken()) return;
       setPosterState("unavailable", {
         href: "",
         fallbackText: "Poster preview unavailable.",
