@@ -45,6 +45,11 @@
     if (node) node.textContent = value || "—";
   }
 
+  function setTagline(value) {
+    const node = document.querySelector("[data-delivery-tagline]");
+    if (node) node.textContent = value || "";
+  }
+
   function setLink(selector, href, show) {
     const node = document.querySelector(selector);
     if (!node) return;
@@ -211,18 +216,199 @@
 
   // ── Project ID resolution ───────────────────────────────────────────
 
-  function resolveProjectId(context) {
+  function getWorkspaceHints() {
+    try {
+      const params = new URLSearchParams(window.location.search || "");
+      return {
+        projectId: String(params.get("project_id") || "").trim(),
+        familyId: String(params.get("family_id") || "").trim(),
+      };
+    } catch (_e) {
+      return { projectId: "", familyId: "" };
+    }
+  }
+
+  function getProjectIdFromRecord(record) {
+    if (!record || typeof record !== "object") return "";
+    return String(
+      record.project_id || record.projectId || record.id || record._id || "",
+    ).trim();
+  }
+
+  function resolveProjectId(context, hints) {
+    if (hints && hints.projectId) return hints.projectId;
     if (!context) return "";
     const p = context.activeProject || {};
+    const fallbackRecords = [
+      context.currentWorkspace,
+      context.activeEntitlement,
+      context.paidOrder,
+      context.latestSubmission,
+    ];
+    for (const record of fallbackRecords) {
+      const candidate =
+        String((record && record.projectId) || "").trim() ||
+        getProjectIdFromRecord(record);
+      if (candidate) return candidate;
+    }
     return String(
-      p.id || p._id || context.projectId || "",
+      p.project_id || p.projectId || p.id || p._id || context.projectId || "",
     ).trim();
+  }
+
+  function buildDeliveryFallback(context, mintStatus, mintEligibility, projectId) {
+    const latest = (mintStatus && mintStatus.latest) || {};
+    const mintStatusValue = String(
+      (mintStatus && (mintStatus.current_status || mintStatus.canonical_status)) ||
+        latest.mint_status ||
+        "",
+    ).trim();
+    const mintEnabled = Boolean(
+      (mintStatus && mintStatus.mint_enabled) ||
+        (mintEligibility &&
+          mintEligibility.mint_policy &&
+          mintEligibility.mint_policy.product_includes_onchain_anchor),
+    );
+    const isMinted = normalizeValue(mintStatusValue) === "minted";
+    const isMintPending =
+      mintEnabled &&
+      ["pending", "queued", "approved", "minting", "pending_approval", "draft"].includes(
+        normalizeValue(mintStatusValue),
+      );
+
+    const entitlement = context && context.activeEntitlement ? context.activeEntitlement : {};
+    const paidOrder = context && context.paidOrder ? context.paidOrder : {};
+
+    const packageName =
+      entitlement.package_name ||
+      (context && context.packageName) ||
+      paidOrder.package_name ||
+      "";
+    const packageCode =
+      entitlement.package_code ||
+      (context && context.packageCode) ||
+      paidOrder.package_code ||
+      "";
+    const packageLane =
+      entitlement.package_lane ||
+      (context && context.packageLane) ||
+      (context && context.activeProject && context.activeProject.project_lane) ||
+      "";
+
+    return {
+      project_id: projectId,
+      package_name: packageName,
+      package_code: packageCode,
+      package_lane: packageLane,
+      entitlement_status: entitlement.status || "",
+      delivered_at: entitlement.delivered_at || "",
+      order_id: paidOrder.id || paidOrder._id || "",
+      order_status: paidOrder.status || "",
+      order_created_at: paidOrder.created_at || "",
+      mint_enabled: mintEnabled,
+      mint_status: mintStatusValue,
+      mint_record_id: latest.mint_record_id || "",
+      chain: latest.chain || "",
+      contract_address: latest.contract_address || "",
+      token_id: latest.token_id || "",
+      tx_hash: latest.tx_hash || "",
+      public_token_id: latest.public_token_id || "",
+      wallet: latest.customer_wallet || latest.wallet || "",
+      minted_at: latest.minted_at || "",
+      version_number: latest.version_number,
+      token_type: latest.token_type || "",
+      metadata_uri: latest.metadata_uri || "",
+      poster_image_uri_public: latest.poster_image_uri_public || "",
+      has_poster: Boolean(latest.poster_image_uri_public),
+      has_metadata: Boolean(latest.metadata_uri),
+      is_minted: isMinted,
+      is_mint_pending: isMintPending,
+    };
+  }
+
+  async function loadDeliveryFallback(context, projectId) {
+    const [mintStatusResult, mintEligibilityResult] = await Promise.allSettled([
+      app.apiRequest(`/projects/${encodeURIComponent(projectId)}/mint-status`, {
+        method: "GET",
+      }),
+      app.apiRequest(`/projects/${encodeURIComponent(projectId)}/mint-eligibility`, {
+        method: "GET",
+      }),
+    ]);
+
+    const mintStatus =
+      mintStatusResult.status === "fulfilled" ? mintStatusResult.value : null;
+    const mintEligibility =
+      mintEligibilityResult.status === "fulfilled"
+        ? mintEligibilityResult.value
+        : null;
+
+    if (!mintStatus && !mintEligibility) {
+      const firstError =
+        mintStatusResult.status === "rejected"
+          ? mintStatusResult.reason
+          : mintEligibilityResult.reason;
+      throw firstError || new Error("Digital collectible fallback source unavailable.");
+    }
+
+    return buildDeliveryFallback(context, mintStatus, mintEligibility, projectId);
+  }
+
+  function renderSpecimenRecord(projectId, payload) {
+    const specimenUrl = document.querySelector("[data-specimen-url]");
+    if (specimenUrl) specimenUrl.textContent = window.location.href;
+
+    const specimenTs = document.querySelector("[data-specimen-timestamp]");
+    if (specimenTs) specimenTs.textContent = formatDateTime(new Date().toISOString());
+
+    const specimenAssetId = document.querySelector("[data-specimen-asset-id]");
+    if (specimenAssetId) {
+      specimenAssetId.textContent =
+        (payload && (payload.public_token_id || payload.mint_record_id)) ||
+        projectId ||
+        "—";
+    }
+
+    const specimenOrderId = document.querySelector("[data-specimen-order-id]");
+    if (specimenOrderId) specimenOrderId.textContent = (payload && payload.order_id) || "—";
+  }
+
+  function renderServiceError(err) {
+    const status = Number(err && err.status);
+    let message =
+      "Digital collectible delivery service is temporarily unavailable. Please try again shortly.";
+    let badge = "Service Error";
+
+    if (status === 401 || status === 403) {
+      message =
+        "Authentication is required to view this digital collectible. Please sign in again.";
+      badge = "Auth Required";
+    } else if (status === 404) {
+      message =
+        "No digital collectible delivery record exists for this workspace yet.";
+      badge = "Unavailable";
+    } else if (status === 422) {
+      message =
+        "Project context is invalid for this page. Open this page from your dashboard workspace.";
+      badge = "Context Error";
+    }
+
+    const statusCopy = document.querySelector("[data-delivery-status-copy]");
+    if (statusCopy) statusCopy.textContent = message;
+    setTagline(message);
+    applyBadge("[data-delivery-status-badge]", badge, "badge-error");
+    hide("[data-delivery-identity-row]");
+    hide("[data-delivery-actions]");
+    hide("[data-delivery-anchor-panel]");
+    hide("[data-delivery-order-panel]");
+    renderSpecimenRecord("", null);
   }
 
   // ── Main page renderer ───────────────────────────────────────────────
 
   async function loadDeliveryPage(context) {
-    const projectId = resolveProjectId(context);
+    const hints = getWorkspaceHints();
+    const projectId = resolveProjectId(context, hints);
     if (!projectId) {
       renderNoAccess("No active project found for this account.");
       return;
@@ -235,10 +421,12 @@
         { method: "GET" },
       );
     } catch (err) {
-      renderNoAccess(
-        "Could not load your digital collectible details. Please try again or contact support.",
-      );
-      return;
+      try {
+        delivery = await loadDeliveryFallback(context, projectId);
+      } catch (_fallbackError) {
+        renderServiceError(err);
+        return;
+      }
     }
 
     renderDelivery(delivery, projectId);
@@ -247,11 +435,13 @@
   function renderNoAccess(message) {
     const statusCopy = document.querySelector("[data-delivery-status-copy]");
     if (statusCopy) statusCopy.textContent = message;
+    setTagline(message);
     applyBadge("[data-delivery-status-badge]", "Unavailable", "badge-error");
     hide("[data-delivery-identity-row]");
     hide("[data-delivery-actions]");
     hide("[data-delivery-anchor-panel]");
     hide("[data-delivery-order-panel]");
+    renderSpecimenRecord("", null);
   }
 
   function renderDelivery(d, projectId) {
@@ -266,36 +456,67 @@
     const mintEnabled = Boolean(d.mint_enabled);
     const isMintPending = Boolean(d.is_mint_pending);
     const mintStatus = String(d.mint_status || "").trim();
-    const packageLane = String(d.package_lane || "").trim().toLowerCase();
+    const hasAnyFile = hasPoster || hasMetadata;
+    const paidStatuses = new Set([
+      "paid",
+      "active",
+      "fulfilled",
+      "confirmed",
+      "complete",
+      "completed",
+      "succeeded",
+    ]);
+    const isPaid =
+      paidStatuses.has(normalizeValue(d.order_status)) ||
+      ["active", "fulfilled", "delivered"].includes(
+        normalizeValue(d.entitlement_status),
+      );
 
     // ── Primary status ───────────────────────────────────────────────
-    let primaryStatusText = "Your TOMB OF LIGHT digital collectible has been delivered.";
-    let primaryBadgeText = "Delivered";
-    let primaryBadgeClass = "badge-success";
+    let primaryStatusText =
+      "Your digital collectible record is active. Delivery files will appear as they become available.";
+    let primaryBadgeText = "Active";
+    let primaryBadgeClass = "badge-info";
 
-    if (isMinted) {
+    if (isPaid && isMinted && hasPoster && hasMetadata) {
       primaryStatusText =
         "Your TOMB OF LIGHT digital collectible is minted and delivered. " +
         "Download your NFT-authenticated digital files below.";
       primaryBadgeText = "Delivered & Minted";
       primaryBadgeClass = "badge-success";
-    } else if (isMintPending) {
+    } else if (isPaid && isMinted && hasAnyFile) {
+      primaryStatusText =
+        "Your Legacy Anchor is minted. Some delivery files are still being finalized.";
+      primaryBadgeText = "Partial Delivery";
+      primaryBadgeClass = "badge-info";
+    } else if (isPaid && isMintPending) {
       primaryStatusText =
         "Your TOMB OF LIGHT digital collectible is active. " +
-        "On-chain minting is in progress. Downloads are available below.";
+        "On-chain minting is in progress.";
       primaryBadgeText = "Mint Pending";
       primaryBadgeClass = "badge-info";
-    } else if (mintEnabled && !isMinted && !isMintPending) {
+    } else if (isPaid && hasAnyFile) {
+      primaryStatusText =
+        "Your digital collectible delivery files are available below.";
+      primaryBadgeText = "Delivered";
+      primaryBadgeClass = "badge-success";
+    } else if (isPaid && mintEnabled && !isMinted && !isMintPending) {
       primaryStatusText =
         "Your TOMB OF LIGHT digital collectible is active. " +
-        "Your package includes on-chain minting. Access your available files below.";
+        "Your package includes on-chain minting.";
       primaryBadgeText = "Active";
-      primaryBadgeClass = "badge-success";
+      primaryBadgeClass = "badge-info";
+    } else if (!isPaid && !hasAnyFile && !isMinted) {
+      primaryStatusText =
+        "A delivered digital collectible is not yet available for this workspace.";
+      primaryBadgeText = "Unavailable";
+      primaryBadgeClass = "badge-error";
     }
 
     applyBadge("[data-delivery-status-badge]", primaryBadgeText, primaryBadgeClass);
     const statusCopy = document.querySelector("[data-delivery-status-copy]");
     if (statusCopy) statusCopy.textContent = primaryStatusText;
+    setTagline(primaryStatusText);
 
     // ── Asset identity ───────────────────────────────────────────────
     const assetName = buildAssetName(d);
@@ -442,20 +663,7 @@
     }
 
     // ── Specimen metadata bar ────────────────────────────────────────
-    const specimenUrl = document.querySelector("[data-specimen-url]");
-    if (specimenUrl) specimenUrl.textContent = window.location.href;
-
-    const specimenTs = document.querySelector("[data-specimen-timestamp]");
-    if (specimenTs) specimenTs.textContent = formatDateTime(new Date().toISOString());
-
-    const specimenAssetId = document.querySelector("[data-specimen-asset-id]");
-    if (specimenAssetId) {
-      specimenAssetId.textContent =
-        d.public_token_id || d.mint_record_id || projectId || "—";
-    }
-
-    const specimenOrderId = document.querySelector("[data-specimen-order-id]");
-    if (specimenOrderId) specimenOrderId.textContent = d.order_id || "—";
+    renderSpecimenRecord(projectId, d);
   }
 
   // ── Asset label builders ─────────────────────────────────────────────
