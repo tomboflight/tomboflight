@@ -3,6 +3,7 @@
 
   const app = window.TOLApp || {};
   const authPages = window.TOLAuthPages || {};
+  let posterPreviewLoadSeq = 0;
 
   function isInternalRole(user) {
     if (window.TOLApp && typeof window.TOLApp.isInternalRole === "function") {
@@ -719,7 +720,8 @@
       fallbackText: "Loading poster preview…",
     });
 
-    const previewLoadToken = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    posterPreviewLoadSeq += 1;
+    const previewLoadToken = String(posterPreviewLoadSeq);
     posterBlock.setAttribute("data-poster-load-token", previewLoadToken);
 
     function clearPosterImageHandlers() {
