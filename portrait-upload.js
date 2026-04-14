@@ -4,18 +4,11 @@
   const app = window.TOLApp || window.TOLAuth;
   const authPages = window.TOLAuthPages || {};
   if (!app || typeof app.apiRequest !== "function") {
-    console.error("verification-upload.js requires app.js/auth.js first.");
+    console.error("portrait-upload.js requires app.js/auth.js first.");
     return;
   }
 
   const ALLOWED_PHOTO_TYPES = new Set([
-    "image/jpeg",
-    "image/png",
-    "image/webp",
-  ]);
-
-  const ALLOWED_EVIDENCE_TYPES = new Set([
-    "application/pdf",
     "image/jpeg",
     "image/png",
     "image/webp",
@@ -126,17 +119,56 @@
 
   function updateNav(context, familyIdOverride) {
     [
-      "intake-review.html",
+      "dashboard.html",
       "portrait-upload.html",
       "verification-upload.html",
       "link-keys.html",
       "tree-view.html",
       "lineage-certificate.html",
     ].forEach(function (href) {
-      document.querySelectorAll(`.site-nav a[href^="${href}"]`).forEach(function (node) {
-        node.setAttribute("href", withWorkspaceHref(href, context, familyIdOverride));
-      });
+      document
+        .querySelectorAll(`.site-nav a[href^="${href}"]`)
+        .forEach(function (node) {
+          node.setAttribute("href", withWorkspaceHref(href, context, familyIdOverride));
+        });
     });
+
+    document.querySelectorAll("[data-portrait-dashboard-link]").forEach(function (node) {
+      node.setAttribute("href", withWorkspaceHref("dashboard.html", context, familyIdOverride));
+    });
+
+    document
+      .querySelectorAll("[data-portrait-verification-link]")
+      .forEach(function (node) {
+        node.setAttribute(
+          "href",
+          withWorkspaceHref("verification-upload.html", context, familyIdOverride),
+        );
+      });
+  }
+
+  function setNavVisible(href, isVisible) {
+    document
+      .querySelectorAll(`.site-nav a[href^="${href}"]`)
+      .forEach(function (node) {
+        node.style.display = isVisible ? "" : "none";
+      });
+  }
+
+  function applyEntitlementNav(context) {
+    const resolved = context?.resolvedEntitlements || {};
+    if (!Object.keys(resolved).length) return;
+
+    setNavVisible(
+      "verification-upload.html",
+      Boolean(resolved.can_upload_verification_docs || resolved.can_upload_portraits),
+    );
+    setNavVisible("link-keys.html", Boolean(resolved.can_use_link_keys));
+    setNavVisible("tree-view.html", Boolean(resolved.can_build_family_tree));
+    setNavVisible(
+      "lineage-certificate.html",
+      Boolean(resolved.can_use_lineage_certificate),
+    );
   }
 
   async function getCurrentContext() {
@@ -219,7 +251,7 @@
 
     const joined =
       `${member.first_name || ""} ${member.last_name || ""}`.trim();
-    return joined || "Unknown Member";
+    return joined || "Portrait Subject";
   }
 
   function sortMembers(members) {
@@ -241,7 +273,7 @@
     const currentValue = String(selectNode.value || "").trim();
     const options = sortMembers(members || [])
       .map(function (member) {
-        return `<option value="${escapeHtml(member.id)}">${escapeHtml(getDisplayName(member))} — Gen ${escapeHtml(member.generation ?? "—")}</option>`;
+        return `<option value="${escapeHtml(member.id)}">${escapeHtml(getDisplayName(member))}</option>`;
       })
       .join("");
 
@@ -268,34 +300,27 @@
       : [];
 
     setSelectOptions(
-      document.querySelector("[data-verification-member-select]"),
+      document.querySelector("[data-portrait-member-select]"),
       members,
-      "Select member",
+      "Select subject",
     );
     setSelectOptions(
-      document.querySelector("[data-verification-photo-member]"),
+      document.querySelector("[data-portrait-list-member]"),
       members,
-      "Select member",
-    );
-    setSelectOptions(
-      document.querySelector("[data-verification-list-member]"),
-      members,
-      "Select member",
+      "Select subject",
     );
   }
 
   function renderFamilies(preferredFamilyId) {
-    const selectNode = document.querySelector(
-      "[data-verification-family-select]",
-    );
+    const selectNode = document.querySelector("[data-portrait-family-select]");
     if (!selectNode) return;
 
     if (!families.length) {
       if (preferredFamilyId) {
-        selectNode.innerHTML = `<option value="">Select family</option>`;
+        selectNode.innerHTML = `<option value="">Select portrait record</option>`;
         const option = document.createElement("option");
         option.value = preferredFamilyId;
-        option.textContent = "Current Workspace Family";
+        option.textContent = "Current Portrait Workspace";
         selectNode.appendChild(option);
         selectNode.value = preferredFamilyId;
         currentFamilyId = preferredFamilyId;
@@ -303,13 +328,13 @@
         return;
       }
 
-      selectNode.innerHTML = `<option value="">No family records found</option>`;
+      selectNode.innerHTML = `<option value="">No portrait records found</option>`;
       currentFamilyId = "";
       updateNav(currentContext, "");
       return;
     }
 
-    selectNode.innerHTML = `<option value="">Select family</option>`;
+    selectNode.innerHTML = `<option value="">Select portrait record</option>`;
 
     families.forEach(function (family) {
       const option = document.createElement("option");
@@ -330,7 +355,7 @@
       if (!matched) {
         const option = document.createElement("option");
         option.value = preferredFamilyId;
-        option.textContent = "Current Workspace Family";
+        option.textContent = "Current Portrait Workspace";
         selectNode.appendChild(option);
       }
 
@@ -352,7 +377,7 @@
     if (typeof form.reportValidity === "function" && !form.reportValidity()) {
       setStatus(
         statusNode,
-        "Please complete all required fields and confirmations before continuing.",
+        "Please complete the required fields and confirmations before uploading.",
         "error",
       );
       return false;
@@ -361,27 +386,23 @@
     return true;
   }
 
-  function validateFileType(file, allowedTypes, fallbackExtensions) {
+  function validateFileType(file) {
     if (!file) return false;
 
     const type = String(file.type || "").toLowerCase();
-    if (type && allowedTypes.has(type)) {
+    if (type && ALLOWED_PHOTO_TYPES.has(type)) {
       return true;
     }
 
     const name = String(file.name || "").toLowerCase();
-    return fallbackExtensions.some(function (ext) {
+    return [".jpg", ".jpeg", ".png", ".webp"].some(function (ext) {
       return name.endsWith(ext);
     });
   }
 
   async function loadFamilies(preferredFamilyId) {
-    const pageStatus = document.querySelector(
-      "[data-verification-page-status]",
-    );
-    const actionStatus = document.querySelector(
-      "[data-verification-action-status]",
-    );
+    const pageStatus = document.querySelector("[data-portrait-page-status]");
+    const actionStatus = document.querySelector("[data-portrait-action-status]");
 
     try {
       clearStatus(actionStatus);
@@ -394,35 +415,29 @@
       renderFamilies(preferredFamilyId);
 
       pageStatus.textContent = families.length
-        ? `Loaded ${families.length} family record(s).`
+        ? `Loaded ${families.length} portrait record(s).`
         : preferredFamilyId
-          ? "Loaded your current workspace family."
-          : "No family records are available yet.";
+          ? "Loaded your current portrait workspace."
+          : "No portrait records are available yet.";
     } catch (error) {
-      console.error("Failed to load families:", error);
-      pageStatus.textContent = "Unable to load family records.";
+      console.error("Failed to load portrait records:", error);
+      pageStatus.textContent = "Unable to load portrait records.";
       setStatus(
         actionStatus,
-        error.message || "Unable to load family records.",
+        error.message || "Unable to load portrait records.",
         "error",
       );
     }
   }
 
   async function loadFamilyGraph() {
-    const familySelect = document.querySelector(
-      "[data-verification-family-select]",
-    );
-    const pageStatus = document.querySelector(
-      "[data-verification-page-status]",
-    );
-    const actionStatus = document.querySelector(
-      "[data-verification-action-status]",
-    );
+    const familySelect = document.querySelector("[data-portrait-family-select]");
+    const pageStatus = document.querySelector("[data-portrait-page-status]");
+    const actionStatus = document.querySelector("[data-portrait-action-status]");
 
     const familyId = String(familySelect ? familySelect.value : "").trim();
     if (!familyId) {
-      setStatus(actionStatus, "Please select a family first.", "error");
+      setStatus(actionStatus, "Please select a portrait record first.", "error");
       return;
     }
 
@@ -453,47 +468,48 @@
             );
             members = Array.isArray(graph.members) ? graph.members : [];
           } catch (retryError) {
-            console.warn(
-              "Verification upload member backfill retry failed:",
-              retryError,
-            );
+            console.warn("Portrait member backfill retry failed:", retryError);
           }
         }
       }
 
-      currentGraph = {
-        members,
-      };
-
+      currentGraph = { members };
       populateMemberSelects();
+
       if (members.length) {
-        pageStatus.textContent = `Family ${familyId} loaded successfully.`;
-        setStatus(actionStatus, "Family loaded successfully.", "success");
+        const firstMember = String(members[0]?.id || "").trim();
+        const listMember = document.querySelector("[data-portrait-list-member]");
+        if (members.length === 1 && listMember && firstMember) {
+          listMember.value = firstMember;
+          await loadUploads();
+        }
+
+        pageStatus.textContent = "Portrait record loaded successfully.";
+        setStatus(actionStatus, "Portrait record loaded successfully.", "success");
       } else {
-        pageStatus.textContent = `Family ${familyId} loaded, but no member records were found yet.`;
+        pageStatus.textContent =
+          "Portrait record loaded, but no subject record was found yet.";
         setStatus(
           actionStatus,
-          "Family loaded, but no member record is available yet for uploads. Please refresh or contact Tomb of Light support if this workspace was just provisioned.",
+          "Portrait record loaded, but no subject is available yet for uploads. Please refresh or contact Tomb of Light support if this workspace was just provisioned.",
           "error",
         );
       }
     } catch (error) {
-      console.error("Failed to load family graph:", error);
+      console.error("Failed to load portrait record:", error);
       setStatus(
         actionStatus,
-        error.message || "Unable to load family graph.",
+        error.message || "Unable to load portrait record.",
         "error",
       );
     }
   }
 
-  async function handlePhotoUploadSubmit(event) {
+  async function handlePortraitUploadSubmit(event) {
     event.preventDefault();
 
     const form = event.currentTarget;
-    const actionStatus = document.querySelector(
-      "[data-verification-action-status]",
-    );
+    const actionStatus = document.querySelector("[data-portrait-action-status]");
 
     if (!validateRequiredForm(form, actionStatus)) {
       return;
@@ -502,7 +518,7 @@
     if (!currentFamilyId) {
       setStatus(
         actionStatus,
-        "Load a family before uploading a member photo.",
+        "Load the portrait record before uploading a portrait.",
         "error",
       );
       return;
@@ -513,21 +529,14 @@
     const file = fileInput && fileInput.files ? fileInput.files[0] : null;
 
     if (!memberId || !file) {
-      setStatus(actionStatus, "Member and photo file are required.", "error");
+      setStatus(actionStatus, "Portrait subject and file are required.", "error");
       return;
     }
 
-    if (
-      !validateFileType(file, ALLOWED_PHOTO_TYPES, [
-        ".jpg",
-        ".jpeg",
-        ".png",
-        ".webp",
-      ])
-    ) {
+    if (!validateFileType(file)) {
       setStatus(
         actionStatus,
-        "Invalid file type. Allowed member photo formats are JPG, PNG, and WEBP.",
+        "Invalid file type. Allowed portrait formats are JPG, PNG, and WEBP.",
         "error",
       );
       return;
@@ -539,7 +548,7 @@
     body.append("file", file);
 
     try {
-      setStatus(actionStatus, "Uploading member photo...", "info");
+      setStatus(actionStatus, "Uploading portrait...", "info");
 
       await app.apiRequest("/uploads/member-photo", {
         method: "POST",
@@ -548,127 +557,30 @@
 
       form.reset();
 
-      const listMember = document.querySelector(
-        "[data-verification-list-member]",
-      );
-      const categoryFilter = document.querySelector(
-        "[data-verification-category-filter]",
-      );
+      const memberSelect = document.querySelector("[data-portrait-member-select]");
+      const listMember = document.querySelector("[data-portrait-list-member]");
+      if (memberSelect) memberSelect.value = memberId;
       if (listMember) listMember.value = memberId;
-      if (categoryFilter) categoryFilter.value = "member_photo";
-
-      setStatus(actionStatus, "Member photo uploaded successfully.", "success");
-      await loadUploads();
-    } catch (error) {
-      console.error("Photo upload failed:", error);
-      setStatus(
-        actionStatus,
-        error.message || "Unable to upload member photo.",
-        "error",
-      );
-    }
-  }
-
-  async function handleUploadSubmit(event) {
-    event.preventDefault();
-
-    const form = event.currentTarget;
-    const actionStatus = document.querySelector(
-      "[data-verification-action-status]",
-    );
-
-    if (!validateRequiredForm(form, actionStatus)) {
-      return;
-    }
-
-    if (!currentFamilyId) {
-      setStatus(
-        actionStatus,
-        "Load a family before uploading evidence.",
-        "error",
-      );
-      return;
-    }
-
-    const memberId = String(form.member_id.value || "").trim();
-    const verificationType = String(form.verification_type.value || "").trim();
-    const evidenceKind = String(form.evidence_kind.value || "").trim();
-    const fileInput = form.querySelector('input[name="evidence_file"]');
-    const file = fileInput && fileInput.files ? fileInput.files[0] : null;
-
-    if (!memberId || !verificationType || !evidenceKind || !file) {
-      setStatus(
-        actionStatus,
-        "Member, verification type, evidence kind, and file are required.",
-        "error",
-      );
-      return;
-    }
-
-    if (
-      !validateFileType(file, ALLOWED_EVIDENCE_TYPES, [
-        ".pdf",
-        ".jpg",
-        ".jpeg",
-        ".png",
-        ".webp",
-      ])
-    ) {
-      setStatus(
-        actionStatus,
-        "Invalid file type. Allowed evidence formats are PDF, JPG, PNG, and WEBP.",
-        "error",
-      );
-      return;
-    }
-
-    const body = new FormData();
-    body.append("family_id", currentFamilyId);
-    body.append("member_id", memberId);
-    body.append("verification_type", verificationType);
-    body.append("evidence_kind", evidenceKind);
-    body.append("file", file);
-
-    try {
-      setStatus(actionStatus, "Uploading verification evidence...", "info");
-
-      await app.apiRequest("/uploads/verification-evidence", {
-        method: "POST",
-        body,
-      });
-
-      form.reset();
-
-      const listMember = document.querySelector(
-        "[data-verification-list-member]",
-      );
-      const categoryFilter = document.querySelector(
-        "[data-verification-category-filter]",
-      );
-      if (listMember) listMember.value = memberId;
-      if (categoryFilter) categoryFilter.value = "verification_evidence";
 
       setStatus(
         actionStatus,
-        "Verification evidence uploaded successfully.",
+        "Portrait uploaded successfully. You can return to the dashboard or add another portrait.",
         "success",
       );
       await loadUploads();
     } catch (error) {
-      console.error("Upload failed:", error);
+      console.error("Portrait upload failed:", error);
       setStatus(
         actionStatus,
-        error.message || "Unable to upload verification evidence.",
+        error.message || "Unable to upload portrait.",
         "error",
       );
     }
   }
 
   function renderUploads(uploads) {
-    const listNode = document.querySelector("[data-verification-uploads-list]");
-    const emptyNode = document.querySelector(
-      "[data-verification-uploads-empty]",
-    );
+    const listNode = document.querySelector("[data-portrait-uploads-list]");
+    const emptyNode = document.querySelector("[data-portrait-uploads-empty]");
     if (!listNode) return;
 
     if (!Array.isArray(uploads) || !uploads.length) {
@@ -681,19 +593,19 @@
 
     listNode.innerHTML = uploads
       .map(function (upload, index) {
+        const downloadUrl =
+          (typeof app.getApiBaseUrl === "function"
+            ? app.getApiBaseUrl()
+            : "") +
+          "/uploads/" +
+          encodeURIComponent(upload.id || "") +
+          "/download";
         const preview = String(upload.content_type || "").startsWith("image/")
           ? `<div style="margin: 0 0 1rem;">
                  <img
-                   src="${escapeHtml(
-                     (typeof app.getApiBaseUrl === "function"
-                       ? app.getApiBaseUrl()
-                       : "") +
-                       "/uploads/" +
-                       encodeURIComponent(upload.id || "") +
-                       "/download",
-                   )}"
-                   alt="${escapeHtml(upload.original_filename || "Uploaded image")}"
-                   style="width: 100%; max-height: 220px; object-fit: cover; border-radius: 18px; border: 1px solid rgba(255,255,255,0.08);"
+                   src="${escapeHtml(downloadUrl)}"
+                   alt="${escapeHtml(upload.original_filename || "Uploaded portrait")}"
+                   style="width: 100%; max-height: 260px; object-fit: cover; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08);"
                  />
                </div>`
           : "";
@@ -702,10 +614,8 @@
           <div class="family-record-card">
             <div class="card-number">${index + 1}</div>
             ${preview}
-            <h3>${escapeHtml(upload.original_filename || "Uploaded File")}</h3>
-            <p class="card-copy"><strong>Category:</strong> ${escapeHtml(upload.category || "—")}</p>
-            <p class="card-copy"><strong>Verification Type:</strong> ${escapeHtml(upload.verification_type || "—")}</p>
-            <p class="card-copy"><strong>Evidence Kind:</strong> ${escapeHtml(upload.evidence_kind || "—")}</p>
+            <h3>${escapeHtml(upload.original_filename || "Uploaded Portrait")}</h3>
+            <p class="card-copy"><strong>Category:</strong> ${escapeHtml(upload.category || "member_photo")}</p>
             <p class="card-copy"><strong>Content Type:</strong> ${escapeHtml(upload.content_type || "—")}</p>
             <p class="card-copy"><strong>Size:</strong> ${escapeHtml(upload.size_bytes ?? "—")}</p>
             <p class="card-copy"><strong>Uploaded By:</strong> ${escapeHtml(upload.uploaded_by || "—")}</p>
@@ -728,57 +638,41 @@
   }
 
   async function loadUploads() {
-    const memberSelect = document.querySelector(
-      "[data-verification-list-member]",
-    );
-    const categorySelect = document.querySelector(
-      "[data-verification-category-filter]",
-    );
-    const actionStatus = document.querySelector(
-      "[data-verification-action-status]",
-    );
+    const memberSelect = document.querySelector("[data-portrait-list-member]");
+    const actionStatus = document.querySelector("[data-portrait-action-status]");
 
     const memberId = String(memberSelect ? memberSelect.value : "").trim();
-    const category = String(categorySelect ? categorySelect.value : "").trim();
-
     if (!memberId) {
       setStatus(
         actionStatus,
-        "Select a member before loading uploads.",
+        "Select a portrait subject before loading uploads.",
         "error",
       );
       return;
     }
 
     try {
-      setStatus(actionStatus, "Loading uploaded records...", "info");
+      setStatus(actionStatus, "Loading portrait uploads...", "info");
 
-      const query = category ? `?category=${encodeURIComponent(category)}` : "";
       const payload = await app.apiRequest(
-        `/uploads/member/${encodeURIComponent(memberId)}${query}`,
+        `/uploads/member/${encodeURIComponent(memberId)}?category=member_photo`,
         { method: "GET" },
       );
 
       renderUploads(Array.isArray(payload.uploads) ? payload.uploads : []);
-      setStatus(
-        actionStatus,
-        "Uploaded records loaded successfully.",
-        "success",
-      );
+      setStatus(actionStatus, "Portrait uploads loaded successfully.", "success");
     } catch (error) {
-      console.error("Load uploads failed:", error);
+      console.error("Load portrait uploads failed:", error);
       setStatus(
         actionStatus,
-        error.message || "Unable to load uploaded records.",
+        error.message || "Unable to load portrait uploads.",
         "error",
       );
     }
   }
 
   async function downloadUpload(uploadId, originalFilename) {
-    const actionStatus = document.querySelector(
-      "[data-verification-action-status]",
-    );
+    const actionStatus = document.querySelector("[data-portrait-action-status]");
 
     if (!uploadId) {
       setStatus(actionStatus, "Missing upload id.", "error");
@@ -786,7 +680,7 @@
     }
 
     try {
-      setStatus(actionStatus, "Downloading file...", "info");
+      setStatus(actionStatus, "Downloading portrait...", "info");
 
       const token = app.getToken ? app.getToken() : "";
       const apiBaseUrl =
@@ -803,14 +697,14 @@
 
       if (!response.ok) {
         const text = await response.text();
-        throw new Error(text || "Unable to download file.");
+        throw new Error(text || "Unable to download portrait.");
       }
 
       const blob = await response.blob();
       const objectUrl = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = objectUrl;
-      link.download = originalFilename || "download";
+      link.download = originalFilename || "portrait-download";
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -818,17 +712,17 @@
 
       setStatus(actionStatus, "Download started.", "success");
     } catch (error) {
-      console.error("Download failed:", error);
+      console.error("Portrait download failed:", error);
       setStatus(
         actionStatus,
-        error.message || "Unable to download uploaded file.",
+        error.message || "Unable to download portrait.",
         "error",
       );
     }
   }
 
-  async function setupVerificationUploadPage() {
-    const page = document.querySelector("[data-verification-upload-page]");
+  async function setupPortraitUploadPage() {
+    const page = document.querySelector("[data-portrait-upload-page]");
     if (!page) return;
 
     try {
@@ -847,20 +741,13 @@
 
       const preferredFamilyId = await ensureWorkspaceFamilyId(currentContext);
       updateNav(currentContext, preferredFamilyId);
+      applyEntitlementNav(currentContext);
       await loadFamilies(preferredFamilyId);
 
-      const loadFamilyButton = document.querySelector(
-        "[data-verification-load-family]",
-      );
-      const photoForm = document.querySelector(
-        "[data-verification-photo-form]",
-      );
-      const uploadForm = document.querySelector(
-        "[data-verification-upload-form]",
-      );
-      const loadUploadsButton = document.querySelector(
-        "[data-verification-load-uploads]",
-      );
+      const loadFamilyButton = document.querySelector("[data-portrait-load-family]");
+      const uploadForm = document.querySelector("[data-portrait-upload-form]");
+      const loadUploadsButton = document.querySelector("[data-portrait-load-uploads]");
+      const familySelect = document.querySelector("[data-portrait-family-select]");
 
       if (loadFamilyButton) {
         loadFamilyButton.addEventListener("click", function () {
@@ -868,12 +755,8 @@
         });
       }
 
-      if (photoForm) {
-        photoForm.addEventListener("submit", handlePhotoUploadSubmit);
-      }
-
       if (uploadForm) {
-        uploadForm.addEventListener("submit", handleUploadSubmit);
+        uploadForm.addEventListener("submit", handlePortraitUploadSubmit);
       }
 
       if (loadUploadsButton) {
@@ -883,9 +766,7 @@
       }
 
       document.addEventListener("click", function (event) {
-        const downloadButton = event.target.closest(
-          "[data-download-upload-id]",
-        );
+        const downloadButton = event.target.closest("[data-download-upload-id]");
         if (!downloadButton) return;
 
         downloadUpload(
@@ -894,39 +775,33 @@
         );
       });
 
-      const familySelect = document.querySelector(
-        "[data-verification-family-select]",
-      );
       if (familySelect) {
         familySelect.addEventListener("change", function () {
           updateNav(currentContext, familySelect.value);
         });
       }
+
       if (familySelect && familySelect.value) {
         await loadFamilyGraph();
       }
     } catch (error) {
-      console.error("Verification upload page setup failed:", error);
-      const pageStatus = document.querySelector(
-        "[data-verification-page-status]",
-      );
-      const actionStatus = document.querySelector(
-        "[data-verification-action-status]",
-      );
+      console.error("Portrait upload page setup failed:", error);
+      const pageStatus = document.querySelector("[data-portrait-page-status]");
+      const actionStatus = document.querySelector("[data-portrait-action-status]");
 
       if (pageStatus) {
-        pageStatus.textContent = "Verification workspace could not be loaded.";
+        pageStatus.textContent = "Portrait workspace could not be loaded.";
       }
 
       setStatus(
         actionStatus,
-        error.message || "Unable to load verification workspace.",
+        error.message || "Unable to load portrait workspace.",
         "error",
       );
     }
   }
 
   document.addEventListener("DOMContentLoaded", function () {
-    setupVerificationUploadPage();
+    setupPortraitUploadPage();
   });
 })();

@@ -925,8 +925,8 @@
         workspaceCopy: canUseLinkKeys
           ? "Your portrait workspace connects package access, portrait uploads, verification records, guided delivery, and link capabilities in one place."
           : "Your portrait workspace connects package access, portrait uploads, verification records, and guided delivery in one place.",
-        primaryActionText: "Upload Portrait & Records",
-        primaryActionHref: "verification-upload.html",
+        primaryActionText: "Upload Portrait",
+        primaryActionHref: "portrait-upload.html",
         secondaryActionText: "Verification Uploads",
         secondaryActionHref: "verification-upload.html",
         showTree: canBuildFamilyTree,
@@ -1157,7 +1157,8 @@
           cardCopy: canUseLinkKeys
             ? "Your portrait package is approved and ready for portrait, verification, and link-enabled work."
             : "Your portrait package is approved and ready for portrait and verification work.",
-          nextStep: "Upload portrait and supporting verification records.",
+          nextStep:
+            "Upload the portrait first, then add verification records only if needed.",
           lockNote:
             "Editing is locked because this portrait package has already been approved and provisioned.",
           workspaceCopy: canUseLinkKeys
@@ -1168,7 +1169,8 @@
 
       return {
         cardCopy: "Your portrait intake information is shown below.",
-        nextStep: "Upload portrait and supporting verification records.",
+        nextStep:
+          "Upload the portrait first, then add verification records only if needed.",
         lockNote: "Intake lock state is based on your current review status.",
         workspaceCopy: canUseLinkKeys
           ? "Your portrait workspace connects package access, portrait uploads, verification records, guided delivery, and link capabilities in one place."
@@ -1262,6 +1264,10 @@
       config.navCertificate && hasWorkspaceFamily,
     );
     applyNavVisibility("intake-review.html", config.navIntake);
+    applyNavVisibility(
+      "portrait-upload.html",
+      config.lane === "portrait" && config.showVerification,
+    );
     applyNavVisibility("verification-upload.html", config.showVerification);
     applyNavVisibility("link-keys.html", config.navLinkKeys);
 
@@ -1278,6 +1284,11 @@
     applyAction('.site-nav a[href^="link-keys.html"]', {
       href: withFamilyId("link-keys.html", context),
       show: config.navLinkKeys,
+    });
+
+    applyAction('.site-nav a[href^="portrait-upload.html"]', {
+      href: withFamilyId("portrait-upload.html", context),
+      show: config.lane === "portrait" && config.showVerification,
     });
 
     applyAction(
@@ -1433,8 +1444,8 @@
     const canOpenOrgIntake = Boolean(resolved.can_open_org_intake);
 
     if (lane === "portrait") {
-      actionNode.textContent = "Upload Portrait & Records";
-      actionNode.setAttribute("href", "verification-upload.html");
+      actionNode.textContent = "Upload Portrait";
+      actionNode.setAttribute("href", "portrait-upload.html");
       return;
     }
 
@@ -1568,7 +1579,7 @@
         text(
           nextStep,
           config.lane === "portrait"
-            ? "Upload portrait and supporting records to begin."
+            ? "Upload the portrait first, then add verification records only if needed."
             : config.lane === "organization"
               ? "Upload organization and supporting records to begin."
               : "Open your intake flow and submit the review step.",

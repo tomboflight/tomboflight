@@ -2214,6 +2214,7 @@
     const page = window.location.pathname.split("/").pop() || "";
 
     const uploadPages = new Set(["verification-upload.html"]);
+    const portraitUploadPages = new Set(["portrait-upload.html"]);
     const linkKeyPages = new Set(["link-keys.html"]);
     const familyIntakePages = new Set([
       "intake-welcome.html",
@@ -2235,6 +2236,7 @@
 
     if (
       !uploadPages.has(page) &&
+      !portraitUploadPages.has(page) &&
       !linkKeyPages.has(page) &&
       !familyIntakePages.has(page) &&
       !familyTreePages.has(page) &&
@@ -2288,6 +2290,11 @@
           resolved.can_upload_verification_docs || resolved.can_upload_portraits
         )
       ) {
+        window.location.href = "dashboard.html?purchase_required=1";
+        return;
+      }
+
+      if (portraitUploadPages.has(page) && !resolved.can_upload_portraits) {
         window.location.href = "dashboard.html?purchase_required=1";
         return;
       }
