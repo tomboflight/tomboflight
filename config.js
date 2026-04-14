@@ -2,14 +2,21 @@
   "use strict";
 
   const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
-  const isLocal = LOCAL_HOSTS.has(window.location.hostname);
+  const localHost = String(window.location.hostname || "").toLowerCase();
+  const isLocal = LOCAL_HOSTS.has(localHost);
+  const preferredLocalApiBaseUrl =
+    localHost === "localhost"
+      ? "http://localhost:8000"
+      : localHost === "::1" || localHost === "[::1]"
+      ? "http://[::1]:8000"
+      : "http://127.0.0.1:8000";
 
   window.TOL_CONFIG = Object.assign({}, window.TOL_CONFIG || {}, {
     API_BASE_URL: isLocal
-      ? "http://127.0.0.1:8000"
+      ? preferredLocalApiBaseUrl
       : "https://tomboflight-api.onrender.com",
     API_BASE_URLS: isLocal
-      ? ["http://127.0.0.1:8000"]
+      ? [preferredLocalApiBaseUrl, "http://127.0.0.1:8000", "http://localhost:8000", "http://[::1]:8000"]
       : [
           "https://api.tomboflight.com",
           "https://tomboflight-api.onrender.com",
