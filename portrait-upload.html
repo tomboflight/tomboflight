@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Portrait Uploads | Tomb of Light</title>
+    <meta
+      name="description"
+      content="Upload portrait images for your Tomb of Light portrait workspace."
+    />
+    <link rel="stylesheet" href="styles.css?v=20260331-1" />
+  </head>
+  <body>
+    <a href="#main-content" class="skip-to-content">Skip to main content</a>
+
+    <div class="site-watermark" aria-hidden="true"></div>
+
+    <div class="page-wrap">
+      <header class="site-header">
+        <div class="container site-header-inner">
+          <a class="brand" href="index.html" aria-label="Tomb of Light home">
+            <span>Tomb of Light<span class="brand-symbol">™</span></span>
+          </a>
+
+          <button
+            class="menu-toggle"
+            type="button"
+            aria-label="Toggle navigation"
+            aria-expanded="false"
+            aria-controls="site-nav"
+          >
+            Menu
+          </button>
+
+          <nav class="site-nav" id="site-nav" aria-label="Portal navigation">
+            <a href="dashboard.html">Dashboard</a>
+            <a href="portrait-upload.html" aria-current="page">
+              Portrait Uploads
+            </a>
+            <a href="verification-upload.html">Verification Uploads</a>
+            <a href="link-keys.html" style="display: none">Link Keys</a>
+            <a href="tree-view.html" style="display: none">Family Tree</a>
+            <a href="lineage-certificate.html" style="display: none">
+              Lineage Certificate
+            </a>
+            <a href="faq.html">Help</a>
+          </nav>
+
+          <div class="header-actions">
+            <button class="btn btn-secondary" type="button" data-logout-btn>
+              Log Out
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main id="main-content" data-portrait-upload-page>
+        <section class="page-hero">
+          <div class="container">
+            <div class="page-hero-panel">
+              <span class="eyebrow">Portrait Workspace</span>
+              <h1>Upload your portrait record.</h1>
+              <p data-portrait-page-status>
+                Loading your portrait workspace...
+              </p>
+
+              <div class="inline-actions" style="margin-top: 1.5rem">
+                <a
+                  class="btn btn-primary"
+                  href="dashboard.html"
+                  data-portrait-dashboard-link
+                >
+                  Return to Dashboard
+                </a>
+                <a
+                  class="btn btn-secondary"
+                  href="verification-upload.html"
+                  data-portrait-verification-link
+                >
+                  Verification Uploads
+                </a>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="page-sections">
+          <div class="container form-shell">
+            <div class="form-panel">
+              <span class="eyebrow">Before Uploading</span>
+              <div class="notice">
+                Upload portrait images you have the lawful right to submit and
+                share. Tomb of Light uses these files to support your selected
+                portrait workspace.
+              </div>
+              <div class="helper" style="margin-top: 1rem">
+                Verification records belong on the Verification Uploads page.
+                This page is only for portrait images.
+              </div>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Step 1 - Load Portrait Record</span>
+
+              <div class="form-grid two-col">
+                <label>
+                  Portrait Record
+                  <select data-portrait-family-select>
+                    <option value="">Loading portrait records...</option>
+                  </select>
+                </label>
+
+                <label>
+                  Load Record
+                  <button
+                    class="btn btn-primary"
+                    type="button"
+                    data-portrait-load-family
+                    style="margin-top: 0.45rem"
+                  >
+                    Load Portrait Record
+                  </button>
+                </label>
+              </div>
+
+              <div
+                class="helper"
+                data-portrait-action-status
+                aria-live="polite"
+                style="display: none"
+              ></div>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Step 2 - Upload Portrait</span>
+
+              <form class="form-grid" data-portrait-upload-form novalidate>
+                <div class="form-grid two-col">
+                  <label>
+                    Portrait Subject
+                    <select name="member_id" data-portrait-member-select required>
+                      <option value="">Select subject</option>
+                    </select>
+                  </label>
+
+                  <label>
+                    Portrait File
+                    <input
+                      type="file"
+                      name="photo_file"
+                      accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                      required
+                    />
+                  </label>
+                </div>
+
+                <div class="helper">
+                  Allowed formats: JPG, PNG, and WEBP. Use the image you want
+                  attached to this portrait workspace.
+                </div>
+
+                <div style="display: grid; gap: 0.85rem; margin-top: 0.85rem">
+                  <label
+                    style="display: flex; gap: 0.65rem; align-items: flex-start"
+                  >
+                    <input
+                      type="checkbox"
+                      required
+                      style="margin-top: 0.2rem"
+                    />
+                    <span>
+                      I confirm that I have the lawful right and authority to
+                      upload this image and, where required, permission from the
+                      living individual involved or from the parent or legal
+                      guardian of a minor.
+                    </span>
+                  </label>
+
+                  <label
+                    style="display: flex; gap: 0.65rem; align-items: flex-start"
+                  >
+                    <input
+                      type="checkbox"
+                      required
+                      style="margin-top: 0.2rem"
+                    />
+                    <span>
+                      I understand that Tomb of Light may review uploaded
+                      materials for workflow, support, security, fraud
+                      prevention, compliance, and service fulfillment.
+                    </span>
+                  </label>
+                </div>
+
+                <div class="inline-actions" style="margin-top: 1rem">
+                  <button
+                    class="btn btn-primary"
+                    type="submit"
+                    data-portrait-upload-submit
+                  >
+                    Upload Portrait
+                  </button>
+                  <a
+                    class="btn btn-secondary"
+                    href="dashboard.html"
+                    data-portrait-dashboard-link
+                  >
+                    Return to Dashboard
+                  </a>
+                </div>
+              </form>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Step 3 - Portrait Uploads</span>
+
+              <div class="form-grid two-col">
+                <label>
+                  Portrait Subject
+                  <select data-portrait-list-member>
+                    <option value="">Select subject</option>
+                  </select>
+                </label>
+
+                <label>
+                  Uploaded Portraits
+                  <button
+                    class="btn btn-secondary"
+                    type="button"
+                    data-portrait-load-uploads
+                    style="margin-top: 0.45rem"
+                  >
+                    Load Portrait Uploads
+                  </button>
+                </label>
+              </div>
+
+              <div
+                class="grid-3"
+                data-portrait-uploads-list
+                style="margin-top: 1.25rem"
+              ></div>
+
+              <div
+                class="helper"
+                data-portrait-uploads-empty
+                style="display: none; margin-top: 1rem"
+              >
+                No portrait uploads found for this subject.
+              </div>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Next Step</span>
+              <p class="card-copy">
+                Return to the dashboard when the portrait is uploaded. Use
+                Verification Uploads only when you need to add records or
+                supporting documents.
+              </p>
+
+              <div class="inline-actions" style="margin-top: 1rem">
+                <a
+                  class="btn btn-primary"
+                  href="dashboard.html"
+                  data-portrait-dashboard-link
+                >
+                  Return to Dashboard
+                </a>
+                <a
+                  class="btn btn-secondary"
+                  href="verification-upload.html"
+                  data-portrait-verification-link
+                >
+                  Verification Uploads
+                </a>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <div class="container">
+          <div class="footer-card">
+            <div class="footer-top">
+              <div>
+                <div class="footer-brand">
+                  Tomb of Light<span class="brand-symbol">™</span>
+                </div>
+                <p class="footer-copy">
+                  A private, guided, premium digital lineage platform for
+                  protecting memory, lineage, and identity across generations.
+                </p>
+                <div class="cookie-status" data-cookie-status>
+                  Your cookie preference has not been set yet.
+                </div>
+              </div>
+
+              <div class="footer-links">
+                <a href="privacy.html">Privacy Policy</a>
+                <a href="terms.html">Terms</a>
+                <a href="data-request.html">Data Requests</a>
+                <a href="security.html">Security</a>
+                <a href="faq.html">Help</a>
+              </div>
+            </div>
+
+            <div class="footer-bottom">
+              <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
+              <span>
+                Tomb of Light technology and platform design are proprietary.
+              </span>
+            </div>
+          </div>
+        </div>
+      </footer>
+    </div>
+
+    <div
+      class="cookie-banner"
+      data-cookie-banner
+      role="contentinfo"
+      aria-label="Cookie preferences"
+    >
+      <div class="cookie-inner">
+        <div class="cookie-copy">
+          We use essential site technologies and may use optional analytics
+          tools only where permitted. You can accept or decline optional
+          analytics cookies and review your choices at any time.
+        </div>
+        <div class="cookie-actions">
+          <button class="btn btn-primary" type="button" data-cookie-accept>
+            Accept
+          </button>
+          <button class="btn btn-secondary" type="button" data-cookie-decline>
+            Decline
+          </button>
+          <a class="btn btn-ghost" href="privacy-choices.html">
+            Privacy Choices
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <script src="config.js?v=20260328-7"></script>
+    <script src="app.js?v=20260410-1"></script>
+    <script src="auth.js?v=20260413-4"></script>
+    <script src="portrait-upload.js?v=20260413-1"></script>
+  </body>
+</html>
