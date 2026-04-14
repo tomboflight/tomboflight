@@ -32,7 +32,7 @@ class PackageMappingTests(unittest.TestCase):
         self.assertIn("digital-legacy-portrait", payload["package_map"]["packages"])
 
     def test_admin_repairs_routes_registered(self):
-        paths = {route.path for route in admin_control_router.routes}
+        paths = {str(getattr(route, "path", "")) for route in admin_control_router.routes}
         self.assertIn("/admin/control-center/repairs/missing-entitlements", paths)
         self.assertIn("/admin/control-center/repairs/missing-lanes", paths)
         self.assertIn("/admin/control-center/repairs/unlinked-paid-orders", paths)
@@ -40,4 +40,3 @@ class PackageMappingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

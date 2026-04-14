@@ -63,7 +63,7 @@ def _require_mint_runtime() -> None:
         )
 
 
-def _web3_client():
+def _web3_client() -> Any:
     Web3, _Account = _lazy_web3()
     client = Web3(Web3.HTTPProvider(_normalize(settings.nft_rpc_url)))
     if not client.is_connected():

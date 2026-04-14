@@ -155,6 +155,8 @@ class LinkRequestApprovalTests(unittest.TestCase):
                 is_admin=False,
             )
 
+        self.assertIsNotNone(updated)
+        assert updated is not None
         self.assertEqual(updated["status"], "approved")
         links = db["household_links"].documents
         self.assertEqual(len(links), 1)
