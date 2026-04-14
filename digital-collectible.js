@@ -719,7 +719,6 @@
       href: posterUrl,
       fallbackText: "Loading poster preview…",
     });
-    posterImg.removeAttribute("src");
 
     posterImg.onload = function () {
       setPosterState("ready", {
@@ -734,11 +733,11 @@
         href: "",
         fallbackText: "Poster preview unavailable.",
       });
-      posterImg.removeAttribute("src");
       posterImg.onload = null;
       posterImg.onerror = null;
     };
 
+    posterImg.removeAttribute("src");
     posterImg.src = posterUrl;
   }
 
