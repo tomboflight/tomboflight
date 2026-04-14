@@ -360,26 +360,149 @@
     }
   }
 
+  function getTreeApiBaseUrls() {
+    const configured = window.TOL_CONFIG || {};
+    const configuredList = Array.isArray(configured.API_BASE_URLS)
+      ? configured.API_BASE_URLS
+      : [];
+    const fallbackUrl =
+      typeof configured.API_BASE_URL === "string" ? configured.API_BASE_URL : "";
+    const runtimeBaseUrl =
+      window.TOLAuth && typeof window.TOLAuth.getApiBaseUrl === "function"
+        ? window.TOLAuth.getApiBaseUrl()
+        : "";
+    const candidates = [runtimeBaseUrl, ...configuredList, fallbackUrl]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean);
+    return Array.from(new Set(candidates));
+  }
+
+  function describeTreeResponseShape(payload) {
+    const members = Array.isArray(payload?.members) ? payload.members : null;
+    const relationships = Array.isArray(payload?.relationships)
+      ? payload.relationships
+      : null;
+    const nodes = Array.isArray(payload?.nodes) ? payload.nodes : null;
+    return {
+      payload_type:
+        payload === null ? "null" : Array.isArray(payload) ? "array" : typeof payload,
+      payload_keys:
+        payload && typeof payload === "object" && !Array.isArray(payload)
+          ? Object.keys(payload).sort()
+          : [],
+      member_count: members ? members.length : null,
+      relationship_count: relationships ? relationships.length : null,
+      node_count: nodes ? nodes.length : null,
+    };
+  }
+
+  function parseTreeErrorMessage(responsePayload, responseStatus, responseText) {
+    const detail =
+      (responsePayload &&
+        (responsePayload.detail || responsePayload.message || responsePayload.error)) ||
+      responseText ||
+      `Request failed with status ${responseStatus}`;
+    return String(detail || "").trim();
+  }
+
+  async function fetchTreeGraph(endpoint) {
+    const apiBaseUrls = getTreeApiBaseUrls();
+    const token =
+      window.TOLAuth && typeof window.TOLAuth.getToken === "function"
+        ? window.TOLAuth.getToken()
+        : "";
+    const headers = {
+      Accept: "application/json",
+    };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    let lastError = null;
+    for (const apiBaseUrl of apiBaseUrls) {
+      try {
+        const response = await fetch(`${apiBaseUrl}${endpoint}`, {
+          method: "GET",
+          credentials: "include",
+          headers,
+        });
+
+        const contentType = String(response.headers.get("content-type") || "");
+        let payload = null;
+        let rawText = "";
+        if (contentType.includes("application/json")) {
+          try {
+            payload = await response.json();
+          } catch (_error) {
+            payload = null;
+          }
+        } else {
+          rawText = await response.text();
+          payload = rawText ? { detail: rawText } : null;
+        }
+
+        const bodyShape = describeTreeResponseShape(payload);
+        if (!response.ok) {
+          const failure = new Error(
+            parseTreeErrorMessage(payload, response.status, rawText),
+          );
+          failure.status = response.status;
+          failure.detail = failure.message;
+          failure.endpoint = endpoint;
+          failure.apiBaseUrl = apiBaseUrl;
+          failure.bodyShape = bodyShape;
+          throw failure;
+        }
+
+        return {
+          payload,
+          status: response.status,
+          apiBaseUrl,
+          bodyShape,
+        };
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    if (lastError) {
+      throw lastError;
+    }
+
+    throw new Error("Unable to reach the visual tree service.");
+  }
+
   function categorizeTreeError(error) {
+    const status = Number(error?.status || 0);
     const msg = String(error?.message || "").toLowerCase();
 
-    if (/401|unauthorized|authentication/.test(msg) || /sign in|signed in/.test(msg)) {
+    if (
+      status === 401 ||
+      /401|unauthorized|authentication/.test(msg) ||
+      /sign in|signed in/.test(msg)
+    ) {
       return {
         type: "auth",
-        message:
-          "Authentication error. Please sign in again to view the family tree.",
+        message: "Authentication error. Please sign in again.",
       };
     }
 
     if (
-      /403|forbidden|not authorized|package does not include|does not include/.test(
-        msg,
-      )
+      (status === 403 &&
+        /package does not include|does not include|plan does not include/.test(msg)) ||
+      /package does not include|does not include|plan does not include/.test(msg)
     ) {
+      return {
+        type: "entitlement",
+        message: "Your current package does not include this tree view.",
+      };
+    }
+
+    if (status === 403 || /403|forbidden|not authorized/.test(msg)) {
       return {
         type: "permission",
         message:
-          "Your current plan does not include access to the visual family tree. Please contact support to upgrade.",
+          "You do not have access to this family tree in the current workspace.",
       };
     }
 
@@ -407,6 +530,14 @@
       };
     }
 
+    if (status >= 500) {
+      return {
+        type: "backend",
+        message:
+          "We could not load your visual tree due to a backend service error. Please try again shortly.",
+      };
+    }
+
     return {
       type: "backend",
       message: error.message || "Failed to load the visual tree. Please try again.",
@@ -425,53 +556,104 @@
 
     const resolved = context?.resolvedEntitlements || {};
     const canTraverseLinked = Boolean(resolved.can_link_households);
-    const endpoint = canTraverseLinked
-      ? `/tree/${familyId}/linked?mode=private`
-      : `/tree/${familyId}/private`;
+    const canBuildPrivateTree = Boolean(resolved.can_build_family_tree);
+    const linkedEndpoint = `/tree/${familyId}/linked?mode=private`;
+    const privateEndpoint = `/tree/${familyId}/private`;
+    const attempts = canTraverseLinked
+      ? [
+          { label: "linked", endpoint: linkedEndpoint },
+          ...(canBuildPrivateTree ? [{ label: "private", endpoint: privateEndpoint }] : []),
+        ]
+      : [{ label: "private", endpoint: privateEndpoint }];
     const projectId = getProjectIdFromContext(context);
 
     console.info("[TreeView] Loading tree", {
       family_id: familyId,
       project_id: projectId || "(not resolved)",
-      endpoint,
+      selected_endpoint: attempts[0]?.endpoint || privateEndpoint,
+      requested_endpoints: attempts.map((attempt) => attempt.endpoint),
       can_traverse_linked: canTraverseLinked,
+      can_build_private_tree: canBuildPrivateTree,
     });
 
     showStatus(statusNode, "Loading visual tree...", "info");
     canvas.innerHTML = "";
 
     let graph = null;
+    let selectedEndpoint = "";
+    let selectedSource = "";
+    let selectedStatus = null;
+    let selectedBodyShape = null;
+    let lastError = null;
 
-    try {
-      graph = await window.TOLAuth.apiRequest(endpoint, { method: "GET" });
-    } catch (error) {
+    for (let index = 0; index < attempts.length; index += 1) {
+      const attempt = attempts[index];
+      const isFallbackAttempt = index > 0;
+      selectedEndpoint = attempt.endpoint;
+      selectedSource = attempt.label;
+
+      if (isFallbackAttempt) {
+        showStatus(
+          statusNode,
+          "Linked tree unavailable. Trying private family tree...",
+          "info",
+        );
+      }
+
+      try {
+        const response = await fetchTreeGraph(attempt.endpoint);
+        graph = response.payload;
+        selectedStatus = response.status;
+        selectedBodyShape = response.bodyShape;
+        console.info("[TreeView] Tree data received", {
+          family_id: familyId,
+          project_id: projectId || "(not resolved)",
+          endpoint: attempt.endpoint,
+          source: attempt.label,
+          response_status: response.status,
+          response_body_shape: response.bodyShape,
+          api_base_url: response.apiBaseUrl || "(unknown)",
+        });
+        break;
+      } catch (error) {
+        lastError = error;
+        console.error("[TreeView] Tree fetch failed", {
+          family_id: familyId,
+          project_id: projectId || "(not resolved)",
+          endpoint: attempt.endpoint,
+          source: attempt.label,
+          response_status: error?.status || null,
+          response_body_shape: error?.bodyShape || null,
+          api_base_url: error?.apiBaseUrl || "(unknown)",
+          error_message: error?.message || String(error),
+          error_detail: error?.detail || "",
+          fallback_available: index < attempts.length - 1,
+        });
+      }
+    }
+
+    if (!graph) {
+      const error = lastError || new Error("Failed to load the visual tree.");
       const { type, message: userMessage } = categorizeTreeError(error);
-      console.error("[TreeView] Tree fetch failed", {
+      console.error("[TreeView] Tree load failed after all attempts", {
         family_id: familyId,
         project_id: projectId || "(not resolved)",
-        endpoint,
         error_type: type,
         error_message: error.message,
-        cause: error.cause,
       });
       showStatus(statusNode, userMessage, "error");
       return;
     }
 
-    console.info("[TreeView] Tree data received", {
-      family_id: familyId,
-      endpoint,
-      member_count: Array.isArray(graph?.members) ? graph.members.length : 0,
-      relationship_count: Array.isArray(graph?.relationships)
-        ? graph.relationships.length
-        : 0,
-    });
-
     const members = Array.isArray(graph?.members) ? graph.members : [];
     if (!members.length) {
       console.info("[TreeView] No renderable tree data", {
         family_id: familyId,
-        endpoint,
+        project_id: projectId || "(not resolved)",
+        endpoint: selectedEndpoint,
+        source: selectedSource,
+        response_status: selectedStatus,
+        response_body_shape: selectedBodyShape,
       });
       canvas.innerHTML =
         '<div class="tree-empty">No visual tree data available yet for this family. Family members and relationships must be added before the tree can be rendered.</div>';
@@ -487,7 +669,7 @@
       renderStructuredTree(graph, canvas, detailPanel, detailEmpty);
       showStatus(
         statusNode,
-        canTraverseLinked
+        selectedSource === "linked"
           ? "Linked family graph loaded successfully."
           : "Visual family tree loaded successfully. Use the zoom controls for larger families.",
         "success",
@@ -495,7 +677,11 @@
     } catch (renderError) {
       console.error("[TreeView] Tree render failed", {
         family_id: familyId,
-        endpoint,
+        project_id: projectId || "(not resolved)",
+        endpoint: selectedEndpoint,
+        source: selectedSource,
+        response_status: selectedStatus,
+        response_body_shape: selectedBodyShape,
         error_message: renderError.message,
         stack: renderError.stack,
       });
