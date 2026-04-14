@@ -231,6 +231,93 @@
     });
   }
 
+  function getWorkspaceContext(selected) {
+    const workspace = state.workspace && state.workspace.case_id === state.selectedCaseId ? state.workspace : null;
+    const tabs = (workspace && workspace.tabs) || {};
+    const identity = tabs.identity || {};
+    const packageTab = tabs.package_lane || {};
+    const projectTab = tabs.project || {};
+    const mintTab = tabs.mint_readiness || {};
+    const project = (workspace && workspace.project) || {};
+    const packageInfo = (workspace && workspace.package) || {};
+    const readiness = (workspace && workspace.readiness) || {};
+    const selectedFallback = selected || {};
+    const blocking = Array.isArray(mintTab.blocking_reasons)
+      ? mintTab.blocking_reasons
+      : Array.isArray(readiness.blocking_reasons)
+        ? readiness.blocking_reasons
+        : Array.isArray(selectedFallback.mint_blocking_reasons)
+          ? selectedFallback.mint_blocking_reasons
+          : [];
+
+    return {
+      workspace,
+      caseId: (workspace && workspace.case_id) || selectedFallback.case_id || "",
+      name:
+        identity.full_name ||
+        project.name ||
+        project.project_name ||
+        selectedFallback.name ||
+        selectedFallback.project ||
+        "Customer Case",
+      email: identity.email || selectedFallback.email || "",
+      projectName:
+        projectTab.project_name ||
+        project.name ||
+        project.project_name ||
+        "",
+      packageName:
+        packageTab.package_name ||
+        packageInfo.package_name ||
+        selectedFallback.package_name ||
+        selectedFallback.package ||
+        "Unknown Package",
+      packageCode:
+        packageTab.package_code ||
+        packageInfo.package_code ||
+        selectedFallback.package_code ||
+        "",
+      lane:
+        packageTab.project_lane ||
+        packageTab.lane ||
+        projectTab.project_lane ||
+        projectTab.lane ||
+        selectedFallback.lane ||
+        "",
+      status:
+        projectTab.build_status ||
+        project.status ||
+        selectedFallback.status ||
+        "unknown",
+      alerts: workspace ? workspace.alerts || [] : selectedFallback.alerts || [],
+      guidance: getGuidanceItems(workspace ? workspace.operator_guidance : selectedFallback.operator_guidance),
+      blocking,
+    };
+  }
+
+  function getActionScope(selected) {
+    const workspace = state.workspace && state.workspace.case_id === state.selectedCaseId ? state.workspace : null;
+    const selectedFallback = selected || {};
+    if (!workspace) {
+      return {
+        project_id: selectedFallback.project_id || "",
+        order_id: selectedFallback.order_id || "",
+      };
+    }
+
+    const tabs = workspace.tabs || {};
+    const projectTab = tabs.project || {};
+    const ordersTab = tabs.orders_billing || {};
+    const primaryOrder = ordersTab.primary_order || {};
+    const project = workspace.project || {};
+    const order = workspace.order || {};
+
+    return {
+      project_id: projectTab.project_id || project.id || project.project_id || "",
+      order_id: order.id || primaryOrder.id || "",
+    };
+  }
+
   function renderScalar(value) {
     if (value == null || value === "") return "—";
     if (typeof value === "boolean") return value ? "yes" : "no";
@@ -703,22 +790,31 @@
       return;
     }
 
-    const blocking = Array.isArray(selected.mint_blocking_reasons) ? selected.mint_blocking_reasons : [];
-    const guidance = getGuidanceItems((state.workspace && state.workspace.operator_guidance) || selected.operator_guidance);
+    if (!state.workspace || state.workspace.case_id !== state.selectedCaseId) {
+      node.innerHTML = `
+        <div class="admin-context-card">
+          <h3>Opening case workspace</h3>
+          <p class="card-copy">Loading the case-scoped operations context.</p>
+        </div>
+      `;
+      return;
+    }
+
+    const context = getWorkspaceContext(selected);
     node.innerHTML = `
       <div class="admin-context-card">
-        <h3>${escapeHtml(selected.name || "Selected Case")}</h3>
-        <p class="card-copy"><strong>Case:</strong> <span class="admin-id-ref">${escapeHtml(shortId(selected.case_id))}</span></p>
-        <p class="card-copy"><strong>Package:</strong> ${escapeHtml(selected.package_name || selected.package || "—")} ${selected.package_code ? `<span class="admin-id-ref">${escapeHtml(selected.package_code)}</span>` : ""}</p>
-        <p class="card-copy"><strong>Lane:</strong> ${laneChip(selected.lane)}</p>
-        <div class="admin-context-chip-row">${renderStatusStack(selected.alerts || [], "none")}</div>
+        <h3>${escapeHtml(context.name || "Selected Case")}</h3>
+        <p class="card-copy"><strong>Case:</strong> <span class="admin-id-ref">${escapeHtml(shortId(context.caseId))}</span></p>
+        <p class="card-copy"><strong>Package:</strong> ${escapeHtml(context.packageName || "—")} ${context.packageCode ? `<span class="admin-id-ref">${escapeHtml(context.packageCode)}</span>` : ""}</p>
+        <p class="card-copy"><strong>Lane:</strong> ${laneChip(context.lane)}</p>
+        <div class="admin-context-chip-row">${renderStatusStack(context.alerts || [], "none")}</div>
         <div class="admin-context-guidance">
           <span>Operator Guidance</span>
-          ${renderGuidanceList(guidance, "No active repair guidance", "This case is not reporting a repair blocker in the selected queue.")}
+          ${renderGuidanceList(context.guidance, "No active repair guidance", "This case is not reporting a repair blocker in the selected queue.")}
         </div>
         <div class="admin-blocking-reasons">
           <span>Mint Blocking Reasons</span>
-          <div>${renderStatusStack(blocking, "none")}</div>
+          <div>${renderStatusStack(context.blocking, "none")}</div>
         </div>
       </div>
     `;
@@ -762,12 +858,19 @@
       meta.textContent = "Open a customer or project to isolate the record.";
       return;
     }
-    heading.textContent = selected.name || selected.project || "Customer Case";
-    meta.innerHTML = `${escapeHtml(selected.email || "No email")} · ${escapeHtml(selected.project || "No project")} · ${laneChip(selected.lane)} · ${statusChip(selected.status || "unknown", chipClassForValue(selected.status))}`;
+    if (!state.workspace || state.workspace.case_id !== state.selectedCaseId) {
+      heading.textContent = "Opening case workspace";
+      meta.textContent = "Loading isolated case details.";
+      return;
+    }
+    const context = getWorkspaceContext(selected);
+    heading.textContent = context.name || "Customer Case";
+    meta.innerHTML = `${escapeHtml(context.email || "No email")} · ${escapeHtml(context.projectName || "No project")} · ${laneChip(context.lane)} · ${statusChip(context.status || "unknown", chipClassForValue(context.status))}`;
   }
 
   function updateActionAvailability() {
     const selected = getSelectedCase();
+    const scope = getActionScope(selected);
     document.querySelectorAll("[data-admin-case-action]").forEach(function (button) {
       const action = button.getAttribute("data-admin-case-action") || "";
       const tier = ACTION_TIERS[action] || "utility";
@@ -777,9 +880,9 @@
         selected && (!Array.isArray(selected.quick_actions) || selected.quick_actions.includes(action));
       const hasRequirements =
         action === "link_order_to_project"
-          ? Boolean(selected && (selected.project_id || selected.order_id))
+          ? Boolean(scope.project_id && scope.order_id)
           : requirements.every(function (key) {
-              return selected && selected[key];
+              return scope[key];
             });
       const available = Boolean(selected && allowedByRole && allowedByCase && hasRequirements);
       button.hidden = !allowedByRole;

@@ -85,18 +85,6 @@ CASE_ACTION_PERMISSIONS: dict[str, set[str]] = {
     "rebuild_mint_summary": {"admin.control.mint"},
     "resync_mint_receipt": {"admin.control.mint"},
 }
-# Actions that can benefit from an order resolved from the project owner when
-# no order is directly linked to the project yet.
-ACTIONS_REQUIRING_ORDER_FALLBACK: frozenset[str] = frozenset({
-    "sync_package",
-    "normalize_package",
-    "generate_entitlement",
-    "refresh_entitlement",
-    "run_readiness_check",
-    "queue_for_mint_review",
-    "repair_record",
-    "link_order_to_project",
-})
 BULK_ACTION_PERMISSIONS: dict[str, set[str]] = {
     "repair-missing-entitlements": {"admin.control.billing"},
     "assign-missing-lanes": {"admin.control.write"},
@@ -479,15 +467,20 @@ def _order_by_id(order_id: str) -> dict[str, Any] | None:
     return None
 
 
-def _project_id_candidates(project_id: str) -> list[Any]:
-    values: list[Any] = [project_id]
-    oid = _to_object_id(project_id)
+def _document_id_candidates(value: str) -> list[Any]:
+    normalized = _normalize(value)
+    values: list[Any] = [normalized]
+    oid = _to_object_id(normalized)
     if oid is not None:
         values.append(oid)
         oid_text = str(oid)
         values.append(f'ObjectId("{oid_text}")')
         values.append(f"ObjectId('{oid_text}')")
     return values
+
+
+def _project_id_candidates(project_id: str) -> list[Any]:
+    return _document_id_candidates(project_id)
 
 
 def _project_is_approved(project: dict[str, Any]) -> bool:
@@ -522,6 +515,18 @@ def _latest_linked_order(project_id: str) -> dict[str, Any] | None:
     return None
 
 
+def _order_project_id_matches(order: dict[str, Any] | None, project_id: str) -> bool:
+    if not order or not _normalize(project_id):
+        return False
+    project_ids = {
+        _normalize_object_id(value)
+        for value in _project_id_candidates(project_id)
+        if _normalize_object_id(value)
+    }
+    order_project_id = _normalize_object_id(order.get("project_id"))
+    return bool(order_project_id and order_project_id in project_ids)
+
+
 def _latest_user_order_for_project(project: dict[str, Any]) -> dict[str, Any] | None:
     db = _db()
     owner_email = _normalize_email(project.get("owner_email"))
@@ -545,17 +550,27 @@ def _latest_user_order_for_project(project: dict[str, Any]) -> dict[str, Any] | 
     return None
 
 
-def _resolve_project_order_context(project_id: str, preferred_order_id: str = "") -> tuple[dict[str, Any], dict[str, Any] | None]:
+def _resolve_project_order_context(
+    project_id: str,
+    preferred_order_id: str = "",
+    *,
+    allow_owner_order_fallback: bool = False,
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
     project = _project_by_id(project_id)
     if project is None:
         raise ValueError("Project not found.")
 
+    project_id_str = _normalize(project.get("_id") or project.get("id"))
     order: dict[str, Any] | None = None
     if preferred_order_id:
-        order = _order_by_id(preferred_order_id)
+        preferred_order = _order_by_id(preferred_order_id)
+        if preferred_order is not None:
+            if not _order_project_id_matches(preferred_order, project_id_str):
+                raise ValueError("Order does not belong to the selected project.")
+            order = preferred_order
     if order is None:
-        order = _latest_linked_order(_normalize(project.get("_id")))
-    if order is None:
+        order = _latest_linked_order(project_id_str)
+    if order is None and allow_owner_order_fallback:
         order = _latest_user_order_for_project(project)
     return project, order
 
@@ -1298,9 +1313,10 @@ def project_workspace_snapshot(project_id: str) -> dict[str, Any]:
 
     related_orders = []
     db = _db()
-    owner_email = _normalize_email(project.get("owner_email"))
-    if owner_email:
-        cursor = db["orders"].find({"email": owner_email}).sort("created_at", -1).limit(10)
+    if project_id_str:
+        cursor = db["orders"].find(
+            {"project_id": {"$in": _project_id_candidates(project_id_str)}}
+        ).sort("created_at", -1).limit(10)
         related_orders = [_serialize_order(item) for item in cursor if _serialize_order(item)]
 
     return {
@@ -1900,26 +1916,27 @@ def _find_duplicate_identity(email: str) -> bool:
 
 
 def _workspace_audit_timeline(*, project_id: str, order_id: str = "", owner_email: str = "") -> list[dict[str, Any]]:
+    del owner_email
     db = _db()
     conditions: list[dict[str, Any]] = []
     if project_id:
+        project_id_values = _document_id_candidates(project_id)
         conditions.extend(
             [
-                {"target_id": project_id},
-                {"context.project_id": project_id},
-                {"details.project_id": project_id},
+                {"target_id": {"$in": project_id_values}},
+                {"context.project_id": {"$in": project_id_values}},
+                {"details.project_id": {"$in": project_id_values}},
             ]
         )
     if order_id:
+        order_id_values = _document_id_candidates(order_id)
         conditions.extend(
             [
-                {"target_id": order_id},
-                {"context.order_id": order_id},
-                {"details.order_id": order_id},
+                {"target_id": {"$in": order_id_values}},
+                {"context.order_id": {"$in": order_id_values}},
+                {"details.order_id": {"$in": order_id_values}},
             ]
         )
-    if owner_email:
-        conditions.append({"actor_email": _normalize_email(owner_email)})
     if not conditions:
         return []
 
@@ -1942,17 +1959,16 @@ def _workspace_audit_timeline(*, project_id: str, order_id: str = "", owner_emai
 
 
 def _workspace_uploads_snapshot(project_id: str, owner_email: str) -> dict[str, Any]:
+    del owner_email
     db = _db()
-    filters: list[dict[str, Any]] = []
-    if project_id:
-        filters.append({"project_id": {"$in": _project_id_candidates(project_id)}})
-    if owner_email:
-        filters.append({"uploaded_by": _normalize_email(owner_email)})
-    if not filters:
+    if not project_id:
         return {"count": 0, "items": []}
 
     items: list[dict[str, Any]] = []
-    for item in db["uploaded_files"].find({"$or": filters}).sort("created_at", -1).limit(12):
+    cursor = db["uploaded_files"].find(
+        {"project_id": {"$in": _project_id_candidates(project_id)}}
+    ).sort("created_at", -1).limit(12)
+    for item in cursor:
         items.append(
             {
                 "id": _normalize(item.get("_id")),
@@ -2391,6 +2407,37 @@ def _mint_record_snapshot(project_id: str) -> dict[str, Any]:
     }
 
 
+def _workspace_related_orders(
+    *,
+    project_id: str,
+    primary_order: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    db = _db()
+    seen: set[str] = set()
+    related_orders: list[dict[str, Any]] = []
+
+    def append_order(order: dict[str, Any] | None) -> None:
+        serialized = _serialize_order(order)
+        order_id = _normalize((serialized or {}).get("id"))
+        if not serialized or not order_id or order_id in seen:
+            return
+        seen.add(order_id)
+        related_orders.append(serialized)
+
+    if project_id:
+        cursor = db["orders"].find(
+            {"project_id": {"$in": _project_id_candidates(project_id)}}
+        ).sort("created_at", -1).limit(10)
+        for order in cursor:
+            append_order(order)
+        if _order_project_id_matches(primary_order, project_id):
+            append_order(primary_order)
+        return related_orders[:10]
+
+    append_order(primary_order)
+    return related_orders
+
+
 def _build_user_workspace_payload(user: dict[str, Any]) -> dict[str, Any]:
     user_id = _normalize_object_id(user.get("_id")) or _normalize(user.get("id"))
     if not user_id:
@@ -2596,7 +2643,12 @@ def list_customer_cases(*, search: str = "", limit: int = 50, queue: str = "cust
         order = _latest_linked_order(project_id) or _latest_user_order_for_project(project)
         entitlement = get_project_entitlement(project_id)
         package_fields = _package_fields_from_context(project, order, entitlement)
-        readiness = run_readiness_check(project_id=project_id, order_id=_normalize((order or {}).get("_id")))
+        readiness_order_id = (
+            _normalize((order or {}).get("_id"))
+            if _order_project_id_matches(order, project_id)
+            else ""
+        )
+        readiness = run_readiness_check(project_id=project_id, order_id=readiness_order_id)
         upload_count = count_workspace_uploads(project_id=project_id)
         duplicate_identity = _find_duplicate_identity(_normalize_email(project.get("owner_email")))
         alerts = _case_alerts(
@@ -2635,7 +2687,7 @@ def list_customer_cases(*, search: str = "", limit: int = 50, queue: str = "cust
             {
                 "case_id": project_id,
                 "project_id": project_id,
-                "order_id": _normalize((order or {}).get("_id")) or None,
+                "order_id": readiness_order_id or None,
                 "name": user_name,
                 "email": owner_email or None,
                 "role": _normalize((user or {}).get("role")) or "customer",
@@ -2742,8 +2794,9 @@ def _build_case_workspace_payload(
     project: dict[str, Any] | None,
     order: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    db = _db()
     project_id = _normalize((project or {}).get("_id") or (project or {}).get("id"))
+    if project_id and order is not None and not _order_project_id_matches(order, project_id):
+        order = None
     order_id = _normalize((order or {}).get("_id"))
     owner_email = _normalize_email((project or {}).get("owner_email") or (order or {}).get("email"))
     owner_user_id = _normalize((project or {}).get("owner_user_id") or (order or {}).get("user_id"))
@@ -2762,10 +2815,10 @@ def _build_case_workspace_payload(
     family = _linked_family_snapshot(project)
     mint_record = _mint_record_snapshot(project_id)
 
-    related_orders = []
-    if owner_email:
-        cursor = db["orders"].find({"email": owner_email}).sort("created_at", -1).limit(10)
-        related_orders = [_serialize_order(item) for item in cursor if _serialize_order(item)]
+    related_orders = _workspace_related_orders(
+        project_id=project_id,
+        primary_order=order,
+    )
 
     project_snapshot = _serialize_project(project) if project else None
     order_snapshot = _serialize_order(order)
@@ -2964,7 +3017,7 @@ def customer_case_workspace(case_id: str) -> dict[str, Any]:
         order = _order_by_id(order_id)
         if order is None:
             raise ValueError("Order case not found.")
-        project = _project_by_id(_normalize(order.get("project_id"))) or _find_matching_approved_project_for_order(order)
+        project = _project_by_id(_normalize(order.get("project_id")))
         return _build_case_workspace_payload(
             case_id=normalized_case_id,
             project=project,
@@ -3065,9 +3118,9 @@ def repair_selected_records(*, project_ids: list[str], order_ids: list[str]) -> 
             if order is None:
                 failures.append({"order_id": _normalize(order_id), "error": "Order not found."})
                 continue
-            project = _project_by_id(_normalize(order.get("project_id"))) or _find_matching_approved_project_for_order(order)
+            project = _project_by_id(_normalize(order.get("project_id")))
             if project is None:
-                failures.append({"order_id": _normalize(order_id), "error": "Matching project not found."})
+                failures.append({"order_id": _normalize(order_id), "error": "Linked project not found."})
                 continue
             repaired.append(repair_record(project_id=_normalize(project.get("_id")), order_id=_normalize(order_id)))
         except Exception:
@@ -3126,7 +3179,8 @@ def execute_case_action(
         order = _order_by_id(order_id)
         if order is None:
             raise ValueError("Order not found.")
-        project = _project_by_id(_normalize(order.get("project_id"))) or _find_matching_approved_project_for_order(order)
+        project_id = ""
+        project = _project_by_id(_normalize(order.get("project_id")))
         if project is not None:
             project_id = _normalize(project.get("_id"))
     elif normalized_case_id.startswith("user:"):
@@ -3152,10 +3206,6 @@ def execute_case_action(
 
     if not order_id:
         linked = _latest_linked_order(project_id)
-        if linked is None and normalized_action in ACTIONS_REQUIRING_ORDER_FALLBACK:
-            project_doc = _project_by_id(project_id)
-            if project_doc is not None:
-                linked = _latest_user_order_for_project(project_doc)
         order_id = _normalize((linked or {}).get("_id"))
 
     action_handlers: dict[str, Callable[[], dict[str, Any]]] = {
