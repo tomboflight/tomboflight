@@ -261,7 +261,7 @@ async def store_verification_evidence_upload(
         "family_id": family_id,
         "member_id": member_id,
         "category": "verification_evidence",
-        "internal_only": True,
+        "internal_only": False,
         "customer_visible": False,
         "vault_scope": "personal",
         "visibility_scope": "private",

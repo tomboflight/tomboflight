@@ -308,10 +308,23 @@ def _require_upload_access(
         current_user_id = _current_user_id(current_user)
         uploaded_by_user_id = _normalize_value(upload_record.get("uploaded_by_user_id"))
         owns_record = bool(current_user_id and uploaded_by_user_id and current_user_id == uploaded_by_user_id)
-        if (
-            bool(upload_record.get("internal_only"))
-            or (not bool(upload_record.get("customer_visible")) and not owns_record)
-        ):
+        if bool(upload_record.get("internal_only")) and not owns_record:
+            try:
+                create_audit_log(
+                    "private_file_access_denied",
+                    current_user_id or None,
+                    "upload",
+                    upload_id,
+                    {"reason": "visibility_policy"},
+                )
+            except Exception:
+                pass
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="This file is not visible to customers.",
+            )
+
+        if not bool(upload_record.get("customer_visible")) and not owns_record:
             try:
                 create_audit_log(
                     "private_file_access_denied",
@@ -749,12 +762,28 @@ def _enforce_workspace_storage_limit(
     )
 
 
-def _apply_customer_visibility_filter(query: dict[str, Any], *, is_admin: bool) -> None:
+def _apply_customer_visibility_filter(
+    query: dict[str, Any],
+    *,
+    is_admin: bool,
+    current_user: dict[str, Any],
+) -> None:
     if is_admin:
         return
-    query["internal_only"] = {"$ne": True}
-    query["customer_visible"] = True
-    query["privacy_classification"] = {"$nin": ["admin_only"]}
+
+    current_user_id = _current_user_id(current_user)
+    query["$or"] = [
+        {
+            "uploaded_by_user_id": current_user_id,
+            "privacy_classification": {"$ne": "admin_only"},
+        },
+        {
+            "customer_visible": True,
+            "internal_only": {"$ne": True},
+            "privacy_classification": {"$nin": ["owner_only", "admin_only"]},
+        },
+        {"privacy_classification": "public"},
+    ]
 
 
 @router.get("/admin/review")
@@ -980,7 +1009,11 @@ def list_member_uploads(
         "family_id": _normalize_value((family or {}).get("_id")),
         "project_id": _normalize_value((project or {}).get("_id")),
     }
-    _apply_customer_visibility_filter(query, is_admin=bool(context.get("is_admin")))
+    _apply_customer_visibility_filter(
+        query,
+        is_admin=bool(context.get("is_admin")),
+        current_user=current_user,
+    )
     if normalized_category:
         query["category"] = normalized_category
 
@@ -1019,7 +1052,11 @@ def list_family_uploads(
         "family_id": _normalize_value((family or {}).get("_id")),
         "project_id": _normalize_value((project or {}).get("_id")),
     }
-    _apply_customer_visibility_filter(query, is_admin=bool(context.get("is_admin")))
+    _apply_customer_visibility_filter(
+        query,
+        is_admin=bool(context.get("is_admin")),
+        current_user=current_user,
+    )
     if normalized_category:
         query["category"] = normalized_category
 
