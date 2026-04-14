@@ -135,6 +135,8 @@ class AuthMfaTests(unittest.TestCase):
         )
         with patch.object(auth_service, "_get_database_or_none", return_value=db):
             result = auth_service.authenticate_user("admin@example.com", "StrongPass!123")
+        self.assertIsNotNone(result)
+        assert result is not None
         self.assertEqual(result["status"], "authenticated")
         self.assertTrue(result.get("access_token"))
 
@@ -157,6 +159,8 @@ class AuthMfaTests(unittest.TestCase):
         )
         with patch.object(auth_service, "_get_database_or_none", return_value=db):
             result = auth_service.authenticate_user("admin@example.com", "StrongPass!123")
+        self.assertIsNotNone(result)
+        assert result is not None
         self.assertEqual(result["status"], "mfa_required")
         self.assertTrue(result.get("mfa_challenge_token"))
 
