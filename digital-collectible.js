@@ -50,6 +50,12 @@
     if (node) node.textContent = value || "";
   }
 
+  function setHeroSummaryTagline() {
+    setTagline(
+      "Your NFT-authenticated delivery status, files, and verification record are shown below.",
+    );
+  }
+
   function setLink(selector, href, show) {
     const node = document.querySelector(selector);
     if (!node) return;
@@ -412,7 +418,7 @@
 
     const statusCopy = document.querySelector("[data-delivery-status-copy]");
     if (statusCopy) statusCopy.textContent = message;
-    setTagline(message);
+    setHeroSummaryTagline();
     applyBadge("[data-delivery-status-badge]", badge, "badge-error");
     hide("[data-delivery-identity-row]");
     hide("[data-delivery-actions]");
@@ -452,7 +458,7 @@
   function renderNoAccess(message) {
     const statusCopy = document.querySelector("[data-delivery-status-copy]");
     if (statusCopy) statusCopy.textContent = message;
-    setTagline(message);
+    setHeroSummaryTagline();
     applyBadge("[data-delivery-status-badge]", "Unavailable", "badge-error");
     hide("[data-delivery-identity-row]");
     hide("[data-delivery-actions]");
@@ -524,7 +530,7 @@
     applyBadge("[data-delivery-status-badge]", primaryBadgeText, primaryBadgeClass);
     const statusCopy = document.querySelector("[data-delivery-status-copy]");
     if (statusCopy) statusCopy.textContent = primaryStatusText;
-    setTagline(primaryStatusText);
+    setHeroSummaryTagline();
 
     // ── Asset identity ───────────────────────────────────────────────
     const assetName = buildAssetName(d);
@@ -534,17 +540,7 @@
     show("[data-delivery-identity-row]");
 
     // ── Poster preview ───────────────────────────────────────────────
-    if (hasPoster) {
-      show("[data-delivery-poster-block]");
-      const posterImg = document.querySelector("[data-delivery-poster-preview]");
-      if (posterImg) {
-        posterImg.src = d.poster_image_uri_public;
-        posterImg.style.display = "";
-      }
-      hide("[data-delivery-poster-empty]");
-      const posterWrapper = document.querySelector("[data-delivery-poster-link-wrapper]");
-      if (posterWrapper) posterWrapper.href = d.poster_image_uri_public;
-    }
+    renderPosterPreview(d);
 
     // ── Action buttons ───────────────────────────────────────────────
     const posterBtnHref = projectId
@@ -672,6 +668,80 @@
 
     // ── Specimen metadata bar ────────────────────────────────────────
     renderSpecimenRecord(projectId, d);
+  }
+
+  function setPosterState(state, options) {
+    const posterBlock = document.querySelector("[data-delivery-poster-block]");
+    const posterImg = document.querySelector("[data-delivery-poster-preview]");
+    const posterEmpty = document.querySelector("[data-delivery-poster-empty]");
+    const posterWrapper = document.querySelector("[data-delivery-poster-link-wrapper]");
+    if (!posterBlock || !posterImg || !posterEmpty || !posterWrapper) return;
+
+    const fallbackText = options?.fallbackText || "Poster preview unavailable.";
+    const href = options?.href || "";
+
+    posterBlock.setAttribute("data-poster-state", state);
+    posterEmpty.textContent = fallbackText;
+
+    if (href) {
+      posterWrapper.setAttribute("href", href);
+      posterWrapper.setAttribute("target", "_blank");
+      posterWrapper.setAttribute("rel", "noopener noreferrer");
+      posterWrapper.removeAttribute("aria-disabled");
+      posterWrapper.tabIndex = 0;
+    } else {
+      posterWrapper.setAttribute("href", "#");
+      posterWrapper.removeAttribute("target");
+      posterWrapper.removeAttribute("rel");
+      posterWrapper.setAttribute("aria-disabled", "true");
+      posterWrapper.tabIndex = -1;
+    }
+
+    const isReady = state === "ready";
+    posterImg.style.display = isReady ? "" : "none";
+    posterEmpty.style.display = isReady ? "none" : "";
+  }
+
+  function renderPosterPreview(d) {
+    const posterBlock = document.querySelector("[data-delivery-poster-block]");
+    const posterImg = document.querySelector("[data-delivery-poster-preview]");
+    const posterUrl = (d?.poster_image_uri_public || "").trim();
+    if (!posterBlock || !posterImg) return;
+
+    if (!posterUrl) {
+      hide("[data-delivery-poster-block]");
+      return;
+    }
+
+    show("[data-delivery-poster-block]");
+    setPosterState("loading", {
+      href: posterUrl,
+      fallbackText: "Loading poster preview…",
+    });
+
+    function clearPosterImageHandlers() {
+      posterImg.onload = null;
+      posterImg.onerror = null;
+    }
+
+    posterImg.onload = function () {
+      setPosterState("ready", {
+        href: posterUrl,
+      });
+      clearPosterImageHandlers();
+    };
+
+    posterImg.onerror = function () {
+      setPosterState("unavailable", {
+        href: "",
+        fallbackText: "Poster preview unavailable.",
+      });
+      clearPosterImageHandlers();
+    };
+
+    // Clear existing src first so the browser treats the next src assignment as a new load request.
+    posterImg.removeAttribute("src");
+    posterImg.src = posterUrl;
   }
 
   // ── Asset label builders ─────────────────────────────────────────────

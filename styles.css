@@ -4652,7 +4652,70 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
 }
 
 .delivery-asset-poster-block {
-  flex: 0 0 auto;
+  flex: 1 1 220px;
+  min-width: 180px;
+  max-width: 260px;
+}
+
+.delivery-asset-poster-block .anchor-poster-card {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  padding: 0.7rem 0.85rem;
+  border-radius: 16px;
+  border: 1px solid var(--border-soft);
+  background: rgba(255, 255, 255, 0.02);
+  text-decoration: none;
+  color: inherit;
+}
+
+.delivery-asset-poster-block .anchor-poster-card[aria-disabled="true"] {
+  pointer-events: none;
+}
+
+.delivery-asset-poster-block .anchor-poster-preview {
+  display: none;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  object-position: center;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 14px 36px rgba(4, 8, 16, 0.42);
+}
+
+.delivery-asset-poster-block .anchor-poster-empty {
+  display: block;
+  max-width: none;
+  margin: 0;
+  text-align: left;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.delivery-asset-poster-block[data-poster-state="ready"] .anchor-poster-card {
+  padding: 0.55rem;
+  border-radius: 18px;
+  border-color: rgba(200, 169, 110, 0.44);
+  background:
+    radial-gradient(circle at top, rgba(122, 200, 255, 0.14), transparent 52%),
+    rgba(255, 255, 255, 0.03);
+}
+
+.delivery-asset-poster-block[data-poster-state="ready"] .anchor-poster-preview {
+  display: block;
+}
+
+.delivery-asset-poster-block[data-poster-state="ready"] .anchor-poster-empty {
+  display: none;
+}
+
+.delivery-asset-poster-block[data-poster-state="loading"] .anchor-poster-empty {
+  color: var(--color-text-muted, #888);
+}
+
+.delivery-asset-poster-block[data-poster-state="unavailable"] .anchor-poster-card {
+  padding: 0.62rem 0.8rem;
 }
 
 .delivery-action-row {
@@ -4701,6 +4764,36 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
   color: var(--color-text, #f2f2f2);
   font-family: var(--font-mono, monospace);
   word-break: break-all;
+}
+
+@media (max-width: 760px) {
+  .delivery-asset-identity {
+    gap: 0.9rem;
+    margin-bottom: 0.9rem;
+  }
+
+  .delivery-asset-poster-block {
+    flex: 1 1 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .delivery-asset-poster-block .anchor-poster-card {
+    padding: 0.62rem 0.72rem;
+    border-radius: 14px;
+  }
+
+  .delivery-asset-poster-block[data-poster-state="ready"] .anchor-poster-card {
+    padding: 0.5rem;
+  }
+
+  .delivery-asset-poster-block .anchor-poster-preview {
+    max-height: min(56vh, 440px);
+  }
+
+  .delivery-action-row {
+    margin-top: 0.8rem;
+  }
 }
 
 /* Status badge variants used on this page */
