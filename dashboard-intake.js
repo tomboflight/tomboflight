@@ -1292,6 +1292,14 @@
     });
 
     applyAction(
+      "[data-dashboard-digital-collectible-action], a[href^=\"digital-collectible.html\"]",
+      {
+        href: withFamilyId("digital-collectible.html", context),
+        show: true,
+      },
+    );
+
+    applyAction(
       "[data-dashboard-hero-primary-action], [data-dashboard-package-primary-action]",
       {
         text: primaryAction.text,

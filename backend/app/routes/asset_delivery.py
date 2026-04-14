@@ -141,7 +141,7 @@ def get_digital_collectible_delivery(
     token_id = _normalize(latest.get("token_id") or "")
     tx_hash = _normalize(latest.get("tx_hash") or "")
     public_token_id = _normalize(latest.get("public_token_id") or "")
-    wallet = _normalize(latest.get("wallet") or "")
+    wallet = _normalize(latest.get("wallet") or latest.get("customer_wallet") or "")
     metadata_uri = _normalize(latest.get("metadata_uri") or "")
     poster_image_uri_public = _normalize(latest.get("poster_image_uri_public") or "")
     minted_at = latest.get("minted_at")
@@ -199,6 +199,8 @@ def get_digital_collectible_delivery(
         "tx_hash": tx_hash,
         "public_token_id": public_token_id,
         "wallet": wallet,
+        # Backward-compatible alias for consumers still reading customer_wallet.
+        "customer_wallet": wallet,
         "minted_at": _fmt_datetime(minted_at),
         "version_number": version_number,
         "token_type": token_type,
