@@ -3,6 +3,7 @@
 
   const app = window.TOLApp || {};
   const authPages = window.TOLAuthPages || {};
+  const MIN_RENDERABLE_POSTER_DIMENSION_PX = 2;
   let posterPreviewLoadSeq = 0;
 
   function isInternalRole(user) {
@@ -721,7 +722,7 @@
     });
 
     posterPreviewLoadSeq += 1;
-    const previewLoadToken = String(posterPreviewLoadSeq);
+    const previewLoadToken = posterPreviewLoadSeq;
     posterBlock.setAttribute("data-poster-load-token", previewLoadToken);
 
     function clearPosterImageHandlers() {
@@ -730,7 +731,7 @@
     }
 
     function isCurrentLoadToken() {
-      return posterBlock.getAttribute("data-poster-load-token") === previewLoadToken;
+      return Number(posterBlock.getAttribute("data-poster-load-token")) === previewLoadToken;
     }
 
     posterImg.onload = function () {
@@ -738,8 +739,8 @@
       const hasRenderableImage =
         Number.isFinite(posterImg.naturalWidth) &&
         Number.isFinite(posterImg.naturalHeight) &&
-        posterImg.naturalWidth > 1 &&
-        posterImg.naturalHeight > 1;
+        posterImg.naturalWidth >= MIN_RENDERABLE_POSTER_DIMENSION_PX &&
+        posterImg.naturalHeight >= MIN_RENDERABLE_POSTER_DIMENSION_PX;
       if (!hasRenderableImage) {
         setPosterState("unavailable", {
           href: "",
