@@ -9,6 +9,7 @@ from app.database import close_mongo_connection, connect_to_mongo, get_database
 from app.routes.admin_intake_submissions import (
     router as admin_intake_submissions_router,
 )
+from app.routes.asset_delivery import router as asset_delivery_router
 from app.routes.admin_control_center import router as admin_control_center_router
 from app.routes.admin_maintenance import router as admin_maintenance_router
 from app.routes.audit_logs import router as audit_logs_router
@@ -173,6 +174,7 @@ app.include_router(viewer_manifest_router)
 app.include_router(mint_policy_router)
 app.include_router(mint_records_router)
 app.include_router(mint_jobs_router)
+app.include_router(asset_delivery_router)
 
 # Stripe Webhooks
 app.include_router(stripe_webhooks_router)

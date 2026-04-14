@@ -4591,3 +4591,131 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
     grid-template-columns: 1fr;
   }
 }
+
+/* ============================================================
+   Digital Collectible Delivery Page
+   ============================================================ */
+
+.delivery-mark {
+  display: block;
+  font-size: 2.6rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-gold, #c8a96e);
+  line-height: 1.1;
+}
+
+.delivery-tagline {
+  font-size: 1.05rem;
+  color: var(--color-text-muted, #888);
+  margin-top: 0.5rem;
+}
+
+.delivery-primary-panel {
+  border-top: 3px solid var(--color-gold, #c8a96e);
+}
+
+.delivery-asset-identity {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  margin: 1rem 0 1.25rem;
+}
+
+.delivery-asset-name-block {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.delivery-asset-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-muted, #888);
+  margin: 0 0 0.2rem;
+}
+
+.delivery-asset-name {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--color-text, #f2f2f2);
+  word-break: break-word;
+  margin: 0 0 0.2rem;
+}
+
+.delivery-asset-sub {
+  font-size: 0.82rem;
+  color: var(--color-text-muted, #888);
+  margin: 0;
+}
+
+.delivery-asset-poster-block {
+  flex: 0 0 auto;
+}
+
+.delivery-action-row {
+  margin-top: 1.1rem;
+}
+
+.delivery-unavailable-note {
+  color: var(--color-text-muted, #888);
+  font-style: italic;
+  font-size: 0.88rem;
+}
+
+.delivery-detail-grid {
+  margin-top: 0.75rem;
+}
+
+/* Specimen / Webpage Record bar */
+.delivery-specimen-bar {
+  border-top: 2px solid var(--color-border, #333);
+  padding: 1rem 1.25rem;
+}
+
+.delivery-specimen-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 2rem;
+  margin-top: 0.5rem;
+}
+
+.delivery-specimen-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.delivery-specimen-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-text-muted, #888);
+}
+
+.delivery-specimen-value {
+  font-size: 0.78rem;
+  color: var(--color-text, #f2f2f2);
+  font-family: var(--font-mono, monospace);
+  word-break: break-all;
+}
+
+/* Status badge variants used on this page */
+.badge-success { background: var(--color-green, #2a7a3b) !important; color: #fff !important; }
+.badge-info    { background: var(--color-blue, #1a5fa8) !important;  color: #fff !important; }
+.badge-warning { background: var(--color-amber, #a07a10) !important; color: #fff !important; }
+.badge-error   { background: var(--color-red, #8b1a1a) !important;   color: #fff !important; }
+
+@media (max-width: 760px) {
+  .delivery-mark {
+    font-size: 1.8rem;
+  }
+
+  .delivery-specimen-fields {
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+}
