@@ -199,6 +199,7 @@ def get_digital_collectible_delivery(
         "tx_hash": tx_hash,
         "public_token_id": public_token_id,
         "wallet": wallet,
+        # Backward-compatible alias for consumers still reading customer_wallet.
         "customer_wallet": wallet,
         "minted_at": _fmt_datetime(minted_at),
         "version_number": version_number,
