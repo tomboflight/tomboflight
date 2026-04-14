@@ -4676,11 +4676,13 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
 .delivery-asset-poster-block .anchor-poster-preview {
   display: none;
   width: 100%;
-  aspect-ratio: 3 / 4;
-  object-fit: cover;
+  height: auto;
+  max-height: min(58vh, 460px);
+  object-fit: contain;
   object-position: center;
   border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(4, 8, 16, 0.32);
   box-shadow: 0 14px 36px rgba(4, 8, 16, 0.42);
 }
 
@@ -4694,6 +4696,9 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
 }
 
 .delivery-asset-poster-block[data-poster-state="ready"] .anchor-poster-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 0.55rem;
   border-radius: 18px;
   border-color: rgba(200, 169, 110, 0.44);
@@ -4788,7 +4793,7 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
   }
 
   .delivery-asset-poster-block .anchor-poster-preview {
-    max-height: min(56vh, 440px);
+    max-height: min(44vh, 320px);
   }
 
   .delivery-action-row {

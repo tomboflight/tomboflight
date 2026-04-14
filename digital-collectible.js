@@ -3,6 +3,8 @@
 
   const app = window.TOLApp || {};
   const authPages = window.TOLAuthPages || {};
+  // Treat 1x1 assets as non-renderable placeholders so we collapse to compact fallback.
+  const MIN_RENDERABLE_POSTER_DIMENSION_PX = 2;
 
   function isInternalRole(user) {
     if (window.TOLApp && typeof window.TOLApp.isInternalRole === "function") {
@@ -719,12 +721,36 @@
       fallbackText: "Loading poster preview…",
     });
 
+    const previewLoadToken =
+      Number(posterBlock.getAttribute("data-poster-load-token-seq") || "0") + 1;
+    const previewLoadTokenValue = String(previewLoadToken);
+    posterBlock.setAttribute("data-poster-load-token-seq", previewLoadTokenValue);
+    posterBlock.setAttribute("data-poster-load-token", previewLoadTokenValue);
+
     function clearPosterImageHandlers() {
       posterImg.onload = null;
       posterImg.onerror = null;
     }
 
+    function isCurrentLoadToken() {
+      return posterBlock.getAttribute("data-poster-load-token") === previewLoadTokenValue;
+    }
+
     posterImg.onload = function () {
+      if (!isCurrentLoadToken()) return;
+      const hasRenderableImage =
+        Number.isFinite(posterImg.naturalWidth) &&
+        Number.isFinite(posterImg.naturalHeight) &&
+        posterImg.naturalWidth >= MIN_RENDERABLE_POSTER_DIMENSION_PX &&
+        posterImg.naturalHeight >= MIN_RENDERABLE_POSTER_DIMENSION_PX;
+      if (!hasRenderableImage) {
+        setPosterState("unavailable", {
+          href: "",
+          fallbackText: "Poster preview unavailable.",
+        });
+        clearPosterImageHandlers();
+        return;
+      }
       setPosterState("ready", {
         href: posterUrl,
       });
@@ -732,6 +758,7 @@
     };
 
     posterImg.onerror = function () {
+      if (!isCurrentLoadToken()) return;
       setPosterState("unavailable", {
         href: "",
         fallbackText: "Poster preview unavailable.",
