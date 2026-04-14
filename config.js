@@ -10,13 +10,21 @@
       : localHost === "::1" || localHost === "[::1]"
       ? "http://[::1]:8000"
       : "http://127.0.0.1:8000";
+  const localApiBaseUrls = Array.from(
+    new Set([
+      preferredLocalApiBaseUrl,
+      "http://127.0.0.1:8000",
+      "http://localhost:8000",
+      "http://[::1]:8000",
+    ]),
+  );
 
   window.TOL_CONFIG = Object.assign({}, window.TOL_CONFIG || {}, {
     API_BASE_URL: isLocal
       ? preferredLocalApiBaseUrl
       : "https://tomboflight-api.onrender.com",
     API_BASE_URLS: isLocal
-      ? [preferredLocalApiBaseUrl, "http://127.0.0.1:8000", "http://localhost:8000", "http://[::1]:8000"]
+      ? localApiBaseUrls
       : [
           "https://api.tomboflight.com",
           "https://tomboflight-api.onrender.com",
