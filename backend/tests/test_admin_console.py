@@ -266,6 +266,267 @@ class AdminUserQueueTests(unittest.TestCase):
         self.assertEqual(workspace["tabs"]["project"]["related_projects"], [])
         self.assertEqual(workspace["tabs"]["entitlements"]["entitlement_status"], "missing")
 
+    def test_project_case_workspace_isolates_related_records_to_selected_project(self):
+        larry_user_id = ObjectId()
+        larry_project_id = ObjectId()
+        larry_other_project_id = ObjectId()
+        marquis_project_id = ObjectId()
+        selected_order_id = ObjectId()
+        larry_other_order_id = ObjectId()
+        marquis_order_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "users": [
+                    {
+                        "_id": larry_user_id,
+                        "email": "larry@example.com",
+                        "full_name": "Larry Robinson",
+                        "role": "user",
+                        "status": "active",
+                    }
+                ],
+                "projects": [
+                    {
+                        "_id": larry_project_id,
+                        "owner_user_id": str(larry_user_id),
+                        "owner_email": "larry@example.com",
+                        "name": "Larry Selected Project",
+                        "package_code": "legacy_snapshot",
+                        "project_lane": "portrait",
+                        "status": "build_ready",
+                        "phase": "intake_approved",
+                    },
+                    {
+                        "_id": larry_other_project_id,
+                        "owner_user_id": str(larry_user_id),
+                        "owner_email": "larry@example.com",
+                        "name": "Larry Other Project",
+                        "package_code": "legacy_plus",
+                        "project_lane": "household",
+                        "status": "build_ready",
+                        "phase": "intake_approved",
+                    },
+                    {
+                        "_id": marquis_project_id,
+                        "owner_email": "marquis@example.com",
+                        "name": "Marquis Project",
+                        "package_code": "legacy_snapshot",
+                        "project_lane": "portrait",
+                        "status": "build_ready",
+                        "phase": "intake_approved",
+                    },
+                ],
+                "orders": [
+                    {
+                        "_id": selected_order_id,
+                        "email": "larry@example.com",
+                        "project_id": larry_project_id,
+                        "status": "paid",
+                        "item_type": "package",
+                        "package_code": "legacy_snapshot",
+                    },
+                    {
+                        "_id": larry_other_order_id,
+                        "email": "larry@example.com",
+                        "project_id": larry_other_project_id,
+                        "status": "paid",
+                        "item_type": "package",
+                        "package_code": "legacy_plus",
+                    },
+                    {
+                        "_id": marquis_order_id,
+                        "email": "marquis@example.com",
+                        "project_id": marquis_project_id,
+                        "status": "paid",
+                        "item_type": "package",
+                        "package_code": "legacy_snapshot",
+                    },
+                ],
+                "project_entitlements": [],
+                "uploaded_files": [
+                    {
+                        "_id": ObjectId(),
+                        "project_id": larry_project_id,
+                        "uploaded_by": "larry@example.com",
+                        "filename": "larry-selected.jpg",
+                        "category": "member_photo",
+                        "status": "received",
+                    },
+                    {
+                        "_id": ObjectId(),
+                        "project_id": larry_other_project_id,
+                        "uploaded_by": "larry@example.com",
+                        "filename": "larry-other.jpg",
+                        "category": "member_photo",
+                        "status": "received",
+                    },
+                    {
+                        "_id": ObjectId(),
+                        "project_id": marquis_project_id,
+                        "uploaded_by": "marquis@example.com",
+                        "filename": "marquis.jpg",
+                        "category": "member_photo",
+                        "status": "received",
+                    },
+                ],
+                "audit_logs": [
+                    {
+                        "_id": ObjectId(),
+                        "target_id": larry_project_id,
+                        "actor_email": "larry@example.com",
+                        "action": "selected_project_event",
+                    },
+                    {
+                        "_id": ObjectId(),
+                        "target_id": str(larry_other_project_id),
+                        "actor_email": "larry@example.com",
+                        "action": "other_larry_project_event",
+                    },
+                    {
+                        "_id": ObjectId(),
+                        "target_id": str(marquis_project_id),
+                        "actor_email": "marquis@example.com",
+                        "action": "marquis_project_event",
+                    },
+                ],
+                "families": [],
+                "households": [],
+            }
+        )
+
+        with (
+            patch.object(admin_control_service, "get_database", return_value=db),
+            patch.object(admin_control_service, "get_project_entitlement", return_value=None),
+            patch.object(
+                admin_control_service,
+                "run_readiness_check",
+                return_value={
+                    "mint_review_ready": False,
+                    "mint_eligible": False,
+                    "mint_already_completed": False,
+                    "blocking_reasons": [],
+                },
+            ),
+            patch.object(admin_control_service, "_mint_record_snapshot", return_value={}),
+        ):
+            workspace = admin_control_service.customer_case_workspace(str(larry_project_id))
+
+        related_order_ids = {
+            item["id"] for item in workspace["tabs"]["orders_billing"]["related_orders"]
+        }
+        upload_names = {
+            item["filename"] for item in workspace["tabs"]["uploads_verification"]["items"]
+        }
+        audit_actions = {item["action"] for item in workspace["audit_timeline"]}
+
+        self.assertEqual(workspace["tabs"]["project"]["project_id"], str(larry_project_id))
+        self.assertEqual(related_order_ids, {str(selected_order_id)})
+        self.assertEqual(upload_names, {"larry-selected.jpg"})
+        self.assertEqual(audit_actions, {"selected_project_event"})
+
+    def test_order_case_workspace_does_not_infer_unlinked_project_by_email(self):
+        order_id = ObjectId()
+        same_email_project_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "users": [],
+                "projects": [
+                    {
+                        "_id": same_email_project_id,
+                        "owner_email": "genesis@example.com",
+                        "name": "Genesis Existing Project",
+                        "package_code": "legacy_snapshot",
+                        "project_lane": "portrait",
+                    }
+                ],
+                "orders": [
+                    {
+                        "_id": order_id,
+                        "email": "genesis@example.com",
+                        "status": "paid",
+                        "item_type": "package",
+                        "package_code": "legacy_snapshot",
+                    }
+                ],
+                "project_entitlements": [],
+                "uploaded_files": [
+                    {
+                        "_id": ObjectId(),
+                        "project_id": same_email_project_id,
+                        "uploaded_by": "genesis@example.com",
+                        "filename": "genesis-project.jpg",
+                    }
+                ],
+                "audit_logs": [],
+                "families": [],
+                "households": [],
+            }
+        )
+
+        with (
+            patch.object(admin_control_service, "get_database", return_value=db),
+            patch.object(admin_control_service, "get_project_entitlement", return_value=None),
+            patch.object(admin_control_service, "_mint_record_snapshot", return_value={}),
+        ):
+            workspace = admin_control_service.customer_case_workspace(f"order:{order_id}")
+
+        related_order_ids = [
+            item["id"] for item in workspace["tabs"]["orders_billing"]["related_orders"]
+        ]
+        self.assertIsNone(workspace["project"])
+        self.assertIsNone(workspace["tabs"]["project"]["project_id"])
+        self.assertEqual(related_order_ids, [str(order_id)])
+        self.assertEqual(workspace["tabs"]["uploads_verification"]["items"], [])
+
+    def test_order_case_actions_do_not_infer_unlinked_project_by_email(self):
+        order_id = ObjectId()
+        same_email_project_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "users": [],
+                "projects": [
+                    {
+                        "_id": same_email_project_id,
+                        "owner_email": "genesis@example.com",
+                        "name": "Genesis Existing Project",
+                        "package_code": "legacy_snapshot",
+                        "project_lane": "portrait",
+                        "status": "build_ready",
+                        "phase": "intake_approved",
+                    }
+                ],
+                "orders": [
+                    {
+                        "_id": order_id,
+                        "email": "genesis@example.com",
+                        "status": "paid",
+                        "item_type": "package",
+                        "package_code": "legacy_snapshot",
+                    }
+                ],
+                "project_entitlements": [],
+                "uploaded_files": [],
+                "audit_logs": [],
+                "families": [],
+                "households": [],
+            }
+        )
+
+        with patch.object(admin_control_service, "get_database", return_value=db):
+            with self.assertRaisesRegex(ValueError, "Action requires a linked project."):
+                admin_control_service.execute_case_action(
+                    case_id=f"order:{order_id}",
+                    action="run_readiness_check",
+                )
+            result = admin_control_service.repair_selected_records(
+                project_ids=[],
+                order_ids=[str(order_id)],
+            )
+
+        self.assertEqual(result["repaired_count"], 0)
+        self.assertEqual(result["failed_count"], 1)
+        self.assertEqual(result["failed"][0]["error"], "Linked project not found.")
+
 
 if __name__ == "__main__":
     unittest.main()
