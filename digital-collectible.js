@@ -191,6 +191,23 @@
     fulfilled: "Fulfilled",
     confirmed: "Confirmed",
   };
+  const MINT_PENDING_STATUSES = new Set([
+    "pending",
+    "queued",
+    "approved",
+    "minting",
+    "pending_approval",
+    "draft",
+  ]);
+  const PAID_ORDER_STATUSES = new Set([
+    "paid",
+    "active",
+    "fulfilled",
+    "confirmed",
+    "complete",
+    "completed",
+    "succeeded",
+  ]);
 
   function humanizeStatus(value) {
     const n = normalizeValue(value);
@@ -272,9 +289,7 @@
     const isMinted = normalizeValue(mintStatusValue) === "minted";
     const isMintPending =
       mintEnabled &&
-      ["pending", "queued", "approved", "minting", "pending_approval", "draft"].includes(
-        normalizeValue(mintStatusValue),
-      );
+      MINT_PENDING_STATUSES.has(normalizeValue(mintStatusValue));
 
     const entitlement = context && context.activeEntitlement ? context.activeEntitlement : {};
     const paidOrder = context && context.paidOrder ? context.paidOrder : {};
@@ -457,17 +472,8 @@
     const isMintPending = Boolean(d.is_mint_pending);
     const mintStatus = String(d.mint_status || "").trim();
     const hasAnyFile = hasPoster || hasMetadata;
-    const paidStatuses = new Set([
-      "paid",
-      "active",
-      "fulfilled",
-      "confirmed",
-      "complete",
-      "completed",
-      "succeeded",
-    ]);
     const isPaid =
-      paidStatuses.has(normalizeValue(d.order_status)) ||
+      PAID_ORDER_STATUSES.has(normalizeValue(d.order_status)) ||
       ["active", "fulfilled", "delivered"].includes(
         normalizeValue(d.entitlement_status),
       );
