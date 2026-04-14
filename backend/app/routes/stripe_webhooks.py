@@ -6,7 +6,7 @@ Endpoint:
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 from uuid import uuid4
 
@@ -33,6 +33,7 @@ except Exception:  # pragma: no cover
 
 router = APIRouter(prefix="/webhooks", tags=["Stripe Webhooks"])
 logger = logging.getLogger(__name__)
+PROCESSING_CLAIM_TTL_MINUTES = 15
 
 
 def _require_setting(value: str, name: str) -> str:
@@ -100,11 +101,15 @@ def _claim_event_processing(
         pass
 
     claim_token = str(uuid4())
+    stale_before = now - timedelta(minutes=PROCESSING_CLAIM_TTL_MINUTES)
     claimed = events_col.find_one_and_update(
         {
             "event_id": event_id,
             "processed_at": {"$exists": False},
-            "processing_claim": {"$exists": False},
+            "$or": [
+                {"processing_claim": {"$exists": False}},
+                {"processing_started_at": {"$lt": stale_before}},
+            ],
         },
         {
             "$set": {

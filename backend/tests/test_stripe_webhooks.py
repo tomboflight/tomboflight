@@ -43,17 +43,35 @@ class FakeStripeEventsCollection:
         current = self.docs.get(event_id)
         if current is None:
             return None
-        for key, expected in query.items():
-            if key == "event_id":
-                continue
-            if isinstance(expected, dict) and "$exists" in expected:
-                exists = key in current
-                if exists != bool(expected["$exists"]):
-                    return None
-            elif current.get(key) != expected:
-                return None
+        if not self._matches_query(current, query):
+            return None
         current.update(update.get("$set", {}))
         return dict(current)
+
+    def _matches_query(self, current, query):
+        for key, expected in query.items():
+            if key == "event_id":
+                if current.get("event_id") != expected:
+                    return False
+                continue
+            if key == "$or":
+                if not any(self._matches_query(current, item) for item in expected):
+                    return False
+                continue
+            if isinstance(expected, dict):
+                if "$exists" in expected:
+                    exists = key in current
+                    if exists != bool(expected["$exists"]):
+                        return False
+                    continue
+                if "$lt" in expected:
+                    value = current.get(key)
+                    if value is None or not (value < expected["$lt"]):
+                        return False
+                    continue
+            if current.get(key) != expected:
+                return False
+        return True
 
 
 class StripeWebhookPersistenceTests(unittest.TestCase):
@@ -117,6 +135,25 @@ class StripeWebhookPersistenceTests(unittest.TestCase):
             now=now,
         )
         self.assertFalse(duplicate_should_process)
+
+    def test_stale_processing_claim_can_be_reclaimed(self):
+        events = FakeStripeEventsCollection()
+        started_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        events.docs["evt_stale"] = {
+            "event_id": "evt_stale",
+            "processing_claim": "old-claim",
+            "processing_started_at": started_at,
+        }
+        event = {"id": "evt_stale", "type": "checkout.session.completed"}
+        now = started_at.replace(minute=started_at.minute + 30)
+
+        should_process, claim_token = stripe_webhooks._claim_event_processing(
+            events,
+            event=event,
+            now=now,
+        )
+        self.assertTrue(should_process)
+        self.assertNotEqual(claim_token, "old-claim")
 
 
 if __name__ == "__main__":
