@@ -677,9 +677,8 @@
     const posterWrapper = document.querySelector("[data-delivery-poster-link-wrapper]");
     if (!posterBlock || !posterImg || !posterEmpty || !posterWrapper) return;
 
-    const fallbackText =
-      (options && options.fallbackText) || "Poster preview unavailable.";
-    const href = (options && options.href) || "";
+    const fallbackText = options?.fallbackText || "Poster preview unavailable.";
+    const href = options?.href || "";
 
     posterBlock.setAttribute("data-poster-state", state);
     posterEmpty.textContent = fallbackText;
@@ -706,7 +705,7 @@
   function renderPosterPreview(d) {
     const posterBlock = document.querySelector("[data-delivery-poster-block]");
     const posterImg = document.querySelector("[data-delivery-poster-preview]");
-    const posterUrl = String((d && d.poster_image_uri_public) || "").trim();
+    const posterUrl = (d?.poster_image_uri_public || "").trim();
     if (!posterBlock || !posterImg) return;
 
     if (!posterUrl) {
@@ -720,12 +719,16 @@
       fallbackText: "Loading poster preview…",
     });
 
+    function clearPosterImageHandlers() {
+      posterImg.onload = null;
+      posterImg.onerror = null;
+    }
+
     posterImg.onload = function () {
       setPosterState("ready", {
         href: posterUrl,
       });
-      posterImg.onload = null;
-      posterImg.onerror = null;
+      clearPosterImageHandlers();
     };
 
     posterImg.onerror = function () {
@@ -733,10 +736,10 @@
         href: "",
         fallbackText: "Poster preview unavailable.",
       });
-      posterImg.onload = null;
-      posterImg.onerror = null;
+      clearPosterImageHandlers();
     };
 
+    // Clear existing src first so the browser treats the next src assignment as a new load request.
     posterImg.removeAttribute("src");
     posterImg.src = posterUrl;
   }
