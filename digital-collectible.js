@@ -721,11 +721,11 @@
       fallbackText: "Loading poster preview…",
     });
 
-    const nextLoadToken =
+    const previewLoadToken =
       Number(posterBlock.getAttribute("data-poster-load-token-seq") || "0") + 1;
-    const previewLoadToken = nextLoadToken;
-    posterBlock.setAttribute("data-poster-load-token-seq", nextLoadToken);
-    posterBlock.setAttribute("data-poster-load-token", previewLoadToken);
+    const previewLoadTokenValue = String(previewLoadToken);
+    posterBlock.setAttribute("data-poster-load-token-seq", previewLoadTokenValue);
+    posterBlock.setAttribute("data-poster-load-token", previewLoadTokenValue);
 
     function clearPosterImageHandlers() {
       posterImg.onload = null;
@@ -733,7 +733,7 @@
     }
 
     function isCurrentLoadToken() {
-      return Number(posterBlock.getAttribute("data-poster-load-token")) === previewLoadToken;
+      return posterBlock.getAttribute("data-poster-load-token") === previewLoadTokenValue;
     }
 
     posterImg.onload = function () {
