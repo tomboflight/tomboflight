@@ -313,7 +313,7 @@
       token_id: latest.token_id || "",
       tx_hash: latest.tx_hash || "",
       public_token_id: latest.public_token_id || "",
-      wallet: latest.customer_wallet || latest.wallet || "",
+      wallet: latest.wallet || latest.customer_wallet || "",
       minted_at: latest.minted_at || "",
       version_number: latest.version_number,
       token_type: latest.token_type || "",
