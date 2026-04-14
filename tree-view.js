@@ -365,13 +365,13 @@
     const configuredList = Array.isArray(configured.API_BASE_URLS)
       ? configured.API_BASE_URLS
       : [];
-    const fallbackUrl =
+    const singleConfigUrl =
       typeof configured.API_BASE_URL === "string" ? configured.API_BASE_URL : "";
     const runtimeBaseUrl =
       window.TOLAuth && typeof window.TOLAuth.getApiBaseUrl === "function"
         ? window.TOLAuth.getApiBaseUrl()
         : "";
-    const candidates = [runtimeBaseUrl, ...configuredList, fallbackUrl]
+    const candidates = [runtimeBaseUrl, ...configuredList, singleConfigUrl]
       .map((value) => String(value || "").trim())
       .filter(Boolean);
     return Array.from(new Set(candidates));
@@ -487,11 +487,10 @@
       };
     }
 
-    if (
-      (status === 403 &&
-        /package does not include|does not include|plan does not include/.test(msg)) ||
-      /package does not include|does not include|plan does not include/.test(msg)
-    ) {
+    const isEntitlementError = /package does not include|does not include|plan does not include/.test(
+      msg,
+    );
+    if (isEntitlementError) {
       return {
         type: "entitlement",
         message: "Your current package does not include this tree view.",
