@@ -1,4 +1,5 @@
 from datetime import date, datetime, timezone
+import logging
 from typing import Any, Optional
 
 from bson import ObjectId
@@ -15,6 +16,7 @@ from app.core.relationship_catalog import (
 from app.schemas.relationship import RelationshipCreate
 
 MIN_PARENT_CHILD_AGE_GAP = 12
+logger = logging.getLogger(__name__)
 
 
 def normalize_mongo_doc(document: dict[str, Any]) -> dict[str, Any]:
@@ -45,7 +47,7 @@ class RelationshipGuardrailService:
                 unique=True,
             )
         except Exception as e:
-            print(f"Warning: could not create relationship index: {e}")
+            logger.warning("Could not create relationship index: %s", e)
 
     def validate_relationship_payload(self, payload: RelationshipCreate) -> None:
         normalized_relationship_type = normalize_relationship_type(

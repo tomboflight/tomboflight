@@ -13,8 +13,7 @@ from app.services.order_service import (
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
 
-@router.on_event("startup")
-def startup_indexes():
+def initialize_order_indexes() -> None:
     ensure_order_indexes()
 
 

@@ -118,8 +118,7 @@ def _admin_mint_overview_item(project: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-@router.on_event("startup")
-def startup_mint_record_indexes():
+def initialize_mint_record_indexes() -> None:
     ensure_mint_record_indexes()
 
 

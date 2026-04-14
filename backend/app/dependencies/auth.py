@@ -768,13 +768,36 @@ def resolve_access_context(user_id: str, project_id: str | None = None) -> dict[
             if _normalize_value(entitlement.get("project_id")) == _normalize_value(project_id)
         ]
 
+    normalized_project_id = _normalize_value(project_id)
     return {
         "role_codes": sorted(role_codes),
         "permissions": sorted(permissions),
         "entitlements": entitlements,
         "project_scope": _resolve_project_scope(user, project_id),
         "workflow_state": _resolve_workflow_state(project_id),
+        "project_id": normalized_project_id or None,
     }
+
+
+def _get_or_resolve_access_context(
+    current_user: dict[str, Any],
+    *,
+    project_id: str | None,
+) -> dict[str, Any]:
+    normalized_project_id = _normalize_value(project_id) or None
+    cached_context = current_user.get("_access_context")
+    if isinstance(cached_context, dict):
+        cached_project_id = _normalize_value(cached_context.get("project_id")) or None
+        if cached_project_id == normalized_project_id:
+            return cached_context
+
+    user_id = _current_user_id(current_user)
+    context = resolve_access_context(
+        user_id,
+        project_id=normalized_project_id,
+    )
+    current_user["_access_context"] = context
+    return context
 
 
 def require_permission(permission_code: str):
@@ -786,9 +809,8 @@ def require_permission(permission_code: str):
         request: Request,
         current_user: dict[str, Any] = Depends(get_current_user),
     ) -> dict[str, Any]:
-        user_id = _current_user_id(current_user)
-        context = resolve_access_context(
-            user_id,
+        context = _get_or_resolve_access_context(
+            current_user,
             project_id=_extract_project_id_from_request(request),
         )
         permissions = set(context.get("permissions") or [])
@@ -797,7 +819,6 @@ def require_permission(permission_code: str):
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Permission '{normalized_permission}' is required.",
             )
-        current_user["_access_context"] = context
         return current_user
 
     return _dependency
@@ -814,9 +835,8 @@ def require_any_permission(permission_codes: list[str]):
         request: Request,
         current_user: dict[str, Any] = Depends(get_current_user),
     ) -> dict[str, Any]:
-        user_id = _current_user_id(current_user)
-        context = resolve_access_context(
-            user_id,
+        context = _get_or_resolve_access_context(
+            current_user,
             project_id=_extract_project_id_from_request(request),
         )
         permissions = set(context.get("permissions") or [])
@@ -827,7 +847,6 @@ def require_any_permission(permission_codes: list[str]):
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="At least one required permission is missing.",
             )
-        current_user["_access_context"] = context
         return current_user
 
     return _dependency
