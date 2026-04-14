@@ -3,8 +3,8 @@
 
   const app = window.TOLApp || {};
   const authPages = window.TOLAuthPages || {};
+  // Treat 1x1 assets as non-renderable placeholders so we collapse to compact fallback.
   const MIN_RENDERABLE_POSTER_DIMENSION_PX = 2;
-  let posterPreviewLoadSeq = 0;
 
   function isInternalRole(user) {
     if (window.TOLApp && typeof window.TOLApp.isInternalRole === "function") {
@@ -721,8 +721,10 @@
       fallbackText: "Loading poster preview…",
     });
 
-    posterPreviewLoadSeq += 1;
-    const previewLoadToken = posterPreviewLoadSeq;
+    const nextLoadToken =
+      Number(posterBlock.getAttribute("data-poster-load-token-seq") || "0") + 1;
+    const previewLoadToken = nextLoadToken;
+    posterBlock.setAttribute("data-poster-load-token-seq", nextLoadToken);
     posterBlock.setAttribute("data-poster-load-token", previewLoadToken);
 
     function clearPosterImageHandlers() {
