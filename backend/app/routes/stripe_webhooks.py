@@ -8,9 +8,13 @@ Endpoint:
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
+from uuid import uuid4
 
 import stripe
 from fastapi import APIRouter, HTTPException, Request, status
+from pymongo import ReturnDocument
+from pymongo.collection import Collection
+from pymongo.errors import DuplicateKeyError, OperationFailure
 
 from app.config import settings
 from app.database import get_database
@@ -36,6 +40,119 @@ def _require_setting(value: str, name: str) -> str:
     if not value:
         raise RuntimeError(f"Missing required setting: {name}")
     return value
+
+
+def ensure_stripe_event_indexes() -> None:
+    db = get_database()
+    events_col = db["stripe_events"]
+    try:
+        events_col.create_index(
+            [("event_id", 1)],
+            name="event_id_1",
+            unique=True,
+            sparse=True,
+        )
+    except OperationFailure:
+        return
+
+
+def _build_event_audit_record(event: dict[str, Any], now: datetime) -> dict[str, Any]:
+    data_object = ((event.get("data") or {}).get("object") or {})
+    request_data = event.get("request") or {}
+    return {
+        "event_id": event.get("id"),
+        "type": event.get("type", "unknown"),
+        "livemode": bool(event.get("livemode", False)),
+        "created": event.get("created"),
+        "api_version": event.get("api_version"),
+        "account": event.get("account"),
+        "object_id": data_object.get("id"),
+        "object_type": data_object.get("object"),
+        "customer_id": data_object.get("customer"),
+        "subscription_id": data_object.get("subscription"),
+        "payment_intent_id": data_object.get("payment_intent"),
+        "checkout_session_id": data_object.get("id")
+        if str(data_object.get("object") or "").strip() == "checkout.session"
+        else None,
+        "request_id": request_data.get("id"),
+        "request_idempotency_key": request_data.get("idempotency_key"),
+        "received_at": now,
+    }
+
+
+def _claim_event_processing(
+    events_col: Collection[dict[str, Any]],
+    *,
+    event: dict[str, Any],
+    now: datetime,
+) -> tuple[bool, str]:
+    event_id = str(event.get("id") or "").strip()
+    if not event_id:
+        return True, ""
+
+    try:
+        events_col.update_one(
+            {"event_id": event_id},
+            {"$setOnInsert": _build_event_audit_record(event, now)},
+            upsert=True,
+        )
+    except DuplicateKeyError:
+        pass
+
+    claim_token = str(uuid4())
+    claimed = events_col.find_one_and_update(
+        {
+            "event_id": event_id,
+            "processed_at": {"$exists": False},
+            "processing_claim": {"$exists": False},
+        },
+        {
+            "$set": {
+                "processing_claim": claim_token,
+                "processing_started_at": now,
+            }
+        },
+        return_document=ReturnDocument.AFTER,
+    )
+    if claimed:
+        return True, claim_token
+    return False, ""
+
+
+def _mark_event_processed(
+    events_col: Collection[dict[str, Any]],
+    *,
+    event_id: str,
+    claim_token: str,
+    order_result: dict[str, Any],
+    maintenance_result: dict[str, Any],
+    now: datetime,
+) -> None:
+    if not event_id:
+        return
+    events_col.update_one(
+        {
+            "event_id": event_id,
+            "processing_claim": claim_token,
+        },
+        {
+            "$set": {
+                "processed_at": now,
+                "processing_finished_at": now,
+                "order_result": {
+                    "order_id": order_result.get("order_id"),
+                    "error": order_result.get("error"),
+                    "type": order_result.get("type"),
+                },
+                "maintenance_result": {
+                    "updated": bool(maintenance_result.get("updated")),
+                    "error": maintenance_result.get("error"),
+                    "type": maintenance_result.get("type"),
+                },
+            },
+            "$unset": {"processing_claim": ""},
+        },
+    )
 
 
 @router.post("/stripe", status_code=status.HTTP_200_OK)
@@ -70,23 +187,27 @@ async def stripe_webhook(request: Request) -> Dict[str, Any]:
     db = get_database()
     events_col = db["stripe_events"]
 
-    event_id = event.get("id")
+    event_id = str(event.get("id") or "").strip()
     event_type = event.get("type", "unknown")
     now = datetime.now(timezone.utc)
 
-    if event_id:
-        existing = events_col.find_one({"event_id": event_id})
-        if not existing:
-            events_col.insert_one(
-                {
-                    "event_id": event_id,
-                    "type": event_type,
-                    "livemode": bool(event.get("livemode", False)),
-                    "created": event.get("created"),
-                    "received_at": now,
-                    "raw": event,
-                }
-            )
+    should_process, claim_token = _claim_event_processing(
+        events_col,
+        event=event,
+        now=now,
+    )
+    if not should_process:
+        logger.info(
+            "Stripe webhook duplicate delivery ignored",
+            extra={"event_id": event_id, "event_type": event_type},
+        )
+        return {
+            "received": True,
+            "duplicate": True,
+            "type": event_type,
+            "order": {"order_id": None, "duplicate": True},
+            "maintenance": {"updated": False, "duplicate": True},
+        }
 
     order_result: Dict[str, Any] = {"order_id": None}
     maintenance_result: Dict[str, Any] = {"updated": False}
@@ -122,9 +243,18 @@ async def stripe_webhook(request: Request) -> Dict[str, Any]:
             logger.error("Stripe invoice maintenance sync failed", exc_info=True)
             maintenance_result = {"updated": False, "error": "maintenance_invoice_sync_failed", "type": event_type}
 
-    print(
-        "[stripe_webhook]",
-        {
+    _mark_event_processed(
+        events_col,
+        event_id=event_id,
+        claim_token=claim_token,
+        order_result=order_result,
+        maintenance_result=maintenance_result,
+        now=datetime.now(timezone.utc),
+    )
+
+    logger.info(
+        "Stripe webhook processed",
+        extra={
             "event_id": event_id,
             "event_type": event_type,
             "order_result": order_result,

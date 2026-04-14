@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import logging
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -45,17 +46,29 @@ from app.routes.linked_network import router as linked_network_router
 from app.routes.vault import router as vault_router
 from app.routes.match_candidates import router as match_candidates_router
 from app.routes.match_generation import router as match_generation_router
-from app.routes.mint_jobs import router as mint_jobs_router
+from app.routes.mint_jobs import (
+    initialize_mint_job_indexes,
+    router as mint_jobs_router,
+)
 from app.routes.mint_policy import router as mint_policy_router
-from app.routes.mint_records import router as mint_records_router
+from app.routes.mint_records import (
+    initialize_mint_record_indexes,
+    router as mint_records_router,
+)
 from app.routes.narrative_records import router as narrative_records_router
-from app.routes.orders import router as orders_router
+from app.routes.orders import (
+    initialize_order_indexes,
+    router as orders_router,
+)
 from app.routes.package_catalog import router as package_catalog_router
 from app.routes.presence import router as presence_router
 from app.routes.projects import router as projects_router
 from app.routes.project_entitlements import router as project_entitlements_router
 from app.routes.relationships import router as relationships_router
-from app.routes.stripe_webhooks import router as stripe_webhooks_router
+from app.routes.stripe_webhooks import (
+    ensure_stripe_event_indexes,
+    router as stripe_webhooks_router,
+)
 from app.routes.tree import router as tree_router
 from app.routes.uploads import router as uploads_router
 from app.routes.users import router as users_router
@@ -64,6 +77,9 @@ from app.routes.viewer_manifest import router as viewer_manifest_router
 from app.services.nft_runtime_validation_service import (
     validate_nft_runtime_configuration_on_startup,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 def _resolve_allowed_origins() -> list[str]:
@@ -99,10 +115,14 @@ async def lifespan(app: FastAPI):
     validate_nft_runtime_configuration_on_startup()
     connect_to_mongo()
     app.state.db = get_database()
-    print("Connected to MongoDB database.")
+    initialize_order_indexes()
+    initialize_mint_record_indexes()
+    initialize_mint_job_indexes()
+    ensure_stripe_event_indexes()
+    logger.info("Connected to MongoDB database.")
     yield
     close_mongo_connection()
-    print("MongoDB connection closed.")
+    logger.info("MongoDB connection closed.")
 
 
 app = FastAPI(

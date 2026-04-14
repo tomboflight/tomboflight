@@ -219,6 +219,13 @@
     node.textContent = value || "";
   }
 
+  function clearElement(node) {
+    if (!node) return;
+    while (node.firstChild) {
+      node.removeChild(node.firstChild);
+    }
+  }
+
   function getCurrentTargets() {
     const config = statesById[state];
     return (
@@ -351,11 +358,13 @@
             return `${item.title} — ${item.status || "Viewer Node"}`;
           });
 
-    pathList.innerHTML = items
-      .map(function (item) {
-        return `<div class="path-item">${item}</div>`;
-      })
-      .join("");
+    clearElement(pathList);
+    items.forEach(function (item) {
+      const row = document.createElement("div");
+      row.className = "path-item";
+      row.textContent = String(item || "");
+      pathList.appendChild(row);
+    });
   }
 
   function updateNavLabels() {
@@ -677,15 +686,18 @@
       ? currentManifest.branchOptionsByState[state]
       : [];
 
-    branchOptions.innerHTML = branchOptionsForState
-      .map(function (option) {
-        const label = String(option?.label || "").trim();
-        const targetStateId = String(option?.target_state_id || "").trim();
-        return label && targetStateId
-          ? `<button type="button" data-target-state="${targetStateId}">${label}</button>`
-          : "";
-      })
-      .join("");
+    clearElement(branchOptions);
+    branchOptionsForState.forEach(function (option) {
+      const label = String(option?.label || "").trim();
+      const targetStateId = String(option?.target_state_id || "").trim();
+      if (!label || !targetStateId) return;
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.setAttribute("data-target-state", targetStateId);
+      button.textContent = label;
+      branchOptions.appendChild(button);
+    });
 
     branchOptions.style.display = branchOptionsForState.length ? "flex" : "none";
   }
