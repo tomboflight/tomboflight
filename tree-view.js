@@ -360,6 +360,59 @@
     }
   }
 
+  function categorizeTreeError(error) {
+    const msg = String(error?.message || "").toLowerCase();
+
+    if (/401|unauthorized|authentication/.test(msg) || /sign in|signed in/.test(msg)) {
+      return {
+        type: "auth",
+        message:
+          "Authentication error. Please sign in again to view the family tree.",
+      };
+    }
+
+    if (
+      /403|forbidden|not authorized|package does not include|does not include/.test(
+        msg,
+      )
+    ) {
+      return {
+        type: "permission",
+        message:
+          "Your current plan does not include access to the visual family tree. Please contact support to upgrade.",
+      };
+    }
+
+    if (/404|not found|could not be resolved/.test(msg)) {
+      return {
+        type: "not_found",
+        message:
+          "Family or workspace data not found. Please check your family selection and try again.",
+      };
+    }
+
+    if (/timeout|timed out/.test(msg)) {
+      return {
+        type: "timeout",
+        message:
+          "The request timed out while loading the tree. This may indicate a large family graph. Please try again.",
+      };
+    }
+
+    if (/temporarily unavailable|service unavailable|network error/.test(msg)) {
+      return {
+        type: "network",
+        message:
+          "Unable to reach the visual tree service. Please check your connection and try again in a moment.",
+      };
+    }
+
+    return {
+      type: "backend",
+      message: error.message || "Failed to load the visual tree. Please try again.",
+    };
+  }
+
   async function loadAndRenderTree(
     familyId,
     canvas,
@@ -370,17 +423,67 @@
   ) {
     if (!canvas || !window.TOLAuth) return;
 
+    const resolved = context?.resolvedEntitlements || {};
+    const canTraverseLinked = Boolean(resolved.can_link_households);
+    const endpoint = canTraverseLinked
+      ? `/tree/${familyId}/linked?mode=private`
+      : `/tree/${familyId}/private`;
+    const projectId = getProjectIdFromContext(context);
+
+    console.info("[TreeView] Loading tree", {
+      family_id: familyId,
+      project_id: projectId || "(not resolved)",
+      endpoint,
+      can_traverse_linked: canTraverseLinked,
+    });
+
     showStatus(statusNode, "Loading visual tree...", "info");
     canvas.innerHTML = "";
 
-    try {
-      const resolved = context?.resolvedEntitlements || {};
-      const canTraverseLinked = Boolean(resolved.can_link_households);
-      const endpoint = canTraverseLinked
-        ? `/tree/${familyId}/linked?mode=private`
-        : `/tree/${familyId}/private`;
-      const graph = await window.TOLAuth.apiRequest(endpoint, { method: "GET" });
+    let graph = null;
 
+    try {
+      graph = await window.TOLAuth.apiRequest(endpoint, { method: "GET" });
+    } catch (error) {
+      const { type, message: userMessage } = categorizeTreeError(error);
+      console.error("[TreeView] Tree fetch failed", {
+        family_id: familyId,
+        project_id: projectId || "(not resolved)",
+        endpoint,
+        error_type: type,
+        error_message: error.message,
+        cause: error.cause,
+      });
+      showStatus(statusNode, userMessage, "error");
+      return;
+    }
+
+    console.info("[TreeView] Tree data received", {
+      family_id: familyId,
+      endpoint,
+      member_count: Array.isArray(graph?.members) ? graph.members.length : 0,
+      relationship_count: Array.isArray(graph?.relationships)
+        ? graph.relationships.length
+        : 0,
+    });
+
+    const members = Array.isArray(graph?.members) ? graph.members : [];
+    if (!members.length) {
+      console.info("[TreeView] No renderable tree data", {
+        family_id: familyId,
+        endpoint,
+      });
+      canvas.innerHTML =
+        '<div class="tree-empty">No visual tree data available yet for this family. Family members and relationships must be added before the tree can be rendered.</div>';
+      showStatus(
+        statusNode,
+        "No visual tree data available yet for this family.",
+        "info",
+      );
+      return;
+    }
+
+    try {
       renderStructuredTree(graph, canvas, detailPanel, detailEmpty);
       showStatus(
         statusNode,
@@ -389,9 +492,18 @@
           : "Visual family tree loaded successfully. Use the zoom controls for larger families.",
         "success",
       );
-    } catch (error) {
-      console.error("Tree render error:", error);
-      showStatus(statusNode, error.message || "Failed to load tree.", "error");
+    } catch (renderError) {
+      console.error("[TreeView] Tree render failed", {
+        family_id: familyId,
+        endpoint,
+        error_message: renderError.message,
+        stack: renderError.stack,
+      });
+      showStatus(
+        statusNode,
+        "Failed to render the visual tree. The graph data may be incomplete. Please try again or contact support.",
+        "error",
+      );
     }
   }
 
