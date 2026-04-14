@@ -197,10 +197,7 @@ async def stripe_webhook(request: Request) -> Dict[str, Any]:
         now=now,
     )
     if not should_process:
-        logger.info(
-            "Stripe webhook duplicate delivery ignored",
-            extra={"event_id": event_id, "event_type": event_type},
-        )
+        logger.info("Stripe webhook duplicate delivery ignored")
         return {
             "received": True,
             "duplicate": True,
@@ -252,15 +249,7 @@ async def stripe_webhook(request: Request) -> Dict[str, Any]:
         now=datetime.now(timezone.utc),
     )
 
-    logger.info(
-        "Stripe webhook processed",
-        extra={
-            "event_id": event_id,
-            "event_type": event_type,
-            "order_result": order_result,
-            "maintenance_result": maintenance_result,
-        },
-    )
+    logger.info("Stripe webhook processed")
 
     return {
         "received": True,
