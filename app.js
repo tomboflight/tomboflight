@@ -3,7 +3,11 @@
 
   const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
 
-  const DEFAULT_LOCAL_API_BASE_URL = "http://127.0.0.1:8000";
+  const DEFAULT_LOCAL_API_BASE_URLS = [
+    "http://127.0.0.1:8000",
+    "http://localhost:8000",
+    "http://[::1]:8000",
+  ];
   const DEFAULT_LIVE_API_BASE_URL = "https://tomboflight-api.onrender.com";
   const DEFAULT_LIVE_API_BASE_URLS = [
     "https://api.tomboflight.com",
@@ -314,9 +318,21 @@
       return configured;
     }
 
-    return isLocalApp()
-      ? [DEFAULT_LOCAL_API_BASE_URL]
-      : DEFAULT_LIVE_API_BASE_URLS.slice();
+    if (isLocalApp()) {
+      const localHost = String(window.location.hostname || "").toLowerCase();
+      const preferredLocalApiBaseUrl =
+        localHost === "localhost"
+          ? "http://localhost:8000"
+          : localHost === "::1" || localHost === "[::1]"
+          ? "http://[::1]:8000"
+          : "http://127.0.0.1:8000";
+      return uniqueNonEmptyValues([
+        preferredLocalApiBaseUrl,
+        ...DEFAULT_LOCAL_API_BASE_URLS,
+      ]);
+    }
+
+    return DEFAULT_LIVE_API_BASE_URLS.slice();
   }
 
   function getSavedApiBaseUrl() {
