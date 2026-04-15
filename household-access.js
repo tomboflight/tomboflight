@@ -49,7 +49,7 @@
   }
 
   function roleLabel(role) {
-    return ROLE_LABELS[String(role || "").trim()] || String(role || "viewer");
+    return ROLE_LABELS[String(role || "").trim()] || "Viewer";
   }
 
   function projectIdFromContext(user) {
@@ -302,12 +302,14 @@
       inviteCoOwnerButton.addEventListener("click", function () {
         const roleNode = inviteForm.querySelector('select[name="member_role"]');
         if (roleNode) roleNode.value = "co_owner";
+        inviteForm.requestSubmit();
       });
     }
     if (inviteFamilyButton) {
       inviteFamilyButton.addEventListener("click", function () {
         const roleNode = inviteForm.querySelector('select[name="member_role"]');
         if (roleNode) roleNode.value = "contributor";
+        inviteForm.requestSubmit();
       });
     }
   }

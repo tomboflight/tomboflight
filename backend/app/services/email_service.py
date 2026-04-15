@@ -329,7 +329,8 @@ def send_household_invite_email(
 ) -> None:
     safe_invite_key = quote_plus(_normalize_text(invite_key))
     safe_project_id = quote_plus(_normalize_text(project_id))
-    safe_member_role = escape(_normalize_text(member_role), quote=True)
+    normalized_role = _normalize_text(member_role).replace("_", " ").strip().title() or "Viewer"
+    safe_member_role = escape(normalized_role, quote=True)
     safe_inviter_email = escape(_normalize_text(inviter_email), quote=True)
     app_base_url = _public_app_base_url()
     accept_url = (
@@ -357,7 +358,7 @@ def send_household_invite_email(
     )
     text_body = (
         "Hello,\n\n"
-        f"You have been invited to join a Tomb of Light household workspace as a {member_role}.\n\n"
+        f"You have been invited to join a Tomb of Light household workspace as a {normalized_role}.\n\n"
         f"{invited_by_line}"
         "Use your own account credentials (do not share passwords).\n\n"
         f"Accept invite: {accept_url}\n"
