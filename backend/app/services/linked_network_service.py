@@ -217,6 +217,8 @@ def build_linked_network(
                 continue
             source_member_id = _str_id(rel.get("source_member_id") or "")
             target_member_id = _str_id(rel.get("target_member_id") or "")
+            # Keep linked-network edges aligned with the visible node set so
+            # cross-household views never leak orphan/private relationship data.
             if source_member_id not in seen_member_ids or target_member_id not in seen_member_ids:
                 continue
             seen_relationship_ids.add(rid)

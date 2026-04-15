@@ -221,7 +221,7 @@ def create_household_invite(
         raise ValueError("This email already has active workspace access.")
 
     now = _now()
-    invite_key = f"hhinv_{secrets.token_urlsafe(18)}"
+    invite_key = f"hhinv_{secrets.token_urlsafe(24)}"
     document = {
         "project_id": _normalize(project_id),
         "email": normalized_email,
