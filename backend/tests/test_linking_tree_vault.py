@@ -1,8 +1,10 @@
 import unittest
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 from bson import ObjectId
 from fastapi import HTTPException
+from fastapi.encoders import jsonable_encoder
 
 from app.routes import uploads as upload_routes
 from app.services import link_request_service, tree_service
@@ -166,6 +168,74 @@ class LinkRequestApprovalTests(unittest.TestCase):
 
 
 class LinkedTreeTests(unittest.TestCase):
+    def test_private_family_tree_payload_is_json_safe(self):
+        family_id = ObjectId()
+        parent_id = ObjectId()
+        child_id = ObjectId()
+        created_at = datetime(2026, 4, 14, 23, 0, tzinfo=timezone.utc)
+        db = FakeDatabase(
+            {
+                "families": [
+                    {
+                        "_id": family_id,
+                        "family_name": "Robinson",
+                        "household_id": "household-a",
+                        "created_at": created_at,
+                    }
+                ],
+                "family_members": [
+                    {
+                        "_id": parent_id,
+                        "family_id": family_id,
+                        "first_name": "Parent",
+                        "last_name": "One",
+                        "generation": 0,
+                        "created_at": created_at,
+                    },
+                    {
+                        "_id": child_id,
+                        "family_id": family_id,
+                        "first_name": "Child",
+                        "last_name": "One",
+                        "generation": 1,
+                        "created_at": created_at,
+                    },
+                ],
+                "lineage_nodes": [
+                    {
+                        "_id": ObjectId(),
+                        "family_id": family_id,
+                        "member_id": child_id,
+                        "generation": 1,
+                        "created_at": created_at,
+                    }
+                ],
+                "relationships": [
+                    {
+                        "_id": ObjectId(),
+                        "family_id": family_id,
+                        "source_member_id": parent_id,
+                        "target_member_id": child_id,
+                        "relationship_type": "parent_child",
+                        "created_at": created_at,
+                    }
+                ],
+            }
+        )
+
+        with patch.object(tree_service, "get_database", return_value=db):
+            tree = tree_service.get_filtered_family_tree(str(family_id), "private")
+
+        encoded = jsonable_encoder(tree)
+        self.assertEqual(encoded["family"]["id"], str(family_id))
+        self.assertEqual(encoded["family"]["_id"], str(family_id))
+        self.assertEqual(encoded["members"][0]["family_id"], str(family_id))
+        self.assertEqual(
+            encoded["relationships"][0]["source_member_id"],
+            str(parent_id),
+        )
+        self.assertEqual(encoded["nodes"][0]["member_id"], str(child_id))
+
     def test_linked_family_tree_includes_approved_household_neighbors(self):
         family_a = ObjectId()
         family_b = ObjectId()
