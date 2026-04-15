@@ -607,12 +607,16 @@ def ensure_order_indexes() -> None:
             return
 
     _ensure_index([("user_id", 1)], name="user_id_1")
+    _ensure_index([("owner_user_id", 1)], name="owner_user_id_1")
     _ensure_index([("email", 1)], name="email_1")
     _ensure_index([("package_code", 1)], name="package_code_1")
     _ensure_index([("package_slug", 1)], name="package_slug_1")
     _ensure_index([("item_type", 1)], name="item_type_1")
     _ensure_index([("billing_plan", 1)], name="billing_plan_1")
     _ensure_index([("created_at", -1)], name="created_at_-1")
+    # project_id is queried on every workspace access check; index is required to
+    # avoid full collection scans that cause request timeouts.
+    _ensure_index([("project_id", 1)], name="project_id_1")
     _ensure_index(
         [("stripe_session_id", 1)],
         name="stripe_session_id_1",

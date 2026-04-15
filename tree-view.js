@@ -407,6 +407,11 @@
   function categorizeTreeError(error) {
     const status = Number(error?.status || 0);
     const msg = String(error?.message || "").toLowerCase();
+    // When apiRequest times out (AbortError), it wraps the error as
+    // "Service temporarily unavailable" but stores the real "Request timed out"
+    // message in error.cause.  Check both so timeouts are not misreported as
+    // network unreachability errors.
+    const causeMsg = String(error?.cause?.message || "").toLowerCase();
 
     if (
       status === 401 ||
@@ -445,7 +450,7 @@
       };
     }
 
-    if (/timeout|timed out/.test(msg)) {
+    if (/timeout|timed out/.test(msg) || /timeout|timed out/.test(causeMsg)) {
       return {
         type: "timeout",
         message:
