@@ -162,7 +162,10 @@ def _resolve_member_seat_cap(project_id: str) -> int:
     package_code = normalize_package_code(entitlement.get("package_code"))
     package = get_package(package_code) or {}
     package_lane = _normalize(entitlement.get("package_lane") or package.get("package_lane") or "household").lower()
-    package_defined_members = int(package.get("max_members") or 0)
+    try:
+        package_defined_members = int(package.get("max_members") or 0)
+    except (TypeError, ValueError):
+        package_defined_members = 0
     if package_defined_members > 0:
         included = package_defined_members
     else:

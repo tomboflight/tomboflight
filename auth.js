@@ -859,8 +859,8 @@
   function getPostLoginRedirect() {
     try {
       const params = new URLSearchParams(window.location.search);
-      const inviteKey = String(params.get("invite_key") || "").trim();
-      const projectId = String(params.get("project_id") || "").trim();
+      const inviteKey = (params.get("invite_key") || "").trim();
+      const projectId = (params.get("project_id") || "").trim();
       if (!inviteKey) {
         return POST_LOGIN_REDIRECT;
       }
