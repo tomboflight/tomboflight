@@ -86,6 +86,7 @@ def build_invite_response(data: dict[str, Any]) -> dict[str, Any]:
         "use_count": int(data.get("use_count") or 0),
         "notes": _normalize_value(data.get("notes")),
         "expires_at": _serialize_dt(data.get("expires_at")),
+        "expired_at": _serialize_dt(data.get("expired_at")),
         "accepted_at": _serialize_dt(data.get("accepted_at")),
         "revoked_at": _serialize_dt(data.get("revoked_at")),
         "created_at": _serialize_dt(data.get("created_at")) or datetime.now(UTC).isoformat(),

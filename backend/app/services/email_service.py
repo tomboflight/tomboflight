@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from email.utils import formataddr
 from html import escape
 from typing import Any
+from urllib.parse import quote_plus, urlsplit, urlunsplit
 
 import requests
 from requests import RequestException
@@ -302,4 +303,83 @@ def send_password_changed_email(*, to_email: str) -> None:
         text_body=text_body,
         html_body=html_body,
         email_type="password_changed",
+    )
+
+
+def _public_app_base_url() -> str:
+    source = (
+        _normalize_text(settings.password_reset_base_url_clean)
+        or _normalize_text(settings.stripe_billing_portal_return_url_clean)
+        or "https://tomboflight.com"
+    )
+    parsed = urlsplit(source)
+    scheme = parsed.scheme or "https"
+    netloc = parsed.netloc or "tomboflight.com"
+    return urlunsplit((scheme, netloc, "", "", "")).rstrip("/")
+
+
+def send_household_invite_email(
+    *,
+    to_email: str,
+    invite_key: str,
+    project_id: str,
+    member_role: str,
+    inviter_email: str = "",
+    is_resend: bool = False,
+) -> None:
+    safe_invite_key = quote_plus(_normalize_text(invite_key))
+    safe_project_id = quote_plus(_normalize_text(project_id))
+    safe_member_role = escape(_normalize_text(member_role), quote=True)
+    safe_inviter_email = escape(_normalize_text(inviter_email), quote=True)
+    app_base_url = _public_app_base_url()
+    accept_url = (
+        f"{app_base_url}/household-access.html"
+        f"?invite_key={safe_invite_key}&project_id={safe_project_id}"
+    )
+    signup_url = (
+        f"{app_base_url}/signup.html"
+        f"?invite_key={safe_invite_key}&project_id={safe_project_id}"
+    )
+    signin_url = (
+        f"{app_base_url}/signin.html"
+        f"?invite_key={safe_invite_key}&project_id={safe_project_id}"
+    )
+
+    invite_action = "reminder to join" if is_resend else "invitation to join"
+    subject = f"Tomb of Light {invite_action} your household workspace"
+    invited_by_line = (
+        f"Invited by: {inviter_email}\n\n" if _normalize_text(inviter_email) else ""
+    )
+    invited_by_html = (
+        f"<p><strong>Invited by:</strong> {safe_inviter_email}</p>"
+        if _normalize_text(inviter_email)
+        else ""
+    )
+    text_body = (
+        "Hello,\n\n"
+        f"You have been invited to join a Tomb of Light household workspace as a {member_role}.\n\n"
+        f"{invited_by_line}"
+        "Use your own account credentials (do not share passwords).\n\n"
+        f"Accept invite: {accept_url}\n"
+        f"Sign in: {signin_url}\n"
+        f"Create account: {signup_url}\n\n"
+        "If you did not expect this invite, you can ignore this message.\n"
+    )
+    html_body = (
+        "<p>Hello,</p>"
+        f"<p>You have been invited to join a Tomb of Light household workspace as a "
+        f"<strong>{safe_member_role}</strong>.</p>"
+        f"{invited_by_html}"
+        "<p>Use your own account credentials (do not share passwords).</p>"
+        f'<p><a href="{escape(accept_url, quote=True)}">Accept invite</a></p>'
+        f'<p><a href="{escape(signin_url, quote=True)}">Sign in</a> or '
+        f'<a href="{escape(signup_url, quote=True)}">create account</a></p>'
+        "<p>If you did not expect this invite, you can ignore this message.</p>"
+    )
+    _send_email(
+        to_email=to_email,
+        subject=subject,
+        text_body=text_body,
+        html_body=html_body,
+        email_type="household_invite",
     )

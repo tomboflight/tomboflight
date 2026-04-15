@@ -10,6 +10,7 @@ from app.core.package_catalog import get_package, normalize_package_code
 from app.core.role_catalog import normalize_project_member_role
 from app.database import get_database
 from app.services.audit_log_service import create_audit_log
+from app.services.email_service import send_household_invite_email
 from app.services.project_entitlement_service import get_project_entitlement
 from app.services.project_membership_service import (
     ensure_project_owner_membership,
@@ -116,6 +117,34 @@ def _is_active_invite(invite: dict[str, Any]) -> bool:
     return expiration >= _now()
 
 
+def _parse_dt(value: Any) -> datetime | None:
+    normalized = _normalize(value)
+    if not normalized:
+        return None
+    try:
+        return datetime.fromisoformat(normalized.replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+def _expire_invite_if_needed(invite: dict[str, Any]) -> dict[str, Any]:
+    invite_id = invite.get("_id")
+    if invite_id is None:
+        return invite
+    status = _normalize(invite.get("status") or "pending").lower()
+    if status != "pending":
+        return invite
+    expires_at = _parse_dt(invite.get("expires_at"))
+    if expires_at is None or expires_at >= _now():
+        return invite
+    now_iso = _now().isoformat()
+    _invites().update_one(
+        {"_id": invite_id},
+        {"$set": {"status": "expired", "expired_at": now_iso, "updated_at": now_iso}},
+    )
+    return _invites().find_one({"_id": invite_id}) or {**invite, "status": "expired", "expired_at": now_iso}
+
+
 def _resolve_actor_role(project: dict[str, Any], actor_user: dict[str, Any]) -> str:
     snapshot = get_project_access_snapshot(
         project,
@@ -171,7 +200,8 @@ def list_project_members(project_id: str) -> list[dict[str, Any]]:
 
 def list_project_invites(project_id: str) -> list[dict[str, Any]]:
     cursor = _invites().find({"project_id": _normalize(project_id)}).sort("created_at", -1)
-    return list(cursor)
+    invites = list(cursor)
+    return [_expire_invite_if_needed(invite) for invite in invites]
 
 
 def create_household_invite(
@@ -256,6 +286,14 @@ def create_household_invite(
             "member_role": normalized_role,
         },
     )
+    send_household_invite_email(
+        to_email=normalized_email,
+        invite_key=invite_key,
+        project_id=_normalize(project_id),
+        member_role=normalized_role,
+        inviter_email=_normalize_email(actor_user.get("email")),
+        is_resend=False,
+    )
     return document
 
 
@@ -267,6 +305,7 @@ def accept_household_invite(*, invite_key: str, user: dict[str, Any]) -> dict[st
     invite = _invites().find_one({"invite_key": normalized_key})
     if invite is None:
         raise ValueError("Invite key was not found.")
+    invite = _expire_invite_if_needed(invite)
     if not _is_active_invite(invite):
         raise ValueError("Invite is no longer active.")
 
@@ -343,6 +382,7 @@ def revoke_household_invite(*, invite_id: str, actor_user: dict[str, Any]) -> di
     invite = _invites().find_one({"_id": oid})
     if invite is None:
         return None
+    invite = _expire_invite_if_needed(invite)
     project = _find_project(_normalize(invite.get("project_id")))
     if project is None:
         return None
@@ -358,6 +398,61 @@ def revoke_household_invite(*, invite_id: str, actor_user: dict[str, Any]) -> di
         "household_invite",
         str(oid),
         {"project_id": _normalize(invite.get("project_id"))},
+    )
+    return _invites().find_one({"_id": oid})
+
+
+def resend_household_invite(
+    *,
+    invite_id: str,
+    actor_user: dict[str, Any],
+    expires_in_days: int = 7,
+) -> dict[str, Any] | None:
+    oid = _to_oid(invite_id)
+    if oid is None:
+        return None
+    invite = _invites().find_one({"_id": oid})
+    if invite is None:
+        return None
+    invite = _expire_invite_if_needed(invite)
+    project = _find_project(_normalize(invite.get("project_id")))
+    if project is None:
+        return None
+    actor_role = _resolve_actor_role(project, actor_user)
+    if actor_role not in {"billing_owner", "co_owner", "family_manager"}:
+        raise PermissionError("You do not have permission to resend invites.")
+    status_value = _normalize(invite.get("status") or "pending").lower()
+    if status_value in {"accepted", "revoked"}:
+        raise ValueError("Only pending or expired invites can be resent.")
+
+    now = _now()
+    new_key = f"hhinv_{secrets.token_urlsafe(24)}"
+    updates = {
+        "status": "pending",
+        "invite_key": new_key,
+        "use_count": 0,
+        "accepted_at": None,
+        "revoked_at": None,
+        "expired_at": None,
+        "updated_at": now.isoformat(),
+        "expires_at": (now + timedelta(days=max(1, int(expires_in_days or 7)))).isoformat(),
+    }
+    _invites().update_one({"_id": oid}, {"$set": updates})
+    actor_user_id = _normalize(actor_user.get("id") or actor_user.get("_id") or actor_user.get("user_id"))
+    create_audit_log(
+        "household_invite_resent",
+        actor_user_id or None,
+        "household_invite",
+        str(oid),
+        {"project_id": _normalize(invite.get("project_id")), "invite_email": _normalize_email(invite.get("email"))},
+    )
+    send_household_invite_email(
+        to_email=_normalize_email(invite.get("email")),
+        invite_key=new_key,
+        project_id=_normalize(invite.get("project_id")),
+        member_role=normalize_project_member_role(invite.get("member_role"), default="viewer"),
+        inviter_email=_normalize_email(actor_user.get("email")),
+        is_resend=True,
     )
     return _invites().find_one({"_id": oid})
 

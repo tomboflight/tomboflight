@@ -19,6 +19,7 @@ from app.services.household_access_service import (
     list_my_memberships,
     list_project_invites,
     list_project_members,
+    resend_household_invite,
     revoke_household_invite,
     revoke_membership,
     update_member_role,
@@ -127,6 +128,19 @@ def revoke_invite(invite_id: str, current_user: dict[str, Any] = Depends(get_cur
     return build_invite_response(invite)
 
 
+@router.post("/invites/{invite_id}/resend")
+def resend_invite(invite_id: str, current_user: dict[str, Any] = Depends(get_current_user)):
+    try:
+        invite = resend_household_invite(invite_id=invite_id, actor_user=current_user)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    if invite is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invite not found.")
+    return build_invite_response(invite)
+
+
 @router.post("/project/{project_id}/members/{membership_id}/role")
 def change_member_role(
     project_id: str,
@@ -134,6 +148,7 @@ def change_member_role(
     payload: HouseholdMemberRoleUpdate,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
+    _assert_project_access(project_id, current_user)
     try:
         membership = update_member_role(
             project_id=project_id,
@@ -154,6 +169,7 @@ def revoke_member(
     membership_id: str,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
+    _assert_project_access(project_id, current_user)
     try:
         membership = revoke_membership(
             project_id=project_id,

@@ -11,8 +11,32 @@
   const invitesList = document.querySelector("[data-household-invites-list]");
   const membersEmpty = document.querySelector("[data-household-members-empty]");
   const invitesEmpty = document.querySelector("[data-household-invites-empty]");
+  const pendingCount = document.querySelector("[data-household-pending-count]");
+  const inviteCoOwnerButton = document.querySelector("[data-household-invite-co-owner]");
+  const inviteFamilyButton = document.querySelector("[data-household-invite-family]");
+
+  const ROLE_OPTIONS = [
+    "billing_owner",
+    "co_owner",
+    "family_manager",
+    "contributor",
+    "viewer",
+    "minor_viewer",
+    "linked_relative",
+  ];
+
+  const ROLE_LABELS = {
+    billing_owner: "Billing Owner",
+    co_owner: "Co-Owner",
+    family_manager: "Family Manager",
+    contributor: "Contributor",
+    viewer: "Viewer",
+    minor_viewer: "Minor Viewer",
+    linked_relative: "Linked Relative",
+  };
 
   let currentProjectId = "";
+  let currentUser = null;
 
   function setText(node, message, type = "info") {
     if (!node) return;
@@ -22,6 +46,10 @@
   function clear(node) {
     if (!node) return;
     app.clearStatus(node);
+  }
+
+  function roleLabel(role) {
+    return ROLE_LABELS[String(role || "").trim()] || String(role || "viewer");
   }
 
   function projectIdFromContext(user) {
@@ -35,6 +63,56 @@
     return String(user?.active_project_id || "").trim();
   }
 
+  function inviteKeyFromQuery() {
+    const params = new URLSearchParams(window.location.search);
+    return String(params.get("invite_key") || "").trim();
+  }
+
+  function isPending(invite) {
+    return String(invite?.status || "").toLowerCase() === "pending";
+  }
+
+  function isExpired(invite) {
+    return String(invite?.status || "").toLowerCase() === "expired";
+  }
+
+  function renderPendingCount(items) {
+    if (!pendingCount) return;
+    const pendingTotal = (items || []).filter(isPending).length;
+    pendingCount.textContent = `${pendingTotal} pending invite${pendingTotal === 1 ? "" : "s"}.`;
+  }
+
+  async function changeMemberRole(membershipId, memberRole) {
+    await app.apiRequest(
+      `/workspace-access/project/${encodeURIComponent(currentProjectId)}/members/${encodeURIComponent(membershipId)}/role`,
+      {
+        method: "POST",
+        body: JSON.stringify({ member_role: memberRole }),
+      },
+    );
+  }
+
+  async function removeMember(membershipId) {
+    await app.apiRequest(
+      `/workspace-access/project/${encodeURIComponent(currentProjectId)}/members/${encodeURIComponent(membershipId)}/revoke`,
+      {
+        method: "POST",
+      },
+    );
+  }
+
+  async function resendInvite(inviteId) {
+    await app.apiRequest(`/workspace-access/invites/${encodeURIComponent(inviteId)}/resend`, {
+      method: "POST",
+    });
+  }
+
+  async function revokeInvite(inviteId) {
+    await app.apiRequest(`/workspace-access/invites/${encodeURIComponent(inviteId)}/revoke`, {
+      method: "POST",
+    });
+  }
+
   function renderMembers(items) {
     if (!membersList) return;
     membersList.innerHTML = "";
@@ -46,13 +124,54 @@
     items.forEach((member) => {
       const card = document.createElement("article");
       card.className = "form-panel";
+
+      const emailLabel = member.email || member.user_id || "Unassigned member";
+      const role = String(member.member_role || "viewer").trim();
+      const isBillingOwner = role === "billing_owner";
+      const options = ROLE_OPTIONS.map(
+        (roleCode) =>
+          `<option value="${roleCode}" ${roleCode === role ? "selected" : ""}>${roleLabel(roleCode)}</option>`,
+      ).join("");
       card.innerHTML = `
-        <strong>${member.email || member.user_id || "Unassigned member"}</strong>
-        <p class="card-copy">Role: ${member.member_role || "viewer"}</p>
+        <strong>${emailLabel}</strong>
+        <p class="card-copy">Role: ${roleLabel(role)}</p>
         <p class="card-copy">Relationship: ${member.relationship_scope || "household_member"}</p>
         <p class="card-copy">Privacy: ${member.privacy_scope || "household_private"}</p>
         <p class="card-copy">Status: ${member.status || "active"}</p>
+        <label>Change Role
+          <select ${isBillingOwner ? "disabled" : ""} data-member-role-select>${options}</select>
+        </label>
+        <div class="inline-actions" style="margin-top:0.75rem;">
+          <button class="btn btn-secondary" type="button" data-member-role-save ${isBillingOwner ? "disabled" : ""}>Change Role</button>
+          <button class="btn btn-secondary" type="button" data-member-remove ${isBillingOwner ? "disabled" : ""}>Remove Member</button>
+        </div>
       `;
+
+      const roleSave = card.querySelector("[data-member-role-save]");
+      const roleSelect = card.querySelector("[data-member-role-select]");
+      const removeButton = card.querySelector("[data-member-remove]");
+      if (roleSave && roleSelect && !isBillingOwner) {
+        roleSave.addEventListener("click", async function () {
+          try {
+            await changeMemberRole(member.id, roleSelect.value);
+            await refreshData();
+            setText(inviteStatus, "Member role updated.", "success");
+          } catch (error) {
+            setText(inviteStatus, error.message || "Failed to change role.", "error");
+          }
+        });
+      }
+      if (removeButton && !isBillingOwner) {
+        removeButton.addEventListener("click", async function () {
+          try {
+            await removeMember(member.id);
+            await refreshData();
+            setText(inviteStatus, "Member removed.", "success");
+          } catch (error) {
+            setText(inviteStatus, error.message || "Failed to remove member.", "error");
+          }
+        });
+      }
       membersList.appendChild(card);
     });
   }
@@ -62,19 +181,52 @@
     invitesList.innerHTML = "";
     if (!Array.isArray(items) || !items.length) {
       if (invitesEmpty) invitesEmpty.style.display = "block";
+      renderPendingCount([]);
       return;
     }
     if (invitesEmpty) invitesEmpty.style.display = "none";
+    renderPendingCount(items);
     items.forEach((invite) => {
       const card = document.createElement("article");
       card.className = "form-panel";
+      const canResend = isPending(invite) || isExpired(invite);
+      const canRevoke = isPending(invite) || isExpired(invite);
       card.innerHTML = `
         <strong>${invite.email || "Invite"}</strong>
-        <p class="card-copy">Role: ${invite.member_role || "viewer"}</p>
+        <p class="card-copy">Role: ${roleLabel(invite.member_role || "viewer")}</p>
         <p class="card-copy">Status: ${invite.status || "pending"}</p>
         <p class="card-copy">Expires: ${invite.expires_at || "—"}</p>
-        <p class="card-copy">Invite Key: ${invite.invite_key || "hidden"}</p>
+        <div class="inline-actions" style="margin-top:0.75rem;">
+          <button class="btn btn-secondary" type="button" data-invite-resend ${canResend ? "" : "disabled"}>Resend Invite</button>
+          <button class="btn btn-secondary" type="button" data-invite-revoke ${canRevoke ? "" : "disabled"}>Revoke Invite</button>
+        </div>
       `;
+
+      const resendButton = card.querySelector("[data-invite-resend]");
+      const revokeButton = card.querySelector("[data-invite-revoke]");
+      if (resendButton && canResend) {
+        resendButton.addEventListener("click", async function () {
+          try {
+            await resendInvite(invite.id);
+            await refreshData();
+            setText(inviteStatus, "Invite resent.", "success");
+          } catch (error) {
+            setText(inviteStatus, error.message || "Failed to resend invite.", "error");
+          }
+        });
+      }
+      if (revokeButton && canRevoke) {
+        revokeButton.addEventListener("click", async function () {
+          try {
+            await revokeInvite(invite.id);
+            await refreshData();
+            setText(inviteStatus, "Invite revoked.", "success");
+          } catch (error) {
+            setText(inviteStatus, error.message || "Failed to revoke invite.", "error");
+          }
+        });
+      }
+
       invitesList.appendChild(card);
     });
   }
@@ -89,6 +241,12 @@
     renderInvites(invitesPayload?.items || []);
   }
 
+  function selectedInviteRole() {
+    if (!inviteForm) return "viewer";
+    const node = inviteForm.querySelector('select[name="member_role"]');
+    return String(node?.value || "viewer").trim();
+  }
+
   async function handleInviteSubmit(event) {
     event.preventDefault();
     clear(inviteStatus);
@@ -99,16 +257,17 @@
     const formData = new FormData(inviteForm);
     const payload = {
       email: String(formData.get("email") || "").trim(),
-      member_role: String(formData.get("member_role") || "viewer").trim(),
+      member_role: selectedInviteRole(),
       relationship_scope: String(formData.get("relationship_scope") || "household_member").trim(),
       privacy_scope: String(formData.get("privacy_scope") || "household_private").trim(),
+      notes: String(formData.get("notes") || "").trim(),
     };
     try {
       await app.apiRequest(`/workspace-access/project/${encodeURIComponent(currentProjectId)}/invites`, {
         method: "POST",
         body: JSON.stringify(payload),
       });
-      setText(inviteStatus, "Invite created. Share the key with the invited person.", "success");
+      setText(inviteStatus, "Invite sent by email.", "success");
       inviteForm.reset();
       await refreshData();
     } catch (error) {
@@ -137,10 +296,26 @@
     }
   }
 
+  function bindQuickInviteButtons() {
+    if (!inviteForm) return;
+    if (inviteCoOwnerButton) {
+      inviteCoOwnerButton.addEventListener("click", function () {
+        const roleNode = inviteForm.querySelector('select[name="member_role"]');
+        if (roleNode) roleNode.value = "co_owner";
+      });
+    }
+    if (inviteFamilyButton) {
+      inviteFamilyButton.addEventListener("click", function () {
+        const roleNode = inviteForm.querySelector('select[name="member_role"]');
+        if (roleNode) roleNode.value = "contributor";
+      });
+    }
+  }
+
   async function initialize() {
-    const user = await app.requireSession("signin.html");
-    if (!user) return;
-    currentProjectId = projectIdFromContext(user);
+    currentUser = await app.requireSession("signin.html");
+    if (!currentUser) return;
+    currentProjectId = projectIdFromContext(currentUser);
     if (!currentProjectId) {
       if (statusNode) {
         statusNode.textContent =
@@ -152,6 +327,13 @@
       statusNode.textContent = `Managing workspace access for project ${currentProjectId}.`;
     }
 
+    const inviteKey = inviteKeyFromQuery();
+    if (acceptForm && inviteKey) {
+      const keyInput = acceptForm.querySelector('input[name="invite_key"]');
+      if (keyInput) keyInput.value = inviteKey;
+    }
+
+    bindQuickInviteButtons();
     if (inviteForm) inviteForm.addEventListener("submit", handleInviteSubmit);
     if (acceptForm) acceptForm.addEventListener("submit", handleAcceptSubmit);
     await refreshData();
