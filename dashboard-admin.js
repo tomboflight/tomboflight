@@ -7,23 +7,30 @@
   }
 
   const INTERNAL_ROLE_KEYS = new Set([
-    "admin",
     "super_admin",
-    "root_admin",
-    "platform_admin",
     "operations_admin",
     "finance_admin",
     "marketing_admin",
-    "executive_technology",
-    "operations",
-    "finance",
-    "marketing",
   ]);
+
+  const ROLE_ALIASES = {
+    root_admin: "super_admin",
+    platform_admin: "super_admin",
+    executive_technology: "super_admin",
+    operations: "operations_admin",
+    finance: "finance_admin",
+    marketing: "marketing_admin",
+  };
 
   function normalizeValue(value) {
     return String(value || "")
       .trim()
       .toLowerCase();
+  }
+
+  function normalizeRole(value) {
+    const normalized = normalizeValue(value);
+    return ROLE_ALIASES[normalized] || normalized;
   }
 
   function escapeHtml(value) {
@@ -37,9 +44,9 @@
 
   function getRoleSignals(me) {
     return [
-      normalizeValue(me && me.role),
-      normalizeValue(me && me.access_tier),
-      normalizeValue(me && me.department_role),
+      normalizeRole(me && me.access_tier),
+      normalizeRole(me && me.department_role),
+      normalizeRole(me && me.role),
     ].filter(Boolean);
   }
 
@@ -83,20 +90,15 @@
 
     const roleKey = getInternalRoleKey(me);
 
-    if (roleKey === "root_admin") return "CEO / Super Admin";
     if (roleKey === "super_admin") return "CEO / Super Admin";
-    if (roleKey === "admin") return "Administrative Control";
-    if (roleKey === "operations_admin" || roleKey === "operations") {
+    if (roleKey === "operations_admin") {
       return "COO";
     }
-    if (roleKey === "finance_admin" || roleKey === "finance") {
+    if (roleKey === "finance_admin") {
       return "CFO";
     }
-    if (roleKey === "marketing_admin" || roleKey === "marketing") {
+    if (roleKey === "marketing_admin") {
       return "CMO";
-    }
-    if (roleKey === "platform_admin" || roleKey === "executive_technology") {
-      return "CEO / Super Admin";
     }
     return "Internal Control";
   }
@@ -106,11 +108,7 @@
 
     if (
       [
-        "root_admin",
         "super_admin",
-        "admin",
-        "platform_admin",
-        "executive_technology",
       ].includes(roleKey)
     ) {
       return [
@@ -138,12 +136,7 @@
       ];
     }
 
-    if (
-      [
-        "operations_admin",
-        "operations",
-      ].includes(roleKey)
-    ) {
+    if (roleKey === "operations_admin") {
       return [
         card(
           "A",
@@ -169,7 +162,7 @@
       ];
     }
 
-    if (["finance_admin", "finance"].includes(roleKey)) {
+    if (roleKey === "finance_admin") {
       return [
         card(
           "A",
@@ -181,7 +174,7 @@
       ];
     }
 
-    if (["marketing_admin", "marketing"].includes(roleKey)) {
+    if (roleKey === "marketing_admin") {
       return [
         card(
           "A",

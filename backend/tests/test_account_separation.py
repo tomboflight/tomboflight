@@ -130,6 +130,38 @@ class AccountSeparationTests(unittest.TestCase):
             resolved = auth_dependencies.require_super_admin(request=object(), current_user=current_user)
         self.assertIs(resolved, current_user)
 
+    def test_admin_base_role_does_not_grant_full_admin_permissions(self):
+        with (
+            patch.object(
+                auth_dependencies,
+                "_load_user_by_id",
+                return_value={
+                    "_id": "user-1",
+                    "email": "jenn.wood@tomboflight.com",
+                    "role": "admin",
+                    "access_tier": "finance_admin",
+                    "department_role": "finance",
+                },
+            ),
+            patch.object(
+                auth_dependencies,
+                "_db",
+                return_value={
+                    "user_role_assignments": type("Collection", (), {"find": lambda self, *_a, **_k: []})(),
+                    "role_permissions": type("Collection", (), {"find": lambda self, *_a, **_k: []})(),
+                    "role_capabilities": type("Collection", (), {"find": lambda self, *_a, **_k: []})(),
+                    "projects": type("Collection", (), {"count_documents": lambda self, *_a, **_k: 0})(),
+                    "workflow_events": type("Collection", (), {"find_one": lambda self, *_a, **_k: None})(),
+                },
+            ),
+            patch.object(auth_dependencies, "list_user_project_entitlements", return_value=[]),
+        ):
+            context = auth_dependencies.resolve_access_context("user-1")
+        permissions = set(context.get("permissions") or [])
+        self.assertIn("admin.control.billing", permissions)
+        self.assertNotIn("admin.users.write", permissions)
+        self.assertNotIn("admin.intake.write", permissions)
+
 
 if __name__ == "__main__":
     unittest.main()

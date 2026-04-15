@@ -8,13 +8,8 @@
   }
 
   const INTAKE_REVIEW_ROLE_KEYS = new Set([
-    "admin",
     "super_admin",
-    "root_admin",
-    "platform_admin",
     "operations_admin",
-    "executive_technology",
-    "operations",
   ]);
 
   const LINK_KEY_ENABLED_PACKAGES = new Set([

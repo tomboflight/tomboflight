@@ -5,18 +5,20 @@
   if (!app || typeof app.apiRequest !== "function") return;
 
   const INTERNAL_ROLE_KEYS = new Set([
-    "admin",
     "super_admin",
-    "root_admin",
-    "platform_admin",
     "operations_admin",
     "finance_admin",
     "marketing_admin",
-    "executive_technology",
-    "operations",
-    "finance",
-    "marketing",
   ]);
+
+  const ROLE_ALIASES = {
+    root_admin: "super_admin",
+    platform_admin: "super_admin",
+    executive_technology: "super_admin",
+    operations: "operations_admin",
+    finance: "finance_admin",
+    marketing: "marketing_admin",
+  };
 
   const state = {
     currentUser: null,
@@ -34,6 +36,7 @@
     workspace: null,
     packageOptions: [],
   };
+  const DEFAULT_ROLE_KEY = "user";
 
   const QUEUE_META = {
     overview: ["Overview", "Executive repair posture across active customer operations."],
@@ -94,6 +97,11 @@
     return normalizeValue(value).toLowerCase();
   }
 
+  function normalizeRole(value) {
+    const normalized = normalizeLower(value);
+    return ROLE_ALIASES[normalized] || normalized;
+  }
+
   function escapeHtml(value) {
     return String(value ?? "")
       .replaceAll("&", "&amp;")
@@ -127,9 +135,9 @@
 
   function getInternalRoleKey(me) {
     const values = [
-      normalizeLower(me && me.role),
-      normalizeLower(me && me.access_tier),
-      normalizeLower(me && me.department_role),
+      normalizeRole(me && me.access_tier),
+      normalizeRole(me && me.department_role),
+      normalizeRole(me && me.role),
     ].filter(Boolean);
     const direct = values.find(function (value) {
       return INTERNAL_ROLE_KEYS.has(value);
@@ -168,7 +176,8 @@
   async function loadAccessProfile() {
     const profile = await fetchJson("/admin/control-center/access-profile");
     state.accessProfile = profile || {};
-    state.roleKey = normalizeLower(profile && profile.role_key) || state.roleKey || "admin";
+    const profileRoleKey = normalizeRole(profile && profile.role_key);
+    state.roleKey = profileRoleKey ? profileRoleKey : (state.roleKey || DEFAULT_ROLE_KEY);
     state.allowedQueues = normalizeAccessList(profile && profile.allowed_queues);
     state.allowedTabs = normalizeAccessList(profile && profile.allowed_tabs);
     state.allowedActions = normalizeAccessList(profile && profile.allowed_actions);
@@ -1450,7 +1459,7 @@
     }
     if (statusNode) {
       const queueCount = Array.isArray(state.allowedQueues) ? state.allowedQueues.length : 0;
-      statusNode.textContent = `Search-first case operations are active for role: ${state.roleKey || "admin"} across ${queueCount} permitted queue${queueCount === 1 ? "" : "s"}.`;
+      statusNode.textContent = `Search-first case operations are active for role: ${state.roleKey || DEFAULT_ROLE_KEY} across ${queueCount} permitted queue${queueCount === 1 ? "" : "s"}.`;
     }
   }
 

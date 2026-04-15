@@ -127,6 +127,7 @@ class AuthMfaTests(unittest.TestCase):
                         "status": "active",
                         "password_hash": auth_service.hash_password("StrongPass!123"),
                         "role": "admin",
+                        "access_tier": "super_admin",
                         "mfa_enabled": False,
                         "session_token_version": 0,
                     }
@@ -151,6 +152,7 @@ class AuthMfaTests(unittest.TestCase):
                         "status": "active",
                         "password_hash": auth_service.hash_password("StrongPass!123"),
                         "role": "admin",
+                        "access_tier": "super_admin",
                         "mfa_enabled": True,
                         "session_token_version": 0,
                     }

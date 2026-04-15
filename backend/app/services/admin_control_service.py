@@ -13,7 +13,12 @@ from app.core.package_catalog import (
     get_package_control_profile,
     normalize_package_code,
 )
-from app.core.role_catalog import SUPER_ADMIN_ROLE_CODES, normalize_role_code
+from app.core.role_catalog import (
+    INTERNAL_ADMIN_ROLE_CODES,
+    SUPER_ADMIN_ROLE_CODES,
+    normalize_role_code,
+    resolve_primary_role_code,
+)
 from app.database import get_database
 from app.services.audit_log_service import write_audit_log
 from app.services.mint_job_service import sync_receipt_for_mint_record
@@ -34,19 +39,7 @@ INTAKE_APPROVED_PHASES = {"intake_approved", "build_started", "quality_review", 
 PAID_ORDER_STATUSES = {"paid", "succeeded", "complete", "completed"}
 OBJECT_ID_WRAPPER_PATTERN = re.compile(r"""^ObjectId\((["']?)([0-9a-fA-F]{24})\1\)$""")
 MAX_BULK_ACTION_LIMIT = 5000
-INTERNAL_ROLE_KEYS = {
-    "admin",
-    "super_admin",
-    "root_admin",
-    "platform_admin",
-    "operations_admin",
-    "finance_admin",
-    "marketing_admin",
-    "executive_technology",
-    "operations",
-    "finance",
-    "marketing",
-}
+INTERNAL_ROLE_KEYS = set(INTERNAL_ADMIN_ROLE_CODES) | {"admin"}
 
 ADMIN_CONTROL_QUEUES = [
     "overview",
@@ -298,6 +291,11 @@ def admin_control_access_profile(current_user: dict[str, Any]) -> dict[str, Any]
         for permission in (access_context.get("permissions") or [])
         if _normalize(permission)
     }
+    capabilities = {
+        _normalize(capability).lower()
+        for capability in (access_context.get("capabilities") or [])
+        if _normalize(capability)
+    }
 
     allowed_queues = [
         queue
@@ -320,14 +318,12 @@ def admin_control_access_profile(current_user: dict[str, Any]) -> dict[str, Any]
         if _has_any_permission(permissions, BULK_ACTION_PERMISSIONS[action])
     ]
 
-    primary_role = next(
-        (role for role in role_codes if role in INTERNAL_ROLE_KEYS),
-        role_codes[0] if role_codes else _normalize(current_user.get("role")).lower() or "user",
-    )
+    primary_role = resolve_primary_role_code(role_codes, default="user")
 
     return {
         "role_key": primary_role,
         "role_codes": role_codes,
+        "capabilities": sorted(capabilities),
         "permissions": sorted(permissions),
         "allowed_queues": allowed_queues,
         "allowed_tabs": allowed_tabs,
@@ -2169,9 +2165,9 @@ def _is_internal_user_document(user: dict[str, Any] | None) -> bool:
     if not user:
         return False
     values = {
-        _normalize(user.get("role")).lower(),
-        _normalize(user.get("access_tier")).lower(),
-        _normalize(user.get("department_role")).lower(),
+        normalize_role_code(_normalize(user.get("role"))).lower(),
+        normalize_role_code(_normalize(user.get("access_tier"))).lower(),
+        normalize_role_code(_normalize(user.get("department_role"))).lower(),
     }
     return any(value in INTERNAL_ROLE_KEYS for value in values if value)
 
@@ -2190,11 +2186,13 @@ def _user_display_name(user: dict[str, Any]) -> str:
 
 
 def _user_role_value(user: dict[str, Any]) -> str:
-    return (
-        _normalize(user.get("role"))
-        or _normalize(user.get("access_tier"))
-        or _normalize(user.get("department_role"))
-        or "user"
+    return resolve_primary_role_code(
+        (
+            _normalize(user.get("role")),
+            _normalize(user.get("access_tier")),
+            _normalize(user.get("department_role")),
+        ),
+        default="user",
     )
 
 

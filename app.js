@@ -260,18 +260,20 @@
   // Any module needing role gating should call app.isInternalRole() rather
   // than maintaining its own copy of this set.
   const INTERNAL_ROLE_KEYS = new Set([
-    "admin",
     "super_admin",
-    "root_admin",
-    "platform_admin",
     "operations_admin",
     "finance_admin",
     "marketing_admin",
-    "executive_technology",
-    "operations",
-    "finance",
-    "marketing",
   ]);
+
+  const INTERNAL_ROLE_ALIASES = {
+    root_admin: "super_admin",
+    platform_admin: "super_admin",
+    executive_technology: "super_admin",
+    operations: "operations_admin",
+    finance: "finance_admin",
+    marketing: "marketing_admin",
+  };
 
   function isInternalRole(user) {
     if (!user || typeof user !== "object") return false;
@@ -280,7 +282,8 @@
       String(user.access_tier || "").trim().toLowerCase(),
       String(user.department_role || "").trim().toLowerCase(),
     ].some(function (v) {
-      return v && INTERNAL_ROLE_KEYS.has(v);
+      const normalized = INTERNAL_ROLE_ALIASES[v] || v;
+      return normalized && INTERNAL_ROLE_KEYS.has(normalized);
     });
   }
 
