@@ -14,7 +14,6 @@ from app.core.role_catalog import (
     collect_role_codes,
     has_internal_admin_role,
     normalize_role_code,
-    resolve_primary_role_code,
 )
 from app.core.security import decode_access_token, verify_csrf_token
 from app.database import get_database
@@ -666,9 +665,6 @@ def _collect_role_codes_for_user(user: dict[str, Any]) -> set[str]:
             role_code = normalize_role_code(assignment.get("role_code"))
             if role_code:
                 role_codes.add(role_code)
-    primary_role = resolve_primary_role_code(role_codes, default="")
-    if primary_role:
-        role_codes.add(primary_role)
     return role_codes
 
 
@@ -809,9 +805,6 @@ def resolve_access_context(user_id: str, project_id: str | None = None) -> dict[
         )
 
     role_codes = _collect_role_codes_for_user(user)
-    if has_internal_admin_access(user) and not role_codes:
-        role_codes.add("admin")
-
     capabilities = _collect_capabilities_for_roles(role_codes)
     permissions = _collect_permissions_for_roles(role_codes, capabilities)
 

@@ -142,7 +142,7 @@
       return INTERNAL_ROLE_KEYS.has(value);
     });
     if (direct) return direct;
-    if (typeof app.isInternalRole === "function" && app.isInternalRole(me)) return "user";
+    if (typeof app.isInternalRole === "function" && app.isInternalRole(me)) return "admin";
     return "";
   }
 
