@@ -530,7 +530,7 @@
     }
 
     const preferredApiBaseUrl =
-      savedApiBaseUrl && configuredApiBaseUrls.includes(savedApiBaseUrl)
+      savedApiBaseUrl && configuredApiBaseUrls[0] === savedApiBaseUrl
         ? savedApiBaseUrl
         : configuredApiBaseUrls.length > 1
         ? await discoverApiBaseUrl(configuredApiBaseUrls)
@@ -612,6 +612,8 @@
 
     if (!response) {
       const error = new Error(buildNetworkErrorMessage(apiBaseUrls));
+      error.status = 0;
+      error.apiBaseUrls = apiBaseUrls;
       if (lastNetworkError) {
         error.cause = lastNetworkError;
       }
@@ -633,7 +635,12 @@
     }
 
     if (!response.ok) {
-      throw new Error(parseApiError(data, response));
+      const error = new Error(parseApiError(data, response));
+      error.status = response.status;
+      error.statusText = response.statusText;
+      error.detail = data && (data.detail || data.message || data.error);
+      error.data = data;
+      throw error;
     }
 
     return data;
