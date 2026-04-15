@@ -172,16 +172,24 @@ def build_linked_network(
                 continue
 
             member_household_id = _str_id(member.get("household_id") or hh_id)
-            visibility_scope = str(member.get("visibility_scope") or "").strip()
+            visibility_scope = str(member.get("visibility_scope") or "").strip().lower()
             is_deceased = bool(member.get("is_deceased", False))
+            approved_cross_branch = bool(
+                member.get("approved_cross_branch")
+                or member.get("share_with_linked_families")
+                or visibility_scope in {"linked_family_shared", "branch_shared", "public_memorial", "memorial"}
+            )
 
             # Visibility logic
-            if visibility_scope == "private" and member_household_id not in user_household_ids:
+            if member_household_id not in user_household_ids and not (
+                is_deceased
+                or approved_cross_branch
+            ):
                 continue
 
-            if is_deceased or visibility_scope == "memorial":
+            if is_deceased or visibility_scope in {"memorial", "public_memorial"}:
                 effective_scope = "memorial"
-            elif member_household_id in user_household_ids or visibility_scope == "household":
+            elif member_household_id in user_household_ids or visibility_scope in {"household", "household_private"}:
                 effective_scope = "household"
             else:
                 effective_scope = "linked"
@@ -207,11 +215,15 @@ def build_linked_network(
             rid = _str_id(rel.get("_id"))
             if rid in seen_relationship_ids:
                 continue
+            source_member_id = _str_id(rel.get("source_member_id") or "")
+            target_member_id = _str_id(rel.get("target_member_id") or "")
+            if source_member_id not in seen_member_ids or target_member_id not in seen_member_ids:
+                continue
             seen_relationship_ids.add(rid)
             all_edges.append({
                 "id": rid,
-                "source_member_id": _str_id(rel.get("source_member_id") or ""),
-                "target_member_id": _str_id(rel.get("target_member_id") or ""),
+                "source_member_id": source_member_id,
+                "target_member_id": target_member_id,
                 "relationship_type": rel.get("relationship_type"),
                 "notes": rel.get("notes"),
                 "source_project_id": hh_project_id,

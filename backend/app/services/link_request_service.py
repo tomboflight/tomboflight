@@ -142,6 +142,8 @@ def create_link_request(
     source_key_doc = get_active_key_doc_for_project(source_project_id)
     if source_key_doc is None:
         raise ValueError("Generate a link key for your workspace before requesting a link.")
+    if _normalize_value(source_key_doc.get("key_type") or "branch_link_key") != "branch_link_key":
+        raise ValueError("The active source key must be a branch link key.")
 
     target_key_doc = get_key_doc_by_value(target_key)
     if target_key_doc is None:
@@ -156,6 +158,8 @@ def create_link_request(
         except Exception:
             pass
         raise ValueError("Target link key was not found or is no longer active.")
+    if _normalize_value(target_key_doc.get("key_type") or "branch_link_key") != "branch_link_key":
+        raise ValueError("The target key must be a branch link key.")
 
     target_project_id = str(target_key_doc.get("project_id") or "").strip()
     if not target_project_id:
