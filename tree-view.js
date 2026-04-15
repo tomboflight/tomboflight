@@ -360,23 +360,6 @@
     }
   }
 
-  function getTreeApiBaseUrls() {
-    const configured = window.TOL_CONFIG || {};
-    const configuredList = Array.isArray(configured.API_BASE_URLS)
-      ? configured.API_BASE_URLS
-      : [];
-    const singleConfigUrl =
-      typeof configured.API_BASE_URL === "string" ? configured.API_BASE_URL : "";
-    const runtimeBaseUrl =
-      window.TOLAuth && typeof window.TOLAuth.getApiBaseUrl === "function"
-        ? window.TOLAuth.getApiBaseUrl()
-        : "";
-    const candidates = [runtimeBaseUrl, ...configuredList, singleConfigUrl]
-      .map((value) => String(value || "").trim())
-      .filter(Boolean);
-    return Array.from(new Set(candidates));
-  }
-
   function describeTreeResponseShape(payload) {
     const members = Array.isArray(payload?.members) ? payload.members : null;
     const relationships = Array.isArray(payload?.relationships)
@@ -396,80 +379,29 @@
     };
   }
 
-  function parseTreeErrorMessage(responsePayload, responseStatus, responseText) {
-    const detail =
-      (responsePayload &&
-        (responsePayload.detail || responsePayload.message || responsePayload.error)) ||
-      responseText ||
-      `Request failed with status ${responseStatus}`;
-    return String(detail || "").trim();
-  }
-
   async function fetchTreeGraph(endpoint) {
-    const apiBaseUrls = getTreeApiBaseUrls();
-    const token =
-      window.TOLAuth && typeof window.TOLAuth.getToken === "function"
-        ? window.TOLAuth.getToken()
+    const apiBaseUrl =
+      window.TOLAuth && typeof window.TOLAuth.getApiBaseUrl === "function"
+        ? window.TOLAuth.getApiBaseUrl()
         : "";
-    const headers = {
-      Accept: "application/json",
-    };
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
-
-    let lastError = null;
-    for (const apiBaseUrl of apiBaseUrls) {
-      try {
-        const response = await fetch(`${apiBaseUrl}${endpoint}`, {
-          method: "GET",
-          credentials: "include",
-          headers,
-        });
-
-        const contentType = String(response.headers.get("content-type") || "");
-        let payload = null;
-        let rawText = "";
-        if (contentType.includes("application/json")) {
-          try {
-            payload = await response.json();
-          } catch (_error) {
-            payload = null;
-          }
-        } else {
-          rawText = await response.text();
-          payload = rawText ? { detail: rawText } : null;
-        }
-
-        const bodyShape = describeTreeResponseShape(payload);
-        if (!response.ok) {
-          const failure = new Error(
-            parseTreeErrorMessage(payload, response.status, rawText),
-          );
-          failure.status = response.status;
-          failure.detail = failure.message;
-          failure.endpoint = endpoint;
-          failure.apiBaseUrl = apiBaseUrl;
-          failure.bodyShape = bodyShape;
-          throw failure;
-        }
-
-        return {
-          payload,
-          status: response.status,
-          apiBaseUrl,
-          bodyShape,
-        };
-      } catch (error) {
-        lastError = error;
+    try {
+      const payload = await window.TOLAuth.apiRequest(endpoint, {
+        method: "GET",
+      });
+      return {
+        payload,
+        status: 200,
+        apiBaseUrl,
+        bodyShape: describeTreeResponseShape(payload),
+      };
+    } catch (error) {
+      error.endpoint = endpoint;
+      error.apiBaseUrl = apiBaseUrl;
+      if (!error.bodyShape) {
+        error.bodyShape = null;
       }
+      throw error;
     }
-
-    if (lastError) {
-      throw lastError;
-    }
-
-    throw new Error("Unable to reach the visual tree service.");
   }
 
   function categorizeTreeError(error) {
