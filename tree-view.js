@@ -14,6 +14,14 @@
   ]);
 
   const SECONDARY_ANCESTRY_TYPES = new Set(["step_parent_child"]);
+  const RELATIONSHIP_TYPE_ALIASES = {
+    "parent-child": "parent_child",
+    adoptive: "adoptive_parent_child",
+    "adoptive-parent-child": "adoptive_parent_child",
+    step: "step_parent_child",
+    "step-parent-child": "step_parent_child",
+    spousal: "spouse",
+  };
 
   const TREE_VIEW_STATE = {
     scale: 1,
@@ -83,29 +91,35 @@
   }
 
   function formatRelationshipLabel(relationshipType, context) {
-    const rel = String(relationshipType || "")
-      .trim()
-      .toLowerCase();
+    const rel = normalizeRelationshipType(relationshipType);
 
     if (context === "parents") {
-      if (rel === "parent_child") return "biological parent";
-      if (rel === "step_parent_child") return "step-parent";
-      if (rel === "adoptive_parent_child") return "adoptive parent";
+      if (rel === "parent_child") return "Biological parent";
+      if (rel === "step_parent_child") return "Step-parent";
+      if (rel === "adoptive_parent_child") return "Adoptive parent";
+      if (rel === "guardian") return "Guardian";
       return rel.replaceAll("_", " ");
     }
 
     if (context === "children") {
-      if (rel === "parent_child") return "biological child";
-      if (rel === "step_parent_child") return "step-child";
-      if (rel === "adoptive_parent_child") return "adopted child";
+      if (rel === "parent_child") return "Biological child";
+      if (rel === "step_parent_child") return "Step-child";
+      if (rel === "adoptive_parent_child") return "Adopted child";
       return rel.replaceAll("_", " ");
     }
 
     if (context === "spouses") {
-      return "spouse";
+      return "Spouse";
     }
 
     return rel.replaceAll("_", " ");
+  }
+
+  function normalizeRelationshipType(value) {
+    const normalized = String(value || "")
+      .trim()
+      .toLowerCase();
+    return RELATIONSHIP_TYPE_ALIASES[normalized] || normalized;
   }
 
   function getFamilyIdFromUrl() {
@@ -645,6 +659,10 @@
     const relationships = Array.isArray(graph.relationships)
       ? graph.relationships
       : [];
+    const normalizedRelationships = relationships.map((rel) => ({
+      ...rel,
+      relationship_type: normalizeRelationshipType(rel.relationship_type),
+    }));
 
     if (!members.length) {
       canvas.innerHTML =
@@ -655,14 +673,14 @@
     const memberMap = new Map();
     members.forEach((member) => memberMap.set(member.id, member));
 
-    const spousePairs = buildSpousePairs(relationships);
+    const spousePairs = buildSpousePairs(normalizedRelationships, memberMap);
     const pairMap = new Map();
     spousePairs.forEach((pair) => {
       pairMap.set(pair.a, pair);
       pairMap.set(pair.b, pair);
     });
 
-    const memberRowMap = buildMemberRowMap(members, relationships);
+    const memberRowMap = buildMemberRowMap(members, normalizedRelationships);
 
     const generationGroups = new Map();
     members.forEach((member) => {
@@ -806,7 +824,7 @@
 
     const positions = new Map();
 
-    const primaryRelationships = relationships.filter((rel) =>
+    const primaryRelationships = normalizedRelationships.filter((rel) =>
       PRIMARY_ANCESTRY_TYPES.has(rel.relationship_type),
     );
 
@@ -825,7 +843,6 @@
           item,
           positions,
           primaryRelationships,
-          pairMap,
         );
         const widthValue =
           item.type === "couple" ? nodeWidth * 2 + coupleGap : nodeWidth;
@@ -872,7 +889,7 @@
             detailPanel,
             detailEmpty,
             memberMap,
-            relationships,
+            normalizedRelationships,
           );
           positions.set(
             member.id,
@@ -892,7 +909,7 @@
             detailPanel,
             detailEmpty,
             memberMap,
-            relationships,
+            normalizedRelationships,
           );
           positions.set(
             leftMember.id,
@@ -911,7 +928,7 @@
             detailPanel,
             detailEmpty,
             memberMap,
-            relationships,
+            normalizedRelationships,
           );
           positions.set(
             rightMember.id,
@@ -935,14 +952,8 @@
     });
 
     const childLinks = primaryRelationships;
-    const spouseLinks = relationships.filter(
-      (rel) => rel.relationship_type === "spouse",
-    );
-
     const spouseSet = new Set(
-      spouseLinks.map((rel) =>
-        buildPairKey(rel.source_member_id, rel.target_member_id),
-      ),
+      spousePairs.map((pair) => buildPairKey(pair.a, pair.b)),
     );
 
     const groupedChildren = new Map();
@@ -959,7 +970,7 @@
     childrenByTarget.forEach((parents, childId) => {
       const uniqueParents = [...new Set(parents)].filter(Boolean);
 
-      if (uniqueParents.length >= 2) {
+      if (uniqueParents.length === 2) {
         const paired = findPairedParents(uniqueParents, spouseSet);
         if (paired) {
           const key = `${paired[0]}::${paired[1]}::${childId}`;
@@ -1068,7 +1079,7 @@
         "tree-line parent-child",
       );
       dashed.style.strokeDasharray = "8 8";
-      dashed.style.opacity = "0.7";
+      dashed.style.opacity = "0.88";
       svg.appendChild(dashed);
     });
 
@@ -1362,7 +1373,7 @@
     `;
   }
 
-  function getItemAnchorX(item, positions, relationships, pairMap) {
+  function getItemAnchorX(item, positions, relationships) {
     const memberIds = item.members.map((member) => member.id);
     const anchorValues = [];
 
@@ -1387,14 +1398,6 @@
           return;
         }
 
-        const pair = pairMap.get(parentId);
-        if (pair) {
-          const posA = positions.get(pair.a);
-          const posB = positions.get(pair.b);
-          if (posA && posB) {
-            parentCenters.push((posA.centerX + posB.centerX) / 2);
-          }
-        }
       });
 
       if (parentCenters.length) {
@@ -1492,13 +1495,19 @@
     return memberRowMap;
   }
 
-  function buildSpousePairs(relationships) {
+  function buildSpousePairs(relationships, memberMap) {
     const pairs = [];
     const seen = new Set();
 
     relationships
       .filter((rel) => rel.relationship_type === "spouse")
       .forEach((rel) => {
+        const source = memberMap.get(rel.source_member_id);
+        const target = memberMap.get(rel.target_member_id);
+        if (!isLikelyAdultForSpouseLink(source) || !isLikelyAdultForSpouseLink(target)) {
+          return;
+        }
+
         const key = buildPairKey(rel.source_member_id, rel.target_member_id);
         if (seen.has(key)) return;
 
@@ -1510,6 +1519,18 @@
       });
 
     return pairs;
+  }
+
+  function isLikelyAdultForSpouseLink(member) {
+    if (!member) return false;
+    const currentYear = new Date().getFullYear();
+    const birthYear = Number(member.birth_year);
+
+    if (Number.isFinite(birthYear) && birthYear > 0) {
+      return currentYear - birthYear >= 18;
+    }
+
+    return true;
   }
 
   function buildPairKey(a, b) {

@@ -4,6 +4,7 @@ from typing import Any
 
 from bson import ObjectId
 
+from app.core.relationship_catalog import normalize_relationship_type
 from app.database import get_database
 
 
@@ -95,7 +96,9 @@ def _serialize_relationship(rel: dict) -> dict:
             "family_id": _string_or_none(rel.get("family_id")),
             "source_member_id": _string_or_none(rel.get("source_member_id")),
             "target_member_id": _string_or_none(rel.get("target_member_id")),
-            "relationship_type": rel.get("relationship_type"),
+            "relationship_type": normalize_relationship_type(
+                rel.get("relationship_type")
+            ),
             "relationship_mode": rel.get("relationship_mode"),
             "status_marker": rel.get("status_marker"),
             "notes": rel.get("notes"),
@@ -112,7 +115,9 @@ def _build_edges(relationships: list[dict]) -> list[dict]:
                 {
                     "source": _string_or_none(rel.get("source_member_id")),
                     "target": _string_or_none(rel.get("target_member_id")),
-                    "relationship_type": rel.get("relationship_type"),
+                    "relationship_type": normalize_relationship_type(
+                        rel.get("relationship_type")
+                    ),
                     "relationship_mode": rel.get("relationship_mode"),
                     "status_marker": rel.get("status_marker"),
                 }
