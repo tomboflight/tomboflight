@@ -1269,6 +1269,7 @@
     );
     applyNavVisibility("verification-upload.html", config.showVerification);
     applyNavVisibility("link-keys.html", config.navLinkKeys);
+    applyNavVisibility("household-access.html", true);
 
     applyAction('.site-nav a[href^="tree-view.html"]', {
       href: withFamilyId("tree-view.html", context),
@@ -1283,6 +1284,11 @@
     applyAction('.site-nav a[href^="link-keys.html"]', {
       href: withFamilyId("link-keys.html", context),
       show: config.navLinkKeys,
+    });
+
+    applyAction('.site-nav a[href^="household-access.html"]', {
+      href: withFamilyId("household-access.html", context),
+      show: true,
     });
 
     applyAction('.site-nav a[href^="portrait-upload.html"]', {
@@ -1322,6 +1328,14 @@
         text: "Manage Linking Keys",
         href: withFamilyId("link-keys.html", context),
         show: config.showLinkKeys,
+      },
+    );
+
+    applyAction(
+      "[data-dashboard-household-invite-co-owner], [data-dashboard-household-invite-family], [data-dashboard-household-view-members], [data-dashboard-household-pending-invites]",
+      {
+        href: withFamilyId("household-access.html", context),
+        show: true,
       },
     );
 

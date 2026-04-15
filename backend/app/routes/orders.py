@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.dependencies.auth import get_current_user, require_permission
 from app.schemas.order import OrderCreate, OrderResponse
@@ -26,7 +26,10 @@ def record_checkout_order(
     payload: OrderCreate,
     current_user: dict = Depends(get_current_user),
 ):
-    return create_order_for_user(current_user, payload)
+    try:
+        return create_order_for_user(current_user, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/my-orders", response_model=list[OrderResponse])

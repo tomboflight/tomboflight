@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
@@ -12,6 +13,8 @@ from app.dependencies.auth import (
     require_permission,
 )
 from app.core.package_catalog import get_package, get_package_catalog
+from app.database import get_database
+from app.services.project_membership_service import get_project_access_snapshot
 from app.services.entitlement_service import resolve_project_entitlements
 from app.services.project_entitlement_service import (
     get_project_entitlement,
@@ -45,6 +48,24 @@ def _current_user_id(user: dict[str, Any]) -> str:
 
 def _is_admin(user: dict[str, Any]) -> bool:
     return has_internal_admin_access(user)
+
+
+def _assert_workspace_access(project_id: str, current_user: dict[str, Any]) -> None:
+    db = get_database()
+    project_stub = None
+    if db is not None and ObjectId.is_valid(project_id):
+        project_stub = db["projects"].find_one({"_id": ObjectId(project_id)})
+    project_stub = project_stub or {"_id": project_id}
+    snapshot = get_project_access_snapshot(
+        project_stub,
+        user_id=_current_user_id(current_user),
+        email=str(current_user.get("email") or "").strip().lower(),
+    )
+    if not snapshot.get("accessible"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to view this project entitlement.",
+        )
 
 
 @router.post("/apply")
@@ -81,13 +102,8 @@ def get_project_entitlement_route(
             detail="Project entitlement not found.",
         )
 
-    current_user_id = _current_user_id(current_user)
-
-    if not _is_admin(current_user) and entitlement.get("user_id") != current_user_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to view this project entitlement.",
-        )
+    if not _is_admin(current_user):
+        _assert_workspace_access(project_id, current_user)
 
     return entitlement
 
@@ -132,13 +148,8 @@ def get_project_upgrade_quote_route(
             detail="Project entitlement not found.",
         )
 
-    current_user_id = _current_user_id(current_user)
-
-    if not _is_admin(current_user) and entitlement.get("user_id") != current_user_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to view this upgrade quote.",
-        )
+    if not _is_admin(current_user):
+        _assert_workspace_access(project_id, current_user)
 
     try:
         return get_upgrade_quote_for_project(project_id, to_package_code)
@@ -161,12 +172,8 @@ def get_package_summary_route(
             detail="Project entitlement not found.",
         )
 
-    current_user_id = _current_user_id(current_user)
-    if not _is_admin(current_user) and entitlement.get("user_id") != current_user_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to view this project package summary.",
-        )
+    if not _is_admin(current_user):
+        _assert_workspace_access(project_id, current_user)
 
     package_code = str(entitlement.get("package_code") or "").strip()
     active_addons = list(entitlement.get("active_addons") or [])

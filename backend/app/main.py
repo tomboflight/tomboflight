@@ -284,6 +284,7 @@ def root():
             "/workspace-access/project/{project_id}/members",
             "/workspace-access/project/{project_id}/invites",
             "/workspace-access/invites/accept",
+            "/workspace-access/invites/{invite_id}/resend",
             "/viewer/manifest",
             "/mint-policy/packages",
             "/projects/{project_id}/experience-lane",
