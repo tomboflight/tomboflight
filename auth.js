@@ -856,8 +856,27 @@
     return await completeAuthenticatedLogin(loginData);
   }
 
+  function getPostLoginRedirect() {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const inviteKey = String(params.get("invite_key") || "").trim();
+      const projectId = String(params.get("project_id") || "").trim();
+      if (!inviteKey) {
+        return POST_LOGIN_REDIRECT;
+      }
+      const inviteParams = new URLSearchParams();
+      inviteParams.set("invite_key", inviteKey);
+      if (projectId) {
+        inviteParams.set("project_id", projectId);
+      }
+      return `household-access.html?${inviteParams.toString()}`;
+    } catch (_error) {
+      return POST_LOGIN_REDIRECT;
+    }
+  }
+
   function redirectAfterLogin() {
-    window.location.href = POST_LOGIN_REDIRECT;
+    window.location.href = getPostLoginRedirect();
   }
 
   function getRoleSignals(user) {

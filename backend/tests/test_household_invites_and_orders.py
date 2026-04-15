@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from app.schemas.household_access import build_invite_response
-from app.services import email_service, order_service
+from app.services import email_service, household_access_service, order_service
 
 
 class HouseholdInviteAndOrderTests(unittest.TestCase):
@@ -67,6 +67,21 @@ class HouseholdInviteAndOrderTests(unittest.TestCase):
             with self.assertRaises(ValueError) as error:
                 order_service.create_order_for_user(user, payload)
         self.assertIn("Invite members instead of purchasing again", str(error.exception))
+
+    def test_household_seat_cap_uses_package_member_limit(self):
+        with (
+            patch.object(
+                household_access_service,
+                "get_project_entitlement",
+                return_value={"package_code": "legacy_plus", "active_addons": []},
+            ),
+            patch.object(
+                household_access_service,
+                "get_package",
+                return_value={"package_code": "legacy_plus", "package_lane": "household", "max_members": 30},
+            ),
+        ):
+            self.assertEqual(household_access_service._resolve_member_seat_cap("project-legacy"), 30)
 
 
 if __name__ == "__main__":

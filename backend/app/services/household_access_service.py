@@ -162,7 +162,11 @@ def _resolve_member_seat_cap(project_id: str) -> int:
     package_code = normalize_package_code(entitlement.get("package_code"))
     package = get_package(package_code) or {}
     package_lane = _normalize(entitlement.get("package_lane") or package.get("package_lane") or "household").lower()
-    included = {"portrait": 2, "household": 6, "network": 20, "organization": 25}.get(package_lane, 6)
+    package_defined_members = int(package.get("max_members") or 0)
+    if package_defined_members > 0:
+        included = package_defined_members
+    else:
+        included = {"portrait": 2, "household": 6, "network": 20, "organization": 25}.get(package_lane, 6)
     active_addons = list(entitlement.get("active_addons") or [])
     addon_seats = 0
     for addon in active_addons:
