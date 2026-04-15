@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from app.config import settings
 from app.core.security import create_csrf_token, decode_access_token
-from app.dependencies.auth import COOKIE_NAME, get_current_user, require_permission
+from app.dependencies.auth import COOKIE_NAME, get_current_user, require_capability
 from app.schemas.auth import (
     MfaDisableRequest,
     MfaEnrollmentBeginRequest,
@@ -458,7 +458,7 @@ def password_change_route(
 def admin_issue_password_reset_route(
     user_id: str,
     response: Response,
-    current_user: dict = Depends(require_permission("admin.users.write")),
+    current_user: dict = Depends(require_capability("manage_users_full")),
 ):
     try:
         result = admin_issue_password_reset(
@@ -477,7 +477,7 @@ def admin_issue_password_reset_route(
 def admin_security_reset_route(
     user_id: str,
     response: Response,
-    current_user: dict = Depends(require_permission("admin.users.write")),
+    current_user: dict = Depends(require_capability("manage_users_full")),
 ):
     try:
         admin_reset_user_security(

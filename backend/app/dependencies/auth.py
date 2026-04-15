@@ -14,6 +14,7 @@ from app.core.role_catalog import (
     collect_role_codes,
     has_internal_admin_role,
     normalize_role_code,
+    resolve_primary_role_code,
 )
 from app.core.security import decode_access_token, verify_csrf_token
 from app.database import get_database
@@ -494,94 +495,85 @@ def require_super_admin(
     )
 
 
-LEGACY_ROLE_PERMISSIONS: dict[str, set[str]] = {
-    "admin": {
-        "admin.access",
-        "admin.audit.read",
-        "admin.control.view",
-        "admin.control.write",
-        "admin.control.billing",
-        "admin.control.mint",
-        "admin.entitlements.read",
-        "admin.entitlements.write",
-        "admin.intake.review",
-        "admin.intake.write",
-        "admin.orders.read",
-        "admin.orders.repair",
-        "admin.users.read",
-        "admin.users.write",
-        "projects.create",
-        "verification.review",
-        "uploads.admin.review",
-        "project.workflow.transition",
-    },
+ROLE_CAPABILITIES: dict[str, set[str]] = {
+    "admin": set(),
     "super_admin": {"*"},
-    "root_admin": {"*"},
-    "platform_admin": {"*"},
+    "operations_admin": {
+        "manage_user_contact",
+        "manage_orders",
+        "manage_entitlements",
+        "manage_packages",
+        "manage_projects",
+        "manage_families",
+        "run_admin_repairs",
+        "view_audit_all",
+    },
+    "finance_admin": {
+        "manage_billing",
+        "manage_orders",
+        "view_audit_all",
+        "read_finance_scope",
+    },
+    "marketing_admin": {
+        "manage_marketing_content",
+        "read_analytics",
+    },
+    "user": set(),
+}
+
+CAPABILITY_PERMISSIONS: dict[str, set[str]] = {
+    "manage_roles": {"admin.users.write"},
+    "manage_users_full": {"admin.users.read", "admin.users.write"},
+    "manage_user_contact": {"admin.users.read", "admin.control.view", "admin.control.write"},
+    "manage_orders": {"admin.orders.read", "admin.orders.repair", "admin.control.billing"},
+    "manage_entitlements": {"admin.entitlements.read", "admin.entitlements.write"},
+    "manage_packages": {"admin.control.write"},
+    "manage_projects": {"admin.control.view", "project.workflow.transition"},
+    "manage_families": {"admin.access", "admin.intake.review", "admin.intake.write"},
+    "manage_billing": {"admin.control.billing"},
+    "manage_marketing_content": {
+        "admin.marketing.content.read",
+        "admin.marketing.content.write",
+    },
+    "view_audit_all": {"admin.audit.read"},
+    "run_admin_repairs": {"admin.control.write", "admin.control.mint"},
+    "read_finance_scope": {"admin.entitlements.read", "admin.control.view"},
+    "read_analytics": {"admin.analytics.read"},
+}
+
+LEGACY_ROLE_PERMISSIONS: dict[str, set[str]] = {
+    "admin": set(),
+    "super_admin": {"*"},
     "operations_admin": {
         "admin.access",
         "admin.audit.read",
         "admin.control.view",
         "admin.control.write",
+        "admin.control.billing",
         "admin.control.mint",
         "admin.entitlements.read",
         "admin.entitlements.write",
         "admin.intake.review",
         "admin.intake.write",
         "admin.orders.read",
+        "admin.orders.repair",
+        "projects.create",
         "verification.review",
         "uploads.admin.review",
         "project.workflow.transition",
     },
     "finance_admin": {
-        "admin.access",
         "admin.audit.read",
         "admin.control.view",
         "admin.control.billing",
         "admin.entitlements.read",
-        "admin.entitlements.write",
         "admin.orders.read",
         "admin.orders.repair",
     },
     "marketing_admin": {
-        "admin.access",
-        "admin.audit.read",
-        "admin.control.view",
-        "admin.users.read",
-        "admin.orders.read",
-    },
-    "executive_technology": {"*"},
-    "operations": {
-        "admin.access",
-        "admin.audit.read",
-        "admin.control.view",
-        "admin.control.write",
-        "admin.control.mint",
-        "admin.entitlements.read",
-        "admin.entitlements.write",
-        "admin.intake.review",
-        "admin.intake.write",
-        "admin.orders.read",
-        "verification.review",
-        "uploads.admin.review",
-        "project.workflow.transition",
-    },
-    "finance": {
-        "admin.access",
-        "admin.audit.read",
-        "admin.control.view",
-        "admin.control.billing",
-        "admin.entitlements.read",
-        "admin.entitlements.write",
-        "admin.orders.read",
-        "admin.orders.repair",
-    },
-    "marketing": {
-        "admin.access",
-        "admin.audit.read",
-        "admin.control.view",
-        "admin.users.read",
-        "admin.orders.read",
+        "admin.marketing.content.read",
+        "admin.marketing.content.write",
+        "admin.analytics.read",
     },
     "user": {"projects.read", "uploads.read", "uploads.write"},
 }
@@ -674,11 +666,40 @@ def _collect_role_codes_for_user(user: dict[str, Any]) -> set[str]:
             role_code = normalize_role_code(assignment.get("role_code"))
             if role_code:
                 role_codes.add(role_code)
+    primary_role = resolve_primary_role_code(role_codes, default="")
+    if primary_role:
+        role_codes.add(primary_role)
     return role_codes
 
 
-def _collect_permissions_for_roles(role_codes: set[str]) -> set[str]:
+def _collect_capabilities_for_roles(role_codes: set[str]) -> set[str]:
+    capabilities: set[str] = set()
+    if not role_codes:
+        return capabilities
+
+    for role_code in role_codes:
+        capabilities.update(ROLE_CAPABILITIES.get(role_code, set()))
+
+    docs = _db()["role_capabilities"].find(
+        {
+            "role_code": {"$in": list(role_codes)},
+            "status": {"$in": ["active", "enabled", ""]},
+        }
+    )
+    for doc in docs:
+        capability_code = _normalize_value(doc.get("capability_code"))
+        if capability_code:
+            capabilities.add(capability_code)
+
+    return capabilities
+
+
+def _collect_permissions_for_roles(role_codes: set[str], capabilities: set[str]) -> set[str]:
     permissions: set[str] = set()
+    for capability in capabilities:
+        permissions.update(CAPABILITY_PERMISSIONS.get(capability, set()))
+    if "*" in capabilities:
+        permissions.add("*")
     if not role_codes:
         return permissions
 
@@ -791,7 +812,8 @@ def resolve_access_context(user_id: str, project_id: str | None = None) -> dict[
     if has_internal_admin_access(user) and not role_codes:
         role_codes.add("admin")
 
-    permissions = _collect_permissions_for_roles(role_codes)
+    capabilities = _collect_capabilities_for_roles(role_codes)
+    permissions = _collect_permissions_for_roles(role_codes, capabilities)
 
     entitlements = list_user_project_entitlements(user_id, active_only=True)
     if project_id:
@@ -804,6 +826,7 @@ def resolve_access_context(user_id: str, project_id: str | None = None) -> dict[
     normalized_project_id = _normalize_value(project_id)
     return {
         "role_codes": sorted(role_codes),
+        "capabilities": sorted(capabilities),
         "permissions": sorted(permissions),
         "entitlements": entitlements,
         "project_scope": _resolve_project_scope(user, project_id),
@@ -879,6 +902,30 @@ def require_any_permission(permission_codes: list[str]):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="At least one required permission is missing.",
+            )
+        return current_user
+
+    return _dependency
+
+
+def require_capability(capability_code: str):
+    normalized_capability = _normalize_value(capability_code)
+    if not normalized_capability:
+        raise ValueError("capability_code is required.")
+
+    def _dependency(
+        request: Request,
+        current_user: dict[str, Any] = Depends(get_current_user),
+    ) -> dict[str, Any]:
+        context = _get_or_resolve_access_context(
+            current_user,
+            project_id=_extract_project_id_from_request(request),
+        )
+        capabilities = set(context.get("capabilities") or [])
+        if "*" not in capabilities and normalized_capability not in capabilities:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Capability '{normalized_capability}' is required.",
             )
         return current_user
 

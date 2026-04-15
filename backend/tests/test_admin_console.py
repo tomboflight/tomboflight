@@ -133,6 +133,9 @@ class AdminPermissionContextTests(unittest.TestCase):
             context = auth_dependencies.resolve_access_context(str(user_id))
 
         permissions = set(context["permissions"])
+        capabilities = set(context["capabilities"])
+        self.assertIn("manage_billing", capabilities)
+        self.assertNotIn("manage_roles", capabilities)
         self.assertNotIn("*", permissions)
         self.assertIn("admin.control.billing", permissions)
         self.assertIn("admin.orders.read", permissions)
@@ -193,6 +196,18 @@ class AdminControlAccessProfileTests(unittest.TestCase):
         self.assertNotIn("sync_package", profile["allowed_actions"])
         self.assertNotIn("generate_entitlement", profile["allowed_actions"])
         self.assertEqual(profile["allowed_bulk_actions"], [])
+
+    def test_officer_role_takes_precedence_over_generic_admin_role(self):
+        current_user = {
+            "role": "admin",
+            "access_tier": "finance_admin",
+            "_access_context": {
+                "role_codes": ["admin", "finance_admin"],
+                "permissions": ["admin.control.view", "admin.control.billing"],
+            },
+        }
+        profile = admin_control_service.admin_control_access_profile(current_user)
+        self.assertEqual(profile["role_key"], "finance_admin")
 
     def test_wildcard_profile_gets_all_console_controls(self):
         current_user = {

@@ -89,20 +89,19 @@
             normalizeValue(departmentRole),
           ];
 
-    return [
-      "admin",
-      "super_admin",
-      "platform_admin",
-      "operations_admin",
-      "finance_admin",
-      "marketing_admin",
-      "root_admin",
-      "executive_technology",
-      "operations",
-      "finance",
-      "marketing",
-    ].some(function (value) {
-      return values.includes(value);
+    const aliases = {
+      root_admin: "super_admin",
+      platform_admin: "super_admin",
+      executive_technology: "super_admin",
+      operations: "operations_admin",
+      finance: "finance_admin",
+      marketing: "marketing_admin",
+    };
+    const normalized = values.map(function (value) {
+      return aliases[value] || value;
+    });
+    return ["super_admin", "operations_admin", "finance_admin", "marketing_admin"].some(function (value) {
+      return normalized.includes(value);
     });
   }
 

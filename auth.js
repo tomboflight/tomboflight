@@ -861,10 +861,22 @@
   }
 
   function getRoleSignals(user) {
+    const roleAliases = {
+      root_admin: "super_admin",
+      platform_admin: "super_admin",
+      executive_technology: "super_admin",
+      operations: "operations_admin",
+      finance: "finance_admin",
+      marketing: "marketing_admin",
+    };
+    const normalizeRole = function (value) {
+      const normalized = normalizeValue(value);
+      return roleAliases[normalized] || normalized;
+    };
     return [
-      normalizeValue(user?.role),
-      normalizeValue(user?.access_tier),
-      normalizeValue(user?.department_role),
+      normalizeRole(user?.access_tier),
+      normalizeRole(user?.department_role),
+      normalizeRole(user?.role),
     ].filter(Boolean);
   }
 
@@ -881,16 +893,13 @@
     ) {
       return "CEO / Super Admin";
     }
-    if (signals.includes("admin")) {
-      return "Administrative Control";
-    }
-    if (signals.includes("finance_admin") || signals.includes("finance")) {
+    if (signals.includes("finance_admin")) {
       return "CFO";
     }
-    if (signals.includes("operations_admin") || signals.includes("operations")) {
+    if (signals.includes("operations_admin")) {
       return "COO";
     }
-    if (signals.includes("marketing_admin") || signals.includes("marketing")) {
+    if (signals.includes("marketing_admin")) {
       return "CMO";
     }
     return "Internal Admin";
