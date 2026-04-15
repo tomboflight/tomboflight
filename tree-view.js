@@ -490,12 +490,17 @@
     const canBuildPrivateTree = Boolean(resolved.can_build_family_tree);
     const linkedEndpoint = `/tree/${familyId}/linked?mode=private`;
     const privateEndpoint = `/tree/${familyId}/private`;
+    const legacyGraphEndpoint = `/families/${encodeURIComponent(familyId)}/graph`;
     const attempts = canTraverseLinked
       ? [
           { label: "linked", endpoint: linkedEndpoint },
           ...(canBuildPrivateTree ? [{ label: "private", endpoint: privateEndpoint }] : []),
+          { label: "legacy", endpoint: legacyGraphEndpoint },
         ]
-      : [{ label: "private", endpoint: privateEndpoint }];
+      : [
+          { label: "private", endpoint: privateEndpoint },
+          { label: "legacy", endpoint: legacyGraphEndpoint },
+        ];
     const projectId = getProjectIdFromContext(context);
 
     console.info("[TreeView] Loading tree", {
@@ -524,9 +529,13 @@
       selectedSource = attempt.label;
 
       if (isFallbackAttempt) {
+        const fallbackMessage =
+          attempt.label === "legacy"
+            ? "Tree renderer service unavailable. Trying family graph fallback..."
+            : "Linked tree unavailable. Trying private family tree...";
         showStatus(
           statusNode,
-          "Linked tree unavailable. Trying private family tree...",
+          fallbackMessage,
           "info",
         );
       }
@@ -602,6 +611,8 @@
         statusNode,
         selectedSource === "linked"
           ? "Linked family graph loaded successfully."
+          : selectedSource === "legacy"
+          ? "Visual family tree loaded from fallback graph service."
           : "Visual family tree loaded successfully. Use the zoom controls for larger families.",
         "success",
       );
