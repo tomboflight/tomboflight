@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, cast
@@ -19,6 +20,8 @@ from app.services.entitlement_service import (
 
 MAINTENANCE_START_DELAY_DAYS = 30
 MAINTENANCE_MONTHLY_PERIOD_DAYS = 30
+
+_logger = logging.getLogger(__name__)
 
 
 def _collection() -> Collection[dict[str, Any]]:
@@ -395,7 +398,12 @@ def ensure_project_entitlement_indexes() -> None:
             return
         try:
             collection.create_index(keys, name=name, unique=unique, sparse=sparse)
-        except OperationFailure:
+        except OperationFailure as exc:
+            _logger.warning(
+                "Could not create project_entitlements index %s: %s",
+                name,
+                exc,
+            )
             return
 
     _ensure_index([("project_id", 1)], name="project_id_1")
