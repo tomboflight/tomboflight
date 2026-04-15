@@ -827,6 +827,9 @@
           return `<option value="${escapeHtml(item.code)}"${selected}>${escapeHtml(item.label)} (${escapeHtml(item.code)})</option>`;
         })
         .join("");
+      const packageFallbackOption = packageCode
+        ? `<option value="${escapeHtml(packageCode)}">${escapeHtml(packageCode)}</option>`
+        : `<option value="" selected="selected">Select package</option>`;
       const showSuperAdminControls = Boolean(state.isSuperAdmin && projectId);
       node.innerHTML = `
         ${warningMarkup}
@@ -850,7 +853,7 @@
                 <label class="admin-field">
                   <span>Target Package</span>
                   <select data-super-admin-package-field="package_code">
-                    ${packageOptions || `<option value="${escapeHtml(packageCode)}">${escapeHtml(packageCode || "Current package")}</option>`}
+                    ${packageOptions || packageFallbackOption}
                   </select>
                 </label>
                 <label class="admin-field"><span>Target Lane</span><input type="text" data-super-admin-package-field="project_lane" value="${escapeHtml(tabData.project_lane || tabData.lane || "")}" /></label>

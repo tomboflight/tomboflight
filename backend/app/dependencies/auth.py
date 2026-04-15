@@ -13,7 +13,6 @@ from app.core.role_catalog import (
     SUPER_ADMIN_ROLE_CODES,
     collect_role_codes,
     has_internal_admin_role,
-    has_super_admin_role,
     normalize_role_code,
 )
 from app.core.security import decode_access_token, verify_csrf_token
@@ -477,16 +476,16 @@ def require_super_admin(
         for role_code in (context.get("role_codes") or [])
         if _normalize_value(role_code)
     }
-    if role_codes.intersection(SUPER_ADMIN_KEYS):
-        return current_user
-
-    if has_super_admin_role(
-        (
-            current_user.get("role"),
-            current_user.get("access_tier"),
-            current_user.get("department_role"),
+    role_codes.update(
+        collect_role_codes(
+            (
+                current_user.get("role"),
+                current_user.get("access_tier"),
+                current_user.get("department_role"),
+            )
         )
-    ):
+    )
+    if role_codes.intersection(SUPER_ADMIN_KEYS):
         return current_user
 
     raise HTTPException(
