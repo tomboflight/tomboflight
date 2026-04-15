@@ -495,6 +495,7 @@ def require_super_admin(
 
 
 ROLE_CAPABILITIES: dict[str, set[str]] = {
+    # Deprecated generic admin role: no implicit capability grants.
     "admin": set(),
     "super_admin": {"*"},
     "operations_admin": {
@@ -541,6 +542,7 @@ CAPABILITY_PERMISSIONS: dict[str, set[str]] = {
 }
 
 LEGACY_ROLE_PERMISSIONS: dict[str, set[str]] = {
+    # Deprecated generic admin role: no implicit permission grants.
     "admin": set(),
     "super_admin": {"*"},
     "operations_admin": {

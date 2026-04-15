@@ -36,6 +36,7 @@
     workspace: null,
     packageOptions: [],
   };
+  const DEFAULT_ROLE_KEY = "user";
 
   const QUEUE_META = {
     overview: ["Overview", "Executive repair posture across active customer operations."],
@@ -175,7 +176,8 @@
   async function loadAccessProfile() {
     const profile = await fetchJson("/admin/control-center/access-profile");
     state.accessProfile = profile || {};
-    state.roleKey = normalizeRole(profile && profile.role_key) || state.roleKey || "user";
+    const profileRoleKey = normalizeRole(profile && profile.role_key);
+    state.roleKey = profileRoleKey ? profileRoleKey : (state.roleKey || DEFAULT_ROLE_KEY);
     state.allowedQueues = normalizeAccessList(profile && profile.allowed_queues);
     state.allowedTabs = normalizeAccessList(profile && profile.allowed_tabs);
     state.allowedActions = normalizeAccessList(profile && profile.allowed_actions);
@@ -1457,7 +1459,7 @@
     }
     if (statusNode) {
       const queueCount = Array.isArray(state.allowedQueues) ? state.allowedQueues.length : 0;
-      statusNode.textContent = `Search-first case operations are active for role: ${state.roleKey || "user"} across ${queueCount} permitted queue${queueCount === 1 ? "" : "s"}.`;
+      statusNode.textContent = `Search-first case operations are active for role: ${state.roleKey || DEFAULT_ROLE_KEY} across ${queueCount} permitted queue${queueCount === 1 ? "" : "s"}.`;
     }
   }
 
