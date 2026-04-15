@@ -44,6 +44,22 @@ class FakeCollection:
         query = query or {}
         return len([document for document in self.documents if self._matches(document, query)])
 
+    def update_one(self, query, update):
+        updated = 0
+        for document in self.documents:
+            if self._matches(document, query):
+                for key, value in (update.get("$set") or {}).items():
+                    document[key] = value
+                updated = 1
+                break
+        return type("Result", (), {"matched_count": updated, "modified_count": updated})()
+
+    def insert_one(self, payload):
+        document = dict(payload)
+        document.setdefault("_id", ObjectId())
+        self.documents.append(document)
+        return type("Result", (), {"inserted_id": document["_id"]})()
+
     def _get_nested(self, document, key):
         current = document
         for part in key.split("."):
@@ -526,6 +542,112 @@ class AdminUserQueueTests(unittest.TestCase):
         self.assertEqual(result["repaired_count"], 0)
         self.assertEqual(result["failed_count"], 1)
         self.assertEqual(result["failed"][0]["error"], "Linked project not found.")
+
+
+class SuperAdminControlsTests(unittest.TestCase):
+    def test_super_admin_update_user_updates_profile_fields(self):
+        user_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "users": [
+                    {
+                        "_id": user_id,
+                        "email": "before@example.com",
+                        "full_name": "Before Name",
+                        "role": "user",
+                        "status": "active",
+                    }
+                ]
+            }
+        )
+
+        with patch.object(admin_control_service, "get_database", return_value=db):
+            result = admin_control_service.super_admin_update_user(
+                user_id=str(user_id),
+                payload={
+                    "email": "after@example.com",
+                    "full_name": "After Name",
+                    "phone_number": "555-0101",
+                    "mailing_address": "123 Main St",
+                    "birthday": "1980-01-02",
+                    "status": "suspended",
+                    "role": "super_admin",
+                },
+                actor={"_id": ObjectId(), "email": "ceo@example.com"},
+            )
+
+        self.assertEqual(result["before"]["email"], "before@example.com")
+        self.assertEqual(result["after"]["email"], "after@example.com")
+        self.assertEqual(result["after"]["full_name"], "After Name")
+        self.assertEqual(result["after"]["status"], "suspended")
+        self.assertEqual(result["after"]["role"], "super_admin")
+
+    def test_super_admin_package_change_preview_and_apply(self):
+        project_id = ObjectId()
+        order_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "projects": [
+                    {
+                        "_id": project_id,
+                        "owner_email": "customer@example.com",
+                        "owner_user_id": str(ObjectId()),
+                        "package_code": "legacy_snapshot",
+                        "package_slug": "legacy_snapshot",
+                        "package_name": "Legacy Snapshot",
+                        "project_lane": "portrait",
+                        "status": "build_ready",
+                        "phase": "intake_approved",
+                    }
+                ],
+                "orders": [
+                    {
+                        "_id": order_id,
+                        "email": "customer@example.com",
+                        "status": "paid",
+                        "item_type": "package",
+                        "package_code": "legacy_snapshot",
+                        "package_slug": "legacy_snapshot",
+                        "package_name": "Legacy Snapshot",
+                        "project_id": project_id,
+                    }
+                ],
+                "project_entitlements": [],
+            }
+        )
+
+        with (
+            patch.object(admin_control_service, "get_database", return_value=db),
+            patch.object(admin_control_service, "get_project_entitlement", return_value=None),
+            patch.object(
+                admin_control_service,
+                "repair_record",
+                return_value={
+                    "project": {"package_code": "legacy_plus", "project_lane": "household"},
+                    "order": {"package_code": "legacy_plus", "status": "complete"},
+                    "entitlement": {"package_code": "legacy_plus", "package_lane": "household"},
+                },
+            ),
+        ):
+            preview = admin_control_service.super_admin_preview_package_change(
+                project_id=str(project_id),
+                package_code="legacy_plus",
+                project_lane="household",
+                order_status="complete",
+            )
+            applied = admin_control_service.super_admin_apply_package_change(
+                project_id=str(project_id),
+                package_code="legacy_plus",
+                project_lane="household",
+                order_status="complete",
+                actor={"_id": ObjectId(), "email": "ceo@example.com"},
+            )
+
+        self.assertTrue(preview["changes"])
+        self.assertEqual(preview["validation"]["target_lane"], "household")
+        self.assertEqual(applied["after"]["project"]["package_code"], "legacy_plus")
+        self.assertEqual(applied["after"]["order"]["status"], "complete")
+        self.assertEqual(applied["after"]["entitlement"]["package_lane"], "household")
 
 
 if __name__ == "__main__":

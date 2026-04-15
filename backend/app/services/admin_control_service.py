@@ -13,6 +13,7 @@ from app.core.package_catalog import (
     get_package_control_profile,
     normalize_package_code,
 )
+from app.core.role_catalog import normalize_role_code
 from app.database import get_database
 from app.services.audit_log_service import write_audit_log
 from app.services.mint_job_service import sync_receipt_for_mint_record
@@ -116,6 +117,21 @@ TAB_PERMISSIONS: dict[str, set[str]] = {
     "uploads_verification": {"uploads.admin.review", "verification.review"},
     "mint_readiness": {"admin.control.mint"},
     "audit_timeline": {"admin.audit.read"},
+}
+
+SUPER_ADMIN_USER_STATUS_VALUES = {
+    "active",
+    "enabled",
+    "disabled",
+    "suspended",
+    "pending_activation",
+    "archived",
+}
+SUPER_ADMIN_USER_STATE_ACTIONS = {
+    "activate": "active",
+    "restore": "active",
+    "suspend": "suspended",
+    "disable": "disabled",
 }
 
 GUIDANCE_RULE_ALIASES = {
@@ -318,6 +334,7 @@ def admin_control_access_profile(current_user: dict[str, Any]) -> dict[str, Any]
         "allowed_actions": allowed_actions,
         "allowed_bulk_actions": allowed_bulk_actions,
         "is_wildcard": "*" in permissions,
+        "is_super_admin": primary_role in {"super_admin", "root_admin", "platform_admin", "executive_technology"},
     }
 
 
@@ -1141,6 +1158,171 @@ def repair_record(*, project_id: str, order_id: str = "") -> dict[str, Any]:
             "mint": mint_repair,
         },
         "readiness": readiness,
+    }
+
+
+def _build_package_change_summary(*, before: dict[str, Any], proposed: dict[str, Any]) -> list[dict[str, Any]]:
+    changes: list[dict[str, Any]] = []
+    for section in ("project", "order", "entitlement"):
+        before_section = dict(before.get(section) or {})
+        after_section = dict(proposed.get(section) or {})
+        all_keys = sorted(set(before_section.keys()) | set(after_section.keys()))
+        for key in all_keys:
+            if before_section.get(key) == after_section.get(key):
+                continue
+            changes.append(
+                {
+                    "scope": section,
+                    "field": key,
+                    "before": before_section.get(key),
+                    "after": after_section.get(key),
+                }
+            )
+    return changes
+
+
+def super_admin_preview_package_change(
+    *,
+    project_id: str,
+    package_code: str,
+    project_lane: str = "",
+    order_status: str = "",
+) -> dict[str, Any]:
+    normalized_project_id = _normalize(project_id)
+    if not normalized_project_id:
+        raise ValueError("Project id is required.")
+    normalized_package = normalize_package_code(_normalize(package_code))
+    package_profile = get_package(normalized_package)
+    if not package_profile:
+        raise ValueError("Unknown package code.")
+
+    project, order = _resolve_project_order_context(
+        normalized_project_id,
+        allow_owner_order_fallback=True,
+    )
+    entitlement = get_project_entitlement(_normalize(project.get("_id")))
+    before_package_fields = _package_fields_from_context(project, order, entitlement)
+
+    target_lane = _normalize(project_lane).lower() or _normalize(package_profile.get("package_lane")).lower() or _normalize(project.get("project_lane")).lower()
+    if target_lane not in ALLOWED_LANES:
+        raise ValueError("Invalid project lane.")
+    requested_order_status = _normalize(order_status).lower() or _normalize((order or {}).get("status")).lower() or "paid"
+
+    project_after = {
+        "package_code": normalized_package,
+        "package_slug": normalized_package,
+        "package_name": _normalize(package_profile.get("display_name")) or normalized_package,
+        "project_lane": target_lane,
+    }
+    order_after = {
+        "package_code": normalized_package,
+        "package_slug": normalized_package,
+        "package_name": _normalize(package_profile.get("display_name")) or normalized_package,
+        "status": requested_order_status if order else None,
+    }
+    entitlement_after = {
+        "package_code": normalized_package,
+        "package_lane": target_lane,
+    }
+    before = {
+        "project": {
+            "package_code": before_package_fields.get("package_code"),
+            "package_slug": before_package_fields.get("package_slug"),
+            "package_name": before_package_fields.get("package_name"),
+            "project_lane": _normalize(project.get("project_lane")) or before_package_fields.get("project_lane"),
+        },
+        "order": {
+            "package_code": _normalize((order or {}).get("package_code")),
+            "package_slug": _normalize((order or {}).get("package_slug")),
+            "package_name": _normalize((order or {}).get("package_name")),
+            "status": _normalize((order or {}).get("status")) if order else None,
+        },
+        "entitlement": {
+            "package_code": _normalize((entitlement or {}).get("package_code")) if entitlement else None,
+            "package_lane": _normalize((entitlement or {}).get("package_lane")) if entitlement else None,
+        },
+    }
+    proposed = {
+        "project": project_after,
+        "order": order_after,
+        "entitlement": entitlement_after,
+    }
+    return {
+        "project_id": _normalize(project.get("_id")),
+        "order_id": _normalize((order or {}).get("_id")) or None,
+        "before": before,
+        "proposed_after": proposed,
+        "changes": _build_package_change_summary(before=before, proposed=proposed),
+        "validation": {
+            "project_exists": True,
+            "known_package": True,
+            "order_linked": bool(order),
+            "target_lane": target_lane,
+            "target_order_status": requested_order_status,
+        },
+    }
+
+
+def super_admin_apply_package_change(
+    *,
+    project_id: str,
+    package_code: str,
+    project_lane: str = "",
+    order_status: str = "",
+    actor: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    preview = super_admin_preview_package_change(
+        project_id=project_id,
+        package_code=package_code,
+        project_lane=project_lane,
+        order_status=order_status,
+    )
+    db = _db()
+    resolved_project_id = _normalize(preview.get("project_id"))
+    if not resolved_project_id:
+        raise ValueError("Project id is invalid.")
+    project_oid = _to_object_id(resolved_project_id)
+    if project_oid is None:
+        raise ValueError("Project id is invalid.")
+
+    project_after = dict((preview.get("proposed_after") or {}).get("project") or {})
+    project_after["updated_at"] = _now()
+    db["projects"].update_one({"_id": project_oid}, {"$set": project_after})
+
+    order_id = _normalize(preview.get("order_id"))
+    if order_id:
+        order_doc = _order_by_id(order_id)
+        if order_doc is not None:
+            order_updates = dict((preview.get("proposed_after") or {}).get("order") or {})
+            order_updates = {key: value for key, value in order_updates.items() if value is not None}
+            db["orders"].update_one({"_id": order_doc.get("_id")}, {"$set": order_updates})
+
+    repaired = repair_record(project_id=resolved_project_id, order_id=order_id)
+    after_snapshot = {
+        "project": (repaired.get("project") or {}),
+        "order": (repaired.get("order") or {}),
+        "entitlement": {
+            "package_code": _normalize(((repaired.get("entitlement") or {}).get("package_code"))),
+            "package_lane": _normalize(((repaired.get("entitlement") or {}).get("package_lane"))),
+        },
+    }
+    _write_admin_action_audit(
+        actor=actor,
+        action="super_admin.package_change",
+        target_type="project",
+        target_id=resolved_project_id,
+        before=preview.get("before") or {},
+        after=after_snapshot,
+        context={"surface": "admin_control_center.super_admin", "order_id": order_id or None},
+        details={"changes": preview.get("changes") or []},
+    )
+    return {
+        "project_id": resolved_project_id,
+        "order_id": order_id or None,
+        "before": preview.get("before") or {},
+        "after": after_snapshot,
+        "changes": preview.get("changes") or [],
+        "repair_result": repaired,
     }
 
 
@@ -2098,6 +2280,249 @@ def _list_user_account_cases(
     return cases
 
 
+def _user_by_id(user_id: str) -> dict[str, Any] | None:
+    normalized_user_id = _normalize(user_id)
+    if not normalized_user_id:
+        return None
+    db = _db()
+    user_oid = _to_object_id(normalized_user_id)
+    if user_oid is not None:
+        user = db["users"].find_one({"_id": user_oid})
+        if user is not None:
+            return user
+    return db["users"].find_one(
+        {
+            "$or": [
+                {"_id": normalized_user_id},
+                {"id": normalized_user_id},
+                {"user_id": normalized_user_id},
+            ]
+        }
+    )
+
+
+def _safe_user_search_haystack(user: dict[str, Any]) -> str:
+    return " ".join(
+        [
+            _normalize(user.get("_id")),
+            _normalize(user.get("id")),
+            _normalize(user.get("user_id")),
+            _normalize(user.get("email")),
+            _normalize(user.get("full_name")),
+            _normalize(user.get("first_name")),
+            _normalize(user.get("last_name")),
+            _normalize(user.get("role")),
+            _normalize(user.get("access_tier")),
+            _normalize(user.get("department_role")),
+            _normalize(user.get("status")),
+            _normalize(user.get("phone_number") or user.get("phone")),
+            _normalize(user.get("birthday") or user.get("birth_date") or user.get("date_of_birth") or user.get("dob")),
+            _normalize(user.get("mailing_address") or user.get("address")),
+        ]
+    ).lower()
+
+
+def _serialize_super_admin_user_summary(user: dict[str, Any]) -> dict[str, Any]:
+    related_projects = _related_projects_for_user(user)
+    related_orders = _related_orders_for_user(user)
+    project_ids = [
+        _normalize_object_id(project.get("id"))
+        for project in related_projects
+        if _normalize_object_id(project.get("id"))
+    ]
+    related_entitlements = _related_entitlements_for_user(user, project_ids)
+    family_ids = sorted(
+        {
+            _normalize(project.get("family_id"))
+            for project in related_projects
+            if _normalize(project.get("family_id"))
+        }
+    )
+    package_values = sorted(
+        {
+            _normalize(entitlement.get("package_code"))
+            for entitlement in related_entitlements
+            if _normalize(entitlement.get("package_code"))
+        }
+        | {
+            _normalize(order.get("package_code"))
+            for order in related_orders
+            if _normalize(order.get("package_code"))
+        }
+        | {
+            _normalize(project.get("package_code"))
+            for project in related_projects
+            if _normalize(project.get("package_code"))
+        }
+    )
+    return {
+        "user_id": _normalize_object_id(user.get("_id")) or _normalize(user.get("id")) or _normalize(user.get("user_id")),
+        "email": _normalize_email(user.get("email")) or None,
+        "full_name": _user_display_name(user),
+        "role": _user_role_value(user),
+        "status": _normalize(user.get("status")) or "active",
+        "phone_number": _normalize(user.get("phone_number") or user.get("phone")) or None,
+        "birthday": _serialize_datetime(
+            user.get("birthday") or user.get("birth_date") or user.get("date_of_birth") or user.get("dob")
+        ),
+        "mailing_address": _normalize(user.get("mailing_address") or user.get("address")) or None,
+        "project_count": len(related_projects),
+        "order_count": len(related_orders),
+        "entitlement_count": len(related_entitlements),
+        "family_ids": family_ids,
+        "packages": package_values,
+        "is_internal_admin": _is_internal_user_document(user),
+        "last_login_at": _serialize_datetime(user.get("last_login_at")),
+        "updated_at": _serialize_datetime(user.get("updated_at") or user.get("created_at")),
+    }
+
+
+def super_admin_list_users(*, search: str = "", limit: int = 100) -> dict[str, Any]:
+    db = _db()
+    safe_limit = max(1, min(limit, 500))
+    normalized_search = _normalize(search).lower()
+    items: list[dict[str, Any]] = []
+    for user in db["users"].find({}).sort("updated_at", -1).limit(max(500, safe_limit * 8)):
+        summary = _serialize_super_admin_user_summary(user)
+        if not summary.get("user_id"):
+            continue
+        if normalized_search:
+            related_terms = " ".join(
+                [
+                    " ".join(summary.get("packages") or []),
+                    " ".join(summary.get("family_ids") or []),
+                ]
+            ).lower()
+            if normalized_search not in (_safe_user_search_haystack(user) + " " + related_terms):
+                continue
+        items.append(summary)
+        if len(items) >= safe_limit:
+            break
+    return {"items": items, "total": len(items)}
+
+
+def _validate_super_admin_email(email: str, *, user_id: str) -> str:
+    normalized = _normalize_email(email)
+    if not normalized or "@" not in normalized:
+        raise ValueError("A valid email address is required.")
+    db = _db()
+    existing = db["users"].find_one({"email": normalized})
+    existing_id = _normalize_object_id((existing or {}).get("_id"))
+    if existing is not None and existing_id and existing_id != _normalize_object_id(user_id):
+        raise ValueError("Email address is already in use by another account.")
+    return normalized
+
+
+def _validated_role_value(role_value: str) -> str:
+    normalized_role = normalize_role_code(role_value)
+    if not normalized_role:
+        raise ValueError("Role is required.")
+    return normalized_role
+
+
+def super_admin_update_user(
+    *,
+    user_id: str,
+    payload: dict[str, Any],
+    actor: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    user = _user_by_id(user_id)
+    if user is None:
+        raise ValueError("User not found.")
+    db = _db()
+    current_user_id = _normalize_object_id(user.get("_id")) or _normalize(user_id)
+    updates: dict[str, Any] = {"updated_at": _now()}
+
+    if "email" in payload:
+        updates["email"] = _validate_super_admin_email(_normalize(payload.get("email")), user_id=current_user_id)
+    if "full_name" in payload:
+        full_name = _normalize(payload.get("full_name"))
+        if not full_name:
+            raise ValueError("full_name is required.")
+        updates["full_name"] = full_name
+    if "phone_number" in payload:
+        updates["phone_number"] = _normalize(payload.get("phone_number")) or None
+    if "birthday" in payload:
+        updates["birthday"] = _normalize(payload.get("birthday")) or None
+    if "mailing_address" in payload:
+        updates["mailing_address"] = _normalize(payload.get("mailing_address")) or None
+    if "status" in payload:
+        status_value = _normalize(payload.get("status")).lower()
+        if status_value not in SUPER_ADMIN_USER_STATUS_VALUES:
+            raise ValueError("Invalid account status.")
+        updates["status"] = status_value
+    if "role" in payload:
+        updates["role"] = _validated_role_value(_normalize(payload.get("role")))
+    if "access_tier" in payload:
+        updates["access_tier"] = normalize_role_code(_normalize(payload.get("access_tier"))) or None
+    if "department_role" in payload:
+        updates["department_role"] = normalize_role_code(_normalize(payload.get("department_role"))) or None
+
+    if len(updates) == 1:
+        raise ValueError("No valid updates were provided.")
+
+    before = {
+        "email": _normalize_email(user.get("email")),
+        "full_name": _user_display_name(user),
+        "phone_number": _normalize(user.get("phone_number") or user.get("phone")) or None,
+        "birthday": _serialize_datetime(
+            user.get("birthday") or user.get("birth_date") or user.get("date_of_birth") or user.get("dob")
+        ),
+        "mailing_address": _normalize(user.get("mailing_address") or user.get("address")) or None,
+        "status": _normalize(user.get("status")) or "active",
+        "role": _user_role_value(user),
+        "access_tier": _normalize(user.get("access_tier")) or None,
+        "department_role": _normalize(user.get("department_role")) or None,
+    }
+
+    user_oid = _to_object_id(current_user_id)
+    if user_oid is not None:
+        db["users"].update_one({"_id": user_oid}, {"$set": updates})
+    else:
+        db["users"].update_one({"_id": current_user_id}, {"$set": updates})
+    refreshed = _user_by_id(current_user_id) or {}
+    after = {
+        "email": _normalize_email(refreshed.get("email")),
+        "full_name": _user_display_name(refreshed),
+        "phone_number": _normalize(refreshed.get("phone_number") or refreshed.get("phone")) or None,
+        "birthday": _serialize_datetime(
+            refreshed.get("birthday") or refreshed.get("birth_date") or refreshed.get("date_of_birth") or refreshed.get("dob")
+        ),
+        "mailing_address": _normalize(refreshed.get("mailing_address") or refreshed.get("address")) or None,
+        "status": _normalize(refreshed.get("status")) or "active",
+        "role": _user_role_value(refreshed),
+        "access_tier": _normalize(refreshed.get("access_tier")) or None,
+        "department_role": _normalize(refreshed.get("department_role")) or None,
+    }
+    _write_admin_action_audit(
+        actor=actor,
+        action="super_admin.user_update",
+        target_type="user",
+        target_id=current_user_id,
+        before=before,
+        after=after,
+        context={"surface": "admin_control_center.super_admin"},
+    )
+    return {"user_id": current_user_id, "before": before, "after": after}
+
+
+def super_admin_apply_user_state_action(
+    *,
+    user_id: str,
+    action: str,
+    actor: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    normalized_action = _normalize(action).lower()
+    mapped_status = SUPER_ADMIN_USER_STATE_ACTIONS.get(normalized_action)
+    if not mapped_status:
+        raise ValueError("Unsupported user state action.")
+    return super_admin_update_user(
+        user_id=user_id,
+        payload={"status": mapped_status},
+        actor=actor,
+    )
+
+
 def _user_id_candidates(user: dict[str, Any]) -> list[Any]:
     user_id = _normalize_object_id(user.get("_id")) or _normalize(user.get("id"))
     candidates: list[Any] = []
@@ -2263,6 +2688,10 @@ def _find_case_user(*, email: str = "", user_id: str = "") -> dict[str, Any] | N
         "birth_date": 1,
         "date_of_birth": 1,
         "dob": 1,
+        "phone_number": 1,
+        "phone": 1,
+        "mailing_address": 1,
+        "address": 1,
         "role": 1,
         "access_tier": 1,
         "department_role": 1,
@@ -2314,10 +2743,15 @@ def _user_identity_snapshot(*, email: str = "", user_id: str = "") -> dict[str, 
         "first_name": _normalize(user.get("first_name")) or None,
         "last_name": _normalize(user.get("last_name")) or None,
         "email": _normalize_email(user.get("email")) or normalized_email or None,
+        "phone_number": _normalize(user.get("phone_number") or user.get("phone")) or None,
+        "mailing_address": _normalize(user.get("mailing_address") or user.get("address")) or None,
         "birthday": _serialize_datetime(
             user.get("birthday") or user.get("birth_date") or user.get("date_of_birth") or user.get("dob")
         ),
         "role": role,
+        "status": _normalize(user.get("status")) or "active",
+        "access_tier": _normalize(user.get("access_tier")) or None,
+        "department_role": _normalize(user.get("department_role")) or None,
         "admin_user_relationship": "internal_admin_identity"
         if role.lower() in INTERNAL_ROLE_KEYS
         else "customer_record",
@@ -2526,11 +2960,15 @@ def _build_user_workspace_payload(user: dict[str, Any]) -> dict[str, Any]:
                 "first_name": _normalize(user.get("first_name")) or None,
                 "last_name": _normalize(user.get("last_name")) or None,
                 "email": _normalize_email(user.get("email")) or None,
+                "phone_number": _normalize(user.get("phone_number") or user.get("phone")) or None,
+                "mailing_address": _normalize(user.get("mailing_address") or user.get("address")) or None,
                 "birthday": _serialize_datetime(
                     user.get("birthday") or user.get("birth_date") or user.get("date_of_birth") or user.get("dob")
                 ),
                 "role": role,
                 "status": status_value,
+                "access_tier": _normalize(user.get("access_tier")) or None,
+                "department_role": _normalize(user.get("department_role")) or None,
                 "admin_user_relationship": "internal_admin_identity" if is_internal else "customer_record",
                 "created_at": _serialize_datetime(user.get("created_at")),
                 "updated_at": _serialize_datetime(user.get("updated_at")),
@@ -2890,8 +3328,13 @@ def _build_case_workspace_payload(
             "identity": {
                 "full_name": display_name,
                 "email": identity.get("email") or owner_email or None,
+                "phone_number": identity.get("phone_number") or None,
+                "mailing_address": identity.get("mailing_address") or None,
                 "birthday": identity.get("birthday"),
                 "role": identity.get("role") or "customer",
+                "status": identity.get("status") or "active",
+                "access_tier": identity.get("access_tier") or None,
+                "department_role": identity.get("department_role") or None,
                 "admin_user_relationship": identity.get("admin_user_relationship") or "customer_record",
                 "household_name": family.get("household_name"),
                 "family_name": family.get("family_name"),

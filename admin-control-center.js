@@ -26,11 +26,13 @@
     allowedTabs: [],
     allowedActions: [],
     allowedBulkActions: [],
+    isSuperAdmin: false,
     queue: "overview",
     selectedCaseId: "",
     selectedTab: "identity",
     cases: [],
     workspace: null,
+    packageOptions: [],
   };
 
   const QUEUE_META = {
@@ -171,12 +173,34 @@
     state.allowedTabs = normalizeAccessList(profile && profile.allowed_tabs);
     state.allowedActions = normalizeAccessList(profile && profile.allowed_actions);
     state.allowedBulkActions = normalizeAccessList(profile && profile.allowed_bulk_actions);
+    state.isSuperAdmin = Boolean(profile && profile.is_super_admin);
 
     if (!isAllowedQueue(state.queue)) {
       state.queue = state.allowedQueues[0] || "overview";
     }
     if (!isAllowedTab(state.selectedTab)) {
       state.selectedTab = state.allowedTabs[0] || "identity";
+    }
+  }
+
+  async function loadPackageOptions() {
+    if (state.packageOptions.length) return;
+    try {
+      const payload = await fetchJson("/packages/catalog");
+      const packages = payload && payload.packages ? payload.packages : {};
+      state.packageOptions = Object.keys(packages)
+        .map(function (code) {
+          const item = packages[code] || {};
+          return {
+            code,
+            label: item.display_name || code,
+          };
+        })
+        .sort(function (a, b) {
+          return a.label.localeCompare(b.label);
+        });
+    } catch (_error) {
+      state.packageOptions = [];
     }
   }
 
@@ -668,6 +692,63 @@
       return;
     }
 
+    if (tab === "identity") {
+      const userId =
+        (tabData && tabData.user_id) ||
+        (workspace.tabs && workspace.tabs.identity && workspace.tabs.identity.user_id) ||
+        "";
+      const showSuperAdminControls = Boolean(state.isSuperAdmin && userId);
+      node.innerHTML = `
+        ${warningMarkup}
+        <article class="admin-dossier-card admin-dossier-card--wide">
+          <div class="admin-card-header"><span class="admin-card-badge">I</span><h3 class="admin-card-title">Identity</h3></div>
+          ${renderFieldGrid([
+            { label: "User ID", value: userId, mono: true },
+            { label: "Full Name", value: tabData.full_name },
+            { label: "Email", value: tabData.email },
+            { label: "Phone", value: tabData.phone_number },
+            { label: "Birthday", value: tabData.birthday },
+            { label: "Role", value: tabData.role, chip: true },
+            { label: "Status", value: tabData.status, chip: true },
+            { label: "Admin/User Relationship", value: tabData.admin_user_relationship, chip: true },
+            { label: "Access Tier", value: tabData.access_tier || "—" },
+            { label: "Department Role", value: tabData.department_role || "—" },
+            { label: "Mailing Address", value: tabData.mailing_address || "—" },
+            { label: "Last Login", value: formatDate(tabData.last_login_at) },
+          ])}
+        </article>
+        ${
+          showSuperAdminControls
+            ? `
+              <article class="admin-dossier-card admin-dossier-card--wide">
+                <div class="admin-card-header"><span class="admin-card-badge">S</span><h3 class="admin-card-title">Super Admin Controls</h3></div>
+                <div class="admin-field-grid">
+                  <label class="admin-field"><span>Full Name</span><input type="text" data-super-admin-user-field="full_name" value="${escapeHtml(tabData.full_name || "")}" /></label>
+                  <label class="admin-field"><span>Email</span><input type="email" data-super-admin-user-field="email" value="${escapeHtml(tabData.email || "")}" /></label>
+                  <label class="admin-field"><span>Phone Number</span><input type="text" data-super-admin-user-field="phone_number" value="${escapeHtml(tabData.phone_number || "")}" /></label>
+                  <label class="admin-field"><span>Birthday</span><input type="text" data-super-admin-user-field="birthday" value="${escapeHtml(tabData.birthday || "")}" /></label>
+                  <label class="admin-field"><span>Mailing Address</span><input type="text" data-super-admin-user-field="mailing_address" value="${escapeHtml(tabData.mailing_address || "")}" /></label>
+                  <label class="admin-field"><span>Role</span><input type="text" data-super-admin-user-field="role" value="${escapeHtml(tabData.role || "")}" /></label>
+                  <label class="admin-field"><span>Status</span><input type="text" data-super-admin-user-field="status" value="${escapeHtml(tabData.status || "")}" /></label>
+                  <label class="admin-field"><span>Access Tier</span><input type="text" data-super-admin-user-field="access_tier" value="${escapeHtml(tabData.access_tier || "")}" /></label>
+                  <label class="admin-field"><span>Department Role</span><input type="text" data-super-admin-user-field="department_role" value="${escapeHtml(tabData.department_role || "")}" /></label>
+                </div>
+                <div class="inline-actions" style="margin-top: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                  <button class="btn btn-primary" type="button" data-super-admin-user-save="${escapeHtml(userId)}">Save User Updates</button>
+                  <button class="btn btn-secondary" type="button" data-super-admin-user-action="activate" data-super-admin-user-id="${escapeHtml(userId)}">Activate</button>
+                  <button class="btn btn-secondary" type="button" data-super-admin-user-action="suspend" data-super-admin-user-id="${escapeHtml(userId)}">Suspend</button>
+                  <button class="btn btn-secondary" type="button" data-super-admin-user-action="disable" data-super-admin-user-id="${escapeHtml(userId)}">Disable</button>
+                  <button class="btn btn-secondary" type="button" data-super-admin-user-action="restore" data-super-admin-user-id="${escapeHtml(userId)}">Restore</button>
+                  <button class="btn btn-secondary" type="button" data-super-admin-user-password-reset="${escapeHtml(userId)}">Trigger Password Reset</button>
+                </div>
+              </article>
+            `
+            : ""
+        }
+      `;
+      return;
+    }
+
     if (tab === "mint_readiness") {
       const guidance = getGuidanceItems(tabData && tabData.guidance);
       const history = Array.isArray(tabData && tabData.historical_attempts) ? tabData.historical_attempts : [];
@@ -730,6 +811,60 @@
           <div class="admin-card-header"><span class="admin-card-badge">G</span><h3 class="admin-card-title">Operator Guidance</h3></div>
           ${renderGuidanceList(guidance, "Mint path is clear", "No active mint blockers were returned for this case.")}
         </article>
+      `;
+      return;
+    }
+
+    if (tab === "package_lane") {
+      const projectId =
+        (workspace.tabs && workspace.tabs.project && workspace.tabs.project.project_id) ||
+        (workspace.project && workspace.project.id) ||
+        "";
+      const packageCode = tabData.package_code || "";
+      const packageOptions = (state.packageOptions || [])
+        .map(function (item) {
+          const selected = item.code === packageCode ? ' selected="selected"' : "";
+          return `<option value="${escapeHtml(item.code)}"${selected}>${escapeHtml(item.label)} (${escapeHtml(item.code)})</option>`;
+        })
+        .join("");
+      const showSuperAdminControls = Boolean(state.isSuperAdmin && projectId);
+      node.innerHTML = `
+        ${warningMarkup}
+        <article class="admin-dossier-card admin-dossier-card--wide">
+          <div class="admin-card-header"><span class="admin-card-badge">P</span><h3 class="admin-card-title">Package & Lane</h3></div>
+          ${renderFieldGrid([
+            { label: "Package Name", value: tabData.package_name },
+            { label: "Package Code", value: tabData.package_code, mono: true },
+            { label: "Lane", value: tabData.project_lane || tabData.lane, chip: true },
+            { label: "Normalization", value: tabData.package_normalization_status, chip: true },
+            { label: "Source", value: tabData.source || "—" },
+            { label: "Raw Value", value: tabData.raw_value || "—" },
+          ])}
+        </article>
+        ${
+          showSuperAdminControls
+            ? `
+            <article class="admin-dossier-card admin-dossier-card--wide">
+              <div class="admin-card-header"><span class="admin-card-badge">S</span><h3 class="admin-card-title">Super Admin Package Change</h3></div>
+              <div class="admin-field-grid">
+                <label class="admin-field">
+                  <span>Target Package</span>
+                  <select data-super-admin-package-field="package_code">
+                    ${packageOptions || `<option value="${escapeHtml(packageCode)}">${escapeHtml(packageCode || "Current package")}</option>`}
+                  </select>
+                </label>
+                <label class="admin-field"><span>Target Lane</span><input type="text" data-super-admin-package-field="project_lane" value="${escapeHtml(tabData.project_lane || tabData.lane || "")}" /></label>
+                <label class="admin-field"><span>Order Status</span><input type="text" data-super-admin-package-field="order_status" value="${escapeHtml((workspace.tabs.orders_billing || {}).order_status || "")}" /></label>
+              </div>
+              <div class="inline-actions" style="margin-top: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                <button class="btn btn-secondary" type="button" data-super-admin-package-preview="${escapeHtml(projectId)}">Preview Change</button>
+                <button class="btn btn-primary" type="button" data-super-admin-package-apply="${escapeHtml(projectId)}">Apply Package Change</button>
+              </div>
+              <div data-super-admin-package-preview-output class="helper" style="margin-top: 0.75rem;"></div>
+            </article>
+            `
+            : ""
+        }
       `;
       return;
     }
@@ -1047,6 +1182,139 @@
     }
   }
 
+  function collectSuperAdminUserPayload() {
+    const payload = {};
+    document.querySelectorAll("[data-super-admin-user-field]").forEach(function (node) {
+      const key = node.getAttribute("data-super-admin-user-field");
+      if (!key) return;
+      payload[key] = normalizeValue(node.value);
+    });
+    return payload;
+  }
+
+  async function runSuperAdminUserUpdate(userId) {
+    if (!state.isSuperAdmin) {
+      setPageStatus("Super Admin access is required.", "error");
+      return;
+    }
+    if (!window.confirm("Apply user profile and account updates?")) return;
+    setPageStatus("Saving user updates...", "info");
+    try {
+      await app.apiRequest(`/admin/control-center/super-admin/users/${encodeURIComponent(userId)}`, {
+        method: "PATCH",
+        body: JSON.stringify(collectSuperAdminUserPayload()),
+      });
+      await loadCases();
+      if (state.selectedCaseId) await loadCaseWorkspace(state.selectedCaseId);
+      setPageStatus("User updates saved.", "success");
+    } catch (error) {
+      setPageStatus(error.message || "Unable to update user.", "error");
+    }
+  }
+
+  async function runSuperAdminUserStateAction(userId, action) {
+    if (!state.isSuperAdmin) {
+      setPageStatus("Super Admin access is required.", "error");
+      return;
+    }
+    if (!window.confirm(`Confirm ${action} for this account?`)) return;
+    setPageStatus("Updating account status...", "info");
+    try {
+      await postJson(
+        `/admin/control-center/super-admin/users/${encodeURIComponent(userId)}/status-action`,
+        { action },
+      );
+      await loadCases();
+      if (state.selectedCaseId) await loadCaseWorkspace(state.selectedCaseId);
+      setPageStatus("Account status updated.", "success");
+    } catch (error) {
+      setPageStatus(error.message || "Unable to update account status.", "error");
+    }
+  }
+
+  async function runSuperAdminPasswordReset(userId) {
+    if (!state.isSuperAdmin) {
+      setPageStatus("Super Admin access is required.", "error");
+      return;
+    }
+    if (!window.confirm("Trigger password reset for this account?")) return;
+    setPageStatus("Issuing password reset...", "info");
+    try {
+      await postJson(
+        `/admin/control-center/super-admin/users/${encodeURIComponent(userId)}/password-reset`,
+        {},
+      );
+      setPageStatus("Password reset issued.", "success");
+    } catch (error) {
+      setPageStatus(error.message || "Unable to issue password reset.", "error");
+    }
+  }
+
+  function collectSuperAdminPackagePayload() {
+    const payload = { package_code: "", project_lane: "", order_status: "" };
+    document.querySelectorAll("[data-super-admin-package-field]").forEach(function (node) {
+      const key = node.getAttribute("data-super-admin-package-field");
+      if (!key) return;
+      payload[key] = normalizeValue(node.value);
+    });
+    return payload;
+  }
+
+  function renderSuperAdminPackagePreview(payload) {
+    const node = document.querySelector("[data-super-admin-package-preview-output]");
+    if (!node) return;
+    const changes = Array.isArray(payload && payload.changes) ? payload.changes : [];
+    if (!changes.length) {
+      node.textContent = "No field changes detected.";
+      return;
+    }
+    node.innerHTML = changes
+      .map(function (change) {
+        return `${escapeHtml(titleize(change.scope))} · ${escapeHtml(titleize(change.field))}: ${escapeHtml(renderScalar(change.before))} → ${escapeHtml(renderScalar(change.after))}`;
+      })
+      .join("<br />");
+  }
+
+  async function runSuperAdminPackagePreview(projectId) {
+    if (!state.isSuperAdmin) {
+      setPageStatus("Super Admin access is required.", "error");
+      return;
+    }
+    setPageStatus("Generating package-change preview...", "info");
+    try {
+      const payload = await postJson(
+        `/admin/control-center/super-admin/projects/${encodeURIComponent(projectId)}/package-change/preview`,
+        collectSuperAdminPackagePayload(),
+      );
+      renderSuperAdminPackagePreview(payload || {});
+      setPageStatus("Package-change preview ready.", "success");
+    } catch (error) {
+      setPageStatus(error.message || "Unable to preview package change.", "error");
+    }
+  }
+
+  async function runSuperAdminPackageApply(projectId) {
+    if (!state.isSuperAdmin) {
+      setPageStatus("Super Admin access is required.", "error");
+      return;
+    }
+    if (!window.confirm("Apply package change and repair consistency across project/order/entitlements?")) return;
+    setPageStatus("Applying package change...", "info");
+    try {
+      const payload = await postJson(
+        `/admin/control-center/super-admin/projects/${encodeURIComponent(projectId)}/package-change/apply`,
+        collectSuperAdminPackagePayload(),
+      );
+      renderSuperAdminPackagePreview(payload || {});
+      await loadOverview();
+      await loadCases();
+      if (state.selectedCaseId) await loadCaseWorkspace(state.selectedCaseId);
+      setPageStatus("Package change applied and synchronized.", "success");
+    } catch (error) {
+      setPageStatus(error.message || "Unable to apply package change.", "error");
+    }
+  }
+
   function bindEvents() {
     document.addEventListener("click", function (event) {
       const target = event.target;
@@ -1089,6 +1357,42 @@
         if (bulkActionButton.disabled || bulkActionButton.classList.contains("is-disabled")) return;
         const action = bulkActionButton.getAttribute("data-admin-bulk-action");
         if (action) runBulkAction(action);
+        return;
+      }
+
+      const superAdminUserSave = target.closest("[data-super-admin-user-save]");
+      if (superAdminUserSave) {
+        const userId = superAdminUserSave.getAttribute("data-super-admin-user-save");
+        if (userId) runSuperAdminUserUpdate(userId);
+        return;
+      }
+
+      const superAdminUserAction = target.closest("[data-super-admin-user-action]");
+      if (superAdminUserAction) {
+        const action = superAdminUserAction.getAttribute("data-super-admin-user-action");
+        const userId = superAdminUserAction.getAttribute("data-super-admin-user-id");
+        if (action && userId) runSuperAdminUserStateAction(userId, action);
+        return;
+      }
+
+      const superAdminPasswordReset = target.closest("[data-super-admin-user-password-reset]");
+      if (superAdminPasswordReset) {
+        const userId = superAdminPasswordReset.getAttribute("data-super-admin-user-password-reset");
+        if (userId) runSuperAdminPasswordReset(userId);
+        return;
+      }
+
+      const superAdminPackagePreview = target.closest("[data-super-admin-package-preview]");
+      if (superAdminPackagePreview) {
+        const projectId = superAdminPackagePreview.getAttribute("data-super-admin-package-preview");
+        if (projectId) runSuperAdminPackagePreview(projectId);
+        return;
+      }
+
+      const superAdminPackageApply = target.closest("[data-super-admin-package-apply]");
+      if (superAdminPackageApply) {
+        const projectId = superAdminPackageApply.getAttribute("data-super-admin-package-apply");
+        if (projectId) runSuperAdminPackageApply(projectId);
         return;
       }
 
@@ -1163,6 +1467,9 @@
 
     try {
       await loadAccessProfile();
+      if (state.isSuperAdmin) {
+        await loadPackageOptions();
+      }
     } catch (error) {
       setPageStatus(error.message || "Unable to load access profile.", "error");
     }

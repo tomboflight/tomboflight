@@ -33,6 +33,15 @@ INTERNAL_ADMIN_ROLE_CODES: frozenset[str] = frozenset(
     }
 )
 
+SUPER_ADMIN_ROLE_CODES: frozenset[str] = frozenset(
+    {
+        "super_admin",
+        "root_admin",
+        "platform_admin",
+        "executive_technology",
+    }
+)
+
 PROJECT_MEMBER_ROLE_ALIASES: dict[str, str] = {
     "owner": "owner",
     "administrator": "manager",
@@ -79,3 +88,7 @@ def collect_role_codes(values: Iterable[Any]) -> set[str]:
 
 def has_internal_admin_role(values: Iterable[Any]) -> bool:
     return any(role_code in INTERNAL_ADMIN_ROLE_CODES for role_code in collect_role_codes(values))
+
+
+def has_super_admin_role(values: Iterable[Any]) -> bool:
+    return any(role_code in SUPER_ADMIN_ROLE_CODES for role_code in collect_role_codes(values))

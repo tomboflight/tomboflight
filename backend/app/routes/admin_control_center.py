@@ -6,7 +6,8 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
-from app.dependencies.auth import require_any_permission, require_permission
+from app.dependencies.auth import require_any_permission, require_permission, require_super_admin
+from app.services.auth_service import admin_issue_password_reset
 from app.services.audit_log_service import write_audit_log
 from app.services.admin_control_service import (
     MAX_BULK_ACTION_LIMIT,
@@ -30,6 +31,11 @@ from app.services.admin_control_service import (
     repair_all_safe_records,
     repair_record,
     repair_selected_records,
+    super_admin_apply_package_change,
+    super_admin_apply_user_state_action,
+    super_admin_list_users,
+    super_admin_preview_package_change,
+    super_admin_update_user,
     resync_current_mint_receipt,
     project_workspace_snapshot,
     run_readiness_check,
@@ -102,6 +108,41 @@ class BulkRepairPayload(BaseModel):
 class RepairSelectedPayload(BaseModel):
     project_ids: list[str] = Field(default_factory=list)
     order_ids: list[str] = Field(default_factory=list)
+
+
+class SuperAdminUserUpdatePayload(BaseModel):
+    email: str | None = None
+    full_name: str | None = None
+    phone_number: str | None = None
+    birthday: str | None = None
+    mailing_address: str | None = None
+    status: str | None = None
+    role: str | None = None
+    access_tier: str | None = None
+    department_role: str | None = None
+
+
+class SuperAdminUserStateActionPayload(BaseModel):
+    action: str = Field(min_length=1)
+
+
+class SuperAdminPackageChangePayload(BaseModel):
+    package_code: str = Field(min_length=1)
+    project_lane: str = Field(default="")
+    order_status: str = Field(default="")
+
+
+def _current_user_id(current_user: dict[str, Any]) -> str:
+    return _string_value(current_user.get("_id") or current_user.get("id") or current_user.get("user_id"))
+
+
+def _current_user_display(current_user: dict[str, Any]) -> str:
+    full_name = _string_value(current_user.get("full_name"))
+    if full_name:
+        return full_name
+    first_name = _string_value(current_user.get("first_name"))
+    last_name = _string_value(current_user.get("last_name"))
+    return " ".join([first_name, last_name]).strip()
 
 
 def _assert_bulk_action_allowed(current_user: dict[str, Any], action: str) -> None:
@@ -409,3 +450,96 @@ def bulk_repair_all_safe_records(
     result = repair_all_safe_records(limit=(payload.limit if payload else BULK_ACTION_DEFAULT_LIMIT))
     _audit_bulk_action(current_user=current_user, action="repair_all_safe_records", result_payload=result)
     return result
+
+
+@router.get("/super-admin/users")
+def super_admin_users_index(
+    search: str = Query(default=""),
+    limit: int = Query(default=100, ge=1, le=500),
+    current_user: dict[str, Any] = Depends(require_super_admin),
+):
+    del current_user
+    return super_admin_list_users(search=search, limit=limit)
+
+
+@router.patch("/super-admin/users/{user_id}")
+def super_admin_patch_user(
+    user_id: str,
+    payload: SuperAdminUserUpdatePayload,
+    current_user: dict[str, Any] = Depends(require_super_admin),
+):
+    try:
+        return super_admin_update_user(
+            user_id=user_id,
+            payload=payload.model_dump(exclude_none=True),
+            actor=current_user,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/super-admin/users/{user_id}/status-action")
+def super_admin_user_status_action(
+    user_id: str,
+    payload: SuperAdminUserStateActionPayload,
+    current_user: dict[str, Any] = Depends(require_super_admin),
+):
+    try:
+        return super_admin_apply_user_state_action(
+            user_id=user_id,
+            action=payload.action,
+            actor=current_user,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/super-admin/users/{user_id}/password-reset")
+def super_admin_user_password_reset(
+    user_id: str,
+    current_user: dict[str, Any] = Depends(require_super_admin),
+):
+    try:
+        return admin_issue_password_reset(
+            user_id,
+            admin_user_id=_current_user_id(current_user),
+            admin_display=_current_user_display(current_user),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.post("/super-admin/projects/{project_id}/package-change/preview")
+def super_admin_preview_project_package_change(
+    project_id: str,
+    payload: SuperAdminPackageChangePayload,
+    current_user: dict[str, Any] = Depends(require_super_admin),
+):
+    del current_user
+    try:
+        return super_admin_preview_package_change(
+            project_id=project_id,
+            package_code=payload.package_code,
+            project_lane=payload.project_lane,
+            order_status=payload.order_status,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/super-admin/projects/{project_id}/package-change/apply")
+def super_admin_apply_project_package_change(
+    project_id: str,
+    payload: SuperAdminPackageChangePayload,
+    current_user: dict[str, Any] = Depends(require_super_admin),
+):
+    try:
+        return super_admin_apply_package_change(
+            project_id=project_id,
+            package_code=payload.package_code,
+            project_lane=payload.project_lane,
+            order_status=payload.order_status,
+            actor=current_user,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
