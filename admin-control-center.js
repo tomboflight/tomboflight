@@ -1270,7 +1270,7 @@
     }
     node.innerHTML = changes
       .map(function (change) {
-        return `${escapeHtml(titleize(change.scope))} · ${escapeHtml(titleize(change.field))}: ${escapeHtml(renderScalar(change.before))} → ${escapeHtml(renderScalar(change.after))}`;
+        return `${escapeHtml(titleize(change.scope))} · ${escapeHtml(titleize(change.field))}: ${escapeHtml(renderScalar(change.before))} to ${escapeHtml(renderScalar(change.after))}`;
       })
       .join("<br />");
   }

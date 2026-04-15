@@ -13,7 +13,7 @@ from app.core.package_catalog import (
     get_package_control_profile,
     normalize_package_code,
 )
-from app.core.role_catalog import normalize_role_code
+from app.core.role_catalog import SUPER_ADMIN_ROLE_CODES, normalize_role_code
 from app.database import get_database
 from app.services.audit_log_service import write_audit_log
 from app.services.mint_job_service import sync_receipt_for_mint_record
@@ -334,7 +334,7 @@ def admin_control_access_profile(current_user: dict[str, Any]) -> dict[str, Any]
         "allowed_actions": allowed_actions,
         "allowed_bulk_actions": allowed_bulk_actions,
         "is_wildcard": "*" in permissions,
-        "is_super_admin": primary_role in {"super_admin", "root_admin", "platform_admin", "executive_technology"},
+        "is_super_admin": primary_role in SUPER_ADMIN_ROLE_CODES,
     }
 
 
