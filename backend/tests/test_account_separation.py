@@ -1,6 +1,8 @@
 import unittest
 from unittest.mock import patch
 
+from fastapi import HTTPException
+
 from app.dependencies import auth as auth_dependencies
 from app.services.auth_service import build_user_response
 
@@ -98,6 +100,35 @@ class AccountSeparationTests(unittest.TestCase):
         self.assertIs(resolved_user, current_user)
         resolve_mock.assert_called_once_with("user-1", project_id="project-2")
         self.assertEqual(current_user["_access_context"]["project_id"], "project-2")
+
+    def test_require_super_admin_rejects_non_super_admin_role(self):
+        current_user = {
+            "id": "user-1",
+            "role": "admin",
+            "_access_context": {
+                "project_id": None,
+                "role_codes": ["admin"],
+                "permissions": ["*"],
+            },
+        }
+        with patch.object(auth_dependencies, "_extract_project_id_from_request", return_value=""):
+            with self.assertRaises(HTTPException) as error:
+                auth_dependencies.require_super_admin(request=object(), current_user=current_user)
+        self.assertEqual(error.exception.status_code, 403)
+
+    def test_require_super_admin_allows_super_admin_role(self):
+        current_user = {
+            "id": "user-1",
+            "role": "super_admin",
+            "_access_context": {
+                "project_id": None,
+                "role_codes": ["super_admin"],
+                "permissions": ["*"],
+            },
+        }
+        with patch.object(auth_dependencies, "_extract_project_id_from_request", return_value=""):
+            resolved = auth_dependencies.require_super_admin(request=object(), current_user=current_user)
+        self.assertIs(resolved, current_user)
 
 
 if __name__ == "__main__":

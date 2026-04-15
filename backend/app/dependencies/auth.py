@@ -10,6 +10,7 @@ from app.config import settings
 from app.core.package_catalog import get_package
 from app.core.role_catalog import (
     INTERNAL_ADMIN_ROLE_CODES,
+    SUPER_ADMIN_ROLE_CODES,
     collect_role_codes,
     has_internal_admin_role,
     normalize_role_code,
@@ -30,6 +31,7 @@ COOKIE_NAME = "tol_access_token"
 CSRF_COOKIE_NAME = "tol_csrf_token"
 
 INTERNAL_ADMIN_KEYS = set(INTERNAL_ADMIN_ROLE_CODES)
+SUPER_ADMIN_KEYS = set(SUPER_ADMIN_ROLE_CODES)
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -459,6 +461,37 @@ def require_admin(current_user: dict[str, Any] = Depends(get_current_user)) -> d
             detail="Admin access required.",
         )
     return current_user
+
+
+def require_super_admin(
+    request: Request,
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+    context = _get_or_resolve_access_context(
+        current_user,
+        project_id=_extract_project_id_from_request(request),
+    )
+    role_codes = {
+        _normalize_value(role_code)
+        for role_code in (context.get("role_codes") or [])
+        if _normalize_value(role_code)
+    }
+    role_codes.update(
+        collect_role_codes(
+            (
+                current_user.get("role"),
+                current_user.get("access_tier"),
+                current_user.get("department_role"),
+            )
+        )
+    )
+    if role_codes.intersection(SUPER_ADMIN_KEYS):
+        return current_user
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Super Admin role is required.",
+    )
 
 
 LEGACY_ROLE_PERMISSIONS: dict[str, set[str]] = {
