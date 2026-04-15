@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Household Access | Tomb of Light</title>
+    <link rel="stylesheet" href="styles.css?v=20260328-7" />
+  </head>
+  <body>
+    <div class="page-wrap">
+      <header class="site-header">
+        <div class="container site-header-inner">
+          <a class="brand" href="dashboard.html">Tomb of Light<span class="brand-symbol">™</span></a>
+          <nav class="site-nav" id="site-nav" aria-label="Portal navigation">
+            <a href="dashboard.html">Dashboard</a>
+            <a href="household-access.html" aria-current="page">Household Access</a>
+            <a href="link-keys.html">Link Keys</a>
+            <a href="faq.html">Help</a>
+          </nav>
+          <div class="header-actions">
+            <button class="btn btn-secondary" type="button" data-logout-btn>Log Out</button>
+          </div>
+        </div>
+      </header>
+
+      <main id="main-content" data-household-access-page>
+        <section class="page-hero">
+          <div class="container">
+            <div class="page-hero-panel">
+              <span class="eyebrow">Household Workspace Access</span>
+              <h1>Members & Invites</h1>
+              <p data-household-status>Loading workspace access settings...</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="page-sections">
+          <div class="container form-shell">
+            <div class="form-panel">
+              <span class="eyebrow">Invite Household Member</span>
+              <form class="form-grid" data-household-invite-form novalidate>
+                <label>Email <input type="email" name="email" required /></label>
+                <label>Role
+                  <select name="member_role" required>
+                    <option value="co_owner">Co-Owner</option>
+                    <option value="family_manager">Family Manager</option>
+                    <option value="contributor">Contributor</option>
+                    <option value="viewer" selected>Viewer</option>
+                    <option value="minor_viewer">Minor Viewer</option>
+                    <option value="linked_relative">Linked Relative</option>
+                    <option value="legacy_executor">Legacy Executor</option>
+                  </select>
+                </label>
+                <label>Relationship Scope <input type="text" name="relationship_scope" value="household_member" /></label>
+                <label>Privacy Scope
+                  <select name="privacy_scope">
+                    <option value="household_private" selected>Household Private</option>
+                    <option value="private_to_owner_and_co_owner">Owner + Co-Owner Private</option>
+                    <option value="branch_shared">Branch Shared</option>
+                    <option value="linked_family_shared">Linked Family Shared</option>
+                    <option value="public_memorial">Public Memorial</option>
+                    <option value="minor_protected">Minor Protected</option>
+                  </select>
+                </label>
+                <div class="inline-actions">
+                  <button class="btn btn-primary" type="submit">Send Invite</button>
+                </div>
+              </form>
+              <div class="helper" data-household-invite-status style="display: none; margin-top: 1rem"></div>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Accept Invite</span>
+              <form class="form-grid" data-household-accept-form novalidate>
+                <label>Invite Key <input type="text" name="invite_key" required /></label>
+                <div class="inline-actions">
+                  <button class="btn btn-primary" type="submit">Accept Invite</button>
+                </div>
+              </form>
+              <div class="helper" data-household-accept-status style="display: none; margin-top: 1rem"></div>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Current Members</span>
+              <div class="grid-3" data-household-members-list></div>
+              <div class="helper" data-household-members-empty style="display: none; margin-top: 1rem">No members found.</div>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Pending & Historical Invites</span>
+              <div class="grid-3" data-household-invites-list></div>
+              <div class="helper" data-household-invites-empty style="display: none; margin-top: 1rem">No invites found.</div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script src="config.js?v=20260328-7"></script>
+    <script src="app.js?v=20260410-1"></script>
+    <script src="auth.js?v=20260410-2"></script>
+    <script src="household-access.js?v=20260415-1"></script>
+  </body>
+</html>

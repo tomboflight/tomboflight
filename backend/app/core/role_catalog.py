@@ -33,18 +33,35 @@ SUPER_ADMIN_ROLE_CODES: frozenset[str] = frozenset(
 )
 
 PROJECT_MEMBER_ROLE_ALIASES: dict[str, str] = {
-    "owner": "owner",
-    "administrator": "manager",
-    "admin": "manager",
-    "manager": "manager",
-    "editor": "editor",
-    "contributor": "editor",
+    "billing_owner": "billing_owner",
+    "owner": "billing_owner",
+    "co_owner": "co_owner",
+    "spouse": "co_owner",
+    "partner": "co_owner",
+    "family_manager": "family_manager",
+    "manager": "family_manager",
+    "administrator": "family_manager",
+    "admin": "family_manager",
+    "contributor": "contributor",
+    "editor": "contributor",
     "viewer": "viewer",
     "reader": "viewer",
+    "minor_viewer": "minor_viewer",
+    "linked_relative": "linked_relative",
+    "legacy_executor": "legacy_executor",
 }
 
 PROJECT_MEMBER_ROLE_CODES: frozenset[str] = frozenset(
-    {"owner", "manager", "editor", "viewer"}
+    {
+        "billing_owner",
+        "co_owner",
+        "family_manager",
+        "contributor",
+        "viewer",
+        "minor_viewer",
+        "linked_relative",
+        "legacy_executor",
+    }
 )
 
 

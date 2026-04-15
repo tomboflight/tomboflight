@@ -17,6 +17,12 @@ from app.services.project_membership_service import (
     list_accessible_project_ids,
 )
 
+ALLOWED_KEY_TYPES = {
+    "household_invite_key",
+    "branch_link_key",
+    "viewer_share_key",
+}
+
 
 def _utcnow_iso() -> str:
     return datetime.now(UTC).isoformat()
@@ -124,8 +130,12 @@ def _serialize_key(document: dict[str, Any] | None) -> dict[str, Any] | None:
     return {
         "_id": document.get("_id"),
         "id": str(document.get("_id")),
+        "key_type": str(document.get("key_type") or "branch_link_key"),
         "project_id": str(document.get("project_id") or ""),
         "user_id": str(document.get("user_id") or ""),
+        "issuer_user_id": str(document.get("issuer_user_id") or document.get("user_id") or "") or None,
+        "target_email": _normalize_value(document.get("target_email")) or None,
+        "allowed_role": _normalize_value(document.get("allowed_role")) or None,
         "package_code": document.get("package_code"),
         "package_name": document.get("package_name"),
         "package_lane": document.get("package_lane"),
@@ -138,6 +148,8 @@ def _serialize_key(document: dict[str, Any] | None) -> dict[str, Any] | None:
         "revoked_at": document.get("revoked_at"),
         "expires_at": document.get("expires_at"),
         "expired_at": document.get("expired_at"),
+        "max_uses": int(document.get("max_uses") or 1),
+        "use_count": int(document.get("use_count") or 0),
     }
 
 
@@ -412,7 +424,14 @@ def generate_link_key(
     user_id: str,
     user_email: str = "",
     allow_admin: bool = False,
+    key_type: str = "branch_link_key",
+    target_email: str = "",
+    allowed_role: str = "",
+    max_uses: int = 1,
 ) -> dict[str, Any]:
+    normalized_key_type = _normalize_value(key_type).lower() or "branch_link_key"
+    if normalized_key_type not in ALLOWED_KEY_TYPES:
+        raise ValueError("Invalid key type.")
     if not allow_admin and not user_can_access_project(project_id, user_id, user_email):
         raise PermissionError("Not authorized to generate a link key for this project.")
 
@@ -427,19 +446,17 @@ def generate_link_key(
     now = _utcnow_iso()
 
     keys.update_many(
-        {"project_id": str(project_id), "status": "active"},
-        {
-            "$set": {
-                "status": "revoked",
-                "revoked_at": now,
-                "updated_at": now,
-            }
-        },
+        {"project_id": str(project_id), "status": "active", "key_type": normalized_key_type},
+        {"$set": {"status": "revoked", "revoked_at": now, "updated_at": now}},
     )
 
     document = {
+        "key_type": normalized_key_type,
         "project_id": str(project_id),
         "user_id": str(user_id),
+        "issuer_user_id": str(user_id),
+        "target_email": _normalize_value(target_email).lower() or None,
+        "allowed_role": _normalize_value(allowed_role) or None,
         "package_code": project_summary.get("package_code"),
         "package_name": project_summary.get("package_name"),
         "package_lane": project_summary.get("package_lane"),
@@ -452,6 +469,8 @@ def generate_link_key(
         "revoked_at": None,
         "expires_at": None,
         "expired_at": None,
+        "max_uses": max(1, int(max_uses or 1)),
+        "use_count": 0,
     }
     raw_key = _generate_raw_link_key()
     document["key_hash"] = _hash_link_key(raw_key)
@@ -468,7 +487,7 @@ def generate_link_key(
             str(user_id or "") or None,
             "project_link_key",
             str(result.inserted_id),
-            {"project_id": str(project_id)},
+            {"project_id": str(project_id), "key_type": normalized_key_type},
         )
     except Exception:
         pass

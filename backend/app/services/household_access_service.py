@@ -1,0 +1,439 @@
+from __future__ import annotations
+
+import secrets
+from datetime import UTC, datetime, timedelta
+from typing import Any
+
+from bson import ObjectId
+
+from app.core.package_catalog import get_package, normalize_package_code
+from app.core.role_catalog import normalize_project_member_role
+from app.database import get_database
+from app.services.audit_log_service import create_audit_log
+from app.services.project_entitlement_service import get_project_entitlement
+from app.services.project_membership_service import (
+    ensure_project_owner_membership,
+    get_project_access_snapshot,
+)
+
+MEMBERSHIP_COLLECTION = "project_members"
+INVITES_COLLECTION = "household_invites"
+
+ACTIVE_MEMBER_STATUSES = {"active"}
+ACTIVE_INVITE_STATUSES = {"pending"}
+
+ROLE_PRIORITY = {
+    "billing_owner": 100,
+    "co_owner": 80,
+    "family_manager": 60,
+    "contributor": 40,
+    "viewer": 20,
+    "minor_viewer": 10,
+    "linked_relative": 10,
+    "legacy_executor": 5,
+}
+
+ROLE_ASSIGNMENTS: dict[str, set[str]] = {
+    "billing_owner": set(ROLE_PRIORITY.keys()),
+    "co_owner": {"family_manager", "contributor", "viewer", "minor_viewer", "linked_relative"},
+    "family_manager": {"contributor", "viewer", "minor_viewer"},
+}
+
+PRIVACY_SCOPES = {
+    "private_to_owner",
+    "private_to_owner_and_co_owner",
+    "household_private",
+    "branch_shared",
+    "linked_family_shared",
+    "public_memorial",
+    "minor_protected",
+}
+
+
+def _now() -> datetime:
+    return datetime.now(UTC)
+
+
+def _normalize(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _normalize_email(value: Any) -> str:
+    return _normalize(value).lower()
+
+
+def _to_oid(value: Any) -> ObjectId | None:
+    try:
+        return ObjectId(str(value))
+    except Exception:
+        return None
+
+
+def _db():
+    return get_database()
+
+
+def _projects():
+    return _db()["projects"]
+
+
+def _members():
+    return _db()[MEMBERSHIP_COLLECTION]
+
+
+def _invites():
+    return _db()[INVITES_COLLECTION]
+
+
+def _find_project(project_id: str) -> dict[str, Any] | None:
+    oid = _to_oid(project_id)
+    if oid is None:
+        return None
+    return _projects().find_one({"_id": oid})
+
+
+def _role_rank(role: str) -> int:
+    return int(ROLE_PRIORITY.get(normalize_project_member_role(role, default="viewer"), 0))
+
+
+def _can_assign_role(actor_role: str, target_role: str) -> bool:
+    actor = normalize_project_member_role(actor_role, default="viewer")
+    target = normalize_project_member_role(target_role, default="viewer")
+    return target in ROLE_ASSIGNMENTS.get(actor, set())
+
+
+def _is_active_invite(invite: dict[str, Any]) -> bool:
+    status = _normalize(invite.get("status") or "pending").lower()
+    if status not in ACTIVE_INVITE_STATUSES:
+        return False
+    expires_at = invite.get("expires_at")
+    if not expires_at:
+        return True
+    try:
+        expiration = datetime.fromisoformat(str(expires_at).replace("Z", "+00:00"))
+    except Exception:
+        return True
+    return expiration >= _now()
+
+
+def _resolve_actor_role(project: dict[str, Any], actor_user: dict[str, Any]) -> str:
+    snapshot = get_project_access_snapshot(
+        project,
+        user_id=_normalize(actor_user.get("id") or actor_user.get("_id") or actor_user.get("user_id")),
+        email=_normalize_email(actor_user.get("email")),
+    )
+    role = normalize_project_member_role(snapshot.get("member_role"), default="viewer")
+    if snapshot.get("via") == "owner_fallback" or role == "billing_owner":
+        return "billing_owner"
+    return role
+
+
+def _resolve_member_seat_cap(project_id: str) -> int:
+    entitlement = get_project_entitlement(project_id) or {}
+    package_code = normalize_package_code(entitlement.get("package_code"))
+    package = get_package(package_code) or {}
+    package_lane = _normalize(entitlement.get("package_lane") or package.get("package_lane") or "household").lower()
+    included = {"portrait": 2, "household": 6, "network": 20, "organization": 25}.get(package_lane, 6)
+    active_addons = list(entitlement.get("active_addons") or [])
+    addon_seats = 0
+    for addon in active_addons:
+        addon_text = _normalize(addon).lower()
+        if addon_text.startswith("extra_seat_"):
+            try:
+                addon_seats += int(addon_text.rsplit("_", 1)[-1])
+            except Exception:
+                addon_seats += 0
+        elif addon_text in {"extra_seat", "extra_seat_pack"}:
+            addon_seats += 1
+    return included + addon_seats
+
+
+def _active_member_count(project_id: str) -> int:
+    return int(
+        _members().count_documents(
+            {"project_id": _normalize(project_id), "status": {"$in": sorted(ACTIVE_MEMBER_STATUSES)}}
+        )
+    )
+
+
+def ensure_owner_membership(project_id: str) -> None:
+    project = _find_project(project_id)
+    if project is None:
+        return
+    ensure_project_owner_membership(project)
+
+
+def list_project_members(project_id: str) -> list[dict[str, Any]]:
+    ensure_owner_membership(project_id)
+    cursor = _members().find({"project_id": _normalize(project_id)}).sort("created_at", 1)
+    return list(cursor)
+
+
+def list_project_invites(project_id: str) -> list[dict[str, Any]]:
+    cursor = _invites().find({"project_id": _normalize(project_id)}).sort("created_at", -1)
+    return list(cursor)
+
+
+def create_household_invite(
+    *,
+    project_id: str,
+    actor_user: dict[str, Any],
+    email: str,
+    member_role: str,
+    relationship_scope: str,
+    privacy_scope: str,
+    notes: str = "",
+    expires_in_days: int = 7,
+    max_uses: int = 1,
+) -> dict[str, Any]:
+    project = _find_project(project_id)
+    if project is None:
+        raise ValueError("Workspace project not found.")
+
+    actor_user_id = _normalize(actor_user.get("id") or actor_user.get("_id") or actor_user.get("user_id"))
+    actor_role = _resolve_actor_role(project, actor_user)
+    if actor_role not in ROLE_ASSIGNMENTS:
+        raise PermissionError("You do not have permission to invite household members.")
+
+    normalized_role = normalize_project_member_role(member_role, default="viewer")
+    if not _can_assign_role(actor_role, normalized_role):
+        raise PermissionError("Your role cannot assign the requested membership role.")
+
+    normalized_email = _normalize_email(email)
+    if not normalized_email:
+        raise ValueError("Invite email is required.")
+
+    normalized_privacy_scope = _normalize(privacy_scope or "household_private").lower()
+    if normalized_privacy_scope not in PRIVACY_SCOPES:
+        raise ValueError("Invalid privacy scope for invite.")
+
+    if _active_member_count(project_id) >= _resolve_member_seat_cap(project_id):
+        raise ValueError("This workspace has reached the included seat limit for the active package.")
+
+    existing_member = _members().find_one(
+        {
+            "project_id": _normalize(project_id),
+            "email": normalized_email,
+            "status": {"$in": sorted(ACTIVE_MEMBER_STATUSES)},
+        }
+    )
+    if existing_member is not None:
+        raise ValueError("This email already has active workspace access.")
+
+    now = _now()
+    invite_key = f"hhinv_{secrets.token_urlsafe(24)}"
+    document = {
+        "project_id": _normalize(project_id),
+        "email": normalized_email,
+        "invite_key": invite_key,
+        "key_type": "household_invite_key",
+        "status": "pending",
+        "member_role": normalized_role,
+        "relationship_scope": _normalize(relationship_scope or "household_member") or "household_member",
+        "privacy_scope": normalized_privacy_scope,
+        "issuer_user_id": actor_user_id or None,
+        "target_email": normalized_email,
+        "allowed_role": normalized_role,
+        "max_uses": max(1, int(max_uses or 1)),
+        "use_count": 0,
+        "notes": _normalize(notes),
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat(),
+        "expires_at": (now + timedelta(days=max(1, int(expires_in_days or 7)))).isoformat(),
+        "accepted_at": None,
+        "revoked_at": None,
+    }
+    result = _invites().insert_one(document)
+    document["_id"] = result.inserted_id
+    create_audit_log(
+        "household_invite_created",
+        actor_user_id or None,
+        "household_invite",
+        str(result.inserted_id),
+        {
+            "project_id": _normalize(project_id),
+            "invite_email": normalized_email,
+            "member_role": normalized_role,
+        },
+    )
+    return document
+
+
+def accept_household_invite(*, invite_key: str, user: dict[str, Any]) -> dict[str, Any]:
+    normalized_key = _normalize(invite_key)
+    if not normalized_key:
+        raise ValueError("Invite key is required.")
+
+    invite = _invites().find_one({"invite_key": normalized_key})
+    if invite is None:
+        raise ValueError("Invite key was not found.")
+    if not _is_active_invite(invite):
+        raise ValueError("Invite is no longer active.")
+
+    user_email = _normalize_email(user.get("email"))
+    if user_email and _normalize_email(invite.get("email")) and user_email != _normalize_email(invite.get("email")):
+        raise PermissionError("This invite was issued for a different email address.")
+
+    project_id = _normalize(invite.get("project_id"))
+    if _active_member_count(project_id) >= _resolve_member_seat_cap(project_id):
+        raise ValueError("This workspace has reached the included seat limit for the active package.")
+
+    user_id = _normalize(user.get("id") or user.get("_id") or user.get("user_id"))
+    now = _now().isoformat()
+    member_doc = {
+        "project_id": project_id,
+        "user_id": user_id or None,
+        "email": user_email or _normalize_email(invite.get("email")) or None,
+        "member_role": normalize_project_member_role(invite.get("member_role"), default="viewer"),
+        "relationship_scope": _normalize(invite.get("relationship_scope") or "household_member") or "household_member",
+        "privacy_scope": _normalize(invite.get("privacy_scope") or "household_private"),
+        "status": "active",
+        "invited_by_user_id": _normalize(invite.get("issuer_user_id")) or None,
+        "joined_at": now,
+        "updated_at": now,
+    }
+    _members().update_one(
+        {
+            "project_id": project_id,
+            "$or": [
+                {"user_id": user_id},
+                {"email": user_email or _normalize_email(invite.get("email"))},
+            ],
+        },
+        {"$set": member_doc, "$setOnInsert": {"created_at": now}},
+        upsert=True,
+    )
+
+    use_count = int(invite.get("use_count") or 0) + 1
+    max_uses = max(1, int(invite.get("max_uses") or 1))
+    invite_status = "accepted" if use_count >= max_uses else "pending"
+    _invites().update_one(
+        {"_id": invite["_id"]},
+        {
+            "$set": {
+                "status": invite_status,
+                "use_count": use_count,
+                "accepted_at": now,
+                "updated_at": now,
+            }
+        },
+    )
+    create_audit_log(
+        "household_invite_accepted",
+        user_id or None,
+        "household_invite",
+        str(invite["_id"]),
+        {"project_id": project_id, "member_role": member_doc["member_role"]},
+    )
+    return (
+        _members().find_one(
+            {
+                "project_id": project_id,
+                "$or": [{"user_id": user_id}, {"email": user_email}],
+            }
+        )
+        or member_doc
+    )
+
+
+def revoke_household_invite(*, invite_id: str, actor_user: dict[str, Any]) -> dict[str, Any] | None:
+    oid = _to_oid(invite_id)
+    if oid is None:
+        return None
+    invite = _invites().find_one({"_id": oid})
+    if invite is None:
+        return None
+    project = _find_project(_normalize(invite.get("project_id")))
+    if project is None:
+        return None
+    actor_role = _resolve_actor_role(project, actor_user)
+    if actor_role not in {"billing_owner", "co_owner", "family_manager"}:
+        raise PermissionError("You do not have permission to revoke invites.")
+    now = _now().isoformat()
+    _invites().update_one({"_id": oid}, {"$set": {"status": "revoked", "revoked_at": now, "updated_at": now}})
+    actor_user_id = _normalize(actor_user.get("id") or actor_user.get("_id") or actor_user.get("user_id"))
+    create_audit_log(
+        "household_invite_revoked",
+        actor_user_id or None,
+        "household_invite",
+        str(oid),
+        {"project_id": _normalize(invite.get("project_id"))},
+    )
+    return _invites().find_one({"_id": oid})
+
+
+def update_member_role(
+    *,
+    project_id: str,
+    membership_id: str,
+    member_role: str,
+    actor_user: dict[str, Any],
+) -> dict[str, Any] | None:
+    oid = _to_oid(membership_id)
+    if oid is None:
+        return None
+    membership = _members().find_one({"_id": oid, "project_id": _normalize(project_id)})
+    if membership is None:
+        return None
+    project = _find_project(project_id)
+    if project is None:
+        return None
+    actor_role = _resolve_actor_role(project, actor_user)
+    next_role = normalize_project_member_role(member_role, default="viewer")
+    if not _can_assign_role(actor_role, next_role):
+        raise PermissionError("You do not have permission to assign this role.")
+    if _role_rank(next_role) >= _role_rank(actor_role):
+        raise PermissionError("You can only assign roles below your own role level.")
+    now = _now().isoformat()
+    _members().update_one({"_id": oid}, {"$set": {"member_role": next_role, "updated_at": now}})
+    actor_user_id = _normalize(actor_user.get("id") or actor_user.get("_id") or actor_user.get("user_id"))
+    create_audit_log(
+        "household_role_changed",
+        actor_user_id or None,
+        "project_member",
+        membership_id,
+        {
+            "project_id": _normalize(project_id),
+            "previous_role": normalize_project_member_role(membership.get("member_role"), default="viewer"),
+            "next_role": next_role,
+        },
+    )
+    return _members().find_one({"_id": oid})
+
+
+def revoke_membership(*, project_id: str, membership_id: str, actor_user: dict[str, Any]) -> dict[str, Any] | None:
+    oid = _to_oid(membership_id)
+    if oid is None:
+        return None
+    membership = _members().find_one({"_id": oid, "project_id": _normalize(project_id)})
+    if membership is None:
+        return None
+    project = _find_project(project_id)
+    if project is None:
+        return None
+    actor_role = _resolve_actor_role(project, actor_user)
+    target_role = normalize_project_member_role(membership.get("member_role"), default="viewer")
+    if actor_role not in ROLE_ASSIGNMENTS:
+        raise PermissionError("You do not have permission to revoke memberships.")
+    if target_role == "billing_owner":
+        raise PermissionError("Billing owner access cannot be revoked from this action.")
+    if _role_rank(target_role) >= _role_rank(actor_role):
+        raise PermissionError("You can only revoke access for roles below your role level.")
+    now = _now().isoformat()
+    _members().update_one({"_id": oid}, {"$set": {"status": "revoked", "updated_at": now}})
+    actor_user_id = _normalize(actor_user.get("id") or actor_user.get("_id") or actor_user.get("user_id"))
+    create_audit_log(
+        "household_membership_revoked",
+        actor_user_id or None,
+        "project_member",
+        membership_id,
+        {"project_id": _normalize(project_id), "target_role": target_role},
+    )
+    return _members().find_one({"_id": oid})
+
+
+def list_my_memberships(user: dict[str, Any]) -> list[dict[str, Any]]:
+    user_id = _normalize(user.get("id") or user.get("_id") or user.get("user_id"))
+    email = _normalize_email(user.get("email"))
+    query = {"$or": [{"user_id": user_id}, {"email": email}]}
+    return list(_members().find(query).sort("updated_at", -1))

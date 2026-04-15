@@ -147,7 +147,7 @@ def get_project_access_snapshot(
         "project_id": project_id,
         "accessible": owner_access,
         "via": "owner_fallback" if owner_access else "",
-        "member_role": "owner" if owner_access else "",
+        "member_role": "billing_owner" if owner_access else "",
         "member_status": "active" if owner_access else "",
         "owner_user_id": owner_user_id,
         "owner_email": owner_email,
@@ -220,7 +220,7 @@ def ensure_project_owner_membership(project: dict[str, Any]) -> dict[str, Any] |
         project_id=_project_id(project),
         user_id=_normalize_value(project.get("owner_user_id")),
         email=_normalize_email(project.get("owner_email")),
-        member_role="owner",
+        member_role="billing_owner",
         status="active",
     )
 

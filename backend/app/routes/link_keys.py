@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 
 from app.dependencies.auth import (
     get_current_user,
@@ -18,6 +19,13 @@ from app.services.link_key_service import (
 )
 
 router = APIRouter(prefix="/link-keys", tags=["Link Keys"])
+
+
+class LinkKeyGeneratePayload(BaseModel):
+    key_type: str = Field(default="branch_link_key", min_length=1, max_length=50)
+    target_email: str = Field(default="", max_length=320)
+    allowed_role: str = Field(default="", max_length=50)
+    max_uses: int = Field(default=1, ge=1, le=20)
 
 def _current_user_id(user: dict[str, Any]) -> str:
     raw_id = user.get("id") or user.get("_id") or user.get("user_id")
@@ -81,6 +89,7 @@ def get_my_active_link_key(
 @router.post("/project/{project_id}/generate", response_model=LinkKeyResponse)
 def generate_project_link_key(
     project_id: str,
+    payload: LinkKeyGeneratePayload | None = None,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
     user_id = _current_user_id(current_user)
@@ -93,6 +102,10 @@ def generate_project_link_key(
             user_id=user_id,
             user_email=user_email,
             allow_admin=allow_admin,
+            key_type=(payload.key_type if payload else "branch_link_key"),
+            target_email=(payload.target_email if payload else ""),
+            allowed_role=(payload.allowed_role if payload else ""),
+            max_uses=(payload.max_uses if payload else 1),
         )
         return build_link_key_response(item)
     except PermissionError as exc:

@@ -400,6 +400,13 @@ def resolve_workspace_context(
             detail="Not authorized to access this workspace.",
         )
 
+    access_snapshot = get_project_access_snapshot(
+        project,
+        user_id=_current_user_id(current_user),
+        email=_current_user_email(current_user),
+    )
+    membership = (access_snapshot or {}).get("membership") or {}
+
     entitlement_map = _resolve_project_entitlement_map(project)
     return {
         "project": project,
@@ -410,6 +417,13 @@ def resolve_workspace_context(
         "resolved_entitlements": entitlement_map.get("resolved_entitlements") or {},
         "entitlement": entitlement_map.get("entitlement"),
         "paid_order": entitlement_map.get("paid_order"),
+        "access_snapshot": access_snapshot,
+        "member_role": _normalize_value(access_snapshot.get("member_role") or "viewer") or "viewer",
+        "relationship_scope": _normalize_value(membership.get("relationship_scope") or "household_member")
+        or "household_member",
+        "member_privacy_scope": _normalize_value(membership.get("privacy_scope") or "household_private")
+        or "household_private",
+        "link_status": _normalize_value(membership.get("link_status") or "active") or "active",
         "is_admin": _has_workspace_admin_access(current_user),
     }
 
