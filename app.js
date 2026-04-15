@@ -10,8 +10,8 @@
   ];
   const DEFAULT_LIVE_API_BASE_URL = "https://tomboflight-api.onrender.com";
   const DEFAULT_LIVE_API_BASE_URLS = [
-    "https://api.tomboflight.com",
     DEFAULT_LIVE_API_BASE_URL,
+    "https://api.tomboflight.com",
   ];
 
   const TOKEN_KEY = "tol_access_token";
@@ -311,8 +311,8 @@
         : "";
 
     const configured = uniqueNonEmptyValues([
-      ...configuredList,
       configuredSingle,
+      ...configuredList,
     ]);
     if (configured.length) {
       return configured;
@@ -360,7 +360,7 @@
   function getApiBaseUrls() {
     const configured = getConfiguredApiBaseUrls();
     const saved = getSavedApiBaseUrl();
-    if (saved && configured.includes(saved)) {
+    if (saved && configured[0] === saved) {
       return [saved].concat(
         configured.filter(function (item) {
           return item !== saved;
@@ -373,7 +373,7 @@
   function getApiBaseUrl() {
     const configured = getApiBaseUrls();
     const saved = getSavedApiBaseUrl();
-    if (saved && configured.includes(saved)) {
+    if (saved && configured[0] === saved) {
       return saved;
     }
     return configured[0] || "";

@@ -26,8 +26,8 @@
     API_BASE_URLS: isLocal
       ? localApiBaseUrls
       : [
-          "https://api.tomboflight.com",
           "https://tomboflight-api.onrender.com",
+          "https://api.tomboflight.com",
         ],
 
     PAYMENT_LINKS: Object.assign(
