@@ -74,11 +74,23 @@ def get_project_members(project_id: str, current_user: dict[str, Any] = Depends(
     return {"items": [build_membership_response(item) for item in items]}
 
 
+@legacy_router.get("/workspace_access/project/{project_id}/members", include_in_schema=False)
+@legacy_router.get("/household-access/project/{project_id}/members", include_in_schema=False)
+def get_project_members_legacy(project_id: str, current_user: dict[str, Any] = Depends(get_current_user)):
+    return get_project_members(project_id=project_id, current_user=current_user)
+
+
 @router.get("/project/{project_id}/invites")
 def get_project_invites(project_id: str, current_user: dict[str, Any] = Depends(get_current_user)):
     _assert_project_access(project_id, current_user)
     invites = list_project_invites(project_id)
     return {"items": [build_invite_response(item) for item in invites]}
+
+
+@legacy_router.get("/workspace_access/project/{project_id}/invites", include_in_schema=False)
+@legacy_router.get("/household-access/project/{project_id}/invites", include_in_schema=False)
+def get_project_invites_legacy(project_id: str, current_user: dict[str, Any] = Depends(get_current_user)):
+    return get_project_invites(project_id=project_id, current_user=current_user)
 
 
 @router.post("/project/{project_id}/invites", status_code=status.HTTP_201_CREATED)
