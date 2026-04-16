@@ -262,16 +262,17 @@ def create_household_invite(
     max_uses: int = 1,
 ) -> dict[str, Any]:
     logger.info(
-        (
-            "household_access_service.create_household_invite.start "
-            "project_id=%s actor_user_id=%s actor_email=%s member_role=%s relationship_scope=%s privacy_scope=%s"
-        ),
-        _normalize(project_id),
-        _normalize(actor_user.get("id") or actor_user.get("_id") or actor_user.get("user_id")),
-        _normalize_email(actor_user.get("email")),
-        _normalize(member_role),
-        _normalize(relationship_scope),
-        _normalize(privacy_scope),
+        "household_access_service.create_household_invite.start context=%s",
+        {
+            "project_id": _normalize(project_id),
+            "actor_user_id": _normalize(
+                actor_user.get("id") or actor_user.get("_id") or actor_user.get("user_id")
+            ),
+            "actor_email": _normalize_email(actor_user.get("email")),
+            "member_role": _normalize(member_role),
+            "relationship_scope": _normalize(relationship_scope),
+            "privacy_scope": _normalize(privacy_scope),
+        },
     )
     project = _find_project(project_id)
     if project is None:

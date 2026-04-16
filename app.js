@@ -337,15 +337,15 @@
     ]).filter(function (candidate) {
       return isLikelyApiBaseUrl(candidate);
     });
-    const safeConfigured = configured.filter(function (candidate) {
+    const backendApiBaseUrls = configured.filter(function (candidate) {
       return !isFrontendOriginBaseUrl(candidate);
     });
-    if (safeConfigured.length) {
+    if (backendApiBaseUrls.length) {
       if (isLocalApp()) {
-        return safeConfigured;
+        return backendApiBaseUrls;
       }
       return uniqueNonEmptyValues([
-        ...safeConfigured,
+        ...backendApiBaseUrls,
         ...DEFAULT_LIVE_API_BASE_URLS,
       ]);
     }
@@ -613,6 +613,9 @@
         const requestUrl = `${apiBaseUrl}${path}`;
         lastRequestUrl = requestUrl;
         response = await fetch(requestUrl, requestOptions);
+        // Some deployments can expose mixed-version backends behind different
+        // API domains where `/health` passes but specific routes lag behind.
+        // For that case, retry 404s on the next configured API base URL.
         if (response && response.status === 404 && hasFallbackCandidate) {
           console.warn("Tomb of Light API fallback retry after 404.", {
             requestPath: String(path || ""),
