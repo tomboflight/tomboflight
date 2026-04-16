@@ -433,11 +433,22 @@ def create_household_invite(
             "exception_type": type(exc).__name__,
         }
 
-    if not bool(email_delivery.get("sent")):
-        document["email_delivery_status"] = "failed"
-        document["email_delivery_error"] = _normalize(email_delivery.get("error")) or "email delivery failed"
+    if not email_delivery.get("sent"):
+        email_delivery_updates = {
+            "email_delivery_status": "failed",
+            "email_delivery_error": _normalize(email_delivery.get("error")) or "email delivery failed",
+            "updated_at": _now().isoformat(),
+        }
+        _invites().update_one({"_id": result.inserted_id}, {"$set": email_delivery_updates})
+        document.update(email_delivery_updates)
     else:
-        document["email_delivery_status"] = "sent"
+        email_delivery_updates = {
+            "email_delivery_status": "sent",
+            "email_delivery_error": None,
+            "updated_at": _now().isoformat(),
+        }
+        _invites().update_one({"_id": result.inserted_id}, {"$set": email_delivery_updates})
+        document.update(email_delivery_updates)
     return document
 
 
@@ -617,11 +628,22 @@ def resend_household_invite(
             "error": str(exc) or type(exc).__name__,
             "exception_type": type(exc).__name__,
         }
-    if not bool(email_delivery.get("sent")):
-        invite["email_delivery_status"] = "failed"
-        invite["email_delivery_error"] = _normalize(email_delivery.get("error")) or "email delivery failed"
+    if not email_delivery.get("sent"):
+        email_delivery_updates = {
+            "email_delivery_status": "failed",
+            "email_delivery_error": _normalize(email_delivery.get("error")) or "email delivery failed",
+            "updated_at": _now().isoformat(),
+        }
+        _invites().update_one({"_id": oid}, {"$set": email_delivery_updates})
+        invite.update(email_delivery_updates)
     else:
-        invite["email_delivery_status"] = "sent"
+        email_delivery_updates = {
+            "email_delivery_status": "sent",
+            "email_delivery_error": None,
+            "updated_at": _now().isoformat(),
+        }
+        _invites().update_one({"_id": oid}, {"$set": email_delivery_updates})
+        invite.update(email_delivery_updates)
     return invite
 
 

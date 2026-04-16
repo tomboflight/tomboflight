@@ -1,7 +1,6 @@
 """Postmark API email helpers for Tomb of Light auth flows."""
 
 import logging
-import os
 from datetime import UTC, datetime
 from email.utils import formataddr
 from html import escape
@@ -30,16 +29,7 @@ def _normalize_email(value: object) -> str:
 
 
 def _postmark_token() -> str:
-    configured_token = _normalize_text(settings.postmark_server_token)
-    if configured_token:
-        return configured_token
-    legacy_token = _normalize_text(os.getenv("POSTMARK_API_TOKEN"))
-    if legacy_token:
-        logger.warning(
-            "Using legacy POSTMARK_API_TOKEN fallback for Postmark authentication; "
-            "prefer POSTMARK_SERVER_TOKEN."
-        )
-    return legacy_token
+    return _normalize_text(settings.postmark_server_token)
 
 
 def _postmark_from_email() -> str:
@@ -56,6 +46,16 @@ def _postmark_message_stream() -> str:
 
 def _postmark_from_header() -> str:
     return formataddr((_postmark_from_name(), _postmark_from_email()))
+
+
+def _is_likely_email_address(value: str) -> bool:
+    normalized = _normalize_email(value)
+    if not normalized or "@" not in normalized:
+        return False
+    local_part, _, domain = normalized.partition("@")
+    if not local_part or not domain:
+        return False
+    return "." in domain and not domain.startswith(".") and not domain.endswith(".")
 
 
 def _truncate_log_value(
@@ -155,7 +155,7 @@ def _send_email(
     sender_header = _postmark_from_header()
     message_stream = _postmark_message_stream()
 
-    if "@" not in sender_email:
+    if not _is_likely_email_address(sender_email):
         logger.error(
             "Postmark sender email appears invalid: sender_email=%s sender_header=%s",
             sender_email,

@@ -11,15 +11,22 @@ class HouseholdInviteAndOrderTests(unittest.TestCase):
         inserted_docs = []
 
         class FakeInvitesCollection:
+            def __init__(self):
+                self.updated = []
+
             def insert_one(self, document):
                 inserted_docs.append(dict(document))
                 return SimpleNamespace(inserted_id="invite-1")
+
+            def update_one(self, _query, update):
+                self.updated.append(update.get("$set") or {})
 
         class FakeMembersCollection:
             def find_one(self, *_args, **_kwargs):
                 return None
 
         actor = {"_id": "owner-1", "email": "owner@example.com"}
+        fake_invites = FakeInvitesCollection()
         with (
             patch.object(
                 household_access_service,
@@ -30,7 +37,7 @@ class HouseholdInviteAndOrderTests(unittest.TestCase):
             patch.object(household_access_service, "_active_member_count", return_value=0),
             patch.object(household_access_service, "_resolve_member_seat_cap", return_value=6),
             patch.object(household_access_service, "_members", return_value=FakeMembersCollection()),
-            patch.object(household_access_service, "_invites", return_value=FakeInvitesCollection()),
+            patch.object(household_access_service, "_invites", return_value=fake_invites),
             patch.object(household_access_service, "create_audit_log"),
             patch.object(
                 household_access_service,
@@ -53,6 +60,7 @@ class HouseholdInviteAndOrderTests(unittest.TestCase):
         self.assertEqual(invite["status"], "pending")
         self.assertEqual(invite["email_delivery_status"], "failed")
         self.assertIn("pending approval", invite["email_delivery_error"])
+        self.assertEqual(fake_invites.updated[-1]["email_delivery_status"], "failed")
         send_email_mock.assert_called_once()
 
     def test_build_invite_response_includes_expired_timestamp(self):

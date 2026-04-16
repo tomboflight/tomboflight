@@ -1,5 +1,4 @@
 import unittest
-from os import environ
 from typing import cast
 from unittest.mock import patch
 
@@ -38,13 +37,6 @@ class FakePostmarkResponse:
 
 
 class PostmarkEmailLoggingTests(unittest.TestCase):
-    def test_postmark_token_falls_back_to_legacy_api_token_env(self):
-        with (
-            patch.object(email_service.settings, "postmark_server_token", ""),
-            patch.dict(environ, {"POSTMARK_API_TOKEN": "legacy-token"}, clear=False),
-        ):
-            self.assertEqual(email_service._postmark_token(), "legacy-token")
-
     def test_password_reset_postmark_block_logs_safe_structured_context(self):
         response = FakePostmarkResponse(
             payload={
