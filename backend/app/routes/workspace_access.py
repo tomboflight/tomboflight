@@ -91,6 +91,14 @@ def create_invite(
 ):
     actor_user_id = _current_user_id(current_user)
     actor_email = str(current_user.get("email") or "").strip().lower() or None
+    logger.info(
+        "workspace_access invite route_hit method=%s url=%s project_id=%s actor_user_id=%s actor_email=%s",
+        request.method,
+        str(request.url),
+        project_id,
+        actor_user_id,
+        actor_email,
+    )
     project_stub = {"_id": project_id}
     access_snapshot = get_project_access_snapshot(
         project_stub,
