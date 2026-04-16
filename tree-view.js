@@ -3,24 +3,32 @@
 
   const authPages = window.TOLAuthPages || {};
   const ANCESTRY_TYPES = new Set([
-    "parent_child",
-    "adoptive_parent_child",
-    "step_parent_child",
+    "biological_parent",
+    "adoptive_parent",
+    "step_parent",
+    "guardian",
   ]);
 
   const PRIMARY_ANCESTRY_TYPES = new Set([
-    "parent_child",
-    "adoptive_parent_child",
+    "biological_parent",
+    "adoptive_parent",
+    "guardian",
   ]);
 
-  const SECONDARY_ANCESTRY_TYPES = new Set(["step_parent_child"]);
+  const SECONDARY_ANCESTRY_TYPES = new Set(["step_parent"]);
   const RELATIONSHIP_TYPE_ALIASES = {
-    "parent-child": "parent_child",
-    adoptive: "adoptive_parent_child",
-    "adoptive-parent-child": "adoptive_parent_child",
-    step: "step_parent_child",
-    "step-parent-child": "step_parent_child",
+    "parent-child": "biological_parent",
+    parent_child: "biological_parent",
+    biological: "biological_parent",
+    adoptive: "adoptive_parent",
+    adoptive_parent_child: "adoptive_parent",
+    "adoptive-parent-child": "adoptive_parent",
+    step: "step_parent",
+    step_parent_child: "step_parent",
+    "step-parent-child": "step_parent",
     spousal: "spouse",
+    "former-spouse": "former_spouse",
+    household_member: "household_member",
   };
 
   const TREE_VIEW_STATE = {
@@ -94,21 +102,23 @@
     const rel = normalizeRelationshipType(relationshipType);
 
     if (context === "parents") {
-      if (rel === "parent_child") return "Biological parent";
-      if (rel === "step_parent_child") return "Step-parent";
-      if (rel === "adoptive_parent_child") return "Adoptive parent";
+      if (rel === "biological_parent") return "Biological parent";
+      if (rel === "step_parent") return "Step-parent";
+      if (rel === "adoptive_parent") return "Adoptive parent";
       if (rel === "guardian") return "Guardian";
       return rel.replaceAll("_", " ");
     }
 
     if (context === "children") {
-      if (rel === "parent_child") return "Biological child";
-      if (rel === "step_parent_child") return "Step-child";
-      if (rel === "adoptive_parent_child") return "Adopted child";
+      if (rel === "biological_parent") return "Biological child";
+      if (rel === "step_parent") return "Step-child";
+      if (rel === "adoptive_parent") return "Adopted child";
+      if (rel === "guardian") return "Ward";
       return rel.replaceAll("_", " ");
     }
 
     if (context === "spouses") {
+      if (rel === "former_spouse") return "Former spouse";
       return "Spouse";
     }
 
@@ -1203,6 +1213,7 @@
     const card = document.createElement("button");
     card.type = "button";
     card.className = "tree-node tree-node-button";
+    card.setAttribute("data-member-node-id", member.id || "");
     card.style.left = `${x}px`;
     card.style.top = `${y}px`;
 
@@ -1250,7 +1261,8 @@
     const spouses = relationships
       .filter(
         (rel) =>
-          rel.relationship_type === "spouse" &&
+          (rel.relationship_type === "spouse" ||
+            rel.relationship_type === "former_spouse") &&
           (rel.source_member_id === member.id ||
             rel.target_member_id === member.id),
       )
@@ -1261,7 +1273,7 @@
               ? rel.target_member_id
               : rel.source_member_id,
           ) || null,
-        relationship_type: "spouse",
+        relationship_type: rel.relationship_type || "spouse",
       }))
       .filter((entry) => entry.person);
 
@@ -1276,6 +1288,26 @@
         relationship_type: rel.relationship_type,
       }))
       .filter((entry) => entry.person);
+
+    const relatedParentIds = new Set(
+      parents.map((entry) => (entry.person && entry.person.id ? entry.person.id : "")),
+    );
+    [member && member.mother_id, member && member.father_id]
+      .filter(Boolean)
+      .forEach((parentId) => {
+        if (!relatedParentIds.has(parentId)) {
+          parents.push({
+            person: {
+              id: parentId,
+              display_name: `Unknown parent (${parentId.slice(0, 8)}…)`,
+              birth_year: null,
+              family_id: member.family_id,
+              unresolved_person: true,
+            },
+            relationship_type: "biological_parent",
+          });
+        }
+      });
 
     const children = relationships
       .filter(
@@ -1341,6 +1373,41 @@
         </div>
       </div>
     `;
+    bindDetailPanelJumpActions(
+      detailPanel,
+      detailEmpty,
+      memberMap,
+      relationships,
+    );
+  }
+
+  function escapeSelectorValue(value) {
+    const raw = String(value || "");
+    if (window.CSS && typeof window.CSS.escape === "function") {
+      return window.CSS.escape(raw);
+    }
+    return raw.replace(/["\\]/g, "\\$&");
+  }
+
+  function bindDetailPanelJumpActions(detailPanel, detailEmpty, memberMap, relationships) {
+    detailPanel.querySelectorAll("[data-tree-person-jump]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        const personId = button.getAttribute("data-tree-person-jump") || "";
+        if (!personId) return;
+        const nextMember = memberMap.get(personId);
+        if (!nextMember) return;
+        renderDetailPanel(nextMember, memberMap, relationships, detailPanel, detailEmpty);
+        const selector = `[data-member-node-id="${escapeSelectorValue(personId)}"]`;
+        const nextCard = document.querySelector(selector);
+        if (nextCard) {
+          document.querySelectorAll(".tree-node.is-active").forEach((node) => {
+            node.classList.remove("is-active");
+          });
+          nextCard.classList.add("is-active");
+          nextCard.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" });
+        }
+      });
+    });
   }
 
   function renderPeopleList(entries, context) {
@@ -1365,6 +1432,11 @@
                   <div style="font-size:0.82rem; opacity:0.8;">${escapeHtml(relType)}</div>
                 </div>
                 <span>${escapeHtml(getBirthYear(person))}</span>
+                ${
+                  person && person.id && !person.unresolved_person
+                    ? `<button type="button" class="btn btn-secondary" data-tree-person-jump="${escapeHtml(person.id)}">Open branch</button>`
+                    : ""
+                }
               </li>
             `;
           })
@@ -1500,7 +1572,11 @@
     const seen = new Set();
 
     relationships
-      .filter((rel) => rel.relationship_type === "spouse")
+      .filter(
+        (rel) =>
+          rel.relationship_type === "spouse" ||
+          rel.relationship_type === "former_spouse",
+      )
       .forEach((rel) => {
         const source = memberMap.get(rel.source_member_id);
         const target = memberMap.get(rel.target_member_id);

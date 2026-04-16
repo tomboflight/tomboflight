@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import re
-from datetime import UTC, datetime
+import secrets
+from datetime import UTC, datetime, timedelta
 from typing import Any, Callable
 
 from bson import ObjectId
@@ -32,6 +33,7 @@ from app.services.project_entitlement_service import (
     upsert_project_entitlement,
 )
 from app.services.workspace_access_service import count_workspace_uploads
+from app.services.email_service import send_household_invite_email
 
 ALLOWED_LANES = {"portrait", "household", "network", "organization"}
 BUILD_READY_STATUSES = {"build_ready", "in_production", "qa_review", "client_review", "delivered", "archived"}
@@ -3691,3 +3693,426 @@ def execute_case_action(
             details={"error": str(exc)},
         )
         raise
+
+
+def _super_admin_actor_snapshot(actor: dict[str, Any] | None) -> dict[str, Any]:
+    actor = actor or {}
+    role_codes = actor.get("role_codes") or []
+    normalized_codes = [normalize_role_code(code) for code in role_codes if normalize_role_code(code)]
+    fallback_role = normalize_role_code(actor.get("role") or actor.get("access_tier") or actor.get("department_role"))
+    primary_role = resolve_primary_role_code(normalized_codes) or fallback_role or "super_admin"
+    return {
+        "actor_user_id": _normalize(actor.get("_id") or actor.get("id") or actor.get("user_id")) or None,
+        "actor_email": _normalize_email(actor.get("email")) or None,
+        "actor_name": _normalize(actor.get("full_name") or actor.get("name")) or None,
+        "actor_role": primary_role,
+    }
+
+
+def _resolve_case_project_order(case_id: str) -> tuple[str, str]:
+    normalized_case_id = _normalize(case_id)
+    project_id = normalized_case_id
+    order_id = ""
+    if normalized_case_id.startswith("order:"):
+        order_id = normalized_case_id.split(":", 1)[1]
+        order = _order_by_id(order_id)
+        if order is None:
+            raise ValueError("Order case not found.")
+        project_id = _normalize(order.get("project_id"))
+    elif normalized_case_id.startswith("user:"):
+        user = _find_case_user(user_id=normalized_case_id.split(":", 1)[1])
+        if user is None:
+            raise ValueError("User case not found.")
+        related_projects = _related_projects_for_user(user)
+        project_id = _normalize((related_projects[0] or {}).get("_id")) if related_projects else ""
+    if project_id and _project_by_id(project_id) is None:
+        project_id = ""
+    if not order_id and project_id:
+        linked_order = _latest_linked_order(project_id)
+        order_id = _normalize((linked_order or {}).get("_id"))
+    return project_id, order_id
+
+
+def _admin_repair_confirmed(payload: dict[str, Any]) -> bool:
+    return bool(payload.get("confirm_destructive") or payload.get("confirm") or payload.get("confirmed"))
+
+
+def _super_admin_update_relationship(*, payload: dict[str, Any], project_id: str) -> dict[str, Any]:
+    db = _db()
+    relationship_id = _normalize(payload.get("relationship_id"))
+    if not relationship_id:
+        raise ValueError("relationship_id is required.")
+    relationship_oid = _to_object_id(relationship_id)
+    relationship = db["relationships"].find_one({"_id": relationship_oid}) if relationship_oid else None
+    if relationship is None:
+        raise ValueError("Relationship record was not found.")
+    before = {
+        "source_member_id": _normalize(relationship.get("source_member_id")),
+        "target_member_id": _normalize(relationship.get("target_member_id")),
+        "relationship_type": normalize_relationship_type(relationship.get("relationship_type")),
+        "notes": _normalize(relationship.get("notes")),
+    }
+    updates: dict[str, Any] = {}
+    if _normalize(payload.get("source_member_id")):
+        updates["source_member_id"] = _normalize(payload.get("source_member_id"))
+    if _normalize(payload.get("target_member_id")):
+        updates["target_member_id"] = _normalize(payload.get("target_member_id"))
+    if _normalize(payload.get("relationship_type")):
+        updates["relationship_type"] = normalize_relationship_type(payload.get("relationship_type"))
+    if "notes" in payload:
+        updates["notes"] = _normalize(payload.get("notes"))
+    if not updates:
+        raise ValueError("No relationship updates were provided.")
+    updates["updated_at"] = _now().isoformat()
+    db["relationships"].update_one({"_id": relationship_oid}, {"$set": updates})
+    after_doc = db["relationships"].find_one({"_id": relationship_oid}) or {}
+    after = {
+        "source_member_id": _normalize(after_doc.get("source_member_id")),
+        "target_member_id": _normalize(after_doc.get("target_member_id")),
+        "relationship_type": normalize_relationship_type(after_doc.get("relationship_type")),
+        "notes": _normalize(after_doc.get("notes")),
+    }
+    return {"target_type": "relationship", "target_id": relationship_id, "before": before, "after": after, "project_id": project_id}
+
+
+def _super_admin_relink_person(*, payload: dict[str, Any], project_id: str) -> dict[str, Any]:
+    db = _db()
+    member_id = _normalize(payload.get("member_id"))
+    if not member_id:
+        raise ValueError("member_id is required.")
+    member_oid = _to_object_id(member_id)
+    member = db["family_members"].find_one({"_id": member_oid}) if member_oid else None
+    if member is None:
+        raise ValueError("Family member was not found.")
+    before = {
+        "family_id": _normalize(member.get("family_id")),
+        "household_id": _normalize(member.get("household_id")),
+        "network_id": _normalize(member.get("network_id")),
+    }
+    updates: dict[str, Any] = {}
+    for key in ("family_id", "household_id", "network_id"):
+        value = _normalize(payload.get(key))
+        if value:
+            updates[key] = value
+    if not updates:
+        raise ValueError("Provide at least one target linkage field to relink this person.")
+    updates["updated_at"] = _now().isoformat()
+    db["family_members"].update_one({"_id": member_oid}, {"$set": updates})
+    after_doc = db["family_members"].find_one({"_id": member_oid}) or {}
+    after = {
+        "family_id": _normalize(after_doc.get("family_id")),
+        "household_id": _normalize(after_doc.get("household_id")),
+        "network_id": _normalize(after_doc.get("network_id")),
+    }
+    return {"target_type": "family_member", "target_id": member_id, "before": before, "after": after, "project_id": project_id}
+
+
+def _super_admin_add_missing_parent(*, payload: dict[str, Any], project_id: str) -> dict[str, Any]:
+    db = _db()
+    child_member_id = _normalize(payload.get("child_member_id") or payload.get("target_member_id"))
+    if not child_member_id:
+        raise ValueError("child_member_id is required.")
+    parent_member_id = _normalize(payload.get("parent_member_id") or payload.get("source_member_id"))
+    relationship_type = normalize_relationship_type(payload.get("relationship_type") or "biological_parent")
+    child_oid = _to_object_id(child_member_id)
+    child = db["family_members"].find_one({"_id": child_oid}) if child_oid else None
+    if child is None:
+        raise ValueError("Child member was not found.")
+    created_parent = False
+    if not parent_member_id:
+        parent_document = {
+            "family_id": _normalize(payload.get("family_id")) or _normalize(child.get("family_id")),
+            "first_name": _normalize(payload.get("parent_first_name")) or "Unknown",
+            "last_name": _normalize(payload.get("parent_last_name")) or "Parent",
+            "generation": int(child.get("generation") or 1) - 1,
+            "birth_year": payload.get("parent_birth_year"),
+            "bio": _normalize(payload.get("notes")) or "Added by super admin repair workflow.",
+            "created_at": _now().isoformat(),
+            "updated_at": _now().isoformat(),
+            "created_by": "super_admin_repair",
+        }
+        inserted = db["family_members"].insert_one(parent_document)
+        parent_member_id = _normalize(inserted.inserted_id)
+        created_parent = True
+    existing = db["relationships"].find_one(
+        {
+            "source_member_id": parent_member_id,
+            "target_member_id": child_member_id,
+            "relationship_type": relationship_type,
+        }
+    )
+    if existing:
+        relationship_id = _normalize(existing.get("_id"))
+    else:
+        rel_document = {
+            "family_id": _normalize(payload.get("family_id")) or _normalize(child.get("family_id")),
+            "source_member_id": parent_member_id,
+            "target_member_id": child_member_id,
+            "relationship_type": relationship_type,
+            "notes": _normalize(payload.get("notes")) or "Added by super admin repair workflow.",
+            "created_at": _now().isoformat(),
+            "updated_at": _now().isoformat(),
+            "created_by": "super_admin_repair",
+        }
+        inserted_rel = db["relationships"].insert_one(rel_document)
+        relationship_id = _normalize(inserted_rel.inserted_id)
+    return {
+        "target_type": "family_link",
+        "target_id": relationship_id,
+        "before": {"relationship_present": bool(existing), "created_parent": False},
+        "after": {
+            "relationship_present": True,
+            "created_parent": created_parent,
+            "parent_member_id": parent_member_id,
+            "child_member_id": child_member_id,
+            "relationship_type": relationship_type,
+        },
+        "project_id": project_id,
+    }
+
+
+def _super_admin_correct_child_or_spouse(*, payload: dict[str, Any], project_id: str, default_type: str) -> dict[str, Any]:
+    db = _db()
+    source_member_id = _normalize(payload.get("source_member_id"))
+    target_member_id = _normalize(payload.get("target_member_id"))
+    if not source_member_id or not target_member_id:
+        raise ValueError("source_member_id and target_member_id are required.")
+    relationship_type = normalize_relationship_type(payload.get("relationship_type") or default_type)
+    existing = db["relationships"].find_one(
+        {
+            "source_member_id": source_member_id,
+            "target_member_id": target_member_id,
+            "relationship_type": relationship_type,
+        }
+    )
+    if existing is None and relationship_type in {"spouse", "former_spouse", "household_member"}:
+        existing = db["relationships"].find_one(
+            {
+                "source_member_id": target_member_id,
+                "target_member_id": source_member_id,
+                "relationship_type": relationship_type,
+            }
+        )
+    before = {"relationship_present": bool(existing)}
+    if existing:
+        rel_id = _normalize(existing.get("_id"))
+        db["relationships"].update_one(
+            {"_id": existing.get("_id")},
+            {"$set": {"notes": _normalize(payload.get("notes")) or _normalize(existing.get("notes")), "updated_at": _now().isoformat()}},
+        )
+    else:
+        rel_document = {
+            "family_id": _normalize(payload.get("family_id")),
+            "source_member_id": source_member_id,
+            "target_member_id": target_member_id,
+            "relationship_type": relationship_type,
+            "notes": _normalize(payload.get("notes")) or "Added by super admin repair workflow.",
+            "created_at": _now().isoformat(),
+            "updated_at": _now().isoformat(),
+            "created_by": "super_admin_repair",
+        }
+        inserted = db["relationships"].insert_one(rel_document)
+        rel_id = _normalize(inserted.inserted_id)
+    return {
+        "target_type": "relationship",
+        "target_id": rel_id,
+        "before": before,
+        "after": {
+            "relationship_present": True,
+            "source_member_id": source_member_id,
+            "target_member_id": target_member_id,
+            "relationship_type": relationship_type,
+        },
+        "project_id": project_id,
+    }
+
+
+def _super_admin_fix_household_member_access(*, payload: dict[str, Any], project_id: str) -> dict[str, Any]:
+    db = _db()
+    membership_id = _normalize(payload.get("membership_id"))
+    if not membership_id:
+        raise ValueError("membership_id is required.")
+    membership_oid = _to_object_id(membership_id)
+    membership = db["project_members"].find_one({"_id": membership_oid}) if membership_oid else None
+    if membership is None:
+        raise ValueError("Project membership was not found.")
+    before = {
+        "member_role": _normalize(membership.get("member_role")),
+        "relationship_scope": _normalize(membership.get("relationship_scope")),
+        "privacy_scope": _normalize(membership.get("privacy_scope")),
+        "status": _normalize(membership.get("status")),
+        "project_id": _normalize(membership.get("project_id")),
+    }
+    updates: dict[str, Any] = {}
+    for key in ("member_role", "relationship_scope", "privacy_scope", "status"):
+        if key in payload and _normalize(payload.get(key)):
+            updates[key] = _normalize(payload.get(key))
+    if not updates:
+        raise ValueError("No membership updates were provided.")
+    updates["updated_at"] = _now().isoformat()
+    db["project_members"].update_one({"_id": membership_oid}, {"$set": updates})
+    after_doc = db["project_members"].find_one({"_id": membership_oid}) or {}
+    after = {
+        "member_role": _normalize(after_doc.get("member_role")),
+        "relationship_scope": _normalize(after_doc.get("relationship_scope")),
+        "privacy_scope": _normalize(after_doc.get("privacy_scope")),
+        "status": _normalize(after_doc.get("status")),
+        "project_id": _normalize(after_doc.get("project_id")),
+    }
+    return {"target_type": "project_member", "target_id": membership_id, "before": before, "after": after, "project_id": project_id}
+
+
+def _super_admin_repair_invite(*, payload: dict[str, Any], project_id: str, action: str) -> dict[str, Any]:
+    db = _db()
+    invite_id = _normalize(payload.get("invite_id"))
+    if not invite_id:
+        raise ValueError("invite_id is required.")
+    invite_oid = _to_object_id(invite_id)
+    invite = db["household_invites"].find_one({"_id": invite_oid}) if invite_oid else None
+    if invite is None:
+        raise ValueError("Household invite was not found.")
+    before = {
+        "email": _normalize_email(invite.get("email")),
+        "status": _normalize(invite.get("status")),
+        "invite_key": _normalize(invite.get("invite_key")),
+        "expires_at": invite.get("expires_at"),
+    }
+    now_iso = _now().isoformat()
+    if action == "cancel_invite":
+        if not _admin_repair_confirmed(payload):
+            raise ValueError("Destructive invite cancellation requires confirm_destructive=true.")
+        updates = {"status": "revoked", "revoked_at": now_iso, "updated_at": now_iso}
+    elif action == "resend_invite":
+        new_key = f"hhinv_{secrets.token_urlsafe(24)}"
+        updates = {
+            "status": "pending",
+            "invite_key": new_key,
+            "use_count": 0,
+            "accepted_at": None,
+            "revoked_at": None,
+            "expired_at": None,
+            "updated_at": now_iso,
+            "expires_at": (_now() + timedelta(days=7)).isoformat(),
+        }
+    elif action == "update_invite_email":
+        new_email = _normalize_email(payload.get("invite_email"))
+        if not new_email:
+            raise ValueError("invite_email is required.")
+        updates = {"email": new_email, "target_email": new_email, "updated_at": now_iso}
+    else:
+        raise ValueError("Unsupported invite repair action.")
+    db["household_invites"].update_one({"_id": invite_oid}, {"$set": updates})
+    after_doc = db["household_invites"].find_one({"_id": invite_oid}) or {}
+    after = {
+        "email": _normalize_email(after_doc.get("email")),
+        "status": _normalize(after_doc.get("status")),
+        "invite_key": _normalize(after_doc.get("invite_key")),
+        "expires_at": after_doc.get("expires_at"),
+    }
+    if action == "resend_invite":
+        send_household_invite_email(
+            to_email=after["email"],
+            invite_key=after["invite_key"],
+            project_id=_normalize(after_doc.get("project_id")),
+            member_role=_normalize(after_doc.get("member_role")) or "viewer",
+            inviter_email=_normalize_email((payload.get("actor_email") or "")),
+            is_resend=True,
+        )
+    return {"target_type": "household_invite", "target_id": invite_id, "before": before, "after": after, "project_id": project_id}
+
+
+def super_admin_repair_case_action(
+    *,
+    case_id: str,
+    action: str,
+    payload: dict[str, Any] | None = None,
+    actor: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    normalized_case_id = _normalize(case_id)
+    normalized_action = _normalize(action).lower()
+    if not normalized_case_id:
+        raise ValueError("Case id is required.")
+    if not normalized_action:
+        raise ValueError("Repair action is required.")
+
+    payload = dict(payload or {})
+    project_id, order_id = _resolve_case_project_order(normalized_case_id)
+    reason = _normalize(payload.get("reason") or payload.get("note"))
+    if not reason:
+        raise ValueError("A repair reason is required for audit traceability.")
+    actor_snapshot = _super_admin_actor_snapshot(actor)
+    payload["actor_email"] = actor_snapshot.get("actor_email")
+
+    before_workspace = customer_case_workspace(normalized_case_id)
+    action_handlers: dict[str, Callable[[], dict[str, Any]]] = {
+        "fix_family_relationship": lambda: _super_admin_update_relationship(payload=payload, project_id=project_id),
+        "relink_person": lambda: _super_admin_relink_person(payload=payload, project_id=project_id),
+        "add_missing_parent": lambda: _super_admin_add_missing_parent(payload=payload, project_id=project_id),
+        "correct_spouse_connection": lambda: _super_admin_correct_child_or_spouse(
+            payload=payload, project_id=project_id, default_type="spouse"
+        ),
+        "correct_child_connection": lambda: _super_admin_correct_child_or_spouse(
+            payload=payload, project_id=project_id, default_type="biological_parent"
+        ),
+        "fix_household_member_access": lambda: _super_admin_fix_household_member_access(
+            payload=payload, project_id=project_id
+        ),
+        "resend_invite": lambda: _super_admin_repair_invite(payload=payload, project_id=project_id, action="resend_invite"),
+        "cancel_invite": lambda: _super_admin_repair_invite(payload=payload, project_id=project_id, action="cancel_invite"),
+        "update_invite_email": lambda: _super_admin_repair_invite(payload=payload, project_id=project_id, action="update_invite_email"),
+        "repair_entitlement": lambda: {
+            "target_type": "project",
+            "target_id": project_id,
+            "before": {"entitlement": get_project_entitlement(project_id) if project_id else None},
+            "after": {"entitlement": generate_entitlement(project_id=project_id, order_id=order_id, force=True)},
+            "project_id": project_id,
+        },
+        "repair_package_lane": lambda: {
+            "target_type": "project",
+            "target_id": project_id,
+            "before": {"project": _serialize_project(_project_by_id(project_id) or {}) if project_id else None},
+            "after": {
+                "sync": sync_package(project_id=project_id, order_id=order_id),
+                "lane": assign_lane(project_id=project_id),
+            },
+            "project_id": project_id,
+        },
+    }
+
+    handler = action_handlers.get(normalized_action)
+    if handler is None:
+        raise ValueError("Unsupported super admin repair action.")
+    if normalized_action in {"cancel_invite"} and not _admin_repair_confirmed(payload):
+        raise ValueError("Destructive actions require confirm_destructive=true.")
+
+    repair_result = handler()
+    after_workspace = customer_case_workspace(normalized_case_id)
+    write_audit_log(
+        actor_user_id=actor_snapshot.get("actor_user_id"),
+        actor_email=actor_snapshot.get("actor_email"),
+        actor_name=actor_snapshot.get("actor_name"),
+        action=f"super_admin_repair.{normalized_action}",
+        target_type=_normalize(repair_result.get("target_type")) or "customer_case",
+        target_id=_normalize(repair_result.get("target_id")) or normalized_case_id,
+        before=repair_result.get("before") or {},
+        after=repair_result.get("after") or {},
+        context={
+            "case_id": normalized_case_id,
+            "project_id": project_id,
+            "order_id": order_id,
+            "actor_role": actor_snapshot.get("actor_role"),
+            "reason": reason,
+        },
+        details={"requested_payload": payload},
+        result="success",
+    )
+    return {
+        "status": "repaired",
+        "case_id": normalized_case_id,
+        "action": normalized_action,
+        "project_id": project_id or None,
+        "order_id": order_id or None,
+        "repair_result": repair_result,
+        "before_workspace_alerts": before_workspace.get("alerts") or [],
+        "after_workspace_alerts": after_workspace.get("alerts") or [],
+    }

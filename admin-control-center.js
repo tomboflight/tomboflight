@@ -881,6 +881,82 @@
       return;
     }
 
+    if (tab === "project") {
+      const caseId = workspace.case_id || state.selectedCaseId || "";
+      const linked = (tabData && tabData.linked_family) || {};
+      const showSuperAdminControls = Boolean(state.isSuperAdmin && caseId);
+      node.innerHTML = `
+        ${warningMarkup}
+        <article class="admin-dossier-card admin-dossier-card--wide">
+          <div class="admin-card-header"><span class="admin-card-badge">P</span><h3 class="admin-card-title">Project Workspace</h3></div>
+          ${renderFieldGrid([
+            { label: "Project Name", value: tabData.project_name },
+            { label: "Project ID", value: tabData.project_id, mono: true },
+            { label: "Build Status", value: tabData.build_status, chip: true },
+            { label: "Phase", value: tabData.phase, chip: true },
+            { label: "Intake Readiness", value: tabData.intake_readiness, chip: true },
+            { label: "Family ID", value: linked.family_id, mono: true },
+            { label: "Family Name", value: linked.family_name },
+            { label: "Household ID", value: linked.household_id, mono: true },
+            { label: "Household Name", value: linked.household_name },
+          ])}
+        </article>
+        ${
+          showSuperAdminControls
+            ? `
+              <article class="admin-dossier-card admin-dossier-card--wide">
+                <div class="admin-card-header"><span class="admin-card-badge">S</span><h3 class="admin-card-title">Super Admin Repair Toolkit</h3></div>
+                <p class="card-copy">All actions are audit-logged with before/after snapshots and a required repair reason.</p>
+                <div class="admin-field-grid">
+                  <label class="admin-field"><span>Repair Tool</span><select data-super-admin-repair-field="action">
+                    <option value="">Select tool</option>
+                    <option value="fix_family_relationship">fix family relationship</option>
+                    <option value="relink_person">relink person</option>
+                    <option value="add_missing_parent">add missing parent</option>
+                    <option value="correct_spouse_connection">correct spouse connection</option>
+                    <option value="correct_child_connection">correct child connection</option>
+                    <option value="fix_household_member_access">fix household member access</option>
+                    <option value="resend_invite">resend invite</option>
+                    <option value="cancel_invite">cancel invite</option>
+                    <option value="update_invite_email">correct invite email</option>
+                    <option value="repair_entitlement">repair entitlement</option>
+                    <option value="repair_package_lane">repair package lane</option>
+                  </select></label>
+                  <label class="admin-field"><span>Reason / Note</span><input type="text" data-super-admin-repair-field="reason" placeholder="Required for audit" /></label>
+                  <label class="admin-field"><span>Relationship ID</span><input type="text" data-super-admin-repair-field="relationship_id" /></label>
+                  <label class="admin-field"><span>Member ID</span><input type="text" data-super-admin-repair-field="member_id" /></label>
+                  <label class="admin-field"><span>Source Member ID</span><input type="text" data-super-admin-repair-field="source_member_id" /></label>
+                  <label class="admin-field"><span>Target Member ID</span><input type="text" data-super-admin-repair-field="target_member_id" /></label>
+                  <label class="admin-field"><span>Family ID</span><input type="text" data-super-admin-repair-field="family_id" value="${escapeHtml(linked.family_id || "")}" /></label>
+                  <label class="admin-field"><span>Child Member ID</span><input type="text" data-super-admin-repair-field="child_member_id" /></label>
+                  <label class="admin-field"><span>Parent Member ID</span><input type="text" data-super-admin-repair-field="parent_member_id" /></label>
+                  <label class="admin-field"><span>Parent First Name</span><input type="text" data-super-admin-repair-field="parent_first_name" /></label>
+                  <label class="admin-field"><span>Parent Last Name</span><input type="text" data-super-admin-repair-field="parent_last_name" /></label>
+                  <label class="admin-field"><span>Relationship Type</span><input type="text" data-super-admin-repair-field="relationship_type" /></label>
+                  <label class="admin-field"><span>Membership ID</span><input type="text" data-super-admin-repair-field="membership_id" /></label>
+                  <label class="admin-field"><span>Member Role</span><input type="text" data-super-admin-repair-field="member_role" /></label>
+                  <label class="admin-field"><span>Relationship Scope</span><input type="text" data-super-admin-repair-field="relationship_scope" /></label>
+                  <label class="admin-field"><span>Privacy Scope</span><input type="text" data-super-admin-repair-field="privacy_scope" /></label>
+                  <label class="admin-field"><span>Invite ID</span><input type="text" data-super-admin-repair-field="invite_id" /></label>
+                  <label class="admin-field"><span>Invite Email</span><input type="email" data-super-admin-repair-field="invite_email" /></label>
+                  <label class="admin-field"><span>Notes</span><input type="text" data-super-admin-repair-field="notes" /></label>
+                  <label class="admin-field"><span>Status</span><input type="text" data-super-admin-repair-field="status" /></label>
+                </div>
+                <label class="admin-field" style="margin-top: 0.6rem; display: inline-flex; align-items: center; gap: 0.45rem;">
+                  <input type="checkbox" data-super-admin-repair-field="confirm_destructive" />
+                  <span>I confirm destructive edits if required</span>
+                </label>
+                <div class="inline-actions" style="margin-top: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                  <button class="btn btn-primary" type="button" data-super-admin-repair-run="${escapeHtml(caseId)}">Apply Repair Tool</button>
+                </div>
+              </article>
+            `
+            : ""
+        }
+      `;
+      return;
+    }
+
     const flatFields = Object.entries(tabData || {}).filter(function (entry) {
       return !entry[1] || typeof entry[1] !== "object" || Array.isArray(entry[1]);
     });
@@ -1327,6 +1403,57 @@
     }
   }
 
+  function collectSuperAdminRepairPayload() {
+    const payload = {};
+    document.querySelectorAll("[data-super-admin-repair-field]").forEach(function (node) {
+      const key = node.getAttribute("data-super-admin-repair-field");
+      if (!key) return;
+      if (node instanceof HTMLInputElement && node.type === "checkbox") {
+        payload[key] = Boolean(node.checked);
+        return;
+      }
+      const value = normalizeValue(node.value);
+      if (value) payload[key] = value;
+    });
+    return payload;
+  }
+
+  async function runSuperAdminCaseRepair(caseId) {
+    if (!state.isSuperAdmin) {
+      setPageStatus("Super Admin access is required.", "error");
+      return;
+    }
+    const payload = collectSuperAdminRepairPayload();
+    if (!payload.action) {
+      setPageStatus("Select a repair tool first.", "error");
+      return;
+    }
+    if (!payload.reason) {
+      setPageStatus("A repair reason is required for audit logging.", "error");
+      return;
+    }
+    if (
+      (payload.action === "cancel_invite" || payload.action === "fix_family_relationship") &&
+      !payload.confirm_destructive &&
+      !window.confirm("This action can overwrite customer linkage data. Continue?")
+    ) {
+      return;
+    }
+    setPageStatus("Applying super admin repair...", "info");
+    try {
+      await postJson(
+        `/admin/control-center/super-admin/cases/${encodeURIComponent(caseId)}/repair`,
+        payload,
+      );
+      await loadOverview();
+      await loadCases();
+      if (state.selectedCaseId) await loadCaseWorkspace(state.selectedCaseId);
+      setPageStatus("Super admin repair completed and logged.", "success");
+    } catch (error) {
+      setPageStatus(error.message || "Unable to complete super admin repair.", "error");
+    }
+  }
+
   function bindEvents() {
     document.addEventListener("click", function (event) {
       const target = event.target;
@@ -1405,6 +1532,13 @@
       if (superAdminPackageApply) {
         const projectId = superAdminPackageApply.getAttribute("data-super-admin-package-apply");
         if (projectId) runSuperAdminPackageApply(projectId);
+        return;
+      }
+
+      const superAdminRepair = target.closest("[data-super-admin-repair-run]");
+      if (superAdminRepair) {
+        const caseId = superAdminRepair.getAttribute("data-super-admin-repair-run");
+        if (caseId) runSuperAdminCaseRepair(caseId);
         return;
       }
 

@@ -33,6 +33,7 @@ from app.services.admin_control_service import (
     repair_selected_records,
     super_admin_apply_package_change,
     super_admin_apply_user_state_action,
+    super_admin_repair_case_action,
     super_admin_list_users,
     super_admin_preview_package_change,
     super_admin_update_user,
@@ -130,6 +131,31 @@ class SuperAdminPackageChangePayload(BaseModel):
     package_code: str = Field(min_length=1)
     project_lane: str = Field(default="")
     order_status: str = Field(default="")
+
+
+class SuperAdminRepairPayload(BaseModel):
+    action: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
+    relationship_id: str | None = None
+    member_id: str | None = None
+    source_member_id: str | None = None
+    target_member_id: str | None = None
+    family_id: str | None = None
+    child_member_id: str | None = None
+    parent_member_id: str | None = None
+    parent_first_name: str | None = None
+    parent_last_name: str | None = None
+    parent_birth_year: int | None = None
+    relationship_type: str | None = None
+    notes: str | None = None
+    invite_id: str | None = None
+    invite_email: str | None = None
+    membership_id: str | None = None
+    member_role: str | None = None
+    relationship_scope: str | None = None
+    privacy_scope: str | None = None
+    status: str | None = None
+    confirm_destructive: bool = False
 
 
 def _current_user_id(current_user: dict[str, Any]) -> str:
@@ -539,6 +565,23 @@ def super_admin_apply_project_package_change(
             package_code=payload.package_code,
             project_lane=payload.project_lane,
             order_status=payload.order_status,
+            actor=current_user,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/super-admin/cases/{case_id}/repair")
+def super_admin_case_repair(
+    case_id: str,
+    payload: SuperAdminRepairPayload,
+    current_user: dict[str, Any] = Depends(require_super_admin),
+):
+    try:
+        return super_admin_repair_case_action(
+            case_id=case_id,
+            action=payload.action,
+            payload=payload.model_dump(exclude_none=True),
             actor=current_user,
         )
     except ValueError as exc:

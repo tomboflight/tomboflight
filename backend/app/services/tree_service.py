@@ -4,7 +4,11 @@ from typing import Any
 
 from bson import ObjectId
 
-from app.core.relationship_catalog import normalize_relationship_type
+from app.core.relationship_catalog import (
+    ALLOWED_RELATIONSHIP_TYPES,
+    ANCESTRY_RELATIONSHIP_TYPES,
+    normalize_relationship_type,
+)
 from app.database import get_database
 
 
@@ -53,6 +57,7 @@ def _serialize_member(member: dict) -> dict:
     return _json_safe(
         {
             "id": str(member.get("_id")),
+            "person_id": str(member.get("_id")),
             "family_id": _string_or_none(member.get("family_id")),
             "household_id": _string_or_none(member.get("household_id")),
             "network_id": _string_or_none(member.get("network_id")),
@@ -66,6 +71,20 @@ def _serialize_member(member: dict) -> dict:
             "father_id": _string_or_none(member.get("father_id")),
             "mother_id": _string_or_none(member.get("mother_id")),
             "spouse_id": _string_or_none(member.get("spouse_id")),
+            "spouse_ids": [
+                _string_or_none(value)
+                for value in (
+                    (member.get("spouse_ids") or [])
+                    if isinstance(member.get("spouse_ids"), list)
+                    else ([member.get("spouse_id")] if member.get("spouse_id") else [])
+                )
+                if _string_or_none(value)
+            ],
+            "child_ids": [
+                _string_or_none(value)
+                for value in (member.get("child_ids") or [])
+                if _string_or_none(value)
+            ],
             "bio": member.get("bio"),
             "privacy_marker": member.get("privacy_marker"),
             "created_at": member.get("created_at"),
@@ -133,6 +152,81 @@ def _relationship_touches_members(rel: dict, member_ids: set[str]) -> bool:
     )
 
 
+def _normalized_relationship_document(rel: dict) -> dict[str, Any]:
+    normalized = dict(rel)
+    normalized["source_member_id"] = _string_or_none(rel.get("source_member_id"))
+    normalized["target_member_id"] = _string_or_none(rel.get("target_member_id"))
+    normalized["relationship_type"] = normalize_relationship_type(rel.get("relationship_type"))
+    return normalized
+
+
+def _inferred_parent_links_from_member(member: dict) -> list[dict[str, Any]]:
+    child_id = _string_or_none(member.get("_id"))
+    if not child_id:
+        return []
+    family_id = _string_or_none(member.get("family_id"))
+    links: list[dict[str, Any]] = []
+    mother_id = _string_or_none(member.get("mother_id"))
+    father_id = _string_or_none(member.get("father_id"))
+    for parent_id in [mother_id, father_id]:
+        if not parent_id:
+            continue
+        links.append(
+            {
+                "_id": f"inferred-{parent_id}-{child_id}",
+                "family_id": family_id,
+                "source_member_id": parent_id,
+                "target_member_id": child_id,
+                "relationship_type": "biological_parent",
+                "relationship_mode": "inferred",
+                "status_marker": "inferred",
+                "notes": "Inferred from member mother_id/father_id fields.",
+                "created_at": None,
+            }
+        )
+    return links
+
+
+def _collect_tree_relationships(members: list[dict], relationships: list[dict]) -> list[dict]:
+    member_ids = {str(member.get("_id")) for member in members if member.get("_id")}
+    normalized: list[dict] = []
+    seen_keys: set[tuple[str | None, str | None, str]] = set()
+
+    symmetric_types = {"spouse", "former_spouse", "sibling", "household_member"}
+
+    for rel in relationships:
+        candidate = _normalized_relationship_document(rel)
+        if not _relationship_touches_members(candidate, member_ids):
+            continue
+        source_id = _string_or_none(candidate.get("source_member_id"))
+        target_id = _string_or_none(candidate.get("target_member_id"))
+        rel_type = str(candidate.get("relationship_type") or "")
+        if rel_type in symmetric_types and source_id and target_id:
+            ordered = sorted([source_id, target_id])
+            key = (ordered[0], ordered[1], rel_type)
+        else:
+            key = (source_id, target_id, rel_type)
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        normalized.append(candidate)
+
+    for member in members:
+        for inferred in _inferred_parent_links_from_member(member):
+            candidate = _normalized_relationship_document(inferred)
+            key = (
+                _string_or_none(candidate.get("source_member_id")),
+                _string_or_none(candidate.get("target_member_id")),
+                str(candidate.get("relationship_type") or ""),
+            )
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            normalized.append(candidate)
+
+    return normalized
+
+
 def _relationship_allowed_for_mode(rel: dict, mode: str) -> bool:
     normalized_mode = str(mode or "default").strip().lower()
 
@@ -151,6 +245,134 @@ def _relationship_allowed_for_mode(rel: dict, mode: str) -> bool:
     status_marker = str(rel.get("status_marker") or "").strip().lower()
     relationship_mode = str(rel.get("relationship_mode") or "").strip().lower()
     return status_marker in allowed_markers or relationship_mode in allowed_modes
+
+
+def _build_union_nodes(people: dict[str, dict[str, Any]], relationships: list[dict]) -> list[dict[str, Any]]:
+    primary_parent_types = {"biological_parent", "adoptive_parent"}
+    spouse_types = {"spouse", "former_spouse"}
+    spouse_pairs: dict[tuple[str, str], str] = {}
+    for rel in relationships:
+        rel_type = normalize_relationship_type(rel.get("relationship_type"))
+        source_id = _string_or_none(rel.get("source_member_id"))
+        target_id = _string_or_none(rel.get("target_member_id"))
+        if rel_type not in spouse_types or not source_id or not target_id:
+            continue
+        key = tuple(sorted([source_id, target_id]))
+        spouse_pairs[key] = rel_type
+
+    parents_by_child: dict[str, list[str]] = {}
+    for rel in relationships:
+        rel_type = normalize_relationship_type(rel.get("relationship_type"))
+        if rel_type not in primary_parent_types:
+            continue
+        parent_id = _string_or_none(rel.get("source_member_id"))
+        child_id = _string_or_none(rel.get("target_member_id"))
+        if not parent_id or not child_id:
+            continue
+        parents_by_child.setdefault(child_id, []).append(parent_id)
+
+    children_by_union: dict[tuple[str, str], set[str]] = {}
+    for child_id, parent_ids in parents_by_child.items():
+        unique_parent_ids = sorted({pid for pid in parent_ids if pid in people})
+        if len(unique_parent_ids) < 2:
+            continue
+        for index in range(len(unique_parent_ids)):
+            for compare in range(index + 1, len(unique_parent_ids)):
+                pair = (unique_parent_ids[index], unique_parent_ids[compare])
+                if pair in spouse_pairs:
+                    children_by_union.setdefault(pair, set()).add(child_id)
+
+    unions: list[dict[str, Any]] = []
+    for pair, relationship_type in spouse_pairs.items():
+        union_id = f"union::{pair[0]}::{pair[1]}"
+        unions.append(
+            {
+                "union_id": union_id,
+                "partner_ids": [pair[0], pair[1]],
+                "relationship_type": relationship_type,
+                "shared_child_ids": sorted(children_by_union.get(pair, set())),
+            }
+        )
+    return unions
+
+
+def _build_tree_model(members: list[dict], relationships: list[dict]) -> dict[str, Any]:
+    people: dict[str, dict[str, Any]] = {}
+    for member in members:
+        person_id = _string_or_none(member.get("_id"))
+        if not person_id:
+            continue
+        mother_id = _string_or_none(member.get("mother_id"))
+        father_id = _string_or_none(member.get("father_id"))
+        parent_ids = sorted({pid for pid in [mother_id, father_id] if pid})
+        people[person_id] = {
+            "person_id": person_id,
+            "family_id": _string_or_none(member.get("family_id")),
+            "mother_id": mother_id,
+            "father_id": father_id,
+            "parent_ids": parent_ids,
+            "spouse_ids": [],
+            "child_ids": [],
+            "relationship_type": "person",
+            "related_people": [],
+            "missing_parent_ids": [pid for pid in parent_ids if pid not in people],
+        }
+
+    related_people_by_id: dict[str, list[dict[str, Any]]] = {
+        person_id: [] for person_id in people.keys()
+    }
+    for rel in relationships:
+        rel_type = normalize_relationship_type(rel.get("relationship_type"))
+        source_id = _string_or_none(rel.get("source_member_id"))
+        target_id = _string_or_none(rel.get("target_member_id"))
+        if not source_id or not target_id:
+            continue
+
+        if source_id in people and rel_type in ANCESTRY_RELATIONSHIP_TYPES:
+            current = set(people[source_id]["child_ids"])
+            current.add(target_id)
+            people[source_id]["child_ids"] = sorted(current)
+        if target_id in people and rel_type in ANCESTRY_RELATIONSHIP_TYPES:
+            current = set(people[target_id]["parent_ids"])
+            current.add(source_id)
+            people[target_id]["parent_ids"] = sorted(current)
+        if rel_type in {"spouse", "former_spouse"}:
+            if source_id in people:
+                current = set(people[source_id]["spouse_ids"])
+                current.add(target_id)
+                people[source_id]["spouse_ids"] = sorted(current)
+            if target_id in people:
+                current = set(people[target_id]["spouse_ids"])
+                current.add(source_id)
+                people[target_id]["spouse_ids"] = sorted(current)
+
+        if source_id in related_people_by_id:
+            related_people_by_id[source_id].append(
+                {"person_id": target_id, "relationship_type": rel_type}
+            )
+        if rel_type in {"spouse", "former_spouse", "sibling", "household_member"} and target_id in related_people_by_id:
+            related_people_by_id[target_id].append(
+                {"person_id": source_id, "relationship_type": rel_type}
+            )
+
+    for person_id, person in people.items():
+        parent_ids = person.get("parent_ids") or []
+        person["missing_parent_ids"] = [pid for pid in parent_ids if pid not in people]
+        deduped_related = {
+            (item["person_id"], item["relationship_type"]): item
+            for item in related_people_by_id.get(person_id, [])
+            if item.get("person_id")
+        }
+        person["related_people"] = sorted(
+            deduped_related.values(),
+            key=lambda item: (item["relationship_type"], item["person_id"]),
+        )
+
+    return {
+        "people": sorted(people.values(), key=lambda item: item["person_id"]),
+        "unions": _build_union_nodes(people, relationships),
+        "relationship_types_supported": sorted(ALLOWED_RELATIONSHIP_TYPES),
+    }
 
 
 def _find_family(db, family_id: str):
@@ -282,12 +504,7 @@ def get_family_tree(family_id: str) -> dict:
 
     member_ids = {str(member["_id"]) for member in members}
     relationships = _find_relationships(db, family_id, member_ids)
-
-    filtered_relationships = [
-        rel
-        for rel in relationships
-        if _relationship_touches_members(rel, member_ids)
-    ]
+    filtered_relationships = _collect_tree_relationships(members, relationships)
 
     return {
         "family_id": family_id,
@@ -299,6 +516,7 @@ def get_family_tree(family_id: str) -> dict:
             _serialize_relationship(rel) for rel in filtered_relationships
         ],
         "edges": _build_edges(filtered_relationships),
+        "tree_model": _build_tree_model(members, filtered_relationships),
     }
 
 
@@ -321,12 +539,10 @@ def get_filtered_family_tree(family_id: str, mode: str) -> dict:
 
     member_ids = {str(member["_id"]) for member in members}
     relationships = _find_relationships(db, family_id, member_ids)
-
     filtered_relationships = [
         rel
-        for rel in relationships
-        if _relationship_touches_members(rel, member_ids)
-        and _relationship_allowed_for_mode(rel, mode)
+        for rel in _collect_tree_relationships(members, relationships)
+        if _relationship_allowed_for_mode(rel, mode)
     ]
 
     connected_member_ids = set()
@@ -356,6 +572,7 @@ def get_filtered_family_tree(family_id: str, mode: str) -> dict:
             _serialize_relationship(rel) for rel in filtered_relationships
         ],
         "edges": _build_edges(filtered_relationships),
+        "tree_model": _build_tree_model(filtered_members, filtered_relationships),
     }
 
 
@@ -409,11 +626,7 @@ def get_linked_family_tree(family_id: str, mode: str = "default") -> dict:
     for linked_family_id in seen_family_ids:
         relationships.extend(_find_relationships(db, linked_family_id, member_ids))
 
-    relationships = [
-        rel
-        for rel in relationships
-        if _relationship_touches_members(rel, member_ids)
-    ]
+    relationships = _collect_tree_relationships(members, relationships)
 
     if str(mode or "default").strip().lower() != "default":
         relationships = [
@@ -449,4 +662,5 @@ def get_linked_family_tree(family_id: str, mode: str = "default") -> dict:
         ],
         "edges": _build_edges(relationships),
         "linked_family_ids": seen_family_ids,
+        "tree_model": _build_tree_model(members, relationships),
     }
