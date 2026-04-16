@@ -273,6 +273,50 @@ class LinkedTreeTests(unittest.TestCase):
         self.assertIn(str(member_a), member_ids)
         self.assertIn(str(member_b), member_ids)
 
+    def test_tree_model_keeps_spouse_ancestry_and_union_children_separate(self):
+        family_id = ObjectId()
+        me_id = ObjectId()
+        spouse_id = ObjectId()
+        my_mother_id = ObjectId()
+        spouse_mother_id = ObjectId()
+        shared_child_id = ObjectId()
+        step_child_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "families": [
+                    {"_id": family_id, "family_name": "Household", "household_id": "h-1"},
+                ],
+                "family_members": [
+                    {"_id": me_id, "family_id": str(family_id), "first_name": "Me", "generation": 1, "mother_id": str(my_mother_id)},
+                    {"_id": spouse_id, "family_id": str(family_id), "first_name": "Spouse", "generation": 1, "mother_id": str(spouse_mother_id)},
+                    {"_id": my_mother_id, "family_id": str(family_id), "first_name": "MyMom", "generation": 0},
+                    {"_id": spouse_mother_id, "family_id": str(family_id), "first_name": "SpouseMom", "generation": 0},
+                    {"_id": shared_child_id, "family_id": str(family_id), "first_name": "SharedChild", "generation": 2},
+                    {"_id": step_child_id, "family_id": str(family_id), "first_name": "StepChild", "generation": 2},
+                ],
+                "lineage_nodes": [],
+                "relationships": [
+                    {"_id": ObjectId(), "family_id": str(family_id), "source_member_id": str(me_id), "target_member_id": str(spouse_id), "relationship_type": "spouse"},
+                    {"_id": ObjectId(), "family_id": str(family_id), "source_member_id": str(me_id), "target_member_id": str(shared_child_id), "relationship_type": "biological_parent"},
+                    {"_id": ObjectId(), "family_id": str(family_id), "source_member_id": str(spouse_id), "target_member_id": str(shared_child_id), "relationship_type": "biological_parent"},
+                    {"_id": ObjectId(), "family_id": str(family_id), "source_member_id": str(spouse_id), "target_member_id": str(step_child_id), "relationship_type": "step_parent"},
+                ],
+            }
+        )
+
+        with patch.object(tree_service, "get_database", return_value=db):
+            payload = tree_service.get_family_tree(str(family_id))
+
+        model = payload["tree_model"]
+        people = {item["person_id"]: item for item in model["people"]}
+        spouse = people[str(spouse_id)]
+        me = people[str(me_id)]
+        self.assertIn(str(spouse_mother_id), spouse["parent_ids"])
+        self.assertNotIn(str(spouse_mother_id), me["parent_ids"])
+        unions = model["unions"]
+        self.assertEqual(len(unions), 1)
+        self.assertEqual(unions[0]["shared_child_ids"], [str(shared_child_id)])
+
 
 class UploadPrivacyAndStorageTests(unittest.TestCase):
     def test_private_upload_allows_owner_download_access(self):

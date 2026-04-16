@@ -664,6 +664,48 @@ class SuperAdminControlsTests(unittest.TestCase):
         self.assertEqual(applied["after"]["order"]["status"], "complete")
         self.assertEqual(applied["after"]["entitlement"]["package_lane"], "household")
 
+    def test_super_admin_repair_case_requires_reason(self):
+        with self.assertRaisesRegex(ValueError, "repair reason is required"):
+            admin_control_service.super_admin_repair_case_action(
+                case_id="project-1",
+                action="repair_package_lane",
+                payload={},
+                actor={"_id": ObjectId(), "email": "super@example.com", "role": "super_admin"},
+            )
+
+    def test_super_admin_repair_case_logs_audit_and_returns_alert_diff(self):
+        actor = {"_id": ObjectId(), "email": "super@example.com", "role": "super_admin"}
+        with (
+            patch.object(admin_control_service, "_resolve_case_project_order", return_value=("project-1", "order-1")),
+            patch.object(
+                admin_control_service,
+                "customer_case_workspace",
+                side_effect=[{"alerts": ["before"]}, {"alerts": ["after"]}],
+            ),
+            patch.object(
+                admin_control_service,
+                "_super_admin_repair_invite",
+                return_value={
+                    "target_type": "household_invite",
+                    "target_id": "invite-1",
+                    "before": {"status": "expired"},
+                    "after": {"status": "pending"},
+                    "project_id": "project-1",
+                },
+            ),
+            patch.object(admin_control_service, "write_audit_log") as write_audit_log,
+        ):
+            result = admin_control_service.super_admin_repair_case_action(
+                case_id="project-1",
+                action="resend_invite",
+                payload={"reason": "Fix broken invite", "invite_id": "invite-1"},
+                actor=actor,
+            )
+        self.assertEqual(result["status"], "repaired")
+        self.assertEqual(result["before_workspace_alerts"], ["before"])
+        self.assertEqual(result["after_workspace_alerts"], ["after"])
+        self.assertTrue(write_audit_log.called)
+
 
 if __name__ == "__main__":
     unittest.main()
