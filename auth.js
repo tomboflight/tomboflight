@@ -5,42 +5,30 @@
   const POST_LOGIN_REDIRECT = "dashboard.html";
   const SIGNUP_POLICY_VERSION = "2026-03-26";
   const DASHBOARD_CONTEXT_STORAGE_KEY = "tol_dashboard_context_v1";
-
-  const INTERNAL_ROLE_KEYS = new Set([
-    "admin",
-    "super_admin",
-    "root_admin",
-    "platform_admin",
-    "operations_admin",
-    "finance_admin",
-    "marketing_admin",
-    "executive_technology",
-    "operations",
-    "finance",
-    "marketing",
-  ]);
-
-  const LINK_KEY_ENABLED_PACKAGES = new Set([
-    "digital_legacy_portrait",
-    "household_foundation",
-    "heirloom_legacy_tree",
-    "legacy_plus",
-    "family_estate_concierge",
-  ]);
-
-  const NARRATION_ENABLED_PACKAGES = new Set([
-    "heirloom_legacy_tree",
-    "legacy_plus",
-    "family_estate_concierge",
-  ]);
-
-  const HOUSEHOLD_LINK_ENABLED_PACKAGES = new Set([
+  let hasLogoutBinding = false;
+  const HOUSEHOLD_LINK_PACKAGE_CODES = new Set([
     "legacy_plus",
     "family_estate_concierge",
   ]);
 
   if (!app) {
     console.error("auth.js requires app.js to be loaded first.");
+    return;
+  }
+  const requiredPackageHelpers = [
+    "normalizePackageCode",
+    "stripMaintenanceSuffix",
+    "resolvePackageLane",
+    "resolvePackageDisplayName",
+    "packageSupportsLinkKeys",
+    "getPackageProfile",
+  ];
+  if (
+    requiredPackageHelpers.some(function (helperName) {
+      return typeof app[helperName] !== "function";
+    })
+  ) {
+    console.error("auth.js requires package helper exports from app.js.");
     return;
   }
 
@@ -51,29 +39,207 @@
   }
 
   function isInternalRole(user) {
-    const role = normalizeValue(user && user.role);
-    const accessTier = normalizeValue(user && user.access_tier);
-    const departmentRole = normalizeValue(user && user.department_role);
+    return app && typeof app.isInternalRole === "function"
+      ? app.isInternalRole(user)
+      : false;
+  }
 
-    return [role, accessTier, departmentRole].some(function (value) {
-      return INTERNAL_ROLE_KEYS.has(value);
+  function parseEmbeddedPayload(value) {
+    if (typeof value !== "string") return value;
+
+    const trimmed = value.trim();
+    if (!trimmed || !["{", "["].includes(trimmed.charAt(0))) {
+      return value;
+    }
+
+    try {
+      return JSON.parse(trimmed);
+    } catch (error) {
+      return value;
+    }
+  }
+
+  function collectLoginPayloads(value, seen) {
+    const parsedValue = parseEmbeddedPayload(value);
+    if (!parsedValue || typeof parsedValue !== "object") return [];
+
+    const visited = seen || new Set();
+    if (visited.has(parsedValue)) return [];
+    visited.add(parsedValue);
+
+    const payloads = [parsedValue];
+    [
+      "data",
+      "detail",
+      "result",
+      "payload",
+      "response",
+      "auth",
+      "login",
+      "mfa",
+      "totp",
+      "two_factor",
+      "twoFactor",
+    ].forEach(function (key) {
+      if (Object.prototype.hasOwnProperty.call(parsedValue, key)) {
+        payloads.push(
+          ...collectLoginPayloads(parsedValue[key], visited),
+        );
+      }
     });
+
+    return payloads;
+  }
+
+  function getFirstResponseValue(loginData, keys) {
+    const payloads = collectLoginPayloads(loginData);
+    for (const payload of payloads) {
+      for (const key of keys) {
+        if (!Object.prototype.hasOwnProperty.call(payload, key)) continue;
+        const value = parseEmbeddedPayload(payload[key]);
+        if (value === null || typeof value === "undefined") continue;
+        if (typeof value === "string" && !value.trim()) continue;
+        return value;
+      }
+    }
+
+    return null;
+  }
+
+  function getFirstResponseString(loginData, keys) {
+    const value = getFirstResponseValue(loginData, keys);
+    if (value === null || typeof value === "undefined") return "";
+    if (typeof value === "object") return "";
+    return String(value).trim();
   }
 
   function getAccessTokenFromResponse(loginData) {
-    return (
-      loginData?.access_token ||
-      loginData?.token ||
-      loginData?.accessToken ||
-      null
+    return getFirstResponseString(loginData, [
+      "access_token",
+      "accessToken",
+      "token",
+      "jwt",
+    ]);
+  }
+
+  function getMfaChallengeToken(loginData) {
+    return getFirstResponseString(loginData, [
+      "mfa_challenge_token",
+      "mfaChallengeToken",
+      "challenge_token",
+      "challengeToken",
+      "mfa_token",
+      "mfaToken",
+      "challenge",
+    ]);
+  }
+
+  function isTruthyFlag(value) {
+    if (value === true || value === 1) return true;
+    if (typeof value !== "string") return false;
+
+    return ["true", "1", "yes"].includes(value.trim().toLowerCase());
+  }
+
+  function getLoginStatus(loginData) {
+    return getFirstResponseString(loginData, [
+      "status",
+      "auth_status",
+      "authStatus",
+      "state",
+    ])
+      .trim()
+      .toLowerCase();
+  }
+
+  function isMfaRequired(loginData) {
+    const status = getLoginStatus(loginData);
+    return Boolean(
+      isTruthyFlag(
+        getFirstResponseValue(loginData, [
+          "mfa_required",
+          "mfaRequired",
+          "requires_mfa",
+          "requiresMfa",
+          "two_factor_required",
+          "twoFactorRequired",
+          "totp_required",
+          "totpRequired",
+          "required",
+        ]),
+      ) ||
+        status === "mfa_required" ||
+        status === "mfa_login_required" ||
+        status === "mfa_enrollment_required" ||
+        status === "mfa_setup_required" ||
+        status === "two_factor_required" ||
+        status === "totp_required",
+    );
+  }
+
+  function isMfaEnrollmentRequired(loginData) {
+    return Boolean(
+      isTruthyFlag(
+        getFirstResponseValue(loginData, [
+          "mfa_enrollment_required",
+          "mfaEnrollmentRequired",
+          "enrollment_required",
+          "enrollmentRequired",
+          "requires_mfa_enrollment",
+          "requiresMfaEnrollment",
+          "setup_required",
+          "setupRequired",
+          "enroll_required",
+          "enrollRequired",
+        ]),
+      ) ||
+        ["mfa_enrollment_required", "mfa_setup_required"].includes(
+          getLoginStatus(loginData),
+        ),
+    );
+  }
+
+  function isMfaEnrollmentChallenge(loginData) {
+    return Boolean(
+      isMfaRequired(loginData) &&
+        isMfaEnrollmentRequired(loginData) &&
+        getMfaChallengeToken(loginData),
+    );
+  }
+
+  function isMfaVerificationChallenge(loginData) {
+    return Boolean(
+      isMfaRequired(loginData) &&
+        !isMfaEnrollmentRequired(loginData) &&
+        getMfaChallengeToken(loginData),
+    );
+  }
+
+  function looksLikeMfaResponse(loginData) {
+    const status = getLoginStatus(loginData);
+    return Boolean(
+      isMfaRequired(loginData) ||
+        isMfaEnrollmentRequired(loginData) ||
+        getMfaChallengeToken(loginData) ||
+        status.includes("mfa") ||
+        status.includes("totp") ||
+        status.includes("two_factor"),
     );
   }
 
   function getErrorMessage(error) {
+    const sharedParser =
+      app && typeof app.getReadableErrorMessage === "function"
+        ? app.getReadableErrorMessage
+        : null;
+    if (sharedParser) {
+      const parsed = sharedParser(error, "");
+      if (parsed) return parsed;
+    }
     if (!error) return "Unknown error";
     if (typeof error === "string") return error;
     if (error.message) return String(error.message);
-    return String(error);
+    return "Something went wrong. Please try again.";
   }
 
   function isAuthFailure(error) {
@@ -126,118 +292,78 @@
   }
 
   function normalizePackageCode(value) {
-    const normalized = normalizeValue(value);
-
-    const mapping = {
-      "legacy-snapshot": "legacy_snapshot",
-      legacy_snapshot: "legacy_snapshot",
-
-      "legacy-portrait-intro": "legacy_portrait_intro",
-      legacy_portrait_intro: "legacy_portrait_intro",
-
-      "digital-legacy-portrait": "digital_legacy_portrait",
-      digital_legacy_portrait: "digital_legacy_portrait",
-
-      "starter-family-tree": "household_foundation",
-      starter_family_tree: "household_foundation",
-      "household-foundation": "household_foundation",
-      household_foundation: "household_foundation",
-
-      "heirloom-legacy-tree": "heirloom_legacy_tree",
-      heirloom_legacy_tree: "heirloom_legacy_tree",
-
-      "legacy-plus": "legacy_plus",
-      legacy_plus: "legacy_plus",
-
-      "family-estate-concierge": "family_estate_concierge",
-      family_estate_concierge: "family_estate_concierge",
-
-      "command-structure-network": "command_structure_network",
-      command_structure_network: "command_structure_network",
-    };
-
-    return mapping[normalized] || normalized;
+    return app.normalizePackageCode(value);
   }
 
   function stripMaintenanceSuffix(packageCode) {
-    return normalizePackageCode(packageCode)
-      .replace(/_maintenance_monthly$/, "")
-      .replace(/_maintenance_yearly$/, "");
+    return app.stripMaintenanceSuffix(packageCode);
   }
 
   function resolvePackageLane(packageCode) {
-    const normalized = stripMaintenanceSuffix(packageCode);
-
-    if (
-      normalized === "legacy_snapshot" ||
-      normalized === "legacy_portrait_intro" ||
-      normalized === "digital_legacy_portrait"
-    ) {
-      return "portrait";
-    }
-
-    if (
-      normalized === "household_foundation" ||
-      normalized === "heirloom_legacy_tree" ||
-      normalized === "legacy_plus"
-    ) {
-      return "household";
-    }
-
-    if (normalized === "family_estate_concierge") {
-      return "network";
-    }
-
-    if (normalized === "command_structure_network") {
-      return "organization";
-    }
-
-    return "unknown";
+    return app.resolvePackageLane(packageCode);
   }
 
   function resolvePackageDisplayName(packageCode) {
-    const normalized = stripMaintenanceSuffix(packageCode);
-
-    const mapping = {
-      legacy_snapshot: "Legacy Snapshot",
-      legacy_portrait_intro: "Legacy Portrait Intro",
-      digital_legacy_portrait: "Digital Legacy Portrait",
-      household_foundation: "Household Foundation",
-      heirloom_legacy_tree: "Heirloom Legacy Tree",
-      legacy_plus: "Legacy Plus",
-      family_estate_concierge: "Family Estate Concierge",
-      command_structure_network: "Command Structure Network",
-    };
-
-    return mapping[normalized] || normalized || "Package";
+    return app.resolvePackageDisplayName(packageCode);
   }
 
   function packageSupportsLinkKeys(packageCode) {
-    return LINK_KEY_ENABLED_PACKAGES.has(stripMaintenanceSuffix(packageCode));
+    return app.packageSupportsLinkKeys(packageCode);
   }
 
   function buildFallbackEntitlements(packageCode, packageLane) {
     const normalizedCode = stripMaintenanceSuffix(packageCode);
+    const profile = app.getPackageProfile(normalizedCode);
     const lane =
-      normalizeValue(packageLane) || resolvePackageLane(normalizedCode);
+      normalizeValue(packageLane) ||
+      normalizeValue(profile?.package_lane) ||
+      resolvePackageLane(normalizedCode);
 
     return {
       package_code: normalizedCode,
       package_lane: lane,
-      can_upload_portraits: true,
-      can_upload_verification_docs: true,
-      can_build_household: lane === "household" || lane === "network",
-      can_build_family_tree: lane === "household" || lane === "network",
-      can_build_org_chart: lane === "organization",
-      can_link_households: HOUSEHOLD_LINK_ENABLED_PACKAGES.has(normalizedCode),
-      can_link_org_units: lane === "organization",
-      can_use_viewer: true,
-      can_use_narration: NARRATION_ENABLED_PACKAGES.has(normalizedCode),
-      can_use_lineage_certificate: lane === "household" || lane === "network",
-      can_open_family_intake: lane === "household" || lane === "network",
-      can_open_org_intake: lane === "organization",
+      can_upload_portraits: Boolean(profile?.can_upload_portraits ?? true),
+      can_upload_verification_docs: Boolean(
+        profile?.can_upload_verification_docs ?? true,
+      ),
+      can_build_household:
+        typeof profile?.can_build_household === "boolean"
+          ? profile.can_build_household
+          : lane === "household" || lane === "network",
+      can_build_family_tree:
+        typeof profile?.can_build_family_tree === "boolean"
+          ? profile.can_build_family_tree
+          : lane === "household" || lane === "network",
+      can_build_org_chart:
+        typeof profile?.can_build_org_chart === "boolean"
+          ? profile.can_build_org_chart
+          : lane === "organization",
+      can_link_households:
+        typeof profile?.can_link_households === "boolean"
+          ? profile.can_link_households
+          : HOUSEHOLD_LINK_PACKAGE_CODES.has(normalizedCode),
+      can_link_org_units:
+        typeof profile?.can_link_org_units === "boolean"
+          ? profile.can_link_org_units
+          : lane === "organization",
+      can_use_viewer: Boolean(profile?.can_use_viewer ?? true),
+      can_use_narration: Boolean(profile?.can_use_narration ?? false),
+      can_use_lineage_certificate:
+        typeof profile?.can_use_lineage_certificate === "boolean"
+          ? profile.can_use_lineage_certificate
+          : lane === "household" || lane === "network",
+      can_open_family_intake:
+        typeof profile?.can_open_family_intake === "boolean"
+          ? profile.can_open_family_intake
+          : lane === "household" || lane === "network",
+      can_open_org_intake:
+        typeof profile?.can_open_org_intake === "boolean"
+          ? profile.can_open_org_intake
+          : lane === "organization",
       can_use_link_keys: packageSupportsLinkKeys(normalizedCode),
-      can_manage_link_keys: packageSupportsLinkKeys(normalizedCode),
+      can_manage_link_keys: Boolean(
+        profile?.can_manage_link_keys ?? packageSupportsLinkKeys(normalizedCode),
+      ),
       allowed_addons: [],
       upgrade_targets: [],
     };
@@ -648,12 +774,7 @@
     return user;
   }
 
-  async function handleLogin(email, password) {
-    const loginData = await app.apiRequest("/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ email, password }),
-    });
-
+  async function completeAuthenticatedLogin(loginData) {
     const token = getAccessTokenFromResponse(loginData);
 
     if (!token) {
@@ -666,11 +787,224 @@
     const me = await fetchCurrentUserWithToken(token);
     app.saveUser(me);
 
-    return { loginData, me };
+    return { status: "authenticated", loginData, me };
+  }
+
+  async function handleLogin(email, password) {
+    const loginData = await app.apiRequest("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    });
+
+    if (getAccessTokenFromResponse(loginData)) {
+      return await completeAuthenticatedLogin(loginData);
+    }
+
+    if (isMfaEnrollmentChallenge(loginData)) {
+      clearCachedDashboardContext();
+      app.clearSession();
+      return {
+        status: "mfa_enrollment_required",
+        loginData,
+        mfaChallengeToken: getMfaChallengeToken(loginData),
+      };
+    }
+
+    if (isMfaVerificationChallenge(loginData)) {
+      clearCachedDashboardContext();
+      app.clearSession();
+      return {
+        status: "mfa_required",
+        loginData,
+        mfaChallengeToken: getMfaChallengeToken(loginData),
+      };
+    }
+
+    if (looksLikeMfaResponse(loginData)) {
+      throw new Error(
+        "Secure verification could not be started. Please try signing in again.",
+      );
+    }
+
+    throw new Error(
+      "Secure sign-in could not be completed. Please refresh and try again.",
+    );
+  }
+
+  async function beginMfaEnrollment(mfaChallengeToken) {
+    return await app.apiRequest("/auth/mfa/enroll/begin", {
+      method: "POST",
+      body: JSON.stringify({ mfa_challenge_token: mfaChallengeToken }),
+    });
+  }
+
+  async function verifyMfaEnrollment(setupToken, code) {
+    const loginData = await app.apiRequest("/auth/mfa/enroll/verify", {
+      method: "POST",
+      body: JSON.stringify({ setup_token: setupToken, code }),
+    });
+
+    return await completeAuthenticatedLogin(loginData);
+  }
+
+  async function verifyMfaLogin(mfaChallengeToken, code, recoveryCode) {
+    const payload = { mfa_challenge_token: mfaChallengeToken };
+    if (code) {
+      payload.code = code;
+    }
+    if (recoveryCode) {
+      payload.recovery_code = recoveryCode;
+    }
+
+    const loginData = await app.apiRequest("/auth/mfa/login/verify", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+
+    return await completeAuthenticatedLogin(loginData);
+  }
+
+  function getInviteContextFromQuery() {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      return {
+        inviteKey: String(params.get("invite_key") || "").trim(),
+        projectId: String(params.get("project_id") || "").trim(),
+      };
+    } catch (_error) {
+      return { inviteKey: "", projectId: "" };
+    }
+  }
+
+  function buildInviteContextQueryString(context) {
+    const inviteKey = String(context?.inviteKey || "").trim();
+    if (!inviteKey) return "";
+    const params = new URLSearchParams();
+    params.set("invite_key", inviteKey);
+    const projectId = String(context?.projectId || "").trim();
+    if (projectId) params.set("project_id", projectId);
+    return params.toString();
+  }
+
+  function preserveInviteContextOnAuthLinks() {
+    const inviteQueryString = buildInviteContextQueryString(
+      getInviteContextFromQuery(),
+    );
+    if (!inviteQueryString) return;
+
+    document.querySelectorAll("a[href]").forEach(function (link) {
+      const rawHref = String(link.getAttribute("href") || "").trim();
+      if (
+        !rawHref ||
+        rawHref.startsWith("#") ||
+        rawHref.startsWith("mailto:") ||
+        rawHref.startsWith("tel:")
+      ) {
+        return;
+      }
+
+      let parsed;
+      try {
+        parsed = new URL(rawHref, window.location.href);
+      } catch (_error) {
+        return;
+      }
+
+      const filename = String(parsed.pathname.split("/").pop() || "").toLowerCase();
+      if (
+        filename !== "signin.html" &&
+        filename !== "signup.html" &&
+        filename !== "household-access.html"
+      ) {
+        return;
+      }
+
+      const rewrittenPath = String(parsed.pathname.split("/").pop() || filename);
+      const rewrittenSearch = `?${inviteQueryString}`;
+      link.setAttribute("href", `${rewrittenPath}${rewrittenSearch}${parsed.hash}`);
+    });
+  }
+
+  function getPostLoginRedirect() {
+    const inviteQueryString = buildInviteContextQueryString(
+      getInviteContextFromQuery(),
+    );
+    if (!inviteQueryString) {
+      return POST_LOGIN_REDIRECT;
+    }
+    return `household-access.html?${inviteQueryString}`;
   }
 
   function redirectAfterLogin() {
-    window.location.href = POST_LOGIN_REDIRECT;
+    window.location.href = getPostLoginRedirect();
+  }
+
+  function getRoleSignals(user) {
+    const roleAliases = {
+      root_admin: "super_admin",
+      platform_admin: "super_admin",
+      executive_technology: "super_admin",
+      operations: "operations_admin",
+      finance: "finance_admin",
+      marketing: "marketing_admin",
+    };
+    const normalizeRole = function (value) {
+      const normalized = normalizeValue(value);
+      return roleAliases[normalized] || normalized;
+    };
+    return [
+      normalizeRole(user?.access_tier),
+      normalizeRole(user?.department_role),
+      normalizeRole(user?.role),
+    ].filter(Boolean);
+  }
+
+  function getBusinessTitle(user) {
+    const explicitTitle = String(user?.business_title || "").trim();
+    if (explicitTitle) return explicitTitle;
+
+    const signals = getRoleSignals(user);
+    if (
+      signals.includes("super_admin") ||
+      signals.includes("root_admin") ||
+      signals.includes("platform_admin") ||
+      signals.includes("executive_technology")
+    ) {
+      return "CEO / Super Admin";
+    }
+    if (signals.includes("finance_admin")) {
+      return "CFO";
+    }
+    if (signals.includes("operations_admin")) {
+      return "COO";
+    }
+    if (signals.includes("marketing_admin")) {
+      return "CMO";
+    }
+    return "Internal Admin";
+  }
+
+  function isPrototypeCustomer(user) {
+    return (
+      normalizeValue(user?.account_type) === "prototype_customer" ||
+      normalizeValue(user?.prototype_key) === "genesis_prototype" ||
+      normalizeValue(user?.email) === "larry.frontend.test2@tomboflight.com"
+    );
+  }
+
+  function getCustomerAccountLabel(user, packageName) {
+    const packageLabel = String(packageName || "").trim();
+    const baseLabel = isPrototypeCustomer(user)
+      ? "Genesis Prototype Customer"
+      : "Customer Account";
+    return packageLabel ? `${baseLabel} - ${packageLabel}` : baseLabel;
+  }
+
+  function getAccountDisplayLabel(user) {
+    if (isInternalRole(user)) {
+      return getBusinessTitle(user);
+    }
+    return getCustomerAccountLabel(user);
   }
 
   function populateUserFields(user, refs) {
@@ -678,7 +1012,18 @@
 
     if (refs.userName) refs.userName.textContent = user.full_name || "User";
     if (refs.userEmail) refs.userEmail.textContent = user.email || "";
-    if (refs.userRole) refs.userRole.textContent = user.role || "user";
+    if (refs.userRole) refs.userRole.textContent = getAccountDisplayLabel(user);
+  }
+
+  function updateCustomerProfileFields(context, refs) {
+    if (!context || !refs || !refs.userRole || isInternalRole(context.user)) {
+      return;
+    }
+
+    refs.userRole.textContent = getCustomerAccountLabel(
+      context.user,
+      context.packageName,
+    );
   }
 
   async function fetchOrders() {
@@ -1303,10 +1648,10 @@
         return;
       }
 
-      if (password.length < 8) {
+      if (password.length < 12) {
         app.setStatus(
           statusNode,
-          "Password must be at least 8 characters long.",
+          "Password must be at least 12 characters long.",
           "error",
         );
         return;
@@ -1351,7 +1696,12 @@
           "success",
         );
 
-        await handleLogin(email, password);
+        const loginResult = await handleLogin(email, password);
+        if (loginResult.status !== "authenticated") {
+          throw new Error(
+            "Account created. Please sign in to complete secure verification.",
+          );
+        }
         redirectAfterLogin();
       } catch (error) {
         app.setStatus(
@@ -1378,6 +1728,226 @@
       (submitBtn && submitBtn.textContent
         ? submitBtn.textContent.trim()
         : "") || "Enter Portal";
+    const enrollmentPanel = document.querySelector(
+      "[data-mfa-enrollment-panel]",
+    );
+    const enrollmentSetup = document.querySelector(
+      "[data-mfa-enrollment-setup]",
+    );
+    const enrollmentVerifyArea = document.querySelector(
+      "[data-mfa-enrollment-verify-area]",
+    );
+    const enrollmentForm = document.querySelector(
+      "[data-mfa-enrollment-form]",
+    );
+    const enrollmentStatus = document.querySelector(
+      "[data-mfa-enrollment-status]",
+    );
+    const enrollmentSubmitBtn =
+      enrollmentForm && enrollmentForm.querySelector("[data-submit-btn]");
+    const enrollmentSecretNode = document.querySelector(
+      "[data-mfa-enrollment-secret]",
+    );
+    const enrollmentOtpauthNode = document.querySelector(
+      "[data-mfa-otpauth-url]",
+    );
+    const enrollmentOtpauthLink = document.querySelector(
+      "[data-mfa-otpauth-link]",
+    );
+    const backupCodesPanel = document.querySelector(
+      "[data-mfa-backup-codes-panel]",
+    );
+    const backupCodesList = document.querySelector("[data-mfa-backup-codes]");
+    const continueDashboardBtn = document.querySelector(
+      "[data-mfa-continue-dashboard]",
+    );
+    const verificationPanel = document.querySelector(
+      "[data-mfa-verification-panel]",
+    );
+    const verificationForm = document.querySelector(
+      "[data-mfa-verification-form]",
+    );
+    const verificationStatus = document.querySelector(
+      "[data-mfa-verification-status]",
+    );
+    const verificationSubmitBtn =
+      verificationForm && verificationForm.querySelector("[data-submit-btn]");
+    const resetButtons = document.querySelectorAll("[data-mfa-reset]");
+    let activeMfaChallengeToken = "";
+    let activeMfaSetupToken = "";
+
+    function setHidden(element, hidden) {
+      if (element) {
+        element.hidden = Boolean(hidden);
+      }
+    }
+
+    function normalizeMfaEntry(value) {
+      return String(value || "")
+        .trim()
+        .replace(/\s+/g, "");
+    }
+
+    function focusFirstInput(container) {
+      if (!container) return;
+      const input = container.querySelector("input, textarea, button, a");
+      if (input && typeof input.focus === "function") {
+        input.focus();
+      }
+    }
+
+    function setBusy(button, busy, busyLabel, defaultLabel) {
+      if (!button) return;
+      button.disabled = Boolean(busy);
+      button.textContent = busy ? busyLabel : defaultLabel;
+    }
+
+    function setMfaFlowVisible(flowName) {
+      const isEnrollment = flowName === "enrollment";
+      const isVerification = flowName === "verification";
+      form.hidden = isEnrollment || isVerification;
+      setHidden(enrollmentPanel, !isEnrollment);
+      setHidden(verificationPanel, !isVerification);
+      app.clearStatus(statusNode);
+    }
+
+    function resetMfaFlow() {
+      activeMfaChallengeToken = "";
+      activeMfaSetupToken = "";
+      form.hidden = false;
+      if (typeof form.reset === "function") {
+        form.reset();
+      }
+      if (enrollmentForm && typeof enrollmentForm.reset === "function") {
+        enrollmentForm.reset();
+      }
+      if (verificationForm && typeof verificationForm.reset === "function") {
+        verificationForm.reset();
+      }
+      if (enrollmentSecretNode) {
+        enrollmentSecretNode.textContent = "";
+      }
+      if (enrollmentOtpauthNode) {
+        enrollmentOtpauthNode.value = "";
+      }
+      if (enrollmentOtpauthLink) {
+        enrollmentOtpauthLink.removeAttribute("href");
+      }
+      if (backupCodesList) {
+        backupCodesList.innerHTML = "";
+      }
+      setHidden(enrollmentPanel, true);
+      setHidden(verificationPanel, true);
+      setHidden(enrollmentSetup, false);
+      setHidden(enrollmentVerifyArea, true);
+      setHidden(backupCodesPanel, true);
+      app.clearStatus(statusNode);
+      app.clearStatus(enrollmentStatus);
+      app.clearStatus(verificationStatus);
+      setBusy(submitBtn, false, "Signing In...", defaultSubmitLabel);
+      setBusy(
+        enrollmentSubmitBtn,
+        false,
+        "Verifying...",
+        "Activate MFA",
+      );
+      setBusy(
+        verificationSubmitBtn,
+        false,
+        "Verifying...",
+        "Verify and Enter Portal",
+      );
+    }
+
+    async function startMfaEnrollment(mfaChallengeToken) {
+      activeMfaChallengeToken = mfaChallengeToken;
+      activeMfaSetupToken = "";
+      setMfaFlowVisible("enrollment");
+      setHidden(enrollmentSetup, false);
+      setHidden(enrollmentVerifyArea, true);
+      setHidden(backupCodesPanel, true);
+      app.setStatus(
+        enrollmentStatus,
+        "Preparing your authenticator setup...",
+        "info",
+      );
+
+      try {
+        const setupData = await beginMfaEnrollment(activeMfaChallengeToken);
+        activeMfaSetupToken = String(setupData?.setup_token || "").trim();
+        if (!activeMfaSetupToken) {
+          throw new Error("MFA setup could not be started.");
+        }
+
+        const secret = String(setupData?.secret || "").trim();
+        const otpauthUrl = String(setupData?.otpauth_url || "").trim();
+        if (enrollmentSecretNode) {
+          enrollmentSecretNode.textContent = secret || "Unavailable";
+        }
+        if (enrollmentOtpauthNode) {
+          enrollmentOtpauthNode.value = otpauthUrl;
+        }
+        if (enrollmentOtpauthLink && otpauthUrl) {
+          enrollmentOtpauthLink.href = otpauthUrl;
+        }
+
+        setHidden(enrollmentVerifyArea, false);
+        app.setStatus(
+          enrollmentStatus,
+          "Add this key to your authenticator app, then enter the first code it creates.",
+          "info",
+        );
+        focusFirstInput(enrollmentVerifyArea);
+      } catch (error) {
+        app.setStatus(
+          enrollmentStatus,
+          getErrorMessage(error) || "MFA enrollment could not be started.",
+          "error",
+        );
+      }
+    }
+
+    function startMfaVerification(mfaChallengeToken) {
+      activeMfaChallengeToken = mfaChallengeToken;
+      setMfaFlowVisible("verification");
+      app.setStatus(
+        verificationStatus,
+        "Enter an authenticator code or one recovery code to continue.",
+        "info",
+      );
+      focusFirstInput(verificationPanel);
+    }
+
+    function showBackupCodes(backupCodes) {
+      const codes = Array.isArray(backupCodes) ? backupCodes : [];
+      if (backupCodesList) {
+        backupCodesList.innerHTML = "";
+        if (codes.length) {
+          codes.forEach(function (code) {
+            const item = document.createElement("li");
+            item.textContent = code;
+            backupCodesList.appendChild(item);
+          });
+        } else {
+          const item = document.createElement("li");
+          item.textContent =
+            "No backup codes were returned for this session.";
+          backupCodesList.appendChild(item);
+        }
+      }
+
+      setHidden(enrollmentSetup, true);
+      setHidden(enrollmentVerifyArea, true);
+      setHidden(backupCodesPanel, false);
+      app.setStatus(
+        enrollmentStatus,
+        "MFA is active. Keep these recovery codes before opening the dashboard.",
+        "success",
+      );
+      if (continueDashboardBtn && typeof continueDashboardBtn.focus === "function") {
+        continueDashboardBtn.focus();
+      }
+    }
 
     form.addEventListener("submit", async function (event) {
       event.preventDefault();
@@ -1408,9 +1978,24 @@
       }
 
       try {
-        await handleLogin(email, password);
-        app.setStatus(statusNode, "Portal access granted.", "success");
-        redirectAfterLogin();
+        const loginResult = await handleLogin(email, password);
+        if (loginResult.status === "authenticated") {
+          app.setStatus(statusNode, "Portal access granted.", "success");
+          redirectAfterLogin();
+          return;
+        }
+
+        if (loginResult.status === "mfa_enrollment_required") {
+          await startMfaEnrollment(loginResult.mfaChallengeToken);
+          return;
+        }
+
+        if (loginResult.status === "mfa_required") {
+          startMfaVerification(loginResult.mfaChallengeToken);
+          return;
+        }
+
+        throw new Error("Login could not be completed.");
       } catch (error) {
         app.setStatus(
           statusNode,
@@ -1424,6 +2009,135 @@
         }
       }
     });
+
+    if (enrollmentForm) {
+      enrollmentForm.addEventListener("submit", async function (event) {
+        event.preventDefault();
+        app.clearStatus(enrollmentStatus);
+
+        if (
+          typeof enrollmentForm.reportValidity === "function" &&
+          !enrollmentForm.reportValidity()
+        ) {
+          return;
+        }
+
+        const formData = new FormData(enrollmentForm);
+        const code = normalizeMfaEntry(formData.get("code"));
+
+        if (!activeMfaSetupToken) {
+          app.setStatus(
+            enrollmentStatus,
+            "MFA setup has expired. Please sign in again.",
+            "error",
+          );
+          return;
+        }
+
+        if (!code) {
+          app.setStatus(
+            enrollmentStatus,
+            "Enter the code from your authenticator app.",
+            "error",
+          );
+          return;
+        }
+
+        setBusy(enrollmentSubmitBtn, true, "Verifying...", "Activate MFA");
+
+        try {
+          const result = await verifyMfaEnrollment(activeMfaSetupToken, code);
+          showBackupCodes(result.loginData?.backup_codes);
+        } catch (error) {
+          app.setStatus(
+            enrollmentStatus,
+            getErrorMessage(error) || "MFA enrollment could not be verified.",
+            "error",
+          );
+        } finally {
+          setBusy(enrollmentSubmitBtn, false, "Verifying...", "Activate MFA");
+        }
+      });
+    }
+
+    if (verificationForm) {
+      verificationForm.addEventListener("submit", async function (event) {
+        event.preventDefault();
+        app.clearStatus(verificationStatus);
+
+        if (
+          typeof verificationForm.reportValidity === "function" &&
+          !verificationForm.reportValidity()
+        ) {
+          return;
+        }
+
+        const formData = new FormData(verificationForm);
+        const code = normalizeMfaEntry(formData.get("code"));
+        const recoveryCode = normalizeMfaEntry(formData.get("recovery_code"));
+
+        if (!activeMfaChallengeToken) {
+          app.setStatus(
+            verificationStatus,
+            "MFA verification has expired. Please sign in again.",
+            "error",
+          );
+          return;
+        }
+
+        if (!code && !recoveryCode) {
+          app.setStatus(
+            verificationStatus,
+            "Enter an authenticator code or recovery code.",
+            "error",
+          );
+          return;
+        }
+
+        if (code && recoveryCode) {
+          app.setStatus(
+            verificationStatus,
+            "Use either an authenticator code or a recovery code.",
+            "error",
+          );
+          return;
+        }
+
+        setBusy(
+          verificationSubmitBtn,
+          true,
+          "Verifying...",
+          "Verify and Enter Portal",
+        );
+
+        try {
+          await verifyMfaLogin(activeMfaChallengeToken, code, recoveryCode);
+          app.setStatus(verificationStatus, "Portal access granted.", "success");
+          redirectAfterLogin();
+        } catch (error) {
+          app.setStatus(
+            verificationStatus,
+            getErrorMessage(error) || "MFA verification failed.",
+            "error",
+          );
+        } finally {
+          setBusy(
+            verificationSubmitBtn,
+            false,
+            "Verifying...",
+            "Verify and Enter Portal",
+          );
+        }
+      });
+    }
+
+    resetButtons.forEach(function (button) {
+      button.addEventListener("click", resetMfaFlow);
+    });
+
+    if (continueDashboardBtn) {
+      continueDashboardBtn.addEventListener("click", redirectAfterLogin);
+    }
   }
 
   async function setupDashboard() {
@@ -1447,6 +2161,11 @@
     const savedUser = app.getSavedUser();
     if (savedUser) {
       populateUserFields(savedUser, refs);
+      // Pre-apply admin portal mode from cached user so CSS can hide customer
+      // sections before [data-auth-required] is revealed, preventing FOUC.
+      if (isInternalRole(savedUser)) {
+        document.body.dataset.portalMode = "admin";
+      }
       if (authRequired) authRequired.style.display = "block";
     }
 
@@ -1463,9 +2182,16 @@
 
       populateUserFields(me, refs);
 
-      if (authRequired) authRequired.style.display = "block";
+      // Publish the resolved user for co-loaded scripts (e.g. dashboard-admin.js)
+      // so they do not need to make a duplicate /auth/me request.
+      window.TOLResolvedUser = me;
+      window.dispatchEvent(
+        new CustomEvent("tol:user-resolved", { detail: { user: me } }),
+      );
 
       if (isInternalRole(me)) {
+        document.body.dataset.portalMode = "admin";
+        if (authRequired) authRequired.style.display = "block";
         app.setStatus(
           statusNode,
           "You are signed in to the Tomb of Light internal operations portal.",
@@ -1474,6 +2200,9 @@
         return;
       }
 
+      // Customer path: reveal portal content after confirming role.
+      document.body.dataset.portalMode = "customer";
+      if (authRequired) authRequired.style.display = "block";
       app.setStatus(
         statusNode,
         "You are signed in and connected to the Tomb of Light platform.",
@@ -1526,6 +2255,7 @@
 
       const context = await getDashboardContext(me, orders);
       updateAccessState(context);
+      updateCustomerProfileFields(context, refs);
       publishDashboardContext(context);
 
       if (!context.hasPackageAccess) {
@@ -1572,6 +2302,7 @@
     const page = window.location.pathname.split("/").pop() || "";
 
     const uploadPages = new Set(["verification-upload.html"]);
+    const portraitUploadPages = new Set(["portrait-upload.html"]);
     const linkKeyPages = new Set(["link-keys.html"]);
     const familyIntakePages = new Set([
       "intake-welcome.html",
@@ -1593,6 +2324,7 @@
 
     if (
       !uploadPages.has(page) &&
+      !portraitUploadPages.has(page) &&
       !linkKeyPages.has(page) &&
       !familyIntakePages.has(page) &&
       !familyTreePages.has(page) &&
@@ -1617,6 +2349,7 @@
       );
 
       if (isInternalRole(me)) {
+        window.location.href = "dashboard.html?admin_workspace=1";
         return;
       }
 
@@ -1645,6 +2378,11 @@
           resolved.can_upload_verification_docs || resolved.can_upload_portraits
         )
       ) {
+        window.location.href = "dashboard.html?purchase_required=1";
+        return;
+      }
+
+      if (portraitUploadPages.has(page) && !resolved.can_upload_portraits) {
         window.location.href = "dashboard.html?purchase_required=1";
         return;
       }
@@ -1680,21 +2418,38 @@
   }
 
   function bindLogoutButtons() {
-    document.querySelectorAll("[data-logout-btn]").forEach(function (button) {
-      button.addEventListener("click", async function () {
-        try {
-          if (app.logoutUser) {
-            await app.logoutUser();
-          } else {
-            app.clearSession();
-          }
-        } catch (error) {
+    if (hasLogoutBinding) return;
+    hasLogoutBinding = true;
+
+    document.addEventListener("click", function (event) {
+      const button = event.target.closest("[data-logout-btn]");
+      if (!button) return;
+
+      event.preventDefault();
+      if (button.disabled) return;
+      button.disabled = true;
+
+      // Clear the local session immediately so the redirect is not blocked by
+      // network latency or a backend timeout (the API call can take up to 15 s).
+      try {
+        if (app && typeof app.clearSession === "function") {
           app.clearSession();
         }
+      } catch (_error) {
+        // Best-effort local cleanup.
+      }
 
-        clearCachedDashboardContext();
-        window.location.href = "signin.html";
-      });
+      clearCachedDashboardContext();
+
+      // Notify the backend in the background — do not await.  The local session
+      // is already cleared, so the user is logged out regardless of the outcome.
+      if (app && typeof app.logoutUser === "function") {
+        app.logoutUser().catch(function (err) {
+          console.warn("Background logout request failed:", err);
+        });
+      }
+
+      window.location.href = "signin.html";
     });
   }
 
@@ -1728,6 +2483,7 @@
   }
 
   document.addEventListener("DOMContentLoaded", function () {
+    preserveInviteContextOnAuthLinks();
     protectAuthPages();
     setupSignupForm();
     setupSigninForm();

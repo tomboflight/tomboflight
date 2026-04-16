@@ -5,6 +5,8 @@ from typing import Any
 
 from bson import ObjectId
 
+from app.core.package_type_catalog import normalize_package_type
+from app.core.state_catalog import normalize_visibility_state
 from app.core.package_catalog import get_package
 from app.database import get_database
 from app.dependencies.auth import has_internal_admin_access
@@ -65,14 +67,7 @@ def _split_name(full_name: str, fallback_email: str) -> tuple[str, str]:
 
 
 def _coerce_visibility(value: Any) -> str:
-    normalized = _normalize_value(value).lower()
-    if normalized == "private":
-        return "private"
-    if normalized in {"family", "family_only", "family-only"}:
-        return "family_only"
-    if normalized in {"public", "certificate_only", "certificate-only"}:
-        return "certificate_only"
-    return "private"
+    return normalize_visibility_state(value)
 
 
 def _to_datetime(value: Any) -> datetime:
@@ -119,12 +114,12 @@ def _coerce_int(value: Any) -> int | None:
 
 
 def _lane_from_project(project: dict[str, Any]) -> str:
-    lane = _normalize_value(project.get("project_lane")).lower()
+    lane = normalize_package_type(project.get("project_lane"))
     if lane:
         return lane
 
     package = get_package(_normalize_value(project.get("package_code")))
-    return _normalize_value((package or {}).get("package_lane")).lower() or "portrait"
+    return normalize_package_type((package or {}).get("package_lane"), default="portrait")
 
 
 def _find_submission_for_project(project: dict[str, Any]) -> dict[str, Any] | None:
@@ -290,6 +285,69 @@ def _serialize_project_summary(project: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def load_project_workspace_anchor(
+    *,
+    project: dict[str, Any],
+    submission: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any]]:
+    """Load the current workspace anchor state without creating missing records."""
+    db = get_database()
+    if db is None:
+        return None, None, project
+
+    submission = submission or _find_submission_for_project(project)
+    families = db["families"]
+    family_members = db["family_members"]
+
+    project_id = _normalize_value(project.get("_id") or project.get("id"))
+    owner_user_id = _normalize_value(project.get("owner_user_id"))
+    owner_email = _normalize_email(project.get("owner_email"))
+    submission_id = _normalize_value((submission or {}).get("_id"))
+
+    family_doc = None
+    existing_family_id = _normalize_value(project.get("family_id"))
+
+    if existing_family_id and ObjectId.is_valid(existing_family_id):
+        family_doc = families.find_one({"_id": ObjectId(existing_family_id)})
+
+    if family_doc is None and submission_id:
+        family_doc = families.find_one({"intake_submission_id": submission_id})
+
+    if family_doc is None and project_id:
+        family_doc = families.find_one({"project_id": project_id})
+
+    family_id = _normalize_value((family_doc or {}).get("_id"))
+    primary_member = None
+    if family_id:
+        member_query: dict[str, Any] = {
+            "family_id": {"$in": _family_id_candidates(family_id)},
+        }
+        owned_member_filters: list[dict[str, Any]] = []
+        if owner_user_id:
+            owned_member_filters.append({"owner_user_id": owner_user_id})
+        if owner_email:
+            owned_member_filters.append({"owner_email": owner_email})
+
+        if owned_member_filters:
+            primary_member = family_members.find_one(
+                {
+                    "$and": [
+                        member_query,
+                        {"$or": owned_member_filters},
+                    ]
+                },
+                sort=[("created_at", 1)],
+            )
+
+        if primary_member is None:
+            primary_member = family_members.find_one(
+                member_query,
+                sort=[("created_at", 1)],
+            )
+
+    return family_doc, primary_member, project
+
+
 def ensure_project_workspace_anchor(
     *,
     project: dict[str, Any],
@@ -317,17 +375,11 @@ def ensure_project_workspace_anchor(
     package_name = _normalize_value(project.get("package_name")) or "Tomb of Light Package"
     submission_id = _normalize_value((submission or {}).get("_id"))
 
-    family_doc = None
+    family_doc, primary_member, project = load_project_workspace_anchor(
+        project=project,
+        submission=submission,
+    )
     existing_family_id = _normalize_value(project.get("family_id"))
-
-    if existing_family_id and ObjectId.is_valid(existing_family_id):
-        family_doc = families.find_one({"_id": ObjectId(existing_family_id)})
-
-    if family_doc is None and submission_id:
-        family_doc = families.find_one({"intake_submission_id": submission_id})
-
-    if family_doc is None and project_id:
-        family_doc = families.find_one({"project_id": project_id})
 
     if family_doc is None:
         household = submission.get("household") if isinstance(submission, dict) else {}
@@ -406,61 +458,36 @@ def ensure_project_workspace_anchor(
             project = dict(project)
             project["family_id"] = family_id
 
-    primary_member = None
-    if family_id:
-        member_query: dict[str, Any] = {
-            "family_id": {"$in": _family_id_candidates(family_id)},
+    if family_id and primary_member is None:
+        household = submission.get("household") if isinstance(submission, dict) else {}
+        primary_contact_name = _normalize_value(
+            household.get("primary_contact_name") if isinstance(household, dict) else ""
+        )
+        first_name, last_name = _split_name(primary_contact_name, owner_email)
+
+        member_payload = {
+            "family_id": family_id,
+            "first_name": first_name,
+            "last_name": last_name,
+            "generation": 1,
+            "bio": _build_anchor_description(
+                lane=lane,
+                project=project,
+                submission=submission,
+            ),
+            "owner_user_id": owner_user_id,
+            "owner_email": owner_email,
+            "workspace_lane": lane,
+            "source": "viewer_workspace_anchor",
+            "intake_submission_id": submission_id or None,
+            "is_verified": False,
+            "verification_status": "unverified",
+            "created_at": _now(),
+            "updated_at": _now(),
         }
-        owned_member_filters: list[dict[str, Any]] = []
-        if owner_user_id:
-            owned_member_filters.append({"owner_user_id": owner_user_id})
-        if owner_email:
-            owned_member_filters.append({"owner_email": owner_email})
-
-        if owned_member_filters:
-            primary_member = family_members.find_one(
-                {
-                    "$and": [
-                        member_query,
-                        {"$or": owned_member_filters},
-                    ]
-                },
-                sort=[("created_at", 1)],
-            )
-
-        if primary_member is None:
-            primary_member = family_members.find_one(member_query, sort=[("created_at", 1)])
-
-        if primary_member is None:
-            household = submission.get("household") if isinstance(submission, dict) else {}
-            primary_contact_name = _normalize_value(
-                household.get("primary_contact_name") if isinstance(household, dict) else ""
-            )
-            first_name, last_name = _split_name(primary_contact_name, owner_email)
-
-            member_payload = {
-                "family_id": family_id,
-                "first_name": first_name,
-                "last_name": last_name,
-                "generation": 1,
-                "bio": _build_anchor_description(
-                    lane=lane,
-                    project=project,
-                    submission=submission,
-                ),
-                "owner_user_id": owner_user_id,
-                "owner_email": owner_email,
-                "workspace_lane": lane,
-                "source": "viewer_workspace_anchor",
-                "intake_submission_id": submission_id or None,
-                "is_verified": False,
-                "verification_status": "unverified",
-                "created_at": _now(),
-                "updated_at": _now(),
-            }
-            result = family_members.insert_one(member_payload)
-            member_payload["_id"] = result.inserted_id
-            primary_member = member_payload
+        result = family_members.insert_one(member_payload)
+        member_payload["_id"] = result.inserted_id
+        primary_member = member_payload
 
     return family_doc, primary_member, project
 
@@ -639,7 +666,7 @@ def build_viewer_manifest(
         raise ValueError("Viewer workspace could not be resolved for this account.")
 
     submission = _find_submission_for_project(project)
-    family_doc, primary_member, project = ensure_project_workspace_anchor(
+    family_doc, primary_member, project = load_project_workspace_anchor(
         project=project,
         submission=submission,
     )

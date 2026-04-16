@@ -7,23 +7,30 @@
   }
 
   const INTERNAL_ROLE_KEYS = new Set([
-    "admin",
     "super_admin",
-    "root_admin",
-    "platform_admin",
     "operations_admin",
     "finance_admin",
     "marketing_admin",
-    "executive_technology",
-    "operations",
-    "finance",
-    "marketing",
   ]);
+
+  const ROLE_ALIASES = {
+    root_admin: "super_admin",
+    platform_admin: "super_admin",
+    executive_technology: "super_admin",
+    operations: "operations_admin",
+    finance: "finance_admin",
+    marketing: "marketing_admin",
+  };
 
   function normalizeValue(value) {
     return String(value || "")
       .trim()
       .toLowerCase();
+  }
+
+  function normalizeRole(value) {
+    const normalized = normalizeValue(value);
+    return ROLE_ALIASES[normalized] || normalized;
   }
 
   function escapeHtml(value) {
@@ -37,22 +44,30 @@
 
   function getRoleSignals(me) {
     return [
-      normalizeValue(me && me.role),
-      normalizeValue(me && me.access_tier),
-      normalizeValue(me && me.department_role),
+      normalizeRole(me && me.access_tier),
+      normalizeRole(me && me.department_role),
+      normalizeRole(me && me.role),
     ].filter(Boolean);
   }
 
   function getInternalRoleKey(me) {
     const signals = getRoleSignals(me);
-    return (
-      signals.find(function (value) {
-        return INTERNAL_ROLE_KEYS.has(value);
-      }) || ""
-    );
+    const matched = signals.find(function (value) {
+      return INTERNAL_ROLE_KEYS.has(value);
+    });
+    if (matched) return matched;
+    if (app && typeof app.isInternalRole === "function" && app.isInternalRole(me)) {
+      return "admin";
+    }
+    return "";
   }
 
+  // Use the canonical check from app.js when available, falling back to the
+  // local role-key lookup (which is also needed for role-specific card sets).
   function isInternalRole(me) {
+    if (app && typeof app.isInternalRole === "function") {
+      return app.isInternalRole(me);
+    }
     return Boolean(getInternalRoleKey(me));
   }
 
@@ -70,22 +85,20 @@
   }
 
   function getRoleTitle(me) {
+    const explicitTitle = String(me?.business_title || "").trim();
+    if (explicitTitle) return explicitTitle;
+
     const roleKey = getInternalRoleKey(me);
 
-    if (roleKey === "root_admin") return "Company Root Control";
-    if (roleKey === "super_admin") return "Executive Control";
-    if (roleKey === "admin") return "Administrative Control";
-    if (roleKey === "operations_admin" || roleKey === "operations") {
-      return "Operations Control";
+    if (roleKey === "super_admin") return "CEO / Super Admin";
+    if (roleKey === "operations_admin") {
+      return "COO";
     }
-    if (roleKey === "finance_admin" || roleKey === "finance") {
-      return "Finance Control";
+    if (roleKey === "finance_admin") {
+      return "CFO";
     }
-    if (roleKey === "marketing_admin" || roleKey === "marketing") {
-      return "Marketing Control";
-    }
-    if (roleKey === "platform_admin" || roleKey === "executive_technology") {
-      return "Platform Control";
+    if (roleKey === "marketing_admin") {
+      return "CMO";
     }
     return "Internal Control";
   }
@@ -95,11 +108,7 @@
 
     if (
       [
-        "root_admin",
         "super_admin",
-        "admin",
-        "platform_admin",
-        "executive_technology",
       ].includes(roleKey)
     ) {
       return [
@@ -127,12 +136,7 @@
       ];
     }
 
-    if (
-      [
-        "operations_admin",
-        "operations",
-      ].includes(roleKey)
-    ) {
+    if (roleKey === "operations_admin") {
       return [
         card(
           "A",
@@ -158,7 +162,7 @@
       ];
     }
 
-    if (["finance_admin", "finance"].includes(roleKey)) {
+    if (roleKey === "finance_admin") {
       return [
         card(
           "A",
@@ -170,7 +174,7 @@
       ];
     }
 
-    if (["marketing_admin", "marketing"].includes(roleKey)) {
+    if (roleKey === "marketing_admin") {
       return [
         card(
           "A",
@@ -224,14 +228,6 @@
     });
   }
 
-  function hideCustomerPanels() {
-    document
-      .querySelectorAll("[data-dashboard-customer-only]")
-      .forEach(function (node) {
-        node.style.display = "none";
-      });
-  }
-
   function hideCustomerNavItems() {
     [
       'a[href="intake-review.html"]',
@@ -246,6 +242,22 @@
           node.style.display = "none";
         });
     });
+  }
+
+  function hideCustomerBillingLinks() {
+    document
+      .querySelectorAll('[data-dashboard-billing-link]')
+      .forEach(function (node) {
+        node.style.display = "none";
+      });
+  }
+
+  function showAdminOnlyPanels() {
+    document
+      .querySelectorAll("[data-dashboard-admin-only]")
+      .forEach(function (node) {
+        node.style.display = "";
+      });
   }
 
   function updateHeroForInternal() {
@@ -368,27 +380,37 @@
     anchor.prepend(panel);
   }
 
-  async function setupAdminDashboardTools() {
+  function applyAdminDashboardLayer(me) {
     const dashboard = document.querySelector("[data-dashboard]");
-    if (!dashboard) return;
+    if (!dashboard || !isInternalRole(me)) return;
 
-    try {
-      const me = await app.apiRequest("/auth/me", { method: "GET" });
-
-      if (isInternalRole(me)) {
-        applyAdminPortalTheme(me);
-        hideCustomerPanels();
-        hideCustomerNavItems();
-        updateHeroForInternal();
-        injectAdminPanel(me);
-        enableAdminWorkspaceLinks(me);
-      }
-    } catch (error) {
-      console.error("Failed to load internal dashboard layer:", error);
-    }
+    applyAdminPortalTheme(me);
+    // Customer-only panels are hidden declaratively by CSS using
+    // body[data-portal-mode="admin"] — no DOM iteration needed here.
+    hideCustomerNavItems();
+    hideCustomerBillingLinks();
+    showAdminOnlyPanels();
+    updateHeroForInternal();
+    injectAdminPanel(me);
+    enableAdminWorkspaceLinks(me);
   }
 
   document.addEventListener("DOMContentLoaded", function () {
-    setupAdminDashboardTools();
+    // auth.js fetches /auth/me in setupDashboard() and publishes
+    // tol:user-resolved with the result.  We subscribe here instead of
+    // making a duplicate network request.
+    if (window.TOLResolvedUser) {
+      // auth.js resolved before this DOMContentLoaded handler ran.
+      applyAdminDashboardLayer(window.TOLResolvedUser);
+      return;
+    }
+
+    window.addEventListener(
+      "tol:user-resolved",
+      function (event) {
+        applyAdminDashboardLayer(event.detail.user);
+      },
+      { once: true },
+    );
   });
 })();

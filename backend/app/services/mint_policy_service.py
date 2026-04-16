@@ -5,7 +5,11 @@ from typing import Any
 from bson import ObjectId
 
 from app.config import settings
-from app.core.package_catalog import get_package, get_package_catalog
+from app.core.package_catalog import (
+    get_package_catalog,
+    get_package_control_profile,
+)
+from app.core.package_mapping import resolve_package_identity
 from app.database import get_database
 
 BUILD_READY_STATUSES = {
@@ -25,74 +29,6 @@ BUILD_READY_PHASES = {
     "archived",
 }
 
-PACKAGE_MINT_POLICIES: dict[str, dict[str, Any]] = {
-    "legacy_snapshot": {
-        "product_includes_onchain_anchor": False,
-        "auto_mint_enabled": False,
-        "opt_in_only": False,
-        "token_type": None,
-        "included_anchor_count": 0,
-        "requires_customer_public_safe_approval": False,
-    },
-    "legacy_portrait_intro": {
-        "product_includes_onchain_anchor": False,
-        "auto_mint_enabled": False,
-        "opt_in_only": False,
-        "token_type": None,
-        "included_anchor_count": 0,
-        "requires_customer_public_safe_approval": False,
-    },
-    "digital_legacy_portrait": {
-        "product_includes_onchain_anchor": True,
-        "auto_mint_enabled": True,
-        "opt_in_only": False,
-        "token_type": "portrait_anchor",
-        "included_anchor_count": 1,
-        "requires_customer_public_safe_approval": True,
-    },
-    "household_foundation": {
-        "product_includes_onchain_anchor": True,
-        "auto_mint_enabled": True,
-        "opt_in_only": False,
-        "token_type": "household_anchor",
-        "included_anchor_count": 1,
-        "requires_customer_public_safe_approval": True,
-    },
-    "heirloom_legacy_tree": {
-        "product_includes_onchain_anchor": True,
-        "auto_mint_enabled": True,
-        "opt_in_only": False,
-        "token_type": "household_anchor",
-        "included_anchor_count": 1,
-        "requires_customer_public_safe_approval": True,
-    },
-    "legacy_plus": {
-        "product_includes_onchain_anchor": True,
-        "auto_mint_enabled": True,
-        "opt_in_only": False,
-        "token_type": "household_anchor",
-        "included_anchor_count": 1,
-        "requires_customer_public_safe_approval": True,
-    },
-    "family_estate_concierge": {
-        "product_includes_onchain_anchor": True,
-        "auto_mint_enabled": True,
-        "opt_in_only": False,
-        "token_type": "branch_anchor",
-        "included_anchor_count": 3,
-        "requires_customer_public_safe_approval": True,
-    },
-    "command_structure_network": {
-        "product_includes_onchain_anchor": True,
-        "auto_mint_enabled": False,
-        "opt_in_only": True,
-        "token_type": "organization_anchor",
-        "included_anchor_count": 1,
-        "requires_customer_public_safe_approval": True,
-    },
-}
-
-
 def _normalize(value: Any) -> str:
     return str(value or "").strip()
 
@@ -105,14 +41,14 @@ def _get_project(project_id: str) -> dict[str, Any] | None:
 
 
 def _package_code_from_project(project: dict[str, Any]) -> str:
-    package = get_package(
+    identity = resolve_package_identity(
         _normalize(
             project.get("package_code")
             or project.get("package_slug")
             or project.get("package_type")
         )
     )
-    return _normalize((package or {}).get("package_code")) or _normalize(
+    return _normalize(identity.get("package_code")) or _normalize(
         project.get("package_code")
         or project.get("package_slug")
         or project.get("package_type")
@@ -120,10 +56,8 @@ def _package_code_from_project(project: dict[str, Any]) -> str:
 
 
 def _package_lane_from_project(project: dict[str, Any]) -> str:
-    package = get_package(_package_code_from_project(project))
-    return _normalize((package or {}).get("package_lane")) or _normalize(
-        project.get("project_lane")
-    )
+    identity = resolve_package_identity(_package_code_from_project(project))
+    return _normalize(identity.get("lane")) or _normalize(project.get("project_lane"))
 
 
 def _runtime_enabled(token_type: str | None) -> bool:
@@ -143,31 +77,29 @@ def _project_has_build_state(project: dict[str, Any]) -> bool:
 
 
 def get_package_mint_policy(package_code: str) -> dict[str, Any]:
-    package = get_package(package_code)
-    normalized_code = _normalize((package or {}).get("package_code")) or _normalize(
-        package_code
-    )
-    package_name = _normalize((package or {}).get("display_name")) or normalized_code
-    package_lane = _normalize((package or {}).get("package_lane"))
-
-    base_policy = PACKAGE_MINT_POLICIES.get(
-        normalized_code,
-        {
-            "product_includes_onchain_anchor": False,
-            "auto_mint_enabled": False,
-            "opt_in_only": False,
-            "token_type": None,
-            "included_anchor_count": 0,
-            "requires_customer_public_safe_approval": False,
-        },
-    )
+    identity = resolve_package_identity(package_code)
+    normalized_code = _normalize(identity.get("package_code")) or _normalize(package_code)
+    package_name = _normalize(identity.get("display_name")) or normalized_code
+    package_lane = _normalize(identity.get("lane"))
+    control_profile = get_package_control_profile(normalized_code) or {}
+    base_policy = dict(control_profile.get("mint_policy") or {})
+    launch_policy = dict(control_profile.get("launch_policy") or {})
 
     token_type = base_policy.get("token_type")
 
     return {
         "package_code": normalized_code,
+        "package_slug": normalized_code,
         "package_name": package_name,
         "package_lane": package_lane,
+        "anchor_type": control_profile.get("anchor_type"),
+        "launch_policy": {
+            "allows_automatic_anchor": bool(launch_policy.get("allows_automatic_anchor")),
+            "requires_runtime_flag_for_auto_mint": bool(
+                launch_policy.get("requires_runtime_flag_for_auto_mint", True)
+            ),
+        },
+        "maintenance_default": control_profile.get("maintenance_default") or "monthly",
         "token_type": token_type,
         "product_includes_onchain_anchor": bool(
             base_policy.get("product_includes_onchain_anchor")

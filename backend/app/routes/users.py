@@ -2,7 +2,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.dependencies.auth import get_current_user, require_permission
+from app.dependencies.auth import get_current_user, require_capability, require_permission
 from app.schemas.experience import (
     AccessContextResponse,
     UserProfileResponse,
@@ -27,7 +27,7 @@ def _current_user_id(user: dict[str, Any]) -> str:
 
 
 @router.get("/", response_model=list[UserResponse])
-def get_users(current_user: dict[str, Any] = Depends(require_permission("admin.access"))):
+def get_users(current_user: dict[str, Any] = Depends(require_permission("admin.users.read"))):
     users = list_users()
     return [build_user_response(user) for user in users]
 
@@ -35,7 +35,7 @@ def get_users(current_user: dict[str, Any] = Depends(require_permission("admin.a
 @router.post("/", response_model=UserResponse)
 def create_user_route(
     payload: UserCreate,
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_capability("manage_users_full")),
 ):
     user = create_user(payload)
     return build_user_response(user)

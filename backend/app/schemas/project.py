@@ -3,6 +3,9 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from app.core.package_catalog import get_package, normalize_package_code
+from app.core.package_type_catalog import normalize_package_type
+
 
 class ProjectCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=150)
@@ -71,7 +74,14 @@ def build_project_response(data: dict[str, Any]) -> ProjectResponse:
         "unknown",
     )
 
-    project_lane = _as_string(data.get("project_lane"), "unknown")
+    project_lane = _as_string(data.get("project_lane"))
+    if not project_lane or project_lane == "unknown":
+        resolved_code = normalize_package_code(package_code) if package_code != "unknown" else ""
+        pkg = get_package(resolved_code) if resolved_code else None
+        if pkg:
+            project_lane = normalize_package_type(pkg.get("package_lane")) or "unknown"
+        else:
+            project_lane = "unknown"
 
     return ProjectResponse(
         id=_as_string(data.get("_id")),

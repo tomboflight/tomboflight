@@ -1,14 +1,27 @@
 from __future__ import annotations
 
+import hashlib
 import secrets
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from bson import ObjectId
 
+from app.config import settings
 from app.core.package_catalog import get_package
 from app.database import get_database
+from app.services.audit_log_service import create_audit_log
 from app.services.entitlement_service import resolve_project_entitlements
+from app.services.project_membership_service import (
+    get_project_access_snapshot,
+    list_accessible_project_ids,
+)
+
+ALLOWED_KEY_TYPES = {
+    "household_invite_key",
+    "branch_link_key",
+    "viewer_share_key",
+}
 
 
 def _utcnow_iso() -> str:
@@ -56,6 +69,31 @@ def _normalize_value(value: Any) -> str:
     return str(value or "").strip()
 
 
+def _utcnow() -> datetime:
+    return datetime.now(UTC)
+
+
+def _hash_link_key(raw_value: str) -> str:
+    payload = f"{settings.secret_key}:link-key:{_normalize_value(raw_value)}".encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _link_key_preview(raw_value: str) -> str:
+    del raw_value
+    return "********"
+
+
+def _is_expired(document: dict[str, Any]) -> bool:
+    expires_at = _normalize_value(document.get("expires_at"))
+    if not expires_at:
+        return False
+    try:
+        expires_dt = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+    except Exception:
+        return False
+    return expires_dt < _utcnow()
+
+
 def _project_id_candidates(project_id: str) -> list[Any]:
     values: list[Any] = [str(project_id)]
     oid = _to_object_id(project_id)
@@ -95,19 +133,33 @@ def _serialize_key(document: dict[str, Any] | None) -> dict[str, Any] | None:
     if not document:
         return None
 
+    key_value = document.get("key_value")
+    key_preview = document.get("key_preview")
+    if not key_preview and key_value:
+        key_preview = _link_key_preview(str(key_value))
     return {
         "_id": document.get("_id"),
         "id": str(document.get("_id")),
+        "key_type": str(document.get("key_type") or "branch_link_key"),
         "project_id": str(document.get("project_id") or ""),
         "user_id": str(document.get("user_id") or ""),
+        "issuer_user_id": str(document.get("issuer_user_id") or document.get("user_id") or "") or None,
+        "target_email": _normalize_value(document.get("target_email")) or None,
+        "allowed_role": _normalize_value(document.get("allowed_role")) or None,
         "package_code": document.get("package_code"),
         "package_name": document.get("package_name"),
         "package_lane": document.get("package_lane"),
-        "key_value": document.get("key_value"),
+        "key_value": str(key_value or ""),
+        "key_preview": _normalize_value(key_preview) or None,
+        "key_hash": _normalize_value(document.get("key_hash")) or None,
         "status": document.get("status", "active"),
         "created_at": document.get("created_at"),
         "updated_at": document.get("updated_at"),
         "revoked_at": document.get("revoked_at"),
+        "expires_at": document.get("expires_at"),
+        "expired_at": document.get("expired_at"),
+        "max_uses": int(document.get("max_uses") or 1),
+        "use_count": int(document.get("use_count") or 0),
     }
 
 
@@ -161,6 +213,24 @@ def get_project_summary(project_id: str) -> dict[str, Any] | None:
         "household_id": str(project.get("household_id") or "").strip() or None,
         "family_id": str(project.get("family_id") or "").strip() or None,
     }
+
+
+def _can_user_access_project(
+    project_id: str,
+    *,
+    user_id: str = "",
+    user_email: str = "",
+) -> bool:
+    project = get_project_by_id(project_id)
+    if not project:
+        return False
+
+    access_snapshot = get_project_access_snapshot(
+        project,
+        user_id=str(user_id or "").strip(),
+        email=str(user_email or "").strip().lower(),
+    )
+    return bool(access_snapshot.get("accessible"))
 
 
 def _get_project_entitlement(project_id: str) -> dict[str, Any] | None:
@@ -259,115 +329,95 @@ def project_supports_link_keys(project_id: str) -> bool:
     return bool(package.get("can_use_link_keys", False))
 
 
-def user_can_access_project(project_id: str, user_id: str) -> bool:
+def user_can_access_project(
+    project_id: str,
+    user_id: str,
+    user_email: str = "",
+) -> bool:
+    summary = get_project_summary(project_id)
+    if not summary:
+        return False
+
+    if not _can_user_access_project(
+        project_id,
+        user_id=user_id,
+        user_email=user_email,
+    ):
+        return False
     project = get_project_by_id(project_id)
     if not project:
         return False
-
-    resolved_user_id, resolved_user_email = _load_user_identity(user_id)
-    owner_user_id = _normalize_value(project.get("owner_user_id"))
-    owner_email = _normalize_value(project.get("owner_email")).lower()
-
-    has_direct_access = bool(
-        resolved_user_id and resolved_user_id == owner_user_id
-    ) or bool(
-        resolved_user_email and resolved_user_email == owner_email
-    )
-
-    family_id = _normalize_value(project.get("family_id"))
-    if not has_direct_access and family_id:
-        family = None
-        if ObjectId.is_valid(family_id):
-            family = _families_collection().find_one({"_id": ObjectId(family_id)})
-        if family is None:
-            family = _families_collection().find_one({"family_id": family_id})
-        has_direct_access = _family_allows_user_access(
-            family,
-            user_id=resolved_user_id,
-            user_email=resolved_user_email,
-        )
-
-    if not has_direct_access:
-        return False
-
     return _project_has_access_signal(str(project.get("_id")), project)
 
 
-def list_owned_project_ids(user_id: str) -> list[str]:
-    resolved_user_id, resolved_user_email = _load_user_identity(user_id)
-    if not resolved_user_id and not resolved_user_email:
-        return []
+def list_accessible_link_key_project_ids(
+    user_id: str,
+    user_email: str = "",
+) -> list[str]:
+    project_ids: list[str] = []
+    seen: set[str] = set()
 
-    identity_filters: list[dict[str, Any]] = []
-    if resolved_user_id:
-        identity_filters.append({"owner_user_id": resolved_user_id})
-    if resolved_user_email:
-        identity_filters.append({"owner_email": resolved_user_email})
+    normalized_user_id = str(user_id or "").strip()
+    normalized_user_email = str(user_email or "").strip().lower()
 
-    project_ids: set[str] = set()
-
-    if identity_filters:
-        for item in _projects_collection().find({"$or": identity_filters}, {"_id": 1}):
-            project_id = _normalize_value(item.get("_id"))
-            if project_id:
-                project_ids.add(project_id)
-
-    family_filters: list[dict[str, Any]] = []
-    if resolved_user_id:
-        family_filters.append({"shared_with_user_ids": resolved_user_id})
-    if resolved_user_email:
-        family_filters.append({"shared_with_emails": resolved_user_email})
-
-    if family_filters:
-        shared_family_ids: set[str] = set()
-        shared_project_ids: set[str] = set()
-        for family in _families_collection().find(
-            {"$or": family_filters},
-            {"_id": 1, "project_id": 1},
+    for project_id in list_accessible_project_ids(
+        user_id=normalized_user_id,
+        email=normalized_user_email,
+    ):
+        if project_id not in seen and user_can_access_project(
+            project_id,
+            normalized_user_id,
+            normalized_user_email,
         ):
-            family_id = _normalize_value(family.get("_id"))
-            project_id = _normalize_value(family.get("project_id"))
-            if family_id:
-                shared_family_ids.add(family_id)
-            if project_id:
-                shared_project_ids.add(project_id)
+            seen.add(project_id)
+            project_ids.append(project_id)
 
-        if shared_project_ids:
-            lookup_values: list[Any] = []
-            for project_id in shared_project_ids:
-                lookup_values.append(project_id)
-                if ObjectId.is_valid(project_id):
-                    lookup_values.append(ObjectId(project_id))
-            for item in _projects_collection().find({"_id": {"$in": lookup_values}}, {"_id": 1}):
-                project_id = _normalize_value(item.get("_id"))
-                if project_id:
-                    project_ids.add(project_id)
+    owner_filters = [
+        *([{"owner_user_id": normalized_user_id}] if normalized_user_id else []),
+        *([{"owner_email": normalized_user_email}] if normalized_user_email else []),
+    ]
 
-        if shared_family_ids:
-            for item in _projects_collection().find(
-                {"family_id": {"$in": list(shared_family_ids)}},
-                {"_id": 1},
+    if owner_filters:
+        cursor = _projects_collection().find({"$or": owner_filters})
+        for item in cursor:
+            project_id = str(item.get("_id") or "")
+            if project_id and project_id not in seen and user_can_access_project(
+                project_id,
+                normalized_user_id,
+                normalized_user_email,
             ):
-                project_id = _normalize_value(item.get("_id"))
-                if project_id:
-                    project_ids.add(project_id)
+                seen.add(project_id)
+                project_ids.append(project_id)
 
-    accessible_project_ids: list[str] = []
-    for project_id in sorted(project_ids):
-        if user_can_access_project(project_id, resolved_user_id):
-            accessible_project_ids.append(project_id)
-
-    return accessible_project_ids
+    return project_ids
 
 
 def get_active_key_doc_for_project(project_id: str) -> dict[str, Any] | None:
-    return _keys_collection().find_one(
+    active = _keys_collection().find_one(
         {
             "project_id": str(project_id),
             "status": "active",
         },
         sort=[("created_at", -1)],
     )
+    if active and _is_expired(active):
+        now = _utcnow_iso()
+        _keys_collection().update_one(
+            {"_id": active["_id"]},
+            {"$set": {"status": "expired", "expired_at": now, "updated_at": now}},
+        )
+        try:
+            create_audit_log(
+                "link_key_expired",
+                None,
+                "project_link_key",
+                str(active.get("_id")),
+                {"project_id": _normalize_value(active.get("project_id"))},
+            )
+        except Exception:
+            pass
+        return None
+    return active
 
 
 def get_active_key_for_project(project_id: str) -> dict[str, Any] | None:
@@ -375,26 +425,61 @@ def get_active_key_for_project(project_id: str) -> dict[str, Any] | None:
 
 
 def get_key_doc_by_value(key_value: str) -> dict[str, Any] | None:
-    return _keys_collection().find_one(
-        {
-            "key_value": str(key_value or "").strip(),
-            "status": "active",
-        }
-    )
+    normalized = str(key_value or "").strip()
+    if not normalized:
+        return None
+    key_hash = _hash_link_key(normalized)
+    document = _keys_collection().find_one({"key_hash": key_hash, "status": "active"})
+    if document is None:
+        document = _keys_collection().find_one({"key_value": normalized, "status": "active"})
+        if document is not None:
+            now = _utcnow_iso()
+            _keys_collection().update_one(
+                {"_id": document["_id"]},
+                {
+                    "$set": {
+                        "key_hash": key_hash,
+                        "key_preview": _link_key_preview(normalized),
+                        "key_value": None,
+                        "updated_at": now,
+                    }
+                },
+            )
+            document["key_hash"] = key_hash
+            document["key_preview"] = _link_key_preview(normalized)
+    if document is not None and _is_expired(document):
+        now = _utcnow_iso()
+        _keys_collection().update_one(
+            {"_id": document["_id"]},
+            {"$set": {"status": "expired", "expired_at": now, "updated_at": now}},
+        )
+        try:
+            create_audit_log(
+                "link_key_expired",
+                None,
+                "project_link_key",
+                str(document.get("_id")),
+                {"project_id": _normalize_value(document.get("project_id"))},
+            )
+        except Exception:
+            pass
+        return None
+    return document
 
 
 def list_link_keys_for_user(
     user_id: str,
     *,
+    user_email: str = "",
     project_id: str | None = None,
     include_revoked: bool = True,
 ) -> list[dict[str, Any]]:
     if project_id:
-        if not user_can_access_project(project_id, user_id):
+        if not user_can_access_project(project_id, user_id, user_email):
             return []
         owned_project_ids = [str(project_id)]
     else:
-        owned_project_ids = list_owned_project_ids(user_id)
+        owned_project_ids = list_accessible_link_key_project_ids(user_id, user_email)
 
     if not owned_project_ids:
         return []
@@ -415,9 +500,17 @@ def generate_link_key(
     *,
     project_id: str,
     user_id: str,
+    user_email: str = "",
     allow_admin: bool = False,
+    key_type: str = "branch_link_key",
+    target_email: str = "",
+    allowed_role: str = "",
+    max_uses: int = 1,
 ) -> dict[str, Any]:
-    if not allow_admin and not user_can_access_project(project_id, user_id):
+    normalized_key_type = _normalize_value(key_type).lower() or "branch_link_key"
+    if normalized_key_type not in ALLOWED_KEY_TYPES:
+        raise ValueError("Invalid key type.")
+    if not allow_admin and not user_can_access_project(project_id, user_id, user_email):
         raise PermissionError("Not authorized to generate a link key for this project.")
 
     if not project_supports_link_keys(project_id):
@@ -431,38 +524,61 @@ def generate_link_key(
     now = _utcnow_iso()
 
     keys.update_many(
-        {"project_id": str(project_id), "status": "active"},
-        {
-            "$set": {
-                "status": "revoked",
-                "revoked_at": now,
-                "updated_at": now,
-            }
-        },
+        {"project_id": str(project_id), "status": "active", "key_type": normalized_key_type},
+        {"$set": {"status": "revoked", "revoked_at": now, "updated_at": now}},
     )
 
     document = {
+        "key_type": normalized_key_type,
         "project_id": str(project_id),
         "user_id": str(user_id),
+        "issuer_user_id": str(user_id),
+        "target_email": _normalize_value(target_email).lower() or None,
+        "allowed_role": _normalize_value(allowed_role) or None,
         "package_code": project_summary.get("package_code"),
         "package_name": project_summary.get("package_name"),
         "package_lane": project_summary.get("package_lane"),
-        "key_value": _generate_raw_link_key(),
+        "key_value": None,
+        "key_hash": None,
+        "key_preview": None,
         "status": "active",
         "created_at": now,
         "updated_at": now,
         "revoked_at": None,
+        "expires_at": None,
+        "expired_at": None,
+        "max_uses": max(1, int(max_uses or 1)),
+        "use_count": 0,
     }
+    raw_key = _generate_raw_link_key()
+    document["key_hash"] = _hash_link_key(raw_key)
+    document["key_preview"] = _link_key_preview(raw_key)
+    expiration_hours = max(0, int(settings.link_key_expire_hours or 0))
+    if expiration_hours > 0:
+        document["expires_at"] = (_utcnow() + timedelta(hours=expiration_hours)).isoformat()
 
     result = keys.insert_one(document)
     document["_id"] = result.inserted_id
-    return _serialize_key(document) or {}
+    try:
+        create_audit_log(
+            "link_key_created",
+            str(user_id or "") or None,
+            "project_link_key",
+            str(result.inserted_id),
+            {"project_id": str(project_id), "key_type": normalized_key_type},
+        )
+    except Exception:
+        pass
+    serialized = _serialize_key(document) or {}
+    serialized["key_value"] = raw_key
+    return serialized
 
 
 def revoke_link_key(
     *,
     key_id: str,
     actor_user_id: str,
+    actor_user_email: str = "",
     allow_admin: bool = False,
 ) -> dict[str, Any] | None:
     oid = _to_object_id(key_id)
@@ -475,7 +591,11 @@ def revoke_link_key(
         return None
 
     project_id = str(document.get("project_id") or "")
-    if not allow_admin and not user_can_access_project(project_id, actor_user_id):
+    if not allow_admin and not user_can_access_project(
+        project_id,
+        actor_user_id,
+        actor_user_email,
+    ):
         raise PermissionError("Not authorized to revoke this link key.")
 
     now = _utcnow_iso()
@@ -491,4 +611,14 @@ def revoke_link_key(
     )
 
     updated = keys.find_one({"_id": oid})
+    try:
+        create_audit_log(
+            "link_key_revoked",
+            str(actor_user_id or "") or None,
+            "project_link_key",
+            str(oid),
+            {"project_id": project_id},
+        )
+    except Exception:
+        pass
     return _serialize_key(updated)

@@ -3,8 +3,12 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 
-from app.dependencies.auth import get_current_user, require_permission
+from app.dependencies.auth import (
+    get_current_user,
+    has_internal_admin_access,
+)
 from app.schemas.link_key import LinkKeyResponse, build_link_key_response
 from app.services.link_key_service import (
     generate_link_key,
@@ -16,20 +20,12 @@ from app.services.link_key_service import (
 
 router = APIRouter(prefix="/link-keys", tags=["Link Keys"])
 
-INTERNAL_ADMIN_KEYS = {
-    "admin",
-    "super_admin",
-    "root_admin",
-    "platform_admin",
-    "operations_admin",
-    "finance_admin",
-    "marketing_admin",
-    "executive_technology",
-    "operations",
-    "finance",
-    "marketing",
-}
 
+class LinkKeyGeneratePayload(BaseModel):
+    key_type: str = Field(default="branch_link_key", min_length=1, max_length=50)
+    target_email: str = Field(default="", max_length=320)
+    allowed_role: str = Field(default="", max_length=50)
+    max_uses: int = Field(default=1, ge=1, le=20)
 
 def _current_user_id(user: dict[str, Any]) -> str:
     raw_id = user.get("id") or user.get("_id") or user.get("user_id")
@@ -41,15 +37,12 @@ def _current_user_id(user: dict[str, Any]) -> str:
     return str(raw_id)
 
 
-def _is_admin(user: dict[str, Any]) -> bool:
-    role = str(user.get("role") or "").strip().lower()
-    access_tier = str(user.get("access_tier") or "").strip().lower()
-    department_role = str(user.get("department_role") or "").strip().lower()
+def _current_user_email(user: dict[str, Any]) -> str:
+    return str(user.get("email") or "").strip().lower()
 
-    return any(
-        value in INTERNAL_ADMIN_KEYS
-        for value in (role, access_tier, department_role)
-    )
+
+def _is_admin(user: dict[str, Any]) -> bool:
+    return has_internal_admin_access(user)
 
 
 @router.get("/my-list")
@@ -58,7 +51,13 @@ def list_my_link_keys(
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
     user_id = _current_user_id(current_user)
-    items = list_link_keys_for_user(user_id, project_id=project_id, include_revoked=True)
+    user_email = _current_user_email(current_user)
+    items = list_link_keys_for_user(
+        user_id,
+        user_email=user_email,
+        project_id=project_id,
+        include_revoked=True,
+    )
     return {"items": [build_link_key_response(item) for item in items]}
 
 
@@ -68,9 +67,10 @@ def get_my_active_link_key(
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
     user_id = _current_user_id(current_user)
+    user_email = _current_user_email(current_user)
     allow_admin = _is_admin(current_user)
 
-    if not allow_admin and not user_can_access_project(project_id, user_id):
+    if not allow_admin and not user_can_access_project(project_id, user_id, user_email):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to access this project link key.",
@@ -89,16 +89,23 @@ def get_my_active_link_key(
 @router.post("/project/{project_id}/generate", response_model=LinkKeyResponse)
 def generate_project_link_key(
     project_id: str,
+    payload: LinkKeyGeneratePayload | None = None,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
     user_id = _current_user_id(current_user)
+    user_email = _current_user_email(current_user)
     allow_admin = _is_admin(current_user)
 
     try:
         item = generate_link_key(
             project_id=project_id,
             user_id=user_id,
+            user_email=user_email,
             allow_admin=allow_admin,
+            key_type=(payload.key_type if payload else "branch_link_key"),
+            target_email=(payload.target_email if payload else ""),
+            allowed_role=(payload.allowed_role if payload else ""),
+            max_uses=(payload.max_uses if payload else 1),
         )
         return build_link_key_response(item)
     except PermissionError as exc:
@@ -119,12 +126,14 @@ def revoke_project_link_key(
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
     user_id = _current_user_id(current_user)
+    user_email = _current_user_email(current_user)
     allow_admin = _is_admin(current_user)
 
     try:
         item = revoke_link_key(
             key_id=key_id,
             actor_user_id=user_id,
+            actor_user_email=user_email,
             allow_admin=allow_admin,
         )
     except PermissionError as exc:

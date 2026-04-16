@@ -43,6 +43,78 @@ class Settings(BaseSettings):
         default=60,
         validation_alias=AliasChoices("ACCESS_TOKEN_EXPIRE_MINUTES"),
     )
+    csrf_token_expire_minutes: int = Field(
+        default=120,
+        validation_alias=AliasChoices("CSRF_TOKEN_EXPIRE_MINUTES"),
+    )
+    auth_rate_limit_window_seconds: int = Field(
+        default=60,
+        validation_alias=AliasChoices("AUTH_RATE_LIMIT_WINDOW_SECONDS"),
+    )
+    auth_login_rate_limit: int = Field(
+        default=10,
+        validation_alias=AliasChoices("AUTH_LOGIN_RATE_LIMIT"),
+    )
+    auth_password_reset_request_rate_limit: int = Field(
+        default=5,
+        validation_alias=AliasChoices("AUTH_PASSWORD_RESET_REQUEST_RATE_LIMIT"),
+    )
+    auth_password_reset_confirm_rate_limit: int = Field(
+        default=10,
+        validation_alias=AliasChoices("AUTH_PASSWORD_RESET_CONFIRM_RATE_LIMIT"),
+    )
+    auth_mfa_verify_rate_limit: int = Field(
+        default=10,
+        validation_alias=AliasChoices("AUTH_MFA_VERIFY_RATE_LIMIT"),
+    )
+    auth_failure_lockout_threshold: int = Field(
+        default=5,
+        validation_alias=AliasChoices("AUTH_FAILURE_LOCKOUT_THRESHOLD"),
+    )
+    auth_failure_lockout_seconds: int = Field(
+        default=300,
+        validation_alias=AliasChoices("AUTH_FAILURE_LOCKOUT_SECONDS"),
+    )
+    mfa_totp_issuer: str = Field(
+        default="Tomb of Light",
+        validation_alias=AliasChoices("MFA_TOTP_ISSUER"),
+    )
+    mfa_challenge_expire_minutes: int = Field(
+        default=10,
+        validation_alias=AliasChoices("MFA_CHALLENGE_EXPIRE_MINUTES"),
+    )
+    mfa_backup_code_count: int = Field(
+        default=8,
+        validation_alias=AliasChoices("MFA_BACKUP_CODE_COUNT"),
+    )
+    mfa_totp_window: int = Field(
+        default=1,
+        validation_alias=AliasChoices("MFA_TOTP_WINDOW"),
+    )
+    link_key_expire_hours: int = Field(
+        default=0,
+        validation_alias=AliasChoices("LINK_KEY_EXPIRE_HOURS"),
+    )
+    upload_scan_command: str = Field(
+        default="",
+        validation_alias=AliasChoices("UPLOAD_SCAN_COMMAND"),
+    )
+    upload_scan_hook: str = Field(
+        default="",
+        validation_alias=AliasChoices("UPLOAD_SCAN_HOOK"),
+    )
+    upload_scan_fail_closed: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("UPLOAD_SCAN_FAIL_CLOSED"),
+    )
+    upload_quarantine_dir: str = Field(
+        default="storage/quarantine",
+        validation_alias=AliasChoices("UPLOAD_QUARANTINE_DIR"),
+    )
+    upload_allow_admin_quarantine_override: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("UPLOAD_ALLOW_ADMIN_QUARANTINE_OVERRIDE"),
+    )
 
     stripe_secret_key: str = Field(
         default="",
@@ -76,11 +148,6 @@ class Settings(BaseSettings):
         default="https://tomboflight.com/account-security.html",
         validation_alias=AliasChoices("PASSWORD_RESET_BASE_URL"),
     )
-    password_reset_preview_enabled: bool = Field(
-        default=False,
-        validation_alias=AliasChoices("PASSWORD_RESET_PREVIEW_ENABLED"),
-    )
-
     nft_chain: str = Field(
         default="base-mainnet",
         validation_alias=AliasChoices("NFT_CHAIN"),
@@ -120,6 +187,10 @@ class Settings(BaseSettings):
     nft_org_mint_enabled: bool = Field(
         default=False,
         validation_alias=AliasChoices("NFT_ORG_MINT_ENABLED"),
+    )
+    nft_auto_mint_on_review_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("NFT_AUTO_MINT_ON_REVIEW_ENABLED"),
     )
     nft_token_name_prefix: str = Field(
         default="Tomb of Light Legacy Anchor",
@@ -243,30 +314,22 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("PUBLIC_STORAGE_DIR"),
     )
 
-    # Email / SMTP
-    email_sender: str = Field(
+    # Email / Postmark
+    postmark_server_token: str = Field(
+        default="",
+        validation_alias=AliasChoices("POSTMARK_SERVER_TOKEN", "POSTMARK_API_TOKEN"),
+    )
+    postmark_from_email: str = Field(
         default="admin@tomboflight.com",
-        validation_alias=AliasChoices("EMAIL_SENDER"),
+        validation_alias=AliasChoices("POSTMARK_FROM_EMAIL"),
     )
-    smtp_host: str = Field(
-        default="",
-        validation_alias=AliasChoices("SMTP_HOST"),
+    postmark_from_name: str = Field(
+        default="Tomb of Light Security",
+        validation_alias=AliasChoices("POSTMARK_FROM_NAME"),
     )
-    smtp_port: int = Field(
-        default=0,
-        validation_alias=AliasChoices("SMTP_PORT"),
-    )
-    smtp_username: str = Field(
-        default="",
-        validation_alias=AliasChoices("SMTP_USERNAME"),
-    )
-    smtp_password: str = Field(
-        default="",
-        validation_alias=AliasChoices("SMTP_PASSWORD"),
-    )
-    smtp_use_tls: bool = Field(
-        default=True,
-        validation_alias=AliasChoices("SMTP_USE_TLS"),
+    postmark_message_stream: str = Field(
+        default="outbound",
+        validation_alias=AliasChoices("POSTMARK_MESSAGE_STREAM"),
     )
 
     allowed_origins: str = Field(

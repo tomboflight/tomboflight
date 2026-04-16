@@ -8,29 +8,30 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.config import settings
 from app.core.package_catalog import get_package
-from app.core.security import decode_access_token
+from app.core.role_catalog import (
+    INTERNAL_ADMIN_ROLE_CODES,
+    SUPER_ADMIN_ROLE_CODES,
+    collect_role_codes,
+    has_internal_admin_role,
+    normalize_role_code,
+)
+from app.core.security import decode_access_token, verify_csrf_token
 from app.database import get_database
 from app.services.audit_log_service import write_audit_log
 from app.services.auth_service import get_user_by_email
 from app.services.control_layer_service import create_workflow_event
 from app.services.order_service import get_orders_for_user
 from app.services.project_entitlement_service import list_user_project_entitlements
+from app.services.project_membership_service import (
+    get_project_access_snapshot,
+    list_accessible_project_ids,
+)
 
 COOKIE_NAME = "tol_access_token"
+CSRF_COOKIE_NAME = "tol_csrf_token"
 
-INTERNAL_ADMIN_KEYS = {
-    "admin",
-    "super_admin",
-    "root_admin",
-    "platform_admin",
-    "operations_admin",
-    "finance_admin",
-    "marketing_admin",
-    "executive_technology",
-    "operations",
-    "finance",
-    "marketing",
-}
+INTERNAL_ADMIN_KEYS = set(INTERNAL_ADMIN_ROLE_CODES)
+SUPER_ADMIN_KEYS = set(SUPER_ADMIN_ROLE_CODES)
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -87,6 +88,19 @@ def _is_public_password_reset_route(request: Request) -> bool:
     }
 
 
+def _is_cookie_csrf_exempt_route(request: Request) -> bool:
+    path = str(request.url.path or "").rstrip("/")
+    return path in {
+        "/auth/logout",
+        "/auth/mfa/enroll/begin",
+        "/auth/mfa/enroll/verify",
+        "/auth/mfa/login/verify",
+        "/auth/password-reset/request",
+        "/auth/password-reset/confirm",
+        "/webhooks/stripe",
+    }
+
+
 def _allowed_cookie_auth_origins() -> set[str]:
     configured = settings.allowed_origins_list or []
     normalized = {
@@ -124,6 +138,25 @@ def _enforce_cookie_auth_origin(request: Request) -> None:
         )
 
 
+def _enforce_cookie_auth_csrf(request: Request, *, user_id: str) -> None:
+    if not _is_unsafe_method(request.method):
+        return
+    if _is_cookie_csrf_exempt_route(request):
+        return
+    header_token = str(request.headers.get("x-csrf-token") or "").strip()
+    cookie_token = str(request.cookies.get(CSRF_COOKIE_NAME) or "").strip()
+    if not header_token or not cookie_token or header_token != cookie_token:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="CSRF validation failed for cookie-authenticated request.",
+        )
+    if not verify_csrf_token(cookie_token, user_id=user_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="CSRF token is invalid or expired.",
+        )
+
+
 def _get_token_from_request(
     request: Request,
     credentials: HTTPAuthorizationCredentials | None,
@@ -139,16 +172,21 @@ def _get_token_from_request(
 
 
 def _has_internal_admin_access(user: dict[str, Any]) -> bool:
-    values = {
-        _normalize_value(user.get("role")),
-        _normalize_value(user.get("access_tier")),
-        _normalize_value(user.get("department_role")),
-    }
-    return any(value in INTERNAL_ADMIN_KEYS for value in values if value)
+    return has_internal_admin_role(
+        (
+            user.get("role"),
+            user.get("access_tier"),
+            user.get("department_role"),
+        )
+    )
 
 
 def has_internal_admin_access(user: dict[str, Any]) -> bool:
     return _has_internal_admin_access(user)
+
+
+def is_customer_account(user: dict[str, Any]) -> bool:
+    return not has_internal_admin_access(user)
 
 
 def _current_user_id(user: dict[str, Any]) -> str:
@@ -210,10 +248,11 @@ def _list_active_entitlements_for_user(user_id: str) -> list[dict[str, Any]]:
 
 
 def get_user_package_capabilities(user: dict[str, Any]) -> set[str]:
-    if has_internal_admin_access(user):
-        return {"*"}
-
     capabilities: set[str] = set()
+
+    if not is_customer_account(user):
+        return capabilities
+
     user_id = _current_user_id(user)
 
     if user_id:
@@ -242,18 +281,30 @@ def get_user_package_capabilities(user: dict[str, Any]) -> set[str]:
     return capabilities
 
 
-def has_package_capability(user: dict[str, Any], capability: str) -> bool:
-    if has_internal_admin_access(user):
+def has_package_capability(
+    user: dict[str, Any],
+    capability: str,
+    *,
+    allow_internal_admin: bool = False,
+) -> bool:
+    if allow_internal_admin and has_internal_admin_access(user):
         return True
 
     normalized_capability = _normalize_value(capability)
     if not normalized_capability:
         return False
 
+    if not is_customer_account(user):
+        return False
+
     return normalized_capability in get_user_package_capabilities(user)
 
 
-def has_any_package_capability(user: dict[str, Any], *capabilities: str) -> bool:
+def has_any_package_capability(
+    user: dict[str, Any],
+    *capabilities: str,
+    allow_internal_admin: bool = False,
+) -> bool:
     normalized_capabilities = [
         _normalize_value(capability)
         for capability in capabilities
@@ -262,8 +313,11 @@ def has_any_package_capability(user: dict[str, Any], *capabilities: str) -> bool
     if not normalized_capabilities:
         return False
 
-    if has_internal_admin_access(user):
+    if allow_internal_admin and has_internal_admin_access(user):
         return True
+
+    if not is_customer_account(user):
+        return False
 
     user_capabilities = get_user_package_capabilities(user)
     return any(capability in user_capabilities for capability in normalized_capabilities)
@@ -274,8 +328,13 @@ def require_package_capability(
     capability: str,
     *,
     detail: str = "Your active package does not include this feature.",
+    allow_internal_admin: bool = False,
 ) -> dict[str, Any]:
-    if not has_package_capability(user, capability):
+    if not has_package_capability(
+        user,
+        capability,
+        allow_internal_admin=allow_internal_admin,
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=detail,
@@ -287,8 +346,13 @@ def require_any_package_capability(
     user: dict[str, Any],
     *capabilities: str,
     detail: str = "Your active package does not include this feature.",
+    allow_internal_admin: bool = False,
 ) -> dict[str, Any]:
-    if not has_any_package_capability(user, *capabilities):
+    if not has_any_package_capability(
+        user,
+        *capabilities,
+        allow_internal_admin=allow_internal_admin,
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=detail,
@@ -358,6 +422,35 @@ def get_current_user(
             detail="User is inactive.",
         )
 
+    payload_token_version = _normalize_value(payload.get("tv"))
+    user_token_version = _normalize_value(normalized_user.get("session_token_version") or 0)
+    # Backward compatibility: legacy tokens issued before token-version support
+    # may not include "tv". We only permit missing version when the account has
+    # never been version-bumped (still at zero).
+    token_version_missing_for_legacy_user = (
+        payload_token_version == "" and user_token_version == "0"
+    )
+    if payload_token_version != user_token_version and not token_version_missing_for_legacy_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session has been revoked. Please log in again.",
+        )
+
+    if _has_internal_admin_access(normalized_user) and bool(
+        normalized_user.get("mfa_enabled")
+    ):
+        if not bool(payload.get("mfa")):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="MFA verification is required for this session.",
+            )
+
+    if source == "cookie":
+        _enforce_cookie_auth_csrf(
+            request,
+            user_id=_current_user_id(normalized_user) or _current_user_email(normalized_user),
+        )
+
     return normalized_user
 
 
@@ -370,29 +463,119 @@ def require_admin(current_user: dict[str, Any] = Depends(get_current_user)) -> d
     return current_user
 
 
+def require_super_admin(
+    request: Request,
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+    context = _get_or_resolve_access_context(
+        current_user,
+        project_id=_extract_project_id_from_request(request),
+    )
+    role_codes = {
+        _normalize_value(role_code)
+        for role_code in (context.get("role_codes") or [])
+        if _normalize_value(role_code)
+    }
+    role_codes.update(
+        collect_role_codes(
+            (
+                current_user.get("role"),
+                current_user.get("access_tier"),
+                current_user.get("department_role"),
+            )
+        )
+    )
+    if role_codes.intersection(SUPER_ADMIN_KEYS):
+        return current_user
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Super Admin role is required.",
+    )
+
+
+ROLE_CAPABILITIES: dict[str, set[str]] = {
+    # Deprecated generic admin role: no implicit capability grants.
+    "admin": set(),
+    "super_admin": {"*"},
+    "operations_admin": {
+        "manage_user_contact",
+        "manage_orders",
+        "manage_entitlements",
+        "manage_packages",
+        "manage_projects",
+        "manage_families",
+        "run_admin_repairs",
+        "view_audit_all",
+    },
+    "finance_admin": {
+        "manage_billing",
+        "manage_orders",
+        "view_audit_all",
+        "read_finance_scope",
+    },
+    "marketing_admin": {
+        "manage_marketing_content",
+        "read_analytics",
+    },
+    "user": set(),
+}
+
+CAPABILITY_PERMISSIONS: dict[str, set[str]] = {
+    "manage_roles": {"admin.users.write"},
+    "manage_users_full": {"admin.users.read", "admin.users.write"},
+    "manage_user_contact": {"admin.users.read", "admin.control.view", "admin.control.write"},
+    "manage_orders": {"admin.orders.read", "admin.orders.repair", "admin.control.billing"},
+    "manage_entitlements": {"admin.entitlements.read", "admin.entitlements.write"},
+    "manage_packages": {"admin.control.write"},
+    "manage_projects": {"admin.control.view", "project.workflow.transition"},
+    "manage_families": {"admin.access", "admin.intake.review", "admin.intake.write"},
+    "manage_billing": {"admin.control.billing"},
+    "manage_marketing_content": {
+        "admin.marketing.content.read",
+        "admin.marketing.content.write",
+    },
+    "view_audit_all": {"admin.audit.read"},
+    "run_admin_repairs": {"admin.control.write", "admin.control.mint"},
+    "read_finance_scope": {"admin.entitlements.read", "admin.control.view"},
+    "read_analytics": {"admin.analytics.read"},
+}
+
 LEGACY_ROLE_PERMISSIONS: dict[str, set[str]] = {
-    "admin": {
+    # Deprecated generic admin role: no implicit permission grants.
+    "admin": set(),
+    "super_admin": {"*"},
+    "operations_admin": {
         "admin.access",
+        "admin.audit.read",
+        "admin.control.view",
+        "admin.control.write",
+        "admin.control.billing",
+        "admin.control.mint",
+        "admin.entitlements.read",
+        "admin.entitlements.write",
+        "admin.intake.review",
+        "admin.intake.write",
+        "admin.orders.read",
+        "admin.orders.repair",
         "projects.create",
         "verification.review",
         "uploads.admin.review",
         "project.workflow.transition",
     },
-    "super_admin": {"*"},
-    "root_admin": {"*"},
-    "platform_admin": {"*"},
-    "operations_admin": {
-        "admin.access",
-        "verification.review",
-        "uploads.admin.review",
-        "project.workflow.transition",
+    "finance_admin": {
+        "admin.audit.read",
+        "admin.control.view",
+        "admin.control.billing",
+        "admin.entitlements.read",
+        "admin.orders.read",
+        "admin.orders.repair",
     },
-    "finance_admin": {"admin.access"},
-    "marketing_admin": {"admin.access"},
-    "executive_technology": {"*"},
-    "operations": {"admin.access", "verification.review", "uploads.admin.review"},
-    "finance": {"admin.access"},
-    "marketing": {"admin.access"},
+    "marketing_admin": {
+        "admin.marketing.content.read",
+        "admin.marketing.content.write",
+        "admin.analytics.read",
+    },
     "user": {"projects.read", "uploads.read", "uploads.write"},
 }
 
@@ -471,11 +654,9 @@ def _load_user_by_id(user_id: str) -> dict[str, Any] | None:
 
 
 def _collect_role_codes_for_user(user: dict[str, Any]) -> set[str]:
-    role_codes: set[str] = set()
-    for field_name in ("role", "access_tier", "department_role"):
-        value = _normalize_value(user.get(field_name))
-        if value:
-            role_codes.add(value)
+    role_codes = collect_role_codes(
+        user.get(field_name) for field_name in ("role", "access_tier", "department_role")
+    )
 
     user_id = _current_user_id(user)
     if user_id:
@@ -483,14 +664,40 @@ def _collect_role_codes_for_user(user: dict[str, Any]) -> set[str]:
             {"user_id": user_id, "status": {"$in": ["active", "enabled", ""]}}
         )
         for assignment in assignments:
-            role_code = _normalize_value(assignment.get("role_code"))
+            role_code = normalize_role_code(assignment.get("role_code"))
             if role_code:
                 role_codes.add(role_code)
     return role_codes
 
 
-def _collect_permissions_for_roles(role_codes: set[str]) -> set[str]:
+def _collect_capabilities_for_roles(role_codes: set[str]) -> set[str]:
+    capabilities: set[str] = set()
+    if not role_codes:
+        return capabilities
+
+    for role_code in role_codes:
+        capabilities.update(ROLE_CAPABILITIES.get(role_code, set()))
+
+    docs = _db()["role_capabilities"].find(
+        {
+            "role_code": {"$in": list(role_codes)},
+            "status": {"$in": ["active", "enabled", ""]},
+        }
+    )
+    for doc in docs:
+        capability_code = _normalize_value(doc.get("capability_code"))
+        if capability_code:
+            capabilities.add(capability_code)
+
+    return capabilities
+
+
+def _collect_permissions_for_roles(role_codes: set[str], capabilities: set[str]) -> set[str]:
     permissions: set[str] = set()
+    for capability in capabilities:
+        permissions.update(CAPABILITY_PERMISSIONS.get(capability, set()))
+    if "*" in capabilities:
+        permissions.add("*")
     if not role_codes:
         return permissions
 
@@ -524,37 +731,43 @@ def _resolve_project_scope(user: dict[str, Any], project_id: str | None = None) 
         if project is None:
             return {"project_id": project_id, "accessible": False}
 
-        owner_user_id = _normalize_value(project.get("owner_user_id"))
-        owner_email = _normalize_value(project.get("owner_email"))
-        current_user_id = _current_user_id(user)
-        current_user_email = _current_user_email(user)
-        accessible = bool(
-            has_internal_admin_access(user)
-            or (current_user_id and current_user_id == owner_user_id)
-            or (current_user_email and current_user_email == owner_email)
+        access_snapshot = get_project_access_snapshot(
+            project,
+            user_id=_current_user_id(user),
+            email=_current_user_email(user),
         )
         return {
             "project_id": str(project.get("_id")),
-            "accessible": accessible,
-            "owner_user_id": owner_user_id,
-            "owner_email": owner_email,
+            "accessible": bool(
+                has_internal_admin_access(user) or access_snapshot.get("accessible")
+            ),
+            "owner_user_id": access_snapshot.get("owner_user_id"),
+            "owner_email": access_snapshot.get("owner_email"),
+            "access_via": access_snapshot.get("via"),
+            "member_role": access_snapshot.get("member_role"),
         }
 
     if has_internal_admin_access(user):
         return {"scope": "all", "project_count": int(projects.count_documents({}))}
 
-    filters: list[dict[str, Any]] = []
     user_id = _current_user_id(user)
     user_email = _current_user_email(user)
+    project_ids = set(list_accessible_project_ids(user_id=user_id, email=user_email))
+
+    filters: list[dict[str, Any]] = []
     if user_id:
         filters.append({"owner_user_id": user_id})
     if user_email:
         filters.append({"owner_email": user_email})
-    if not filters:
+
+    if filters:
+        docs = projects.find({"$or": filters}, {"_id": 1})
+        project_ids.update(str(doc.get("_id")) for doc in docs if doc.get("_id") is not None)
+
+    if not project_ids:
         return {"scope": "owned", "project_ids": []}
 
-    docs = projects.find({"$or": filters}, {"_id": 1})
-    return {"scope": "owned", "project_ids": [str(doc.get("_id")) for doc in docs]}
+    return {"scope": "owned", "project_ids": sorted(project_ids)}
 
 
 def _resolve_workflow_state(project_id: str | None) -> dict[str, Any]:
@@ -594,12 +807,8 @@ def resolve_access_context(user_id: str, project_id: str | None = None) -> dict[
         )
 
     role_codes = _collect_role_codes_for_user(user)
-    if has_internal_admin_access(user):
-        role_codes.add("admin")
-
-    permissions = _collect_permissions_for_roles(role_codes)
-    if has_internal_admin_access(user):
-        permissions.add("*")
+    capabilities = _collect_capabilities_for_roles(role_codes)
+    permissions = _collect_permissions_for_roles(role_codes, capabilities)
 
     entitlements = list_user_project_entitlements(user_id, active_only=True)
     if project_id:
@@ -609,13 +818,37 @@ def resolve_access_context(user_id: str, project_id: str | None = None) -> dict[
             if _normalize_value(entitlement.get("project_id")) == _normalize_value(project_id)
         ]
 
+    normalized_project_id = _normalize_value(project_id)
     return {
         "role_codes": sorted(role_codes),
+        "capabilities": sorted(capabilities),
         "permissions": sorted(permissions),
         "entitlements": entitlements,
         "project_scope": _resolve_project_scope(user, project_id),
         "workflow_state": _resolve_workflow_state(project_id),
+        "project_id": normalized_project_id or None,
     }
+
+
+def _get_or_resolve_access_context(
+    current_user: dict[str, Any],
+    *,
+    project_id: str | None,
+) -> dict[str, Any]:
+    normalized_project_id = _normalize_value(project_id) or None
+    cached_context = current_user.get("_access_context")
+    if isinstance(cached_context, dict):
+        cached_project_id = _normalize_value(cached_context.get("project_id")) or None
+        if cached_project_id == normalized_project_id:
+            return cached_context
+
+    user_id = _current_user_id(current_user)
+    context = resolve_access_context(
+        user_id,
+        project_id=normalized_project_id,
+    )
+    current_user["_access_context"] = context
+    return context
 
 
 def require_permission(permission_code: str):
@@ -627,9 +860,8 @@ def require_permission(permission_code: str):
         request: Request,
         current_user: dict[str, Any] = Depends(get_current_user),
     ) -> dict[str, Any]:
-        user_id = _current_user_id(current_user)
-        context = resolve_access_context(
-            user_id,
+        context = _get_or_resolve_access_context(
+            current_user,
             project_id=_extract_project_id_from_request(request),
         )
         permissions = set(context.get("permissions") or [])
@@ -638,7 +870,6 @@ def require_permission(permission_code: str):
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Permission '{normalized_permission}' is required.",
             )
-        current_user["_access_context"] = context
         return current_user
 
     return _dependency
@@ -655,9 +886,8 @@ def require_any_permission(permission_codes: list[str]):
         request: Request,
         current_user: dict[str, Any] = Depends(get_current_user),
     ) -> dict[str, Any]:
-        user_id = _current_user_id(current_user)
-        context = resolve_access_context(
-            user_id,
+        context = _get_or_resolve_access_context(
+            current_user,
             project_id=_extract_project_id_from_request(request),
         )
         permissions = set(context.get("permissions") or [])
@@ -668,13 +898,40 @@ def require_any_permission(permission_codes: list[str]):
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="At least one required permission is missing.",
             )
-        current_user["_access_context"] = context
         return current_user
 
     return _dependency
 
 
-def require_entitlement(capability: str):
+def require_capability(capability_code: str):
+    normalized_capability = _normalize_value(capability_code)
+    if not normalized_capability:
+        raise ValueError("capability_code is required.")
+
+    def _dependency(
+        request: Request,
+        current_user: dict[str, Any] = Depends(get_current_user),
+    ) -> dict[str, Any]:
+        context = _get_or_resolve_access_context(
+            current_user,
+            project_id=_extract_project_id_from_request(request),
+        )
+        capabilities = set(context.get("capabilities") or [])
+        if "*" not in capabilities and normalized_capability not in capabilities:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Capability '{normalized_capability}' is required.",
+            )
+        return current_user
+
+    return _dependency
+
+
+def require_entitlement(
+    capability: str,
+    *,
+    allow_internal_admin: bool = False,
+):
     normalized_capability = _normalize_value(capability)
     if not normalized_capability:
         raise ValueError("capability is required.")
@@ -684,7 +941,12 @@ def require_entitlement(capability: str):
         current_user: dict[str, Any] = Depends(get_current_user),
     ) -> dict[str, Any]:
         if has_internal_admin_access(current_user):
-            return current_user
+            if allow_internal_admin:
+                return current_user
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Customer package entitlement is required.",
+            )
 
         project_id, family_id, member_id = _extract_workspace_identifiers(request)
 

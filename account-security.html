@@ -8,7 +8,7 @@
       name="description"
       content="Reset or change your Tomb of Light password through the protected account security layer."
     />
-    <link rel="stylesheet" href="styles.css?v=20260331-2" />
+    <link rel="stylesheet" href="styles.css?v=20260413-1" />
   </head>
   <body class="portal-dashboard-body">
     <div class="page-wrap">
@@ -51,7 +51,7 @@
               <h1>Password recovery and protected account changes.</h1>
               <p data-account-security-page-status>
                 Tomb of Light can issue secure reset requests, accept one-time
-                reset tokens, and let signed-in users change their password
+                reset links, and let signed-in users change their password
                 directly inside the portal.
               </p>
             </div>
@@ -60,7 +60,11 @@
 
         <section class="page-sections">
           <div class="container form-shell portal-account-grid">
-            <div class="form-panel" id="reset-request">
+            <div
+              class="form-panel"
+              id="reset-request"
+              data-password-reset-request-panel
+            >
               <span class="eyebrow">Reset Request</span>
               <p class="card-copy">
                 Enter the email attached to your Tomb of Light account. If it
@@ -99,11 +103,15 @@
               ></div>
             </div>
 
-            <div class="form-panel" id="reset-confirm">
-              <span class="eyebrow">Use Reset Token</span>
+            <div
+              class="form-panel"
+              id="reset-confirm"
+              data-password-reset-confirm-panel
+              hidden
+            >
+              <span class="eyebrow">Reset Password</span>
               <p class="card-copy">
-                Open the reset link from your email or paste the token below,
-                then set a strong new password.
+                Enter a strong new password to finish securing your account.
               </p>
               <p class="card-copy" style="font-size: 0.875rem; color: var(--color-muted, #888);">
                 Passwords must be at least 12 characters and include at least
@@ -113,23 +121,13 @@
 
               <form class="form-grid" data-password-reset-confirm-form novalidate>
                 <label>
-                  Reset Token
-                  <input
-                    type="text"
-                    name="token"
-                    placeholder="Paste your secure reset token"
-                    autocomplete="off"
-                    required
-                  />
-                </label>
-
-                <label>
                   New Password
                   <input
                     type="password"
                     name="new_password"
                     placeholder="Create a new password"
                     autocomplete="new-password"
+                    minlength="12"
                     required
                   />
                 </label>
@@ -141,13 +139,14 @@
                     name="confirm_new_password"
                     placeholder="Re-enter your new password"
                     autocomplete="new-password"
+                    minlength="12"
                     required
                   />
                 </label>
 
                 <div class="inline-actions" style="margin-top: 1rem">
                   <button class="btn btn-primary" type="submit">
-                    Apply New Password
+                    Reset Password
                   </button>
                 </div>
               </form>
@@ -191,6 +190,7 @@
                     name="new_password"
                     placeholder="Create a new password"
                     autocomplete="new-password"
+                    minlength="12"
                     required
                   />
                 </label>
@@ -202,6 +202,7 @@
                     name="confirm_new_password"
                     placeholder="Re-enter your new password"
                     autocomplete="new-password"
+                    minlength="12"
                     required
                   />
                 </label>
@@ -219,6 +220,150 @@
                 style="display: none; margin-top: 1rem"
                 aria-live="polite"
               ></div>
+            </div>
+
+            <div class="form-panel" data-mfa-settings-panel>
+              <span class="eyebrow">Authenticator MFA</span>
+              <p class="card-copy" data-mfa-settings-intro>
+                Sign in to choose whether your account requires an
+                authenticator code at login.
+              </p>
+
+              <div
+                class="helper"
+                data-mfa-settings-status
+                style="display: none; margin-top: 1rem"
+                aria-live="polite"
+              ></div>
+
+              <div data-mfa-disabled-controls hidden>
+                <div class="inline-actions" style="margin-top: 1rem">
+                  <button
+                    class="btn btn-primary"
+                    type="button"
+                    data-mfa-start-enrollment
+                  >
+                    Set Up Authenticator
+                  </button>
+                </div>
+              </div>
+
+              <div class="portal-mfa-panel" data-mfa-setup-panel hidden>
+                <div class="portal-mfa-top">
+                  <h3>Set up your authenticator.</h3>
+                  <p>
+                    Add Tomb of Light to your authenticator app, then enter the
+                    first code it creates.
+                  </p>
+                </div>
+
+                <div class="portal-mfa-secret-card">
+                  <span>Manual setup key</span>
+                  <code data-mfa-enrollment-secret></code>
+                </div>
+
+                <label class="portal-mfa-url-field">
+                  Authenticator setup URL
+                  <textarea
+                    data-mfa-otpauth-url
+                    rows="3"
+                    readonly
+                  ></textarea>
+                </label>
+
+                <form class="form-grid portal-mfa-form" data-mfa-enrollment-form novalidate>
+                  <label>
+                    First Authenticator Code
+                    <input
+                      type="text"
+                      name="code"
+                      placeholder="123456"
+                      inputmode="numeric"
+                      autocomplete="one-time-code"
+                      pattern="[0-9]{6,12}"
+                      maxlength="12"
+                      required
+                    />
+                  </label>
+
+                  <div class="inline-actions" style="margin-top: 1rem">
+                    <button class="btn btn-primary" type="submit">
+                      Activate MFA
+                    </button>
+                    <button class="btn btn-secondary" type="button" data-mfa-cancel-setup>
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              <div
+                class="portal-mfa-backup"
+                data-mfa-backup-codes-panel
+                hidden
+                style="margin-top: 1rem"
+              >
+                <div class="portal-mfa-top">
+                  <h3>Save these recovery codes now.</h3>
+                  <p>
+                    Each code can unlock this account once if your
+                    authenticator is unavailable. Tomb of Light will not show
+                    them again.
+                  </p>
+                </div>
+
+                <ol class="portal-mfa-code-list" data-mfa-backup-codes></ol>
+              </div>
+
+              <div data-mfa-enabled-controls hidden>
+                <p class="card-copy" style="margin-top: 1rem">
+                  MFA is active for this account. You will be asked for an
+                  authenticator code when signing in.
+                </p>
+
+                <form class="form-grid" data-mfa-disable-form novalidate>
+                  <label>
+                    Current Password
+                    <input
+                      type="password"
+                      name="current_password"
+                      placeholder="Enter your current password"
+                      autocomplete="current-password"
+                      required
+                    />
+                  </label>
+
+                  <label>
+                    Authenticator Code
+                    <input
+                      type="text"
+                      name="code"
+                      placeholder="123456"
+                      inputmode="numeric"
+                      autocomplete="one-time-code"
+                      pattern="[0-9]{6,12}"
+                      maxlength="12"
+                    />
+                  </label>
+
+                  <label>
+                    Recovery Code
+                    <input
+                      type="text"
+                      name="recovery_code"
+                      placeholder="Enter recovery code"
+                      autocomplete="one-time-code"
+                      maxlength="64"
+                    />
+                  </label>
+
+                  <div class="inline-actions" style="margin-top: 1rem">
+                    <button class="btn btn-secondary" type="submit">
+                      Disable MFA
+                    </button>
+                  </div>
+                </form>
+              </div>
             </div>
           </div>
         </section>
@@ -249,8 +394,8 @@
     </div>
 
     <script src="config.js?v=20260331-2"></script>
-    <script src="app.js?v=20260331-2"></script>
-    <script src="auth.js?v=20260331-2"></script>
-    <script src="account-security.js?v=20260331-2"></script>
+    <script src="app.js?v=20260410-1"></script>
+    <script src="auth.js?v=20260413-3"></script>
+    <script src="account-security.js?v=20260413-1"></script>
   </body>
 </html>

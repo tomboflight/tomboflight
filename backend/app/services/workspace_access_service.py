@@ -5,16 +5,25 @@ from typing import Any, Iterable
 from bson import ObjectId
 from fastapi import HTTPException, status
 
-from app.core.package_catalog import get_package
+from app.core.package_catalog import get_package, normalize_package_code
 from app.database import get_database
-from app.dependencies.auth import has_internal_admin_access
 from app.services.entitlement_service import resolve_project_entitlements
+from app.services.project_membership_service import get_project_access_snapshot
 
 PAID_PACKAGE_STATUSES = {
     "paid",
     "complete",
     "completed",
     "succeeded",
+}
+WORKSPACE_ADMIN_ROLE_KEYS = {
+    "admin",
+    "super_admin",
+    "root_admin",
+    "platform_admin",
+    "operations_admin",
+    "executive_technology",
+    "operations",
 }
 
 
@@ -36,6 +45,15 @@ def _current_user_email(user: dict[str, Any]) -> str:
 
 def _current_user_name(user: dict[str, Any]) -> str:
     return _normalize_value(user.get("full_name") or user.get("name"))
+
+
+def _has_workspace_admin_access(user: dict[str, Any]) -> bool:
+    role_values = {
+        _normalize_value(user.get("role")).lower(),
+        _normalize_value(user.get("access_tier")).lower(),
+        _normalize_value(user.get("department_role")).lower(),
+    }
+    return any(value in WORKSPACE_ADMIN_ROLE_KEYS for value in role_values if value)
 
 
 def _to_object_id(value: str) -> ObjectId | None:
@@ -235,6 +253,7 @@ def _resolve_project_entitlement_map(project: dict[str, Any]) -> dict[str, Any]:
         or project.get("package_slug")
         or project.get("package_type")
     )
+    package_code = normalize_package_code(package_code)
     active_addons = list((entitlement_doc or {}).get("active_addons") or [])
 
     resolved_entitlements: dict[str, Any] = {}
@@ -261,12 +280,20 @@ def _project_is_visible_to_user(
     family: dict[str, Any] | None,
     current_user: dict[str, Any],
 ) -> bool:
-    if has_internal_admin_access(current_user):
+    if _has_workspace_admin_access(current_user):
         return True
 
     current_user_id = _current_user_id(current_user)
     current_user_email = _current_user_email(current_user)
     current_user_name = _current_user_name(current_user)
+    access_snapshot = get_project_access_snapshot(
+        project,
+        user_id=current_user_id,
+        email=current_user_email,
+    )
+
+    if access_snapshot.get("accessible"):
+        return True
 
     owner_user_ids = {
         _normalize_value(project.get("owner_user_id")),
@@ -373,6 +400,13 @@ def resolve_workspace_context(
             detail="Not authorized to access this workspace.",
         )
 
+    access_snapshot = get_project_access_snapshot(
+        project,
+        user_id=_current_user_id(current_user),
+        email=_current_user_email(current_user),
+    )
+    membership = (access_snapshot or {}).get("membership") or {}
+
     entitlement_map = _resolve_project_entitlement_map(project)
     return {
         "project": project,
@@ -383,7 +417,14 @@ def resolve_workspace_context(
         "resolved_entitlements": entitlement_map.get("resolved_entitlements") or {},
         "entitlement": entitlement_map.get("entitlement"),
         "paid_order": entitlement_map.get("paid_order"),
-        "is_admin": has_internal_admin_access(current_user),
+        "access_snapshot": access_snapshot,
+        "member_role": _normalize_value(access_snapshot.get("member_role") or "viewer") or "viewer",
+        "relationship_scope": _normalize_value(membership.get("relationship_scope") or "household_member")
+        or "household_member",
+        "member_privacy_scope": _normalize_value(membership.get("privacy_scope") or "household_private")
+        or "household_private",
+        "link_status": _normalize_value(membership.get("link_status") or "active") or "active",
+        "is_admin": _has_workspace_admin_access(current_user),
     }
 
 
@@ -428,7 +469,7 @@ def list_accessible_families_for_user(
     capabilities: Iterable[str] = (),
 ) -> list[dict[str, Any]]:
     db = _require_database()
-    if has_internal_admin_access(current_user):
+    if _has_workspace_admin_access(current_user):
         return list(db["families"].find().sort("created_at", -1))
 
     normalized_capabilities = [

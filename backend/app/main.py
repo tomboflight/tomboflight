@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import logging
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,6 +10,9 @@ from app.database import close_mongo_connection, connect_to_mongo, get_database
 from app.routes.admin_intake_submissions import (
     router as admin_intake_submissions_router,
 )
+from app.routes.asset_delivery import router as asset_delivery_router
+from app.routes.admin_control_center import router as admin_control_center_router
+from app.routes.admin_maintenance import router as admin_maintenance_router
 from app.routes.audit_logs import router as audit_logs_router
 from app.routes.auth import router as auth_router
 from app.routes.billing import router as billing_router
@@ -35,29 +39,52 @@ from app.routes.lineage_graph import router as lineage_graph_router
 from app.routes.lineage_nodes import router as lineage_nodes_router
 from app.routes.lineage_proof import router as lineage_proof_router
 from app.routes.lineage_query import router as lineage_query_router
+from app.routes.legacy_messages import router as legacy_messages_router
 from app.routes.link_keys import router as link_keys_router
 from app.routes.link_requests import router as link_requests_router
+from app.routes.linked_network import router as linked_network_router
+from app.routes.vault import router as vault_router
 from app.routes.match_candidates import router as match_candidates_router
 from app.routes.match_generation import router as match_generation_router
-from app.routes.mint_jobs import router as mint_jobs_router
+from app.routes.mint_jobs import (
+    initialize_mint_job_indexes,
+    router as mint_jobs_router,
+)
 from app.routes.mint_policy import router as mint_policy_router
-from app.routes.mint_records import router as mint_records_router
+from app.routes.mint_records import (
+    initialize_mint_record_indexes,
+    router as mint_records_router,
+)
 from app.routes.narrative_records import router as narrative_records_router
-from app.routes.orders import router as orders_router
+from app.routes.orders import (
+    initialize_order_indexes,
+    router as orders_router,
+)
+from app.services.project_entitlement_service import ensure_project_entitlement_indexes
 from app.routes.package_catalog import router as package_catalog_router
 from app.routes.presence import router as presence_router
 from app.routes.projects import router as projects_router
 from app.routes.project_entitlements import router as project_entitlements_router
 from app.routes.relationships import router as relationships_router
-from app.routes.stripe_webhooks import router as stripe_webhooks_router
+from app.routes.stripe_webhooks import (
+    ensure_stripe_event_indexes,
+    router as stripe_webhooks_router,
+)
 from app.routes.tree import router as tree_router
 from app.routes.uploads import router as uploads_router
 from app.routes.users import router as users_router
 from app.routes.verification_records import router as verification_records_router
 from app.routes.viewer_manifest import router as viewer_manifest_router
+from app.routes.workspace_access import (
+    legacy_router as workspace_access_legacy_router,
+    router as workspace_access_router,
+)
 from app.services.nft_runtime_validation_service import (
     validate_nft_runtime_configuration_on_startup,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 def _resolve_allowed_origins() -> list[str]:
@@ -93,10 +120,15 @@ async def lifespan(app: FastAPI):
     validate_nft_runtime_configuration_on_startup()
     connect_to_mongo()
     app.state.db = get_database()
-    print("Connected to MongoDB database.")
+    initialize_order_indexes()
+    ensure_project_entitlement_indexes()
+    initialize_mint_record_indexes()
+    initialize_mint_job_indexes()
+    ensure_stripe_event_indexes()
+    logger.info("Connected to MongoDB database.")
     yield
     close_mongo_connection()
-    print("MongoDB connection closed.")
+    logger.info("MongoDB connection closed.")
 
 
 app = FastAPI(
@@ -143,6 +175,7 @@ app.include_router(billing_router)
 app.include_router(intake_router)
 app.include_router(intake_submissions_router)
 app.include_router(admin_intake_submissions_router)
+app.include_router(admin_control_center_router)
 app.include_router(projects_router)
 app.include_router(project_entitlements_router)
 app.include_router(experience_router)
@@ -158,14 +191,18 @@ app.include_router(households_router)
 app.include_router(household_links_router)
 app.include_router(relationships_router)
 app.include_router(db_bootstrap_router)
+app.include_router(admin_maintenance_router)
 app.include_router(graph_integrity_router)
 app.include_router(orders_router)
 app.include_router(package_catalog_router)
 app.include_router(uploads_router)
+app.include_router(workspace_access_router)
+app.include_router(workspace_access_legacy_router)
 app.include_router(viewer_manifest_router)
 app.include_router(mint_policy_router)
 app.include_router(mint_records_router)
 app.include_router(mint_jobs_router)
+app.include_router(asset_delivery_router)
 
 # Stripe Webhooks
 app.include_router(stripe_webhooks_router)
@@ -190,6 +227,9 @@ app.include_router(narrative_records_router)
 # ----------------------------
 app.include_router(link_keys_router)
 app.include_router(link_requests_router)
+app.include_router(linked_network_router)
+app.include_router(vault_router)
+app.include_router(legacy_messages_router)
 
 # ----------------------------
 # Intelligence
@@ -210,6 +250,16 @@ app.include_router(audit_logs_router)
 
 @app.get("/")
 def root():
+    environment = str(settings.environment or "development").strip().lower()
+    is_production = environment in {"production", "prod"}
+    if is_production:
+        return {
+            "message": "Tomb of Light backend is running.",
+            "app_name": settings.app_name,
+            "version": settings.app_version,
+            "environment": settings.environment,
+            "status": "ok",
+        }
     return {
         "message": "Tomb of Light backend is running.",
         "app_name": settings.app_name,
@@ -234,6 +284,11 @@ def root():
             "/uploads/member/{member_id}",
             "/uploads/family/{family_id}",
             "/uploads/{upload_id}/download",
+            "/workspace-access/my-memberships",
+            "/workspace-access/project/{project_id}/members",
+            "/workspace-access/project/{project_id}/invites",
+            "/workspace-access/invites/accept",
+            "/workspace-access/invites/{invite_id}/resend",
             "/viewer/manifest",
             "/mint-policy/packages",
             "/projects/{project_id}/experience-lane",
@@ -247,6 +302,9 @@ def root():
             "/projects/{project_id}/mint-records",
             "/projects/{project_id}/mint-status",
             "/admin/mint-records/maintenance/backfill",
+            "/admin/maintenance/drop-legacy-indexes",
+            "/admin/maintenance/backfill-project-members",
+            "/admin/maintenance/backfill-workspace-anchors",
             "/mint-jobs/run-next",
             "/tokens/{public_token_id}",
             "/link-keys/my-list",

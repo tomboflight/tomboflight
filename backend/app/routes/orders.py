@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.dependencies.auth import get_current_user, require_permission
 from app.schemas.order import OrderCreate, OrderResponse
@@ -7,13 +7,13 @@ from app.services.order_service import (
     ensure_order_indexes,
     get_orders_for_user,
     list_recent_orders,
+    repair_paid_package_order_access,
 )
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
 
-@router.on_event("startup")
-def startup_indexes():
+def initialize_order_indexes() -> None:
     ensure_order_indexes()
 
 
@@ -26,7 +26,10 @@ def record_checkout_order(
     payload: OrderCreate,
     current_user: dict = Depends(get_current_user),
 ):
-    return create_order_for_user(current_user, payload)
+    try:
+        return create_order_for_user(current_user, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/my-orders", response_model=list[OrderResponse])
@@ -39,7 +42,7 @@ def list_all_orders_admin(
     limit: int = Query(default=100, ge=1, le=500),
     status_filter: str = Query(default="", alias="status"),
     search: str = Query(default=""),
-    current_user: dict = Depends(require_permission("admin.access")),
+    current_user: dict = Depends(require_permission("admin.orders.read")),
 ):
     del current_user
     return {
@@ -49,6 +52,15 @@ def list_all_orders_admin(
             search=search,
         )
     }
+
+
+@router.post("/admin/repair-paid-package-access")
+def repair_paid_package_access_admin(
+    limit: int = Query(default=500, ge=1, le=1000),
+    current_user: dict = Depends(require_permission("admin.orders.repair")),
+):
+    del current_user
+    return repair_paid_package_order_access(limit=limit)
 
 
 @router.get("/health")

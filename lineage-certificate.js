@@ -210,7 +210,189 @@
       });
     }
 
-    function renderCertificate(payload) {
+    function getChainExplorerUrl(chain, txHash, tokenId, contractAddress) {
+      const normalized = String(chain || "")
+        .toLowerCase()
+        .replace(/[\s_]/g, "-");
+
+      if (normalized.includes("base-mainnet") || normalized === "base") {
+        if (txHash) return `https://basescan.org/tx/${txHash}`;
+        if (tokenId && contractAddress) {
+          return `https://basescan.org/token/${contractAddress}?a=${tokenId}`;
+        }
+      }
+
+      if (normalized.includes("base-sepolia") || normalized.includes("sepolia")) {
+        if (txHash) return `https://sepolia.basescan.org/tx/${txHash}`;
+      }
+
+      return null;
+    }
+
+    function renderMintPanel(mintStatus) {
+      if (!mintStatus) {
+        return `
+          <section class="exec-certificate" style="margin-top: 1.5rem;">
+            <div class="exec-cert-header">
+              <div class="exec-cert-brand">
+                <div>
+                  <div class="exec-cert-brandname">Blockchain Verification</div>
+                  <div class="exec-cert-brandsub">Legacy Anchor · Mint Record</div>
+                </div>
+              </div>
+              <div class="exec-cert-badge">Not Available</div>
+            </div>
+            <div class="exec-cert-footer" style="margin-top: 1rem;">
+              <div class="exec-cert-statement">
+                No blockchain mint record is available for this family. A Legacy Anchor will
+                appear here once it has been issued and confirmed on-chain.
+              </div>
+            </div>
+          </section>
+        `;
+      }
+
+      const currentStatus = String(mintStatus.current_status || "none").toLowerCase();
+      const isMinted = currentStatus === "minted";
+
+      const chain = String(mintStatus.chain || "Base Mainnet");
+      const contractAddress = String(mintStatus.contract_address || "");
+      const tokenId = String(mintStatus.token_id || "");
+      const txHash = String(mintStatus.tx_hash || "");
+      const wallet = String(mintStatus.wallet || "");
+
+      const current = mintStatus.current || mintStatus.latest || {};
+      const mintedAt = String(
+        current.minted_at || mintStatus.minted_at || "",
+      ).trim();
+      const publicTokenId = String(
+        current.public_token_id || mintStatus.public_token_id || "",
+      ).trim();
+      const versionNumber = mintStatus.version_number != null
+        ? String(mintStatus.version_number)
+        : String(current.version_number || "");
+
+      const explorerUrl = isMinted
+        ? getChainExplorerUrl(chain, txHash || null, tokenId || null, contractAddress || null)
+        : null;
+
+      const statusLabel =
+        currentStatus === "minted"
+          ? "Minted"
+          : currentStatus === "minting"
+          ? "Minting in Progress"
+          : currentStatus === "queued"
+          ? "Queued for Minting"
+          : currentStatus === "processing"
+          ? "Processing"
+          : currentStatus === "approved"
+          ? "Approved"
+          : currentStatus === "draft" || currentStatus === "pending_approval"
+          ? "Pending Approval"
+          : currentStatus === "failed"
+          ? "Failed"
+          : currentStatus === "none"
+          ? "Not Minted"
+          : safe(currentStatus, "Unknown");
+
+      const notAvailable = '<span style="color:#888;font-style:italic;">Not available</span>';
+
+      const explorerLinkHtml = explorerUrl
+        ? `<a href="${escapeHtml(explorerUrl)}" target="_blank" rel="noopener noreferrer" style="color:#8a6a2f;font-weight:700;word-break:break-all;">${escapeHtml(explorerUrl)}</a>`
+        : notAvailable;
+
+      return `
+        <section class="exec-certificate" style="margin-top: 1.5rem;">
+          <div class="exec-cert-watermark" aria-hidden="true"></div>
+
+          <div class="exec-cert-header">
+            <div class="exec-cert-brand">
+              <div>
+                <div class="exec-cert-brandname">Blockchain Verification</div>
+                <div class="exec-cert-brandsub">Legacy Anchor · Mint Record</div>
+              </div>
+            </div>
+            <div class="exec-cert-badge">${escapeHtml(statusLabel)}</div>
+          </div>
+
+          <div class="exec-cert-title" style="margin-top:12px;">
+            <div class="exec-cert-eyebrow">On-Chain Proof of Lineage</div>
+          </div>
+
+          <div class="exec-cert-grid" style="margin-top:14px;">
+            <div class="exec-cert-card">
+              <div class="exec-cert-label">Mint Status</div>
+              <div class="exec-cert-value">${escapeHtml(statusLabel)}</div>
+            </div>
+
+            <div class="exec-cert-card">
+              <div class="exec-cert-label">Chain</div>
+              <div class="exec-cert-value">${chain ? escapeHtml(chain) : notAvailable}</div>
+            </div>
+
+            <div class="exec-cert-card exec-cert-card-wide">
+              <div class="exec-cert-label">Contract Address</div>
+              <div class="exec-cert-value">${contractAddress ? escapeHtml(contractAddress) : notAvailable}</div>
+            </div>
+
+            <div class="exec-cert-card">
+              <div class="exec-cert-label">Token ID</div>
+              <div class="exec-cert-value">${tokenId ? escapeHtml(tokenId) : notAvailable}</div>
+            </div>
+
+            <div class="exec-cert-card">
+              <div class="exec-cert-label">Version</div>
+              <div class="exec-cert-value">${versionNumber ? escapeHtml(versionNumber) : notAvailable}</div>
+            </div>
+
+            <div class="exec-cert-card exec-cert-card-wide">
+              <div class="exec-cert-label">Transaction Hash</div>
+              <div class="exec-cert-value">${txHash ? escapeHtml(txHash) : notAvailable}</div>
+            </div>
+
+            ${
+              publicTokenId
+                ? `<div class="exec-cert-card exec-cert-card-wide">
+                <div class="exec-cert-label">Public Token ID</div>
+                <div class="exec-cert-value">${escapeHtml(publicTokenId)}</div>
+              </div>`
+                : ""
+            }
+
+            <div class="exec-cert-card">
+              <div class="exec-cert-label">Minted Date</div>
+              <div class="exec-cert-value">${mintedAt ? escapeHtml(mintedAt) : notAvailable}</div>
+            </div>
+
+            ${
+              wallet
+                ? `<div class="exec-cert-card">
+                <div class="exec-cert-label">Wallet</div>
+                <div class="exec-cert-value">${escapeHtml(wallet)}</div>
+              </div>`
+                : ""
+            }
+
+            <div class="exec-cert-card exec-cert-card-wide">
+              <div class="exec-cert-label">Explorer Link</div>
+              <div class="exec-cert-value">${explorerLinkHtml}</div>
+            </div>
+          </div>
+
+          <div class="exec-cert-footer">
+            <div class="exec-cert-statement">
+              ${
+                isMinted
+                  ? "This Legacy Anchor has been minted and confirmed on-chain. Use the contract address, token ID, and transaction hash above to independently verify this lineage anchor on the blockchain explorer."
+                  : "This Legacy Anchor has not yet been minted on-chain. Blockchain verification will appear here once the minting process is complete."
+              }
+            </div>
+          </div>
+        </section>
+      `;
+    }
+
+    function renderCertificate(payload, mintStatus) {
       const certificate = payload.certificate || {};
       const family = certificate.family || {};
       const summary = certificate.summary || {};
@@ -311,6 +493,8 @@
             </div>
           </div>
         </section>
+
+        ${renderMintPanel(mintStatus)}
       `;
     }
 
@@ -402,7 +586,25 @@
           `/lineage-certificate/${encodeURIComponent(familyId)}`,
           { method: "GET" },
         );
-        renderCertificate(data);
+
+        const projectId =
+          String(
+            (data?.certificate?.family?.project_id) || "",
+          ).trim() || getProjectIdFromContext(currentContext);
+
+        let mintStatus = null;
+        if (projectId) {
+          try {
+            mintStatus = await window.TOLAuth.apiRequest(
+              `/projects/${encodeURIComponent(projectId)}/mint-status`,
+              { method: "GET" },
+            );
+          } catch (_mintErr) {
+            mintStatus = null;
+          }
+        }
+
+        renderCertificate(data, mintStatus);
         clearStatus();
       } catch (error) {
         output.innerHTML = "";

@@ -1,6 +1,7 @@
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException
 
+from app.core.state_catalog import normalize_approval_state
 from app.core.metadata import apply_update_metadata
 from app.database import get_database
 from app.dependencies.auth import require_permission
@@ -49,13 +50,13 @@ def reject_candidate(candidate_id: str, notes: dict | None = None, current_user:
     if not candidate:
         raise HTTPException(status_code=404, detail="Match candidate not found.")
 
-    if candidate.get("status") != "pending":
+    if normalize_approval_state(candidate.get("status")) != "pending":
         raise HTTPException(status_code=400, detail="Only pending match candidates can be rejected.")
 
     user_id = str(current_user.get("_id")) if current_user.get("_id") else None
 
     update_data = {
-        "status": "rejected",
+        "status": normalize_approval_state("rejected"),
         "rejected_by": user_id,
         "review_notes": (notes or {}).get("review_notes", ""),
     }

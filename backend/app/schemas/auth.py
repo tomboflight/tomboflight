@@ -52,6 +52,38 @@ class PasswordResetResponse(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    csrf_token: Optional[str] = None
+    mfa_required: bool = False
+    mfa_enrollment_required: bool = False
+    mfa_challenge_token: Optional[str] = None
+    backup_codes: list[str] = Field(default_factory=list)
+
+
+class MfaEnrollmentBeginRequest(BaseModel):
+    mfa_challenge_token: str = Field(..., min_length=8, max_length=2048)
+
+
+class MfaEnrollmentBeginResponse(BaseModel):
+    setup_token: str
+    secret: str
+    otpauth_url: str
+
+
+class MfaEnrollmentVerifyRequest(BaseModel):
+    setup_token: str = Field(..., min_length=8, max_length=2048)
+    code: str = Field(..., min_length=6, max_length=12)
+
+
+class MfaLoginVerifyRequest(BaseModel):
+    mfa_challenge_token: str = Field(..., min_length=8, max_length=2048)
+    code: Optional[str] = Field(default=None, min_length=6, max_length=12)
+    recovery_code: Optional[str] = Field(default=None, min_length=6, max_length=64)
+
+
+class MfaDisableRequest(BaseModel):
+    current_password: str = Field(..., min_length=8, max_length=128)
+    code: Optional[str] = Field(default=None, min_length=6, max_length=12)
+    recovery_code: Optional[str] = Field(default=None, min_length=6, max_length=64)
 
 
 class UserResponse(BaseModel):
@@ -59,7 +91,15 @@ class UserResponse(BaseModel):
     email: EmailStr
     full_name: str
     role: str
+    account_type: Optional[str] = None
+    business_title: Optional[str] = None
+    prototype_key: Optional[str] = None
+    creator_credit: Optional[str] = None
+    access_tier: Optional[str] = None
+    department_role: Optional[str] = None
     status: str
+    mfa_enabled: bool = False
+    mfa_enrolled_at: Optional[str] = None
     created_at: str
 
     policy_version: Optional[str] = None

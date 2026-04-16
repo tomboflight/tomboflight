@@ -2,7 +2,12 @@ from pymongo import ASCENDING, DESCENDING
 from pymongo.errors import OperationFailure
 
 from app.database import get_database
-from app.schemas.db_bootstrap import BootstrapResponse, CollectionStatus
+from app.schemas.db_bootstrap import (
+    BootstrapResponse,
+    CollectionStatus,
+    DropLegacyIndexesResponse,
+    LegacyIndexDropResult,
+)
 
 
 CORE_COLLECTIONS: dict[str, list[tuple[list[tuple[str, int]], dict]]] = {
@@ -78,8 +83,15 @@ CORE_COLLECTIONS: dict[str, list[tuple[list[tuple[str, int]], dict]]] = {
         ([("status", ASCENDING)], {"name": "idx_household_links_status"}),
     ],
     "identity_links": [
-        ([("source_member_id", ASCENDING)], {"name": "idx_identity_links_source_member_id"}),
-        ([("target_member_id", ASCENDING)], {"name": "idx_identity_links_target_member_id"}),
+        ([("family_member_id", ASCENDING)], {"name": "idx_identity_links_family_member_id"}),
+        ([("canonical_person_id", ASCENDING)], {"name": "idx_identity_links_canonical_person_id"}),
+        (
+            [("family_member_id", ASCENDING), ("canonical_person_id", ASCENDING)],
+            {
+                "unique": True,
+                "name": "idx_identity_links_member_canonical_unique",
+            },
+        ),
         ([("status", ASCENDING)], {"name": "idx_identity_links_status"}),
     ],
     "lineage_nodes": [
@@ -97,13 +109,48 @@ CORE_COLLECTIONS: dict[str, list[tuple[list[tuple[str, int]], dict]]] = {
     ],
     "relationships": [
         ([("family_id", ASCENDING)], {"name": "idx_relationships_family_id"}),
-        ([("source_id", ASCENDING)], {"name": "idx_relationships_source_id"}),
-        ([("target_id", ASCENDING)], {"name": "idx_relationships_target_id"}),
+        ([("source_member_id", ASCENDING)], {"name": "idx_relationships_source_member_id"}),
+        ([("target_member_id", ASCENDING)], {"name": "idx_relationships_target_member_id"}),
         ([("relationship_type", ASCENDING)], {"name": "idx_relationships_relationship_type"}),
+        (
+            [
+                ("family_id", ASCENDING),
+                ("source_member_id", ASCENDING),
+                ("target_member_id", ASCENDING),
+                ("relationship_type", ASCENDING),
+            ],
+            {
+                "unique": True,
+                "name": "idx_relationships_edge_unique",
+            },
+        ),
     ],
     "projects": [
         ([("name", ASCENDING)], {"name": "idx_projects_name"}),
         ([("created_at", ASCENDING)], {"name": "idx_projects_created_at"}),
+        ([("owner_user_id", ASCENDING)], {"name": "idx_projects_owner_user_id"}),
+        ([("owner_email", ASCENDING)], {"name": "idx_projects_owner_email"}),
+        ([("family_id", ASCENDING)], {"name": "idx_projects_family_id"}),
+    ],
+    "project_members": [
+        ([("project_id", ASCENDING)], {"name": "idx_project_members_project_id"}),
+        ([("user_id", ASCENDING)], {"name": "idx_project_members_user_id"}),
+        ([("email", ASCENDING)], {"name": "idx_project_members_email"}),
+        ([("member_role", ASCENDING)], {"name": "idx_project_members_member_role"}),
+        ([("status", ASCENDING)], {"name": "idx_project_members_status"}),
+        (
+            [("project_id", ASCENDING), ("user_id", ASCENDING), ("email", ASCENDING)],
+            {
+                "unique": True,
+                "name": "idx_project_members_project_identity_unique",
+                "partialFilterExpression": {
+                    "$or": [
+                        {"user_id": {"$type": "string"}},
+                        {"email": {"$type": "string"}},
+                    ]
+                },
+            },
+        ),
     ],
     "project_entitlements": [
         (
@@ -173,6 +220,9 @@ CORE_COLLECTIONS: dict[str, list[tuple[list[tuple[str, int]], dict]]] = {
     "verification_records": [
         ([("family_id", ASCENDING)], {"name": "idx_verification_records_family_id"}),
         ([("member_id", ASCENDING)], {"name": "idx_verification_records_member_id"}),
+        ([("verification_status", ASCENDING)], {"name": "idx_verification_records_status"}),
+        ([("created_at", DESCENDING)], {"name": "idx_verification_records_created_at"}),
+        ([("evidence_upload_ids", ASCENDING)], {"name": "idx_verification_records_evidence_upload_ids"}),
     ],
     "narrative_records": [
         ([("family_id", ASCENDING)], {"name": "idx_narrative_records_family_id"}),
@@ -303,4 +353,57 @@ def bootstrap_core_collections() -> BootstrapResponse:
         message="Core Tomb of Light collections and indexes processed successfully.",
         database_name=db.name,
         collections=results,
+    )
+
+
+_CANONICAL_INDEX_NAMES: dict[str, set[str]] = {
+    collection_name: {opts.get("name", "") for _, opts in index_defs}
+    for collection_name, index_defs in CORE_COLLECTIONS.items()
+}
+
+
+def drop_legacy_indexes() -> DropLegacyIndexesResponse:
+    db = get_database()
+
+    if db is None:
+        raise ValueError("Database is not connected.")
+
+    results: list[LegacyIndexDropResult] = []
+    total_dropped = 0
+
+    for collection_name, canonical_names in _CANONICAL_INDEX_NAMES.items():
+        if collection_name not in set(db.list_collection_names()):
+            continue
+
+        collection = db[collection_name]
+        existing_indexes = collection.index_information()
+
+        dropped: list[str] = []
+        skipped: list[str] = []
+
+        for index_name in list(existing_indexes.keys()):
+            if index_name == "_id_":
+                continue
+            if index_name in canonical_names:
+                continue
+            try:
+                collection.drop_index(index_name)
+                dropped.append(index_name)
+            except OperationFailure:
+                skipped.append(index_name)
+
+        total_dropped += len(dropped)
+        results.append(
+            LegacyIndexDropResult(
+                collection=collection_name,
+                dropped=dropped,
+                skipped=skipped,
+            )
+        )
+
+    return DropLegacyIndexesResponse(
+        message="Legacy index cleanup completed.",
+        database_name=db.name,
+        results=results,
+        total_dropped=total_dropped,
     )

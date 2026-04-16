@@ -9,8 +9,7 @@ from app.services.mint_job_service import ensure_mint_job_indexes, run_next_job
 router = APIRouter(prefix="/mint-jobs", tags=["Mint Jobs"])
 
 
-@router.on_event("startup")
-def startup_mint_job_indexes():
+def initialize_mint_job_indexes() -> None:
     ensure_mint_job_indexes()
 
 

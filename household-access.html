@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Members &amp; Access | Tomb of Light</title>
+    <link rel="stylesheet" href="styles.css?v=20260328-7" />
+  </head>
+  <body>
+    <div class="page-wrap">
+      <header class="site-header">
+        <div class="container site-header-inner">
+          <a class="brand" href="dashboard.html">Tomb of Light<span class="brand-symbol">™</span></a>
+          <nav class="site-nav" id="site-nav" aria-label="Portal navigation">
+            <a href="dashboard.html">Dashboard</a>
+            <a href="household-access.html" aria-current="page">Members &amp; Access</a>
+            <a href="link-keys.html">Link Keys</a>
+            <a href="faq.html">Help</a>
+          </nav>
+          <div class="header-actions">
+            <button class="btn btn-secondary" type="button" data-logout-btn>Log Out</button>
+          </div>
+        </div>
+      </header>
+
+      <main id="main-content" data-household-access-page>
+        <section class="page-hero">
+          <div class="container">
+            <div class="page-hero-panel">
+              <span class="eyebrow">Household Workspace Access</span>
+              <h1>Members &amp; Access</h1>
+              <p data-household-status>Loading workspace access settings...</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="page-sections">
+          <div class="container form-shell">
+            <div class="form-panel">
+              <span class="eyebrow">Invite Household Member</span>
+              <form class="form-grid" data-household-invite-form novalidate>
+                <label>
+                  Email
+                  <input type="email" name="email" required autocomplete="email" inputmode="email" />
+                  <small class="card-copy">The invitation will be sent to this email address.</small>
+                </label>
+                <label>
+                  Role
+                  <select name="member_role" required>
+                    <option value="billing_owner">Billing Owner</option>
+                    <option value="co_owner">Co-Owner</option>
+                    <option value="family_manager">Family Manager</option>
+                    <option value="contributor">Contributor</option>
+                    <option value="viewer" selected>Viewer</option>
+                    <option value="linked_relative">Linked Relative</option>
+                  </select>
+                  <small class="card-copy">Choose what level of workspace access this person should have.</small>
+                </label>
+                <label>
+                  Relationship
+                  <select name="relationship_scope" required>
+                    <option value="spouse">Spouse</option>
+                    <option value="parent">Parent</option>
+                    <option value="child">Child</option>
+                    <option value="sibling">Sibling</option>
+                    <option value="household_member" selected>Household Member</option>
+                    <option value="guardian">Guardian</option>
+                    <option value="relative">Relative</option>
+                    <option value="other">Other</option>
+                  </select>
+                  <small class="card-copy">Select the plain-English relationship for this invite.</small>
+                </label>
+                <label>
+                  Privacy Scope
+                  <select name="privacy_scope" required>
+                    <option value="household_private" selected>Household Private</option>
+                    <option value="household_shared">Shared Household Access</option>
+                    <option value="read_only">Read Only</option>
+                    <option value="link_only">Link-Only Access</option>
+                  </select>
+                  <small class="card-copy">This controls how broadly invited access can be viewed.</small>
+                </label>
+                <label>
+                  Notes (optional)
+                  <input type="text" name="notes" maxlength="500" placeholder="Auto-filled from role + relationship" />
+                  <small class="card-copy">A helpful note is auto-generated. You can edit it if needed.</small>
+                </label>
+                <div class="inline-actions">
+                  <button class="btn btn-primary" type="button" data-household-invite-co-owner>Invite Co-Owner</button>
+                  <button class="btn btn-secondary" type="button" data-household-invite-family>Invite Family Member</button>
+                </div>
+              </form>
+              <div class="helper" data-household-invite-status style="display: none; margin-top: 1rem"></div>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Accept Invite</span>
+              <form class="form-grid" data-household-accept-form novalidate>
+                <label>Invite Key <input type="text" name="invite_key" required /></label>
+                <div class="inline-actions">
+                  <button class="btn btn-primary" type="submit">Accept Invite</button>
+                </div>
+              </form>
+              <div class="helper" data-household-accept-status style="display: none; margin-top: 1rem"></div>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Current Household Members</span>
+              <div class="grid-3" data-household-members-list></div>
+              <div class="helper" data-household-members-empty style="display: none; margin-top: 1rem">No members found.</div>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Pending & Historical Invites</span>
+              <p class="card-copy" data-household-pending-count></p>
+              <div class="grid-3" data-household-invites-list></div>
+              <div class="helper" data-household-invites-empty style="display: none; margin-top: 1rem">No invites found.</div>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Role Restrictions Summary</span>
+              <div class="grid-3">
+                <div>
+                  <div class="card-number">A</div>
+                  <h3>billing_owner</h3>
+                  <p class="card-copy">Billing, package, role assignment, privacy approvals, and invite/member lifecycle controls.</p>
+                </div>
+                <div>
+                  <div class="card-number">B</div>
+                  <h3>co_owner / family_manager</h3>
+                  <p class="card-copy">Content and household record management without package ownership transfer or billing cancellation.</p>
+                </div>
+                <div>
+                  <div class="card-number">C</div>
+                  <h3>contributor / viewer scopes</h3>
+                  <p class="card-copy">Contributors submit branch content. Viewer roles are read-only and privacy-scoped; linked_relative is link-scoped only.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script src="config.js?v=20260328-7"></script>
+    <script src="app.js?v=20260416-4"></script>
+    <script src="auth.js?v=20260416-1"></script>
+    <script src="household-access.js?v=20260416-6"></script>
+  </body>
+</html>

@@ -2,7 +2,11 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from app.dependencies.auth import get_current_user, require_permission
+from app.dependencies.auth import (
+    get_current_user,
+    has_internal_admin_access,
+    require_permission,
+)
 from app.schemas.experience import ExperienceLaneResponse
 from app.schemas.project import ProjectCreate, ProjectResponse, build_project_response
 from app.services.access_context_service import describe_project_experience_lane
@@ -31,35 +35,6 @@ def _current_user_email(user: dict[str, Any]) -> str:
     return str(raw_email).strip().lower()
 
 
-def _is_admin(user: dict[str, Any]) -> bool:
-    role = str(user.get("role", "")).strip().lower()
-    access_tier = str(user.get("access_tier", "")).strip().lower()
-    department_role = str(user.get("department_role", "")).strip().lower()
-
-    return role in {
-        "admin",
-        "super_admin",
-        "root_admin",
-        "platform_admin",
-        "operations_admin",
-        "finance_admin",
-        "marketing_admin",
-    } or access_tier in {
-        "super_admin",
-        "root_admin",
-        "platform_admin",
-        "operations_admin",
-        "finance_admin",
-        "marketing_admin",
-        "executive_technology",
-    } or department_role in {
-        "operations",
-        "finance",
-        "marketing",
-        "executive_technology",
-    }
-
-
 @router.get("", response_model=list[ProjectResponse], include_in_schema=False)
 @router.get("/", response_model=list[ProjectResponse])
 def get_projects(current_user: dict[str, Any] = Depends(get_current_user)):
@@ -69,7 +44,7 @@ def get_projects(current_user: dict[str, Any] = Depends(get_current_user)):
     projects = list_projects(
         owner_user_id=current_user_id,
         owner_email=current_user_email,
-        is_admin=_is_admin(current_user),
+        is_admin=has_internal_admin_access(current_user),
     )
     return [build_project_response(project) for project in projects]
 
