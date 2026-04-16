@@ -8,6 +8,7 @@ from typing import Any
 from urllib.parse import quote_plus, urlsplit, urlunsplit
 
 import requests
+from email_validator import EmailNotValidError, validate_email
 from requests import RequestException
 
 from app.config import settings
@@ -49,13 +50,14 @@ def _postmark_from_header() -> str:
 
 
 def _is_likely_email_address(value: str) -> bool:
-    normalized = _normalize_email(value)
-    if not normalized or "@" not in normalized:
+    normalized = _normalize_text(value)
+    if not normalized:
         return False
-    local_part, _, domain = normalized.partition("@")
-    if not local_part or not domain:
+    try:
+        validate_email(normalized, check_deliverability=False)
+        return True
+    except EmailNotValidError:
         return False
-    return "." in domain and not domain.startswith(".") and not domain.endswith(".")
 
 
 def _truncate_log_value(
