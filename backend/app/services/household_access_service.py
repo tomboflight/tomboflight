@@ -408,14 +408,36 @@ def create_household_invite(
             "member_role": normalized_role,
         },
     )
-    send_household_invite_email(
-        to_email=normalized_email,
-        invite_key=invite_key,
-        project_id=_normalize(project_id),
-        member_role=normalized_role,
-        inviter_email=_normalize_email(actor_user.get("email")),
-        is_resend=False,
-    )
+    email_delivery: dict[str, Any] = {"sent": True}
+    try:
+        email_delivery = send_household_invite_email(
+            to_email=normalized_email,
+            invite_key=invite_key,
+            project_id=_normalize(project_id),
+            member_role=normalized_role,
+            inviter_email=_normalize_email(actor_user.get("email")),
+            is_resend=False,
+        ) or {"sent": False, "error": "unknown_email_delivery_failure"}
+    except Exception as exc:
+        logger.exception(
+            "household_access_service.create_household_invite.email_exception "
+            "project_id=%s invite_id=%s invite_email=%s error=%s",
+            _normalize(project_id),
+            _normalize(result.inserted_id),
+            normalized_email,
+            str(exc),
+        )
+        email_delivery = {
+            "sent": False,
+            "error": str(exc) or type(exc).__name__,
+            "exception_type": type(exc).__name__,
+        }
+
+    if not bool(email_delivery.get("sent")):
+        document["email_delivery_status"] = "failed"
+        document["email_delivery_error"] = _normalize(email_delivery.get("error")) or "email delivery failed"
+    else:
+        document["email_delivery_status"] = "sent"
     return document
 
 
@@ -568,15 +590,39 @@ def resend_household_invite(
         str(oid),
         {"project_id": _normalize(invite.get("project_id")), "invite_email": _normalize_email(invite.get("email"))},
     )
-    send_household_invite_email(
-        to_email=_normalize_email(invite.get("email")),
-        invite_key=new_key,
-        project_id=_normalize(invite.get("project_id")),
-        member_role=normalize_project_member_role(invite.get("member_role"), default="viewer"),
-        inviter_email=_normalize_email(actor_user.get("email")),
-        is_resend=True,
-    )
-    return _invites().find_one({"_id": oid})
+    invite = _invites().find_one({"_id": oid})
+    if invite is None:
+        return None
+    email_delivery: dict[str, Any] = {"sent": True}
+    try:
+        email_delivery = send_household_invite_email(
+            to_email=_normalize_email(invite.get("email")),
+            invite_key=new_key,
+            project_id=_normalize(invite.get("project_id")),
+            member_role=normalize_project_member_role(invite.get("member_role"), default="viewer"),
+            inviter_email=_normalize_email(actor_user.get("email")),
+            is_resend=True,
+        ) or {"sent": False, "error": "unknown_email_delivery_failure"}
+    except Exception as exc:
+        logger.exception(
+            "household_access_service.resend_household_invite.email_exception "
+            "project_id=%s invite_id=%s invite_email=%s error=%s",
+            _normalize(invite.get("project_id")),
+            _normalize(oid),
+            _normalize_email(invite.get("email")),
+            str(exc),
+        )
+        email_delivery = {
+            "sent": False,
+            "error": str(exc) or type(exc).__name__,
+            "exception_type": type(exc).__name__,
+        }
+    if not bool(email_delivery.get("sent")):
+        invite["email_delivery_status"] = "failed"
+        invite["email_delivery_error"] = _normalize(email_delivery.get("error")) or "email delivery failed"
+    else:
+        invite["email_delivery_status"] = "sent"
+    return invite
 
 
 def update_member_role(

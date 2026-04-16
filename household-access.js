@@ -523,7 +523,12 @@
           `Unable to create invite (unexpected status: ${inviteStatusValue || "unknown"}). Please try again or contact support if this persists.`,
         );
       }
-      setText(inviteStatus, "Invite created successfully and added to pending invites.", "success");
+      const emailDeliveryFailed =
+        String(invite?.email_delivery_status || "").trim().toLowerCase() === "failed";
+      const successMessage = emailDeliveryFailed
+        ? String(invite?.message || "Invite created, but email delivery failed.").trim()
+        : "Invite created successfully and added to pending invites.";
+      setText(inviteStatus, successMessage, emailDeliveryFailed ? "warning" : "success");
       inviteForm.reset();
       updateAutoInviteDefaults(true);
       await refreshData();

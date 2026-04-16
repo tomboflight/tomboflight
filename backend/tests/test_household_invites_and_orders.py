@@ -7,6 +7,54 @@ from app.services import email_service, household_access_service, order_service
 
 
 class HouseholdInviteAndOrderTests(unittest.TestCase):
+    def test_create_household_invite_persists_when_email_delivery_fails(self):
+        inserted_docs = []
+
+        class FakeInvitesCollection:
+            def insert_one(self, document):
+                inserted_docs.append(dict(document))
+                return SimpleNamespace(inserted_id="invite-1")
+
+        class FakeMembersCollection:
+            def find_one(self, *_args, **_kwargs):
+                return None
+
+        actor = {"_id": "owner-1", "email": "owner@example.com"}
+        with (
+            patch.object(
+                household_access_service,
+                "_find_project",
+                return_value={"_id": "project-1", "owner_user_id": "owner-1", "owner_email": "owner@example.com"},
+            ),
+            patch.object(household_access_service, "_resolve_actor_role", return_value="billing_owner"),
+            patch.object(household_access_service, "_active_member_count", return_value=0),
+            patch.object(household_access_service, "_resolve_member_seat_cap", return_value=6),
+            patch.object(household_access_service, "_members", return_value=FakeMembersCollection()),
+            patch.object(household_access_service, "_invites", return_value=FakeInvitesCollection()),
+            patch.object(household_access_service, "create_audit_log"),
+            patch.object(
+                household_access_service,
+                "send_household_invite_email",
+                return_value={"sent": False, "error": "Your Postmark account is pending approval."},
+            ) as send_email_mock,
+        ):
+            invite = household_access_service.create_household_invite(
+                project_id="project-1",
+                actor_user=actor,
+                email="wife@example.com",
+                member_role="co_owner",
+                relationship_scope="spouse",
+                privacy_scope="household_private",
+            )
+
+        self.assertEqual(len(inserted_docs), 1)
+        self.assertEqual(inserted_docs[0]["status"], "pending")
+        self.assertTrue(str(inserted_docs[0]["invite_key"]).startswith("hhinv_"))
+        self.assertEqual(invite["status"], "pending")
+        self.assertEqual(invite["email_delivery_status"], "failed")
+        self.assertIn("pending approval", invite["email_delivery_error"])
+        send_email_mock.assert_called_once()
+
     def test_build_invite_response_includes_expired_timestamp(self):
         payload = build_invite_response(
             {

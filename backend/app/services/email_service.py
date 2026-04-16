@@ -1,6 +1,7 @@
 """Postmark API email helpers for Tomb of Light auth flows."""
 
 import logging
+import os
 from datetime import UTC, datetime
 from email.utils import formataddr
 from html import escape
@@ -29,7 +30,16 @@ def _normalize_email(value: object) -> str:
 
 
 def _postmark_token() -> str:
-    return _normalize_text(settings.postmark_server_token)
+    configured_token = _normalize_text(settings.postmark_server_token)
+    if configured_token:
+        return configured_token
+    legacy_token = _normalize_text(os.getenv("POSTMARK_API_TOKEN"))
+    if legacy_token:
+        logger.warning(
+            "Using legacy POSTMARK_API_TOKEN fallback for Postmark authentication; "
+            "prefer POSTMARK_SERVER_TOKEN."
+        )
+    return legacy_token
 
 
 def _postmark_from_email() -> str:
@@ -129,21 +139,43 @@ def _send_email(
     text_body: str,
     html_body: str | None = None,
     email_type: str = "transactional",
-) -> None:
+) -> dict[str, Any]:
     """Send one transactional email through Postmark. Never raises."""
     normalized_to_email = _normalize_email(to_email)
     if not normalized_to_email:
-        return
+        return {
+            "sent": False,
+            "skipped": True,
+            "provider": "postmark",
+            "error": "recipient_email_missing",
+        }
 
     token = _postmark_token()
+    sender_email = _postmark_from_email()
+    sender_header = _postmark_from_header()
+    message_stream = _postmark_message_stream()
+
+    if "@" not in sender_email:
+        logger.error(
+            "Postmark sender email appears invalid: sender_email=%s sender_header=%s",
+            sender_email,
+            sender_header,
+        )
+        return {
+            "sent": False,
+            "skipped": True,
+            "provider": "postmark",
+            "error": "sender_email_invalid",
+        }
+
     if not token:
         context = {
             "event": "postmark_email_not_configured",
             "email_provider": "postmark",
             "email_type": _normalize_text(email_type) or "transactional",
             "recipient_email": normalized_to_email,
-            "sender_email": _postmark_from_email(),
-            "message_stream": _postmark_message_stream(),
+            "sender_email": sender_email,
+            "message_stream": message_stream,
             "subject": _truncate_log_value(subject),
         }
         logger.warning(
@@ -154,14 +186,19 @@ def _send_email(
             context["message_stream"],
             extra=context,
         )
-        return
+        return {
+            "sent": False,
+            "skipped": True,
+            "provider": "postmark",
+            "error": "postmark_token_missing",
+        }
 
     payload = {
-        "From": _postmark_from_header(),
+        "From": sender_header,
         "To": normalized_to_email,
         "Subject": subject,
         "TextBody": text_body,
-        "MessageStream": _postmark_message_stream(),
+        "MessageStream": message_stream,
     }
     if html_body:
         payload["HtmlBody"] = html_body
@@ -193,6 +230,14 @@ def _send_email(
             payload["MessageStream"],
         )
         response.raise_for_status()
+        return {
+            "sent": True,
+            "skipped": False,
+            "provider": "postmark",
+            "message_id": _postmark_response_details(response).get("postmark_message_id"),
+            "status_code": response.status_code,
+            "error": None,
+        }
     except RequestException as exc:
         response = getattr(exc, "response", None)
         context = _postmark_log_context(
@@ -213,7 +258,16 @@ def _send_email(
             extra=context,
             exc_info=True,
         )
-    except Exception:
+        return {
+            "sent": False,
+            "skipped": False,
+            "provider": "postmark",
+            "status_code": context.get("postmark_status_code"),
+            "error_code": context.get("postmark_error_code"),
+            "error": context.get("postmark_error_message") or str(exc) or type(exc).__name__,
+            "exception_type": type(exc).__name__,
+        }
+    except Exception as exc:
         context = _postmark_log_context(
             email_type=email_type,
             to_email=normalized_to_email,
@@ -229,6 +283,14 @@ def _send_email(
             extra=context,
             exc_info=True,
         )
+        return {
+            "sent": False,
+            "skipped": False,
+            "provider": "postmark",
+            "status_code": context.get("postmark_status_code"),
+            "error": "unexpected_postmark_email_failure",
+            "exception_type": type(exc).__name__,
+        }
 
 
 def send_password_reset_email(
@@ -326,7 +388,7 @@ def send_household_invite_email(
     member_role: str,
     inviter_email: str = "",
     is_resend: bool = False,
-) -> None:
+) -> dict[str, Any]:
     safe_invite_key = quote_plus(_normalize_text(invite_key))
     safe_project_id = quote_plus(_normalize_text(project_id))
     normalized_role = _normalize_text(member_role).replace("_", " ").strip().title() or "Viewer"
@@ -377,7 +439,7 @@ def send_household_invite_email(
         f'<a href="{escape(signup_url, quote=True)}">create account</a></p>'
         "<p>If you did not expect this invite, you can ignore this message.</p>"
     )
-    _send_email(
+    return _send_email(
         to_email=to_email,
         subject=subject,
         text_body=text_body,
