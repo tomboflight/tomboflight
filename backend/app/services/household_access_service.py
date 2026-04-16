@@ -188,15 +188,30 @@ def _persist_invite_email_delivery(
     invite_id: Any,
     invite_document: dict[str, Any],
     email_delivery: dict[str, Any],
-) -> None:
+) -> bool:
     sent = bool(email_delivery.get("sent"))
     updates = {
         "email_delivery_status": "sent" if sent else "failed",
         "email_delivery_error": None if sent else (_normalize(email_delivery.get("error")) or "email delivery failed"),
         "updated_at": _now().isoformat(),
     }
-    _invites().update_one({"_id": invite_id}, {"$set": updates})
     invite_document.update(updates)
+    try:
+        _invites().update_one({"_id": invite_id}, {"$set": updates})
+        logger.info(
+            "household_access_service.invite_email_delivery_persisted invite_id=%s status=%s",
+            _normalize(invite_id),
+            updates["email_delivery_status"],
+        )
+        return True
+    except Exception as exc:
+        logger.exception(
+            "household_access_service.invite_email_delivery_persist_failed invite_id=%s status=%s error=%s",
+            _normalize(invite_id),
+            updates["email_delivery_status"],
+            str(exc),
+        )
+        return False
 
 
 def _resolve_actor_role(project: dict[str, Any], actor_user: dict[str, Any]) -> str:
@@ -399,7 +414,16 @@ def create_household_invite(
         "accepted_at": None,
         "revoked_at": None,
     }
-    result = _invites().insert_one(document)
+    try:
+        result = _invites().insert_one(document)
+    except Exception as exc:
+        logger.exception(
+            "household_access_service.create_household_invite.insert_failed project_id=%s invite_email=%s error=%s",
+            _normalize(project_id),
+            normalized_email,
+            str(exc),
+        )
+        raise
     document["_id"] = result.inserted_id
     logger.info(
         (
@@ -425,6 +449,12 @@ def create_household_invite(
         },
     )
     email_delivery: dict[str, Any] = {"sent": True}
+    logger.info(
+        "household_access_service.create_household_invite.email_attempt project_id=%s invite_id=%s invite_email=%s",
+        _normalize(project_id),
+        _normalize(result.inserted_id),
+        normalized_email,
+    )
     try:
         email_delivery = send_household_invite_email(
             to_email=normalized_email,
@@ -449,6 +479,13 @@ def create_household_invite(
             "exception_type": type(exc).__name__,
         }
 
+    logger.info(
+        "household_access_service.create_household_invite.email_result project_id=%s invite_id=%s sent=%s error=%s",
+        _normalize(project_id),
+        _normalize(result.inserted_id),
+        bool(email_delivery.get("sent")),
+        _normalize(email_delivery.get("error")),
+    )
     _persist_invite_email_delivery(
         invite_id=result.inserted_id,
         invite_document=document,

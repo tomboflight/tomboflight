@@ -76,6 +76,10 @@
 
   let currentProjectId = "";
   let currentUser = null;
+  const LIVE_INVITE_API_BASE_URLS = [
+    "https://tomboflight-api.onrender.com",
+    "https://api.tomboflight.com",
+  ];
 
   function normalizeBaseUrl(value) {
     return String(value || "")
@@ -100,21 +104,25 @@
     const configuredList = Array.isArray(currentConfig.API_BASE_URLS)
       ? currentConfig.API_BASE_URLS.map(normalizeBaseUrl).filter(Boolean)
       : [];
-    const configuredCandidates = [configuredBase, ...configuredList].filter(Boolean);
-    const isInvalid = !configuredCandidates.length || configuredCandidates.some(isFrontendOriginBaseUrl);
-    if (!isInvalid) return;
+    const configuredCandidates = [configuredBase, ...configuredList]
+      .filter(Boolean)
+      .filter((value) => !isFrontendOriginBaseUrl(value));
     const runtimeBase =
       typeof app.getApiBaseUrl === "function" ? normalizeBaseUrl(app.getApiBaseUrl()) : "";
-    if (!runtimeBase || isFrontendOriginBaseUrl(runtimeBase)) {
+    const mergedCandidates = Array.from(
+      new Set([
+        runtimeBase,
+        ...configuredCandidates,
+        ...LIVE_INVITE_API_BASE_URLS.map(normalizeBaseUrl),
+      ].filter((value) => value && !isFrontendOriginBaseUrl(value))),
+    );
+    if (!mergedCandidates.length) {
       console.warn("[HouseholdAccess] API base config is invalid for live mode.", {
         API_BASE_URL: currentConfig.API_BASE_URL,
         API_BASE_URLS: currentConfig.API_BASE_URLS,
       });
       return;
     }
-    const mergedCandidates = Array.from(
-      new Set([runtimeBase, ...configuredList].filter((value) => value && !isFrontendOriginBaseUrl(value))),
-    );
     window.TOL_CONFIG = Object.assign({}, currentConfig, {
       API_BASE_URL: mergedCandidates[0],
       API_BASE_URLS: mergedCandidates,
@@ -137,13 +145,14 @@
   }
 
   function inviteDebugMeta(path, payload, error) {
-    const resolvedApiBaseUrl =
-      typeof app.getApiBaseUrl === "function" ? normalizeBaseUrl(app.getApiBaseUrl()) : "";
+    const resolvedApiBaseUrl = normalizeBaseUrl(error?.resolvedApiBaseUrl || app.getApiBaseUrl?.());
+    const resolvedApiBaseUrls = resolveInviteApiBaseUrls();
     const configuredApiBaseUrl = normalizeBaseUrl(window.TOL_CONFIG?.API_BASE_URL);
     const tokenPresent =
       typeof app.getToken === "function" ? Boolean(String(app.getToken() || "").trim()) : false;
     return {
       resolvedApiBaseUrl,
+      resolvedApiBaseUrls,
       configuredApiBaseUrl,
       requestUrl: buildInviteRequestUrl(path, error),
       method: "POST",
@@ -188,9 +197,113 @@
     console.info("[HouseholdAccess] Invite request succeeded.", {
       action,
       ...inviteDebugMeta(path, payload),
-      status: 201,
+      status: Number(responseBody?.__meta?.status || 201),
       responseBody,
     });
+  }
+
+  function resolveInviteApiBaseUrls() {
+    const configuredBase = normalizeBaseUrl(window.TOL_CONFIG?.API_BASE_URL);
+    const configuredList = Array.isArray(window.TOL_CONFIG?.API_BASE_URLS)
+      ? window.TOL_CONFIG.API_BASE_URLS.map(normalizeBaseUrl).filter(Boolean)
+      : [];
+    const runtimeBase =
+      typeof app.getApiBaseUrl === "function" ? normalizeBaseUrl(app.getApiBaseUrl()) : "";
+    return Array.from(
+      new Set(
+        [runtimeBase, configuredBase, ...configuredList, ...LIVE_INVITE_API_BASE_URLS]
+          .map(normalizeBaseUrl)
+          .filter((value) => value && !isFrontendOriginBaseUrl(value)),
+      ),
+    );
+  }
+
+  async function sendInviteRequest(path, payload, action) {
+    const apiBaseUrls = resolveInviteApiBaseUrls();
+    const authToken = typeof app.getToken === "function" ? String(app.getToken() || "").trim() : "";
+    let lastError = null;
+    for (const apiBaseUrl of apiBaseUrls) {
+      const requestUrl = `${apiBaseUrl}${path}`;
+      logInviteRequest(action, path, payload);
+      console.info("[HouseholdAccess] Invite request attempt.", {
+        action,
+        resolvedApiBaseUrl: apiBaseUrl,
+        requestUrl,
+        method: "POST",
+        payload,
+      });
+      try {
+        const headers = {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        };
+        if (authToken) headers.Authorization = `Bearer ${authToken}`;
+        const response = await fetch(requestUrl, {
+          method: "POST",
+          credentials: "include",
+          headers,
+          body: JSON.stringify(payload),
+        });
+        const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+        let responseBody = null;
+        if (contentType.includes("application/json")) {
+          responseBody = await response.json();
+        } else {
+          const text = await response.text();
+          responseBody = text ? { detail: text } : null;
+        }
+        console.info("[HouseholdAccess] Invite request response.", {
+          action,
+          resolvedApiBaseUrl: apiBaseUrl,
+          requestUrl,
+          method: "POST",
+          payload,
+          status: response.status,
+          responseBody,
+        });
+        if (!response.ok) {
+          const detail = String(
+            responseBody?.detail || responseBody?.message || responseBody?.error || response.statusText || "",
+          ).trim();
+          const error = new Error(detail || `Request failed with status ${response.status}`);
+          error.status = response.status;
+          error.statusText = response.statusText;
+          error.detail = detail;
+          error.data = responseBody;
+          error.responseBody = responseBody;
+          error.requestUrl = requestUrl;
+          error.resolvedApiBaseUrl = apiBaseUrl;
+          lastError = error;
+          if (response.status === 404) {
+            continue;
+          }
+          throw error;
+        }
+        if (responseBody && typeof responseBody === "object") {
+          responseBody.__meta = {
+            requestUrl,
+            resolvedApiBaseUrl: apiBaseUrl,
+            status: response.status,
+          };
+        }
+        return responseBody;
+      } catch (error) {
+        if (Number(error?.status || 0) === 404) {
+          lastError = error;
+          continue;
+        }
+        if (Number(error?.status || 0) > 0) {
+          throw error;
+        }
+        const networkError = new Error(error?.message || "Network request failed.");
+        networkError.status = 0;
+        networkError.detail = error?.message || "Network request failed.";
+        networkError.requestUrl = requestUrl;
+        networkError.resolvedApiBaseUrl = apiBaseUrl;
+        lastError = networkError;
+      }
+    }
+    throw lastError || new Error("Invite endpoint is unavailable.");
   }
 
   function setText(node, message, type = "info") {
@@ -500,12 +613,8 @@
       let invite = null;
       let lastError = null;
       for (const invitePath of invitePaths) {
-        logInviteRequest(`invite_${payload.member_role}`, invitePath, payload);
         try {
-          invite = await app.apiRequest(invitePath, {
-            method: "POST",
-            body: JSON.stringify(payload),
-          });
+          invite = await sendInviteRequest(invitePath, payload, `invite_${payload.member_role}`);
           logInviteSuccess(`invite_${payload.member_role}`, invitePath, invite, payload);
           break;
         } catch (error) {
@@ -636,6 +745,7 @@
     console.info("[HouseholdAccess] Invite runtime API context.", {
       resolvedApiBaseUrl:
         typeof app.getApiBaseUrl === "function" ? normalizeBaseUrl(app.getApiBaseUrl()) : "",
+      resolvedApiBaseUrls: resolveInviteApiBaseUrls(),
       configuredApiBaseUrl: normalizeBaseUrl(window.TOL_CONFIG?.API_BASE_URL),
       configuredApiBaseUrls: Array.isArray(window.TOL_CONFIG?.API_BASE_URLS)
         ? window.TOL_CONFIG.API_BASE_URLS.map(normalizeBaseUrl).filter(Boolean)
