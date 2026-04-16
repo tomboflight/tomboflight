@@ -38,6 +38,84 @@
   let currentProjectId = "";
   let currentUser = null;
 
+  function normalizeBaseUrl(value) {
+    return String(value || "")
+      .trim()
+      .replace(/\/+$/, "");
+  }
+
+  function isFrontendOriginBaseUrl(value) {
+    const normalized = normalizeBaseUrl(value);
+    if (!normalized) return false;
+    try {
+      return new URL(normalized).origin === window.location.origin;
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  function ensureApiConfigForHouseholdAccess() {
+    if (typeof app.isLocalApp === "function" && app.isLocalApp()) return;
+    const currentConfig = window.TOL_CONFIG || {};
+    const configuredBase = normalizeBaseUrl(currentConfig.API_BASE_URL);
+    const configuredList = Array.isArray(currentConfig.API_BASE_URLS)
+      ? currentConfig.API_BASE_URLS.map(normalizeBaseUrl).filter(Boolean)
+      : [];
+    const configuredCandidates = [configuredBase, ...configuredList].filter(Boolean);
+    const isInvalid = !configuredCandidates.length || configuredCandidates.some(isFrontendOriginBaseUrl);
+    if (!isInvalid) return;
+    const runtimeBase =
+      typeof app.getApiBaseUrl === "function" ? normalizeBaseUrl(app.getApiBaseUrl()) : "";
+    if (!runtimeBase || isFrontendOriginBaseUrl(runtimeBase)) {
+      console.warn("[HouseholdAccess] API base config is invalid for live mode.", {
+        API_BASE_URL: currentConfig.API_BASE_URL,
+        API_BASE_URLS: currentConfig.API_BASE_URLS,
+      });
+      return;
+    }
+    const mergedCandidates = Array.from(
+      new Set([runtimeBase, ...configuredList].filter((value) => value && !isFrontendOriginBaseUrl(value))),
+    );
+    window.TOL_CONFIG = Object.assign({}, currentConfig, {
+      API_BASE_URL: mergedCandidates[0],
+      API_BASE_URLS: mergedCandidates,
+    });
+    console.warn("[HouseholdAccess] Applied live API base fallback config.", {
+      API_BASE_URL: window.TOL_CONFIG.API_BASE_URL,
+      API_BASE_URLS: window.TOL_CONFIG.API_BASE_URLS,
+    });
+  }
+
+  function buildInviteRequestUrl(path, error) {
+    const explicitUrl = String(error?.requestUrl || "").trim();
+    if (explicitUrl) return explicitUrl;
+    if (/^https?:\/\//i.test(String(path || ""))) return String(path);
+    const baseFromApp =
+      typeof app.getApiBaseUrl === "function" ? normalizeBaseUrl(app.getApiBaseUrl()) : "";
+    const baseFromConfig = normalizeBaseUrl(window.TOL_CONFIG?.API_BASE_URL);
+    const base = baseFromApp || baseFromConfig;
+    return base ? `${base}${path}` : String(path || "");
+  }
+
+  function userInviteErrorMessage(error, fallback) {
+    const detail = String(error?.detail || error?.message || "").trim();
+    const statusCode = Number(error?.status || 0);
+    if (statusCode === 404) {
+      return "Invite endpoint is unavailable. Please contact support if this persists.";
+    }
+    return detail || fallback;
+  }
+
+  function logInviteFailure(action, path, error) {
+    console.error("[HouseholdAccess] Invite request failed.", {
+      action,
+      requestUrl: buildInviteRequestUrl(path, error),
+      status: error?.status ?? null,
+      statusText: error?.statusText || "",
+      responseBody: error?.data ?? error?.responseBody ?? error?.detail ?? error?.message ?? null,
+    });
+  }
+
   function setText(node, message, type = "info") {
     if (!node) return;
     app.setStatus(node, message, type);
@@ -262,16 +340,24 @@
       privacy_scope: String(formData.get("privacy_scope") || "household_private").trim(),
       notes: String(formData.get("notes") || "").trim(),
     };
+    const invitePath = `/workspace-access/project/${encodeURIComponent(currentProjectId)}/invites`;
     try {
-      await app.apiRequest(`/workspace-access/project/${encodeURIComponent(currentProjectId)}/invites`, {
+      const invite = await app.apiRequest(invitePath, {
         method: "POST",
         body: JSON.stringify(payload),
       });
+      const inviteStatusValue = String(invite?.status || "").trim().toLowerCase();
+      if (inviteStatusValue !== "pending") {
+        throw new Error(
+          `Unable to create invite (unexpected status: ${inviteStatusValue || "unknown"}). Please try again or contact support if this persists.`,
+        );
+      }
       setText(inviteStatus, "Invite sent by email.", "success");
       inviteForm.reset();
       await refreshData();
     } catch (error) {
-      setText(inviteStatus, error.message || "Failed to create invite.", "error");
+      logInviteFailure(`invite_${payload.member_role}`, invitePath, error);
+      setText(inviteStatus, userInviteErrorMessage(error, "Failed to create invite."), "error");
     }
   }
 
@@ -315,6 +401,7 @@
   }
 
   async function initialize() {
+    ensureApiConfigForHouseholdAccess();
     currentUser = await app.requireSession("signin.html");
     if (!currentUser) return;
     currentProjectId = projectIdFromContext(currentUser);
