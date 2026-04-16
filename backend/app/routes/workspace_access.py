@@ -149,7 +149,7 @@ def create_invite(
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create workspace invite.",
+            detail="Failed to create workspace invite. Please try again.",
         ) from exc
     response_payload = build_invite_response(invite)
     logger.info(

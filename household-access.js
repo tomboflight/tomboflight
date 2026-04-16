@@ -491,6 +491,7 @@
     };
     const invitePaths = [
       `/workspace-access/project/${encodeURIComponent(currentProjectId)}/invites`,
+      // Backward-compatible singular route retained by backend legacy wiring.
       `/workspace-access/project/${encodeURIComponent(currentProjectId)}/invite`,
       `/workspace_access/project/${encodeURIComponent(currentProjectId)}/invites`,
       `/household-access/project/${encodeURIComponent(currentProjectId)}/invites`,

@@ -613,12 +613,24 @@
         const requestUrl = `${apiBaseUrl}${path}`;
         lastRequestUrl = requestUrl;
         response = await fetch(requestUrl, requestOptions);
+        const normalizedPath = String(path || "");
+        const shouldRetry404Fallback =
+          normalizedPath.startsWith("/workspace-access/") ||
+          normalizedPath.startsWith("/workspace_access/") ||
+          normalizedPath.startsWith("/household-access/") ||
+          normalizedPath.startsWith("/admin/control-center/");
         // Some deployments can expose mixed-version backends behind different
         // API domains where `/health` passes but specific routes lag behind.
-        // For that case, retry 404s on the next configured API base URL.
-        if (response && response.status === 404 && hasFallbackCandidate) {
+        // For these known cross-host-sensitive routes, retry 404s against the
+        // next configured API base URL before surfacing an error.
+        if (
+          response &&
+          response.status === 404 &&
+          hasFallbackCandidate &&
+          shouldRetry404Fallback
+        ) {
           console.warn("Tomb of Light API fallback retry after 404.", {
-            requestPath: String(path || ""),
+            requestPath: normalizedPath,
             failedApiBaseUrl: apiBaseUrl,
           });
           continue;

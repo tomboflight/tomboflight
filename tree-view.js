@@ -137,7 +137,7 @@
     return (Array.isArray(entries) ? entries : []).filter((entry) => {
       const personId = String(entry?.person?.id || "").trim();
       const relType = normalizeRelationshipType(entry?.relationship_type || "");
-      const key = `${personId}::${relType}`;
+      const key = JSON.stringify([personId, relType]);
       if (!personId || seen.has(key)) return false;
       seen.add(key);
       return true;
