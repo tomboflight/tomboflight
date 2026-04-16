@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -39,6 +40,8 @@ ROLE_ASSIGNMENTS: dict[str, set[str]] = {
     "co_owner": {"family_manager", "contributor", "viewer", "minor_viewer", "linked_relative"},
     "family_manager": {"contributor", "viewer", "minor_viewer"},
 }
+
+logger = logging.getLogger(__name__)
 
 PRIVACY_SCOPES = {
     "private_to_owner",
@@ -258,28 +261,83 @@ def create_household_invite(
     expires_in_days: int = 7,
     max_uses: int = 1,
 ) -> dict[str, Any]:
+    logger.info(
+        (
+            "household_access_service.create_household_invite.start "
+            "project_id=%s actor_user_id=%s actor_email=%s member_role=%s relationship_scope=%s privacy_scope=%s"
+        ),
+        _normalize(project_id),
+        _normalize(actor_user.get("id") or actor_user.get("_id") or actor_user.get("user_id")),
+        _normalize_email(actor_user.get("email")),
+        _normalize(member_role),
+        _normalize(relationship_scope),
+        _normalize(privacy_scope),
+    )
     project = _find_project(project_id)
     if project is None:
+        logger.warning(
+            "household_access_service.create_household_invite.project_not_found project_id=%s",
+            _normalize(project_id),
+        )
         raise ValueError("Workspace project not found.")
 
     actor_user_id = _normalize(actor_user.get("id") or actor_user.get("_id") or actor_user.get("user_id"))
     actor_role = _resolve_actor_role(project, actor_user)
     if actor_role not in ROLE_ASSIGNMENTS:
+        logger.warning(
+            "household_access_service.create_household_invite.forbidden actor_role=%s project_id=%s",
+            actor_role,
+            _normalize(project_id),
+        )
         raise PermissionError("You do not have permission to invite household members.")
 
     normalized_role = normalize_project_member_role(member_role, default="viewer")
     if not _can_assign_role(actor_role, normalized_role):
+        logger.warning(
+            (
+                "household_access_service.create_household_invite.role_assignment_forbidden "
+                "actor_role=%s requested_role=%s project_id=%s"
+            ),
+            actor_role,
+            normalized_role,
+            _normalize(project_id),
+        )
         raise PermissionError("Your role cannot assign the requested membership role.")
 
     normalized_email = _normalize_email(email)
     if not normalized_email:
+        logger.warning(
+            "household_access_service.create_household_invite.missing_email project_id=%s actor_user_id=%s",
+            _normalize(project_id),
+            actor_user_id,
+        )
         raise ValueError("Invite email is required.")
 
     normalized_privacy_scope = _normalize_privacy_scope(privacy_scope or "household_private")
     if normalized_privacy_scope not in PRIVACY_SCOPES:
+        logger.warning(
+            (
+                "household_access_service.create_household_invite.invalid_privacy_scope "
+                "privacy_scope=%s normalized_privacy_scope=%s project_id=%s"
+            ),
+            _normalize(privacy_scope),
+            normalized_privacy_scope,
+            _normalize(project_id),
+        )
         raise ValueError("Invalid privacy scope for invite.")
 
-    if _active_member_count(project_id) >= _resolve_member_seat_cap(project_id):
+    active_member_count = _active_member_count(project_id)
+    member_seat_cap = _resolve_member_seat_cap(project_id)
+    logger.info(
+        (
+            "household_access_service.create_household_invite.capacity_check "
+            "project_id=%s active_member_count=%s member_seat_cap=%s"
+        ),
+        _normalize(project_id),
+        active_member_count,
+        member_seat_cap,
+    )
+    if active_member_count >= member_seat_cap:
         raise ValueError("This workspace has reached the included seat limit for the active package.")
 
     existing_member = _members().find_one(
@@ -290,6 +348,15 @@ def create_household_invite(
         }
     )
     if existing_member is not None:
+        logger.warning(
+            (
+                "household_access_service.create_household_invite.member_already_active "
+                "project_id=%s invite_email=%s existing_member_id=%s"
+            ),
+            _normalize(project_id),
+            normalized_email,
+            _normalize(existing_member.get("_id")),
+        )
         raise ValueError("This email already has active workspace access.")
 
     now = _now()
@@ -317,6 +384,18 @@ def create_household_invite(
     }
     result = _invites().insert_one(document)
     document["_id"] = result.inserted_id
+    logger.info(
+        (
+            "household_access_service.create_household_invite.inserted "
+            "project_id=%s invite_id=%s invite_email=%s member_role=%s relationship_scope=%s privacy_scope=%s"
+        ),
+        _normalize(project_id),
+        _normalize(result.inserted_id),
+        normalized_email,
+        normalized_role,
+        _normalize_relationship_scope(relationship_scope or "household_member"),
+        normalized_privacy_scope,
+    )
     create_audit_log(
         "household_invite_created",
         actor_user_id or None,

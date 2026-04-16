@@ -136,6 +136,22 @@
     return base ? `${base}${path}` : String(path || "");
   }
 
+  function inviteDebugMeta(path, payload, error) {
+    const resolvedApiBaseUrl =
+      typeof app.getApiBaseUrl === "function" ? normalizeBaseUrl(app.getApiBaseUrl()) : "";
+    const configuredApiBaseUrl = normalizeBaseUrl(window.TOL_CONFIG?.API_BASE_URL);
+    const tokenPresent =
+      typeof app.getToken === "function" ? Boolean(String(app.getToken() || "").trim()) : false;
+    return {
+      resolvedApiBaseUrl,
+      configuredApiBaseUrl,
+      requestUrl: buildInviteRequestUrl(path, error),
+      method: "POST",
+      authTokenPresent: tokenPresent,
+      payload: payload || null,
+    };
+  }
+
   function userInviteErrorMessage(error, fallback) {
     const detail = String(error?.detail || error?.message || "").trim();
     const statusCode = Number(error?.status || 0);
@@ -151,11 +167,10 @@
     return detail || fallback;
   }
 
-  function logInviteFailure(action, path, error) {
+  function logInviteFailure(action, path, error, payload) {
     console.error("[HouseholdAccess] Invite request failed.", {
       action,
-      requestUrl: buildInviteRequestUrl(path, error),
-      method: "POST",
+      ...inviteDebugMeta(path, payload, error),
       status: error?.status ?? null,
       statusText: error?.statusText || "",
       responseBody: error?.data ?? error?.responseBody ?? error?.detail ?? error?.message ?? null,
@@ -165,17 +180,14 @@
   function logInviteRequest(action, path, payload) {
     console.info("[HouseholdAccess] Invite request.", {
       action,
-      requestUrl: buildInviteRequestUrl(path),
-      method: "POST",
-      payload,
+      ...inviteDebugMeta(path, payload),
     });
   }
 
-  function logInviteSuccess(action, path, responseBody) {
+  function logInviteSuccess(action, path, responseBody, payload) {
     console.info("[HouseholdAccess] Invite request succeeded.", {
       action,
-      requestUrl: buildInviteRequestUrl(path),
-      method: "POST",
+      ...inviteDebugMeta(path, payload),
       status: 201,
       responseBody,
     });
@@ -479,6 +491,7 @@
     };
     const invitePaths = [
       `/workspace-access/project/${encodeURIComponent(currentProjectId)}/invites`,
+      `/workspace-access/project/${encodeURIComponent(currentProjectId)}/invite`,
       `/workspace_access/project/${encodeURIComponent(currentProjectId)}/invites`,
       `/household-access/project/${encodeURIComponent(currentProjectId)}/invites`,
     ];
@@ -492,11 +505,11 @@
             method: "POST",
             body: JSON.stringify(payload),
           });
-          logInviteSuccess(`invite_${payload.member_role}`, invitePath, invite);
+          logInviteSuccess(`invite_${payload.member_role}`, invitePath, invite, payload);
           break;
         } catch (error) {
           lastError = error;
-          logInviteFailure(`invite_${payload.member_role}`, invitePath, error);
+          logInviteFailure(`invite_${payload.member_role}`, invitePath, error, payload);
           if (Number(error?.status || 0) !== 404) throw error;
         }
       }
@@ -614,6 +627,15 @@
 
     bindQuickInviteButtons();
     updateAutoInviteDefaults(true);
+    console.info("[HouseholdAccess] Invite runtime API context.", {
+      resolvedApiBaseUrl:
+        typeof app.getApiBaseUrl === "function" ? normalizeBaseUrl(app.getApiBaseUrl()) : "",
+      configuredApiBaseUrl: normalizeBaseUrl(window.TOL_CONFIG?.API_BASE_URL),
+      configuredApiBaseUrls: Array.isArray(window.TOL_CONFIG?.API_BASE_URLS)
+        ? window.TOL_CONFIG.API_BASE_URLS.map(normalizeBaseUrl).filter(Boolean)
+        : [],
+      projectId: currentProjectId,
+    });
     if (inviteForm) inviteForm.addEventListener("submit", handleInviteSubmit);
     if (acceptForm) acceptForm.addEventListener("submit", handleAcceptSubmit);
     await refreshData();

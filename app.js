@@ -303,6 +303,24 @@
     );
   }
 
+  function isLikelyApiBaseUrl(value) {
+    try {
+      const parsed = new URL(String(value || "").trim());
+      return parsed.protocol === "https:" || parsed.protocol === "http:";
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  function isFrontendOriginBaseUrl(value) {
+    try {
+      const parsed = new URL(String(value || "").trim());
+      return parsed.origin === window.location.origin;
+    } catch (_error) {
+      return false;
+    }
+  }
+
   function getConfiguredApiBaseUrls() {
     const configuredList =
       window.TOL_CONFIG && Array.isArray(window.TOL_CONFIG.API_BASE_URLS)
@@ -316,9 +334,20 @@
     const configured = uniqueNonEmptyValues([
       configuredSingle,
       ...configuredList,
-    ]);
-    if (configured.length) {
-      return configured;
+    ]).filter(function (candidate) {
+      return isLikelyApiBaseUrl(candidate);
+    });
+    const safeConfigured = configured.filter(function (candidate) {
+      return !isFrontendOriginBaseUrl(candidate);
+    });
+    if (safeConfigured.length) {
+      if (isLocalApp()) {
+        return safeConfigured;
+      }
+      return uniqueNonEmptyValues([
+        ...safeConfigured,
+        ...DEFAULT_LIVE_API_BASE_URLS,
+      ]);
     }
 
     if (isLocalApp()) {
@@ -584,12 +613,11 @@
         const requestUrl = `${apiBaseUrl}${path}`;
         lastRequestUrl = requestUrl;
         response = await fetch(requestUrl, requestOptions);
-        if (
-          response &&
-          response.status === 404 &&
-          hasFallbackCandidate &&
-          String(path || "").startsWith("/admin/control-center")
-        ) {
+        if (response && response.status === 404 && hasFallbackCandidate) {
+          console.warn("Tomb of Light API fallback retry after 404.", {
+            requestPath: String(path || ""),
+            failedApiBaseUrl: apiBaseUrl,
+          });
           continue;
         }
         saveApiBaseUrl(apiBaseUrl);
