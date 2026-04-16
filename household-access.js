@@ -64,6 +64,7 @@
       spouse: "Spouse invited as co-owner for household management and family tree collaboration.",
     },
     family_manager: {
+      spouse: "Spouse invited as family manager to help manage household records and family tree collaboration.",
       parent: "Parent invited to help manage household records and family information.",
     },
     viewer: {
@@ -88,6 +89,16 @@
     return String(value || "")
       .trim()
       .replace(/\/+$/, "");
+  }
+
+  function readableMessage(value, fallback = "") {
+    if (typeof app.getReadableErrorMessage === "function") {
+      const parsed = app.getReadableErrorMessage(value, "");
+      if (parsed) return parsed;
+    }
+    const normalized = String(value || "").trim();
+    if (normalized && normalized !== "[object Object]") return normalized;
+    return String(fallback || "").trim();
   }
 
   function isFrontendOriginBaseUrl(value) {
@@ -165,7 +176,10 @@
   }
 
   function userInviteErrorMessage(error, fallback) {
-    const detail = String(error?.detail || error?.message || "").trim();
+    const detail = readableMessage(
+      error?.detail || error?.message || error?.data || error?.responseBody,
+      "",
+    );
     const statusCode = Number(error?.status || 0);
     if (statusCode === 404) {
       return "The invite feature is currently unavailable. Please contact support.";
@@ -322,9 +336,10 @@
           };
           logLoadResponse(action, path, "GET", projectId, responseMeta, responseBody);
           if (!response.ok) {
-            const detail = String(
-              responseBody?.detail || responseBody?.message || responseBody?.error || response.statusText || "",
-            ).trim();
+            const detail = readableMessage(
+              responseBody?.detail || responseBody?.message || responseBody?.error || responseBody,
+              response.statusText || `Request failed with status ${response.status}`,
+            );
             const error = new Error(detail || `Request failed with status ${response.status}`);
             error.status = response.status;
             error.statusText = response.statusText;
@@ -430,9 +445,10 @@
           responseBody,
         });
         if (!response.ok) {
-          const detail = String(
-            responseBody?.detail || responseBody?.message || responseBody?.error || response.statusText || "",
-          ).trim();
+          const detail = readableMessage(
+            responseBody?.detail || responseBody?.message || responseBody?.error || responseBody,
+            response.statusText || `Request failed with status ${response.status}`,
+          );
           const error = new Error(detail || `Request failed with status ${response.status}`);
           error.status = response.status;
           error.statusText = response.statusText;
@@ -535,12 +551,14 @@
   function buildAutoNote(memberRole, relationshipScope, privacyScope) {
     const roleValue = String(memberRole || "viewer").trim();
     const relationshipValue = String(relationshipScope || "household_member").trim();
+    const privacyValue = String(privacyScope || "").trim();
     const preset = DEFAULT_NOTE_BY_ROLE_RELATIONSHIP[roleValue]?.[relationshipValue];
     if (preset) return preset;
     if (roleValue === "linked_relative") {
       return `${relationshipLabel(relationshipValue)} invited for link-only household access.`;
     }
-    if (roleValue === "viewer" || String(privacyScope || "").trim() === "read_only") {
+    const isViewerRole = roleValue === "viewer" || roleValue === "minor_viewer";
+    if (isViewerRole || privacyValue === "read_only") {
       return `${relationshipLabel(relationshipValue)} invited with read-only household access.`;
     }
     return `${relationshipLabel(relationshipValue)} invited as ${titleLabel(roleValue).toLowerCase()} for household collaboration.`;
@@ -578,6 +596,21 @@
   function inviteKeyFromQuery() {
     const params = new URLSearchParams(window.location.search);
     return String(params.get("invite_key") || "").trim();
+  }
+
+  function projectIdFromQuery() {
+    const params = new URLSearchParams(window.location.search);
+    return String(params.get("project_id") || "").trim();
+  }
+
+  function signinRedirectUrlWithInviteContext() {
+    const inviteKey = inviteKeyFromQuery();
+    const projectId = projectIdFromQuery();
+    if (!inviteKey) return "signin.html";
+    const params = new URLSearchParams();
+    params.set("invite_key", inviteKey);
+    if (projectId) params.set("project_id", projectId);
+    return `signin.html?${params.toString()}`;
   }
 
   function isPending(invite) {
@@ -901,7 +934,7 @@
       ensureApiConfigForHouseholdAccess();
       const token = typeof app.getToken === "function" ? String(app.getToken() || "").trim() : "";
       if (!token) {
-        window.location.href = "signin.html";
+        window.location.href = signinRedirectUrlWithInviteContext();
         return;
       }
 
@@ -949,11 +982,14 @@
       const statusCode = Number(error?.status || 0);
       if (statusCode === 401 || statusCode === 403) {
         if (typeof app.clearSession === "function") app.clearSession();
-        window.location.href = "signin.html";
+        window.location.href = signinRedirectUrlWithInviteContext();
         return;
       }
       const detail =
-        String(error?.detail || error?.message || "Unable to load workspace access settings.").trim() ||
+        readableMessage(
+          error?.detail || error?.message || error?.data || error?.responseBody,
+          "Unable to load workspace access settings.",
+        ) ||
         "Unable to load workspace access settings.";
       if (statusNode) {
         statusNode.textContent = detail;
