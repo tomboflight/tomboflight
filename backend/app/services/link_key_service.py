@@ -42,6 +42,16 @@ def _orders_collection():
     return db["orders"]
 
 
+def _families_collection():
+    db = get_database()
+    return db["families"]
+
+
+def _users_collection():
+    db = get_database()
+    return db["users"]
+
+
 def _normalize_value(value: Any) -> str:
     return str(value or "").strip()
 
@@ -158,6 +168,74 @@ def _get_project_entitlement(project_id: str) -> dict[str, Any] | None:
     return entitlements.find_one({"project_id": str(project_id), "status": "active"}) or entitlements.find_one({"project_id": str(project_id)})
 
 
+def _load_user_identity(user_id: str) -> tuple[str, str]:
+    normalized_user_id = _normalize_value(user_id)
+    if not normalized_user_id:
+        return "", ""
+
+    user = None
+    if ObjectId.is_valid(normalized_user_id):
+        user = _users_collection().find_one({"_id": ObjectId(normalized_user_id)})
+    if user is None:
+        user = _users_collection().find_one(
+            {"$or": [{"id": normalized_user_id}, {"user_id": normalized_user_id}]}
+        )
+
+    resolved_user_id = normalized_user_id
+    resolved_email = ""
+
+    if user is not None:
+        resolved_user_id = _normalize_value(
+            user.get("id") or user.get("_id") or user.get("user_id")
+        ) or normalized_user_id
+        resolved_email = _normalize_value(user.get("email")).lower()
+
+    return resolved_user_id, resolved_email
+
+
+def _family_allows_user_access(
+    family: dict[str, Any] | None,
+    *,
+    user_id: str,
+    user_email: str,
+) -> bool:
+    if not isinstance(family, dict):
+        return False
+
+    owner_user_id = _normalize_value(family.get("owner_user_id"))
+    owner_email = _normalize_value(family.get("owner_email")).lower()
+    shared_user_ids = {
+        _normalize_value(value)
+        for value in (family.get("shared_with_user_ids") or [])
+        if _normalize_value(value)
+    }
+    shared_emails = {
+        _normalize_value(value).lower()
+        for value in (family.get("shared_with_emails") or [])
+        if _normalize_value(value)
+    }
+
+    if user_id and (user_id == owner_user_id or user_id in shared_user_ids):
+        return True
+    if user_email and (user_email == owner_email or user_email in shared_emails):
+        return True
+
+    return False
+
+
+def _project_has_access_signal(project_id: str, project: dict[str, Any]) -> bool:
+    if _get_project_entitlement(project_id) or _get_paid_package_order(project_id):
+        return True
+
+    return bool(
+        _normalize_value(
+            project.get("package_code")
+            or project.get("package_slug")
+            or project.get("package_type")
+        )
+    )
+
+
 def project_supports_link_keys(project_id: str) -> bool:
     entitlement = _get_project_entitlement(project_id)
     if entitlement:
@@ -182,28 +260,104 @@ def project_supports_link_keys(project_id: str) -> bool:
 
 
 def user_can_access_project(project_id: str, user_id: str) -> bool:
-    summary = get_project_summary(project_id)
-    if not summary:
+    project = get_project_by_id(project_id)
+    if not project:
         return False
 
-    if str(summary.get("owner_user_id") or "") != str(user_id or ""):
-        return False
+    resolved_user_id, resolved_user_email = _load_user_identity(user_id)
+    owner_user_id = _normalize_value(project.get("owner_user_id"))
+    owner_email = _normalize_value(project.get("owner_email")).lower()
 
-    return bool(
-        _get_project_entitlement(project_id) or _get_paid_package_order(project_id)
+    has_direct_access = bool(
+        resolved_user_id and resolved_user_id == owner_user_id
+    ) or bool(
+        resolved_user_email and resolved_user_email == owner_email
     )
+
+    family_id = _normalize_value(project.get("family_id"))
+    if not has_direct_access and family_id:
+        family = None
+        if ObjectId.is_valid(family_id):
+            family = _families_collection().find_one({"_id": ObjectId(family_id)})
+        if family is None:
+            family = _families_collection().find_one({"family_id": family_id})
+        has_direct_access = _family_allows_user_access(
+            family,
+            user_id=resolved_user_id,
+            user_email=resolved_user_email,
+        )
+
+    if not has_direct_access:
+        return False
+
+    return _project_has_access_signal(str(project.get("_id")), project)
 
 
 def list_owned_project_ids(user_id: str) -> list[str]:
-    cursor = _projects_collection().find({"owner_user_id": str(user_id or "")})
+    resolved_user_id, resolved_user_email = _load_user_identity(user_id)
+    if not resolved_user_id and not resolved_user_email:
+        return []
 
-    project_ids: list[str] = []
-    for item in cursor:
-        project_id = str(item.get("_id"))
-        if user_can_access_project(project_id, user_id):
-            project_ids.append(project_id)
+    identity_filters: list[dict[str, Any]] = []
+    if resolved_user_id:
+        identity_filters.append({"owner_user_id": resolved_user_id})
+    if resolved_user_email:
+        identity_filters.append({"owner_email": resolved_user_email})
 
-    return project_ids
+    project_ids: set[str] = set()
+
+    if identity_filters:
+        for item in _projects_collection().find({"$or": identity_filters}, {"_id": 1}):
+            project_id = _normalize_value(item.get("_id"))
+            if project_id:
+                project_ids.add(project_id)
+
+    family_filters: list[dict[str, Any]] = []
+    if resolved_user_id:
+        family_filters.append({"shared_with_user_ids": resolved_user_id})
+    if resolved_user_email:
+        family_filters.append({"shared_with_emails": resolved_user_email})
+
+    if family_filters:
+        shared_family_ids: set[str] = set()
+        shared_project_ids: set[str] = set()
+        for family in _families_collection().find(
+            {"$or": family_filters},
+            {"_id": 1, "project_id": 1},
+        ):
+            family_id = _normalize_value(family.get("_id"))
+            project_id = _normalize_value(family.get("project_id"))
+            if family_id:
+                shared_family_ids.add(family_id)
+            if project_id:
+                shared_project_ids.add(project_id)
+
+        if shared_project_ids:
+            lookup_values: list[Any] = []
+            for project_id in shared_project_ids:
+                lookup_values.append(project_id)
+                if ObjectId.is_valid(project_id):
+                    lookup_values.append(ObjectId(project_id))
+            for item in _projects_collection().find({"_id": {"$in": lookup_values}}, {"_id": 1}):
+                project_id = _normalize_value(item.get("_id"))
+                if project_id:
+                    project_ids.add(project_id)
+
+        if shared_family_ids:
+            for item in _projects_collection().find(
+                {"family_id": {"$in": list(shared_family_ids)}},
+                {"_id": 1},
+            ):
+                project_id = _normalize_value(item.get("_id"))
+                if project_id:
+                    project_ids.add(project_id)
+
+    accessible_project_ids: list[str] = []
+    for project_id in sorted(project_ids):
+        if user_can_access_project(project_id, resolved_user_id):
+            accessible_project_ids.append(project_id)
+
+    return accessible_project_ids
 
 
 def get_active_key_doc_for_project(project_id: str) -> dict[str, Any] | None:

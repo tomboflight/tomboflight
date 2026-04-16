@@ -37,17 +37,59 @@ def list_projects(
     owner_user_id = _normalize(owner_user_id)
     owner_email = _normalize(owner_email).lower()
 
-    filters: list[dict[str, Any]] = []
+    identity_filters: list[dict[str, Any]] = []
     if owner_user_id:
-        filters.append({"owner_user_id": owner_user_id})
+        identity_filters.append({"owner_user_id": owner_user_id})
     if owner_email:
-        filters.append({"owner_email": owner_email})
+        identity_filters.append({"owner_email": owner_email})
 
-    if not filters:
+    if not identity_filters:
         return []
 
-    return list(
-        db.projects.find({"$or": filters}).sort("created_at", -1)
+    projects_by_id: dict[str, dict[str, Any]] = {}
+
+    for project in db.projects.find({"$or": identity_filters}).sort("created_at", -1):
+        projects_by_id[str(project.get("_id"))] = project
+
+    family_filters: list[dict[str, Any]] = []
+    if owner_user_id:
+        family_filters.append({"shared_with_user_ids": owner_user_id})
+    if owner_email:
+        family_filters.append({"shared_with_emails": owner_email})
+
+    if family_filters:
+        shared_family_ids: set[str] = set()
+        shared_project_ids: set[str] = set()
+
+        for family in db.families.find({"$or": family_filters}, {"_id": 1, "project_id": 1}):
+            family_id = _normalize(family.get("_id"))
+            if family_id:
+                shared_family_ids.add(family_id)
+
+            project_id = _normalize(family.get("project_id"))
+            if project_id:
+                shared_project_ids.add(project_id)
+
+        if shared_project_ids:
+            project_id_values: list[Any] = []
+            for project_id in shared_project_ids:
+                project_id_values.append(project_id)
+                if ObjectId.is_valid(project_id):
+                    project_id_values.append(ObjectId(project_id))
+
+            for project in db.projects.find({"_id": {"$in": project_id_values}}):
+                projects_by_id[str(project.get("_id"))] = project
+
+        if shared_family_ids:
+            for project in db.projects.find({"family_id": {"$in": list(shared_family_ids)}}):
+                projects_by_id[str(project.get("_id"))] = project
+
+    return sorted(
+        list(projects_by_id.values()),
+        key=lambda item: _normalize(
+            item.get("updated_at") or item.get("created_at"),
+        ),
+        reverse=True,
     )
 
 
