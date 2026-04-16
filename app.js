@@ -303,6 +303,24 @@
     );
   }
 
+  function isLikelyApiBaseUrl(value) {
+    try {
+      const parsed = new URL(String(value || "").trim());
+      return parsed.protocol === "https:" || parsed.protocol === "http:";
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  function isFrontendOriginBaseUrl(value) {
+    try {
+      const parsed = new URL(String(value || "").trim());
+      return parsed.origin === window.location.origin;
+    } catch (_error) {
+      return false;
+    }
+  }
+
   function getConfiguredApiBaseUrls() {
     const configuredList =
       window.TOL_CONFIG && Array.isArray(window.TOL_CONFIG.API_BASE_URLS)
@@ -316,9 +334,20 @@
     const configured = uniqueNonEmptyValues([
       configuredSingle,
       ...configuredList,
-    ]);
-    if (configured.length) {
-      return configured;
+    ]).filter(function (candidate) {
+      return isLikelyApiBaseUrl(candidate);
+    });
+    const backendApiBaseUrls = configured.filter(function (candidate) {
+      return !isFrontendOriginBaseUrl(candidate);
+    });
+    if (backendApiBaseUrls.length) {
+      if (isLocalApp()) {
+        return backendApiBaseUrls;
+      }
+      return uniqueNonEmptyValues([
+        ...backendApiBaseUrls,
+        ...DEFAULT_LIVE_API_BASE_URLS,
+      ]);
     }
 
     if (isLocalApp()) {
@@ -584,12 +613,26 @@
         const requestUrl = `${apiBaseUrl}${path}`;
         lastRequestUrl = requestUrl;
         response = await fetch(requestUrl, requestOptions);
+        const normalizedPath = String(path || "");
+        const shouldRetry404Fallback =
+          normalizedPath.startsWith("/workspace-access/") ||
+          normalizedPath.startsWith("/workspace_access/") ||
+          normalizedPath.startsWith("/household-access/") ||
+          normalizedPath.startsWith("/admin/control-center/");
+        // Some deployments can expose mixed-version backends behind different
+        // API domains where `/health` passes but specific routes lag behind.
+        // For these known cross-host-sensitive routes, retry 404s against the
+        // next configured API base URL before surfacing an error.
         if (
           response &&
           response.status === 404 &&
           hasFallbackCandidate &&
-          String(path || "").startsWith("/admin/control-center")
+          shouldRetry404Fallback
         ) {
+          console.warn("Tomb of Light API fallback retry after 404.", {
+            requestPath: normalizedPath,
+            failedApiBaseUrl: apiBaseUrl,
+          });
           continue;
         }
         saveApiBaseUrl(apiBaseUrl);

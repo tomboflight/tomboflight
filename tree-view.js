@@ -132,6 +132,18 @@
     return RELATIONSHIP_TYPE_ALIASES[normalized] || normalized;
   }
 
+  function dedupeRelationshipEntries(entries) {
+    const seen = new Set();
+    return (Array.isArray(entries) ? entries : []).filter((entry) => {
+      const personId = String(entry?.person?.id || "").trim();
+      const relType = normalizeRelationshipType(entry?.relationship_type || "");
+      const key = JSON.stringify([personId, relType]);
+      if (!personId || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
   function getFamilyIdFromUrl() {
     const params = new URLSearchParams(window.location.search);
     return params.get("family_id") || "";
@@ -1275,6 +1287,7 @@
         relationship_type: rel.relationship_type || "spouse",
       }))
       .filter((entry) => entry.person);
+    const dedupedSpouses = dedupeRelationshipEntries(spouses);
 
     const parents = relationships
       .filter(
@@ -1307,6 +1320,7 @@
           });
         }
       });
+    const dedupedParents = dedupeRelationshipEntries(parents);
 
     const children = relationships
       .filter(
@@ -1319,6 +1333,7 @@
         relationship_type: rel.relationship_type,
       }))
       .filter((entry) => entry.person);
+    const dedupedChildren = dedupeRelationshipEntries(children);
 
     detailPanel.innerHTML = `
       <div class="lineage-profile-card">
@@ -1358,17 +1373,17 @@
 
         <div class="lineage-section">
           <h4>Parents</h4>
-          ${renderPeopleList(parents, "parents")}
+          ${renderPeopleList(dedupedParents, "parents")}
         </div>
 
         <div class="lineage-section">
           <h4>Spouses</h4>
-          ${renderPeopleList(spouses, "spouses")}
+          ${renderPeopleList(dedupedSpouses, "spouses")}
         </div>
 
         <div class="lineage-section">
           <h4>Children</h4>
-          ${renderPeopleList(children, "children")}
+          ${renderPeopleList(dedupedChildren, "children")}
         </div>
       </div>
     `;
