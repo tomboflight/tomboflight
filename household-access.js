@@ -223,6 +223,169 @@
     );
   }
 
+  function loadRequestPaths(pathOrPaths) {
+    return Array.from(
+      new Set(
+        (Array.isArray(pathOrPaths) ? pathOrPaths : [pathOrPaths])
+          .map((value) => String(value || "").trim())
+          .filter(Boolean),
+      ),
+    );
+  }
+
+  function loadDebugMeta(path, method, projectId, error) {
+    const resolvedApiBaseUrl = normalizeBaseUrl(error?.resolvedApiBaseUrl || app.getApiBaseUrl?.());
+    const resolvedApiBaseUrls = resolveInviteApiBaseUrls();
+    const configuredApiBaseUrl = normalizeBaseUrl(window.TOL_CONFIG?.API_BASE_URL);
+    const tokenPresent =
+      typeof app.getToken === "function" ? Boolean(String(app.getToken() || "").trim()) : false;
+    return {
+      resolvedApiBaseUrl,
+      resolvedApiBaseUrls,
+      configuredApiBaseUrl,
+      requestUrl: buildInviteRequestUrl(path, error),
+      method: String(method || "GET").toUpperCase(),
+      authTokenPresent: tokenPresent,
+      projectId: String(projectId || "").trim() || null,
+    };
+  }
+
+  function logLoadRequest(action, path, method, projectId, requestMeta) {
+    console.info("[HouseholdAccess] Load request.", {
+      action,
+      ...loadDebugMeta(path, method, projectId, requestMeta),
+      requestUrl: String(requestMeta?.requestUrl || buildInviteRequestUrl(path, requestMeta)),
+    });
+  }
+
+  function logLoadResponse(action, path, method, projectId, responseMeta, responseBody) {
+    console.info("[HouseholdAccess] Load request response.", {
+      action,
+      ...loadDebugMeta(path, method, projectId, responseMeta),
+      status: Number(responseMeta?.status || 0),
+      requestUrl: String(responseMeta?.requestUrl || buildInviteRequestUrl(path, responseMeta)),
+      responseBody,
+    });
+  }
+
+  function logLoadFailure(action, path, method, projectId, error) {
+    console.error("[HouseholdAccess] Load request failed.", {
+      action,
+      ...loadDebugMeta(path, method, projectId, error),
+      status: error?.status ?? null,
+      statusText: error?.statusText || "",
+      responseBody: error?.data ?? error?.responseBody ?? error?.detail ?? error?.message ?? null,
+    });
+  }
+
+  async function sendLoadRequest(pathOrPaths, action, projectId, options = {}) {
+    const paths = loadRequestPaths(pathOrPaths);
+    const apiBaseUrls = resolveInviteApiBaseUrls();
+    const authToken = typeof app.getToken === "function" ? String(app.getToken() || "").trim() : "";
+    const fallbackStatusCodes = new Set(
+      (Array.isArray(options.fallbackStatusCodes) && options.fallbackStatusCodes.length
+        ? options.fallbackStatusCodes
+        : [404]
+      )
+        .map((value) => Number(value))
+        .filter((value) => Number.isFinite(value) && value > 0),
+    );
+    let lastError = null;
+
+    for (const path of paths) {
+      for (const apiBaseUrl of apiBaseUrls) {
+        const requestUrl = `${apiBaseUrl}${path}`;
+        logLoadRequest(action, path, "GET", projectId, {
+          requestUrl,
+          resolvedApiBaseUrl: apiBaseUrl,
+        });
+        try {
+          const headers = { Accept: "application/json" };
+          if (authToken) headers.Authorization = `Bearer ${authToken}`;
+          const response = await fetch(requestUrl, {
+            method: "GET",
+            credentials: "include",
+            headers,
+          });
+          const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+          let responseBody = null;
+          if (contentType.includes("application/json")) {
+            responseBody = await response.json();
+          } else {
+            const text = await response.text();
+            responseBody = text ? { detail: text } : null;
+          }
+          const responseMeta = {
+            requestUrl,
+            resolvedApiBaseUrl: apiBaseUrl,
+            status: response.status,
+          };
+          logLoadResponse(action, path, "GET", projectId, responseMeta, responseBody);
+          if (!response.ok) {
+            const detail = String(
+              responseBody?.detail || responseBody?.message || responseBody?.error || response.statusText || "",
+            ).trim();
+            const error = new Error(detail || `Request failed with status ${response.status}`);
+            error.status = response.status;
+            error.statusText = response.statusText;
+            error.detail = detail;
+            error.data = responseBody;
+            error.responseBody = responseBody;
+            error.requestUrl = requestUrl;
+            error.resolvedApiBaseUrl = apiBaseUrl;
+            lastError = error;
+            logLoadFailure(action, path, "GET", projectId, error);
+            if (fallbackStatusCodes.has(response.status)) {
+              continue;
+            }
+            throw error;
+          }
+          return responseBody;
+        } catch (error) {
+          if (fallbackStatusCodes.has(Number(error?.status || 0))) {
+            lastError = error;
+            continue;
+          }
+          if (Number(error?.status || 0) > 0) {
+            throw error;
+          }
+          const networkError = new Error(error?.message || "Network request failed.");
+          networkError.status = 0;
+          networkError.detail = error?.message || "Network request failed.";
+          networkError.requestUrl = requestUrl;
+          networkError.resolvedApiBaseUrl = apiBaseUrl;
+          lastError = networkError;
+          logLoadFailure(action, path, "GET", projectId, networkError);
+        }
+      }
+    }
+
+    throw (
+      lastError ||
+      new Error(
+        `Load endpoint unavailable for paths [${paths.join(", ") || "none"}] across all configured hosts: ${apiBaseUrls.join(", ") || "none"}`,
+      )
+    );
+  }
+
+  function workspaceMembersLoadPaths(projectId) {
+    const encoded = encodeURIComponent(String(projectId || "").trim());
+    return [
+      `/workspace-access/project/${encoded}/members`,
+      `/workspace_access/project/${encoded}/members`,
+      `/household-access/project/${encoded}/members`,
+    ];
+  }
+
+  function workspaceInvitesLoadPaths(projectId) {
+    const encoded = encodeURIComponent(String(projectId || "").trim());
+    return [
+      `/workspace-access/project/${encoded}/invites`,
+      `/workspace_access/project/${encoded}/invites`,
+      `/household-access/project/${encoded}/invites`,
+    ];
+  }
+
   async function sendInviteRequest(path, payload, action) {
     const apiBaseUrls = resolveInviteApiBaseUrls();
     const authToken = typeof app.getToken === "function" ? String(app.getToken() || "").trim() : "";
@@ -585,8 +748,8 @@
   async function refreshData() {
     if (!currentProjectId) return;
     const [membersPayload, invitesPayload] = await Promise.all([
-      app.apiRequest(`/workspace-access/project/${encodeURIComponent(currentProjectId)}/members`),
-      app.apiRequest(`/workspace-access/project/${encodeURIComponent(currentProjectId)}/invites`),
+      sendLoadRequest(workspaceMembersLoadPaths(currentProjectId), "load_members", currentProjectId),
+      sendLoadRequest(workspaceInvitesLoadPaths(currentProjectId), "load_invites", currentProjectId),
     ]);
     renderMembers(membersPayload?.items || []);
     renderInvites(invitesPayload?.items || []);
@@ -734,42 +897,76 @@
   }
 
   async function initialize() {
-    ensureApiConfigForHouseholdAccess();
-    currentUser = await app.requireSession("signin.html");
-    if (!currentUser) return;
-    currentProjectId = projectIdFromContext(currentUser);
-    if (!currentProjectId) {
-      if (statusNode) {
-        statusNode.textContent =
-          "No active workspace project was detected. Open this page from your dashboard workspace.";
+    try {
+      ensureApiConfigForHouseholdAccess();
+      const token = typeof app.getToken === "function" ? String(app.getToken() || "").trim() : "";
+      if (!token) {
+        window.location.href = "signin.html";
+        return;
       }
-      return;
-    }
-    if (statusNode) {
-      statusNode.textContent = `Managing workspace access for project ${currentProjectId}.`;
-    }
 
-    const inviteKey = inviteKeyFromQuery();
-    if (acceptForm && inviteKey) {
-      const keyInput = acceptForm.querySelector('input[name="invite_key"]');
-      if (keyInput) keyInput.value = inviteKey;
-    }
+      currentUser = await sendLoadRequest("/auth/me", "load_current_user", "", {
+        fallbackStatusCodes: [404, 500, 502, 503, 504],
+      });
+      if (typeof app.saveUser === "function") {
+        app.saveUser(currentUser);
+      }
 
-    bindQuickInviteButtons();
-    updateAutoInviteDefaults(true);
-    console.info("[HouseholdAccess] Invite runtime API context.", {
-      resolvedApiBaseUrl:
-        typeof app.getApiBaseUrl === "function" ? normalizeBaseUrl(app.getApiBaseUrl()) : "",
-      resolvedApiBaseUrls: resolveInviteApiBaseUrls(),
-      configuredApiBaseUrl: normalizeBaseUrl(window.TOL_CONFIG?.API_BASE_URL),
-      configuredApiBaseUrls: Array.isArray(window.TOL_CONFIG?.API_BASE_URLS)
-        ? window.TOL_CONFIG.API_BASE_URLS.map(normalizeBaseUrl).filter(Boolean)
-        : [],
-      projectId: currentProjectId,
-    });
-    if (inviteForm) inviteForm.addEventListener("submit", handleInviteSubmit);
-    if (acceptForm) acceptForm.addEventListener("submit", handleAcceptSubmit);
-    await refreshData();
+      currentProjectId = projectIdFromContext(currentUser);
+      if (!currentProjectId) {
+        if (statusNode) {
+          statusNode.textContent =
+            "No active workspace project was detected. Open this page from your dashboard workspace.";
+        }
+        return;
+      }
+      if (statusNode) {
+        statusNode.textContent = `Managing workspace access for project ${currentProjectId}.`;
+      }
+
+      const inviteKey = inviteKeyFromQuery();
+      if (acceptForm && inviteKey) {
+        const keyInput = acceptForm.querySelector('input[name="invite_key"]');
+        if (keyInput) keyInput.value = inviteKey;
+      }
+
+      bindQuickInviteButtons();
+      updateAutoInviteDefaults(true);
+      console.info("[HouseholdAccess] Invite runtime API context.", {
+        resolvedApiBaseUrl:
+          typeof app.getApiBaseUrl === "function" ? normalizeBaseUrl(app.getApiBaseUrl()) : "",
+        resolvedApiBaseUrls: resolveInviteApiBaseUrls(),
+        configuredApiBaseUrl: normalizeBaseUrl(window.TOL_CONFIG?.API_BASE_URL),
+        configuredApiBaseUrls: Array.isArray(window.TOL_CONFIG?.API_BASE_URLS)
+          ? window.TOL_CONFIG.API_BASE_URLS.map(normalizeBaseUrl).filter(Boolean)
+          : [],
+        projectId: currentProjectId,
+      });
+      if (inviteForm) inviteForm.addEventListener("submit", handleInviteSubmit);
+      if (acceptForm) acceptForm.addEventListener("submit", handleAcceptSubmit);
+      await refreshData();
+    } catch (error) {
+      const statusCode = Number(error?.status || 0);
+      if (statusCode === 401 || statusCode === 403) {
+        if (typeof app.clearSession === "function") app.clearSession();
+        window.location.href = "signin.html";
+        return;
+      }
+      const detail =
+        String(error?.detail || error?.message || "Unable to load workspace access settings.").trim() ||
+        "Unable to load workspace access settings.";
+      if (statusNode) {
+        statusNode.textContent = detail;
+      }
+      console.error("[HouseholdAccess] Bootstrap load failed.", {
+        status: statusCode || null,
+        detail,
+        requestUrl: String(error?.requestUrl || "").trim() || null,
+        resolvedApiBaseUrl: String(error?.resolvedApiBaseUrl || "").trim() || null,
+        responseBody: error?.data ?? error?.responseBody ?? null,
+        projectId: currentProjectId || null,
+      });
+    }
   }
 
   document.addEventListener("DOMContentLoaded", initialize);
