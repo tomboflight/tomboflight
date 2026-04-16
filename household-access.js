@@ -299,7 +299,7 @@
     const fallbackStatusCodes = new Set(
       (Array.isArray(options.fallbackStatusCodes) && options.fallbackStatusCodes.length
         ? options.fallbackStatusCodes
-        : [404]
+        : [404, 500, 502, 503, 504]
       )
         .map((value) => Number(value))
         .filter((value) => Number.isFinite(value) && value > 0),
@@ -625,6 +625,27 @@
     if (!pendingCount) return;
     const pendingTotal = (items || []).filter(isPending).length;
     pendingCount.textContent = `${pendingTotal} pending invite${pendingTotal === 1 ? "" : "s"}.`;
+  }
+
+  function householdLoadFailureMessage(error) {
+    const statusCode = Number(error?.status || 0);
+    const raw = readableMessage(
+      error?.detail || error?.message || error?.data || error?.responseBody,
+      "",
+    ).toLowerCase();
+    if (!statusCode && raw.includes("network")) {
+      return "We couldn’t reach the workspace access service. Please refresh and try again.";
+    }
+    if (statusCode === 404) {
+      return "Workspace access endpoints are not available on the active API host yet.";
+    }
+    if (statusCode >= 500 || raw === "load failed") {
+      return "Workspace access is temporarily unavailable. Please refresh and try again.";
+    }
+    return readableMessage(
+      error?.detail || error?.message || error?.data || error?.responseBody,
+      "Unable to load workspace access settings.",
+    );
   }
 
   async function changeMemberRole(membershipId, memberRole) {
@@ -985,12 +1006,7 @@
         window.location.href = signinRedirectUrlWithInviteContext();
         return;
       }
-      const detail =
-        readableMessage(
-          error?.detail || error?.message || error?.data || error?.responseBody,
-          "Unable to load workspace access settings.",
-        ) ||
-        "Unable to load workspace access settings.";
+      const detail = householdLoadFailureMessage(error);
       if (statusNode) {
         statusNode.textContent = detail;
       }
