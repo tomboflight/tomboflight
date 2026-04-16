@@ -189,6 +189,7 @@ def _persist_invite_email_delivery(
     invite_document: dict[str, Any],
     email_delivery: dict[str, Any],
 ) -> bool:
+    """Persist invite email delivery status; returns False when persistence fails."""
     sent = bool(email_delivery.get("sent"))
     updates = {
         "email_delivery_status": "sent" if sent else "failed",

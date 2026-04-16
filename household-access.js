@@ -196,11 +196,12 @@
     });
   }
 
-  function logInviteSuccess(action, path, responseBody, payload) {
+  function logInviteSuccess(action, path, responseBody, payload, responseMeta) {
     console.info("[HouseholdAccess] Invite request succeeded.", {
       action,
       ...inviteDebugMeta(path, payload),
-      status: Number(responseBody?.__meta?.status || 201),
+      status: Number(responseMeta?.status || 201),
+      requestUrl: String(responseMeta?.requestUrl || buildInviteRequestUrl(path, responseMeta)),
       responseBody,
     });
   }
@@ -285,14 +286,14 @@
           }
           throw error;
         }
-        if (responseBody && typeof responseBody === "object") {
-          responseBody.__meta = {
+        return {
+          responseBody,
+          meta: {
             requestUrl,
             resolvedApiBaseUrl: apiBaseUrl,
             status: response.status,
-          };
-        }
-        return responseBody;
+          },
+        };
       } catch (error) {
         if (Number(error?.status || 0) === 404) {
           lastError = error;
@@ -309,7 +310,12 @@
         lastError = networkError;
       }
     }
-    throw lastError || new Error("Invite endpoint is unavailable.");
+    throw (
+      lastError ||
+      new Error(
+        `Invite endpoint unavailable across all configured hosts: ${apiBaseUrls.join(", ") || "none"}`,
+      )
+    );
   }
 
   function setText(node, message, type = "info") {
@@ -617,11 +623,14 @@
     ];
     try {
       let invite = null;
+      let inviteMeta = null;
       let lastError = null;
       for (const invitePath of invitePaths) {
         try {
-          invite = await sendInviteRequest(invitePath, payload, `invite_${payload.member_role}`);
-          logInviteSuccess(`invite_${payload.member_role}`, invitePath, invite, payload);
+          const inviteResult = await sendInviteRequest(invitePath, payload, `invite_${payload.member_role}`);
+          invite = inviteResult?.responseBody || null;
+          inviteMeta = inviteResult?.meta || null;
+          logInviteSuccess(`invite_${payload.member_role}`, invitePath, invite, payload, inviteMeta);
           break;
         } catch (error) {
           lastError = error;
