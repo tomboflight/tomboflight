@@ -76,10 +76,13 @@
 
   let currentProjectId = "";
   let currentUser = null;
-  const LIVE_INVITE_API_BASE_URLS = [
-    "https://tomboflight-api.onrender.com",
-    "https://api.tomboflight.com",
-  ];
+
+  function inviteApiFallbackBaseUrls() {
+    const configuredFallbacks = Array.isArray(window.TOL_CONFIG?.INVITE_API_BASE_URL_FALLBACKS)
+      ? window.TOL_CONFIG.INVITE_API_BASE_URL_FALLBACKS
+      : [];
+    return configuredFallbacks.map(normalizeBaseUrl).filter(Boolean);
+  }
 
   function normalizeBaseUrl(value) {
     return String(value || "")
@@ -113,7 +116,7 @@
       new Set([
         runtimeBase,
         ...configuredCandidates,
-        ...LIVE_INVITE_API_BASE_URLS.map(normalizeBaseUrl),
+        ...inviteApiFallbackBaseUrls(),
       ].filter((value) => value && !isFrontendOriginBaseUrl(value))),
     );
     if (!mergedCandidates.length) {
@@ -211,7 +214,8 @@
       typeof app.getApiBaseUrl === "function" ? normalizeBaseUrl(app.getApiBaseUrl()) : "";
     return Array.from(
       new Set(
-        [runtimeBase, configuredBase, ...configuredList, ...LIVE_INVITE_API_BASE_URLS]
+        [runtimeBase, configuredBase, ...configuredList]
+          .concat(inviteApiFallbackBaseUrls())
           .map(normalizeBaseUrl)
           .filter((value) => value && !isFrontendOriginBaseUrl(value)),
       ),
@@ -275,6 +279,8 @@
           error.resolvedApiBaseUrl = apiBaseUrl;
           lastError = error;
           if (response.status === 404) {
+            // Some live environments run mixed backend versions per host; keep
+            // trying remaining API hosts so invite creation is not blocked.
             continue;
           }
           throw error;

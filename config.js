@@ -29,6 +29,12 @@
           "https://tomboflight-api.onrender.com",
           "https://api.tomboflight.com",
         ],
+    INVITE_API_BASE_URL_FALLBACKS: isLocal
+      ? localApiBaseUrls
+      : [
+          "https://tomboflight-api.onrender.com",
+          "https://api.tomboflight.com",
+        ],
 
     PAYMENT_LINKS: Object.assign(
       {},
