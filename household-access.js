@@ -359,7 +359,7 @@
     throw (
       lastError ||
       new Error(
-        `Load endpoint unavailable across all configured hosts: ${apiBaseUrls.join(", ") || "none"}`,
+        `Load endpoint unavailable for paths [${paths.join(", ") || "none"}] across all configured hosts: ${apiBaseUrls.join(", ") || "none"}`,
       )
     );
   }
