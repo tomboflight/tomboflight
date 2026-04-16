@@ -250,10 +250,11 @@
     };
   }
 
-  function logLoadRequest(action, path, method, projectId) {
+  function logLoadRequest(action, path, method, projectId, requestMeta) {
     console.info("[HouseholdAccess] Load request.", {
       action,
-      ...loadDebugMeta(path, method, projectId),
+      ...loadDebugMeta(path, method, projectId, requestMeta),
+      requestUrl: String(requestMeta?.requestUrl || buildInviteRequestUrl(path, requestMeta)),
     });
   }
 
@@ -277,23 +278,26 @@
     });
   }
 
-  async function sendLoadRequest(pathOrPaths, action, projectId) {
+  async function sendLoadRequest(pathOrPaths, action, projectId, options = {}) {
     const paths = loadRequestPaths(pathOrPaths);
     const apiBaseUrls = resolveInviteApiBaseUrls();
     const authToken = typeof app.getToken === "function" ? String(app.getToken() || "").trim() : "";
+    const fallbackStatusCodes = new Set(
+      (Array.isArray(options.fallbackStatusCodes) && options.fallbackStatusCodes.length
+        ? options.fallbackStatusCodes
+        : [404]
+      )
+        .map((value) => Number(value))
+        .filter((value) => Number.isFinite(value) && value > 0),
+    );
     let lastError = null;
 
     for (const path of paths) {
       for (const apiBaseUrl of apiBaseUrls) {
         const requestUrl = `${apiBaseUrl}${path}`;
-        logLoadRequest(action, path, "GET", projectId);
-        console.info("[HouseholdAccess] Load request attempt.", {
-          action,
-          resolvedApiBaseUrl: apiBaseUrl,
+        logLoadRequest(action, path, "GET", projectId, {
           requestUrl,
-          method: "GET",
-          projectId: String(projectId || "").trim() || null,
-          authTokenPresent: Boolean(authToken),
+          resolvedApiBaseUrl: apiBaseUrl,
         });
         try {
           const headers = { Accept: "application/json" };
@@ -331,14 +335,14 @@
             error.resolvedApiBaseUrl = apiBaseUrl;
             lastError = error;
             logLoadFailure(action, path, "GET", projectId, error);
-            if (response.status === 404) {
+            if (fallbackStatusCodes.has(response.status)) {
               continue;
             }
             throw error;
           }
           return responseBody;
         } catch (error) {
-          if (Number(error?.status || 0) === 404) {
+          if (fallbackStatusCodes.has(Number(error?.status || 0))) {
             lastError = error;
             continue;
           }
@@ -901,7 +905,9 @@
         return;
       }
 
-      currentUser = await sendLoadRequest("/auth/me", "load_current_user", "");
+      currentUser = await sendLoadRequest("/auth/me", "load_current_user", "", {
+        fallbackStatusCodes: [404, 500, 502, 503, 504],
+      });
       if (typeof app.saveUser === "function") {
         app.saveUser(currentUser);
       }
