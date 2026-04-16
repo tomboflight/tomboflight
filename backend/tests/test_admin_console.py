@@ -707,5 +707,31 @@ class SuperAdminControlsTests(unittest.TestCase):
         self.assertTrue(write_audit_log.called)
 
 
+class AdminConsoleOverviewTests(unittest.TestCase):
+    def test_admin_overview_includes_postmark_runtime_configuration_flags(self):
+        db = FakeDatabase(
+            {
+                "users": [],
+                "projects": [],
+                "orders": [],
+                "project_entitlements": [],
+            }
+        )
+        with (
+            patch.object(admin_control_service, "get_database", return_value=db),
+            patch.object(admin_control_service.settings, "postmark_server_token", "token-123"),
+            patch.object(admin_control_service.settings, "postmark_from_email", "noreply@example.com"),
+        ):
+            payload = admin_control_service.admin_console_overview(limit=5)
+
+        self.assertEqual(
+            payload["system_health"]["postmark"],
+            {
+                "token_configured": True,
+                "from_address_configured": True,
+            },
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

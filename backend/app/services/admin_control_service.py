@@ -1568,6 +1568,9 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
             }
         )
 
+    postmark_token_configured = bool(_normalize(settings.postmark_server_token))
+    postmark_from_address_configured = bool(_normalize_email(settings.postmark_from_email))
+
     return {
         "summary": {
             "total_users": users_total,
@@ -1584,6 +1587,12 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
             "mint_eligible_blocked": priority_repairs["mint_eligible_blocked"][:limit],
         },
         "mismatches": mismatches[:limit],
+        "system_health": {
+            "postmark": {
+                "token_configured": postmark_token_configured,
+                "from_address_configured": postmark_from_address_configured,
+            }
+        },
     }
 
 
