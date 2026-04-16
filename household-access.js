@@ -952,7 +952,9 @@
         window.location.href = "signin.html";
         return;
       }
-      const detail = String(error?.detail || error?.message || "Load failed").trim() || "Load failed";
+      const detail =
+        String(error?.detail || error?.message || "Unable to load workspace access settings.").trim() ||
+        "Unable to load workspace access settings.";
       if (statusNode) {
         statusNode.textContent = detail;
       }
