@@ -545,6 +545,7 @@
 
     let response = null;
     let lastNetworkError = null;
+    let lastRequestUrl = "";
 
     for (let index = 0; index < apiBaseUrls.length; index += 1) {
       const apiBaseUrl = apiBaseUrls[index];
@@ -580,7 +581,9 @@
           }
         }
 
-        response = await fetch(`${apiBaseUrl}${path}`, requestOptions);
+        const requestUrl = `${apiBaseUrl}${path}`;
+        lastRequestUrl = requestUrl;
+        response = await fetch(requestUrl, requestOptions);
         if (
           response &&
           response.status === 404 &&
@@ -617,6 +620,7 @@
       const error = new Error(buildNetworkErrorMessage(apiBaseUrls));
       error.status = 0;
       error.apiBaseUrls = apiBaseUrls;
+      error.requestUrl = lastRequestUrl;
       if (lastNetworkError) {
         error.cause = lastNetworkError;
       }
@@ -643,6 +647,8 @@
       error.statusText = response.statusText;
       error.detail = data && (data.detail || data.message || data.error);
       error.data = data;
+      error.requestUrl = lastRequestUrl;
+      error.responseBody = data;
       throw error;
     }
 
