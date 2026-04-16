@@ -39,29 +39,52 @@
             <div class="form-panel">
               <span class="eyebrow">Invite Household Member</span>
               <form class="form-grid" data-household-invite-form novalidate>
-                <label>Email <input type="email" name="email" required /></label>
-                <label>Role
+                <label>
+                  Email
+                  <input type="email" name="email" required autocomplete="email" inputmode="email" />
+                  <small class="card-copy">The invitation will be sent to this email address.</small>
+                </label>
+                <label>
+                  Role
                   <select name="member_role" required>
+                    <option value="billing_owner">Billing Owner</option>
                     <option value="co_owner">Co-Owner</option>
                     <option value="family_manager">Family Manager</option>
                     <option value="contributor">Contributor</option>
                     <option value="viewer" selected>Viewer</option>
-                    <option value="minor_viewer">Minor Viewer</option>
                     <option value="linked_relative">Linked Relative</option>
                   </select>
+                  <small class="card-copy">Choose what level of workspace access this person should have.</small>
                 </label>
-                <label>Relationship Scope <input type="text" name="relationship_scope" value="household_member" /></label>
-                <label>Privacy Scope
-                  <select name="privacy_scope">
-                    <option value="household_private" selected>Household Private</option>
-                    <option value="private_to_owner_and_co_owner">Owner + Co-Owner Private</option>
-                    <option value="branch_shared">Branch Shared</option>
-                    <option value="linked_family_shared">Linked Family Shared</option>
-                    <option value="public_memorial">Public Memorial</option>
-                    <option value="minor_protected">Minor Protected</option>
+                <label>
+                  Relationship
+                  <select name="relationship_scope" required>
+                    <option value="spouse">Spouse</option>
+                    <option value="parent">Parent</option>
+                    <option value="child">Child</option>
+                    <option value="sibling">Sibling</option>
+                    <option value="household_member" selected>Household Member</option>
+                    <option value="guardian">Guardian</option>
+                    <option value="relative">Relative</option>
+                    <option value="other">Other</option>
                   </select>
+                  <small class="card-copy">Select the plain-English relationship for this invite.</small>
                 </label>
-                <label>Notes <input type="text" name="notes" maxlength="500" /></label>
+                <label>
+                  Privacy Scope
+                  <select name="privacy_scope" required>
+                    <option value="household_private" selected>Household Private</option>
+                    <option value="household_shared">Shared Household Access</option>
+                    <option value="read_only">Read Only</option>
+                    <option value="link_only">Link-Only Access</option>
+                  </select>
+                  <small class="card-copy">This controls how broadly invited access can be viewed.</small>
+                </label>
+                <label>
+                  Notes (optional)
+                  <input type="text" name="notes" maxlength="500" placeholder="Auto-filled from role + relationship" />
+                  <small class="card-copy">A helpful note is auto-generated. You can edit it if needed.</small>
+                </label>
                 <div class="inline-actions">
                   <button class="btn btn-primary" type="button" data-household-invite-co-owner>Invite Co-Owner</button>
                   <button class="btn btn-secondary" type="button" data-household-invite-family>Invite Family Member</button>
@@ -121,6 +144,6 @@
     <script src="config.js?v=20260328-7"></script>
     <script src="app.js?v=20260410-1"></script>
     <script src="auth.js?v=20260410-2"></script>
-    <script src="household-access.js?v=20260415-1"></script>
+    <script src="household-access.js?v=20260416-1"></script>
   </body>
 </html>

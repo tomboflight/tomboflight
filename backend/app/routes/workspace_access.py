@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from app.dependencies.auth import get_current_user
 from app.schemas.household_access import (
@@ -28,6 +29,8 @@ from app.database import get_database
 from app.services.project_membership_service import get_project_access_snapshot
 
 router = APIRouter(prefix="/workspace-access", tags=["Workspace Access"])
+legacy_router = APIRouter(tags=["Workspace Access"])
+logger = logging.getLogger(__name__)
 
 
 def _current_user_id(user: dict[str, Any]) -> str:
@@ -79,11 +82,20 @@ def get_project_invites(project_id: str, current_user: dict[str, Any] = Depends(
 
 
 @router.post("/project/{project_id}/invites", status_code=status.HTTP_201_CREATED)
+@router.post("/project/{project_id}/invite", status_code=status.HTTP_201_CREATED, include_in_schema=False)
 def create_invite(
     project_id: str,
     payload: HouseholdInviteCreate,
+    request: Request,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
+    logger.info(
+        "workspace_access invite request method=%s url=%s project_id=%s payload=%s",
+        request.method,
+        str(request.url),
+        project_id,
+        payload.model_dump(),
+    )
     try:
         invite = create_household_invite(
             project_id=project_id,
@@ -97,10 +109,45 @@ def create_invite(
             max_uses=payload.max_uses,
         )
     except PermissionError as exc:
+        logger.warning(
+            "workspace_access invite forbidden method=%s url=%s status=403 response=%s",
+            request.method,
+            str(request.url),
+            str(exc),
+        )
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except ValueError as exc:
+        logger.warning(
+            "workspace_access invite invalid method=%s url=%s status=400 response=%s",
+            request.method,
+            str(request.url),
+            str(exc),
+        )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    return build_invite_response(invite)
+    response_payload = build_invite_response(invite)
+    logger.info(
+        "workspace_access invite created method=%s url=%s status=201 response=%s",
+        request.method,
+        str(request.url),
+        response_payload,
+    )
+    return response_payload
+
+
+@legacy_router.post("/workspace_access/project/{project_id}/invites", status_code=status.HTTP_201_CREATED, include_in_schema=False)
+@legacy_router.post("/household-access/project/{project_id}/invites", status_code=status.HTTP_201_CREATED, include_in_schema=False)
+def create_invite_legacy(
+    project_id: str,
+    payload: HouseholdInviteCreate,
+    request: Request,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    return create_invite(
+        project_id=project_id,
+        payload=payload,
+        request=request,
+        current_user=current_user,
+    )
 
 
 @router.post("/invites/accept")

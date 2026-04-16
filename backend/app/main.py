@@ -75,7 +75,10 @@ from app.routes.uploads import router as uploads_router
 from app.routes.users import router as users_router
 from app.routes.verification_records import router as verification_records_router
 from app.routes.viewer_manifest import router as viewer_manifest_router
-from app.routes.workspace_access import router as workspace_access_router
+from app.routes.workspace_access import (
+    legacy_router as workspace_access_legacy_router,
+    router as workspace_access_router,
+)
 from app.services.nft_runtime_validation_service import (
     validate_nft_runtime_configuration_on_startup,
 )
@@ -194,6 +197,7 @@ app.include_router(orders_router)
 app.include_router(package_catalog_router)
 app.include_router(uploads_router)
 app.include_router(workspace_access_router)
+app.include_router(workspace_access_legacy_router)
 app.include_router(viewer_manifest_router)
 app.include_router(mint_policy_router)
 app.include_router(mint_records_router)

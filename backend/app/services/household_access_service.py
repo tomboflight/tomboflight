@@ -44,10 +44,35 @@ PRIVACY_SCOPES = {
     "private_to_owner",
     "private_to_owner_and_co_owner",
     "household_private",
+    "household_shared",
+    "read_only",
+    "link_only",
     "branch_shared",
     "linked_family_shared",
     "public_memorial",
     "minor_protected",
+}
+
+PRIVACY_SCOPE_ALIASES = {
+    "shared_household_access": "household_shared",
+    "household_shared": "household_shared",
+    "read_only": "read_only",
+    "link_only_access": "link_only",
+    "link_only": "link_only",
+    "branch_shared": "household_shared",
+    "linked_family_shared": "link_only",
+    "public_memorial": "read_only",
+}
+
+RELATIONSHIP_SCOPE_ALIASES = {
+    "spouse": "spouse",
+    "parent": "parent",
+    "child": "child",
+    "sibling": "sibling",
+    "household_member": "household_member",
+    "guardian": "guardian",
+    "relative": "relative",
+    "other": "other",
 }
 
 
@@ -61,6 +86,16 @@ def _normalize(value: Any) -> str:
 
 def _normalize_email(value: Any) -> str:
     return _normalize(value).lower()
+
+
+def _normalize_relationship_scope(value: Any) -> str:
+    normalized = _normalize(value).lower()
+    return RELATIONSHIP_SCOPE_ALIASES.get(normalized, normalized or "household_member")
+
+
+def _normalize_privacy_scope(value: Any) -> str:
+    normalized = _normalize(value).lower()
+    return PRIVACY_SCOPE_ALIASES.get(normalized, normalized or "household_private")
 
 
 def _to_oid(value: Any) -> ObjectId | None:
@@ -240,7 +275,7 @@ def create_household_invite(
     if not normalized_email:
         raise ValueError("Invite email is required.")
 
-    normalized_privacy_scope = _normalize(privacy_scope or "household_private").lower()
+    normalized_privacy_scope = _normalize_privacy_scope(privacy_scope or "household_private")
     if normalized_privacy_scope not in PRIVACY_SCOPES:
         raise ValueError("Invalid privacy scope for invite.")
 
@@ -266,7 +301,7 @@ def create_household_invite(
         "key_type": "household_invite_key",
         "status": "pending",
         "member_role": normalized_role,
-        "relationship_scope": _normalize(relationship_scope or "household_member") or "household_member",
+        "relationship_scope": _normalize_relationship_scope(relationship_scope or "household_member"),
         "privacy_scope": normalized_privacy_scope,
         "issuer_user_id": actor_user_id or None,
         "target_email": normalized_email,
@@ -331,8 +366,8 @@ def accept_household_invite(*, invite_key: str, user: dict[str, Any]) -> dict[st
         "user_id": user_id or None,
         "email": user_email or _normalize_email(invite.get("email")) or None,
         "member_role": normalize_project_member_role(invite.get("member_role"), default="viewer"),
-        "relationship_scope": _normalize(invite.get("relationship_scope") or "household_member") or "household_member",
-        "privacy_scope": _normalize(invite.get("privacy_scope") or "household_private"),
+        "relationship_scope": _normalize_relationship_scope(invite.get("relationship_scope") or "household_member"),
+        "privacy_scope": _normalize_privacy_scope(invite.get("privacy_scope") or "household_private"),
         "status": "active",
         "invited_by_user_id": _normalize(invite.get("issuer_user_id")) or None,
         "joined_at": now,

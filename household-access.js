@@ -35,6 +35,45 @@
     linked_relative: "Linked Relative",
   };
 
+  const RELATIONSHIP_LABELS = {
+    spouse: "Spouse",
+    parent: "Parent",
+    child: "Child",
+    sibling: "Sibling",
+    household_member: "Household Member",
+    guardian: "Guardian",
+    relative: "Relative",
+    other: "Other",
+  };
+
+  const PRIVACY_LABELS = {
+    household_private: "Household Private",
+    household_shared: "Shared Household Access",
+    read_only: "Read Only",
+    link_only: "Link-Only Access",
+    private_to_owner: "Owner Private",
+    private_to_owner_and_co_owner: "Owner + Co-Owner Private",
+    branch_shared: "Shared Household Access",
+    linked_family_shared: "Link-Only Access",
+    public_memorial: "Read Only",
+    minor_protected: "Household Private",
+  };
+
+  const DEFAULT_NOTE_BY_ROLE_RELATIONSHIP = {
+    co_owner: {
+      spouse: "Spouse invited as co-owner for household management and family tree collaboration.",
+    },
+    family_manager: {
+      parent: "Parent invited to help manage household records and family information.",
+    },
+    viewer: {
+      relative: "Relative invited with read-only household access.",
+    },
+    contributor: {
+      child: "Child invited to contribute approved family content.",
+    },
+  };
+
   let currentProjectId = "";
   let currentUser = null;
 
@@ -101,7 +140,13 @@
     const detail = String(error?.detail || error?.message || "").trim();
     const statusCode = Number(error?.status || 0);
     if (statusCode === 404) {
-      return "Invite endpoint is unavailable. Please contact support if this persists.";
+      return "The invite feature is currently unavailable. Please contact support.";
+    }
+    if (statusCode === 403) {
+      return "Your current role cannot send this invite. Please use a billing owner account.";
+    }
+    if (statusCode === 400) {
+      return detail || "The invite details are invalid. Please check the form and try again.";
     }
     return detail || fallback;
   }
@@ -110,9 +155,29 @@
     console.error("[HouseholdAccess] Invite request failed.", {
       action,
       requestUrl: buildInviteRequestUrl(path, error),
+      method: "POST",
       status: error?.status ?? null,
       statusText: error?.statusText || "",
       responseBody: error?.data ?? error?.responseBody ?? error?.detail ?? error?.message ?? null,
+    });
+  }
+
+  function logInviteRequest(action, path, payload) {
+    console.info("[HouseholdAccess] Invite request.", {
+      action,
+      requestUrl: buildInviteRequestUrl(path),
+      method: "POST",
+      payload,
+    });
+  }
+
+  function logInviteSuccess(action, path, responseBody) {
+    console.info("[HouseholdAccess] Invite request succeeded.", {
+      action,
+      requestUrl: buildInviteRequestUrl(path),
+      method: "POST",
+      status: 201,
+      responseBody,
     });
   }
 
@@ -128,6 +193,75 @@
 
   function roleLabel(role) {
     return ROLE_LABELS[String(role || "").trim()] || "Viewer";
+  }
+
+  function relationshipLabel(value) {
+    return RELATIONSHIP_LABELS[String(value || "").trim()] || "Household Member";
+  }
+
+  function privacyLabel(value) {
+    return PRIVACY_LABELS[String(value || "").trim()] || "Household Private";
+  }
+
+  function titleLabel(value) {
+    return String(value || "")
+      .replaceAll("_", " ")
+      .replace(/\b\w/g, function (char) {
+        return char.toUpperCase();
+      });
+  }
+
+  function roleNode() {
+    return inviteForm ? inviteForm.querySelector('select[name="member_role"]') : null;
+  }
+
+  function relationshipNode() {
+    return inviteForm ? inviteForm.querySelector('select[name="relationship_scope"]') : null;
+  }
+
+  function privacyNode() {
+    return inviteForm ? inviteForm.querySelector('select[name="privacy_scope"]') : null;
+  }
+
+  function noteNode() {
+    return inviteForm ? inviteForm.querySelector('input[name="notes"]') : null;
+  }
+
+  function isNoteCustomized() {
+    const node = noteNode();
+    return Boolean(node && node.dataset.customized === "true");
+  }
+
+  function buildAutoNote(memberRole, relationshipScope, privacyScope) {
+    const roleValue = String(memberRole || "viewer").trim();
+    const relationshipValue = String(relationshipScope || "household_member").trim();
+    const preset = DEFAULT_NOTE_BY_ROLE_RELATIONSHIP[roleValue]?.[relationshipValue];
+    if (preset) return preset;
+    if (roleValue === "linked_relative") {
+      return `${relationshipLabel(relationshipValue)} invited for link-only household access.`;
+    }
+    if (roleValue === "viewer" || String(privacyScope || "").trim() === "read_only") {
+      return `${relationshipLabel(relationshipValue)} invited with read-only household access.`;
+    }
+    return `${relationshipLabel(relationshipValue)} invited as ${titleLabel(roleValue).toLowerCase()} for household collaboration.`;
+  }
+
+  function updateAutoInviteDefaults(force = false) {
+    if (!inviteForm) return;
+    const roleValue = String(roleNode()?.value || "viewer").trim();
+    const relationshipValue = String(relationshipNode()?.value || "household_member").trim();
+    const privacy = privacyNode();
+    if (roleValue === "co_owner" && relationshipValue === "spouse" && privacy) {
+      privacy.value = "household_private";
+    }
+    const privacyValue = String(privacy?.value || "household_private").trim();
+    const notes = noteNode();
+    if (!notes) return;
+    const generated = buildAutoNote(roleValue, relationshipValue, privacyValue);
+    if (force || !isNoteCustomized() || !String(notes.value || "").trim()) {
+      notes.value = generated;
+      notes.dataset.customized = "false";
+    }
   }
 
   function projectIdFromContext(user) {
@@ -213,8 +347,8 @@
       card.innerHTML = `
         <strong>${emailLabel}</strong>
         <p class="card-copy">Role: ${roleLabel(role)}</p>
-        <p class="card-copy">Relationship: ${member.relationship_scope || "household_member"}</p>
-        <p class="card-copy">Privacy: ${member.privacy_scope || "household_private"}</p>
+        <p class="card-copy">Relationship: ${relationshipLabel(member.relationship_scope || "household_member")}</p>
+        <p class="card-copy">Privacy: ${privacyLabel(member.privacy_scope || "household_private")}</p>
         <p class="card-copy">Status: ${member.status || "active"}</p>
         <label>Change Role
           <select ${isBillingOwner ? "disabled" : ""} data-member-role-select>${options}</select>
@@ -272,6 +406,8 @@
       card.innerHTML = `
         <strong>${invite.email || "Invite"}</strong>
         <p class="card-copy">Role: ${roleLabel(invite.member_role || "viewer")}</p>
+        <p class="card-copy">Relationship: ${relationshipLabel(invite.relationship_scope || "household_member")}</p>
+        <p class="card-copy">Privacy: ${privacyLabel(invite.privacy_scope || "household_private")}</p>
         <p class="card-copy">Status: ${invite.status || "pending"}</p>
         <p class="card-copy">Expires: ${invite.expires_at || "—"}</p>
         <div class="inline-actions" style="margin-top:0.75rem;">
@@ -321,7 +457,7 @@
 
   function selectedInviteRole() {
     if (!inviteForm) return "viewer";
-    const node = inviteForm.querySelector('select[name="member_role"]');
+    const node = roleNode();
     return String(node?.value || "viewer").trim();
   }
 
@@ -332,6 +468,7 @@
       setText(inviteStatus, "Select a workspace project first.", "error");
       return;
     }
+    updateAutoInviteDefaults();
     const formData = new FormData(inviteForm);
     const payload = {
       email: String(formData.get("email") || "").trim(),
@@ -340,24 +477,51 @@
       privacy_scope: String(formData.get("privacy_scope") || "household_private").trim(),
       notes: String(formData.get("notes") || "").trim(),
     };
-    const invitePath = `/workspace-access/project/${encodeURIComponent(currentProjectId)}/invites`;
+    const invitePaths = [
+      `/workspace-access/project/${encodeURIComponent(currentProjectId)}/invites`,
+      `/workspace_access/project/${encodeURIComponent(currentProjectId)}/invites`,
+      `/household-access/project/${encodeURIComponent(currentProjectId)}/invites`,
+    ];
     try {
-      const invite = await app.apiRequest(invitePath, {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
+      let invite = null;
+      let lastError = null;
+      for (const invitePath of invitePaths) {
+        logInviteRequest(`invite_${payload.member_role}`, invitePath, payload);
+        try {
+          invite = await app.apiRequest(invitePath, {
+            method: "POST",
+            body: JSON.stringify(payload),
+          });
+          logInviteSuccess(`invite_${payload.member_role}`, invitePath, invite);
+          break;
+        } catch (error) {
+          lastError = error;
+          logInviteFailure(`invite_${payload.member_role}`, invitePath, error);
+          if (Number(error?.status || 0) !== 404) throw error;
+        }
+      }
+      if (!invite) {
+        throw lastError || new Error("Invite endpoint is unavailable.");
+      }
       const inviteStatusValue = String(invite?.status || "").trim().toLowerCase();
       if (inviteStatusValue !== "pending") {
         throw new Error(
           `Unable to create invite (unexpected status: ${inviteStatusValue || "unknown"}). Please try again or contact support if this persists.`,
         );
       }
-      setText(inviteStatus, "Invite sent by email.", "success");
+      setText(inviteStatus, "Invite created successfully and added to pending invites.", "success");
       inviteForm.reset();
+      updateAutoInviteDefaults(true);
       await refreshData();
     } catch (error) {
-      logInviteFailure(`invite_${payload.member_role}`, invitePath, error);
-      setText(inviteStatus, userInviteErrorMessage(error, "Failed to create invite."), "error");
+      setText(
+        inviteStatus,
+        userInviteErrorMessage(
+          error,
+          "We couldn’t create that invite right now. Please verify the email and try again.",
+        ),
+        "error",
+      );
     }
   }
 
@@ -384,17 +548,43 @@
 
   function bindQuickInviteButtons() {
     if (!inviteForm) return;
+    const roleSelect = roleNode();
+    const relationshipSelect = relationshipNode();
+    const privacySelect = privacyNode();
+    const notesInput = noteNode();
+
+    if (roleSelect) {
+      roleSelect.addEventListener("change", function () {
+        updateAutoInviteDefaults();
+      });
+    }
+    if (relationshipSelect) {
+      relationshipSelect.addEventListener("change", function () {
+        updateAutoInviteDefaults();
+      });
+    }
+    if (privacySelect) {
+      privacySelect.addEventListener("change", function () {
+        updateAutoInviteDefaults();
+      });
+    }
+    if (notesInput) {
+      notesInput.addEventListener("input", function () {
+        notesInput.dataset.customized = String(Boolean(String(notesInput.value || "").trim()));
+      });
+    }
     if (inviteCoOwnerButton) {
       inviteCoOwnerButton.addEventListener("click", function () {
-        const roleNode = inviteForm.querySelector('select[name="member_role"]');
-        if (roleNode) roleNode.value = "co_owner";
+        if (roleSelect) roleSelect.value = "co_owner";
+        if (relationshipSelect) relationshipSelect.value = "spouse";
+        updateAutoInviteDefaults(true);
         inviteForm.requestSubmit();
       });
     }
     if (inviteFamilyButton) {
       inviteFamilyButton.addEventListener("click", function () {
-        const roleNode = inviteForm.querySelector('select[name="member_role"]');
-        if (roleNode) roleNode.value = "contributor";
+        if (roleSelect) roleSelect.value = "contributor";
+        updateAutoInviteDefaults(true);
         inviteForm.requestSubmit();
       });
     }
@@ -423,6 +613,7 @@
     }
 
     bindQuickInviteButtons();
+    updateAutoInviteDefaults(true);
     if (inviteForm) inviteForm.addEventListener("submit", handleInviteSubmit);
     if (acceptForm) acceptForm.addEventListener("submit", handleAcceptSubmit);
     await refreshData();
