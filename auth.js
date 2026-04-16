@@ -228,10 +228,18 @@
   }
 
   function getErrorMessage(error) {
+    const sharedParser =
+      app && typeof app.getReadableErrorMessage === "function"
+        ? app.getReadableErrorMessage
+        : null;
+    if (sharedParser) {
+      const parsed = sharedParser(error, "");
+      if (parsed) return parsed;
+    }
     if (!error) return "Unknown error";
     if (typeof error === "string") return error;
     if (error.message) return String(error.message);
-    return String(error);
+    return "Something went wrong. Please try again.";
   }
 
   function isAuthFailure(error) {
@@ -856,23 +864,75 @@
     return await completeAuthenticatedLogin(loginData);
   }
 
-  function getPostLoginRedirect() {
+  function getInviteContextFromQuery() {
     try {
       const params = new URLSearchParams(window.location.search);
-      const inviteKey = (params.get("invite_key") || "").trim();
-      const projectId = (params.get("project_id") || "").trim();
-      if (!inviteKey) {
-        return POST_LOGIN_REDIRECT;
-      }
-      const inviteParams = new URLSearchParams();
-      inviteParams.set("invite_key", inviteKey);
-      if (projectId) {
-        inviteParams.set("project_id", projectId);
-      }
-      return `household-access.html?${inviteParams.toString()}`;
+      return {
+        inviteKey: String(params.get("invite_key") || "").trim(),
+        projectId: String(params.get("project_id") || "").trim(),
+      };
     } catch (_error) {
+      return { inviteKey: "", projectId: "" };
+    }
+  }
+
+  function buildInviteContextQueryString(context) {
+    const inviteKey = String(context?.inviteKey || "").trim();
+    if (!inviteKey) return "";
+    const params = new URLSearchParams();
+    params.set("invite_key", inviteKey);
+    const projectId = String(context?.projectId || "").trim();
+    if (projectId) params.set("project_id", projectId);
+    return params.toString();
+  }
+
+  function preserveInviteContextOnAuthLinks() {
+    const inviteQueryString = buildInviteContextQueryString(
+      getInviteContextFromQuery(),
+    );
+    if (!inviteQueryString) return;
+
+    document.querySelectorAll("a[href]").forEach(function (link) {
+      const rawHref = String(link.getAttribute("href") || "").trim();
+      if (
+        !rawHref ||
+        rawHref.startsWith("#") ||
+        rawHref.startsWith("mailto:") ||
+        rawHref.startsWith("tel:")
+      ) {
+        return;
+      }
+
+      let parsed;
+      try {
+        parsed = new URL(rawHref, window.location.href);
+      } catch (_error) {
+        return;
+      }
+
+      const filename = String(parsed.pathname.split("/").pop() || "").toLowerCase();
+      if (
+        filename !== "signin.html" &&
+        filename !== "signup.html" &&
+        filename !== "household-access.html"
+      ) {
+        return;
+      }
+
+      const rewrittenPath = String(parsed.pathname.split("/").pop() || filename);
+      const rewrittenSearch = `?${inviteQueryString}`;
+      link.setAttribute("href", `${rewrittenPath}${rewrittenSearch}${parsed.hash}`);
+    });
+  }
+
+  function getPostLoginRedirect() {
+    const inviteQueryString = buildInviteContextQueryString(
+      getInviteContextFromQuery(),
+    );
+    if (!inviteQueryString) {
       return POST_LOGIN_REDIRECT;
     }
+    return `household-access.html?${inviteQueryString}`;
   }
 
   function redirectAfterLogin() {
@@ -1588,10 +1648,10 @@
         return;
       }
 
-      if (password.length < 8) {
+      if (password.length < 12) {
         app.setStatus(
           statusNode,
-          "Password must be at least 8 characters long.",
+          "Password must be at least 12 characters long.",
           "error",
         );
         return;
@@ -2423,6 +2483,7 @@
   }
 
   document.addEventListener("DOMContentLoaded", function () {
+    preserveInviteContextOnAuthLinks();
     protectAuthPages();
     setupSignupForm();
     setupSigninForm();

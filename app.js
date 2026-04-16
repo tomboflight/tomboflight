@@ -532,14 +532,153 @@
     clearUser();
   }
 
+  function isMeaningfulMessage(value) {
+    const text = String(value || "").trim();
+    if (!text) return false;
+    if (/^\[object Object\](,\s*\[object Object\])*$/i.test(text)) {
+      return false;
+    }
+    return true;
+  }
+
+  function normalizeMessage(value) {
+    const text = String(value || "").trim();
+    return isMeaningfulMessage(text) ? text : "";
+  }
+
+  function validationLocationLabel(location) {
+    if (!Array.isArray(location)) return "";
+    const scopeKeys = new Set(["body", "query", "path", "header", "cookie"]);
+    return location
+      .map(function (part) {
+        return String(part || "").trim();
+      })
+      .filter(Boolean)
+      .filter(function (part) {
+        return !scopeKeys.has(part.toLowerCase());
+      })
+      .join(".");
+  }
+
+  function dedupeMessages(messages) {
+    const seen = new Set();
+    const result = [];
+    (messages || []).forEach(function (message) {
+      const normalized = normalizeMessage(message);
+      if (!normalized) return;
+      const key = normalized.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      result.push(normalized);
+    });
+    return result;
+  }
+
+  function collectErrorMessages(value, seen) {
+    const visited = seen || new Set();
+    if (value === null || typeof value === "undefined") return [];
+
+    if (
+      typeof value === "string" ||
+      typeof value === "number" ||
+      typeof value === "boolean"
+    ) {
+      return normalizeMessage(value) ? [normalizeMessage(value)] : [];
+    }
+
+    if (value instanceof Error) {
+      return dedupeMessages(
+        []
+          .concat(collectErrorMessages(value.message, visited))
+          .concat(collectErrorMessages(value.detail, visited))
+          .concat(collectErrorMessages(value.error, visited))
+          .concat(collectErrorMessages(value.responseBody, visited))
+          .concat(collectErrorMessages(value.data, visited))
+          .concat(collectErrorMessages(value.cause, visited)),
+      );
+    }
+
+    if (Array.isArray(value)) {
+      return dedupeMessages(
+        value.flatMap(function (item) {
+          return collectErrorMessages(item, visited);
+        }),
+      );
+    }
+
+    if (typeof value === "object") {
+      if (visited.has(value)) return [];
+      visited.add(value);
+
+      const messages = [];
+      const candidateMessage = normalizeMessage(
+        value.message ||
+          value.error ||
+          value.reason ||
+          value.description ||
+          value.title ||
+          value.detail ||
+          value.msg,
+      );
+      const location = validationLocationLabel(value.loc);
+      if (candidateMessage) {
+        messages.push(location ? `${location}: ${candidateMessage}` : candidateMessage);
+      }
+
+      ["detail", "message", "error", "errors"].forEach(function (key) {
+        if (!Object.prototype.hasOwnProperty.call(value, key)) return;
+        messages.push(...collectErrorMessages(value[key], visited));
+      });
+
+      Object.entries(value).forEach(function ([key, nestedValue]) {
+        if (
+          [
+            "detail",
+            "message",
+            "error",
+            "errors",
+            "msg",
+            "loc",
+            "ctx",
+            "type",
+            "input",
+            "reason",
+            "description",
+            "title",
+          ].includes(key)
+        ) {
+          return;
+        }
+        const nestedMessages = collectErrorMessages(nestedValue, visited);
+        nestedMessages.forEach(function (nestedMessage) {
+          const normalizedNested = normalizeMessage(nestedMessage);
+          if (!normalizedNested) return;
+          if (normalizedNested.toLowerCase().startsWith(`${key.toLowerCase()}:`)) {
+            messages.push(normalizedNested);
+          } else {
+            messages.push(`${key}: ${normalizedNested}`);
+          }
+        });
+      });
+
+      return dedupeMessages(messages);
+    }
+
+    return normalizeMessage(value) ? [normalizeMessage(value)] : [];
+  }
+
+  function getReadableErrorMessage(value, fallback = "") {
+    const messages = dedupeMessages(collectErrorMessages(value));
+    if (messages.length) {
+      return messages.join(" ");
+    }
+    return normalizeMessage(fallback);
+  }
+
   function parseApiError(data, response) {
-    return (
-      (data &&
-        (data.detail ||
-          data.message ||
-          data.error ||
-          (Array.isArray(data.errors) && data.errors.join(", ")))) ||
-      `Request failed with status ${response.status}`
+    return getReadableErrorMessage(
+      data,
+      `Request failed with status ${response.status}`,
     );
   }
 
@@ -688,7 +827,9 @@
       const error = new Error(parseApiError(data, response));
       error.status = response.status;
       error.statusText = response.statusText;
-      error.detail = data && (data.detail || data.message || data.error);
+      error.detail = getReadableErrorMessage(
+        data && (data.detail || data.message || data.error || data),
+      );
       error.data = data;
       error.requestUrl = lastRequestUrl;
       error.responseBody = data;
@@ -743,8 +884,14 @@
   function setStatus(node, message, type) {
     if (!node) return;
 
+    const fallbackMessage =
+      type === "error"
+        ? "Something went wrong. Please try again."
+        : "Status updated.";
+    const resolvedMessage = getReadableErrorMessage(message, fallbackMessage);
+
     node.style.display = "block";
-    node.textContent = message;
+    node.textContent = resolvedMessage;
     node.dataset.state = type || "info";
 
     if (type === "error") {
@@ -1005,6 +1152,7 @@
     packageSupportsLinkKeys,
     inferPurchaseTypeFromSlug,
     savePendingCheckout,
+    getReadableErrorMessage,
   };
 
   window.TOLApp = sharedApi;
