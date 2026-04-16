@@ -152,6 +152,15 @@ def create_invite(
             detail="Failed to create workspace invite. Please try again.",
         ) from exc
     response_payload = build_invite_response(invite)
+    email_delivery_status = str(invite.get("email_delivery_status") or "").strip().lower()
+    if email_delivery_status == "failed":
+        response_payload["email_delivery_status"] = "failed"
+        response_payload["message"] = "Invite created, but email delivery failed."
+        email_delivery_error = str(invite.get("email_delivery_error") or "").strip()
+        if email_delivery_error:
+            response_payload["email_delivery_error"] = email_delivery_error
+    elif email_delivery_status == "sent":
+        response_payload["email_delivery_status"] = "sent"
     logger.info(
         "workspace_access invite created method=%s url=%s status=201 response=%s",
         request.method,

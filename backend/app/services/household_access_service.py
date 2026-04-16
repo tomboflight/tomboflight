@@ -183,6 +183,22 @@ def _expire_invite_if_needed(invite: dict[str, Any]) -> dict[str, Any]:
     return _invites().find_one({"_id": invite_id}) or {**invite, "status": "expired", "expired_at": now_iso}
 
 
+def _persist_invite_email_delivery(
+    *,
+    invite_id: Any,
+    invite_document: dict[str, Any],
+    email_delivery: dict[str, Any],
+) -> None:
+    sent = bool(email_delivery.get("sent"))
+    updates = {
+        "email_delivery_status": "sent" if sent else "failed",
+        "email_delivery_error": None if sent else (_normalize(email_delivery.get("error")) or "email delivery failed"),
+        "updated_at": _now().isoformat(),
+    }
+    _invites().update_one({"_id": invite_id}, {"$set": updates})
+    invite_document.update(updates)
+
+
 def _resolve_actor_role(project: dict[str, Any], actor_user: dict[str, Any]) -> str:
     snapshot = get_project_access_snapshot(
         project,
@@ -408,13 +424,35 @@ def create_household_invite(
             "member_role": normalized_role,
         },
     )
-    send_household_invite_email(
-        to_email=normalized_email,
-        invite_key=invite_key,
-        project_id=_normalize(project_id),
-        member_role=normalized_role,
-        inviter_email=_normalize_email(actor_user.get("email")),
-        is_resend=False,
+    email_delivery: dict[str, Any] = {"sent": True}
+    try:
+        email_delivery = send_household_invite_email(
+            to_email=normalized_email,
+            invite_key=invite_key,
+            project_id=_normalize(project_id),
+            member_role=normalized_role,
+            inviter_email=_normalize_email(actor_user.get("email")),
+            is_resend=False,
+        ) or {"sent": False, "error": "unknown_email_delivery_failure"}
+    except Exception as exc:
+        logger.exception(
+            "household_access_service.create_household_invite.email_exception "
+            "project_id=%s invite_id=%s invite_email=%s error=%s",
+            _normalize(project_id),
+            _normalize(result.inserted_id),
+            normalized_email,
+            str(exc),
+        )
+        email_delivery = {
+            "sent": False,
+            "error": str(exc) or type(exc).__name__,
+            "exception_type": type(exc).__name__,
+        }
+
+    _persist_invite_email_delivery(
+        invite_id=result.inserted_id,
+        invite_document=document,
+        email_delivery=email_delivery,
     )
     return document
 
@@ -568,15 +606,39 @@ def resend_household_invite(
         str(oid),
         {"project_id": _normalize(invite.get("project_id")), "invite_email": _normalize_email(invite.get("email"))},
     )
-    send_household_invite_email(
-        to_email=_normalize_email(invite.get("email")),
-        invite_key=new_key,
-        project_id=_normalize(invite.get("project_id")),
-        member_role=normalize_project_member_role(invite.get("member_role"), default="viewer"),
-        inviter_email=_normalize_email(actor_user.get("email")),
-        is_resend=True,
+    invite = _invites().find_one({"_id": oid})
+    if invite is None:
+        return None
+    email_delivery: dict[str, Any] = {"sent": True}
+    try:
+        email_delivery = send_household_invite_email(
+            to_email=_normalize_email(invite.get("email")),
+            invite_key=new_key,
+            project_id=_normalize(invite.get("project_id")),
+            member_role=normalize_project_member_role(invite.get("member_role"), default="viewer"),
+            inviter_email=_normalize_email(actor_user.get("email")),
+            is_resend=True,
+        ) or {"sent": False, "error": "unknown_email_delivery_failure"}
+    except Exception as exc:
+        logger.exception(
+            "household_access_service.resend_household_invite.email_exception "
+            "project_id=%s invite_id=%s invite_email=%s error=%s",
+            _normalize(invite.get("project_id")),
+            _normalize(oid),
+            _normalize_email(invite.get("email")),
+            str(exc),
+        )
+        email_delivery = {
+            "sent": False,
+            "error": str(exc) or type(exc).__name__,
+            "exception_type": type(exc).__name__,
+        }
+    _persist_invite_email_delivery(
+        invite_id=oid,
+        invite_document=invite,
+        email_delivery=email_delivery,
     )
-    return _invites().find_one({"_id": oid})
+    return invite
 
 
 def update_member_role(
