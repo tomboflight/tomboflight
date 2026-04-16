@@ -140,7 +140,7 @@
     const detail = String(error?.detail || error?.message || "").trim();
     const statusCode = Number(error?.status || 0);
     if (statusCode === 404) {
-      return "We couldn’t reach the invite service right now. Please refresh and try again, or contact support if this continues.";
+      return "The invite feature is currently unavailable. Please contact support.";
     }
     if (statusCode === 403) {
       return "Your current role cannot send this invite. Please use a billing owner account.";

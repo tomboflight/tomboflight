@@ -89,25 +89,24 @@ def create_invite(
     request: Request,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
-    payload_data = payload.model_dump()
     logger.info(
         "workspace_access invite request method=%s url=%s project_id=%s payload=%s",
         request.method,
         str(request.url),
         project_id,
-        payload_data,
+        payload.model_dump(),
     )
     try:
         invite = create_household_invite(
             project_id=project_id,
             actor_user=current_user,
-            email=payload_data["email"],
-            member_role=payload_data["member_role"],
-            relationship_scope=payload_data["relationship_scope"],
-            privacy_scope=payload_data["privacy_scope"],
-            notes=payload_data["notes"],
-            expires_in_days=payload_data["expires_in_days"],
-            max_uses=payload_data["max_uses"],
+            email=payload.email,
+            member_role=payload.member_role,
+            relationship_scope=payload.relationship_scope,
+            privacy_scope=payload.privacy_scope,
+            notes=payload.notes,
+            expires_in_days=payload.expires_in_days,
+            max_uses=payload.max_uses,
         )
     except PermissionError as exc:
         logger.warning(

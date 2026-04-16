@@ -95,14 +95,7 @@ def _normalize_relationship_scope(value: Any) -> str:
 
 def _normalize_privacy_scope(value: Any) -> str:
     normalized = _normalize(value).lower()
-    mapped = PRIVACY_SCOPE_ALIASES.get(normalized, normalized or "household_private")
-    if mapped == "branch_shared":
-        return "household_shared"
-    if mapped == "linked_family_shared":
-        return "link_only"
-    if mapped == "public_memorial":
-        return "read_only"
-    return mapped
+    return PRIVACY_SCOPE_ALIASES.get(normalized, normalized or "household_private")
 
 
 def _to_oid(value: Any) -> ObjectId | None:
