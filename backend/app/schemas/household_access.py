@@ -11,6 +11,9 @@ HOUSEHOLD_PRIVACY_SCOPES: tuple[str, ...] = (
     "private_to_owner",
     "private_to_owner_and_co_owner",
     "household_private",
+    "household_shared",
+    "read_only",
+    "link_only",
     "branch_shared",
     "linked_family_shared",
     "public_memorial",
@@ -30,6 +33,9 @@ class HouseholdInviteCreate(BaseModel):
         "private_to_owner",
         "private_to_owner_and_co_owner",
         "household_private",
+        "household_shared",
+        "read_only",
+        "link_only",
         "branch_shared",
         "linked_family_shared",
         "public_memorial",
@@ -48,6 +54,17 @@ def _normalize_value(value: Any) -> str:
     return str(value or "").strip()
 
 
+def _normalize_privacy_scope_value(value: Any) -> str:
+    normalized = _normalize_value(value or "household_private").lower()
+    if normalized == "branch_shared":
+        return "household_shared"
+    if normalized == "linked_family_shared":
+        return "link_only"
+    if normalized == "public_memorial":
+        return "read_only"
+    return normalized
+
+
 def _serialize_dt(value: Any) -> str | None:
     if isinstance(value, datetime):
         return value.isoformat()
@@ -63,7 +80,7 @@ def build_membership_response(data: dict[str, Any]) -> dict[str, Any]:
         "email": _normalize_value(data.get("email")).lower() or None,
         "member_role": normalize_project_member_role(data.get("member_role"), default="viewer"),
         "relationship_scope": _normalize_value(data.get("relationship_scope") or "household_member"),
-        "privacy_scope": _normalize_value(data.get("privacy_scope") or "household_private"),
+        "privacy_scope": _normalize_privacy_scope_value(data.get("privacy_scope") or "household_private"),
         "status": _normalize_value(data.get("status") or "active"),
         "invited_by_user_id": _normalize_value(data.get("invited_by_user_id")) or None,
         "joined_at": _serialize_dt(data.get("joined_at") or data.get("created_at")),
@@ -81,7 +98,7 @@ def build_invite_response(data: dict[str, Any]) -> dict[str, Any]:
         "status": _normalize_value(data.get("status") or "pending"),
         "member_role": normalize_project_member_role(data.get("member_role"), default="viewer"),
         "relationship_scope": _normalize_value(data.get("relationship_scope") or "household_member"),
-        "privacy_scope": _normalize_value(data.get("privacy_scope") or "household_private"),
+        "privacy_scope": _normalize_privacy_scope_value(data.get("privacy_scope") or "household_private"),
         "max_uses": int(data.get("max_uses") or 1),
         "use_count": int(data.get("use_count") or 0),
         "notes": _normalize_value(data.get("notes")),

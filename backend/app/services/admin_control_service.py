@@ -20,6 +20,7 @@ from app.core.role_catalog import (
     normalize_role_code,
     resolve_primary_role_code,
 )
+from app.core.relationship_catalog import normalize_relationship_type
 from app.database import get_database
 from app.services.audit_log_service import write_audit_log
 from app.services.mint_job_service import sync_receipt_for_mint_record
@@ -4021,6 +4022,72 @@ def _super_admin_repair_invite(*, payload: dict[str, Any], project_id: str, acti
     return {"target_type": "household_invite", "target_id": invite_id, "before": before, "after": after, "project_id": project_id}
 
 
+def _super_admin_repair_tree_rendering(*, payload: dict[str, Any], project_id: str) -> dict[str, Any]:
+    db = _db()
+    family_id = _normalize(payload.get("family_id"))
+    if not family_id:
+        raise ValueError("family_id is required.")
+
+    relationships = list(db["relationships"].find({"family_id": family_id}))
+    before = {
+        "relationship_count": len(relationships),
+        "normalized_relationship_types": 0,
+        "deduplicated_relationships": 0,
+    }
+    if not relationships:
+        return {
+            "target_type": "family_tree",
+            "target_id": family_id,
+            "before": before,
+            "after": before,
+            "project_id": project_id,
+        }
+
+    normalized_updates = 0
+    dedupe_removed = 0
+    seen_keys: dict[tuple[str, str, str], ObjectId] = {}
+    for rel in relationships:
+        rel_id = rel.get("_id")
+        rel_type = normalize_relationship_type(rel.get("relationship_type"))
+        source_member_id = _normalize(rel.get("source_member_id"))
+        target_member_id = _normalize(rel.get("target_member_id"))
+        if not source_member_id or not target_member_id:
+            continue
+        if rel_type in {"spouse", "former_spouse", "sibling", "household_member"}:
+            pair = sorted([source_member_id, target_member_id])
+            key = (pair[0], pair[1], rel_type)
+        else:
+            key = (source_member_id, target_member_id, rel_type)
+
+        if key in seen_keys and rel_id:
+            db["relationships"].delete_one({"_id": rel_id})
+            dedupe_removed += 1
+            continue
+        if rel_id:
+            seen_keys[key] = rel_id
+
+        updates: dict[str, Any] = {}
+        if _normalize(rel.get("relationship_type")) != rel_type:
+            updates["relationship_type"] = rel_type
+        if updates and rel_id:
+            updates["updated_at"] = _now().isoformat()
+            db["relationships"].update_one({"_id": rel_id}, {"$set": updates})
+            normalized_updates += 1
+
+    after = {
+        "relationship_count": int(db["relationships"].count_documents({"family_id": family_id})),
+        "normalized_relationship_types": normalized_updates,
+        "deduplicated_relationships": dedupe_removed,
+    }
+    return {
+        "target_type": "family_tree",
+        "target_id": family_id,
+        "before": before,
+        "after": after,
+        "project_id": project_id,
+    }
+
+
 def super_admin_repair_case_action(
     *,
     case_id: str,
@@ -4077,6 +4144,9 @@ def super_admin_repair_case_action(
             },
             "project_id": project_id,
         },
+        "repair_tree_rendering": lambda: _super_admin_repair_tree_rendering(
+            payload=payload, project_id=project_id
+        ),
     }
 
     handler = action_handlers.get(normalized_action)

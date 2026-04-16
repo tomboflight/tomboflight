@@ -921,6 +921,7 @@
                     <option value="update_invite_email">correct invite email</option>
                     <option value="repair_entitlement">repair entitlement</option>
                     <option value="repair_package_lane">repair package lane</option>
+                    <option value="repair_tree_rendering">repair tree rendering</option>
                   </select></label>
                   <label class="admin-field"><span>Reason / Note</span><input type="text" data-super-admin-repair-field="reason" placeholder="Required for audit" /></label>
                   <label class="admin-field"><span>Relationship ID</span><input type="text" data-super-admin-repair-field="relationship_id" /></label>

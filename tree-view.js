@@ -979,21 +979,20 @@
 
     childrenByTarget.forEach((parents, childId) => {
       const uniqueParents = [...new Set(parents)].filter(Boolean);
+      const paired = findPairedParents(uniqueParents, spouseSet);
+      const pairedIds = new Set(paired || []);
 
-      if (uniqueParents.length === 2) {
-        const paired = findPairedParents(uniqueParents, spouseSet);
-        if (paired) {
-          const key = `${paired[0]}::${paired[1]}::${childId}`;
-          groupedChildren.set(key, {
-            parentA: paired[0],
-            parentB: paired[1],
-            childId,
-          });
-          return;
-        }
+      if (paired) {
+        const key = `${paired[0]}::${paired[1]}::${childId}`;
+        groupedChildren.set(key, {
+          parentA: paired[0],
+          parentB: paired[1],
+          childId,
+        });
       }
 
       uniqueParents.forEach((parentId) => {
+        if (pairedIds.has(parentId)) return;
         soloParents.push({ parentId, childId });
       });
     });
