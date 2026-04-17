@@ -48,6 +48,7 @@ from app.services.workspace_access_service import (
     count_workspace_uploads,
     family_is_visible_to_user,
     require_workspace_capability,
+    require_workspace_member_role,
     resolve_workspace_context,
 )
 
@@ -433,7 +434,17 @@ def _require_upload_management_access(
 
     current_user_id = _current_user_id(current_user)
     uploaded_by_user_id = _normalize_value(upload_record.get("uploaded_by_user_id"))
+    member_role = _normalize_value(context.get("member_role"))
+    if current_user_id == uploaded_by_user_id:
+        return upload_record, context
+
+    if member_role in {"billing_owner", "co_owner", "family_manager"}:
+        return upload_record, context
+
     project_owner_user_id = _normalize_value((context.get("project") or {}).get("owner_user_id"))
+    if current_user_id == project_owner_user_id:
+        return upload_record, context
+
     if current_user_id not in {uploaded_by_user_id, project_owner_user_id}:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -902,6 +913,11 @@ async def upload_member_photo(
         capabilities=("can_upload_portraits",),
         detail="Your active package does not include upload access.",
     )
+    require_workspace_member_role(
+        context,
+        allowed_roles=("billing_owner", "co_owner", "family_manager", "contributor"),
+        detail="Your role is read-only for uploads.",
+    )
 
     db = get_database()
     if db is None:
@@ -965,6 +981,11 @@ async def upload_verification_evidence(
         member_id=member_id,
         capabilities=("can_upload_verification_docs",),
         detail="Your active package does not include upload access.",
+    )
+    require_workspace_member_role(
+        context,
+        allowed_roles=("billing_owner", "co_owner", "family_manager", "contributor"),
+        detail="Your role is read-only for uploads.",
     )
 
     db = get_database()
@@ -1410,11 +1431,10 @@ def delete_upload(
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")
 
-    upload_record, _context = _require_upload_access(
+    upload_record, _context = _require_upload_management_access(
         upload_id,
         db,
         current_user,
-        detail="Your active package does not include upload access.",
     )
 
     relative_path = _normalize_value(upload_record.get("relative_path"))

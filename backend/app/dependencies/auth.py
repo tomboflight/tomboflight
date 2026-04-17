@@ -226,15 +226,25 @@ def _is_paid_package_order(order: dict[str, Any] | None) -> bool:
     }
 
 
-def _list_active_entitlements_for_user(user_id: str) -> list[dict[str, Any]]:
-    if not user_id:
+def _list_active_entitlements_for_user(
+    user_id: str,
+    *,
+    user_email: str = "",
+) -> list[dict[str, Any]]:
+    if not user_id and not user_email:
         return []
 
     try:
-        return list_user_project_entitlements(user_id, active_only=True)
+        return list_user_project_entitlements(
+            user_id,
+            email=user_email,
+            active_only=True,
+        )
     except TypeError:
         try:
-            entitlements = list_user_project_entitlements(user_id)
+            entitlements = list_user_project_entitlements(
+                user_id,
+            )
         except Exception:
             return []
 
@@ -254,9 +264,13 @@ def get_user_package_capabilities(user: dict[str, Any]) -> set[str]:
         return capabilities
 
     user_id = _current_user_id(user)
+    user_email = _current_user_email(user)
 
-    if user_id:
-        entitlements = _list_active_entitlements_for_user(user_id)
+    if user_id or user_email:
+        entitlements = _list_active_entitlements_for_user(
+            user_id,
+            user_email=user_email,
+        )
         for entitlement in entitlements:
             _collect_capabilities_from_mapping(
                 capabilities,
@@ -798,7 +812,12 @@ def _resolve_workflow_state(project_id: str | None) -> dict[str, Any]:
     }
 
 
-def resolve_access_context(user_id: str, project_id: str | None = None) -> dict[str, Any]:
+def resolve_access_context(
+    user_id: str,
+    project_id: str | None = None,
+    *,
+    user_email: str = "",
+) -> dict[str, Any]:
     user = _load_user_by_id(user_id)
     if user is None:
         raise HTTPException(
@@ -810,7 +829,11 @@ def resolve_access_context(user_id: str, project_id: str | None = None) -> dict[
     capabilities = _collect_capabilities_for_roles(role_codes)
     permissions = _collect_permissions_for_roles(role_codes, capabilities)
 
-    entitlements = list_user_project_entitlements(user_id, active_only=True)
+    entitlements = list_user_project_entitlements(
+        user_id,
+        email=user_email or _current_user_email(user),
+        active_only=True,
+    )
     if project_id:
         entitlements = [
             entitlement
@@ -843,10 +866,18 @@ def _get_or_resolve_access_context(
             return cached_context
 
     user_id = _current_user_id(current_user)
-    context = resolve_access_context(
-        user_id,
-        project_id=normalized_project_id,
-    )
+    user_email = _current_user_email(current_user)
+    if user_email:
+        context = resolve_access_context(
+            user_id,
+            project_id=normalized_project_id,
+            user_email=user_email,
+        )
+    else:
+        context = resolve_access_context(
+            user_id,
+            project_id=normalized_project_id,
+        )
     current_user["_access_context"] = context
     return context
 
@@ -1043,7 +1074,17 @@ def transition_project(
     if not actor_user_id:
         raise HTTPException(status_code=400, detail="Actor user id is required.")
 
-    access_context = resolve_access_context(actor_user_id, project_id=project_id)
+    if actor_email:
+        access_context = resolve_access_context(
+            actor_user_id,
+            project_id=project_id,
+            user_email=actor_email,
+        )
+    else:
+        access_context = resolve_access_context(
+            actor_user_id,
+            project_id=project_id,
+        )
     permission_pool = set(access_context.get("permissions") or [])
     required_permissions = {
         "project.workflow.transition",

@@ -12,6 +12,7 @@ from app.services.experience_catalog_service import (
     get_lane_chambers,
 )
 from app.services.project_entitlement_service import list_user_project_entitlements
+from app.services.project_membership_service import list_accessible_project_ids
 from app.services.workspace_access_service import resolve_workspace_context
 
 
@@ -62,9 +63,35 @@ def resolve_default_project_id(current_user: dict[str, Any]) -> str | None:
     user_id = _current_user_id(current_user)
     user_email = _current_user_email(current_user)
 
+    # Project memberships are the source of truth for invited customers
+    # (co-owner, family manager, contributor, viewer, linked relative).
+    # Use them first so invited users retain durable workspace context.
+    if user_id or user_email:
+        try:
+            accessible_ids = list_accessible_project_ids(
+                user_id=user_id,
+                email=user_email,
+                active_only=True,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Unable to load project memberships for user %s: %s",
+                user_id or user_email,
+                exc,
+            )
+            accessible_ids = []
+        for project_id in accessible_ids:
+            normalized = _normalize(project_id)
+            if normalized:
+                return normalized
+
     if user_id:
         try:
-            entitlements = list_user_project_entitlements(user_id, active_only=True)
+            entitlements = list_user_project_entitlements(
+                user_id,
+                email=user_email,
+                active_only=True,
+            )
         except RuntimeError as exc:
             logger.warning("Unable to load project entitlements for user %s: %s", user_id, exc)
             entitlements = []
@@ -107,7 +134,19 @@ def build_access_context(
     workspace_context: dict[str, Any] = {}
 
     if resolved_project_id:
-        workspace_context = resolve_workspace_context(current_user, project_id=resolved_project_id)
+        try:
+            workspace_context = resolve_workspace_context(
+                current_user,
+                project_id=resolved_project_id,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Unable to resolve workspace context for user %s project %s: %s",
+                _current_user_id(current_user) or _current_user_email(current_user),
+                resolved_project_id,
+                exc,
+            )
+            workspace_context = {}
 
     project = workspace_context.get("project") or {}
     family = workspace_context.get("family") or {}
@@ -134,7 +173,7 @@ def build_access_context(
         "role": _current_user_role(current_user),
         "status": _current_user_status(current_user),
         "package_lane": package_lane,
-        "active_project_id": _normalize(project.get("_id")) or None,
+        "active_project_id": _normalize(project.get("_id")) or resolved_project_id or None,
         "active_family_id": _normalize(family.get("_id")) or None,
         "active_entitlements": active_entitlements,
         "project_permissions": active_entitlements,

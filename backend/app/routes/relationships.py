@@ -11,8 +11,8 @@ from app.dependencies.auth import (
 from app.schemas.relationship import RelationshipCreate, RelationshipResponse
 from app.services.relationship_guardrails import RelationshipGuardrailService
 from app.services.workspace_access_service import (
-    family_is_visible_to_user,
     require_workspace_capability,
+    require_workspace_member_role,
 )
 
 router = APIRouter(prefix="/relationships", tags=["Relationships"])
@@ -130,6 +130,11 @@ async def create_relationship(
         family_id=payload.family_id,
         capabilities=("can_build_family_tree", "can_open_family_intake"),
         detail="Your active package does not include relationship editing.",
+    )
+    require_workspace_member_role(
+        context,
+        allowed_roles=("billing_owner", "co_owner", "family_manager", "contributor"),
+        detail="Your role is read-only for relationship edits.",
     )
     resolved_family_id = str(context["family"].get("_id"))
 
@@ -273,7 +278,12 @@ async def delete_relationship(
 ):
     db = request.app.state.db
 
-    relationship, _family = _require_relationship_access(relationship_id, db, current_user)
+    relationship, context = _require_relationship_access(relationship_id, db, current_user)
+    require_workspace_member_role(
+        context,
+        allowed_roles=("billing_owner", "co_owner", "family_manager"),
+        detail="Your role cannot remove relationships.",
+    )
 
     db["relationships"].delete_one({"_id": ObjectId(relationship_id)})
 

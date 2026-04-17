@@ -6,6 +6,7 @@ from bson import ObjectId
 from fastapi import HTTPException, status
 
 from app.core.package_catalog import get_package, normalize_package_code
+from app.core.role_catalog import normalize_project_member_role
 from app.database import get_database
 from app.services.entitlement_service import resolve_project_entitlements
 from app.services.project_member_service import is_project_member
@@ -480,6 +481,32 @@ def require_workspace_capability(
             detail=detail,
         )
 
+    return context
+
+
+def require_workspace_member_role(
+    context: dict[str, Any],
+    *,
+    allowed_roles: Iterable[str],
+    detail: str,
+) -> dict[str, Any]:
+    if context.get("is_admin"):
+        return context
+
+    normalized_role = normalize_project_member_role(
+        context.get("member_role"),
+        default="viewer",
+    )
+    allowed = {
+        normalize_project_member_role(role, default="viewer")
+        for role in allowed_roles
+        if _normalize_value(role)
+    }
+    if normalized_role not in allowed:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=detail,
+        )
     return context
 
 

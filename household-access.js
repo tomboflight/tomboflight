@@ -75,8 +75,29 @@
     },
   };
 
+  const ROLE_PRIORITY = {
+    billing_owner: 100,
+    co_owner: 80,
+    family_manager: 60,
+    contributor: 40,
+    viewer: 20,
+    minor_viewer: 10,
+    linked_relative: 10,
+    legacy_executor: 5,
+  };
+
+  const ROLE_ASSIGNMENTS = {
+    billing_owner: new Set(ROLE_OPTIONS),
+    co_owner: new Set(["family_manager", "contributor", "viewer", "minor_viewer", "linked_relative"]),
+    family_manager: new Set(["contributor", "viewer", "minor_viewer"]),
+  };
+
+  const ROLE_CAN_MANAGE_ACCESS = new Set(["billing_owner", "co_owner", "family_manager"]);
+
   let currentProjectId = "";
   let currentUser = null;
+  let currentMemberRole = "viewer";
+  let hasResolvedMemberRole = false;
 
   function inviteApiFallbackBaseUrls() {
     const configuredFallbacks = Array.isArray(window.TOL_CONFIG?.INVITE_API_BASE_URL_FALLBACKS)
@@ -527,6 +548,41 @@
       });
   }
 
+  function normalizeValue(value) {
+    return String(value || "").trim();
+  }
+
+  function normalizeLower(value) {
+    return normalizeValue(value).toLowerCase();
+  }
+
+  function normalizeRole(value) {
+    const normalized = normalizeLower(value);
+    return ROLE_OPTIONS.includes(normalized) ? normalized : "viewer";
+  }
+
+  function roleRank(role) {
+    return Number(ROLE_PRIORITY[normalizeRole(role)] || 0);
+  }
+
+  function roleCanAssign(actorRole, targetRole) {
+    const actor = normalizeRole(actorRole);
+    const target = normalizeRole(targetRole);
+    return Boolean(ROLE_ASSIGNMENTS[actor] && ROLE_ASSIGNMENTS[actor].has(target));
+  }
+
+  function roleCanManageAccess(role) {
+    return ROLE_CAN_MANAGE_ACCESS.has(normalizeRole(role));
+  }
+
+  function currentUserIdentity() {
+    if (!currentUser) return { userId: "", email: "" };
+    return {
+      userId: normalizeValue(currentUser?.id || currentUser?._id || currentUser?.user_id),
+      email: normalizeLower(currentUser?.email),
+    };
+  }
+
   function roleNode() {
     return inviteForm ? inviteForm.querySelector('select[name="member_role"]') : null;
   }
@@ -589,8 +645,151 @@
 
     const context = window.TOLDashboardContext || null;
     const activeProject = context?.activeProject || null;
-    if (activeProject && activeProject.id) return String(activeProject.id).trim();
+    if (activeProject && (activeProject.id || activeProject._id || activeProject.project_id)) {
+      return String(activeProject.id || activeProject._id || activeProject.project_id).trim();
+    }
     return String(user?.active_project_id || "").trim();
+  }
+
+  async function resolveProjectIdFromAccessContext() {
+    try {
+      const payload = await sendLoadRequest(
+        "/users/me/access-context",
+        "load_access_context",
+        "",
+        { fallbackStatusCodes: [404, 500, 502, 503, 504] },
+      );
+      return normalizeValue(payload?.active_project_id);
+    } catch (error) {
+      return "";
+    }
+  }
+
+  async function resolveProjectIdFromMemberships() {
+    try {
+      const payload = await sendLoadRequest(
+        "/workspace-access/my-memberships",
+        "load_my_memberships",
+        "",
+        { fallbackStatusCodes: [404, 500, 502, 503, 504] },
+      );
+      const items = Array.isArray(payload?.items) ? payload.items : [];
+      const active = items.find(function (item) {
+        return normalizeLower(item?.status || "active") === "active" && normalizeValue(item?.project_id);
+      });
+      return normalizeValue(active?.project_id);
+    } catch (error) {
+      return "";
+    }
+  }
+
+  async function resolveProjectId(user) {
+    const direct = projectIdFromContext(user);
+    if (direct) return direct;
+
+    const fromAccessContext = await resolveProjectIdFromAccessContext();
+    if (fromAccessContext) return fromAccessContext;
+
+    const fromMemberships = await resolveProjectIdFromMemberships();
+    if (fromMemberships) return fromMemberships;
+
+    return "";
+  }
+
+  function resolveCurrentMemberRole(items) {
+    const members = Array.isArray(items) ? items : [];
+    const identity = currentUserIdentity();
+    const found = members.find(function (member) {
+      const memberUserId = normalizeValue(member?.user_id);
+      const memberEmail = normalizeLower(member?.email);
+      return (
+        (identity.userId && memberUserId && identity.userId === memberUserId) ||
+        (identity.email && memberEmail && identity.email === memberEmail)
+      );
+    });
+    if (!found) return "";
+    return normalizeRole(found?.member_role || "viewer");
+  }
+
+  async function resolveCurrentMemberRoleFromMemberships(projectId) {
+    const normalizedProjectId = normalizeValue(projectId);
+    if (!normalizedProjectId) return "";
+    try {
+      const payload = await sendLoadRequest(
+        "/workspace-access/my-memberships",
+        "load_my_memberships_role",
+        normalizedProjectId,
+        { fallbackStatusCodes: [404, 500, 502, 503, 504] },
+      );
+      const items = Array.isArray(payload?.items) ? payload.items : [];
+      const identity = currentUserIdentity();
+      const found = items.find(function (item) {
+        const status = normalizeLower(item?.status || "active");
+        const itemProjectId = normalizeValue(item?.project_id);
+        const itemUserId = normalizeValue(item?.user_id);
+        const itemEmail = normalizeLower(item?.email);
+        if (status !== "active") return false;
+        if (!itemProjectId || itemProjectId !== normalizedProjectId) return false;
+        return (
+          (identity.userId && itemUserId && identity.userId === itemUserId) ||
+          (identity.email && itemEmail && identity.email === itemEmail)
+        );
+      });
+      if (!found) return "";
+      return normalizeRole(found?.member_role || "viewer");
+    } catch (_error) {
+      return "";
+    }
+  }
+
+  function applyInviteFormRoleAccess() {
+    if (!inviteForm) return;
+    const canManage = hasResolvedMemberRole && roleCanManageAccess(currentMemberRole);
+    const roleSelect = roleNode();
+    const relationshipSelect = relationshipNode();
+    const privacySelect = privacyNode();
+    const notesInput = noteNode();
+    const emailInput = inviteForm.querySelector('input[name="email"]');
+    const submitButtons = inviteForm.querySelectorAll('button[type="submit"], button[type="button"]');
+
+    [roleSelect, relationshipSelect, privacySelect, notesInput, emailInput].forEach(function (node) {
+      if (!node) return;
+      node.disabled = !canManage;
+    });
+    submitButtons.forEach(function (button) {
+      button.disabled = !canManage;
+    });
+
+    if (roleSelect) {
+      Array.from(roleSelect.options || []).forEach(function (option) {
+        option.disabled = !canManage || !roleCanAssign(currentMemberRole, option.value);
+      });
+      if (canManage && roleSelect.selectedOptions.length) {
+        const selected = roleSelect.selectedOptions[0];
+        if (selected && selected.disabled) {
+          const firstEnabled = Array.from(roleSelect.options).find(function (option) {
+            return !option.disabled;
+          });
+          if (firstEnabled) roleSelect.value = firstEnabled.value;
+        }
+      }
+    }
+
+    if (!hasResolvedMemberRole) {
+      setText(
+        inviteStatus,
+        "Accept your invite to activate workspace access controls.",
+        "info",
+      );
+    } else if (!canManage) {
+      setText(
+        inviteStatus,
+        "Your role is read-only for invites and member access changes.",
+        "warning",
+      );
+    } else if (inviteStatus && inviteStatus.dataset.state === "warning") {
+      clear(inviteStatus);
+    }
   }
 
   function inviteKeyFromQuery() {
@@ -687,16 +886,22 @@
       return;
     }
     if (membersEmpty) membersEmpty.style.display = "none";
+    const canManage = roleCanManageAccess(currentMemberRole);
+    const actorRank = roleRank(currentMemberRole);
     items.forEach((member) => {
       const card = document.createElement("article");
       card.className = "form-panel";
 
       const emailLabel = member.email || member.user_id || "Unassigned member";
-      const role = String(member.member_role || "viewer").trim();
+      const role = normalizeRole(member.member_role || "viewer");
       const isBillingOwner = role === "billing_owner";
+      const targetRank = roleRank(role);
+      const canTouchTarget = canManage && !isBillingOwner && targetRank < actorRank;
       const options = ROLE_OPTIONS.map(
-        (roleCode) =>
-          `<option value="${roleCode}" ${roleCode === role ? "selected" : ""}>${roleLabel(roleCode)}</option>`,
+        (roleCode) => {
+          const disabled = !canManage || !roleCanAssign(currentMemberRole, roleCode);
+          return `<option value="${roleCode}" ${roleCode === role ? "selected" : ""} ${disabled ? "disabled" : ""}>${roleLabel(roleCode)}</option>`;
+        },
       ).join("");
       card.innerHTML = `
         <strong>${emailLabel}</strong>
@@ -705,18 +910,18 @@
         <p class="card-copy">Privacy: ${privacyLabel(member.privacy_scope || "household_private")}</p>
         <p class="card-copy">Status: ${member.status || "active"}</p>
         <label>Change Role
-          <select ${isBillingOwner ? "disabled" : ""} data-member-role-select>${options}</select>
+          <select ${canTouchTarget ? "" : "disabled"} data-member-role-select>${options}</select>
         </label>
         <div class="inline-actions" style="margin-top:0.75rem;">
-          <button class="btn btn-secondary" type="button" data-member-role-save ${isBillingOwner ? "disabled" : ""}>Change Role</button>
-          <button class="btn btn-secondary" type="button" data-member-remove ${isBillingOwner ? "disabled" : ""}>Remove Member</button>
+          <button class="btn btn-secondary" type="button" data-member-role-save ${canTouchTarget ? "" : "disabled"}>Change Role</button>
+          <button class="btn btn-secondary" type="button" data-member-remove ${canTouchTarget ? "" : "disabled"}>Remove Member</button>
         </div>
       `;
 
       const roleSave = card.querySelector("[data-member-role-save]");
       const roleSelect = card.querySelector("[data-member-role-select]");
       const removeButton = card.querySelector("[data-member-remove]");
-      if (roleSave && roleSelect && !isBillingOwner) {
+      if (roleSave && roleSelect && canTouchTarget) {
         roleSave.addEventListener("click", async function () {
           try {
             await changeMemberRole(member.id, roleSelect.value);
@@ -727,7 +932,7 @@
           }
         });
       }
-      if (removeButton && !isBillingOwner) {
+      if (removeButton && canTouchTarget) {
         removeButton.addEventListener("click", async function () {
           try {
             await removeMember(member.id);
@@ -752,11 +957,12 @@
     }
     if (invitesEmpty) invitesEmpty.style.display = "none";
     renderPendingCount(items);
+    const canManageInvites = roleCanManageAccess(currentMemberRole);
     items.forEach((invite) => {
       const card = document.createElement("article");
       card.className = "form-panel";
-      const canResend = isPending(invite) || isExpired(invite);
-      const canRevoke = isPending(invite) || isExpired(invite);
+      const canResend = canManageInvites && (isPending(invite) || isExpired(invite));
+      const canRevoke = canManageInvites && (isPending(invite) || isExpired(invite));
       card.innerHTML = `
         <strong>${invite.email || "Invite"}</strong>
         <p class="card-copy">Role: ${roleLabel(invite.member_role || "viewer")}</p>
@@ -805,7 +1011,15 @@
       sendLoadRequest(workspaceMembersLoadPaths(currentProjectId), "load_members", currentProjectId),
       sendLoadRequest(workspaceInvitesLoadPaths(currentProjectId), "load_invites", currentProjectId),
     ]);
-    renderMembers(membersPayload?.items || []);
+    const memberItems = membersPayload?.items || [];
+    let resolvedRole = resolveCurrentMemberRole(memberItems);
+    if (!resolvedRole) {
+      resolvedRole = await resolveCurrentMemberRoleFromMemberships(currentProjectId);
+    }
+    currentMemberRole = resolvedRole || "viewer";
+    hasResolvedMemberRole = Boolean(resolvedRole);
+    applyInviteFormRoleAccess();
+    renderMembers(memberItems);
     renderInvites(invitesPayload?.items || []);
   }
 
@@ -818,6 +1032,10 @@
   async function handleInviteSubmit(event) {
     event.preventDefault();
     clear(inviteStatus);
+    if (!roleCanManageAccess(currentMemberRole)) {
+      setText(inviteStatus, "Your role cannot send invites from this workspace.", "error");
+      return;
+    }
     if (!currentProjectId) {
       setText(inviteStatus, "Select a workspace project first.", "error");
       return;
@@ -900,6 +1118,10 @@
         body: JSON.stringify({ invite_key: inviteKey }),
       });
       setText(acceptStatus, "Invite accepted. Workspace access granted.", "success");
+      currentProjectId = currentProjectId || (await resolveProjectId(currentUser));
+      if (statusNode && currentProjectId) {
+        statusNode.textContent = `Managing workspace access for project ${currentProjectId}.`;
+      }
       await refreshData();
       const membership = await acceptInviteByKey(inviteKey);
       hydrateProjectContextFromMembership(membership);
@@ -996,8 +1218,9 @@
         app.saveUser(currentUser);
       }
 
-      currentProjectId = projectIdFromContext(currentUser);
-      if (!currentProjectId) {
+      const inviteKey = inviteKeyFromQuery();
+      currentProjectId = await resolveProjectId(currentUser);
+      if (!currentProjectId && !inviteKey) {
         if (statusNode) {
           statusNode.textContent =
             "No active workspace project was detected. Open this page from your dashboard workspace.";
@@ -1035,11 +1258,13 @@
         }
         return;
       }
-      if (statusNode) {
+      if (statusNode && currentProjectId) {
         statusNode.textContent = `Managing workspace access for project ${currentProjectId}.`;
+      } else if (statusNode) {
+        statusNode.textContent =
+          "Invite context detected. Accept the invite key below to activate workspace access.";
       }
 
-      const inviteKey = inviteKeyFromQuery();
       if (acceptForm && inviteKey) {
         const keyInput = acceptForm.querySelector('input[name="invite_key"]');
         if (keyInput) keyInput.value = inviteKey;
@@ -1047,6 +1272,7 @@
 
       bindQuickInviteButtons();
       updateAutoInviteDefaults(true);
+      applyInviteFormRoleAccess();
       console.info("[HouseholdAccess] Invite runtime API context.", {
         resolvedApiBaseUrl:
           typeof app.getApiBaseUrl === "function" ? normalizeBaseUrl(app.getApiBaseUrl()) : "",
@@ -1059,10 +1285,27 @@
       });
       if (inviteForm) inviteForm.addEventListener("submit", handleInviteSubmit);
       if (acceptForm) acceptForm.addEventListener("submit", handleAcceptSubmit);
-      await refreshData();
+      if (currentProjectId) {
+        try {
+          await refreshData();
+        } catch (error) {
+          const statusCode = Number(error?.status || 0);
+          if (statusCode === 403 && inviteKey) {
+            hasResolvedMemberRole = false;
+            applyInviteFormRoleAccess();
+            setText(
+              acceptStatus,
+              "Accept this invite to activate workspace access for this project.",
+              "info",
+            );
+            return;
+          }
+          throw error;
+        }
+      }
     } catch (error) {
       const statusCode = Number(error?.status || 0);
-      if (statusCode === 401 || statusCode === 403) {
+      if (statusCode === 401 || (statusCode === 403 && !inviteKeyFromQuery())) {
         if (typeof app.clearSession === "function") app.clearSession();
         window.location.href = signinRedirectUrlWithInviteContext();
         return;

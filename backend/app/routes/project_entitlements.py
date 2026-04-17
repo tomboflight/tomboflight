@@ -113,8 +113,13 @@ def list_my_project_entitlements(
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
     current_user_id = _current_user_id(current_user)
+    current_user_email = str(current_user.get("email") or "").strip().lower()
     return {
-        "items": list_user_project_entitlements(current_user_id, active_only=True),
+        "items": list_user_project_entitlements(
+            current_user_id,
+            email=current_user_email,
+            active_only=True,
+        ),
     }
 
 

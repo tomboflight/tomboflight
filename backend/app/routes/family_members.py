@@ -17,6 +17,7 @@ from app.services.workspace_access_service import (
     family_is_visible_to_user,
     list_accessible_families_for_user,
     require_workspace_capability,
+    require_workspace_member_role,
 )
 
 router = APIRouter(prefix="/family-members", tags=["family_members"])
@@ -240,6 +241,11 @@ def create_family_member(
         capabilities=("can_build_family_tree", "can_open_family_intake"),
         detail="Your active package does not include family member editing.",
     )
+    require_workspace_member_role(
+        context,
+        allowed_roles=("billing_owner", "co_owner", "family_manager", "contributor"),
+        detail="Your role is read-only for family member edits.",
+    )
 
     user_id = _current_user_id(current_user)
 
@@ -292,6 +298,11 @@ def update_family_member(
         capabilities=("can_build_family_tree", "can_open_family_intake"),
         detail="Your active package does not include family member editing.",
     )
+    require_workspace_member_role(
+        context,
+        allowed_roles=("billing_owner", "co_owner", "family_manager", "contributor"),
+        detail="Your role is read-only for family member edits.",
+    )
     existing = context["member"]
 
     if "family_id" in payload:
@@ -343,6 +354,11 @@ def delete_family_member(
         member_id=member_id,
         capabilities=("can_build_family_tree", "can_open_family_intake"),
         detail="Your active package does not include family member editing.",
+    )
+    require_workspace_member_role(
+        context,
+        allowed_roles=("billing_owner", "co_owner", "family_manager"),
+        detail="Your role cannot remove family members.",
     )
     existing = context["member"]
 

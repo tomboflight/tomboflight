@@ -35,6 +35,7 @@ from app.services.auth_service import (
     verify_mfa_enrollment,
     verify_mfa_login_challenge,
 )
+from app.services.access_context_service import build_access_context
 from app.services.rate_limit_service import (
     clear_failures,
     enforce_lockout,
@@ -374,7 +375,14 @@ def mfa_disable(
 @router.get("/me", response_model=UserResponse)
 def me(response: Response, current_user: dict = Depends(get_current_user)):
     _apply_no_store(response)
-    return build_user_response(current_user)
+    payload = build_user_response(current_user)
+    try:
+        context = build_access_context(current_user)
+    except Exception:
+        context = {}
+    payload["active_project_id"] = context.get("active_project_id")
+    payload["active_family_id"] = context.get("active_family_id")
+    return payload
 
 
 def _current_user_id(user: dict) -> str:
