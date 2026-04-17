@@ -6,23 +6,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.database import get_database
 from app.dependencies.auth import get_current_user, has_internal_admin_access
 from app.services.viewer_manifest_service import ensure_project_workspace_anchor
-from app.services.workspace_access_service import require_workspace_capability
+from app.services.workspace_access_service import require_workspace_capability, family_is_visible_to_user
 
 router = APIRouter(prefix="/families", tags=["Family Graph"])
-
-INTERNAL_ADMIN_KEYS = {
-    "admin",
-    "super_admin",
-    "root_admin",
-    "platform_admin",
-    "operations_admin",
-    "finance_admin",
-    "marketing_admin",
-    "executive_technology",
-    "operations",
-    "finance",
-    "marketing",
-}
 
 
 def _current_user_id(user: dict[str, Any]) -> str:
@@ -59,58 +45,6 @@ def _family_id_candidates(family_id: str) -> list[Any]:
     if ObjectId.is_valid(family_id):
         candidates.append(ObjectId(family_id))
     return candidates
-
-
-def _is_admin(user: dict[str, Any]) -> bool:
-    values = {
-        _normalize_value(user.get("role")),
-        _normalize_value(user.get("access_tier")),
-        _normalize_value(user.get("department_role")),
-    }
-    return any(value in INTERNAL_ADMIN_KEYS for value in values if value)
-
-
-def _family_is_visible_to_user(
-    family: dict[str, Any],
-    current_user_id: str,
-    current_user_email: str,
-    current_user_name: str,
-) -> bool:
-    owner_user_id = str(family.get("owner_user_id") or "").strip()
-    owner_email = str(family.get("owner_email") or "").strip().lower()
-
-    shared_with_user_ids = [
-        str(value).strip()
-        for value in (family.get("shared_with_user_ids") or [])
-        if value is not None
-    ]
-    shared_with_emails = [
-        str(value).strip().lower()
-        for value in (family.get("shared_with_emails") or [])
-        if value is not None
-    ]
-
-    if owner_user_id and owner_user_id == current_user_id:
-        return True
-
-    if owner_email and owner_email == current_user_email:
-        return True
-
-    if current_user_id in shared_with_user_ids:
-        return True
-
-    if current_user_email in shared_with_emails:
-        return True
-
-    # Backward-compatible fallback for older family records
-    if not owner_user_id and not owner_email:
-        created_by = str(family.get("created_by") or "").strip()
-        if created_by and (
-            created_by == current_user_name or created_by.lower() == current_user_email
-        ):
-            return True
-
-    return False
 
 
 @router.get("/{family_id}/graph")

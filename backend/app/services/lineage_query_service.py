@@ -1,12 +1,7 @@
 from collections import defaultdict, deque
 from typing import Any
 
-
-ANCESTRY_RELATIONSHIP_TYPES = {
-    "parent_child",
-    "adoptive_parent_child",
-    "step_parent_child",
-}
+from app.core.relationship_catalog import ANCESTRY_RELATIONSHIP_TYPES
 
 
 class LineageQueryService:

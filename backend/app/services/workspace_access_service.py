@@ -9,6 +9,7 @@ from app.core.package_catalog import get_package
 from app.database import get_database
 from app.dependencies.auth import has_internal_admin_access
 from app.services.entitlement_service import resolve_project_entitlements
+from app.services.project_member_service import is_project_member
 
 PAID_PACKAGE_STATUSES = {
     "paid",
@@ -94,6 +95,21 @@ def _family_is_visible_to_user(
             return True
 
     return False
+
+
+def family_is_visible_to_user(
+    family: dict[str, Any],
+    *,
+    current_user_id: str,
+    current_user_email: str,
+    current_user_name: str,
+) -> bool:
+    return _family_is_visible_to_user(
+        family,
+        current_user_id=current_user_id,
+        current_user_email=current_user_email,
+        current_user_name=current_user_name,
+    )
 
 
 def _require_database():
@@ -283,8 +299,12 @@ def _project_is_visible_to_user(
     if current_user_email and current_user_email in owner_emails:
         return True
 
+    project_id = _normalize_value(project.get("_id") or project.get("id"))
+    if project_id and is_project_member(project_id, current_user_id, current_user_email):
+        return True
+
     if family is not None and not any(value for value in owner_user_ids | owner_emails):
-        return _family_is_visible_to_user(
+        return family_is_visible_to_user(
             family,
             current_user_id=current_user_id,
             current_user_email=current_user_email,

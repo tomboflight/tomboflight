@@ -4,19 +4,14 @@ from typing import Any, Optional
 from bson import ObjectId
 from fastapi import HTTPException, status
 
-from app.schemas.relationship import ALLOWED_RELATIONSHIP_TYPES, RelationshipCreate
-
-
-SYMMETRIC_RELATIONSHIP_TYPES = {"spouse", "sibling"}
-
-ANCESTRY_RELATIONSHIP_TYPES = {
-    "parent_child",
-    "adoptive_parent_child",
-    "step_parent_child",
-}
-
-BIOLOGICAL_PARENT_RELATIONSHIP_TYPE = "parent_child"
-MIN_PARENT_CHILD_AGE_GAP = 12
+from app.core.relationship_catalog import (
+    ALLOWED_RELATIONSHIP_TYPES,
+    ANCESTRY_RELATIONSHIP_TYPES,
+    BIOLOGICAL_PARENT_RELATIONSHIP_TYPE,
+    MIN_PARENT_CHILD_AGE_GAP,
+    SYMMETRIC_RELATIONSHIP_TYPES,
+)
+from app.schemas.relationship import RelationshipCreate
 
 
 def normalize_mongo_doc(document: dict[str, Any]) -> dict[str, Any]:

@@ -8,7 +8,9 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.config import settings
 from app.core.package_catalog import get_package
+from app.core.role_catalog import INTERNAL_ADMIN_KEYS, LEGACY_ROLE_PERMISSIONS
 from app.core.security import decode_access_token
+from app.core.state_catalog import WORKFLOW_ALLOWED_TRANSITIONS, WORKFLOW_PHASE_BY_STATE
 from app.database import get_database
 from app.services.audit_log_service import write_audit_log
 from app.services.auth_service import get_user_by_email
@@ -17,20 +19,6 @@ from app.services.order_service import get_orders_for_user
 from app.services.project_entitlement_service import list_user_project_entitlements
 
 COOKIE_NAME = "tol_access_token"
-
-INTERNAL_ADMIN_KEYS = {
-    "admin",
-    "super_admin",
-    "root_admin",
-    "platform_admin",
-    "operations_admin",
-    "finance_admin",
-    "marketing_admin",
-    "executive_technology",
-    "operations",
-    "finance",
-    "marketing",
-}
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -369,55 +357,6 @@ def require_admin(current_user: dict[str, Any] = Depends(get_current_user)) -> d
         )
     return current_user
 
-
-LEGACY_ROLE_PERMISSIONS: dict[str, set[str]] = {
-    "admin": {
-        "admin.access",
-        "projects.create",
-        "verification.review",
-        "uploads.admin.review",
-        "project.workflow.transition",
-    },
-    "super_admin": {"*"},
-    "root_admin": {"*"},
-    "platform_admin": {"*"},
-    "operations_admin": {
-        "admin.access",
-        "verification.review",
-        "uploads.admin.review",
-        "project.workflow.transition",
-    },
-    "finance_admin": {"admin.access"},
-    "marketing_admin": {"admin.access"},
-    "executive_technology": {"*"},
-    "operations": {"admin.access", "verification.review", "uploads.admin.review"},
-    "finance": {"admin.access"},
-    "marketing": {"admin.access"},
-    "user": {"projects.read", "uploads.read", "uploads.write"},
-}
-
-WORKFLOW_ALLOWED_TRANSITIONS: dict[str, set[str]] = {
-    "": {"draft", "purchased", "build_ready"},
-    "draft": {"purchased", "build_ready"},
-    "purchased": {"build_ready"},
-    "build_ready": {"in_production", "archived"},
-    "in_production": {"qa_review", "client_review", "archived"},
-    "qa_review": {"client_review", "in_production", "archived"},
-    "client_review": {"delivered", "in_production", "archived"},
-    "delivered": {"archived"},
-    "archived": set(),
-}
-
-WORKFLOW_PHASE_BY_STATE: dict[str, str] = {
-    "draft": "created",
-    "purchased": "checkout_completed",
-    "build_ready": "intake_approved",
-    "in_production": "build_started",
-    "qa_review": "quality_review",
-    "client_review": "client_review",
-    "delivered": "delivery_complete",
-    "archived": "archived",
-}
 
 BYTES_PER_GB = 1024 * 1024 * 1024
 

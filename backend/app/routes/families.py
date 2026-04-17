@@ -5,14 +5,15 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.database import get_database
 from app.dependencies.auth import (
-    INTERNAL_ADMIN_KEYS,
     get_current_user,
+    has_internal_admin_access,
     require_any_package_capability,
 )
 from app.schemas.family import FamilyCreate, FamilyResponse, build_family_response
 from app.services.workspace_access_service import (
     list_accessible_families_for_user,
     require_workspace_capability,
+    family_is_visible_to_user,
 )
 
 router = APIRouter(prefix="/families", tags=["Families"])
@@ -43,61 +44,6 @@ def _current_user_display_name(user: dict[str, Any]) -> str:
     return str(raw_name).strip()
 
 
-def _is_admin(user: dict[str, Any]) -> bool:
-    role = str(user.get("role", "")).strip().lower()
-    access_tier = str(user.get("access_tier", "")).strip().lower()
-    department_role = str(user.get("department_role", "")).strip().lower()
-
-    return (
-        role in INTERNAL_ADMIN_KEYS
-        or access_tier in INTERNAL_ADMIN_KEYS
-        or department_role in INTERNAL_ADMIN_KEYS
-    )
-
-
-def _family_is_visible_to_user(
-    family: dict[str, Any],
-    current_user_id: str,
-    current_user_email: str,
-    current_user_name: str,
-) -> bool:
-    owner_user_id = str(family.get("owner_user_id") or "").strip()
-    owner_email = str(family.get("owner_email") or "").strip().lower()
-
-    shared_with_user_ids = [
-        str(value).strip()
-        for value in (family.get("shared_with_user_ids") or [])
-        if value is not None
-    ]
-    shared_with_emails = [
-        str(value).strip().lower()
-        for value in (family.get("shared_with_emails") or [])
-        if value is not None
-    ]
-
-    if owner_user_id and owner_user_id == current_user_id:
-        return True
-
-    if owner_email and owner_email == current_user_email:
-        return True
-
-    if current_user_id in shared_with_user_ids:
-        return True
-
-    if current_user_email in shared_with_emails:
-        return True
-
-    # Backward-compatible fallback for older family records
-    if not owner_user_id and not owner_email:
-        created_by = str(family.get("created_by") or "").strip()
-        if created_by and (
-            created_by == current_user_name or created_by.lower() == current_user_email
-        ):
-            return True
-
-    return False
-
-
 def _safe_build_family_response(family: dict[str, Any]) -> FamilyResponse | None:
     try:
         return build_family_response(family)
@@ -115,7 +61,7 @@ def get_families(user: dict[str, Any] = Depends(get_current_user)):
 
     results: list[FamilyResponse] = []
 
-    if _is_admin(user):
+    if has_internal_admin_access(user):
         for family in docs:
             built = _safe_build_family_response(family)
             if built is not None:
@@ -146,7 +92,7 @@ def create_family_route(
 
     current_user_id = _current_user_id(user)
     current_user_email = _current_user_email(user)
-    is_admin = _is_admin(user)
+    is_admin = has_internal_admin_access(user)
 
     family_name = str(payload.family_name).strip()
     created_by = str(payload.created_by).strip() if payload.created_by else ""

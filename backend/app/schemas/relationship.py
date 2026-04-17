@@ -3,29 +3,20 @@ from typing import Optional, Literal
 
 from pydantic import BaseModel, Field, ConfigDict
 
+from app.core.relationship_catalog import (
+    ALLOWED_RELATIONSHIP_TYPES as CATALOG_ALLOWED_RELATIONSHIP_TYPES,
+    RELATIONSHIP_TYPE_LITERAL_VALUES,
+)
 
-ALLOWED_RELATIONSHIP_TYPES = {
-    "parent_child",
-    "spouse",
-    "sibling",
-    "guardian",
-    "adoptive_parent_child",
-    "step_parent_child",
-}
+# Backward-compatible re-export for existing imports.
+ALLOWED_RELATIONSHIP_TYPES = CATALOG_ALLOWED_RELATIONSHIP_TYPES
 
 
 class RelationshipCreate(BaseModel):
     family_id: str = Field(..., min_length=1)
     source_member_id: str = Field(..., min_length=1)
     target_member_id: str = Field(..., min_length=1)
-    relationship_type: Literal[
-        "parent_child",
-        "spouse",
-        "sibling",
-        "guardian",
-        "adoptive_parent_child",
-        "step_parent_child",
-    ]
+    relationship_type: Literal[*RELATIONSHIP_TYPE_LITERAL_VALUES]
     notes: Optional[str] = None
     created_by: Optional[str] = None
 

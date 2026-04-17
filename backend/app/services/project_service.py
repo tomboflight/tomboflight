@@ -4,9 +4,11 @@ from typing import Any
 from bson import ObjectId
 
 from app.core.package_catalog import get_package
+from app.core.package_type_catalog import PROJECT_LANES
 from app.database import get_database
 from app.schemas.project import ProjectCreate
 from app.services.entitlement_service import can_upgrade
+from app.services.project_member_service import upsert_project_owner_member
 from app.services.project_entitlement_service import (
     get_project_entitlement,
     upsert_project_entitlement,
@@ -58,7 +60,9 @@ def create_project(payload: ProjectCreate) -> dict[str, Any]:
     now = _now()
     data["created_at"] = now
     data["updated_at"] = now
+    # Canonical field is `name`; `project_name` remains for backward compatibility.
     data["project_name"] = data["name"]
+    # Canonical package field is `package_code`; aliases remain for backward compatibility.
     data["package_slug"] = data["package_code"]
     data["package_type"] = data["package_code"]
 
@@ -68,6 +72,11 @@ def create_project(payload: ProjectCreate) -> dict[str, Any]:
 
     result = db.projects.insert_one(data)
     data["_id"] = result.inserted_id
+    upsert_project_owner_member(
+        project_id=str(data["_id"]),
+        user_id=str(data.get("owner_user_id") or "").strip(),
+        user_email=str(data.get("owner_email") or "").strip().lower(),
+    )
     return data
 
 
@@ -88,7 +97,7 @@ def create_project_from_paid_order(
         return None
 
     package_lane = str(package.get("package_lane") or "").strip().lower()
-    if package_lane not in {"portrait", "household", "network", "organization"}:
+    if package_lane not in PROJECT_LANES:
         return None
 
     existing = None
@@ -106,11 +115,13 @@ def create_project_from_paid_order(
 
     project_doc: dict[str, Any] = {
         "name": project_name,
+        # Canonical field is `name`; `project_name` remains for backward compatibility.
         "project_name": project_name,
         "project_lane": package_lane,
         "owner_user_id": user_id,
         "owner_email": owner_email,
         "package_code": package_code,
+        # Canonical package field is `package_code`; aliases remain for backward compatibility.
         "package_slug": package_code,
         "package_type": package_code,
         "package_name": package_name,
@@ -132,6 +143,11 @@ def create_project_from_paid_order(
 
     result = db.projects.insert_one(project_doc)
     project_doc["_id"] = result.inserted_id
+    upsert_project_owner_member(
+        project_id=str(project_doc["_id"]),
+        user_id=user_id,
+        user_email=owner_email,
+    )
 
     try:
         upsert_project_entitlement(
@@ -202,6 +218,7 @@ def apply_package_purchase_to_project(
     updated_fields: dict[str, Any] = {
         "project_lane": str(package.get("package_lane") or project.get("project_lane") or "").strip().lower() or project.get("project_lane"),
         "package_code": package_code,
+        # Canonical package field is `package_code`; aliases remain for backward compatibility.
         "package_slug": package_code,
         "package_type": package_code,
         "package_name": package_name,
@@ -241,5 +258,11 @@ def apply_package_purchase_to_project(
         )
     except Exception:
         pass
+
+    upsert_project_owner_member(
+        project_id=project_id,
+        user_id=owner_user_id or user_id,
+        user_email=owner_email or user_email,
+    )
 
     return refreshed

@@ -22,6 +22,7 @@ from app.database import get_database
 from app.dependencies.auth import (
     enforce_limit,
     get_current_user,
+    has_internal_admin_access,
     require_entitlement,
     require_permission,
 )
@@ -32,25 +33,12 @@ from app.services.upload_service import (
 )
 from app.services.workspace_access_service import (
     count_workspace_uploads,
+    family_is_visible_to_user,
     require_workspace_capability,
     resolve_workspace_context,
 )
 
 router = APIRouter(prefix="/uploads", tags=["Uploads"])
-
-INTERNAL_ADMIN_KEYS = {
-    "admin",
-    "super_admin",
-    "root_admin",
-    "platform_admin",
-    "operations_admin",
-    "finance_admin",
-    "marketing_admin",
-    "executive_technology",
-    "operations",
-    "finance",
-    "marketing",
-}
 
 PHOTO_ALLOWED_CONTENT_TYPES = {
     "image/jpeg",
@@ -147,57 +135,6 @@ def _actor_label(user: dict[str, Any]) -> str:
     )
 
 
-def _is_admin(user: dict[str, Any]) -> bool:
-    values = {
-        _normalize_value(user.get("role")).lower(),
-        _normalize_value(user.get("access_tier")).lower(),
-        _normalize_value(user.get("department_role")).lower(),
-    }
-    return any(value in INTERNAL_ADMIN_KEYS for value in values if value)
-
-
-def _family_is_visible_to_user(
-    family: dict[str, Any],
-    current_user_id: str,
-    current_user_email: str,
-    current_user_name: str,
-) -> bool:
-    owner_user_id = _normalize_value(family.get("owner_user_id"))
-    owner_email = _normalize_email(family.get("owner_email"))
-
-    shared_with_user_ids = [
-        _normalize_value(value)
-        for value in (family.get("shared_with_user_ids") or [])
-        if value is not None
-    ]
-    shared_with_emails = [
-        _normalize_email(value)
-        for value in (family.get("shared_with_emails") or [])
-        if value is not None
-    ]
-
-    if owner_user_id and owner_user_id == current_user_id:
-        return True
-
-    if owner_email and owner_email == current_user_email:
-        return True
-
-    if current_user_id in shared_with_user_ids:
-        return True
-
-    if current_user_email in shared_with_emails:
-        return True
-
-    if not owner_user_id and not owner_email:
-        created_by = _normalize_value(family.get("created_by"))
-        if created_by and (
-            created_by == current_user_name or created_by.lower() == current_user_email
-        ):
-            return True
-
-    return False
-
-
 def _require_family_access_by_family_id(
     family_id: str,
     db: Any,
@@ -213,14 +150,14 @@ def _require_family_access_by_family_id(
     if not family:
         raise HTTPException(status_code=404, detail="Family not found.")
 
-    if _is_admin(current_user):
+    if has_internal_admin_access(current_user):
         return family
 
     current_user_id = _current_user_id(current_user)
     current_user_email = _current_user_email(current_user)
     current_user_name = _current_user_display_name(current_user)
 
-    if not _family_is_visible_to_user(
+    if not family_is_visible_to_user(
         family=family,
         current_user_id=current_user_id,
         current_user_email=current_user_email,

@@ -5,6 +5,9 @@ from typing import Any
 
 from bson import ObjectId
 
+from app.core.relationship_catalog import (
+    LINKED_HOUSEHOLD_RELATIONSHIP_TYPE,
+)
 from app.database import get_database
 from app.schemas.link_request import LinkRequestCreate
 from app.services.audit_log_service import create_audit_log
@@ -334,7 +337,8 @@ def approve_link_request(
                 {
                     "source_household_id": source_household_id,
                     "target_household_id": target_household_id,
-                    "relationship_type": "linked_household",
+                    # This non-ancestry relationship marker is intentionally excluded from lineage traversal.
+                    "relationship_type": LINKED_HOUSEHOLD_RELATIONSHIP_TYPE,
                     "link_status": "approved",
                     "linked_by_key": request.get("source_key"),
                     "source_key": request.get("source_key"),

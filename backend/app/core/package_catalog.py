@@ -60,6 +60,8 @@ ADDON_CODE_ALIASES: dict[str, str] = {
     "command_report_addon": "command_report_addon",
 }
 
+PROJECT_LANES = frozenset({"portrait", "household", "network", "organization"})
+
 PACKAGE_CATALOG: dict[str, dict[str, Any]] = {
     "legacy_snapshot": {
         "package_code": "legacy_snapshot",

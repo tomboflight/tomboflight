@@ -9,6 +9,9 @@ from typing import Any, Optional, cast
 from bson import ObjectId
 
 import app.database as database
+from app.core.relationship_catalog import (
+    ANCESTRY_RELATIONSHIP_TYPES as CATALOG_ANCESTRY_RELATIONSHIP_TYPES,
+)
 
 
 class LineageCertificateService:
@@ -23,11 +26,7 @@ class LineageCertificateService:
     - expose the real project_id from the projects collection
     """
 
-    ANCESTRY_RELATIONSHIP_TYPES = {
-        "parent_child",
-        "adoptive_parent_child",
-        "step_parent_child",
-    }
+    ANCESTRY_RELATIONSHIP_TYPES = CATALOG_ANCESTRY_RELATIONSHIP_TYPES
 
     @staticmethod
     def _get_db() -> Any:

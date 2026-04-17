@@ -22,6 +22,19 @@ An item is only done when:
 - audit logging exists where required
 - basic tests or verification steps are documented and run
 
+## Phase 1 Controlled Foundation (completed 2026-04-17)
+
+- [x] Added canonical catalogs for roles, relationships, workflow states, and package lanes.
+- [x] Added `project_members` schema and service foundation.
+- [x] Added backward-compatible access checks that keep owner fallback and add project-member access checks.
+- [x] De-duplicated route-level family visibility and admin wrappers across targeted route files.
+- [x] Updated core DB bootstrap indexes for relationship source/target member fields and project owner fields.
+- [x] Added `project_members` collection/index bootstrap definitions.
+- [x] Declared canonical project/package fields in project service while keeping compatibility aliases.
+- [x] Canonicalized lineage ancestry relationship constants across guardrail/query/certificate services.
+- [x] Documented non-ancestry `linked_household` relationship marker usage through canonical relationship catalog constants.
+- [x] Verified no existing GET routes were changed to write state in this phase.
+
 ## Phase 0: Platform Guardrails
 
 Goal: Make package scoping, routing, uploads, and admin separation trustworthy before adding more capability.
