@@ -35,6 +35,7 @@ SUPER_ADMIN_ROLE_CODES: frozenset[str] = frozenset(
 PROJECT_MEMBER_ROLE_ALIASES: dict[str, str] = {
     "billing_owner": "billing_owner",
     "owner": "billing_owner",
+    "buyer": "billing_owner",
     "co_owner": "co_owner",
     "spouse": "co_owner",
     "partner": "co_owner",

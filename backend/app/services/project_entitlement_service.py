@@ -237,10 +237,11 @@ def get_project_entitlement(project_id: str) -> dict[str, Any] | None:
 def list_user_project_entitlements(
     user_id: str,
     *,
+    email: str = "",
     active_only: bool = True,
 ) -> list[dict[str, Any]]:
     collection = _collection()
-    project_ids = list_accessible_project_ids(user_id=user_id)
+    project_ids = list_accessible_project_ids(user_id=user_id, email=email)
 
     or_filters: list[dict[str, Any]] = []
     user_id_values = _user_id_candidates(user_id)

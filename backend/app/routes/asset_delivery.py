@@ -3,9 +3,11 @@ from __future__ import annotations
 from typing import Any
 from datetime import timezone
 
+from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse, RedirectResponse
 
+from app.database import get_database
 from app.dependencies.auth import get_current_user
 from app.services.mint_record_service import build_mint_status
 from app.services.order_service import get_orders_for_user
@@ -51,33 +53,75 @@ def _project_for_request(
     return project
 
 
+PAID_PACKAGE_ORDER_STATUSES = {
+    "paid",
+    "complete",
+    "completed",
+    "succeeded",
+    "active",
+    "fulfilled",
+    "confirmed",
+}
+
+
+def _project_id_candidates(project_id: str) -> list[Any]:
+    normalized_project_id = _normalize(project_id)
+    if not normalized_project_id:
+        return []
+    candidates: list[Any] = [normalized_project_id]
+    if ObjectId.is_valid(normalized_project_id):
+        candidates.append(ObjectId(normalized_project_id))
+    return candidates
+
+
+def _is_paid_package_order(order: dict[str, Any] | None) -> bool:
+    if not isinstance(order, dict):
+        return False
+    item_type = _normalize(order.get("item_type") or "package").lower()
+    status_value = _normalize(order.get("status")).lower()
+    return item_type == "package" and status_value in PAID_PACKAGE_ORDER_STATUSES
+
+
 def _resolve_order_for_project(
     current_user: dict[str, Any], project_id: str
 ) -> dict[str, Any] | None:
     """Return the most recent paid order associated with this project, or None."""
+    project_id_values = _project_id_candidates(project_id)
+    db = get_database()
+    if db is not None and project_id_values:
+        cursor = db["orders"].find(
+            {"project_id": {"$in": project_id_values}}
+        ).sort("created_at", -1)
+        for order_doc in cursor:
+            if not _is_paid_package_order(order_doc):
+                continue
+            serialized = dict(order_doc)
+            serialized.setdefault("id", str(order_doc.get("_id") or ""))
+            serialized.setdefault(
+                "project_id",
+                _normalize(order_doc.get("project_id")),
+            )
+            return serialized
+
+    # Fallback for legacy paid orders that were not linked to a project id.
     try:
         orders = get_orders_for_user(current_user)
     except Exception:
         return None
 
-    if not orders:
-        return None
-
-    # Prefer an order whose project_id field directly matches.
+    normalized_project_id = _normalize(project_id)
     for order in orders:
-        order_project = _normalize(order.get("project_id"))
-        if order_project and order_project == _normalize(project_id):
+        if not _is_paid_package_order(order):
+            continue
+        order_project_id = _normalize(order.get("project_id"))
+        if order_project_id and order_project_id == normalized_project_id:
             return order
 
-    # Fall back to the most recent paid package order for this user.
-    paid_statuses = {"paid", "active", "fulfilled", "confirmed"}
     for order in orders:
-        if _normalize(order.get("item_type")) == "package" and _normalize(
-            order.get("status")
-        ).lower() in paid_statuses:
+        if _is_paid_package_order(order):
             return order
 
-    return orders[0] if orders else None
+    return None
 
 
 @router.get("/projects/{project_id}/digital-collectible")

@@ -139,6 +139,102 @@ class HouseholdInviteAndOrderTests(unittest.TestCase):
         ):
             self.assertEqual(household_access_service._resolve_member_seat_cap("project-legacy"), 30)
 
+    def test_accept_household_invite_sets_user_active_project_context(self):
+        now_iso = "2026-04-16T12:00:00+00:00"
+        invite_document = {
+            "_id": "invite-accept-1",
+            "invite_key": "hhinv_accept_key",
+            "status": "pending",
+            "project_id": "project-accept-1",
+            "email": "invitee@example.com",
+            "member_role": "co_owner",
+            "relationship_scope": "spouse",
+            "privacy_scope": "household_private",
+            "use_count": 0,
+            "max_uses": 1,
+        }
+
+        class FakeInvitesCollection:
+            def __init__(self, invite):
+                self.invite = dict(invite)
+
+            def find_one(self, query):
+                if query.get("invite_key") == self.invite.get("invite_key"):
+                    return dict(self.invite)
+                if query.get("_id") == self.invite.get("_id"):
+                    return dict(self.invite)
+                return None
+
+            def update_one(self, query, update):
+                if query.get("_id") != self.invite.get("_id"):
+                    return
+                updates = update.get("$set") or {}
+                self.invite.update(updates)
+
+        class FakeMembersCollection:
+            def __init__(self):
+                self.member = {}
+
+            def update_one(self, _query, update, upsert=False):
+                updates = update.get("$set") or {}
+                self.member.update(updates)
+                self.member.setdefault("_id", "membership-accept-1")
+                if upsert and "$setOnInsert" in update:
+                    for key, value in (update.get("$setOnInsert") or {}).items():
+                        self.member.setdefault(key, value)
+
+            def find_one(self, _query):
+                return dict(self.member)
+
+        class FakeUsersCollection:
+            def __init__(self):
+                self.updates = []
+
+            def update_one(self, query, update):
+                self.updates.append(
+                    {
+                        "query": dict(query),
+                        "update": dict(update),
+                    }
+                )
+
+        fake_invites = FakeInvitesCollection(invite_document)
+        fake_members = FakeMembersCollection()
+        fake_users = FakeUsersCollection()
+        fake_db = {"users": fake_users}
+
+        with (
+            patch.object(household_access_service, "_invites", return_value=fake_invites),
+            patch.object(household_access_service, "_members", return_value=fake_members),
+            patch.object(household_access_service, "_db", return_value=fake_db),
+            patch.object(
+                household_access_service,
+                "_now",
+                return_value=SimpleNamespace(isoformat=lambda: now_iso),
+            ),
+            patch.object(
+                household_access_service,
+                "_active_member_count",
+                return_value=0,
+            ),
+            patch.object(
+                household_access_service,
+                "_resolve_member_seat_cap",
+                return_value=10,
+            ),
+            patch.object(household_access_service, "create_audit_log"),
+        ):
+            membership = household_access_service.accept_household_invite(
+                invite_key="hhinv_accept_key",
+                user={"id": "user-accept-1", "email": "invitee@example.com"},
+            )
+
+        self.assertEqual(membership.get("project_id"), "project-accept-1")
+        self.assertEqual(len(fake_users.updates), 1)
+        user_update = fake_users.updates[0]["update"]["$set"]
+        self.assertEqual(user_update.get("active_project_id"), "project-accept-1")
+        self.assertEqual(user_update.get("active_project_selected_at"), now_iso)
+
 
 if __name__ == "__main__":
     unittest.main()

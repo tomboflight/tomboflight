@@ -4,7 +4,7 @@
   const app = window.TOLApp || window.TOLAuth;
   const POST_LOGIN_REDIRECT = "dashboard.html";
   const SIGNUP_POLICY_VERSION = "2026-03-26";
-  const DASHBOARD_CONTEXT_STORAGE_KEY = "tol_dashboard_context_v1";
+  const DASHBOARD_CONTEXT_STORAGE_KEY = "tol_dashboard_context_v2";
   let hasLogoutBinding = false;
   const HOUSEHOLD_LINK_PACKAGE_CODES = new Set([
     "legacy_plus",
@@ -480,6 +480,59 @@
 
   function hasWorkspaceSelectionHints(hints) {
     return Boolean(hints?.projectId || hints?.familyId);
+  }
+
+  function getWorkspaceHintsFromUser(user) {
+    return {
+      projectId: String(
+        user?.active_project_id || user?.activeProjectId || "",
+      ).trim(),
+      familyId: String(
+        user?.active_family_id || user?.activeFamilyId || "",
+      ).trim(),
+    };
+  }
+
+  function mergeWorkspaceSelectionHints(primary, fallback) {
+    const primaryHints =
+      primary && typeof primary === "object"
+        ? {
+            projectId: String(
+              primary.projectId ||
+                primary.project_id ||
+                primary.active_project_id ||
+                "",
+            ).trim(),
+            familyId: String(
+              primary.familyId ||
+                primary.family_id ||
+                primary.active_family_id ||
+                "",
+            ).trim(),
+          }
+        : { projectId: "", familyId: "" };
+    const fallbackHints =
+      fallback && typeof fallback === "object"
+        ? {
+            projectId: String(
+              fallback.projectId ||
+                fallback.project_id ||
+                fallback.active_project_id ||
+                "",
+            ).trim(),
+            familyId: String(
+              fallback.familyId ||
+                fallback.family_id ||
+                fallback.active_family_id ||
+                "",
+            ).trim(),
+          }
+        : { projectId: "", familyId: "" };
+
+    return {
+      projectId: primaryHints.projectId || fallbackHints.projectId,
+      familyId: primaryHints.familyId || fallbackHints.familyId,
+    };
   }
 
   function candidateMatchesWorkspaceHints(candidate, hints) {
@@ -1059,6 +1112,31 @@
     return toArray(payload);
   }
 
+  async function fetchProjectEntitlementByProjectId(projectId) {
+    const normalizedProjectId = String(projectId || "").trim();
+    if (!normalizedProjectId) return null;
+
+    try {
+      return await app.apiRequest(
+        `/project-entitlements/project/${encodeURIComponent(normalizedProjectId)}`,
+        {
+          method: "GET",
+        },
+      );
+    } catch (error) {
+      const message = getErrorMessage(error).toLowerCase();
+      if (
+        message.includes("project entitlement not found") ||
+        message.includes("not authorized") ||
+        message.includes("404") ||
+        message.includes("403")
+      ) {
+        return null;
+      }
+      throw error;
+    }
+  }
+
   async function fetchProjects() {
     const payload = await app.apiRequest("/projects/", {
       method: "GET",
@@ -1177,10 +1255,6 @@
       getPackageCodeFromRecord(record);
 
     if (!packageCode || packageCode === "unknown") {
-      return null;
-    }
-
-    if (source === "project" && !activeEntitlement && !paidOrder) {
       return null;
     }
 
@@ -1308,13 +1382,10 @@
   async function getDashboardContext(user, orders, options) {
     let entitlements = [];
     let projects = [];
-    const hints =
-      options && typeof options === "object"
-        ? {
-            projectId: String(options.projectId || "").trim(),
-            familyId: String(options.familyId || "").trim(),
-          }
-        : { projectId: "", familyId: "" };
+    const hints = mergeWorkspaceSelectionHints(
+      options,
+      getWorkspaceHintsFromUser(user),
+    );
 
     try {
       const results = await Promise.all([
@@ -1331,6 +1402,24 @@
     } catch (error) {
       entitlements = [];
       projects = [];
+    }
+
+    if (hints.projectId) {
+      const alreadyIncludesHintedProject = entitlements.some(function (item) {
+        return getProjectIdFromRecord(item) === hints.projectId;
+      });
+      if (!alreadyIncludesHintedProject) {
+        try {
+          const hintedEntitlement = await fetchProjectEntitlementByProjectId(
+            hints.projectId,
+          );
+          if (hintedEntitlement && hasKnownPackage(hintedEntitlement)) {
+            entitlements = [hintedEntitlement].concat(entitlements);
+          }
+        } catch (error) {
+          // Ignore supplemental entitlement lookup so dashboard context can still load.
+        }
+      }
     }
 
     let currentWorkspace = resolveCurrentWorkspace(
@@ -1430,7 +1519,10 @@
   }
 
   async function getDashboardContextForCurrentPage(user, orders) {
-    const hints = getWorkspaceSelectionHints();
+    const hints = mergeWorkspaceSelectionHints(
+      getWorkspaceSelectionHints(),
+      getWorkspaceHintsFromUser(user),
+    );
     const cached = readCachedDashboardContext(user, hints);
 
     if (cached) {
@@ -2497,6 +2589,7 @@
     redirectAfterLogin,
     fetchOrders,
     fetchProjectEntitlements,
+    fetchProjectEntitlementByProjectId,
     fetchProjects,
     getDashboardContext,
     getDashboardContextForCurrentPage,

@@ -404,10 +404,14 @@
       "Digital collectible delivery service is temporarily unavailable. Please try again shortly.";
     let badge = "Service Error";
 
-    if (status === 401 || status === 403) {
+    if (status === 401) {
       message =
         "Authentication is required to view this digital collectible. Please sign in again.";
       badge = "Auth Required";
+    } else if (status === 403) {
+      message =
+        "This account does not have access to the selected workspace delivery record.";
+      badge = "Access Required";
     } else if (status === 404) {
       message =
         "No digital collectible delivery record exists for this workspace yet.";
@@ -851,15 +855,33 @@
         }
       }
 
-      if (!context || !context.hasPackageAccess) {
-        renderNoAccess(
-          "Package access is required to view your digital collectible. " +
-            "Please complete your purchase to continue.",
-        );
+      const hints = getWorkspaceHints();
+      const userActiveProjectId = String(
+        me.active_project_id || me.activeProjectId || "",
+      ).trim();
+      const resolvedProjectId =
+        resolveProjectId(context, hints) || userActiveProjectId;
+
+      if (!resolvedProjectId) {
+        if (!context || !context.hasPackageAccess) {
+          renderNoAccess(
+            "Package access is required to view your digital collectible. " +
+              "Please complete your purchase to continue.",
+          );
+          return;
+        }
+        renderNoAccess("No active project found for this account.");
         return;
       }
 
-      await loadDeliveryPage(context);
+      const deliveryContext = Object.assign({}, context || {}, {
+        projectId: resolvedProjectId,
+        activeProject: Object.assign({}, context?.activeProject || {}, {
+          project_id: resolvedProjectId,
+        }),
+      });
+
+      await loadDeliveryPage(deliveryContext);
     };
 
     // Auth.js may have already resolved the user before this script ran.

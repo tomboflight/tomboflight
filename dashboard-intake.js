@@ -29,6 +29,12 @@
     "archived",
   ]);
 
+  const HOUSEHOLD_MANAGEMENT_ROLES = new Set([
+    "billing_owner",
+    "co_owner",
+    "family_manager",
+  ]);
+
   let legacyAnchorState = null;
 
   function normalizeValue(value) {
@@ -117,6 +123,79 @@
   function text(node, value) {
     if (!node) return;
     node.textContent = value;
+  }
+
+  function setPanelVisible(selector, visible) {
+    document.querySelectorAll(selector).forEach(function (node) {
+      node.style.display = visible ? "" : "none";
+    });
+  }
+
+  function applyDashboardHierarchy(context, history) {
+    const lane = normalizeValue(context?.packageLane || context?.resolvedEntitlements?.package_lane);
+    const isHouseholdLane = lane === "household";
+    const historyCount = Array.isArray(history) ? history.length : 0;
+    const memberRole = normalizeMemberRole(
+      context?.household_access?.member_role,
+    );
+    const isInvitedCollaborator = Boolean(
+      memberRole && memberRole !== "billing_owner",
+    );
+
+    // Reduce visual overload for household customers by hiding explanatory
+    // duplicate cards and surfacing only operational panels.
+    setPanelVisible(".portal-workspace-panel", !isHouseholdLane);
+    setPanelVisible(".portal-build-panel", !isHouseholdLane);
+    setPanelVisible(".portal-status-panel", !isHouseholdLane);
+    setPanelVisible(".portal-orders-panel", !isInvitedCollaborator);
+    setPanelVisible("[data-dashboard-purchase-actions]", !isInvitedCollaborator);
+
+    // Intake history is only useful when there is more than one record.
+    setPanelVisible(".portal-history-panel", historyCount > 1);
+  }
+
+  function normalizeMemberRole(value) {
+    return normalizeValue(value);
+  }
+
+  function canManageHouseholdAccess(memberRole) {
+    return HOUSEHOLD_MANAGEMENT_ROLES.has(normalizeMemberRole(memberRole));
+  }
+
+  async function resolveDashboardMemberRole(context) {
+    const projectId = getContextProjectId(context);
+    if (!projectId) return "";
+
+    try {
+      const payload = await app.apiRequest("/workspace-access/my-memberships", {
+        method: "GET",
+      });
+      const items = Array.isArray(payload?.items) ? payload.items : [];
+      const user =
+        context?.user ||
+        window.TOLResolvedUser ||
+        (typeof app.getSavedUser === "function" ? app.getSavedUser() : null) ||
+        {};
+      const userId = String(user?.id || user?._id || user?.user_id || "").trim();
+      const userEmail = normalizeValue(user?.email);
+
+      const match = items.find(function (item) {
+        const membershipProjectId = String(item?.project_id || "").trim();
+        if (!membershipProjectId || membershipProjectId !== projectId) return false;
+        const status = normalizeValue(item?.status || "active");
+        if (status && status !== "active") return false;
+        const membershipUserId = String(item?.user_id || "").trim();
+        const membershipEmail = normalizeValue(item?.email);
+        return (
+          (userId && membershipUserId && userId === membershipUserId) ||
+          (userEmail && membershipEmail && userEmail === membershipEmail)
+        );
+      });
+
+      return normalizeMemberRole(match?.member_role);
+    } catch (_error) {
+      return "";
+    }
   }
 
   function getContextFamilyId(context) {
@@ -1256,6 +1335,11 @@
       config,
       latestSubmission,
     );
+    const explicitHouseholdManageFlag = context?.household_access?.can_manage;
+    const showHouseholdInviteActions =
+      typeof explicitHouseholdManageFlag === "boolean"
+        ? explicitHouseholdManageFlag
+        : true;
 
     applyNavVisibility("tree-view.html", config.navTree && hasWorkspaceFamily);
     applyNavVisibility(
@@ -1300,7 +1384,7 @@
       "[data-dashboard-digital-collectible-action], a[href^=\"digital-collectible.html\"]",
       {
         href: withFamilyId("digital-collectible.html", context),
-        show: true,
+        show: Boolean(context?.hasPackageAccess),
       },
     );
 
@@ -1332,12 +1416,16 @@
     );
 
     applyAction(
-      "[data-dashboard-household-invite-co-owner], [data-dashboard-household-invite-family], [data-dashboard-household-view-members], [data-dashboard-household-pending-invites]",
+      "[data-dashboard-household-invite-co-owner], [data-dashboard-household-invite-family], [data-dashboard-household-pending-invites]",
       {
         href: withFamilyId("household-access.html", context),
-        show: true,
+        show: showHouseholdInviteActions,
       },
     );
+    applyAction("[data-dashboard-household-view-members]", {
+      href: withFamilyId("household-access.html", context),
+      show: true,
+    });
 
     applyAction(
       "[data-dashboard-hero-tree-action], [data-dashboard-package-tree-action], [data-dashboard-workspace-tree-action], a[href=\"tree-view.html\"][data-paid-action]",
@@ -1364,35 +1452,44 @@
 
     const upgradeAction = document.querySelector("[data-upgrade-action]");
     if (upgradeAction) {
-      const re = context.resolvedEntitlements || {};
-      const upgradeTargets = Array.isArray(re.upgrade_targets)
-        ? re.upgrade_targets
-        : [];
-      const allowedAddons = Array.isArray(re.allowed_addons)
-        ? re.allowed_addons
-        : [];
-      const resolveDisplayName =
-        window.TOLAuthPages &&
-        typeof window.TOLAuthPages.resolvePackageDisplayName === "function"
-          ? window.TOLAuthPages.resolvePackageDisplayName
-          : function (code) {
-              return code || "Package";
-            };
-
-      if (upgradeTargets.length > 0) {
-        const firstName = resolveDisplayName(upgradeTargets[0]);
-        upgradeAction.textContent =
-          upgradeTargets.length === 1
-            ? "Upgrade to " + firstName
-            : "Upgrade to " + firstName + " or higher";
-        upgradeAction.setAttribute("href", "index.html#pricing");
-        upgradeAction.style.display = "";
-      } else if (allowedAddons.length > 0) {
-        upgradeAction.textContent = "View Available Add-Ons";
-        upgradeAction.setAttribute("href", "index.html#pricing");
-        upgradeAction.style.display = "";
-      } else {
+      const memberRole = normalizeMemberRole(
+        context?.household_access?.member_role,
+      );
+      const canManageBilling =
+        !memberRole || memberRole === "billing_owner";
+      if (!canManageBilling) {
         upgradeAction.style.display = "none";
+      } else {
+        const re = context.resolvedEntitlements || {};
+        const upgradeTargets = Array.isArray(re.upgrade_targets)
+          ? re.upgrade_targets
+          : [];
+        const allowedAddons = Array.isArray(re.allowed_addons)
+          ? re.allowed_addons
+          : [];
+        const resolveDisplayName =
+          window.TOLAuthPages &&
+          typeof window.TOLAuthPages.resolvePackageDisplayName === "function"
+            ? window.TOLAuthPages.resolvePackageDisplayName
+            : function (code) {
+                return code || "Package";
+              };
+
+        if (upgradeTargets.length > 0) {
+          const firstName = resolveDisplayName(upgradeTargets[0]);
+          upgradeAction.textContent =
+            upgradeTargets.length === 1
+              ? "Upgrade to " + firstName
+              : "Upgrade to " + firstName + " or higher";
+          upgradeAction.setAttribute("href", "index.html#pricing");
+          upgradeAction.style.display = "";
+        } else if (allowedAddons.length > 0) {
+          upgradeAction.textContent = "View Available Add-Ons";
+          upgradeAction.setAttribute("href", "index.html#pricing");
+          upgradeAction.style.display = "";
+        } else {
+          upgradeAction.style.display = "none";
+        }
       }
     }
 
@@ -1549,9 +1646,18 @@
       return;
     }
 
-    const config = getEntitlementConfig(context);
-    updateLaneUi(context, config, null);
-    applyPortalTheme(context, config);
+    const memberRole = await resolveDashboardMemberRole(context);
+    const contextWithMembership = Object.assign({}, context, {
+      household_access: {
+        member_role: memberRole || null,
+        can_manage: canManageHouseholdAccess(memberRole),
+      },
+    });
+
+    const config = getEntitlementConfig(contextWithMembership);
+    updateLaneUi(contextWithMembership, config, null);
+    applyPortalTheme(contextWithMembership, config);
+    applyDashboardHierarchy(contextWithMembership, []);
 
     const intakeCardStatus = document.querySelector(
       "[data-intake-card-status]",
@@ -1578,7 +1684,7 @@
     try {
       const latest = await getLatestSubmission();
       const history = await getSubmissionHistory();
-      const contextWithLatest = Object.assign({}, context, {
+      const contextWithLatest = Object.assign({}, contextWithMembership, {
         latestSubmission: latest || null,
       });
       await updateLegacyAnchorPanel(contextWithLatest);
@@ -1589,8 +1695,9 @@
       );
 
       updateLaneUi(contextWithLatest, config, latest);
+      applyDashboardHierarchy(contextWithLatest, history);
 
-      text(currentPackage, context.packageName || "Active Package");
+      text(currentPackage, contextWithMembership.packageName || "Active Package");
 
       if (!latest) {
         text(intakeCardStatus, config.presenceTitle);
@@ -1615,13 +1722,13 @@
         );
 
         if (openAction) {
-          updatePrimaryIntakeAction(context, "", openAction);
+          updatePrimaryIntakeAction(contextWithMembership, "", openAction);
         }
       } else {
         const status = normalizeStatus(
           latest.status || latest.submission_status,
         );
-        const laneMessages = getLaneAwareIntakeMessages(context, status);
+        const laneMessages = getLaneAwareIntakeMessages(contextWithMembership, status);
 
         text(intakeCardStatus, laneMessages.cardCopy);
         text(statusBadge, humanizeStatus(status));
@@ -1633,7 +1740,7 @@
         text(workspaceCopy, laneMessages.workspaceCopy);
 
         if (openAction) {
-          updatePrimaryIntakeAction(context, status, openAction);
+          updatePrimaryIntakeAction(contextWithMembership, status, openAction);
         }
       }
 
@@ -1648,9 +1755,10 @@
       }
 
       if (dashboardStatus) {
-        dashboardStatus.textContent = `Your package is active: ${context.packageName || "Active Package"}.`;
+        dashboardStatus.textContent = `Your package is active: ${contextWithMembership.packageName || "Active Package"}.`;
       }
     } catch (error) {
+      applyDashboardHierarchy(contextWithMembership, []);
       setLegacyAnchorUnavailable(
         "Legacy Anchor status is temporarily unavailable.",
         "Please refresh shortly. Tomb of Light could not finish loading the customer workspace state.",

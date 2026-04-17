@@ -541,6 +541,21 @@ def accept_household_invite(*, invite_key: str, user: dict[str, Any]) -> dict[st
         upsert=True,
     )
 
+    if user_id:
+        user_lookup: dict[str, Any] = {"$or": [{"id": user_id}, {"user_id": user_id}]}
+        user_oid = _to_oid(user_id)
+        if user_oid is not None:
+            user_lookup["$or"] = [{"_id": user_oid}, *user_lookup["$or"]]
+        _db()["users"].update_one(
+            user_lookup,
+            {
+                "$set": {
+                    "active_project_id": project_id,
+                    "active_project_selected_at": now,
+                }
+            },
+        )
+
     use_count = int(invite.get("use_count") or 0) + 1
     max_uses = max(1, int(invite.get("max_uses") or 1))
     invite_status = "accepted" if use_count >= max_uses else "pending"
@@ -752,5 +767,12 @@ def revoke_membership(*, project_id: str, membership_id: str, actor_user: dict[s
 def list_my_memberships(user: dict[str, Any]) -> list[dict[str, Any]]:
     user_id = _normalize(user.get("id") or user.get("_id") or user.get("user_id"))
     email = _normalize_email(user.get("email"))
-    query = {"$or": [{"user_id": user_id}, {"email": email}]}
+    filters: list[dict[str, Any]] = []
+    if user_id:
+        filters.append({"user_id": user_id})
+    if email:
+        filters.append({"email": email})
+    if not filters:
+        return []
+    query = {"$or": filters}
     return list(_members().find(query).sort("updated_at", -1))

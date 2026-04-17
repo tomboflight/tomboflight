@@ -12,6 +12,7 @@ from app.services.privacy_access_service import (
 class HouseholdAccessModelTests(unittest.TestCase):
     def test_customer_membership_role_aliases_are_normalized(self):
         self.assertEqual(normalize_project_member_role("owner"), "billing_owner")
+        self.assertEqual(normalize_project_member_role("buyer"), "billing_owner")
         self.assertEqual(normalize_project_member_role("spouse"), "co_owner")
         self.assertEqual(normalize_project_member_role("manager"), "family_manager")
         self.assertEqual(normalize_project_member_role("editor"), "contributor")
