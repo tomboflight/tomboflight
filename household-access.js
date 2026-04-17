@@ -1008,9 +1008,10 @@
             const membership = await acceptInviteByKey(inviteKey);
             hydrateProjectContextFromMembership(membership);
           } catch (error) {
+            const statusCode = Number(error?.status);
             console.warn("[HouseholdAccess] Auto-accept invite skipped.", {
-              detail: readableMessage(error?.detail || error?.message || error, "invite auto-accept failed"),
-              status: Number(error?.status || 0) || null,
+              detail: readableMessage(error?.detail || error?.message, "invite auto-accept failed"),
+              status: Number.isFinite(statusCode) && statusCode > 0 ? statusCode : null,
             });
             // Keep the page interactive so invite acceptance can still be attempted manually.
           }
