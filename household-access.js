@@ -910,7 +910,7 @@
     const rawProjectId = membership?.project_id;
     if (rawProjectId === null || rawProjectId === undefined) return null;
     const normalized = String(rawProjectId).trim();
-    return normalized || null;
+    return normalized === "" ? null : normalized;
   }
 
   async function acceptInviteByKey(inviteKey) {
