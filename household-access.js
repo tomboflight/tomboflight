@@ -896,13 +896,7 @@
     }
     try {
       const membership = await acceptInviteByKey(inviteKey);
-      const acceptedProjectId = projectIdFromMembership(membership);
-      if (!currentProjectId && acceptedProjectId) {
-        currentProjectId = acceptedProjectId;
-      }
-      if (currentProjectId && statusNode) {
-        statusNode.textContent = `Managing workspace access for project ${currentProjectId}.`;
-      }
+      hydrateProjectContextFromMembership(membership);
       setText(acceptStatus, "Invite accepted. Workspace access granted.", "success");
       if (currentProjectId) {
         await refreshData();
@@ -913,7 +907,10 @@
   }
 
   function projectIdFromMembership(membership) {
-    return String(membership?.project_id || "").trim();
+    const rawProjectId = membership?.project_id;
+    if (rawProjectId === null || rawProjectId === undefined) return null;
+    const normalized = String(rawProjectId).trim();
+    return normalized || null;
   }
 
   async function acceptInviteByKey(inviteKey) {
@@ -921,6 +918,16 @@
       method: "POST",
       body: JSON.stringify({ invite_key: inviteKey }),
     });
+  }
+
+  function hydrateProjectContextFromMembership(membership) {
+    const acceptedProjectId = projectIdFromMembership(membership);
+    if (!currentProjectId && acceptedProjectId) {
+      currentProjectId = acceptedProjectId;
+    }
+    if (currentProjectId && statusNode) {
+      statusNode.textContent = `Managing workspace access for project ${currentProjectId}.`;
+    }
   }
 
   function bindQuickInviteButtons() {
@@ -999,14 +1006,11 @@
         if (inviteKey && acceptForm) {
           try {
             const membership = await acceptInviteByKey(inviteKey);
-            const acceptedProjectId = projectIdFromMembership(membership);
-            if (acceptedProjectId) {
-              currentProjectId = acceptedProjectId;
-            }
+            hydrateProjectContextFromMembership(membership);
           } catch (error) {
             console.warn("[HouseholdAccess] Auto-accept invite skipped.", {
               detail: readableMessage(error?.detail || error?.message || error, "invite auto-accept failed"),
-              inviteKeyPresent: Boolean(inviteKey),
+              status: Number(error?.status || 0) || null,
             });
             // Keep the page interactive so invite acceptance can still be attempted manually.
           }
