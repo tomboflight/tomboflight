@@ -147,7 +147,7 @@ class HouseholdInviteAndOrderTests(unittest.TestCase):
             "status": "pending",
             "project_id": "project-accept-1",
             "email": "invitee@example.com",
-            "member_role": "co_owner",
+            "member_role": "spouse",
             "relationship_scope": "spouse",
             "privacy_scope": "household_private",
             "use_count": 0,
@@ -230,6 +230,7 @@ class HouseholdInviteAndOrderTests(unittest.TestCase):
             )
 
         self.assertEqual(membership.get("project_id"), "project-accept-1")
+        self.assertEqual(membership.get("member_role"), "co_owner")
         self.assertEqual(len(fake_users.updates), 1)
         user_update = fake_users.updates[0]["update"]["$set"]
         self.assertEqual(user_update.get("active_project_id"), "project-accept-1")
