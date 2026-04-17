@@ -895,11 +895,8 @@
       return;
     }
     try {
-      const membership = await app.apiRequest("/workspace-access/invites/accept", {
-        method: "POST",
-        body: JSON.stringify({ invite_key: inviteKey }),
-      });
-      const acceptedProjectId = String(membership?.project_id || "").trim();
+      const membership = await acceptInviteByKey(inviteKey);
+      const acceptedProjectId = projectIdFromMembership(membership);
       if (!currentProjectId && acceptedProjectId) {
         currentProjectId = acceptedProjectId;
       }
@@ -913,6 +910,17 @@
     } catch (error) {
       setText(acceptStatus, error.message || "Failed to accept invite.", "error");
     }
+  }
+
+  function projectIdFromMembership(membership) {
+    return String(membership?.project_id || "").trim();
+  }
+
+  async function acceptInviteByKey(inviteKey) {
+    return await app.apiRequest("/workspace-access/invites/accept", {
+      method: "POST",
+      body: JSON.stringify({ invite_key: inviteKey }),
+    });
   }
 
   function bindQuickInviteButtons() {
@@ -990,15 +998,16 @@
       if (!currentProjectId) {
         if (inviteKey && acceptForm) {
           try {
-            const membership = await app.apiRequest("/workspace-access/invites/accept", {
-              method: "POST",
-              body: JSON.stringify({ invite_key: inviteKey }),
-            });
-            const acceptedProjectId = String(membership?.project_id || "").trim();
+            const membership = await acceptInviteByKey(inviteKey);
+            const acceptedProjectId = projectIdFromMembership(membership);
             if (acceptedProjectId) {
               currentProjectId = acceptedProjectId;
             }
-          } catch (_error) {
+          } catch (error) {
+            console.warn("[HouseholdAccess] Auto-accept invite skipped.", {
+              detail: readableMessage(error?.detail || error?.message || error, "invite auto-accept failed"),
+              inviteKeyPresent: Boolean(inviteKey),
+            });
             // Keep the page interactive so invite acceptance can still be attempted manually.
           }
         }
