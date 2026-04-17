@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.core.metadata import apply_create_metadata, apply_update_metadata
 from app.database import get_database
+from app.dependencies.auth import enforce_limit, get_current_user, has_internal_admin_access
 from app.dependencies.auth import (
     enforce_limit,
     get_current_user,
@@ -13,6 +14,7 @@ from app.dependencies.auth import (
 from app.services.audit_log_service import create_audit_log
 from app.services.matching import generate_match_candidates_for_member
 from app.services.workspace_access_service import (
+    family_is_visible_to_user,
     list_accessible_families_for_user,
     require_workspace_capability,
 )
@@ -116,14 +118,14 @@ def _require_family_access_by_family_id(
     if not family:
         raise HTTPException(status_code=404, detail="Family not found.")
 
-    if _is_admin(current_user):
+    if has_internal_admin_access(current_user):
         return family
 
     current_user_id = _current_user_id(current_user)
     current_user_email = _current_user_email(current_user)
     current_user_name = _current_user_display_name(current_user)
 
-    if not _family_is_visible_to_user(
+    if not family_is_visible_to_user(
         family=family,
         current_user_id=current_user_id,
         current_user_email=current_user_email,
@@ -196,7 +198,7 @@ def list_family_members_index(current_user: dict[str, Any] = Depends(get_current
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")
 
-    if _is_admin(current_user):
+    if has_internal_admin_access(current_user):
         cursor = db.family_members.find().sort("created_at", 1)
         return [_serialize_member(member) for member in cursor]
 

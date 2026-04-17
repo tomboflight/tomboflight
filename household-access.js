@@ -895,6 +895,12 @@
       return;
     }
     try {
+      await app.apiRequest("/workspace-access/invites/accept", {
+        method: "POST",
+        body: JSON.stringify({ invite_key: inviteKey }),
+      });
+      setText(acceptStatus, "Invite accepted. Workspace access granted.", "success");
+      await refreshData();
       const membership = await acceptInviteByKey(inviteKey);
       hydrateProjectContextFromMembership(membership);
       setText(acceptStatus, "Invite accepted. Workspace access granted.", "success");
@@ -990,6 +996,11 @@
         app.saveUser(currentUser);
       }
 
+      currentProjectId = projectIdFromContext(currentUser);
+      if (!currentProjectId) {
+        if (statusNode) {
+          statusNode.textContent =
+            "No active workspace project was detected. Open this page from your dashboard workspace.";
       const inviteKey = inviteKeyFromQuery();
       if (acceptForm && inviteKey) {
         const keyInput = acceptForm.querySelector('input[name="invite_key"]');
@@ -1028,6 +1039,14 @@
         statusNode.textContent = `Managing workspace access for project ${currentProjectId}.`;
       }
 
+      const inviteKey = inviteKeyFromQuery();
+      if (acceptForm && inviteKey) {
+        const keyInput = acceptForm.querySelector('input[name="invite_key"]');
+        if (keyInput) keyInput.value = inviteKey;
+      }
+
+      bindQuickInviteButtons();
+      updateAutoInviteDefaults(true);
       console.info("[HouseholdAccess] Invite runtime API context.", {
         resolvedApiBaseUrl:
           typeof app.getApiBaseUrl === "function" ? normalizeBaseUrl(app.getApiBaseUrl()) : "",
@@ -1038,6 +1057,8 @@
           : [],
         projectId: currentProjectId,
       });
+      if (inviteForm) inviteForm.addEventListener("submit", handleInviteSubmit);
+      if (acceptForm) acceptForm.addEventListener("submit", handleAcceptSubmit);
       await refreshData();
     } catch (error) {
       const statusCode = Number(error?.status || 0);

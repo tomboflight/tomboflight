@@ -46,6 +46,7 @@ from app.services.privacy_access_service import (
 from app.services.tree_service import list_linked_family_ids
 from app.services.workspace_access_service import (
     count_workspace_uploads,
+    family_is_visible_to_user,
     require_workspace_capability,
     resolve_workspace_context,
 )
@@ -267,14 +268,14 @@ def _require_family_access_by_family_id(
     if not family:
         raise HTTPException(status_code=404, detail="Family not found.")
 
-    if _is_admin(current_user):
+    if has_internal_admin_access(current_user):
         return family
 
     current_user_id = _current_user_id(current_user)
     current_user_email = _current_user_email(current_user)
     current_user_name = _current_user_display_name(current_user)
 
-    if not _family_is_visible_to_user(
+    if not family_is_visible_to_user(
         family=family,
         current_user_id=current_user_id,
         current_user_email=current_user_email,
