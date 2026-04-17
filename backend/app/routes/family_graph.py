@@ -3,6 +3,7 @@ from typing import Any
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from app.core.relationship_catalog import normalize_relationship_type
 from app.database import get_database
 from app.dependencies.auth import get_current_user, has_internal_admin_access
 from app.services.viewer_manifest_service import ensure_project_workspace_anchor
@@ -10,6 +11,10 @@ from app.services.workspace_access_service import require_workspace_capability, 
 
 router = APIRouter(prefix="/families", tags=["Family Graph"])
 
+
+from app.services.workspace_access_service import require_workspace_capability
+
+router = APIRouter(prefix="/families", tags=["Family Graph"])
 
 def _current_user_id(user: dict[str, Any]) -> str:
     raw_id = user.get("id") or user.get("_id") or user.get("user_id")
@@ -36,15 +41,58 @@ def _current_user_display_name(user: dict[str, Any]) -> str:
     return str(raw_name).strip()
 
 
-def _normalize_value(value: Any) -> str:
-    return str(value or "").strip().lower()
-
-
 def _family_id_candidates(family_id: str) -> list[Any]:
     candidates: list[Any] = [family_id]
     if ObjectId.is_valid(family_id):
         candidates.append(ObjectId(family_id))
     return candidates
+
+
+def _is_admin(user: dict[str, Any]) -> bool:
+    return has_internal_admin_access(user)
+
+
+def _family_is_visible_to_user(
+    family: dict[str, Any],
+    current_user_id: str,
+    current_user_email: str,
+    current_user_name: str,
+) -> bool:
+    owner_user_id = str(family.get("owner_user_id") or "").strip()
+    owner_email = str(family.get("owner_email") or "").strip().lower()
+
+    shared_with_user_ids = [
+        str(value).strip()
+        for value in (family.get("shared_with_user_ids") or [])
+        if value is not None
+    ]
+    shared_with_emails = [
+        str(value).strip().lower()
+        for value in (family.get("shared_with_emails") or [])
+        if value is not None
+    ]
+
+    if owner_user_id and owner_user_id == current_user_id:
+        return True
+
+    if owner_email and owner_email == current_user_email:
+        return True
+
+    if current_user_id in shared_with_user_ids:
+        return True
+
+    if current_user_email in shared_with_emails:
+        return True
+
+    # Backward-compatible fallback for older family records
+    if not owner_user_id and not owner_email:
+        created_by = str(family.get("created_by") or "").strip()
+        if created_by and (
+            created_by == current_user_name or created_by.lower() == current_user_email
+        ):
+            return True
+
+    return False
 
 
 @router.get("/{family_id}/graph")
@@ -78,23 +126,8 @@ def get_family_graph(
     relationships_cursor = db.relationships.find(relationship_query)
     members_raw = list(members_cursor)
     relationships_raw = list(relationships_cursor)
-
-    if not members_raw:
-        ensured_family, _primary_member, ensured_project = ensure_project_workspace_anchor(
-            project=project,
-        )
-        if ensured_family is not None:
-            family = ensured_family
-            resolved_family_id = str(family.get("_id"))
-        if ensured_project is not None:
-            project = ensured_project
-
-        member_query = {"family_id": {"$in": _family_id_candidates(resolved_family_id)}}
-        relationship_query = {"family_id": {"$in": _family_id_candidates(resolved_family_id)}}
-        members_raw = list(
-            db.family_members.find(member_query).sort("generation", 1),
-        )
-        relationships_raw = list(db.relationships.find(relationship_query))
+    # Phase 1 keeps this GET route read-only; anchor provisioning now happens
+    # only through explicit write paths such as the intake pipeline.
 
     members = []
     for member in members_raw:
@@ -141,7 +174,9 @@ def get_family_graph(
                 "family_id": rel.get("family_id"),
                 "source_member_id": rel.get("source_member_id"),
                 "target_member_id": rel.get("target_member_id"),
-                "relationship_type": rel.get("relationship_type"),
+                "relationship_type": normalize_relationship_type(
+                    rel.get("relationship_type")
+                ),
                 "notes": rel.get("notes"),
                 "created_by": rel.get("created_by"),
                 "created_at": rel.get("created_at"),
