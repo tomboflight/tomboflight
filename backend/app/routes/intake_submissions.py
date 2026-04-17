@@ -3,8 +3,8 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.dependencies.auth import (
-    INTERNAL_ADMIN_KEYS,
     get_current_user,
+    has_internal_admin_access,
     require_permission,
 )
 from app.schemas.intake_submission import (
@@ -50,12 +50,7 @@ def _actor_label(current_user: dict) -> str:
 
 
 def _is_admin(user: dict[str, Any]) -> bool:
-    values = {
-        str(user.get("role") or "").strip().lower(),
-        str(user.get("access_tier") or "").strip().lower(),
-        str(user.get("department_role") or "").strip().lower(),
-    }
-    return any(value in INTERNAL_ADMIN_KEYS for value in values if value)
+    return has_internal_admin_access(user)
 
 
 @router.post(
@@ -93,6 +88,15 @@ def my_submission_list(
     return list_for_user(_current_user_id(current_user), limit=limit)
 
 
+@router.get("/admin/list", response_model=list[IntakeSubmissionListItem])
+def admin_list_submissions(
+    limit: int = Query(default=50, ge=1, le=200),
+    status_filter: Optional[str] = Query(default=None, alias="status"),
+    _admin_user: dict = Depends(require_permission("admin.access")),
+):
+    return list_all(limit=limit, status=status_filter)
+
+
 @router.get("/{submission_id}", response_model=IntakeSubmissionResponse)
 def get_submission(
     submission_id: str,
@@ -108,15 +112,6 @@ def get_submission(
         raise HTTPException(status_code=403, detail="Not authorized to access this intake submission.")
 
     return result
-
-
-@router.get("/admin/list", response_model=list[IntakeSubmissionListItem])
-def admin_list_submissions(
-    limit: int = Query(default=50, ge=1, le=200),
-    status_filter: Optional[str] = Query(default=None, alias="status"),
-    _admin_user: dict = Depends(require_permission("admin.access")),
-):
-    return list_all(limit=limit, status=status_filter)
 
 
 @router.patch("/{submission_id}/status", response_model=IntakeSubmissionResponse)

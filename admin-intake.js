@@ -7,18 +7,9 @@
     return;
   }
 
-  const INTERNAL_ROLE_KEYS = new Set([
-    "admin",
+  const INTAKE_REVIEW_ROLE_KEYS = new Set([
     "super_admin",
-    "root_admin",
-    "platform_admin",
     "operations_admin",
-    "finance_admin",
-    "marketing_admin",
-    "executive_technology",
-    "operations",
-    "finance",
-    "marketing",
   ]);
 
   const LINK_KEY_ENABLED_PACKAGES = new Set([
@@ -187,6 +178,14 @@
     node.dataset.state = "";
   }
 
+  function getUserFacingErrorMessage(error, fallback) {
+    const local = typeof app.isLocalApp === "function" && app.isLocalApp();
+    if (local && error && error.message) {
+      return String(error.message);
+    }
+    return fallback || "Unable to load data right now.";
+  }
+
   function valueLine(label, value) {
     return `<p class="card-copy"><strong>${escapeHtml(label)}:</strong> ${escapeHtml(value || "—")}</p>`;
   }
@@ -232,7 +231,7 @@
     ];
 
     const hasAccess = values.some(function (value) {
-      return INTERNAL_ROLE_KEYS.has(value);
+      return INTAKE_REVIEW_ROLE_KEYS.has(value);
     });
 
     if (!hasAccess) {
@@ -538,7 +537,7 @@
 
       setStatus(
         actionNode,
-        error.message || "Unable to load intake submissions.",
+        getUserFacingErrorMessage(error, "Unable to load intake submissions."),
         "error",
       );
     }
@@ -709,7 +708,7 @@
       console.error("Admin intake detail load failed:", error);
       setStatus(
         statusNode,
-        error.message || "Unable to load the intake submission.",
+        getUserFacingErrorMessage(error, "Unable to load the intake submission."),
         "error",
       );
     }
@@ -839,7 +838,11 @@
       setStatus(statusNode, label, "success");
     } catch (error) {
       console.error("Admin action failed:", error);
-      setStatus(statusNode, error.message || "Admin action failed.", "error");
+      setStatus(
+        statusNode,
+        getUserFacingErrorMessage(error, "Admin action failed."),
+        "error",
+      );
     } finally {
       setReviewButtonsDisabled(false);
     }
@@ -872,7 +875,11 @@
       if (redirectCustomerToDashboard(error)) return;
 
       const node = document.querySelector("[data-admin-queue-action-status]");
-      setStatus(node, error.message || "Admin access is required.", "error");
+      setStatus(
+        node,
+        getUserFacingErrorMessage(error, "Admin access is required."),
+        "error",
+      );
 
       const hero = document.querySelector("[data-admin-queue-status]");
       if (hero) {
@@ -936,7 +943,11 @@
       if (redirectCustomerToDashboard(error)) return;
 
       const node = document.querySelector("[data-admin-review-action-status]");
-      setStatus(node, error.message || "Admin access is required.", "error");
+      setStatus(
+        node,
+        getUserFacingErrorMessage(error, "Admin access is required."),
+        "error",
+      );
 
       const hero = document.querySelector("[data-admin-review-page-status]");
       if (hero) {

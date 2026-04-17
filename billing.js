@@ -35,6 +35,31 @@
     return String((error && error.message) || error || "Unknown error");
   }
 
+  function isInternalUser(user) {
+    // Prefer the canonical check from app.js, then the TOLAuthPages export.
+    if (app && typeof app.isInternalRole === "function") {
+      return app.isInternalRole(user);
+    }
+    if (authPages && typeof authPages.isInternalRole === "function") {
+      return Boolean(authPages.isInternalRole(user));
+    }
+    return false;
+  }
+
+  function isProductionUi() {
+    return !(app && typeof app.isLocalApp === "function" && app.isLocalApp());
+  }
+
+  function getUserFacingErrorMessage(error) {
+    if (typeof console !== "undefined" && typeof console.error === "function") {
+      console.error("[Billing] Error details:", error);
+    }
+    if (isProductionUi()) {
+      return "Unable to load data right now.";
+    }
+    return getErrorMessage(error);
+  }
+
   function buildSubscriptionCard(item) {
     const productNames = Array.isArray(item.product_names)
       ? item.product_names.join(", ")
@@ -90,14 +115,22 @@
   }
 
   async function loadContext() {
-    const orders = authPages.fetchOrders ? await authPages.fetchOrders() : [];
-    currentContext =
-      typeof authPages.getDashboardContextForCurrentPage === "function"
-        ? await authPages.getDashboardContextForCurrentPage(currentUser, orders)
-        : authPages.getDashboardContext
-          ? await authPages.getDashboardContext(currentUser, orders)
-          : null;
-    renderMaintenanceLinks();
+    try {
+      const orders = authPages.fetchOrders ? await authPages.fetchOrders() : [];
+      currentContext =
+        typeof authPages.getDashboardContextForCurrentPage === "function"
+          ? await authPages.getDashboardContextForCurrentPage(currentUser, orders)
+          : authPages.getDashboardContext
+            ? await authPages.getDashboardContext(currentUser, orders)
+            : null;
+    } catch (error) {
+      currentContext = null;
+      if (typeof console !== "undefined" && typeof console.error === "function") {
+        console.error("[Billing] Failed to resolve customer dashboard context:", error);
+      }
+    } finally {
+      renderMaintenanceLinks();
+    }
   }
 
   async function refreshOverview() {
@@ -173,13 +206,15 @@
       }
     } catch (error) {
       if (pageStatus) {
-        pageStatus.textContent = getErrorMessage(error) || "Billing profile could not be loaded.";
+        pageStatus.textContent =
+          getUserFacingErrorMessage(error) ||
+          "This section is temporarily unavailable.";
       }
       if (cardsStatus) {
-        cardsStatus.textContent = "Saved cards could not be loaded.";
+        cardsStatus.textContent = "Unable to load data right now.";
       }
       if (subscriptionsStatus) {
-        subscriptionsStatus.textContent = "Subscription records could not be loaded.";
+        subscriptionsStatus.textContent = "Unable to load data right now.";
       }
     }
   }
@@ -258,7 +293,7 @@
     } catch (error) {
       app.setStatus(
         statusNode,
-        getErrorMessage(error) || "Unable to save card.",
+        getUserFacingErrorMessage(error) || "This section is temporarily unavailable.",
         "error",
       );
     }
@@ -280,7 +315,7 @@
     } catch (error) {
       app.setStatus(
         pageStatus,
-        getErrorMessage(error) || "Unable to open billing portal.",
+        getUserFacingErrorMessage(error) || "Unable to load data right now.",
         "error",
       );
     }
@@ -296,7 +331,7 @@
     } catch (error) {
       app.setStatus(
         statusNode,
-        getErrorMessage(error) || "Unable to update card.",
+        getUserFacingErrorMessage(error) || "Unable to load data right now.",
         "error",
       );
     }
@@ -343,10 +378,12 @@
   document.addEventListener("DOMContentLoaded", async function () {
     currentUser = await app.requireSession("signin.html");
     if (!currentUser) return;
+    if (isInternalUser(currentUser)) {
+      window.location.replace("dashboard.html");
+      return;
+    }
 
     bindInteractions();
-    await loadContext();
-    await ensureStripeClient();
-    await refreshOverview();
+    await Promise.allSettled([loadContext(), ensureStripeClient(), refreshOverview()]);
   });
 })();

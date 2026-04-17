@@ -3,17 +3,33 @@
 
   const authPages = window.TOLAuthPages || {};
   const ANCESTRY_TYPES = new Set([
-    "parent_child",
-    "adoptive_parent_child",
-    "step_parent_child",
+    "biological_parent",
+    "adoptive_parent",
+    "step_parent",
+    "guardian",
   ]);
 
   const PRIMARY_ANCESTRY_TYPES = new Set([
-    "parent_child",
-    "adoptive_parent_child",
+    "biological_parent",
+    "adoptive_parent",
+    "guardian",
   ]);
 
-  const SECONDARY_ANCESTRY_TYPES = new Set(["step_parent_child"]);
+  const SECONDARY_ANCESTRY_TYPES = new Set(["step_parent"]);
+  const RELATIONSHIP_TYPE_ALIASES = {
+    "parent-child": "biological_parent",
+    parent_child: "biological_parent",
+    biological: "biological_parent",
+    adoptive: "adoptive_parent",
+    adoptive_parent_child: "adoptive_parent",
+    "adoptive-parent-child": "adoptive_parent",
+    step: "step_parent",
+    step_parent_child: "step_parent",
+    "step-parent-child": "step_parent",
+    spousal: "spouse",
+    "former-spouse": "former_spouse",
+    household_member: "household_member",
+  };
 
   const TREE_VIEW_STATE = {
     scale: 1,
@@ -83,29 +99,49 @@
   }
 
   function formatRelationshipLabel(relationshipType, context) {
-    const rel = String(relationshipType || "")
-      .trim()
-      .toLowerCase();
+    const rel = normalizeRelationshipType(relationshipType);
 
     if (context === "parents") {
-      if (rel === "parent_child") return "biological parent";
-      if (rel === "step_parent_child") return "step-parent";
-      if (rel === "adoptive_parent_child") return "adoptive parent";
+      if (rel === "biological_parent") return "Biological parent";
+      if (rel === "step_parent") return "Step-parent";
+      if (rel === "adoptive_parent") return "Adoptive parent";
+      if (rel === "guardian") return "Guardian";
       return rel.replaceAll("_", " ");
     }
 
     if (context === "children") {
-      if (rel === "parent_child") return "biological child";
-      if (rel === "step_parent_child") return "step-child";
-      if (rel === "adoptive_parent_child") return "adopted child";
+      if (rel === "biological_parent") return "Biological child";
+      if (rel === "step_parent") return "Step-child";
+      if (rel === "adoptive_parent") return "Adopted child";
+      if (rel === "guardian") return "Ward";
       return rel.replaceAll("_", " ");
     }
 
     if (context === "spouses") {
-      return "spouse";
+      if (rel === "former_spouse") return "Former spouse";
+      return "Spouse";
     }
 
     return rel.replaceAll("_", " ");
+  }
+
+  function normalizeRelationshipType(value) {
+    const normalized = String(value || "")
+      .trim()
+      .toLowerCase();
+    return RELATIONSHIP_TYPE_ALIASES[normalized] || normalized;
+  }
+
+  function dedupeRelationshipEntries(entries) {
+    const seen = new Set();
+    return (Array.isArray(entries) ? entries : []).filter((entry) => {
+      const personId = String(entry?.person?.id || "").trim();
+      const relType = normalizeRelationshipType(entry?.relationship_type || "");
+      const key = JSON.stringify([personId, relType]);
+      if (!personId || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   }
 
   function getFamilyIdFromUrl() {
@@ -263,6 +299,7 @@
           statusNode,
           detailPanel,
           detailEmpty,
+          currentContext,
         );
       });
     }
@@ -283,6 +320,7 @@
         statusNode,
         detailPanel,
         detailEmpty,
+        currentContext,
       );
     }
   }
@@ -358,35 +396,283 @@
     }
   }
 
+  function describeTreeResponseShape(payload) {
+    const members = Array.isArray(payload?.members) ? payload.members : null;
+    const relationships = Array.isArray(payload?.relationships)
+      ? payload.relationships
+      : null;
+    const nodes = Array.isArray(payload?.nodes) ? payload.nodes : null;
+    return {
+      payload_type:
+        payload === null ? "null" : Array.isArray(payload) ? "array" : typeof payload,
+      payload_keys:
+        payload && typeof payload === "object" && !Array.isArray(payload)
+          ? Object.keys(payload).sort()
+          : [],
+      member_count: members ? members.length : null,
+      relationship_count: relationships ? relationships.length : null,
+      node_count: nodes ? nodes.length : null,
+    };
+  }
+
+  async function fetchTreeGraph(endpoint) {
+    const apiBaseUrl =
+      window.TOLAuth && typeof window.TOLAuth.getApiBaseUrl === "function"
+        ? window.TOLAuth.getApiBaseUrl()
+        : "";
+    try {
+      const payload = await window.TOLAuth.apiRequest(endpoint, {
+        method: "GET",
+      });
+      return {
+        payload,
+        status: 200,
+        apiBaseUrl,
+        bodyShape: describeTreeResponseShape(payload),
+      };
+    } catch (error) {
+      error.endpoint = endpoint;
+      error.apiBaseUrl = apiBaseUrl;
+      if (!error.bodyShape) {
+        error.bodyShape = null;
+      }
+      throw error;
+    }
+  }
+
+  function categorizeTreeError(error) {
+    const status = Number(error?.status || 0);
+    const msg = String(error?.message || "").toLowerCase();
+    // When apiRequest times out (AbortError), it wraps the error as
+    // "Service temporarily unavailable" but stores the real "Request timed out"
+    // message in error.cause.  Check both so timeouts are not misreported as
+    // network unreachability errors.
+    const causeMsg = String(error?.cause?.message || "").toLowerCase();
+
+    if (
+      status === 401 ||
+      /401|unauthorized|authentication/.test(msg) ||
+      /sign in|signed in/.test(msg)
+    ) {
+      return {
+        type: "auth",
+        message: "Authentication error. Please sign in again.",
+      };
+    }
+
+    const isEntitlementError = /package does not include|does not include|plan does not include/.test(
+      msg,
+    );
+    if (isEntitlementError) {
+      return {
+        type: "entitlement",
+        message: "Your current package does not include this tree view.",
+      };
+    }
+
+    if (status === 403 || /403|forbidden|not authorized/.test(msg)) {
+      return {
+        type: "permission",
+        message:
+          "You do not have access to this family tree in the current workspace.",
+      };
+    }
+
+    if (/404|not found|could not be resolved/.test(msg)) {
+      return {
+        type: "not_found",
+        message:
+          "Family or workspace data not found. Please check your family selection and try again.",
+      };
+    }
+
+    if (/timeout|timed out/.test(msg) || /timeout|timed out/.test(causeMsg)) {
+      return {
+        type: "timeout",
+        message:
+          "The request timed out while loading the tree. This may indicate a large family graph. Please try again.",
+      };
+    }
+
+    if (/temporarily unavailable|service unavailable|network error/.test(msg)) {
+      return {
+        type: "network",
+        message:
+          "Unable to reach the visual tree service. Please check your connection and try again in a moment.",
+      };
+    }
+
+    if (status >= 500) {
+      return {
+        type: "backend",
+        message:
+          "We could not load your visual tree due to a backend service error. Please try again shortly.",
+      };
+    }
+
+    return {
+      type: "backend",
+      message: error.message || "Failed to load the visual tree. Please try again.",
+    };
+  }
+
   async function loadAndRenderTree(
     familyId,
     canvas,
     statusNode,
     detailPanel,
     detailEmpty,
+    context,
   ) {
     if (!canvas || !window.TOLAuth) return;
+
+    const resolved = context?.resolvedEntitlements || {};
+    const canTraverseLinked = Boolean(resolved.can_link_households);
+    const canBuildPrivateTree = Boolean(resolved.can_build_family_tree);
+    const linkedEndpoint = `/tree/${familyId}/linked?mode=private`;
+    const privateEndpoint = `/tree/${familyId}/private`;
+    const legacyGraphEndpoint = `/families/${encodeURIComponent(familyId)}/graph`;
+    const attempts = canTraverseLinked
+      ? [
+          { label: "linked", endpoint: linkedEndpoint },
+          ...(canBuildPrivateTree ? [{ label: "private", endpoint: privateEndpoint }] : []),
+          { label: "legacy", endpoint: legacyGraphEndpoint },
+        ]
+      : [
+          { label: "private", endpoint: privateEndpoint },
+          { label: "legacy", endpoint: legacyGraphEndpoint },
+        ];
+    const projectId = getProjectIdFromContext(context);
+
+    console.info("[TreeView] Loading tree", {
+      family_id: familyId,
+      project_id: projectId || "(not resolved)",
+      selected_endpoint: attempts[0]?.endpoint || privateEndpoint,
+      requested_endpoints: attempts.map((attempt) => attempt.endpoint),
+      can_traverse_linked: canTraverseLinked,
+      can_build_private_tree: canBuildPrivateTree,
+    });
 
     showStatus(statusNode, "Loading visual tree...", "info");
     canvas.innerHTML = "";
 
-    try {
-      const graph = await window.TOLAuth.apiRequest(
-        `/families/${familyId}/graph`,
-        {
-          method: "GET",
-        },
-      );
+    let graph = null;
+    let selectedEndpoint = "";
+    let selectedSource = "";
+    let selectedStatus = null;
+    let selectedBodyShape = null;
+    let lastError = null;
 
+    for (let index = 0; index < attempts.length; index += 1) {
+      const attempt = attempts[index];
+      const isFallbackAttempt = index > 0;
+      selectedEndpoint = attempt.endpoint;
+      selectedSource = attempt.label;
+
+      if (isFallbackAttempt) {
+        const fallbackMessage =
+          attempt.label === "legacy"
+            ? "Tree renderer service unavailable. Trying family graph fallback..."
+            : "Linked tree unavailable. Trying private family tree...";
+        showStatus(
+          statusNode,
+          fallbackMessage,
+          "info",
+        );
+      }
+
+      try {
+        const response = await fetchTreeGraph(attempt.endpoint);
+        graph = response.payload;
+        selectedStatus = response.status;
+        selectedBodyShape = response.bodyShape;
+        console.info("[TreeView] Tree data received", {
+          family_id: familyId,
+          project_id: projectId || "(not resolved)",
+          endpoint: attempt.endpoint,
+          source: attempt.label,
+          response_status: response.status,
+          response_body_shape: response.bodyShape,
+          api_base_url: response.apiBaseUrl || "(unknown)",
+        });
+        break;
+      } catch (error) {
+        lastError = error;
+        console.error("[TreeView] Tree fetch failed", {
+          family_id: familyId,
+          project_id: projectId || "(not resolved)",
+          endpoint: attempt.endpoint,
+          source: attempt.label,
+          response_status: error?.status || null,
+          response_body_shape: error?.bodyShape || null,
+          api_base_url: error?.apiBaseUrl || "(unknown)",
+          error_message: error?.message || String(error),
+          error_detail: error?.detail || "",
+          fallback_available: index < attempts.length - 1,
+        });
+      }
+    }
+
+    if (!graph) {
+      const error = lastError || new Error("Failed to load the visual tree.");
+      const { type, message: userMessage } = categorizeTreeError(error);
+      console.error("[TreeView] Tree load failed after all attempts", {
+        family_id: familyId,
+        project_id: projectId || "(not resolved)",
+        error_type: type,
+        error_message: error.message,
+      });
+      showStatus(statusNode, userMessage, "error");
+      return;
+    }
+
+    const members = Array.isArray(graph?.members) ? graph.members : [];
+    if (!members.length) {
+      console.info("[TreeView] No renderable tree data", {
+        family_id: familyId,
+        project_id: projectId || "(not resolved)",
+        endpoint: selectedEndpoint,
+        source: selectedSource,
+        response_status: selectedStatus,
+        response_body_shape: selectedBodyShape,
+      });
+      canvas.innerHTML =
+        '<div class="tree-empty">No visual tree data available yet for this family. Family members and relationships must be added before the tree can be rendered.</div>';
+      showStatus(
+        statusNode,
+        "No visual tree data available yet for this family.",
+        "info",
+      );
+      return;
+    }
+
+    try {
       renderStructuredTree(graph, canvas, detailPanel, detailEmpty);
       showStatus(
         statusNode,
-        "Visual family tree loaded successfully. Use the zoom controls for larger families.",
+        selectedSource === "linked"
+          ? "Linked family graph loaded successfully."
+          : selectedSource === "legacy"
+          ? "Visual family tree loaded from fallback graph service."
+          : "Visual family tree loaded successfully. Use the zoom controls for larger families.",
         "success",
       );
-    } catch (error) {
-      console.error("Tree render error:", error);
-      showStatus(statusNode, error.message || "Failed to load tree.", "error");
+    } catch (renderError) {
+      console.error("[TreeView] Tree render failed", {
+        family_id: familyId,
+        project_id: projectId || "(not resolved)",
+        endpoint: selectedEndpoint,
+        source: selectedSource,
+        response_status: selectedStatus,
+        response_body_shape: selectedBodyShape,
+        error_message: renderError.message,
+        stack: renderError.stack,
+      });
+      showStatus(
+        statusNode,
+        "Failed to render the visual tree. The graph data may be incomplete. Please try again or contact support.",
+        "error",
+      );
     }
   }
 
@@ -395,6 +681,10 @@
     const relationships = Array.isArray(graph.relationships)
       ? graph.relationships
       : [];
+    const normalizedRelationships = relationships.map((rel) => ({
+      ...rel,
+      relationship_type: normalizeRelationshipType(rel.relationship_type),
+    }));
 
     if (!members.length) {
       canvas.innerHTML =
@@ -405,14 +695,14 @@
     const memberMap = new Map();
     members.forEach((member) => memberMap.set(member.id, member));
 
-    const spousePairs = buildSpousePairs(relationships);
+    const spousePairs = buildSpousePairs(normalizedRelationships, memberMap);
     const pairMap = new Map();
     spousePairs.forEach((pair) => {
       pairMap.set(pair.a, pair);
       pairMap.set(pair.b, pair);
     });
 
-    const memberRowMap = buildMemberRowMap(members, relationships);
+    const memberRowMap = buildMemberRowMap(members, normalizedRelationships);
 
     const generationGroups = new Map();
     members.forEach((member) => {
@@ -556,7 +846,7 @@
 
     const positions = new Map();
 
-    const primaryRelationships = relationships.filter((rel) =>
+    const primaryRelationships = normalizedRelationships.filter((rel) =>
       PRIMARY_ANCESTRY_TYPES.has(rel.relationship_type),
     );
 
@@ -575,7 +865,6 @@
           item,
           positions,
           primaryRelationships,
-          pairMap,
         );
         const widthValue =
           item.type === "couple" ? nodeWidth * 2 + coupleGap : nodeWidth;
@@ -622,7 +911,7 @@
             detailPanel,
             detailEmpty,
             memberMap,
-            relationships,
+            normalizedRelationships,
           );
           positions.set(
             member.id,
@@ -642,7 +931,7 @@
             detailPanel,
             detailEmpty,
             memberMap,
-            relationships,
+            normalizedRelationships,
           );
           positions.set(
             leftMember.id,
@@ -661,7 +950,7 @@
             detailPanel,
             detailEmpty,
             memberMap,
-            relationships,
+            normalizedRelationships,
           );
           positions.set(
             rightMember.id,
@@ -685,14 +974,8 @@
     });
 
     const childLinks = primaryRelationships;
-    const spouseLinks = relationships.filter(
-      (rel) => rel.relationship_type === "spouse",
-    );
-
     const spouseSet = new Set(
-      spouseLinks.map((rel) =>
-        buildPairKey(rel.source_member_id, rel.target_member_id),
-      ),
+      spousePairs.map((pair) => buildPairKey(pair.a, pair.b)),
     );
 
     const groupedChildren = new Map();
@@ -708,21 +991,20 @@
 
     childrenByTarget.forEach((parents, childId) => {
       const uniqueParents = [...new Set(parents)].filter(Boolean);
+      const paired = findPairedParents(uniqueParents, spouseSet);
+      const pairedIds = new Set(paired || []);
 
-      if (uniqueParents.length >= 2) {
-        const paired = findPairedParents(uniqueParents, spouseSet);
-        if (paired) {
-          const key = `${paired[0]}::${paired[1]}::${childId}`;
-          groupedChildren.set(key, {
-            parentA: paired[0],
-            parentB: paired[1],
-            childId,
-          });
-          return;
-        }
+      if (paired) {
+        const key = `${paired[0]}::${paired[1]}::${childId}`;
+        groupedChildren.set(key, {
+          parentA: paired[0],
+          parentB: paired[1],
+          childId,
+        });
       }
 
       uniqueParents.forEach((parentId) => {
+        if (pairedIds.has(parentId)) return;
         soloParents.push({ parentId, childId });
       });
     });
@@ -818,7 +1100,7 @@
         "tree-line parent-child",
       );
       dashed.style.strokeDasharray = "8 8";
-      dashed.style.opacity = "0.7";
+      dashed.style.opacity = "0.88";
       svg.appendChild(dashed);
     });
 
@@ -942,6 +1224,7 @@
     const card = document.createElement("button");
     card.type = "button";
     card.className = "tree-node tree-node-button";
+    card.setAttribute("data-member-node-id", member.id || "");
     card.style.left = `${x}px`;
     card.style.top = `${y}px`;
 
@@ -989,7 +1272,8 @@
     const spouses = relationships
       .filter(
         (rel) =>
-          rel.relationship_type === "spouse" &&
+          (rel.relationship_type === "spouse" ||
+            rel.relationship_type === "former_spouse") &&
           (rel.source_member_id === member.id ||
             rel.target_member_id === member.id),
       )
@@ -1000,9 +1284,10 @@
               ? rel.target_member_id
               : rel.source_member_id,
           ) || null,
-        relationship_type: "spouse",
+        relationship_type: rel.relationship_type || "spouse",
       }))
       .filter((entry) => entry.person);
+    const dedupedSpouses = dedupeRelationshipEntries(spouses);
 
     const parents = relationships
       .filter(
@@ -1016,6 +1301,27 @@
       }))
       .filter((entry) => entry.person);
 
+    const relatedParentIds = new Set(
+      parents.map((entry) => (entry.person && entry.person.id ? entry.person.id : "")),
+    );
+    [member && member.mother_id, member && member.father_id]
+      .filter(Boolean)
+      .forEach((parentId) => {
+        if (!relatedParentIds.has(parentId)) {
+          parents.push({
+            person: {
+              id: parentId,
+              display_name: `Unknown parent (${parentId.slice(0, 8)}…)`,
+              birth_year: null,
+              family_id: member.family_id,
+              unresolved_person: true,
+            },
+            relationship_type: "biological_parent",
+          });
+        }
+      });
+    const dedupedParents = dedupeRelationshipEntries(parents);
+
     const children = relationships
       .filter(
         (rel) =>
@@ -1027,6 +1333,7 @@
         relationship_type: rel.relationship_type,
       }))
       .filter((entry) => entry.person);
+    const dedupedChildren = dedupeRelationshipEntries(children);
 
     detailPanel.innerHTML = `
       <div class="lineage-profile-card">
@@ -1066,20 +1373,55 @@
 
         <div class="lineage-section">
           <h4>Parents</h4>
-          ${renderPeopleList(parents, "parents")}
+          ${renderPeopleList(dedupedParents, "parents")}
         </div>
 
         <div class="lineage-section">
           <h4>Spouses</h4>
-          ${renderPeopleList(spouses, "spouses")}
+          ${renderPeopleList(dedupedSpouses, "spouses")}
         </div>
 
         <div class="lineage-section">
           <h4>Children</h4>
-          ${renderPeopleList(children, "children")}
+          ${renderPeopleList(dedupedChildren, "children")}
         </div>
       </div>
     `;
+    bindDetailPanelJumpActions(
+      detailPanel,
+      detailEmpty,
+      memberMap,
+      relationships,
+    );
+  }
+
+  function escapeSelectorValue(value) {
+    const raw = String(value || "");
+    if (window.CSS && typeof window.CSS.escape === "function") {
+      return window.CSS.escape(raw);
+    }
+    return raw.replace(/["\\]/g, "\\$&");
+  }
+
+  function bindDetailPanelJumpActions(detailPanel, detailEmpty, memberMap, relationships) {
+    detailPanel.querySelectorAll("[data-tree-person-jump]").forEach(function (button) {
+      button.addEventListener("click", function () {
+        const personId = button.getAttribute("data-tree-person-jump") || "";
+        if (!personId) return;
+        const nextMember = memberMap.get(personId);
+        if (!nextMember) return;
+        renderDetailPanel(nextMember, memberMap, relationships, detailPanel, detailEmpty);
+        const selector = `[data-member-node-id="${escapeSelectorValue(personId)}"]`;
+        const nextCard = document.querySelector(selector);
+        if (nextCard) {
+          document.querySelectorAll(".tree-node.is-active").forEach((node) => {
+            node.classList.remove("is-active");
+          });
+          nextCard.classList.add("is-active");
+          nextCard.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" });
+        }
+      });
+    });
   }
 
   function renderPeopleList(entries, context) {
@@ -1104,6 +1446,11 @@
                   <div style="font-size:0.82rem; opacity:0.8;">${escapeHtml(relType)}</div>
                 </div>
                 <span>${escapeHtml(getBirthYear(person))}</span>
+                ${
+                  person && person.id && !person.unresolved_person
+                    ? `<button type="button" class="btn btn-secondary" data-tree-person-jump="${escapeHtml(person.id)}">Open branch</button>`
+                    : ""
+                }
               </li>
             `;
           })
@@ -1112,7 +1459,7 @@
     `;
   }
 
-  function getItemAnchorX(item, positions, relationships, pairMap) {
+  function getItemAnchorX(item, positions, relationships) {
     const memberIds = item.members.map((member) => member.id);
     const anchorValues = [];
 
@@ -1137,14 +1484,6 @@
           return;
         }
 
-        const pair = pairMap.get(parentId);
-        if (pair) {
-          const posA = positions.get(pair.a);
-          const posB = positions.get(pair.b);
-          if (posA && posB) {
-            parentCenters.push((posA.centerX + posB.centerX) / 2);
-          }
-        }
       });
 
       if (parentCenters.length) {
@@ -1242,13 +1581,23 @@
     return memberRowMap;
   }
 
-  function buildSpousePairs(relationships) {
+  function buildSpousePairs(relationships, memberMap) {
     const pairs = [];
     const seen = new Set();
 
     relationships
-      .filter((rel) => rel.relationship_type === "spouse")
+      .filter(
+        (rel) =>
+          rel.relationship_type === "spouse" ||
+          rel.relationship_type === "former_spouse",
+      )
       .forEach((rel) => {
+        const source = memberMap.get(rel.source_member_id);
+        const target = memberMap.get(rel.target_member_id);
+        if (!isLikelyAdultForSpouseLink(source) || !isLikelyAdultForSpouseLink(target)) {
+          return;
+        }
+
         const key = buildPairKey(rel.source_member_id, rel.target_member_id);
         if (seen.has(key)) return;
 
@@ -1260,6 +1609,18 @@
       });
 
     return pairs;
+  }
+
+  function isLikelyAdultForSpouseLink(member) {
+    if (!member) return false;
+    const currentYear = new Date().getFullYear();
+    const birthYear = Number(member.birth_year);
+
+    if (Number.isFinite(birthYear) && birthYear > 0) {
+      return currentYear - birthYear >= 18;
+    }
+
+    return true;
   }
 
   function buildPairKey(a, b) {

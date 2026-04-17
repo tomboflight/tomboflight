@@ -1,24 +1,32 @@
 from datetime import datetime, timezone
-from typing import Optional, Literal
+from typing import Optional
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.relationship_catalog import (
-    ALLOWED_RELATIONSHIP_TYPES as CATALOG_ALLOWED_RELATIONSHIP_TYPES,
-    RELATIONSHIP_TYPE_LITERAL_VALUES,
+    ALLOWED_RELATIONSHIP_TYPES,
+    ALLOWED_RELATIONSHIP_TYPE_SET,
+    normalize_relationship_type,
 )
-
-# Backward-compatible re-export for existing imports.
-ALLOWED_RELATIONSHIP_TYPES = CATALOG_ALLOWED_RELATIONSHIP_TYPES
 
 
 class RelationshipCreate(BaseModel):
     family_id: str = Field(..., min_length=1)
     source_member_id: str = Field(..., min_length=1)
     target_member_id: str = Field(..., min_length=1)
-    relationship_type: Literal[*RELATIONSHIP_TYPE_LITERAL_VALUES]
+    relationship_type: str = Field(..., min_length=1)
     notes: Optional[str] = None
     created_by: Optional[str] = None
+
+    @field_validator("relationship_type")
+    @classmethod
+    def _normalize_relationship_type(cls, value: str) -> str:
+        normalized = normalize_relationship_type(value)
+        if normalized not in ALLOWED_RELATIONSHIP_TYPE_SET:
+            raise ValueError(
+                f"relationship_type must be one of {sorted(ALLOWED_RELATIONSHIP_TYPES)}"
+            )
+        return normalized
 
 
 class RelationshipInDB(BaseModel):

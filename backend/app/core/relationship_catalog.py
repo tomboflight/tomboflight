@@ -1,41 +1,57 @@
 from __future__ import annotations
 
-ALLOWED_RELATIONSHIP_TYPES = frozenset(
-    {
-        "parent_child",
-        "spouse",
-        "sibling",
-        "guardian",
-        "adoptive_parent_child",
-        "step_parent_child",
-    }
+from typing import Any
+
+RELATIONSHIP_TYPE_ALIASES: dict[str, str] = {
+    "parent_child": "biological_parent",
+    "parent-child": "biological_parent",
+    "biological_parent": "biological_parent",
+    "biological-parent": "biological_parent",
+    "spouse": "spouse",
+    "spousal": "spouse",
+    "former_spouse": "former_spouse",
+    "former-spouse": "former_spouse",
+    "sibling": "sibling",
+    "guardian": "guardian",
+    "adoptive_parent_child": "adoptive_parent",
+    "adoptive-parent-child": "adoptive_parent",
+    "adoptive_parent": "adoptive_parent",
+    "adoptive-parent": "adoptive_parent",
+    "step_parent_child": "step_parent",
+    "step-parent-child": "step_parent",
+    "step_parent": "step_parent",
+    "step-parent": "step_parent",
+    "household_member": "household_member",
+    "household-member": "household_member",
+}
+
+ALLOWED_RELATIONSHIP_TYPES: tuple[str, ...] = (
+    "biological_parent",
+    "adoptive_parent",
+    "step_parent",
+    "guardian",
+    "spouse",
+    "former_spouse",
+    "sibling",
+    "household_member",
 )
 
-ANCESTRY_RELATIONSHIP_TYPES = frozenset(
-    {
-        "parent_child",
-        "adoptive_parent_child",
-        "step_parent_child",
-    }
+ALLOWED_RELATIONSHIP_TYPE_SET: frozenset[str] = frozenset(ALLOWED_RELATIONSHIP_TYPES)
+SYMMETRIC_RELATIONSHIP_TYPES: frozenset[str] = frozenset(
+    {"spouse", "former_spouse", "sibling", "household_member"}
 )
-
-SYMMETRIC_RELATIONSHIP_TYPES = frozenset({"spouse", "sibling"})
-
-# Stored in relationships for backward compatibility, but explicitly excluded from lineage ancestry traversal.
-HOUSEHOLD_LINK_TYPES = frozenset({"linked_household"})
-LINKED_HOUSEHOLD_RELATIONSHIP_TYPE = "linked_household"
-
-ALL_RELATIONSHIP_TYPES = frozenset(ALLOWED_RELATIONSHIP_TYPES | HOUSEHOLD_LINK_TYPES)
-
-BIOLOGICAL_PARENT_RELATIONSHIP_TYPE = "parent_child"
-MIN_PARENT_CHILD_AGE_GAP = 12
-
-RELATIONSHIP_TYPE_LITERAL_VALUES = tuple(sorted(ALLOWED_RELATIONSHIP_TYPES))
+ANCESTRY_RELATIONSHIP_TYPES: frozenset[str] = frozenset(
+    {"biological_parent", "adoptive_parent", "step_parent", "guardian"}
+)
+BIOLOGICAL_PARENT_RELATIONSHIP_TYPE = "biological_parent"
 
 
-def is_ancestry_type(relationship_type: str) -> bool:
-    return str(relationship_type or "").strip().lower() in ANCESTRY_RELATIONSHIP_TYPES
+
+def normalize_relationship_type(value: Any) -> str:
+    normalized = str(value or "").strip().lower()
+    return RELATIONSHIP_TYPE_ALIASES.get(normalized, normalized)
 
 
-def is_symmetric_type(relationship_type: str) -> bool:
-    return str(relationship_type or "").strip().lower() in SYMMETRIC_RELATIONSHIP_TYPES
+
+def is_allowed_relationship_type(value: Any) -> bool:
+    return normalize_relationship_type(value) in ALLOWED_RELATIONSHIP_TYPE_SET

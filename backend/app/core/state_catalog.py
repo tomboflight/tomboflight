@@ -1,56 +1,86 @@
 from __future__ import annotations
 
-PROJECT_STATUSES = frozenset(
-    {
-        "draft",
-        "purchased",
-        "build_ready",
-        "in_production",
-        "qa_review",
-        "client_review",
-        "delivered",
-        "archived",
-    }
-)
+from typing import Any
 
-PROJECT_PHASES = frozenset(
-    {
-        "created",
-        "checkout_completed",
-        "intake_approved",
-        "build_started",
-        "quality_review",
-        "client_review",
-        "delivery_complete",
-        "archived",
-    }
-)
-
-WORKFLOW_ALLOWED_TRANSITIONS: dict[str, set[str]] = {
-    "": {"draft", "purchased", "build_ready"},
-    "draft": {"purchased", "build_ready"},
-    "purchased": {"build_ready"},
-    "build_ready": {"in_production", "archived"},
-    "in_production": {"qa_review", "client_review", "archived"},
-    "qa_review": {"client_review", "in_production", "archived"},
-    "client_review": {"delivered", "in_production", "archived"},
-    "delivered": {"archived"},
-    "archived": set(),
+VISIBILITY_STATE_ALIASES: dict[str, str] = {
+    "private": "private",
+    "family": "family_only",
+    "family_only": "family_only",
+    "family-only": "family_only",
+    "public": "certificate_only",
+    "certificate_only": "certificate_only",
+    "certificate-only": "certificate_only",
 }
 
-WORKFLOW_PHASE_BY_STATE: dict[str, str] = {
-    "draft": "created",
-    "purchased": "checkout_completed",
-    "build_ready": "intake_approved",
-    "in_production": "build_started",
-    "qa_review": "quality_review",
-    "client_review": "client_review",
-    "delivered": "delivery_complete",
+APPROVAL_STATE_ALIASES: dict[str, str] = {
+    "pending": "pending",
+    "pending_review": "pending",
+    "awaiting_review": "pending",
+    "approved": "approved",
+    "rejected": "rejected",
+}
+
+RELATIONSHIP_LINK_STATE_ALIASES: dict[str, str] = {
+    "active": "active",
+    "linked": "active",
+    "pending": "pending",
+    "pending_review": "pending",
+    "inactive": "inactive",
     "archived": "archived",
 }
 
+TRUST_STATE_ALIASES: dict[str, str] = {
+    "pending": "pending",
+    "unverified": "pending",
+    "verified": "verified",
+    "flagged": "flagged",
+}
 
-def is_valid_transition(from_state: str, to_state: str) -> bool:
-    normalized_from = str(from_state or "").strip().lower()
-    normalized_to = str(to_state or "").strip().lower()
-    return normalized_to in WORKFLOW_ALLOWED_TRANSITIONS.get(normalized_from, set())
+NARRATIVE_STATE_ALIASES: dict[str, str] = {
+    "draft": "draft",
+    "private": "private",
+    "family_only": "family_only",
+    "family-only": "family_only",
+    "certificate_only": "certificate_only",
+    "certificate-only": "certificate_only",
+    "published": "published",
+}
+
+ACTIVE_RECORD_STATES: frozenset[str] = frozenset({"active", "enabled"})
+ACTIVE_OR_UNSET_RECORD_STATES: frozenset[str] = frozenset(
+    set(ACTIVE_RECORD_STATES) | {""}
+)
+
+
+
+def _normalize(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+
+def normalize_visibility_state(value: Any, *, default: str = "private") -> str:
+    normalized = _normalize(value)
+    if not normalized:
+        return default
+    return VISIBILITY_STATE_ALIASES.get(normalized, default)
+
+
+
+def normalize_approval_state(value: Any, *, default: str = "pending") -> str:
+    normalized = _normalize(value)
+    if not normalized:
+        return default
+    return APPROVAL_STATE_ALIASES.get(normalized, default)
+
+
+
+def normalize_relationship_link_state(value: Any, *, default: str = "active") -> str:
+    normalized = _normalize(value)
+    if not normalized:
+        return default
+    return RELATIONSHIP_LINK_STATE_ALIASES.get(normalized, default)
+
+
+
+def is_active_record_state(value: Any) -> bool:
+    return _normalize(value) in ACTIVE_RECORD_STATES

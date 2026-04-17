@@ -6,8 +6,8 @@ Purpose: Define the exact backend architecture for public-safe NFT anchor issuan
 
 Related documents:
 
-- [PLATFORM_BLUEPRINT.md](/Users/ok/Documents/GitHub/tomboflight/PLATFORM_BLUEPRINT.md)
-- [IMPLEMENTATION_CHECKLIST.md](/Users/ok/Documents/GitHub/tomboflight/IMPLEMENTATION_CHECKLIST.md)
+- [PLATFORM_BLUEPRINT.md](./PLATFORM_BLUEPRINT.md)
+- [IMPLEMENTATION_CHECKLIST.md](./IMPLEMENTATION_CHECKLIST.md)
 
 ## 1. Launch rule
 

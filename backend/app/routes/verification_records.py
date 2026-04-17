@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.database import get_database
@@ -10,7 +10,9 @@ from app.dependencies.auth import require_permission
 from app.schemas.verification_record import (
     VerificationRecordCreate,
     VerificationRecordResponse,
+    build_verification_record_document,
     build_verification_record_response,
+    normalize_verification_status,
 )
 from app.services.verification_record_service import (
     create_verification_record,
@@ -60,6 +62,15 @@ def _normalize_email(value: Any) -> str:
     return str(value or "").strip().lower()
 
 
+def _dedupe_strings(values: list[str]) -> list[str]:
+    deduped: list[str] = []
+    for value in values:
+        normalized = _normalize_value(value)
+        if normalized and normalized not in deduped:
+            deduped.append(normalized)
+    return deduped
+
+
 def _review_actor(current_user: dict[str, Any]) -> str:
     return (
         _normalize_email(current_user.get("email"))
@@ -96,7 +107,14 @@ def _serialize_member(member: dict[str, Any]) -> dict[str, Any]:
 
 
 def _require_member(member_id: str) -> tuple[Any, dict[str, Any]]:
-    db = get_database()
+    try:
+        db = get_database()
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="Database is not connected.",
+        ) from exc
+
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")
 
@@ -108,6 +126,51 @@ def _require_member(member_id: str) -> tuple[Any, dict[str, Any]]:
         raise HTTPException(status_code=404, detail="Family member not found.")
 
     return db, member
+
+
+def _matching_evidence_upload_ids(
+    *,
+    db: Any,
+    member: dict[str, Any],
+    verification_type: str,
+    evidence_files: list[str],
+) -> list[str]:
+    family_id = _normalize_value(member.get("family_id"))
+    member_id = str(member.get("_id"))
+    upload_ids: list[str] = []
+
+    explicit_ids = [
+        ObjectId(value)
+        for value in _dedupe_strings(evidence_files)
+        if ObjectId.is_valid(value)
+    ]
+    if explicit_ids:
+        explicit_records = db["uploaded_files"].find(
+            {
+                "_id": {"$in": explicit_ids},
+                "family_id": family_id,
+                "member_id": member_id,
+                "category": "verification_evidence",
+            }
+        )
+        upload_ids.extend(str(record.get("_id")) for record in explicit_records)
+
+    if verification_type:
+        matching_records = (
+            db["uploaded_files"]
+            .find(
+                {
+                    "family_id": family_id,
+                    "member_id": member_id,
+                    "category": "verification_evidence",
+                    "verification_type": verification_type,
+                }
+            )
+            .sort("created_at", -1)
+        )
+        upload_ids.extend(str(record.get("_id")) for record in matching_records)
+
+    return _dedupe_strings(upload_ids)
 
 
 def _insert_verification_record(
@@ -123,27 +186,80 @@ def _insert_verification_record(
     reviewed_by: str,
 ) -> dict[str, Any]:
     now_iso = datetime.now(UTC).isoformat()
+    normalized_status = normalize_verification_status(status_value)
+    normalized_evidence_files = _dedupe_strings(evidence_files)
+    evidence_upload_ids = _matching_evidence_upload_ids(
+        db=db,
+        member=member,
+        verification_type=verification_type,
+        evidence_files=normalized_evidence_files,
+    )
 
-    record = {
-        "family_id": _normalize_value(member.get("family_id")),
-        "member_id": str(member.get("_id")),
-        "person_id": str(member.get("_id")),
-        "full_name": _member_display_name(member),
-        "verification_type": verification_type,
-        "verification_method": verification_method,
-        "status": status_value,
-        "review_notes": review_notes,
-        "evidence_summary": evidence_summary,
-        "evidence_files": evidence_files,
-        "reviewed_by": reviewed_by,
-        "reviewed_at": now_iso,
-        "created_at": now_iso,
-        "updated_at": now_iso,
-    }
+    record = build_verification_record_document(
+        {
+            "family_id": _normalize_value(member.get("family_id")),
+            "member_id": str(member.get("_id")),
+            "person_id": str(member.get("_id")),
+            "full_name": _member_display_name(member),
+            "verification_type": verification_type,
+            "verification_method": verification_method,
+            "verification_status": normalized_status,
+            "review_notes": review_notes,
+            "evidence_summary": evidence_summary,
+            "evidence_files": normalized_evidence_files,
+            "evidence_upload_ids": evidence_upload_ids,
+            "reviewed_by": reviewed_by,
+            "reviewed_at": now_iso,
+            "created_at": now_iso,
+            "updated_at": now_iso,
+        },
+        now_iso=now_iso,
+    )
+    record.update(
+        {
+            # Keep the legacy field used by certificate/chamber summaries.
+            "status": normalized_status,
+        }
+    )
 
     result = db["verification_records"].insert_one(record)
     record["_id"] = result.inserted_id
     return record
+
+
+def _update_member_verification_state(
+    *,
+    db: Any,
+    member_id: str,
+    status_value: str,
+    is_verified: bool,
+    verification_method: str,
+    review_notes: str,
+    reviewed_by: str,
+    now_iso: str,
+) -> dict[str, Any]:
+    normalized_status = normalize_verification_status(status_value)
+
+    db["family_members"].update_one(
+        {"_id": ObjectId(member_id)},
+        {
+            "$set": {
+                "is_verified": is_verified,
+                "verification_status": normalized_status,
+                "verification_method": verification_method,
+                "verified_by": reviewed_by,
+                "verified_at": now_iso,
+                "verification_notes": review_notes,
+                "updated_at": now_iso,
+                "updated_by": reviewed_by,
+            }
+        },
+    )
+
+    updated_member = db["family_members"].find_one({"_id": ObjectId(member_id)})
+    if not updated_member:
+        raise HTTPException(status_code=404, detail="Family member not found.")
+    return updated_member
 
 
 @router.get("/", response_model=list[VerificationRecordResponse])
@@ -184,27 +300,20 @@ def verify_member_route(
     payload: MemberVerificationActionPayload,
     current_user: dict[str, Any] = Depends(require_permission("verification.review")),
 ):
-    db, member = _require_member(member_id)
+    db, _member = _require_member(member_id)
     reviewed_by = _review_actor(current_user)
     now_iso = datetime.now(UTC).isoformat()
 
-    db["family_members"].update_one(
-        {"_id": ObjectId(member_id)},
-        {
-            "$set": {
-                "is_verified": True,
-                "verification_status": "verified",
-                "verification_method": payload.verification_method,
-                "verified_by": reviewed_by,
-                "verified_at": now_iso,
-                "verification_notes": payload.review_notes,
-                "updated_at": now_iso,
-                "updated_by": reviewed_by,
-            }
-        },
+    updated_member = _update_member_verification_state(
+        db=db,
+        member_id=member_id,
+        status_value="verified",
+        is_verified=True,
+        verification_method=payload.verification_method,
+        review_notes=payload.review_notes,
+        reviewed_by=reviewed_by,
+        now_iso=now_iso,
     )
-
-    updated_member = db["family_members"].find_one({"_id": ObjectId(member_id)})
 
     record = _insert_verification_record(
         db=db,
@@ -231,27 +340,20 @@ def reject_member_verification_route(
     payload: MemberVerificationActionPayload,
     current_user: dict[str, Any] = Depends(require_permission("verification.review")),
 ):
-    db, member = _require_member(member_id)
+    db, _member = _require_member(member_id)
     reviewed_by = _review_actor(current_user)
     now_iso = datetime.now(UTC).isoformat()
 
-    db["family_members"].update_one(
-        {"_id": ObjectId(member_id)},
-        {
-            "$set": {
-                "is_verified": False,
-                "verification_status": "rejected",
-                "verification_method": payload.verification_method,
-                "verified_by": reviewed_by,
-                "verified_at": now_iso,
-                "verification_notes": payload.review_notes,
-                "updated_at": now_iso,
-                "updated_by": reviewed_by,
-            }
-        },
+    updated_member = _update_member_verification_state(
+        db=db,
+        member_id=member_id,
+        status_value="rejected",
+        is_verified=False,
+        verification_method=payload.verification_method,
+        review_notes=payload.review_notes,
+        reviewed_by=reviewed_by,
+        now_iso=now_iso,
     )
-
-    updated_member = db["family_members"].find_one({"_id": ObjectId(member_id)})
 
     record = _insert_verification_record(
         db=db,
@@ -278,27 +380,20 @@ def mark_member_verification_pending_route(
     payload: MemberVerificationActionPayload,
     current_user: dict[str, Any] = Depends(require_permission("verification.review")),
 ):
-    db, member = _require_member(member_id)
+    db, _member = _require_member(member_id)
     reviewed_by = _review_actor(current_user)
     now_iso = datetime.now(UTC).isoformat()
 
-    db["family_members"].update_one(
-        {"_id": ObjectId(member_id)},
-        {
-            "$set": {
-                "is_verified": False,
-                "verification_status": "pending",
-                "verification_method": payload.verification_method,
-                "verified_by": reviewed_by,
-                "verified_at": now_iso,
-                "verification_notes": payload.review_notes,
-                "updated_at": now_iso,
-                "updated_by": reviewed_by,
-            }
-        },
+    updated_member = _update_member_verification_state(
+        db=db,
+        member_id=member_id,
+        status_value="pending",
+        is_verified=False,
+        verification_method=payload.verification_method,
+        review_notes=payload.review_notes,
+        reviewed_by=reviewed_by,
+        now_iso=now_iso,
     )
-
-    updated_member = db["family_members"].find_one({"_id": ObjectId(member_id)})
 
     record = _insert_verification_record(
         db=db,
@@ -329,23 +424,16 @@ def clear_member_verification_route(
     reviewed_by = _review_actor(current_user)
     now_iso = datetime.now(UTC).isoformat()
 
-    db["family_members"].update_one(
-        {"_id": ObjectId(member_id)},
-        {
-            "$set": {
-                "is_verified": False,
-                "verification_status": "unverified",
-                "verification_method": "",
-                "verified_by": reviewed_by,
-                "verified_at": now_iso,
-                "verification_notes": payload.review_notes,
-                "updated_at": now_iso,
-                "updated_by": reviewed_by,
-            }
-        },
+    updated_member = _update_member_verification_state(
+        db=db,
+        member_id=member_id,
+        status_value="unverified",
+        is_verified=False,
+        verification_method="",
+        review_notes=payload.review_notes,
+        reviewed_by=reviewed_by,
+        now_iso=now_iso,
     )
-
-    updated_member = db["family_members"].find_one({"_id": ObjectId(member_id)})
 
     record = _insert_verification_record(
         db=db,

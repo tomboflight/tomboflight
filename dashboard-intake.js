@@ -67,6 +67,15 @@
   }
 
   function isInternalRole(userOrRole, accessTier, departmentRole) {
+    // Prefer the canonical check from app.js.
+    if (app && typeof app.isInternalRole === "function") {
+      const user =
+        userOrRole && typeof userOrRole === "object"
+          ? userOrRole
+          : { role: userOrRole, access_tier: accessTier, department_role: departmentRole };
+      return app.isInternalRole(user);
+    }
+
     const values =
       userOrRole && typeof userOrRole === "object"
         ? [
@@ -80,20 +89,19 @@
             normalizeValue(departmentRole),
           ];
 
-    return [
-      "admin",
-      "super_admin",
-      "platform_admin",
-      "operations_admin",
-      "finance_admin",
-      "marketing_admin",
-      "root_admin",
-      "executive_technology",
-      "operations",
-      "finance",
-      "marketing",
-    ].some(function (value) {
-      return values.includes(value);
+    const aliases = {
+      root_admin: "super_admin",
+      platform_admin: "super_admin",
+      executive_technology: "super_admin",
+      operations: "operations_admin",
+      finance: "finance_admin",
+      marketing: "marketing_admin",
+    };
+    const normalized = values.map(function (value) {
+      return aliases[value] || value;
+    });
+    return ["super_admin", "operations_admin", "finance_admin", "marketing_admin"].some(function (value) {
+      return normalized.includes(value);
     });
   }
 
@@ -916,8 +924,8 @@
         workspaceCopy: canUseLinkKeys
           ? "Your portrait workspace connects package access, portrait uploads, verification records, guided delivery, and link capabilities in one place."
           : "Your portrait workspace connects package access, portrait uploads, verification records, and guided delivery in one place.",
-        primaryActionText: "Upload Portrait & Records",
-        primaryActionHref: "verification-upload.html",
+        primaryActionText: "Upload Portrait",
+        primaryActionHref: "portrait-upload.html",
         secondaryActionText: "Verification Uploads",
         secondaryActionHref: "verification-upload.html",
         showTree: canBuildFamilyTree,
@@ -1148,7 +1156,8 @@
           cardCopy: canUseLinkKeys
             ? "Your portrait package is approved and ready for portrait, verification, and link-enabled work."
             : "Your portrait package is approved and ready for portrait and verification work.",
-          nextStep: "Upload portrait and supporting verification records.",
+          nextStep:
+            "Upload the portrait first, then add verification records only if needed.",
           lockNote:
             "Editing is locked because this portrait package has already been approved and provisioned.",
           workspaceCopy: canUseLinkKeys
@@ -1159,7 +1168,8 @@
 
       return {
         cardCopy: "Your portrait intake information is shown below.",
-        nextStep: "Upload portrait and supporting verification records.",
+        nextStep:
+          "Upload the portrait first, then add verification records only if needed.",
         lockNote: "Intake lock state is based on your current review status.",
         workspaceCopy: canUseLinkKeys
           ? "Your portrait workspace connects package access, portrait uploads, verification records, guided delivery, and link capabilities in one place."
@@ -1253,8 +1263,13 @@
       config.navCertificate && hasWorkspaceFamily,
     );
     applyNavVisibility("intake-review.html", config.navIntake);
+    applyNavVisibility(
+      "portrait-upload.html",
+      config.lane === "portrait" && config.showVerification,
+    );
     applyNavVisibility("verification-upload.html", config.showVerification);
     applyNavVisibility("link-keys.html", config.navLinkKeys);
+    applyNavVisibility("household-access.html", true);
 
     applyAction('.site-nav a[href^="tree-view.html"]', {
       href: withFamilyId("tree-view.html", context),
@@ -1270,6 +1285,24 @@
       href: withFamilyId("link-keys.html", context),
       show: config.navLinkKeys,
     });
+
+    applyAction('.site-nav a[href^="household-access.html"]', {
+      href: withFamilyId("household-access.html", context),
+      show: true,
+    });
+
+    applyAction('.site-nav a[href^="portrait-upload.html"]', {
+      href: withFamilyId("portrait-upload.html", context),
+      show: config.lane === "portrait" && config.showVerification,
+    });
+
+    applyAction(
+      "[data-dashboard-digital-collectible-action], a[href^=\"digital-collectible.html\"]",
+      {
+        href: withFamilyId("digital-collectible.html", context),
+        show: true,
+      },
+    );
 
     applyAction(
       "[data-dashboard-hero-primary-action], [data-dashboard-package-primary-action]",
@@ -1295,6 +1328,14 @@
         text: "Manage Linking Keys",
         href: withFamilyId("link-keys.html", context),
         show: config.showLinkKeys,
+      },
+    );
+
+    applyAction(
+      "[data-dashboard-household-invite-co-owner], [data-dashboard-household-invite-family], [data-dashboard-household-view-members], [data-dashboard-household-pending-invites]",
+      {
+        href: withFamilyId("household-access.html", context),
+        show: true,
       },
     );
 
@@ -1376,6 +1417,11 @@
   }
 
   async function getCurrentUser() {
+    // Use the user already resolved by auth.js when available so that
+    // dashboard-intake.js does not make a redundant /auth/me request.
+    if (window.TOLResolvedUser) {
+      return window.TOLResolvedUser;
+    }
     return await app.apiRequest("/auth/me", { method: "GET" });
   }
 
@@ -1419,8 +1465,8 @@
     const canOpenOrgIntake = Boolean(resolved.can_open_org_intake);
 
     if (lane === "portrait") {
-      actionNode.textContent = "Upload Portrait & Records";
-      actionNode.setAttribute("href", "verification-upload.html");
+      actionNode.textContent = "Upload Portrait";
+      actionNode.setAttribute("href", "portrait-upload.html");
       return;
     }
 
@@ -1554,7 +1600,7 @@
         text(
           nextStep,
           config.lane === "portrait"
-            ? "Upload portrait and supporting records to begin."
+            ? "Upload the portrait first, then add verification records only if needed."
             : config.lane === "organization"
               ? "Upload organization and supporting records to begin."
               : "Open your intake flow and submit the review step.",

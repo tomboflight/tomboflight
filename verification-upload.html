@@ -6,7 +6,7 @@
     <title>Verification Uploads | Tomb of Light</title>
     <meta
       name="description"
-      content="Upload verification records, portraits, and supporting family documents to Tomb of Light."
+      content="Upload verification records and supporting family documents to Tomb of Light."
     />
     <link rel="stylesheet" href="styles.css?v=20260328-7" />
   </head>
@@ -35,6 +35,9 @@
           <nav class="site-nav" id="site-nav" aria-label="Portal navigation">
             <a href="dashboard.html">Dashboard</a>
             <a href="intake-review.html" style="display: none">My Intake</a>
+            <a href="portrait-upload.html" style="display: none">
+              Portrait Uploads
+            </a>
             <a href="verification-upload.html" aria-current="page">
               Verification Uploads
             </a>
@@ -119,85 +122,7 @@
             </div>
 
             <div class="form-panel">
-              <span class="eyebrow">Step 2 — Upload Member Photo</span>
-
-              <form class="form-grid" data-verification-photo-form novalidate>
-                <div class="form-grid two-col">
-                  <label>
-                    Family Member
-                    <select
-                      name="member_id"
-                      data-verification-photo-member
-                      required
-                    >
-                      <option value="">Select member</option>
-                    </select>
-                  </label>
-
-                  <label>
-                    Photo File
-                    <input
-                      type="file"
-                      name="photo_file"
-                      accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
-                      required
-                    />
-                  </label>
-                </div>
-
-                <div class="helper">
-                  Upload portrait images for family members. Allowed: JPG, PNG,
-                  and WEBP. Submit only images you have the lawful right to use
-                  and share.
-                </div>
-
-                <div style="display: grid; gap: 0.85rem; margin-top: 0.85rem">
-                  <label
-                    style="display: flex; gap: 0.65rem; align-items: flex-start"
-                  >
-                    <input
-                      type="checkbox"
-                      required
-                      style="margin-top: 0.2rem"
-                    />
-                    <span>
-                      I confirm that I have the lawful right and authority to
-                      upload this image and, where required, permission from the
-                      living individual involved or from the parent or legal
-                      guardian of a minor.
-                    </span>
-                  </label>
-
-                  <label
-                    style="display: flex; gap: 0.65rem; align-items: flex-start"
-                  >
-                    <input
-                      type="checkbox"
-                      required
-                      style="margin-top: 0.2rem"
-                    />
-                    <span>
-                      I understand that Tomb of Light may review uploaded
-                      materials for workflow, support, security, fraud
-                      prevention, compliance, and service fulfillment.
-                    </span>
-                  </label>
-                </div>
-
-                <div class="inline-actions" style="margin-top: 1rem">
-                  <button
-                    class="btn btn-primary"
-                    type="submit"
-                    data-verification-photo-submit
-                  >
-                    Upload Member Photo
-                  </button>
-                </div>
-              </form>
-            </div>
-
-            <div class="form-panel">
-              <span class="eyebrow">Step 3 — Upload Verification Evidence</span>
+              <span class="eyebrow">Step 2 — Upload Verification Evidence</span>
 
               <form class="form-grid" data-verification-upload-form novalidate>
                 <div class="form-grid two-col">
@@ -341,22 +266,20 @@
             </div>
 
             <div class="form-panel">
-              <span class="eyebrow">Step 4 — View Uploaded Records</span>
+              <span class="eyebrow">Step 3 — View Uploaded Records</span>
 
               <div class="form-grid two-col">
                 <label>
-                  Member
+                  Member Filter
                   <select data-verification-list-member>
-                    <option value="">Select member</option>
+                    <option value="">All members in this workspace</option>
                   </select>
                 </label>
 
                 <label>
                   Upload Category
                   <select data-verification-category-filter>
-                    <option value="">All upload categories</option>
-                    <option value="member_photo">member_photo</option>
-                    <option value="verification_evidence">
+                    <option value="verification_evidence" selected>
                       verification_evidence
                     </option>
                   </select>
@@ -384,7 +307,7 @@
                 data-verification-uploads-empty
                 style="display: none; margin-top: 1rem"
               >
-                No uploaded records found for this member.
+                No verification records found for this workspace.
               </div>
             </div>
 
@@ -412,10 +335,10 @@
 
                 <div>
                   <div class="card-number">3</div>
-                  <h3>Portrait Files</h3>
+                  <h3>Supporting Images</h3>
                   <p class="card-copy">
-                    Portraits and member photos used to support visual lineage
-                    presentation and related family record workflows.
+                    Supplemental images used to support the verification record
+                    when a document is not enough on its own.
                   </p>
                 </div>
               </div>
@@ -489,8 +412,8 @@
     </div>
 
     <script src="config.js?v=20260328-7"></script>
-    <script src="app.js?v=20260328-7"></script>
-    <script src="auth.js?v=20260328-7"></script>
+    <script src="app.js?v=20260410-1"></script>
+    <script src="auth.js?v=20260413-4"></script>
 
     <script>
       document.addEventListener("DOMContentLoaded", async function () {
@@ -556,6 +479,11 @@
           const me = await app.apiRequest("/auth/me", { method: "GET" });
           if (auth.isInternalRole && auth.isInternalRole(me)) {
             document
+              .querySelectorAll('.site-nav a[href^="portrait-upload.html"]')
+              .forEach(function (node) {
+                node.style.display = "";
+              });
+            document
               .querySelectorAll('.site-nav a[href^="verification-upload.html"]')
               .forEach(function (node) {
                 node.style.display = "";
@@ -583,12 +511,18 @@
           const canUpload =
             !!resolved.can_upload_verification_docs ||
             !!resolved.can_upload_portraits;
+          const packageLane = String(
+            context?.packageLane || resolved.package_lane || "",
+          ).toLowerCase();
+          const canUploadPortraits =
+            packageLane === "portrait" && !!resolved.can_upload_portraits;
           const canUseLinkKeys = !!resolved.can_use_link_keys;
           const canOpenFamilyIntake = !!resolved.can_open_family_intake;
           const canBuildFamilyTree = !!resolved.can_build_family_tree;
           const canUseCertificate = !!resolved.can_use_lineage_certificate;
 
           updateNavHref("intake-review.html", context);
+          updateNavHref("portrait-upload.html", context);
           updateNavHref("verification-upload.html", context);
           updateNavHref("link-keys.html", context);
           updateNavHref("tree-view.html", context);
@@ -598,6 +532,12 @@
             .querySelectorAll('.site-nav a[href^="intake-review.html"]')
             .forEach(function (node) {
               node.style.display = canOpenFamilyIntake ? "" : "none";
+            });
+
+          document
+            .querySelectorAll('.site-nav a[href^="portrait-upload.html"]')
+            .forEach(function (node) {
+              node.style.display = canUploadPortraits ? "" : "none";
             });
 
           document
@@ -629,6 +569,6 @@
       });
     </script>
 
-    <script src="verification-upload.js?v=20260330-1"></script>
+    <script src="verification-upload.js?v=20260413-2"></script>
   </body>
 </html>

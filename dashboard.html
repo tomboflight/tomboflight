@@ -33,8 +33,10 @@
           <nav class="site-nav" id="site-nav" aria-label="Portal navigation">
             <a href="dashboard.html" aria-current="page">Dashboard</a>
             <a href="intake-review.html" style="display: none">My Intake</a>
+            <a href="portrait-upload.html" style="display: none">Portrait Uploads</a>
             <a href="verification-upload.html" style="display: none">Verification Uploads</a>
             <a href="link-keys.html" style="display: none">Link Keys</a>
+            <a href="household-access.html" style="display: none">Members &amp; Access</a>
             <a href="tree-view.html" style="display: none">Family Tree</a>
             <a href="lineage-certificate.html" style="display: none">Lineage Certificate</a>
             <a href="faq.html">Help</a>
@@ -77,7 +79,7 @@
                 <div class="inline-actions portal-core-actions">
                   <a
                     class="btn btn-primary"
-                    href="verification-upload.html"
+                    href="portrait-upload.html"
                     data-dashboard-hero-primary-action
                     data-dashboard-hero-action
                     style="display: none"
@@ -278,8 +280,21 @@
                 <a class="btn btn-secondary" href="account-security.html">
                   Account Security
                 </a>
-                <a class="btn btn-secondary" href="billing.html">
+                <a
+                  class="btn btn-secondary"
+                  href="billing.html"
+                  data-dashboard-billing-link
+                  data-dashboard-customer-only
+                >
                   Billing &amp; Cards
+                </a>
+                <a
+                  class="btn btn-secondary"
+                  href="admin-control-center.html"
+                  data-dashboard-admin-only
+                  style="display: none"
+                >
+                  Open Admin Control Center
                 </a>
               </div>
             </div>
@@ -337,7 +352,7 @@
               <div class="inline-actions" style="margin-top: 1.5rem">
                 <a
                   class="btn btn-primary"
-                  href="verification-upload.html"
+                  href="portrait-upload.html"
                   data-dashboard-package-primary-action
                   style="display: none"
                 >
@@ -387,6 +402,52 @@
                 </a>
                 <a class="btn btn-secondary" href="how-it-works.html">
                   Review Process
+                </a>
+              </div>
+            </div>
+
+            <div class="form-panel portal-household-access-panel" data-dashboard-customer-only>
+              <span class="eyebrow">Household Access</span>
+              <h3>Members &amp; Access</h3>
+              <p class="card-copy">
+                Manage spouse, children, and trusted family member access to this paid workspace.
+              </p>
+              <div class="inline-actions" style="margin-top: 1rem">
+                <a class="btn btn-primary" href="household-access.html" data-dashboard-household-invite-co-owner>
+                  Invite Co-Owner
+                </a>
+                <a class="btn btn-secondary" href="household-access.html" data-dashboard-household-invite-family>
+                  Invite Family Member
+                </a>
+                <a class="btn btn-secondary" href="household-access.html" data-dashboard-household-view-members>
+                  View Members
+                </a>
+                <a class="btn btn-secondary" href="household-access.html" data-dashboard-household-pending-invites>
+                  Pending Invites
+                </a>
+              </div>
+            </div>
+
+            <div class="form-panel portal-delivery-panel" data-dashboard-customer-only>
+              <div class="anchor-status-row">
+                <span class="eyebrow">Digital Collectible Delivery</span>
+                <span class="presence-badge" data-dashboard-delivery-badge>
+                  Your Account
+                </span>
+              </div>
+              <p class="card-copy">
+                Your TOMB OF LIGHT digital collectible is associated with your
+                paid order and account. Download your NFT-authenticated digital
+                files, view on-chain proof, and access your delivered asset
+                package from your dedicated delivery page.
+              </p>
+              <div class="inline-actions" style="margin-top: 0.75rem">
+                <a
+                  class="btn btn-primary"
+                  href="digital-collectible.html"
+                  data-dashboard-digital-collectible-action
+                >
+                  Open Digital Collectible
                 </a>
               </div>
             </div>
@@ -668,9 +729,9 @@
     </div>
 
     <script src="config.js?v=20260329-1"></script>
-    <script src="app.js?v=20260329-1"></script>
-    <script src="auth.js?v=20260329-1"></script>
-    <script src="dashboard-intake.js?v=20260331-1"></script>
-    <script src="dashboard-admin.js?v=20260330-1"></script>
+    <script src="app.js?v=20260410-1"></script>
+    <script src="auth.js?v=20260413-4"></script>
+    <script src="dashboard-intake.js?v=20260414-2"></script>
+    <script src="dashboard-admin.js?v=20260410-1"></script>
   </body>
 </html>

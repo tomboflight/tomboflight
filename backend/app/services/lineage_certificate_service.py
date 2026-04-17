@@ -209,9 +209,14 @@ class LineageCertificateService:
     def _verification_summary(record: dict[str, Any]) -> dict[str, Any]:
         return {
             "id": str(record.get("_id", "")),
-            "verification_type": record.get("verification_type"),
-            "status": record.get("status"),
-            "reviewed_by": record.get("reviewed_by"),
+            "verification_type": record.get("verification_type")
+            or record.get("record_type"),
+            "status": record.get("verification_status")
+            or record.get("status")
+            or record.get("review_status"),
+            "reviewed_by": record.get("reviewed_by")
+            or record.get("verified_by")
+            or record.get("approved_by"),
             "created_at": LineageCertificateService._serialize_value(record.get("created_at")),
             "updated_at": LineageCertificateService._serialize_value(record.get("updated_at")),
         }

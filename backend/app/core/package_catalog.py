@@ -3,26 +3,37 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
+from app.core.package_type_catalog import normalize_package_type
+
 
 PACKAGE_CODE_ALIASES: dict[str, str] = {
     "legacy-snapshot": "legacy_snapshot",
     "legacy_snapshot": "legacy_snapshot",
+    "legacy snapshot": "legacy_snapshot",
     "legacy-portrait-intro": "legacy_portrait_intro",
     "legacy_portrait_intro": "legacy_portrait_intro",
+    "legacy portrait intro": "legacy_portrait_intro",
     "digital-legacy-portrait": "digital_legacy_portrait",
     "digital_legacy_portrait": "digital_legacy_portrait",
+    "digital legacy portrait": "digital_legacy_portrait",
     "starter-family-tree": "household_foundation",
     "starter_family_tree": "household_foundation",
+    "starter family tree": "household_foundation",
     "household-foundation": "household_foundation",
     "household_foundation": "household_foundation",
+    "household foundation": "household_foundation",
     "heirloom-legacy-tree": "heirloom_legacy_tree",
     "heirloom_legacy_tree": "heirloom_legacy_tree",
+    "heirloom legacy tree": "heirloom_legacy_tree",
     "legacy-plus": "legacy_plus",
     "legacy_plus": "legacy_plus",
+    "legacy plus": "legacy_plus",
     "family-estate-concierge": "family_estate_concierge",
     "family_estate_concierge": "family_estate_concierge",
+    "family estate concierge": "family_estate_concierge",
     "command-structure-network": "command_structure_network",
     "command_structure_network": "command_structure_network",
+    "command structure network": "command_structure_network",
 }
 
 ADDON_CODE_ALIASES: dict[str, str] = {
@@ -415,6 +426,137 @@ PACKAGE_CATALOG: dict[str, dict[str, Any]] = {
     },
 }
 
+PACKAGE_CONTROL_POLICY: dict[str, dict[str, Any]] = {
+    "legacy_snapshot": {
+        "anchor_type": None,
+        "launch_policy": {
+            "allows_automatic_anchor": False,
+            "requires_runtime_flag_for_auto_mint": True,
+        },
+        "maintenance_default": "monthly",
+        "mint_policy": {
+            "product_includes_onchain_anchor": False,
+            "auto_mint_enabled": False,
+            "opt_in_only": False,
+            "token_type": None,
+            "included_anchor_count": 0,
+            "requires_customer_public_safe_approval": False,
+        },
+    },
+    "legacy_portrait_intro": {
+        "anchor_type": None,
+        "launch_policy": {
+            "allows_automatic_anchor": False,
+            "requires_runtime_flag_for_auto_mint": True,
+        },
+        "maintenance_default": "monthly",
+        "mint_policy": {
+            "product_includes_onchain_anchor": False,
+            "auto_mint_enabled": False,
+            "opt_in_only": False,
+            "token_type": None,
+            "included_anchor_count": 0,
+            "requires_customer_public_safe_approval": False,
+        },
+    },
+    "digital_legacy_portrait": {
+        "anchor_type": "portrait_anchor",
+        "launch_policy": {
+            "allows_automatic_anchor": True,
+            "requires_runtime_flag_for_auto_mint": True,
+        },
+        "maintenance_default": "monthly",
+        "mint_policy": {
+            "product_includes_onchain_anchor": True,
+            "auto_mint_enabled": True,
+            "opt_in_only": False,
+            "token_type": "portrait_anchor",
+            "included_anchor_count": 1,
+            "requires_customer_public_safe_approval": True,
+        },
+    },
+    "household_foundation": {
+        "anchor_type": "household_anchor",
+        "launch_policy": {
+            "allows_automatic_anchor": True,
+            "requires_runtime_flag_for_auto_mint": True,
+        },
+        "maintenance_default": "monthly",
+        "mint_policy": {
+            "product_includes_onchain_anchor": True,
+            "auto_mint_enabled": True,
+            "opt_in_only": False,
+            "token_type": "household_anchor",
+            "included_anchor_count": 1,
+            "requires_customer_public_safe_approval": True,
+        },
+    },
+    "heirloom_legacy_tree": {
+        "anchor_type": "household_anchor",
+        "launch_policy": {
+            "allows_automatic_anchor": True,
+            "requires_runtime_flag_for_auto_mint": True,
+        },
+        "maintenance_default": "monthly",
+        "mint_policy": {
+            "product_includes_onchain_anchor": True,
+            "auto_mint_enabled": True,
+            "opt_in_only": False,
+            "token_type": "household_anchor",
+            "included_anchor_count": 1,
+            "requires_customer_public_safe_approval": True,
+        },
+    },
+    "legacy_plus": {
+        "anchor_type": "household_anchor",
+        "launch_policy": {
+            "allows_automatic_anchor": True,
+            "requires_runtime_flag_for_auto_mint": True,
+        },
+        "maintenance_default": "monthly",
+        "mint_policy": {
+            "product_includes_onchain_anchor": True,
+            "auto_mint_enabled": True,
+            "opt_in_only": False,
+            "token_type": "household_anchor",
+            "included_anchor_count": 1,
+            "requires_customer_public_safe_approval": True,
+        },
+    },
+    "family_estate_concierge": {
+        "anchor_type": "branch_anchor",
+        "launch_policy": {
+            "allows_automatic_anchor": True,
+            "requires_runtime_flag_for_auto_mint": True,
+        },
+        "maintenance_default": "monthly",
+        "mint_policy": {
+            "product_includes_onchain_anchor": True,
+            "auto_mint_enabled": True,
+            "opt_in_only": False,
+            "token_type": "branch_anchor",
+            "included_anchor_count": 3,
+            "requires_customer_public_safe_approval": True,
+        },
+    },
+    "command_structure_network": {
+        "anchor_type": "organization_anchor",
+        "launch_policy": {
+            "allows_automatic_anchor": True,
+            "requires_runtime_flag_for_auto_mint": True,
+        },
+        "maintenance_default": "monthly",
+        "mint_policy": {
+            "product_includes_onchain_anchor": True,
+            "auto_mint_enabled": False,
+            "opt_in_only": True,
+            "token_type": "organization_anchor",
+            "included_anchor_count": 1,
+            "requires_customer_public_safe_approval": True,
+        },
+    },
+}
+
 ADDON_CATALOG: dict[str, dict[str, Any]] = {
     "extra_upload_pack": {
         "addon_code": "extra_upload_pack",
@@ -547,38 +689,136 @@ ADDON_CATALOG: dict[str, dict[str, Any]] = {
 }
 
 
+def _copy_package(value: dict[str, Any]) -> dict[str, Any]:
+    package = deepcopy(value)
+    package["package_lane"] = normalize_package_type(package.get("package_lane"))
+    return package
+
+
 def get_package_catalog() -> dict[str, dict[str, Any]]:
-    return deepcopy(PACKAGE_CATALOG)
+    return {
+        package_code: _copy_package(package)
+        for package_code, package in PACKAGE_CATALOG.items()
+    }
 
 
 def get_addon_catalog() -> dict[str, dict[str, Any]]:
     return deepcopy(ADDON_CATALOG)
 
 
-def _normalize_package_code(package_code: str) -> str:
+def normalize_package_code(package_code: Any) -> str:
+    raw = str(package_code or "").strip().lower()
     return PACKAGE_CODE_ALIASES.get(
-        str(package_code or "").strip(),
-        str(package_code or "").strip(),
+        raw,
+        raw,
     )
 
 
-def _normalize_addon_code(addon_code: str) -> str:
+def canonicalize_package_identifier(value: Any) -> dict[str, Any]:
+    raw = str(value or "").strip()
+    normalized = normalize_package_code(raw)
+    package = PACKAGE_CATALOG.get(normalized)
+    if not raw:
+        status = "missing"
+    elif package and raw.lower() == normalized:
+        status = "canonical"
+    elif package:
+        status = "alias_mapped"
+    else:
+        status = "unknown"
+
+    return {
+        "raw_value": raw,
+        "package_code": normalized or "",
+        "package_slug": normalized or "",
+        "package_name": (package or {}).get("display_name") or raw or "",
+        "package_lane": normalize_package_type((package or {}).get("package_lane")),
+        "normalization_status": status,
+        "is_known": package is not None,
+    }
+
+
+def get_package_identifier_map() -> dict[str, Any]:
+    return {
+        "aliases": deepcopy(PACKAGE_CODE_ALIASES),
+        "packages": {
+            package_code: {
+                "package_code": package["package_code"],
+                "package_slug": package["package_code"],
+                "package_name": package["display_name"],
+                "package_lane": normalize_package_type(package["package_lane"]),
+                "status": package.get("status", "active"),
+            }
+            for package_code, package in PACKAGE_CATALOG.items()
+        },
+    }
+
+
+def normalize_addon_code(addon_code: Any) -> str:
+    raw = str(addon_code or "").strip().lower()
     return ADDON_CODE_ALIASES.get(
-        str(addon_code or "").strip(),
-        str(addon_code or "").strip(),
+        raw,
+        raw,
     )
 
 
-def get_package(package_code: str) -> dict[str, Any] | None:
-    normalized = _normalize_package_code(package_code)
+def get_package(package_code: Any) -> dict[str, Any] | None:
+    normalized = normalize_package_code(package_code)
     if not normalized:
         return None
     value = PACKAGE_CATALOG.get(normalized)
-    return deepcopy(value) if value else None
+    return _copy_package(value) if value else None
+
+
+def get_package_control_profile(package_code: str) -> dict[str, Any] | None:
+    package = get_package(package_code)
+    if not package:
+        return None
+
+    normalized_code = str(package.get("package_code") or "").strip()
+    policy = deepcopy(PACKAGE_CONTROL_POLICY.get(normalized_code) or {})
+    launch_policy = dict(policy.get("launch_policy") or {})
+    mint_policy = dict(policy.get("mint_policy") or {})
+
+    return {
+        "package_code": normalized_code,
+        "package_slug": normalized_code,
+        "display_name": package.get("display_name"),
+        "package_lane": package.get("package_lane"),
+        "anchor_type": policy.get("anchor_type"),
+        "launch_policy": {
+            "allows_automatic_anchor": bool(launch_policy.get("allows_automatic_anchor")),
+            "requires_runtime_flag_for_auto_mint": bool(
+                launch_policy.get("requires_runtime_flag_for_auto_mint", True)
+            ),
+        },
+        "maintenance_default": str(policy.get("maintenance_default") or "monthly"),
+        "mint_policy": {
+            "product_includes_onchain_anchor": bool(
+                mint_policy.get("product_includes_onchain_anchor")
+            ),
+            "auto_mint_enabled": bool(mint_policy.get("auto_mint_enabled")),
+            "opt_in_only": bool(mint_policy.get("opt_in_only")),
+            "token_type": mint_policy.get("token_type"),
+            "included_anchor_count": int(mint_policy.get("included_anchor_count") or 0),
+            "requires_customer_public_safe_approval": bool(
+                mint_policy.get("requires_customer_public_safe_approval")
+            ),
+        },
+    }
+
+
+def list_package_control_profiles() -> list[dict[str, Any]]:
+    profiles: list[dict[str, Any]] = []
+    for package_code in PACKAGE_CATALOG:
+        profile = get_package_control_profile(package_code)
+        if profile is not None:
+            profiles.append(profile)
+    return profiles
 
 
 def get_addon(addon_code: str) -> dict[str, Any] | None:
-    normalized = _normalize_addon_code(addon_code)
+    normalized = normalize_addon_code(addon_code)
     if not normalized:
         return None
     value = ADDON_CATALOG.get(normalized)

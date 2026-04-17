@@ -1,3 +1,6 @@
+import hashlib
+import hmac
+import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
@@ -46,10 +49,15 @@ def verify_password(password: str, hashed: str) -> bool:
     return pwd_context.verify(password, hashed)
 
 
-def create_access_token(data: dict[str, Any]) -> str:
+def create_access_token(data: dict[str, Any], *, expires_minutes: int | None = None) -> str:
     to_encode = data.copy()
     now = datetime.now(UTC)
-    expire = now + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    lifetime_minutes = (
+        ACCESS_TOKEN_EXPIRE_MINUTES
+        if expires_minutes is None
+        else max(1, int(expires_minutes))
+    )
+    expire = now + timedelta(minutes=lifetime_minutes)
 
     to_encode.update(
         {
@@ -82,3 +90,37 @@ def decode_access_token(token: str) -> dict[str, Any] | None:
         return cast(dict[str, Any], payload)
     except JWTError:
         return None
+
+
+def _csrf_sig(user_id: str, nonce: str, expires_at: int) -> str:
+    payload = f"{user_id}:{nonce}:{expires_at}".encode("utf-8")
+    secret = SECRET_KEY.encode("utf-8")
+    return hmac.new(secret, payload, hashlib.sha256).hexdigest()
+
+
+def create_csrf_token(user_id: str, *, ttl_minutes: int) -> str:
+    normalized_user_id = str(user_id or "").strip()
+    if not normalized_user_id:
+        raise ValueError("user_id is required for CSRF token issuance.")
+    nonce = secrets.token_urlsafe(24)
+    expires_at = int(
+        (datetime.now(UTC) + timedelta(minutes=max(1, int(ttl_minutes)))).timestamp()
+    )
+    signature = _csrf_sig(normalized_user_id, nonce, expires_at)
+    return f"{nonce}.{expires_at}.{signature}"
+
+
+def verify_csrf_token(token: str, *, user_id: str) -> bool:
+    normalized = str(token or "").strip()
+    normalized_user_id = str(user_id or "").strip()
+    if not normalized or not normalized_user_id:
+        return False
+    try:
+        nonce, expires_at_raw, signature = normalized.split(".", 2)
+        expires_at = int(expires_at_raw)
+    except Exception:
+        return False
+    if expires_at < int(datetime.now(UTC).timestamp()):
+        return False
+    expected = _csrf_sig(normalized_user_id, nonce, expires_at)
+    return hmac.compare_digest(signature, expected)

@@ -12,12 +12,15 @@ from pymongo.errors import OperationFailure
 from app.database import get_database
 from app.services.blockchain_mint_service import mint_anchor, sync_mint_receipt
 from app.services.mint_record_service import (
+    ACTIVE_MINT_JOB_STATUSES,
+    _object_id_or_text,
     get_mint_record,
-    get_latest_mint_record,
+    mark_obsolete_mint_jobs_for_project,
     mark_mint_failed,
     mark_mint_minted,
     mark_mint_minting,
     mark_mint_queued,
+    resolve_canonical_mint_status,
 )
 from app.services.poster_asset_service import build_poster_asset
 from app.services.public_manifest_service import (
@@ -57,6 +60,17 @@ def _to_object_id(value: str) -> ObjectId | None:
         return ObjectId(str(value))
     except Exception:
         return None
+
+
+def _id_candidates(value: Any) -> list[Any]:
+    normalized = _normalize(value)
+    candidates: list[Any] = []
+    if normalized:
+        candidates.append(normalized)
+    oid = _to_object_id(normalized)
+    if oid is not None:
+        candidates.append(oid)
+    return list(dict.fromkeys(candidates))
 
 
 def _collection() -> Collection[dict[str, Any]]:
@@ -123,11 +137,36 @@ def enqueue_job(
     run_after: datetime | None = None,
     payload: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    normalized_job_type = _normalize(job_type)
+    if normalized_job_type not in JOB_SEQUENCE:
+        raise ValueError("Unsupported mint job type.")
+
+    record = get_mint_record(mint_record_id)
+    if record is None:
+        raise ValueError("Mint record not found.")
+    if record["project_id"] != _normalize(project_id):
+        raise ValueError("Mint record does not belong to the requested project.")
+
+    canonical = resolve_canonical_mint_status(project_id, include_history=False)
+    canonical_record_id = _normalize(canonical.get("current_mint_record_id"))
+    if canonical.get("is_minted"):
+        mark_obsolete_mint_jobs_for_project(
+            project_id,
+            current_mint_record_id=canonical_record_id,
+            reason="canonical_mint_already_minted",
+        )
+        if canonical_record_id == _normalize(mint_record_id) and normalized_job_type == "sync_receipt":
+            pass
+        else:
+            raise ValueError("Project already has a canonical minted record.")
+    elif canonical_record_id and canonical_record_id != _normalize(mint_record_id):
+        raise ValueError("Mint job belongs to a non-canonical mint record.")
+
     now = _now()
     document = {
-        "project_id": _normalize(project_id),
-        "mint_record_id": _normalize(mint_record_id),
-        "job_type": _normalize(job_type),
+        "project_id": _object_id_or_text(project_id),
+        "mint_record_id": _object_id_or_text(mint_record_id),
+        "job_type": normalized_job_type,
         "status": "queued",
         "attempt_count": 0,
         "max_attempts": 5,
@@ -147,10 +186,10 @@ def enqueue_job(
 
     existing = _collection().find_one(
         {
-            "project_id": document["project_id"],
-            "mint_record_id": document["mint_record_id"],
+            "project_id": {"$in": _id_candidates(document["project_id"])},
+            "mint_record_id": {"$in": _id_candidates(document["mint_record_id"])},
             "job_type": document["job_type"],
-            "status": {"$in": ["queued", "running"]},
+            "status": {"$in": list(ACTIVE_MINT_JOB_STATUSES)},
         }
     )
     if existing is not None:
@@ -175,6 +214,16 @@ def queue_mint_pipeline(
         raise ValueError("Mint record not found.")
     if record["project_id"] != _normalize(project_id):
         raise ValueError("Mint record does not belong to the requested project.")
+    canonical = resolve_canonical_mint_status(project_id, include_history=False)
+    if canonical.get("is_minted"):
+        mark_obsolete_mint_jobs_for_project(
+            project_id,
+            current_mint_record_id=_normalize(canonical.get("current_mint_record_id")),
+            reason="canonical_mint_already_minted",
+        )
+        raise ValueError("Project already has a canonical minted record.")
+    if canonical.get("current_mint_record_id") and canonical["current_mint_record_id"] != _normalize(mint_record_id):
+        raise ValueError("Only the current canonical mint record can be queued.")
 
     mark_mint_queued(mint_record_id)
 
@@ -314,18 +363,18 @@ def _queued_or_running_dependency(project_id: str, mint_record_id: str, job_type
     for dependency in _job_dependencies(job_type):
         pending_job = _collection().find_one(
             {
-                "project_id": _normalize(project_id),
-                "mint_record_id": _normalize(mint_record_id),
+                "project_id": {"$in": _id_candidates(project_id)},
+                "mint_record_id": {"$in": _id_candidates(mint_record_id)},
                 "job_type": dependency,
-                "status": {"$in": ["queued", "running"]},
+                "status": {"$in": list(ACTIVE_MINT_JOB_STATUSES)},
             }
         )
         if pending_job is not None:
             return pending_job
         failed_job = _collection().find_one(
             {
-                "project_id": _normalize(project_id),
-                "mint_record_id": _normalize(mint_record_id),
+                "project_id": {"$in": _id_candidates(project_id)},
+                "mint_record_id": {"$in": _id_candidates(mint_record_id)},
                 "job_type": dependency,
                 "status": "failed",
             }
@@ -339,6 +388,14 @@ def sync_receipt_for_mint_record(mint_record_id: str) -> dict[str, Any]:
     record = get_mint_record(mint_record_id)
     if record is None:
         raise ValueError("Mint record not found.")
+    canonical = resolve_canonical_mint_status(record["project_id"], include_history=False)
+    if canonical.get("current_mint_record_id") and canonical["current_mint_record_id"] != record["id"]:
+        return {
+            "mint_record_id": mint_record_id,
+            "status": "obsolete",
+            "message": "Receipt sync skipped because this mint record is historical.",
+            "canonical_mint": canonical,
+        }
     tx_hash = _normalize_tx_hash(record.get("tx_hash"))
     if not tx_hash:
         return {
@@ -420,7 +477,7 @@ def run_next_job(worker_id: str) -> dict[str, Any]:
         },
         {
             "$set": {
-                "status": "running",
+                "status": "started",
                 "locked_by": _normalize(worker_id) or "api-worker",
                 "locked_at": now,
                 "started_at": now,
@@ -448,13 +505,35 @@ def run_next_job(worker_id: str) -> dict[str, Any]:
             error_message="Mint record was not found.",
         )
 
-    latest = get_latest_mint_record(record["project_id"])
-    if latest is None or latest["id"] != record["id"]:
+    canonical = resolve_canonical_mint_status(record["project_id"], include_history=False)
+    canonical_record_id = _normalize(canonical.get("current_mint_record_id"))
+    if canonical.get("is_minted") and canonical_record_id == record["id"] and serialized_job["job_type"] != "sync_receipt":
         return _finish_job(
             job["_id"],
-            status="cancelled",
+            status="obsolete",
+            error_code="mint_already_completed",
+            error_message="Canonical mint record is already minted.",
+        )
+    if canonical.get("current_status") == "failed":
+        return _finish_job(
+            job["_id"],
+            status="canceled",
+            error_code="mint_record_failed",
+            error_message="Canonical mint record is failed and must be repaired before jobs can run.",
+        )
+    if canonical_record_id and canonical_record_id != record["id"]:
+        return _finish_job(
+            job["_id"],
+            status="obsolete",
             error_code="mint_record_superseded",
-            error_message="Mint job belongs to a non-authoritative mint record.",
+            error_message="Mint job belongs to a historical mint record.",
+        )
+    if _normalize(record.get("canonical_mint_status")).lower() in {"superseded", "canceled"}:
+        return _finish_job(
+            job["_id"],
+            status="obsolete",
+            error_code="mint_record_not_current",
+            error_message="Mint record is historical and cannot run jobs.",
         )
 
     dependency = _queued_or_running_dependency(
@@ -467,7 +546,7 @@ def run_next_job(worker_id: str) -> dict[str, Any]:
         if dependency_status == "failed":
             return _finish_job(
                 job["_id"],
-                status="cancelled",
+                status="canceled",
                 error_code="mint_dependency_failed",
                 error_message=(
                     "A required earlier mint job failed, so this job was cancelled."

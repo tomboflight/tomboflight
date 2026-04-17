@@ -1,11 +1,13 @@
 from pymongo import MongoClient
 from pymongo.database import Database
 import certifi
+import logging
 
 from app.config import settings
 
 client: MongoClient | None = None
 db: Database | None = None
+logger = logging.getLogger(__name__)
 
 
 def connect_to_mongo() -> Database:
@@ -25,7 +27,7 @@ def connect_to_mongo() -> Database:
         )
         db = client[settings.mongodb_db_name]
         client.admin.command("ping")
-        print(f"Connected to MongoDB database: {settings.mongodb_db_name}")
+        logger.info("Connected to MongoDB database", extra={"database": settings.mongodb_db_name})
         return db
     except Exception as exc:
         client = None
@@ -35,7 +37,7 @@ def connect_to_mongo() -> Database:
 
 def get_database() -> Database:
     if db is None:
-      raise RuntimeError("Database connection has not been initialized.")
+        raise RuntimeError("Database connection has not been initialized.")
     return db
 
 
@@ -44,7 +46,7 @@ def close_mongo_connection() -> None:
 
     if client is not None:
         client.close()
-        print("MongoDB connection closed.")
+        logger.info("MongoDB connection closed.")
 
     client = None
     db = None

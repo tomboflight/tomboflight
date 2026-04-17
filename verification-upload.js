@@ -127,6 +127,7 @@
   function updateNav(context, familyIdOverride) {
     [
       "intake-review.html",
+      "portrait-upload.html",
       "verification-upload.html",
       "link-keys.html",
       "tree-view.html",
@@ -279,7 +280,7 @@
     setSelectOptions(
       document.querySelector("[data-verification-list-member]"),
       members,
-      "Select member",
+      "All members in this workspace",
     );
   }
 
@@ -466,8 +467,16 @@
 
       populateMemberSelects();
       if (members.length) {
+        const listMember = document.querySelector(
+          "[data-verification-list-member]",
+        );
+        if (listMember) {
+          listMember.value = "";
+        }
+
         pageStatus.textContent = `Family ${familyId} loaded successfully.`;
         setStatus(actionStatus, "Family loaded successfully.", "success");
+        await loadUploads();
       } else {
         pageStatus.textContent = `Family ${familyId} loaded, but no member records were found yet.`;
         setStatus(
@@ -740,10 +749,10 @@
     const memberId = String(memberSelect ? memberSelect.value : "").trim();
     const category = String(categorySelect ? categorySelect.value : "").trim();
 
-    if (!memberId) {
+    if (!memberId && !currentFamilyId) {
       setStatus(
         actionStatus,
-        "Select a member before loading uploads.",
+        "Load a family before loading verification records.",
         "error",
       );
       return;
@@ -752,9 +761,15 @@
     try {
       setStatus(actionStatus, "Loading uploaded records...", "info");
 
-      const query = category ? `?category=${encodeURIComponent(category)}` : "";
+      const effectiveCategory = category || "verification_evidence";
+      const query = effectiveCategory
+        ? `?category=${encodeURIComponent(effectiveCategory)}`
+        : "";
+      const endpoint = memberId
+        ? `/uploads/member/${encodeURIComponent(memberId)}${query}`
+        : `/uploads/family/${encodeURIComponent(currentFamilyId)}${query}`;
       const payload = await app.apiRequest(
-        `/uploads/member/${encodeURIComponent(memberId)}${query}`,
+        endpoint,
         { method: "GET" },
       );
 

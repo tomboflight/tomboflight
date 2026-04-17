@@ -143,6 +143,52 @@
         border: 1px solid rgba(255, 255, 255, 0.05);
       }
 
+      .tree-legend {
+        margin: 0.75rem 0 0.95rem;
+        padding: 0.8rem 0.9rem;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+      }
+
+      .tree-legend-items {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: 0.5rem;
+      }
+
+      .tree-legend-item {
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+        color: #d6e6ff;
+        font-size: 0.86rem;
+      }
+
+      .tree-legend-line {
+        width: 34px;
+        height: 0;
+        border-top-width: 3px;
+        border-top-style: solid;
+        flex-shrink: 0;
+      }
+
+      .tree-legend-line--lineage {
+        border-top-color: rgba(214, 176, 102, 0.95);
+      }
+
+      .tree-legend-line--step {
+        border-top-color: rgba(214, 176, 102, 0.95);
+        border-top-style: dashed;
+      }
+
+      .tree-legend-line--spouse {
+        border-top-color: rgba(255, 255, 255, 0.48);
+        border-top-style: dashed;
+      }
+
       .lineage-profile-shell {
         position: sticky;
         top: 1rem;
@@ -374,6 +420,26 @@
             <div class="tree-layout">
               <div class="form-panel">
                 <span class="eyebrow">Rendered Family Tree</span>
+                <div class="tree-legend" aria-label="Relationship legend">
+                  <ul class="tree-legend-items">
+                    <li class="tree-legend-item">
+                      <span class="tree-legend-line tree-legend-line--lineage" aria-hidden="true"></span>
+                      <span>Solid gold = Direct lineage</span>
+                    </li>
+                    <li class="tree-legend-item">
+                      <span class="tree-legend-line tree-legend-line--lineage" aria-hidden="true"></span>
+                      <span>Solid gold + “Adoptive parent/child” in details = Adoptive lineage</span>
+                    </li>
+                    <li class="tree-legend-item">
+                      <span class="tree-legend-line tree-legend-line--step" aria-hidden="true"></span>
+                      <span>Dashed gold = Step-family / blended-family link</span>
+                    </li>
+                    <li class="tree-legend-item">
+                      <span class="tree-legend-line tree-legend-line--spouse" aria-hidden="true"></span>
+                      <span>Soft silver dashed = Spouse</span>
+                    </li>
+                  </ul>
+                </div>
                 <div class="tree-shell">
                   <div data-tree-canvas></div>
                 </div>
@@ -412,9 +478,9 @@
       </footer>
     </div>
 
-    <script src="config.js?v=20260323-4"></script>
-    <script src="app.js?v=20260323-4"></script>
-    <script src="auth.js?v=20260323-4"></script>
-    <script src="tree-view.js?v=20260323-4"></script>
+    <script src="config.js?v=20260415-1"></script>
+    <script src="app.js?v=20260415-1"></script>
+    <script src="auth.js?v=20260410-2"></script>
+    <script src="tree-view.js?v=20260415-1"></script>
   </body>
 </html>
