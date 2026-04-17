@@ -1233,51 +1233,6 @@
 
       const inviteKey = inviteKeyFromQuery();
       currentProjectId = await resolveProjectId(currentUser);
-      if (!currentProjectId && !inviteKey) {
-        if (statusNode) {
-          statusNode.textContent =
-            "No active workspace project was detected. Open this page from your dashboard workspace.";
-      const inviteKey = inviteKeyFromQuery();
-      if (acceptForm && inviteKey) {
-        const keyInput = acceptForm.querySelector('input[name="invite_key"]');
-        if (keyInput) keyInput.value = inviteKey;
-      }
-
-      bindQuickInviteButtons();
-      updateAutoInviteDefaults(true);
-      if (inviteForm) inviteForm.addEventListener("submit", handleInviteSubmit);
-      if (acceptForm) acceptForm.addEventListener("submit", handleAcceptSubmit);
-
-      currentProjectId = projectIdFromContext(currentUser);
-      if (!currentProjectId) {
-        if (inviteKey && acceptForm) {
-          try {
-            const membership = await acceptInviteByKey(inviteKey);
-            hydrateProjectContextFromMembership(membership);
-          } catch (error) {
-            const statusCode = Number(error?.status);
-            console.warn("[HouseholdAccess] Auto-accept invite skipped.", {
-              detail: readableMessage(error?.detail || error?.message, "invite auto-accept failed"),
-              status: Number.isFinite(statusCode) && statusCode > 0 ? statusCode : null,
-            });
-            // Keep the page interactive so invite acceptance can still be attempted manually.
-          }
-        }
-      }
-      if (!currentProjectId) {
-        if (statusNode) {
-          statusNode.textContent =
-            "No active workspace project was detected. Open this page from your dashboard workspace, or accept an invite key below.";
-        }
-        return;
-      }
-      if (statusNode && currentProjectId) {
-        statusNode.textContent = `Managing workspace access for project ${currentProjectId}.`;
-      } else if (statusNode) {
-        statusNode.textContent =
-          "Invite context detected. Accept the invite key below to activate workspace access.";
-      }
-
       if (acceptForm && inviteKey) {
         const keyInput = acceptForm.querySelector('input[name="invite_key"]');
         if (keyInput) keyInput.value = inviteKey;
@@ -1286,6 +1241,39 @@
       bindQuickInviteButtons();
       updateAutoInviteDefaults(true);
       applyInviteFormRoleAccess();
+      if (inviteForm) inviteForm.addEventListener("submit", handleInviteSubmit);
+      if (acceptForm) acceptForm.addEventListener("submit", handleAcceptSubmit);
+
+      if (!currentProjectId && inviteKey && acceptForm) {
+        try {
+          const membership = await acceptInviteByKey(inviteKey);
+          hydrateProjectContextFromMembership(membership);
+        } catch (error) {
+          const statusCode = Number(error?.status);
+          console.warn("[HouseholdAccess] Auto-accept invite skipped.", {
+            detail: readableMessage(error?.detail || error?.message, "invite auto-accept failed"),
+            status: Number.isFinite(statusCode) && statusCode > 0 ? statusCode : null,
+          });
+          // Keep the page interactive so invite acceptance can still be attempted manually.
+        }
+      }
+
+      if (!currentProjectId) {
+        if (statusNode) {
+          statusNode.textContent = inviteKey
+            ? "No active workspace project was detected yet. Accept the invite key below to activate workspace access."
+            : "No active workspace project was detected. Open this page from your dashboard workspace.";
+        }
+        return;
+      }
+
+      if (statusNode && currentProjectId) {
+        statusNode.textContent = `Managing workspace access for project ${currentProjectId}.`;
+      } else if (statusNode) {
+        statusNode.textContent =
+          "Invite context detected. Accept the invite key below to activate workspace access.";
+      }
+
       console.info("[HouseholdAccess] Invite runtime API context.", {
         resolvedApiBaseUrl:
           typeof app.getApiBaseUrl === "function" ? normalizeBaseUrl(app.getApiBaseUrl()) : "",
@@ -1296,25 +1284,22 @@
           : [],
         projectId: currentProjectId,
       });
-      if (inviteForm) inviteForm.addEventListener("submit", handleInviteSubmit);
-      if (acceptForm) acceptForm.addEventListener("submit", handleAcceptSubmit);
-      if (currentProjectId) {
-        try {
-          await refreshData();
-        } catch (error) {
-          const statusCode = Number(error?.status || 0);
-          if (statusCode === 403 && inviteKey) {
-            hasResolvedMemberRole = false;
-            applyInviteFormRoleAccess();
-            setText(
-              acceptStatus,
-              "Accept this invite to activate workspace access for this project.",
-              "info",
-            );
-            return;
-          }
-          throw error;
+
+      try {
+        await refreshData();
+      } catch (error) {
+        const statusCode = Number(error?.status || 0);
+        if (statusCode === 403 && inviteKey) {
+          hasResolvedMemberRole = false;
+          applyInviteFormRoleAccess();
+          setText(
+            acceptStatus,
+            "Accept this invite to activate workspace access for this project.",
+            "info",
+          );
+          return;
         }
+        throw error;
       }
     } catch (error) {
       const statusCode = Number(error?.status || 0);
