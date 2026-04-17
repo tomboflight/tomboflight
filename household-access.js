@@ -35,6 +35,18 @@
     linked_relative: "Linked Relative",
   };
 
+  const ROLE_ALIASES = {
+    owner: "billing_owner",
+    buyer: "billing_owner",
+    spouse: "co_owner",
+    partner: "co_owner",
+    manager: "family_manager",
+    administrator: "family_manager",
+    admin: "family_manager",
+    editor: "contributor",
+    reader: "viewer",
+  };
+
   const RELATIONSHIP_LABELS = {
     spouse: "Spouse",
     parent: "Parent",
@@ -529,7 +541,7 @@
   }
 
   function roleLabel(role) {
-    return ROLE_LABELS[String(role || "").trim()] || "Viewer";
+    return ROLE_LABELS[normalizeRole(role)] || "Viewer";
   }
 
   function relationshipLabel(value) {
@@ -558,7 +570,8 @@
 
   function normalizeRole(value) {
     const normalized = normalizeLower(value);
-    return ROLE_OPTIONS.includes(normalized) ? normalized : "viewer";
+    const aliased = ROLE_ALIASES[normalized] || normalized;
+    return ROLE_OPTIONS.includes(aliased) ? aliased : "viewer";
   }
 
   function roleRank(role) {

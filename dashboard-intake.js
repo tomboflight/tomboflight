@@ -34,6 +34,17 @@
     "co_owner",
     "family_manager",
   ]);
+  const HOUSEHOLD_MEMBER_ROLE_ALIASES = {
+    owner: "billing_owner",
+    buyer: "billing_owner",
+    spouse: "co_owner",
+    partner: "co_owner",
+    manager: "family_manager",
+    administrator: "family_manager",
+    admin: "family_manager",
+    editor: "contributor",
+    reader: "viewer",
+  };
 
   let legacyAnchorState = null;
 
@@ -155,7 +166,8 @@
   }
 
   function normalizeMemberRole(value) {
-    return normalizeValue(value);
+    const normalized = normalizeValue(value);
+    return HOUSEHOLD_MEMBER_ROLE_ALIASES[normalized] || normalized;
   }
 
   function canManageHouseholdAccess(memberRole) {

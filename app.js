@@ -1043,6 +1043,18 @@
     });
   }
 
+  function setupHeaderScrollState() {
+    const header = document.querySelector(".site-header");
+    if (!header) return;
+
+    function syncScrollState() {
+      header.classList.toggle("is-scrolled", window.scrollY > 18);
+    }
+
+    syncScrollState();
+    window.addEventListener("scroll", syncScrollState, { passive: true });
+  }
+
   function markActiveNavLink() {
     const currentPage =
       window.location.pathname.split("/").pop() || "index.html";
@@ -1118,6 +1130,7 @@
 
   document.addEventListener("DOMContentLoaded", function () {
     setupMobileMenu();
+    setupHeaderScrollState();
     markActiveNavLink();
     updateCookieStatus();
     setupCookieBanner();

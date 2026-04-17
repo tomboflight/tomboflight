@@ -207,6 +207,17 @@ a {
   vertical-align: super;
 }
 
+.brand-logo {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  flex: 0 0 auto;
+  opacity: 0.88;
+  transition:
+    transform var(--transition),
+    opacity var(--transition);
+}
+
 .site-nav {
   display: flex;
   align-items: center;
@@ -1606,6 +1617,17 @@ textarea {
   border-bottom-color: rgba(120, 217, 255, 0.08);
 }
 
+.portal-dashboard-body .brand-logo {
+  width: 46px;
+  height: 46px;
+  opacity: 0.92;
+}
+
+.portal-dashboard-body .site-header.is-scrolled .brand-logo {
+  opacity: 1;
+  transform: scale(1.08);
+}
+
 .portal-login-body .brand,
 .portal-dashboard-body .brand,
 .portal-login-body h1,
@@ -2906,6 +2928,60 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
 
   .workspace-stage-strip {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 1200px) {
+  .portal-dashboard-body .site-header-inner {
+    min-height: 74px;
+    padding: 12px 0;
+    gap: 12px;
+    flex-wrap: nowrap;
+  }
+
+  .portal-dashboard-body .menu-toggle {
+    display: inline-flex;
+    margin-left: auto;
+  }
+
+  .portal-dashboard-body .site-nav,
+  .portal-dashboard-body .header-actions {
+    display: none;
+  }
+
+  .portal-dashboard-body .site-header.open .site-nav,
+  .portal-dashboard-body .site-header.open .header-actions {
+    display: flex;
+  }
+
+  .portal-dashboard-body .site-header.open .site-header-inner {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .portal-dashboard-body .site-nav {
+    order: 3;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 14px 0 6px;
+    margin-left: 0;
+  }
+
+  .portal-dashboard-body .header-actions {
+    order: 4;
+    width: 100%;
+    justify-content: flex-start;
+    padding-bottom: 10px;
+  }
+
+  .portal-dashboard-body .portal-command-bar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .portal-dashboard-body .portal-chip-row-compact {
+    width: 100%;
   }
 }
 
