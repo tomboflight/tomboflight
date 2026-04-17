@@ -10,6 +10,7 @@ from app.dependencies.auth import (
     require_package_capability,
 )
 from app.services.lineage_graph_service import build_lineage_graph
+from app.services.workspace_access_service import family_is_visible_to_user
 
 router = APIRouter(
     prefix="/lineage",
@@ -42,53 +43,6 @@ def _current_user_display_name(user: dict[str, Any]) -> str:
     return str(raw_name).strip()
 
 
-def _is_admin(user: dict[str, Any]) -> bool:
-    return has_internal_admin_access(user)
-
-
-def _family_is_visible_to_user(
-    family: dict[str, Any],
-    current_user_id: str,
-    current_user_email: str,
-    current_user_name: str,
-) -> bool:
-    owner_user_id = str(family.get("owner_user_id") or "").strip()
-    owner_email = str(family.get("owner_email") or "").strip().lower()
-
-    shared_with_user_ids = [
-        str(value).strip()
-        for value in (family.get("shared_with_user_ids") or [])
-        if value is not None
-    ]
-    shared_with_emails = [
-        str(value).strip().lower()
-        for value in (family.get("shared_with_emails") or [])
-        if value is not None
-    ]
-
-    if owner_user_id and owner_user_id == current_user_id:
-        return True
-
-    if owner_email and owner_email == current_user_email:
-        return True
-
-    if current_user_id in shared_with_user_ids:
-        return True
-
-    if current_user_email in shared_with_emails:
-        return True
-
-    # Backward-compatible fallback for older family records
-    if not owner_user_id and not owner_email:
-        created_by = str(family.get("created_by") or "").strip()
-        if created_by and (
-            created_by == current_user_name or created_by.lower() == current_user_email
-        ):
-            return True
-
-    return False
-
-
 def _require_family_access(
     family_id: str,
     current_user: dict[str, Any],
@@ -113,14 +67,14 @@ def _require_family_access(
             detail="Family not found.",
         )
 
-    if _is_admin(current_user):
+    if has_internal_admin_access(current_user):
         return family
 
     current_user_id = _current_user_id(current_user)
     current_user_email = _current_user_email(current_user)
     current_user_name = _current_user_display_name(current_user)
 
-    if not _family_is_visible_to_user(
+    if not family_is_visible_to_user(
         family=family,
         current_user_id=current_user_id,
         current_user_email=current_user_email,
