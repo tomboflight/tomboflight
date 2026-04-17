@@ -21,6 +21,8 @@ RELATIONSHIP_TYPE_ALIASES: dict[str, str] = {
     "step-parent-child": "step_parent",
     "step_parent": "step_parent",
     "step-parent": "step_parent",
+    "step parent": "step_parent",
+    "stepparent": "step_parent",
     "household_member": "household_member",
     "household-member": "household_member",
 }
