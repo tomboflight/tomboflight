@@ -385,20 +385,39 @@
 
   function workspaceMembersLoadPaths(projectId) {
     const encoded = encodeURIComponent(String(projectId || "").trim());
-    return [
-      `/workspace-access/project/${encoded}/members`,
-      `/workspace_access/project/${encoded}/members`,
-      `/household-access/project/${encoded}/members`,
-    ];
+    return workspaceAccessPathAliases(`/workspace-access/project/${encoded}/members`);
   }
 
   function workspaceInvitesLoadPaths(projectId) {
     const encoded = encodeURIComponent(String(projectId || "").trim());
-    return [
-      `/workspace-access/project/${encoded}/invites`,
-      `/workspace_access/project/${encoded}/invites`,
-      `/household-access/project/${encoded}/invites`,
-    ];
+    return workspaceAccessPathAliases(`/workspace-access/project/${encoded}/invites`);
+  }
+
+  function workspaceAccessPathAliases(path) {
+    const normalized = String(path || "").trim();
+    if (!normalized) return [];
+    const withCanonical = normalized
+      .replace("/workspace_access/", "/workspace-access/")
+      .replace("/household-access/", "/workspace-access/");
+    return loadRequestPaths([
+      withCanonical,
+      withCanonical.replace("/workspace-access/", "/workspace_access/"),
+      withCanonical.replace("/workspace-access/", "/household-access/"),
+    ]);
+  }
+
+  async function sendWorkspaceAccessRequest(pathOrPaths, options = {}) {
+    const paths = loadRequestPaths(pathOrPaths);
+    let lastError = null;
+    for (const path of paths) {
+      try {
+        return await app.apiRequest(path, options);
+      } catch (error) {
+        lastError = error;
+        if (Number(error?.status || 0) !== 404) throw error;
+      }
+    }
+    throw lastError || new Error(`Workspace access endpoint unavailable for ${paths.join(", ") || "request"}.`);
   }
 
   async function sendInviteRequest(path, payload, action) {
@@ -626,7 +645,7 @@
   async function resolveProjectIdFromMemberships() {
     try {
       const payload = await sendLoadRequest(
-        "/workspace-access/my-memberships",
+        workspaceAccessPathAliases("/workspace-access/my-memberships"),
         "load_my_memberships",
         "",
         { fallbackStatusCodes: [404, 500, 502, 503, 504] },
@@ -674,7 +693,7 @@
     if (!normalizedProjectId) return "";
     try {
       const payload = await sendLoadRequest(
-        "/workspace-access/my-memberships",
+        workspaceAccessPathAliases("/workspace-access/my-memberships"),
         "load_my_memberships_role",
         normalizedProjectId,
         { fallbackStatusCodes: [404, 500, 502, 503, 504] },
@@ -809,8 +828,10 @@
   }
 
   async function changeMemberRole(membershipId, memberRole) {
-    await app.apiRequest(
-      `/workspace-access/project/${encodeURIComponent(currentProjectId)}/members/${encodeURIComponent(membershipId)}/role`,
+    await sendWorkspaceAccessRequest(
+      workspaceAccessPathAliases(
+        `/workspace-access/project/${encodeURIComponent(currentProjectId)}/members/${encodeURIComponent(membershipId)}/role`,
+      ),
       {
         method: "POST",
         body: JSON.stringify({ member_role: memberRole }),
@@ -819,8 +840,10 @@
   }
 
   async function removeMember(membershipId) {
-    await app.apiRequest(
-      `/workspace-access/project/${encodeURIComponent(currentProjectId)}/members/${encodeURIComponent(membershipId)}/revoke`,
+    await sendWorkspaceAccessRequest(
+      workspaceAccessPathAliases(
+        `/workspace-access/project/${encodeURIComponent(currentProjectId)}/members/${encodeURIComponent(membershipId)}/revoke`,
+      ),
       {
         method: "POST",
       },
@@ -828,15 +851,17 @@
   }
 
   async function resendInvite(inviteId) {
-    await app.apiRequest(`/workspace-access/invites/${encodeURIComponent(inviteId)}/resend`, {
-      method: "POST",
-    });
+    await sendWorkspaceAccessRequest(
+      workspaceAccessPathAliases(`/workspace-access/invites/${encodeURIComponent(inviteId)}/resend`),
+      { method: "POST" },
+    );
   }
 
   async function revokeInvite(inviteId) {
-    await app.apiRequest(`/workspace-access/invites/${encodeURIComponent(inviteId)}/revoke`, {
-      method: "POST",
-    });
+    await sendWorkspaceAccessRequest(
+      workspaceAccessPathAliases(`/workspace-access/invites/${encodeURIComponent(inviteId)}/revoke`),
+      { method: "POST" },
+    );
   }
 
   function renderMembers(items) {
@@ -1035,13 +1060,12 @@
       privacy_scope: String(formData.get("privacy_scope") || "household_private").trim(),
       notes: String(formData.get("notes") || "").trim(),
     };
-    const invitePaths = [
+    const invitePaths = workspaceAccessPathAliases(
       `/workspace-access/project/${encodeURIComponent(currentProjectId)}/invites`,
+    ).concat([
       // Backward-compatible singular route retained by backend legacy wiring.
       `/workspace-access/project/${encodeURIComponent(currentProjectId)}/invite`,
-      `/workspace_access/project/${encodeURIComponent(currentProjectId)}/invites`,
-      `/household-access/project/${encodeURIComponent(currentProjectId)}/invites`,
-    ];
+    ]);
     try {
       let invite = null;
       let inviteMeta = null;
@@ -1118,7 +1142,7 @@
   }
 
   async function acceptInviteByKey(inviteKey) {
-    return await app.apiRequest("/workspace-access/invites/accept", {
+    return await sendWorkspaceAccessRequest(workspaceAccessPathAliases("/workspace-access/invites/accept"), {
       method: "POST",
       body: JSON.stringify({ invite_key: inviteKey }),
     });
