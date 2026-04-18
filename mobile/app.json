@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "Tomb of Light",
+    "slug": "tomboflight-mobile",
+    "scheme": "tomboflight",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "plugins": [
+      "expo-router"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {},
+    "extra": {
+      "apiBaseUrl": "https://api.tomboflight.com"
+    }
+  }
+}
