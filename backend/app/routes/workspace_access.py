@@ -61,6 +61,88 @@ def _assert_project_access(project_id: str, current_user: dict[str, Any]) -> Non
         )
 
 
+def _member_name_payload_from_user_doc(user_doc: dict[str, Any] | None) -> dict[str, str]:
+    if not isinstance(user_doc, dict):
+        return {}
+    full_name = str(
+        user_doc.get("full_name")
+        or user_doc.get("name")
+        or user_doc.get("display_name")
+        or user_doc.get("user_name")
+        or ""
+    ).strip()
+    first_name = str(user_doc.get("first_name") or user_doc.get("given_name") or "").strip()
+    last_name = str(user_doc.get("last_name") or user_doc.get("family_name") or "").strip()
+    if not full_name and (first_name or last_name):
+        full_name = f"{first_name} {last_name}".strip()
+    payload: dict[str, str] = {}
+    if full_name:
+        payload["full_name"] = full_name
+    if first_name:
+        payload["first_name"] = first_name
+    if last_name:
+        payload["last_name"] = last_name
+    return payload
+
+
+def _with_member_identity_fields(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    db = get_database()
+    if db is None or not items:
+        return items
+    by_email: dict[str, dict[str, Any]] = {}
+    by_user_id: dict[str, dict[str, Any]] = {}
+
+    user_ids = sorted(
+        {
+            str(item.get("user_id")).strip()
+            for item in items
+            if str(item.get("user_id") or "").strip()
+        }
+    )
+    emails = sorted(
+        {
+            str(item.get("email")).strip().lower()
+            for item in items
+            if str(item.get("email") or "").strip()
+        }
+    )
+    if user_ids:
+        object_ids = [ObjectId(value) for value in user_ids if ObjectId.is_valid(value)]
+        lookup = {"$or": [{"id": {"$in": user_ids}}, {"user_id": {"$in": user_ids}}]}
+        if object_ids:
+            lookup["$or"].append({"_id": {"$in": object_ids}})
+        for user_doc in db["users"].find(lookup):
+            identity = _member_name_payload_from_user_doc(user_doc)
+            if not identity:
+                continue
+            raw_id = str(user_doc.get("id") or user_doc.get("user_id") or "").strip()
+            if raw_id:
+                by_user_id[raw_id] = identity
+            email = str(user_doc.get("email") or "").strip().lower()
+            if email:
+                by_email[email] = identity
+    if emails:
+        for user_doc in db["users"].find({"email": {"$in": emails}}):
+            identity = _member_name_payload_from_user_doc(user_doc)
+            if not identity:
+                continue
+            email = str(user_doc.get("email") or "").strip().lower()
+            if email:
+                by_email[email] = identity
+
+    merged: list[dict[str, Any]] = []
+    for item in items:
+        copy = dict(item)
+        item_user_id = str(copy.get("user_id") or "").strip()
+        item_email = str(copy.get("email") or "").strip().lower()
+        profile = by_user_id.get(item_user_id) or by_email.get(item_email) or {}
+        for key, value in profile.items():
+            if not copy.get(key):
+                copy[key] = value
+        merged.append(copy)
+    return merged
+
+
 @router.get("/my-memberships")
 def get_my_memberships(current_user: dict[str, Any] = Depends(get_current_user)):
     items = list_my_memberships(current_user)
@@ -70,7 +152,7 @@ def get_my_memberships(current_user: dict[str, Any] = Depends(get_current_user))
 @router.get("/project/{project_id}/members")
 def get_project_members(project_id: str, current_user: dict[str, Any] = Depends(get_current_user)):
     _assert_project_access(project_id, current_user)
-    items = list_project_members(project_id)
+    items = _with_member_identity_fields(list_project_members(project_id))
     return {"items": [build_membership_response(item) for item in items]}
 
 

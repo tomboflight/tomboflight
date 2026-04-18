@@ -29,7 +29,7 @@
             <div class="page-hero-panel">
               <span class="eyebrow">Household Workspace Access</span>
               <h1>Members &amp; Access</h1>
-              <p data-household-status>Loading workspace access settings...</p>
+              <p data-household-status>Preparing your household access experience…</p>
             </div>
           </div>
         </section>
@@ -95,17 +95,27 @@
 
             <div class="form-panel">
               <span class="eyebrow">Accept Invite</span>
+              <p class="card-copy">
+                Open the invite link from your email to accept instantly. If your email app does not open links
+                correctly, use the advanced manual code option below.
+              </p>
+              <div class="helper" data-household-accept-link-status style="display: none; margin-top: 0.75rem"></div>
+              <details style="margin-top: 1rem">
+                <summary>Advanced: Enter an invite code manually</summary>
               <form class="form-grid" data-household-accept-form novalidate>
                 <label>Invite Key <input type="text" name="invite_key" required /></label>
                 <div class="inline-actions">
                   <button class="btn btn-primary" type="submit">Accept Invite</button>
                 </div>
               </form>
+              </details>
               <div class="helper" data-household-accept-status style="display: none; margin-top: 1rem"></div>
             </div>
 
             <div class="form-panel">
               <span class="eyebrow">Current Household Members</span>
+              <div class="helper" data-household-members-loading style="display: none; margin-top: 0.75rem">Loading members…</div>
+              <div class="helper" data-household-members-error style="display: none; margin-top: 0.75rem"></div>
               <div class="grid-3" data-household-members-list></div>
               <div class="helper" data-household-members-empty style="display: none; margin-top: 1rem">No members found.</div>
             </div>
@@ -113,6 +123,8 @@
             <div class="form-panel">
               <span class="eyebrow">Pending & Historical Invites</span>
               <p class="card-copy" data-household-pending-count></p>
+              <div class="helper" data-household-invites-loading style="display: none; margin-top: 0.75rem">Loading invites…</div>
+              <div class="helper" data-household-invites-error style="display: none; margin-top: 0.75rem"></div>
               <div class="grid-3" data-household-invites-list></div>
               <div class="helper" data-household-invites-empty style="display: none; margin-top: 1rem">No invites found.</div>
             </div>
@@ -122,18 +134,18 @@
               <div class="grid-3">
                 <div>
                   <div class="card-number">A</div>
-                  <h3>billing_owner</h3>
+                  <h3>Billing Owner</h3>
                   <p class="card-copy">Billing, package, role assignment, privacy approvals, and invite/member lifecycle controls.</p>
                 </div>
                 <div>
                   <div class="card-number">B</div>
-                  <h3>co_owner / family_manager</h3>
+                  <h3>Co-Owner / Family Manager</h3>
                   <p class="card-copy">Content and household record management without package ownership transfer or billing cancellation.</p>
                 </div>
                 <div>
                   <div class="card-number">C</div>
-                  <h3>contributor / viewer scopes</h3>
-                  <p class="card-copy">Contributors submit branch content. Viewer roles are read-only and privacy-scoped; linked_relative is link-scoped only.</p>
+                  <h3>Contributor / Viewer Scopes</h3>
+                  <p class="card-copy">Contributors submit branch content. Viewer roles are read-only and privacy-scoped; Linked Relative is link-scoped only.</p>
                 </div>
               </div>
             </div>
