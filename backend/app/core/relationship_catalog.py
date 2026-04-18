@@ -25,6 +25,8 @@ RELATIONSHIP_TYPE_ALIASES: dict[str, str] = {
     "stepparent": "step_parent",
     "household_member": "household_member",
     "household-member": "household_member",
+    "linked_household": "linked_household",
+    "linked-household": "linked_household",
 }
 
 ALLOWED_RELATIONSHIP_TYPES: tuple[str, ...] = (
@@ -36,6 +38,7 @@ ALLOWED_RELATIONSHIP_TYPES: tuple[str, ...] = (
     "former_spouse",
     "sibling",
     "household_member",
+    "linked_household",
 )
 
 ALLOWED_RELATIONSHIP_TYPE_SET: frozenset[str] = frozenset(ALLOWED_RELATIONSHIP_TYPES)
@@ -46,6 +49,7 @@ ANCESTRY_RELATIONSHIP_TYPES: frozenset[str] = frozenset(
     {"biological_parent", "adoptive_parent", "step_parent", "guardian"}
 )
 BIOLOGICAL_PARENT_RELATIONSHIP_TYPE = "biological_parent"
+LINKED_HOUSEHOLD_RELATIONSHIP_TYPE = "linked_household"
 
 
 
