@@ -72,6 +72,14 @@ def _serialize_dt(value: Any) -> str | None:
     return normalized or None
 
 
+def _coerce_int(value: Any, *, default: int, minimum: int = 0) -> int:
+    try:
+        normalized = int(value)
+    except (TypeError, ValueError):
+        normalized = int(default)
+    return max(minimum, normalized)
+
+
 def build_membership_response(data: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": _normalize_value(data.get("_id") or data.get("id")),
@@ -99,8 +107,8 @@ def build_invite_response(data: dict[str, Any]) -> dict[str, Any]:
         "member_role": normalize_project_member_role(data.get("member_role"), default="viewer"),
         "relationship_scope": _normalize_value(data.get("relationship_scope") or "household_member"),
         "privacy_scope": _normalize_privacy_scope_value(data.get("privacy_scope") or "household_private"),
-        "max_uses": int(data.get("max_uses") or 1),
-        "use_count": int(data.get("use_count") or 0),
+        "max_uses": _coerce_int(data.get("max_uses"), default=1, minimum=1),
+        "use_count": _coerce_int(data.get("use_count"), default=0, minimum=0),
         "notes": _normalize_value(data.get("notes")),
         "expires_at": _serialize_dt(data.get("expires_at")),
         "expired_at": _serialize_dt(data.get("expired_at")),
