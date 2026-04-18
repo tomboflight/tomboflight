@@ -1,6 +1,6 @@
 (function () {
   const app = window.TOLApp || window.TOLAuth;
-  if (!app) return;
+  if (!app || typeof app.apiRequest !== "function") return;
 
   const statusNode = document.querySelector("[data-household-status]");
   const inviteForm = document.querySelector("[data-household-invite-form]");
@@ -332,7 +332,6 @@
 
   async function sendLoadRequest(pathOrPaths, action, projectId, options = {}) {
     const paths = loadRequestPaths(pathOrPaths);
-    const apiBaseUrls = resolveInviteApiBaseUrls();
     const authToken = typeof app.getToken === "function" ? String(app.getToken() || "").trim() : "";
     const fallbackStatusCodes = new Set(
       (Array.isArray(options.fallbackStatusCodes) && options.fallbackStatusCodes.length
@@ -345,78 +344,41 @@
     let lastError = null;
 
     for (const path of paths) {
-      for (const apiBaseUrl of apiBaseUrls) {
-        const requestUrl = `${apiBaseUrl}${path}`;
-        logLoadRequest(action, path, "GET", projectId, {
-          requestUrl,
-          resolvedApiBaseUrl: apiBaseUrl,
+      logLoadRequest(action, path, "GET", projectId, { requestUrl: path });
+      try {
+        const headers = { Accept: "application/json" };
+        if (authToken) headers.Authorization = `Bearer ${authToken}`;
+        const responseBody = await app.apiRequest(path, {
+          method: "GET",
+          headers,
         });
-        try {
-          const headers = { Accept: "application/json" };
-          if (authToken) headers.Authorization = `Bearer ${authToken}`;
-          const response = await fetch(requestUrl, {
-            method: "GET",
-            credentials: "include",
-            headers,
-          });
-          const contentType = String(response.headers.get("content-type") || "").toLowerCase();
-          let responseBody = null;
-          if (contentType.includes("application/json")) {
-            responseBody = await response.json();
-          } else {
-            const text = await response.text();
-            responseBody = text ? { detail: text } : null;
-          }
-          const responseMeta = {
-            requestUrl,
-            resolvedApiBaseUrl: apiBaseUrl,
-            status: response.status,
-          };
-          logLoadResponse(action, path, "GET", projectId, responseMeta, responseBody);
-          if (!response.ok) {
-            const detail = readableMessage(
-              responseBody?.detail || responseBody?.message || responseBody?.error || responseBody,
-              response.statusText || `Request failed with status ${response.status}`,
-            );
-            const error = new Error(detail || `Request failed with status ${response.status}`);
-            error.status = response.status;
-            error.statusText = response.statusText;
-            error.detail = detail;
-            error.data = responseBody;
-            error.responseBody = responseBody;
-            error.requestUrl = requestUrl;
-            error.resolvedApiBaseUrl = apiBaseUrl;
-            lastError = error;
-            logLoadFailure(action, path, "GET", projectId, error);
-            if (fallbackStatusCodes.has(response.status)) {
-              continue;
-            }
-            throw error;
-          }
-          return responseBody;
-        } catch (error) {
-          if (fallbackStatusCodes.has(Number(error?.status || 0))) {
-            lastError = error;
-            continue;
-          }
-          if (Number(error?.status || 0) > 0) {
-            throw error;
-          }
-          const networkError = new Error(error?.message || "Network request failed.");
-          networkError.status = 0;
-          networkError.detail = error?.message || "Network request failed.";
-          networkError.requestUrl = requestUrl;
-          networkError.resolvedApiBaseUrl = apiBaseUrl;
-          lastError = networkError;
-          logLoadFailure(action, path, "GET", projectId, networkError);
+        logLoadResponse(
+          action,
+          path,
+          "GET",
+          projectId,
+          {
+            requestUrl: path,
+            resolvedApiBaseUrl: typeof app.getApiBaseUrl === "function" ? app.getApiBaseUrl() : "",
+            status: 200,
+          },
+          responseBody,
+        );
+        return responseBody;
+      } catch (error) {
+        lastError = error;
+        logLoadFailure(action, path, "GET", projectId, error);
+        if (fallbackStatusCodes.has(Number(error?.status || 0))) {
+          continue;
         }
+        throw error;
       }
     }
 
     throw (
       lastError ||
       new Error(
-        `Load endpoint unavailable for paths [${paths.join(", ") || "none"}] across all configured hosts: ${apiBaseUrls.join(", ") || "none"}`,
+        `Load endpoint unavailable for paths [${paths.join(", ") || "none"}].`,
       )
     );
   }
@@ -440,99 +402,19 @@
   }
 
   async function sendInviteRequest(path, payload, action) {
-    const apiBaseUrls = resolveInviteApiBaseUrls();
-    const authToken = typeof app.getToken === "function" ? String(app.getToken() || "").trim() : "";
-    let lastError = null;
-    for (const apiBaseUrl of apiBaseUrls) {
-      const requestUrl = `${apiBaseUrl}${path}`;
-      logInviteRequest(action, path, payload);
-      console.info("[HouseholdAccess] Invite request attempt.", {
-        action,
-        resolvedApiBaseUrl: apiBaseUrl,
-        requestUrl,
-        method: "POST",
-        payload,
-      });
-      try {
-        const headers = {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-        };
-        if (authToken) headers.Authorization = `Bearer ${authToken}`;
-        const response = await fetch(requestUrl, {
-          method: "POST",
-          credentials: "include",
-          headers,
-          body: JSON.stringify(payload),
-        });
-        const contentType = String(response.headers.get("content-type") || "").toLowerCase();
-        let responseBody = null;
-        if (contentType.includes("application/json")) {
-          responseBody = await response.json();
-        } else {
-          const text = await response.text();
-          responseBody = text ? { detail: text } : null;
-        }
-        console.info("[HouseholdAccess] Invite request response.", {
-          action,
-          resolvedApiBaseUrl: apiBaseUrl,
-          requestUrl,
-          method: "POST",
-          payload,
-          status: response.status,
-          responseBody,
-        });
-        if (!response.ok) {
-          const detail = readableMessage(
-            responseBody?.detail || responseBody?.message || responseBody?.error || responseBody,
-            response.statusText || `Request failed with status ${response.status}`,
-          );
-          const error = new Error(detail || `Request failed with status ${response.status}`);
-          error.status = response.status;
-          error.statusText = response.statusText;
-          error.detail = detail;
-          error.data = responseBody;
-          error.responseBody = responseBody;
-          error.requestUrl = requestUrl;
-          error.resolvedApiBaseUrl = apiBaseUrl;
-          lastError = error;
-          if (response.status === 404) {
-            // Some live environments run mixed backend versions per host; keep
-            // trying remaining API hosts so invite creation is not blocked.
-            continue;
-          }
-          throw error;
-        }
-        return {
-          responseBody,
-          meta: {
-            requestUrl,
-            resolvedApiBaseUrl: apiBaseUrl,
-            status: response.status,
-          },
-        };
-      } catch (error) {
-        if (Number(error?.status || 0) === 404) {
-          lastError = error;
-          continue;
-        }
-        if (Number(error?.status || 0) > 0) {
-          throw error;
-        }
-        const networkError = new Error(error?.message || "Network request failed.");
-        networkError.status = 0;
-        networkError.detail = error?.message || "Network request failed.";
-        networkError.requestUrl = requestUrl;
-        networkError.resolvedApiBaseUrl = apiBaseUrl;
-        lastError = networkError;
-      }
-    }
-    throw (
-      lastError ||
-      new Error(
-        `Invite endpoint unavailable across all configured hosts: ${apiBaseUrls.join(", ") || "none"}`,
-      )
-    );
+    logInviteRequest(action, path, payload);
+    const responseBody = await app.apiRequest(path, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    return {
+      responseBody,
+      meta: {
+        requestUrl: path,
+        resolvedApiBaseUrl: typeof app.getApiBaseUrl === "function" ? app.getApiBaseUrl() : "",
+        status: 201,
+      },
+    };
   }
 
   function setText(node, message, type = "info") {
@@ -908,7 +790,10 @@
       error?.detail || error?.message || error?.data || error?.responseBody,
       "",
     ).toLowerCase();
-    if (!statusCode && raw.includes("network")) {
+    if (
+      !statusCode &&
+      (raw.includes("network") || raw.includes("failed to fetch") || raw.includes("load failed"))
+    ) {
       return "We couldn’t reach the workspace access service. Please refresh and try again.";
     }
     if (statusCode === 404) {
