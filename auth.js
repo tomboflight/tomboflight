@@ -1112,6 +1112,13 @@
     return toArray(payload);
   }
 
+  async function fetchWorkspaceMemberships() {
+    const payload = await app.apiRequest("/workspace-access/my-memberships", {
+      method: "GET",
+    });
+    return toArray(payload);
+  }
+
   async function fetchProjectEntitlementByProjectId(projectId) {
     const normalizedProjectId = String(projectId || "").trim();
     if (!normalizedProjectId) return null;
@@ -1382,7 +1389,7 @@
   async function getDashboardContext(user, orders, options) {
     let entitlements = [];
     let projects = [];
-    const hints = mergeWorkspaceSelectionHints(
+    let hints = mergeWorkspaceSelectionHints(
       options,
       getWorkspaceHintsFromUser(user),
     );
@@ -1402,6 +1409,25 @@
     } catch (error) {
       entitlements = [];
       projects = [];
+    }
+
+    if (!hints.projectId) {
+      try {
+        const memberships = await fetchWorkspaceMemberships();
+        const activeMemberships = sortByMostRecent(
+          (Array.isArray(memberships) ? memberships : []).filter(function (item) {
+            return normalizeValue(item?.status || "active") === "active";
+          }),
+        );
+        const membershipProjectId = String(
+          activeMemberships[0]?.project_id || activeMemberships[0]?.projectId || "",
+        ).trim();
+        if (membershipProjectId) {
+          hints = mergeWorkspaceSelectionHints(hints, { projectId: membershipProjectId });
+        }
+      } catch (error) {
+        // Ignore membership lookup failures so dashboard context can still load.
+      }
     }
 
     if (hints.projectId) {
