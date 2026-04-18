@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import logging
 import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, cast
 
 from bson import ObjectId
 from pymongo.collection import Collection
+from pymongo.errors import OperationFailure
 
 from app.core.package_catalog import get_package_control_profile
 from app.core.package_mapping import resolve_package_identity
@@ -18,6 +20,8 @@ from app.services.entitlement_service import (
 
 MAINTENANCE_START_DELAY_DAYS = 30
 MAINTENANCE_MONTHLY_PERIOD_DAYS = 30
+
+_logger = logging.getLogger(__name__)
 
 
 def _collection() -> Collection[dict[str, Any]]:
@@ -233,10 +237,11 @@ def get_project_entitlement(project_id: str) -> dict[str, Any] | None:
 def list_user_project_entitlements(
     user_id: str,
     *,
+    email: str = "",
     active_only: bool = True,
 ) -> list[dict[str, Any]]:
     collection = _collection()
-    project_ids = list_accessible_project_ids(user_id=user_id)
+    project_ids = list_accessible_project_ids(user_id=user_id, email=email)
 
     or_filters: list[dict[str, Any]] = []
     user_id_values = _user_id_candidates(user_id)
@@ -371,3 +376,38 @@ def update_project_entitlement_maintenance(
         collection.find_one({"_id": existing["_id"]}),
     )
     return _serialize(saved)
+
+
+def ensure_project_entitlement_indexes() -> None:
+    """Create indexes on the project_entitlements collection.
+
+    project_id is queried on every workspace capability check.  Without an
+    index the query performs a full collection scan, which causes API request
+    timeouts as the collection grows.
+    """
+    collection = _collection()
+    existing = collection.index_information()
+
+    def _ensure_index(
+        keys: list[tuple[str, int]],
+        *,
+        name: str,
+        unique: bool = False,
+        sparse: bool = False,
+    ) -> None:
+        if name in existing:
+            return
+        try:
+            collection.create_index(keys, name=name, unique=unique, sparse=sparse)
+        except OperationFailure as exc:
+            _logger.warning(
+                "Could not create project_entitlements index %s: %s",
+                name,
+                exc,
+            )
+            return
+
+    _ensure_index([("project_id", 1)], name="project_id_1")
+    _ensure_index([("project_id", 1), ("status", 1)], name="project_id_1_status_1")
+    _ensure_index([("user_id", 1)], name="user_id_1")
+    _ensure_index([("status", 1)], name="status_1")

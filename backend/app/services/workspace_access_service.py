@@ -6,8 +6,10 @@ from bson import ObjectId
 from fastapi import HTTPException, status
 
 from app.core.package_catalog import get_package, normalize_package_code
+from app.core.role_catalog import normalize_project_member_role
 from app.database import get_database
 from app.services.entitlement_service import resolve_project_entitlements
+from app.services.project_member_service import is_project_member
 from app.services.project_membership_service import get_project_access_snapshot
 
 PAID_PACKAGE_STATUSES = {
@@ -112,6 +114,21 @@ def _family_is_visible_to_user(
             return True
 
     return False
+
+
+def family_is_visible_to_user(
+    family: dict[str, Any],
+    *,
+    current_user_id: str,
+    current_user_email: str,
+    current_user_name: str,
+) -> bool:
+    return _family_is_visible_to_user(
+        family,
+        current_user_id=current_user_id,
+        current_user_email=current_user_email,
+        current_user_name=current_user_name,
+    )
 
 
 def _require_database():
@@ -310,8 +327,12 @@ def _project_is_visible_to_user(
     if current_user_email and current_user_email in owner_emails:
         return True
 
+    project_id = _normalize_value(project.get("_id") or project.get("id"))
+    if project_id and is_project_member(project_id, current_user_id, current_user_email):
+        return True
+
     if family is not None and not any(value for value in owner_user_ids | owner_emails):
-        return _family_is_visible_to_user(
+        return family_is_visible_to_user(
             family,
             current_user_id=current_user_id,
             current_user_email=current_user_email,
@@ -400,6 +421,13 @@ def resolve_workspace_context(
             detail="Not authorized to access this workspace.",
         )
 
+    access_snapshot = get_project_access_snapshot(
+        project,
+        user_id=_current_user_id(current_user),
+        email=_current_user_email(current_user),
+    )
+    membership = (access_snapshot or {}).get("membership") or {}
+
     entitlement_map = _resolve_project_entitlement_map(project)
     return {
         "project": project,
@@ -410,6 +438,13 @@ def resolve_workspace_context(
         "resolved_entitlements": entitlement_map.get("resolved_entitlements") or {},
         "entitlement": entitlement_map.get("entitlement"),
         "paid_order": entitlement_map.get("paid_order"),
+        "access_snapshot": access_snapshot,
+        "member_role": _normalize_value(access_snapshot.get("member_role") or "viewer") or "viewer",
+        "relationship_scope": _normalize_value(membership.get("relationship_scope") or "household_member")
+        or "household_member",
+        "member_privacy_scope": _normalize_value(membership.get("privacy_scope") or "household_private")
+        or "household_private",
+        "link_status": _normalize_value(membership.get("link_status") or "active") or "active",
         "is_admin": _has_workspace_admin_access(current_user),
     }
 
@@ -446,6 +481,32 @@ def require_workspace_capability(
             detail=detail,
         )
 
+    return context
+
+
+def require_workspace_member_role(
+    context: dict[str, Any],
+    *,
+    allowed_roles: Iterable[str],
+    detail: str,
+) -> dict[str, Any]:
+    if context.get("is_admin"):
+        return context
+
+    normalized_role = normalize_project_member_role(
+        context.get("member_role"),
+        default="viewer",
+    )
+    allowed = {
+        normalize_project_member_role(role, default="viewer")
+        for role in allowed_roles
+        if _normalize_value(role)
+    }
+    if normalized_role not in allowed:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=detail,
+        )
     return context
 
 
