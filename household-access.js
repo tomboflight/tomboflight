@@ -1,6 +1,6 @@
 (function () {
   const app = window.TOLApp || window.TOLAuth;
-  if (!app) return;
+  if (!app || typeof app.apiRequest !== "function") return;
 
   const statusNode = document.querySelector("[data-household-status]");
   const inviteForm = document.querySelector("[data-household-invite-form]");
@@ -332,7 +332,6 @@
 
   async function sendLoadRequest(pathOrPaths, action, projectId, options = {}) {
     const paths = loadRequestPaths(pathOrPaths);
-    const apiBaseUrls = resolveInviteApiBaseUrls();
     const authToken = typeof app.getToken === "function" ? String(app.getToken() || "").trim() : "";
     const fallbackStatusCodes = new Set(
       (Array.isArray(options.fallbackStatusCodes) && options.fallbackStatusCodes.length
@@ -345,78 +344,41 @@
     let lastError = null;
 
     for (const path of paths) {
-      for (const apiBaseUrl of apiBaseUrls) {
-        const requestUrl = `${apiBaseUrl}${path}`;
-        logLoadRequest(action, path, "GET", projectId, {
-          requestUrl,
-          resolvedApiBaseUrl: apiBaseUrl,
+      logLoadRequest(action, path, "GET", projectId, { requestUrl: path });
+      try {
+        const headers = { Accept: "application/json" };
+        if (authToken) headers.Authorization = `Bearer ${authToken}`;
+        const responseBody = await app.apiRequest(path, {
+          method: "GET",
+          headers,
         });
-        try {
-          const headers = { Accept: "application/json" };
-          if (authToken) headers.Authorization = `Bearer ${authToken}`;
-          const response = await fetch(requestUrl, {
-            method: "GET",
-            credentials: "include",
-            headers,
-          });
-          const contentType = String(response.headers.get("content-type") || "").toLowerCase();
-          let responseBody = null;
-          if (contentType.includes("application/json")) {
-            responseBody = await response.json();
-          } else {
-            const text = await response.text();
-            responseBody = text ? { detail: text } : null;
-          }
-          const responseMeta = {
-            requestUrl,
-            resolvedApiBaseUrl: apiBaseUrl,
-            status: response.status,
-          };
-          logLoadResponse(action, path, "GET", projectId, responseMeta, responseBody);
-          if (!response.ok) {
-            const detail = readableMessage(
-              responseBody?.detail || responseBody?.message || responseBody?.error || responseBody,
-              response.statusText || `Request failed with status ${response.status}`,
-            );
-            const error = new Error(detail || `Request failed with status ${response.status}`);
-            error.status = response.status;
-            error.statusText = response.statusText;
-            error.detail = detail;
-            error.data = responseBody;
-            error.responseBody = responseBody;
-            error.requestUrl = requestUrl;
-            error.resolvedApiBaseUrl = apiBaseUrl;
-            lastError = error;
-            logLoadFailure(action, path, "GET", projectId, error);
-            if (fallbackStatusCodes.has(response.status)) {
-              continue;
-            }
-            throw error;
-          }
-          return responseBody;
-        } catch (error) {
-          if (fallbackStatusCodes.has(Number(error?.status || 0))) {
-            lastError = error;
-            continue;
-          }
-          if (Number(error?.status || 0) > 0) {
-            throw error;
-          }
-          const networkError = new Error(error?.message || "Network request failed.");
-          networkError.status = 0;
-          networkError.detail = error?.message || "Network request failed.";
-          networkError.requestUrl = requestUrl;
-          networkError.resolvedApiBaseUrl = apiBaseUrl;
-          lastError = networkError;
-          logLoadFailure(action, path, "GET", projectId, networkError);
+        logLoadResponse(
+          action,
+          path,
+          "GET",
+          projectId,
+          {
+            requestUrl: path,
+            resolvedApiBaseUrl: typeof app.getApiBaseUrl === "function" ? app.getApiBaseUrl() : "",
+            status: 200,
+          },
+          responseBody,
+        );
+        return responseBody;
+      } catch (error) {
+        lastError = error;
+        logLoadFailure(action, path, "GET", projectId, error);
+        if (fallbackStatusCodes.has(Number(error?.status || 0))) {
+          continue;
         }
+        throw error;
       }
     }
 
     throw (
       lastError ||
       new Error(
-        `Load endpoint unavailable for paths [${paths.join(", ") || "none"}] across all configured hosts: ${apiBaseUrls.join(", ") || "none"}`,
+        `Load endpoint unavailable for paths [${paths.join(", ") || "none"}].`,
       )
     );
   }
@@ -425,8 +387,11 @@
     const encoded = encodeURIComponent(String(projectId || "").trim());
     return [
       `/workspace-access/project/${encoded}/members`,
+      `/workspace-access/projects/${encoded}/members`,
       `/workspace_access/project/${encoded}/members`,
+      `/workspace_access/projects/${encoded}/members`,
       `/household-access/project/${encoded}/members`,
+      `/household-access/projects/${encoded}/members`,
     ];
   }
 
@@ -434,105 +399,28 @@
     const encoded = encodeURIComponent(String(projectId || "").trim());
     return [
       `/workspace-access/project/${encoded}/invites`,
+      `/workspace-access/projects/${encoded}/invites`,
       `/workspace_access/project/${encoded}/invites`,
+      `/workspace_access/projects/${encoded}/invites`,
       `/household-access/project/${encoded}/invites`,
+      `/household-access/projects/${encoded}/invites`,
     ];
   }
 
   async function sendInviteRequest(path, payload, action) {
-    const apiBaseUrls = resolveInviteApiBaseUrls();
-    const authToken = typeof app.getToken === "function" ? String(app.getToken() || "").trim() : "";
-    let lastError = null;
-    for (const apiBaseUrl of apiBaseUrls) {
-      const requestUrl = `${apiBaseUrl}${path}`;
-      logInviteRequest(action, path, payload);
-      console.info("[HouseholdAccess] Invite request attempt.", {
-        action,
-        resolvedApiBaseUrl: apiBaseUrl,
-        requestUrl,
-        method: "POST",
-        payload,
-      });
-      try {
-        const headers = {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-        };
-        if (authToken) headers.Authorization = `Bearer ${authToken}`;
-        const response = await fetch(requestUrl, {
-          method: "POST",
-          credentials: "include",
-          headers,
-          body: JSON.stringify(payload),
-        });
-        const contentType = String(response.headers.get("content-type") || "").toLowerCase();
-        let responseBody = null;
-        if (contentType.includes("application/json")) {
-          responseBody = await response.json();
-        } else {
-          const text = await response.text();
-          responseBody = text ? { detail: text } : null;
-        }
-        console.info("[HouseholdAccess] Invite request response.", {
-          action,
-          resolvedApiBaseUrl: apiBaseUrl,
-          requestUrl,
-          method: "POST",
-          payload,
-          status: response.status,
-          responseBody,
-        });
-        if (!response.ok) {
-          const detail = readableMessage(
-            responseBody?.detail || responseBody?.message || responseBody?.error || responseBody,
-            response.statusText || `Request failed with status ${response.status}`,
-          );
-          const error = new Error(detail || `Request failed with status ${response.status}`);
-          error.status = response.status;
-          error.statusText = response.statusText;
-          error.detail = detail;
-          error.data = responseBody;
-          error.responseBody = responseBody;
-          error.requestUrl = requestUrl;
-          error.resolvedApiBaseUrl = apiBaseUrl;
-          lastError = error;
-          if (response.status === 404) {
-            // Some live environments run mixed backend versions per host; keep
-            // trying remaining API hosts so invite creation is not blocked.
-            continue;
-          }
-          throw error;
-        }
-        return {
-          responseBody,
-          meta: {
-            requestUrl,
-            resolvedApiBaseUrl: apiBaseUrl,
-            status: response.status,
-          },
-        };
-      } catch (error) {
-        if (Number(error?.status || 0) === 404) {
-          lastError = error;
-          continue;
-        }
-        if (Number(error?.status || 0) > 0) {
-          throw error;
-        }
-        const networkError = new Error(error?.message || "Network request failed.");
-        networkError.status = 0;
-        networkError.detail = error?.message || "Network request failed.";
-        networkError.requestUrl = requestUrl;
-        networkError.resolvedApiBaseUrl = apiBaseUrl;
-        lastError = networkError;
-      }
-    }
-    throw (
-      lastError ||
-      new Error(
-        `Invite endpoint unavailable across all configured hosts: ${apiBaseUrls.join(", ") || "none"}`,
-      )
-    );
+    logInviteRequest(action, path, payload);
+    const responseBody = await app.apiRequest(path, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    return {
+      responseBody,
+      meta: {
+        requestUrl: path,
+        resolvedApiBaseUrl: typeof app.getApiBaseUrl === "function" ? app.getApiBaseUrl() : "",
+        status: 201,
+      },
+    };
   }
 
   function setText(node, message, type = "info") {
@@ -908,11 +796,14 @@
       error?.detail || error?.message || error?.data || error?.responseBody,
       "",
     ).toLowerCase();
-    if (!statusCode && raw.includes("network")) {
+    if (
+      !statusCode &&
+      (raw.includes("network") || raw.includes("failed to fetch") || raw.includes("load failed"))
+    ) {
       return "We couldn’t reach the workspace access service. Please refresh and try again.";
     }
     if (statusCode === 404) {
-      return "Workspace access endpoints are not available on the active API host yet.";
+      return "Workspace access endpoints are unavailable for this project context. Please refresh or contact support.";
     }
     if (statusCode >= 500 || raw === "load failed") {
       return "Workspace access is temporarily unavailable. Please refresh and try again.";
@@ -924,22 +815,59 @@
   }
 
   async function changeMemberRole(membershipId, memberRole) {
-    await app.apiRequest(
-      `/workspace-access/project/${encodeURIComponent(currentProjectId)}/members/${encodeURIComponent(membershipId)}/role`,
-      {
-        method: "POST",
-        body: JSON.stringify({ member_role: memberRole }),
-      },
-    );
+    const encodedProjectId = encodeURIComponent(currentProjectId);
+    const encodedMembershipId = encodeURIComponent(membershipId);
+    const rolePayload = JSON.stringify({ member_role: memberRole });
+    const paths = [
+      `/workspace-access/project/${encodedProjectId}/members/${encodedMembershipId}/role`,
+      `/workspace-access/projects/${encodedProjectId}/members/${encodedMembershipId}/role`,
+      `/workspace_access/project/${encodedProjectId}/members/${encodedMembershipId}/role`,
+      `/workspace_access/projects/${encodedProjectId}/members/${encodedMembershipId}/role`,
+      `/household-access/project/${encodedProjectId}/members/${encodedMembershipId}/role`,
+      `/household-access/projects/${encodedProjectId}/members/${encodedMembershipId}/role`,
+    ];
+    let lastError = null;
+    for (const path of paths) {
+      try {
+        await app.apiRequest(path, {
+          method: "POST",
+          body: rolePayload,
+        });
+        return;
+      } catch (error) {
+        lastError = error;
+        if (Number(error?.status || 0) === 404) continue;
+        throw error;
+      }
+    }
+    throw lastError || new Error("Unable to update member role right now.");
   }
 
   async function removeMember(membershipId) {
-    await app.apiRequest(
-      `/workspace-access/project/${encodeURIComponent(currentProjectId)}/members/${encodeURIComponent(membershipId)}/revoke`,
-      {
-        method: "POST",
-      },
-    );
+    const encodedProjectId = encodeURIComponent(currentProjectId);
+    const encodedMembershipId = encodeURIComponent(membershipId);
+    const paths = [
+      `/workspace-access/project/${encodedProjectId}/members/${encodedMembershipId}/revoke`,
+      `/workspace-access/projects/${encodedProjectId}/members/${encodedMembershipId}/revoke`,
+      `/workspace_access/project/${encodedProjectId}/members/${encodedMembershipId}/revoke`,
+      `/workspace_access/projects/${encodedProjectId}/members/${encodedMembershipId}/revoke`,
+      `/household-access/project/${encodedProjectId}/members/${encodedMembershipId}/revoke`,
+      `/household-access/projects/${encodedProjectId}/members/${encodedMembershipId}/revoke`,
+    ];
+    let lastError = null;
+    for (const path of paths) {
+      try {
+        await app.apiRequest(path, {
+          method: "POST",
+        });
+        return;
+      } catch (error) {
+        lastError = error;
+        if (Number(error?.status || 0) === 404) continue;
+        throw error;
+      }
+    }
+    throw lastError || new Error("Unable to remove member right now.");
   }
 
   async function resendInvite(inviteId) {
@@ -1152,10 +1080,14 @@
     };
     const invitePaths = [
       `/workspace-access/project/${encodeURIComponent(currentProjectId)}/invites`,
+      `/workspace-access/projects/${encodeURIComponent(currentProjectId)}/invites`,
       // Backward-compatible singular route retained by backend legacy wiring.
       `/workspace-access/project/${encodeURIComponent(currentProjectId)}/invite`,
+      `/workspace-access/projects/${encodeURIComponent(currentProjectId)}/invite`,
       `/workspace_access/project/${encodeURIComponent(currentProjectId)}/invites`,
+      `/workspace_access/projects/${encodeURIComponent(currentProjectId)}/invites`,
       `/household-access/project/${encodeURIComponent(currentProjectId)}/invites`,
+      `/household-access/projects/${encodeURIComponent(currentProjectId)}/invites`,
     ];
     try {
       let invite = null;
