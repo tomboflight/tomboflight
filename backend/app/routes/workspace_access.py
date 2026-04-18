@@ -149,6 +149,12 @@ def get_my_memberships(current_user: dict[str, Any] = Depends(get_current_user))
     return {"items": [build_membership_response(item) for item in items]}
 
 
+@legacy_router.get("/workspace_access/my-memberships", include_in_schema=False)
+@legacy_router.get("/household-access/my-memberships", include_in_schema=False)
+def get_my_memberships_legacy(current_user: dict[str, Any] = Depends(get_current_user)):
+    return get_my_memberships(current_user=current_user)
+
+
 @router.get("/project/{project_id}/members")
 def get_project_members(project_id: str, current_user: dict[str, Any] = Depends(get_current_user)):
     _assert_project_access(project_id, current_user)
@@ -302,6 +308,15 @@ def accept_invite(
     return build_membership_response(membership)
 
 
+@legacy_router.post("/workspace_access/invites/accept", include_in_schema=False)
+@legacy_router.post("/household-access/invites/accept", include_in_schema=False)
+def accept_invite_legacy(
+    payload: HouseholdInviteAccept,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    return accept_invite(payload=payload, current_user=current_user)
+
+
 @router.post("/invites/{invite_id}/revoke")
 def revoke_invite(invite_id: str, current_user: dict[str, Any] = Depends(get_current_user)):
     try:
@@ -311,6 +326,12 @@ def revoke_invite(invite_id: str, current_user: dict[str, Any] = Depends(get_cur
     if invite is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invite not found.")
     return build_invite_response(invite)
+
+
+@legacy_router.post("/workspace_access/invites/{invite_id}/revoke", include_in_schema=False)
+@legacy_router.post("/household-access/invites/{invite_id}/revoke", include_in_schema=False)
+def revoke_invite_legacy(invite_id: str, current_user: dict[str, Any] = Depends(get_current_user)):
+    return revoke_invite(invite_id=invite_id, current_user=current_user)
 
 
 @router.post("/invites/{invite_id}/resend")
@@ -324,6 +345,12 @@ def resend_invite(invite_id: str, current_user: dict[str, Any] = Depends(get_cur
     if invite is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invite not found.")
     return build_invite_response(invite)
+
+
+@legacy_router.post("/workspace_access/invites/{invite_id}/resend", include_in_schema=False)
+@legacy_router.post("/household-access/invites/{invite_id}/resend", include_in_schema=False)
+def resend_invite_legacy(invite_id: str, current_user: dict[str, Any] = Depends(get_current_user)):
+    return resend_invite(invite_id=invite_id, current_user=current_user)
 
 
 @router.post("/project/{project_id}/members/{membership_id}/role")
@@ -348,6 +375,28 @@ def change_member_role(
     return build_membership_response(membership)
 
 
+@legacy_router.post(
+    "/workspace_access/project/{project_id}/members/{membership_id}/role",
+    include_in_schema=False,
+)
+@legacy_router.post(
+    "/household-access/project/{project_id}/members/{membership_id}/role",
+    include_in_schema=False,
+)
+def change_member_role_legacy(
+    project_id: str,
+    membership_id: str,
+    payload: HouseholdMemberRoleUpdate,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    return change_member_role(
+        project_id=project_id,
+        membership_id=membership_id,
+        payload=payload,
+        current_user=current_user,
+    )
+
+
 @router.post("/project/{project_id}/members/{membership_id}/revoke")
 def revoke_member(
     project_id: str,
@@ -366,3 +415,23 @@ def revoke_member(
     if membership is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Membership not found.")
     return build_membership_response(membership)
+
+
+@legacy_router.post(
+    "/workspace_access/project/{project_id}/members/{membership_id}/revoke",
+    include_in_schema=False,
+)
+@legacy_router.post(
+    "/household-access/project/{project_id}/members/{membership_id}/revoke",
+    include_in_schema=False,
+)
+def revoke_member_legacy(
+    project_id: str,
+    membership_id: str,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    return revoke_member(
+        project_id=project_id,
+        membership_id=membership_id,
+        current_user=current_user,
+    )
