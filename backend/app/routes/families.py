@@ -108,7 +108,7 @@ def get_families(user: dict[str, Any] = Depends(get_current_user)):
 
     results: list[FamilyResponse] = []
 
-    if _is_admin(user):
+    if has_internal_admin_access(user):
         for family in docs:
             built = _safe_build_family_response(family)
             if built is not None:
@@ -139,7 +139,7 @@ def create_family_route(
 
     current_user_id = _current_user_id(user)
     current_user_email = _current_user_email(user)
-    is_admin = _is_admin(user)
+    is_admin = has_internal_admin_access(user)
 
     family_name = str(payload.family_name).strip()
     created_by = str(payload.created_by).strip() if payload.created_by else ""
