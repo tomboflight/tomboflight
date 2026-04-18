@@ -14,6 +14,7 @@ from app.services.entitlement_service import (
     compute_upgrade_quote,
     resolve_project_entitlements,
 )
+from app.core.entitlement_conformance_matrix import get_entitlement_conformance_matrix
 
 router = APIRouter(prefix="/packages", tags=["Packages"])
 
@@ -27,6 +28,11 @@ def get_package_catalog_route():
         "package_identifier_map": get_package_identifier_map(),
         "control_profiles": list_package_control_profiles(),
     }
+
+
+@router.get("/conformance-matrix")
+def get_package_conformance_matrix_route():
+    return get_entitlement_conformance_matrix()
 
 
 @router.get("/entitlements/{package_code}")
