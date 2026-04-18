@@ -7,10 +7,15 @@
   const inviteStatus = document.querySelector("[data-household-invite-status]");
   const acceptForm = document.querySelector("[data-household-accept-form]");
   const acceptStatus = document.querySelector("[data-household-accept-status]");
+  const acceptLinkStatus = document.querySelector("[data-household-accept-link-status]");
   const membersList = document.querySelector("[data-household-members-list]");
   const invitesList = document.querySelector("[data-household-invites-list]");
   const membersEmpty = document.querySelector("[data-household-members-empty]");
   const invitesEmpty = document.querySelector("[data-household-invites-empty]");
+  const membersLoading = document.querySelector("[data-household-members-loading]");
+  const invitesLoading = document.querySelector("[data-household-invites-loading]");
+  const membersError = document.querySelector("[data-household-members-error]");
+  const invitesError = document.querySelector("[data-household-invites-error]");
   const pendingCount = document.querySelector("[data-household-pending-count]");
   const inviteCoOwnerButton = document.querySelector("[data-household-invite-co-owner]");
   const inviteFamilyButton = document.querySelector("[data-household-invite-family]");
@@ -545,7 +550,10 @@
   }
 
   function relationshipLabel(value) {
-    return RELATIONSHIP_LABELS[String(value || "").trim()] || "Household Member";
+    const normalized = normalizeLower(value).replace(/-/g, "_");
+    if (!normalized) return "Household Member";
+    if (RELATIONSHIP_LABELS[normalized]) return RELATIONSHIP_LABELS[normalized];
+    return titleLabel(normalized);
   }
 
   function privacyLabel(value) {
@@ -554,10 +562,65 @@
 
   function titleLabel(value) {
     return String(value || "")
-      .replaceAll("_", " ")
+      .replace(/_/g, " ")
       .replace(/\b\w/g, function (char) {
         return char.toUpperCase();
       });
+  }
+
+  function formatDateTime(value) {
+    const normalized = normalizeValue(value);
+    if (!normalized) return "—";
+    const parsed = new Date(normalized);
+    if (Number.isNaN(parsed.getTime())) return normalized;
+    try {
+      return new Intl.DateTimeFormat(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      }).format(parsed);
+    } catch (_error) {
+      return parsed.toISOString().split("T")[0];
+    }
+  }
+
+  function normalizeInviteStatus(value) {
+    const normalized = normalizeLower(value);
+    if (normalized === "accepted") return "Accepted";
+    if (normalized === "expired") return "Expired";
+    if (normalized === "revoked") return "Revoked";
+    if (normalized === "pending") return "Pending";
+    return titleLabel(normalized || "pending");
+  }
+
+  function memberDisplayName(member) {
+    const directName = normalizeValue(
+      member?.full_name || member?.display_name || member?.name || member?.user_name,
+    );
+    if (directName) return directName;
+    const first = normalizeValue(member?.first_name || member?.given_name);
+    const last = normalizeValue(member?.last_name || member?.family_name);
+    const joined = `${first} ${last}`.trim();
+    if (joined) return joined;
+    return "Name not provided";
+  }
+
+  function setLoadingState(loading) {
+    const show = Boolean(loading);
+    if (membersLoading) membersLoading.style.display = show ? "block" : "none";
+    if (invitesLoading) invitesLoading.style.display = show ? "block" : "none";
+  }
+
+  function setLoadErrorState(message = "") {
+    const errorText = normalizeValue(message);
+    if (membersError) {
+      membersError.style.display = errorText ? "block" : "none";
+      membersError.textContent = errorText;
+    }
+    if (invitesError) {
+      invitesError.style.display = errorText ? "block" : "none";
+      invitesError.textContent = errorText;
+    }
   }
 
   function normalizeValue(value) {
@@ -906,8 +969,16 @@
       card.className = "form-panel";
 
       const emailLabel = member.email || member.user_id || "Unassigned member";
+      const fullName = memberDisplayName(member);
       const role = normalizeRole(member.member_role || "viewer");
       const isBillingOwner = role === "billing_owner";
+      const isCoOwnerSpouse =
+        role === "co_owner" && normalizeLower(member.relationship_scope) === "spouse";
+      const parityNote = isBillingOwner
+        ? "Primary household owner and billing authority."
+        : isCoOwnerSpouse
+          ? "Co-Owner (Spouse) with parity for household access management."
+          : "";
       const targetRank = roleRank(role);
       const canTouchTarget = canManage && !isBillingOwner && targetRank < actorRank;
       const options = ROLE_OPTIONS.map(
@@ -917,8 +988,10 @@
         },
       ).join("");
       card.innerHTML = `
-        <strong>${emailLabel}</strong>
+        <strong>${fullName}</strong>
+        <p class="card-copy">Email: ${emailLabel}</p>
         <p class="card-copy">Role: ${roleLabel(role)}</p>
+        ${parityNote ? `<p class="card-copy">${parityNote}</p>` : ""}
         <p class="card-copy">Relationship: ${relationshipLabel(member.relationship_scope || "household_member")}</p>
         <p class="card-copy">Privacy: ${privacyLabel(member.privacy_scope || "household_private")}</p>
         <p class="card-copy">Status: ${member.status || "active"}</p>
@@ -981,8 +1054,10 @@
         <p class="card-copy">Role: ${roleLabel(invite.member_role || "viewer")}</p>
         <p class="card-copy">Relationship: ${relationshipLabel(invite.relationship_scope || "household_member")}</p>
         <p class="card-copy">Privacy: ${privacyLabel(invite.privacy_scope || "household_private")}</p>
-        <p class="card-copy">Status: ${invite.status || "pending"}</p>
-        <p class="card-copy">Expires: ${invite.expires_at || "—"}</p>
+        <p class="card-copy">Status: ${normalizeInviteStatus(invite.status || "pending")}</p>
+        <p class="card-copy">Created: ${formatDateTime(invite.created_at)}</p>
+        <p class="card-copy">Accepted: ${formatDateTime(invite.accepted_at)}</p>
+        <p class="card-copy">Expires: ${formatDateTime(invite.expires_at)}</p>
         <div class="inline-actions" style="margin-top:0.75rem;">
           <button class="btn btn-secondary" type="button" data-invite-resend ${canResend ? "" : "disabled"}>Resend Invite</button>
           <button class="btn btn-secondary" type="button" data-invite-revoke ${canRevoke ? "" : "disabled"}>Revoke Invite</button>
@@ -1020,20 +1095,33 @@
 
   async function refreshData() {
     if (!currentProjectId) return;
-    const [membersPayload, invitesPayload] = await Promise.all([
-      sendLoadRequest(workspaceMembersLoadPaths(currentProjectId), "load_members", currentProjectId),
-      sendLoadRequest(workspaceInvitesLoadPaths(currentProjectId), "load_invites", currentProjectId),
-    ]);
-    const memberItems = membersPayload?.items || [];
-    let resolvedRole = resolveCurrentMemberRole(memberItems);
-    if (!resolvedRole) {
-      resolvedRole = await resolveCurrentMemberRoleFromMemberships(currentProjectId);
+    setLoadingState(true);
+    setLoadErrorState("");
+    try {
+      const [membersPayload, invitesPayload] = await Promise.all([
+        sendLoadRequest(workspaceMembersLoadPaths(currentProjectId), "load_members", currentProjectId),
+        sendLoadRequest(workspaceInvitesLoadPaths(currentProjectId), "load_invites", currentProjectId),
+      ]);
+      const memberItems = membersPayload?.items || [];
+      let resolvedRole = resolveCurrentMemberRole(memberItems);
+      if (!resolvedRole) {
+        resolvedRole = await resolveCurrentMemberRoleFromMemberships(currentProjectId);
+      }
+      currentMemberRole = resolvedRole || "viewer";
+      hasResolvedMemberRole = Boolean(resolvedRole);
+      applyInviteFormRoleAccess();
+      renderMembers(memberItems);
+      renderInvites(invitesPayload?.items || []);
+      if (statusNode) {
+        statusNode.textContent = `Household access is up to date for project ${currentProjectId}.`;
+      }
+    } catch (error) {
+      const detail = householdLoadFailureMessage(error);
+      setLoadErrorState(detail);
+      throw error;
+    } finally {
+      setLoadingState(false);
     }
-    currentMemberRole = resolvedRole || "viewer";
-    hasResolvedMemberRole = Boolean(resolvedRole);
-    applyInviteFormRoleAccess();
-    renderMembers(memberItems);
-    renderInvites(invitesPayload?.items || []);
   }
 
   function selectedInviteRole() {
@@ -1126,16 +1214,6 @@
       return;
     }
     try {
-      await app.apiRequest("/workspace-access/invites/accept", {
-        method: "POST",
-        body: JSON.stringify({ invite_key: inviteKey }),
-      });
-      setText(acceptStatus, "Invite accepted. Workspace access granted.", "success");
-      currentProjectId = currentProjectId || (await resolveProjectId(currentUser));
-      if (statusNode && currentProjectId) {
-        statusNode.textContent = `Managing workspace access for project ${currentProjectId}.`;
-      }
-      await refreshData();
       const membership = await acceptInviteByKey(inviteKey);
       hydrateProjectContextFromMembership(membership);
       setText(acceptStatus, "Invite accepted. Workspace access granted.", "success");
@@ -1233,6 +1311,15 @@
 
       const inviteKey = inviteKeyFromQuery();
       currentProjectId = await resolveProjectId(currentUser);
+      if (inviteKey) {
+        setText(
+          acceptLinkStatus,
+          "Invite link detected. Continue below to confirm access for this signed-in account.",
+          "info",
+        );
+      } else {
+        clear(acceptLinkStatus);
+      }
       if (acceptForm && inviteKey) {
         const keyInput = acceptForm.querySelector('input[name="invite_key"]');
         if (keyInput) keyInput.value = inviteKey;
@@ -1268,10 +1355,10 @@
       }
 
       if (statusNode && currentProjectId) {
-        statusNode.textContent = `Managing workspace access for project ${currentProjectId}.`;
+        statusNode.textContent = `Loading household members and invite history for project ${currentProjectId}…`;
       } else if (statusNode) {
         statusNode.textContent =
-          "Invite context detected. Accept the invite key below to activate workspace access.";
+          "Invite context detected. Open your invite email link or use the advanced invite code option.";
       }
 
       console.info("[HouseholdAccess] Invite runtime API context.", {
