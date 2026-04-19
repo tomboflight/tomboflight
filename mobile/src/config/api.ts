@@ -1,7 +1,5 @@
-import Constants from 'expo-constants';
-
 const envBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL;
-const extraBaseUrl = Constants.expoConfig?.extra?.apiBaseUrl;
+const extraBaseUrl = getExpoExtraBaseUrl();
 const defaultBaseUrl = 'https://api.tomboflight.com';
 const WORKSPACE_ACCESS_CANONICAL_PREFIX = '/workspace-access';
 const WORKSPACE_ACCESS_PREFIX_ALIASES = [
@@ -9,6 +7,21 @@ const WORKSPACE_ACCESS_PREFIX_ALIASES = [
   '/workspace_access',
   '/household-access'
 ] as const;
+
+function getExpoExtraBaseUrl(): string | undefined {
+  try {
+    const constants = require('expo-constants') as {
+      expoConfig?: {
+        extra?: {
+          apiBaseUrl?: string;
+        };
+      };
+    };
+    return constants?.expoConfig?.extra?.apiBaseUrl;
+  } catch {
+    return undefined;
+  }
+}
 
 function resolveApiBaseUrl(): string {
   const candidate = String(envBaseUrl || extraBaseUrl || defaultBaseUrl)
@@ -51,6 +64,9 @@ export const API_ENDPOINTS = {
     signUp: '/auth/signup',
     logout: '/auth/logout',
     csrfToken: '/auth/csrf-token',
+    mfaEnrollBegin: '/auth/mfa/enroll/begin',
+    mfaEnrollVerify: '/auth/mfa/enroll/verify',
+    mfaLoginVerify: '/auth/mfa/login/verify',
     passwordResetRequest: '/auth/password-reset/request',
     passwordResetConfirm: '/auth/password-reset/confirm'
   },

@@ -44,6 +44,25 @@ export type PasswordResetResponse = {
   delivery_mode?: string | null;
 };
 
+export type MfaEnrollmentBeginResponse = {
+  setup_token: string;
+  secret: string;
+  otpauth_url: string;
+};
+
+export type MfaLoginVerifyInput = {
+  mfaChallengeToken: string;
+  code?: string;
+  recoveryCode?: string;
+};
+
+async function persistAccessToken(response: AuthTokenResponse): Promise<void> {
+  const token = response.access_token?.trim();
+  if (token) {
+    await saveAccessToken(token);
+  }
+}
+
 /**
  * Uses FastAPI /auth/login.
  */
@@ -56,9 +75,7 @@ export async function signIn(input: SignInInput): Promise<AuthTokenResponse> {
     }
   });
 
-  if (response.access_token && !response.mfa_required) {
-    await saveAccessToken(response.access_token);
-  }
+  await persistAccessToken(response);
 
   return response;
 }
@@ -93,6 +110,51 @@ export async function requestPasswordReset(email: string): Promise<PasswordReset
       email: email.trim().toLowerCase()
     }
   });
+}
+
+/**
+ * Starts MFA enrollment after a login challenge.
+ */
+export async function beginMfaEnrollment(mfaChallengeToken: string): Promise<MfaEnrollmentBeginResponse> {
+  return apiRequest<MfaEnrollmentBeginResponse>(API_ENDPOINTS.auth.mfaEnrollBegin, {
+    method: 'POST',
+    body: {
+      mfa_challenge_token: mfaChallengeToken
+    }
+  });
+}
+
+/**
+ * Verifies MFA enrollment code and finalizes authenticated session.
+ */
+export async function verifyMfaEnrollment(setupToken: string, code: string): Promise<AuthTokenResponse> {
+  const response = await apiRequest<AuthTokenResponse>(API_ENDPOINTS.auth.mfaEnrollVerify, {
+    method: 'POST',
+    body: {
+      setup_token: setupToken,
+      code
+    }
+  });
+
+  await persistAccessToken(response);
+  return response;
+}
+
+/**
+ * Verifies MFA login challenge and finalizes authenticated session.
+ */
+export async function verifyMfaLogin(input: MfaLoginVerifyInput): Promise<AuthTokenResponse> {
+  const response = await apiRequest<AuthTokenResponse>(API_ENDPOINTS.auth.mfaLoginVerify, {
+    method: 'POST',
+    body: {
+      mfa_challenge_token: input.mfaChallengeToken,
+      code: input.code,
+      recovery_code: input.recoveryCode
+    }
+  });
+
+  await persistAccessToken(response);
+  return response;
 }
 
 /**
