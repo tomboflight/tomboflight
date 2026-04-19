@@ -1,5 +1,5 @@
 /**
- * settings feature module placeholder.
- * TODO: Add domain models, API adapters, and state management for settings.
+ * settings feature placeholder.
+ * TODO: add domain models, API adapters, and state for settings.
  */
 export {};

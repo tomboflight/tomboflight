@@ -12,7 +12,7 @@ type FeaturePlaceholderScreenProps = {
 };
 
 /**
- * MVP placeholder view used by customer-facing routes until backend and domain logic are wired in.
+ * Placeholder template for MVP screens.
  */
 export function FeaturePlaceholderScreen({
   title,
@@ -29,7 +29,7 @@ export function FeaturePlaceholderScreen({
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>MVP Integration TODO</Text>
+        <Text style={styles.cardTitle}>Integration TODO</Text>
         {todoItems.map((item) => (
           <Text key={item} style={styles.todoItem}>
             • {item}

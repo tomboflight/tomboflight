@@ -1,34 +1,25 @@
-# Tomb of Light Mobile (Expo + React Native + TypeScript)
+# Tomb of Light Mobile
 
-This folder contains a clean starter for the Tomb of Light customer-facing mobile MVP.
+Customer-facing mobile app scaffold for Tomb of Light.
 
-## Scope for this starter
+## Stack
 
-- Expo Router file-based routing
-- TypeScript-first structure
-- Placeholder screens for customer flows only
-- No admin tooling in mobile MVP
-- Clear TODO markers for future FastAPI integration
+- Expo
+- React Native
+- TypeScript
+- Expo Router
 
-## Structure
-
-- `app/` route entrypoints and navigation layout
-- `src/components/` reusable UI shells for MVP placeholder screens
-- `src/features/` future domain modules by customer feature
-- `src/services/` API/auth/storage integration points
-- `src/theme/` design tokens for bright blue/gray/white premium UI direction
-
-## Quick start
+## Commands
 
 ```bash
 npm install
+npx expo install
+npm run typecheck
 npm run start
 ```
 
-Then open iOS/Android simulator or Expo Go from the Metro UI.
+## Notes
 
-## Integration notes
-
-- Set `EXPO_PUBLIC_API_BASE_URL` in `.env`.
-- Replace auth/service TODOs with real FastAPI endpoints once backend contract is finalized.
-- Keep all mobile-only logic inside this `mobile/` directory.
+- This scaffold is intentionally minimal and production-oriented.
+- TODO markers show where FastAPI backend integration should be added.
+- Keep admin tools out of the mobile MVP.

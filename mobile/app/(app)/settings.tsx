@@ -9,11 +9,11 @@ export default function SettingsScreen() {
   return (
     <FeaturePlaceholderScreen
       title="Settings"
-      description="Customer account and preferences area for mobile configuration."
+      description="Customer settings starter for profile and preferences."
       todoItems={[
-        'Connect profile preferences to existing backend account endpoints.',
-        'Add notification preferences and secure credential actions.',
-        'Expose support and legal links from this central screen.'
+        'TODO: Save account settings to FastAPI.',
+        'TODO: Add notification preference management.',
+        'TODO: Add legal/support/account controls.'
       ]}
       footer={
         <Link href="/(app)/support" asChild>

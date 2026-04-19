@@ -9,11 +9,11 @@ export default function ForgotPasswordScreen() {
   return (
     <FeaturePlaceholderScreen
       title="Password Recovery"
-      description="Password reset request screen for customer account recovery."
+      description="Customer password reset request entry point."
       todoItems={[
-        'Send email reset request to FastAPI recovery endpoint.',
-        'Show secure success messaging without exposing account existence.',
-        'Link to post-reset sign-in once backend flow is implemented.'
+        'TODO: Submit reset request to FastAPI auth recovery endpoint.',
+        'TODO: Show secure confirmation messaging.',
+        'TODO: Complete reset token + return-to-signin flow.'
       ]}
       footer={
         <Link href="/(auth)/sign-in" asChild>

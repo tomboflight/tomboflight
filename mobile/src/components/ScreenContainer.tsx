@@ -10,7 +10,7 @@ type ScreenContainerProps = {
 };
 
 /**
- * Shared screen shell so feature screens keep a consistent foundation.
+ * Shared screen frame for consistent spacing and background.
  */
 export function ScreenContainer({ children, contentStyle }: ScreenContainerProps) {
   return (

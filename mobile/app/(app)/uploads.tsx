@@ -6,11 +6,11 @@ export default function UploadsScreen() {
   return (
     <FeaturePlaceholderScreen
       title="Uploads"
-      description="Customer document and media upload center for genealogy project inputs."
+      description="Customer upload center for project documents and media."
       todoItems={[
-        'Integrate secure file upload workflow with backend API.',
-        'Show upload queue, progress, and failure handling states.',
-        'Connect uploaded assets to the correct project and member records.'
+        'TODO: Integrate upload API with FastAPI.',
+        'TODO: Show upload queue/progress states.',
+        'TODO: Link files to project/member records.'
       ]}
     />
   );

@@ -9,11 +9,11 @@ export default function SignUpScreen() {
   return (
     <FeaturePlaceholderScreen
       title="Create Your Account"
-      description="Starter screen for customer onboarding into Tomb of Light mobile."
+      description="Starter onboarding screen for customer registration."
       todoItems={[
-        'Collect required identity and account fields for customer onboarding.',
-        'Send sign-up payload to FastAPI and handle conflict/validation responses.',
-        'Trigger post-signup verification and first-session bootstrap.'
+        'TODO: Submit signup payload to FastAPI backend.',
+        'TODO: Handle duplicate-email and validation responses.',
+        'TODO: Initialize first authenticated session on success.'
       ]}
       footer={
         <Link href="/(auth)/sign-in" asChild>

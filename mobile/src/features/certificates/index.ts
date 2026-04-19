@@ -1,5 +1,5 @@
 /**
- * certificates feature module placeholder.
- * TODO: Add domain models, API adapters, and state management for certificates.
+ * certificates feature placeholder.
+ * TODO: add domain models, API adapters, and state for certificates.
  */
 export {};

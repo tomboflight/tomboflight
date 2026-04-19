@@ -5,8 +5,8 @@ import { StatusBar } from 'expo-status-bar';
 import { appTheme } from '../src/theme';
 
 /**
- * Root navigation shell.
- * TODO: Add launch-time auth/session bootstrap before selecting auth/app groups.
+ * Root navigator for the mobile app.
+ * TODO: Add startup session/bootstrap flow before redirecting users.
  */
 export default function RootLayout() {
   return (

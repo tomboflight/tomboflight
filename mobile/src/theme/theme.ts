@@ -1,6 +1,6 @@
 /**
- * Tomb of Light mobile MVP design tokens.
- * Visual direction: premium bright blue, gray, white, clean rich-tech feel.
+ * Tomb of Light mobile design tokens.
+ * Direction: premium bright blue, gray, white, clean rich-tech feel.
  */
 export const appTheme = {
   colors: {

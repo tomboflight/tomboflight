@@ -1,5 +1,5 @@
 /**
- * tree feature module placeholder.
- * TODO: Add domain models, API adapters, and state management for tree.
+ * tree feature placeholder.
+ * TODO: add domain models, API adapters, and state for tree.
  */
 export {};

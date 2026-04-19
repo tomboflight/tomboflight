@@ -6,11 +6,11 @@ export default function TreeScreen() {
   return (
     <FeaturePlaceholderScreen
       title="Family Tree Viewer"
-      description="Dedicated entry point for visual genealogy tree rendering on mobile."
+      description="Mobile tree view entry point for lineage exploration."
       todoItems={[
-        'Load tree graph payload from FastAPI.',
-        'Add pan/zoom optimized rendering for mobile screens.',
-        'Support node details and relationship drill-down interactions.'
+        'TODO: Load tree graph payload from FastAPI.',
+        'TODO: Add pan/zoom interactions for mobile.',
+        'TODO: Support node detail expansion.'
       ]}
     />
   );

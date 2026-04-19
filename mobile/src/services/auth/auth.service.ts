@@ -10,17 +10,16 @@ export type SignUpInput = {
 };
 
 /**
- * TODO: Wire these service methods to the existing FastAPI auth endpoints.
- * Keep endpoint paths and payloads aligned with backend contracts when finalized.
+ * TODO: Connect these functions to existing FastAPI auth endpoints.
  */
 export async function signIn(_input: SignInInput) {
-  throw new Error('TODO: Implement sign-in integration with FastAPI backend.');
+  throw new Error('TODO: Implement sign-in integration.');
 }
 
 export async function signUp(_input: SignUpInput) {
-  throw new Error('TODO: Implement sign-up integration with FastAPI backend.');
+  throw new Error('TODO: Implement sign-up integration.');
 }
 
 export async function requestPasswordReset(_email: string) {
-  throw new Error('TODO: Implement password reset integration with FastAPI backend.');
+  throw new Error('TODO: Implement password reset integration.');
 }

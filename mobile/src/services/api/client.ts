@@ -8,7 +8,8 @@ export type ApiRequestOptions = {
 };
 
 /**
- * Minimal API client placeholder for future FastAPI integration.
+ * Minimal API client starter.
+ * TODO: map backend errors to typed mobile errors.
  */
 export async function apiRequest<TResponse>(
   path: string,
@@ -31,7 +32,6 @@ export async function apiRequest<TResponse>(
   });
 
   if (!response.ok) {
-    // TODO: Map existing FastAPI error shape to typed mobile-friendly errors.
     throw new Error(`API request failed (${response.status}).`);
   }
 
@@ -45,6 +45,5 @@ export async function apiRequest<TResponse>(
 function buildUrl(path: string): string {
   const base = API_CONFIG.baseUrl.replace(/\/+$/, '');
   const normalizedPath = path.replace(/^\/+/, '');
-
   return `${base}/${normalizedPath}`;
 }

@@ -1,5 +1,5 @@
 /**
- * dashboard feature module placeholder.
- * TODO: Add domain models, API adapters, and state management for dashboard.
+ * dashboard feature placeholder.
+ * TODO: add domain models, API adapters, and state for dashboard.
  */
 export {};

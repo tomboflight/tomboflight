@@ -5,7 +5,7 @@ export type SessionSnapshot = {
 };
 
 /**
- * TODO: Replace placeholders with secure token storage (for example, expo-secure-store).
+ * TODO: replace with secure token storage implementation.
  */
 export const storageService = {
   async getSession(): Promise<SessionSnapshot | null> {

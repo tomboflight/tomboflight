@@ -6,11 +6,11 @@ export default function CertificatesScreen() {
   return (
     <FeaturePlaceholderScreen
       title="Certificates"
-      description="Customer certificate and lineage proof access screen."
+      description="Customer certificate and lineage proof access starter screen."
       todoItems={[
-        'Fetch available certificate metadata from FastAPI.',
-        'Support secure file preview/download handoff flow.',
-        'Add certificate validity and issuance timeline details.'
+        'TODO: Load certificate metadata from FastAPI.',
+        'TODO: Add secure preview/download flow.',
+        'TODO: Show issuance + verification status.'
       ]}
     />
   );

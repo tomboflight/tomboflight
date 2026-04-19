@@ -6,11 +6,11 @@ export default function BillingScreen() {
   return (
     <FeaturePlaceholderScreen
       title="Billing Summary"
-      description="Customer billing overview for current package and payment status."
+      description="Billing overview starter for package and payment status."
       todoItems={[
-        'Load billing summary from FastAPI billing endpoints.',
-        'Render invoices, payment history, and next due amount.',
-        'Add secure payment handoff or gateway redirect when approved.'
+        'TODO: Connect billing summary endpoint from FastAPI.',
+        'TODO: Render invoices and payment history.',
+        'TODO: Add secure payment handoff flow.'
       ]}
     />
   );

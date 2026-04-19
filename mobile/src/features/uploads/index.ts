@@ -1,5 +1,5 @@
 /**
- * uploads feature module placeholder.
- * TODO: Add domain models, API adapters, and state management for uploads.
+ * uploads feature placeholder.
+ * TODO: add domain models, API adapters, and state for uploads.
  */
 export {};

@@ -4,8 +4,8 @@ import { Tabs } from 'expo-router';
 import { appTheme } from '../../src/theme';
 
 /**
- * Main customer app shell.
- * TODO: Refine nav IA over time (for example, promoted tabs + overflow stack).
+ * Customer app shell.
+ * TODO: Refine navigation IA as features mature.
  */
 export default function AppLayout() {
   return (
@@ -22,10 +22,7 @@ export default function AppLayout() {
         }
       }}
     >
-      <Tabs.Screen
-        name="dashboard"
-        options={{ title: 'Dashboard', tabBarLabel: 'Home' }}
-      />
+      <Tabs.Screen name="dashboard" options={{ title: 'Dashboard', tabBarLabel: 'Home' }} />
       <Tabs.Screen name="project" options={{ title: 'Project' }} />
       <Tabs.Screen name="family" options={{ title: 'Family' }} />
       <Tabs.Screen name="tree" options={{ title: 'Tree' }} />

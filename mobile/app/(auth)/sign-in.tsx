@@ -11,9 +11,9 @@ export default function SignInScreen() {
       title="Welcome Back"
       description="Customer sign-in flow for Tomb of Light mobile."
       todoItems={[
-        'Connect submit action to FastAPI sign-in endpoint.',
-        'Store issued token securely and bootstrap session state.',
-        'Handle backend validation errors and lockout states.'
+        'TODO: Connect sign-in submit to existing FastAPI auth endpoint.',
+        'TODO: Store session token securely for mobile.',
+        'TODO: Handle validation and lockout responses.'
       ]}
       footer={
         <View style={styles.actions}>

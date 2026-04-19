@@ -1,5 +1,5 @@
 /**
- * billing feature module placeholder.
- * TODO: Add domain models, API adapters, and state management for billing.
+ * billing feature placeholder.
+ * TODO: add domain models, API adapters, and state for billing.
  */
 export {};

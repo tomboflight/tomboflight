@@ -6,11 +6,11 @@ export default function DashboardScreen() {
   return (
     <FeaturePlaceholderScreen
       title="Dashboard"
-      description="Customer dashboard lane for package status and high-level progress updates."
+      description="Package-lane dashboard starter for customer progress visibility."
       todoItems={[
-        'Load customer package lanes from FastAPI backend.',
-        'Display timeline/status cards for each package lane.',
-        'Add deep links into project, uploads, and certificates.'
+        'TODO: Load package lane cards from FastAPI.',
+        'TODO: Show milestone and activity status.',
+        'TODO: Add deep links to project, uploads, and certificates.'
       ]}
     />
   );

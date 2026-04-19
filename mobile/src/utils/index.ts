@@ -1,4 +1,4 @@
 /**
- * Shared utility exports go here as the mobile app grows.
+ * Shared utility exports.
  */
 export {};

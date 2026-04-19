@@ -1,5 +1,5 @@
 /**
- * Shared TypeScript types for the mobile app.
+ * Shared mobile feature types.
  */
 export type CustomerFacingFeature =
   | 'auth'
