@@ -1,4 +1,5 @@
 import unittest
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -13,6 +14,9 @@ class HouseholdInviteAndOrderTests(unittest.TestCase):
         class FakeInvitesCollection:
             def __init__(self):
                 self.updated = []
+
+            def find_one(self, *_args, **_kwargs):
+                return None
 
             def insert_one(self, document):
                 inserted_docs.append(dict(document))
@@ -62,6 +66,109 @@ class HouseholdInviteAndOrderTests(unittest.TestCase):
         self.assertIn("pending approval", invite["email_delivery_error"])
         self.assertEqual(fake_invites.updated[-1]["email_delivery_status"], "failed")
         send_email_mock.assert_called_once()
+
+    def test_create_household_invite_reuses_existing_pending_invite_for_same_email(self):
+        fixed_now = datetime(2026, 4, 19, 21, 45, tzinfo=UTC)
+        existing_invite = {
+            "_id": "invite-existing",
+            "project_id": "project-1",
+            "email": "wife@example.com",
+            "status": "pending",
+            "member_role": "viewer",
+            "relationship_scope": "household_member",
+            "privacy_scope": "household_private",
+            "invite_key": "hhinv_old_key",
+            "created_at": "2026-04-18T00:00:00+00:00",
+            "updated_at": "2026-04-18T00:00:00+00:00",
+            "expires_at": "2026-04-25T00:00:00+00:00",
+        }
+
+        class FakeInvitesCollection:
+            def __init__(self, invite):
+                self.invite = dict(invite)
+                self.insert_calls = 0
+                self.updated = []
+                self.update_many_calls = []
+
+            def find_one(self, query, sort=None):  # noqa: ARG002
+                project_id = query.get("project_id")
+                email = query.get("email")
+                status_in = (query.get("status") or {}).get("$in")
+                if project_id and email and status_in is not None:
+                    if (
+                        project_id == self.invite.get("project_id")
+                        and email == self.invite.get("email")
+                        and self.invite.get("status") in status_in
+                    ):
+                        return dict(self.invite)
+                    return None
+                if query.get("_id") == self.invite.get("_id"):
+                    return dict(self.invite)
+                return None
+
+            def insert_one(self, _document):
+                self.insert_calls += 1
+                return SimpleNamespace(inserted_id="invite-new")
+
+            def update_one(self, query, update):
+                if query.get("_id") == self.invite.get("_id"):
+                    updates = update.get("$set") or {}
+                    self.invite.update(updates)
+                    self.updated.append(dict(updates))
+
+            def update_many(self, query, update):
+                self.update_many_calls.append(
+                    {
+                        "query": dict(query),
+                        "update": dict(update),
+                    }
+                )
+
+        class FakeMembersCollection:
+            def find_one(self, *_args, **_kwargs):
+                return None
+
+        fake_invites = FakeInvitesCollection(existing_invite)
+        actor = {"_id": "owner-1", "email": "owner@example.com"}
+        with (
+            patch.object(
+                household_access_service,
+                "_find_project",
+                return_value={"_id": "project-1", "owner_user_id": "owner-1", "owner_email": "owner@example.com"},
+            ),
+            patch.object(household_access_service, "_resolve_actor_role", return_value="billing_owner"),
+            patch.object(household_access_service, "_active_member_count", return_value=0),
+            patch.object(household_access_service, "_resolve_member_seat_cap", return_value=6),
+            patch.object(household_access_service, "_members", return_value=FakeMembersCollection()),
+            patch.object(household_access_service, "_invites", return_value=fake_invites),
+            patch.object(household_access_service, "_now", return_value=fixed_now),
+            patch.object(household_access_service, "create_audit_log"),
+            patch.object(
+                household_access_service,
+                "send_household_invite_email",
+                return_value={"sent": False, "error": "postmark_token_missing"},
+            ) as send_email_mock,
+        ):
+            invite = household_access_service.create_household_invite(
+                project_id="project-1",
+                actor_user=actor,
+                email="wife@example.com",
+                member_role="co_owner",
+                relationship_scope="spouse",
+                privacy_scope="household_private",
+            )
+
+        self.assertEqual(fake_invites.insert_calls, 0)
+        self.assertEqual(invite.get("_id"), "invite-existing")
+        self.assertEqual(invite.get("status"), "pending")
+        self.assertEqual(invite.get("member_role"), "co_owner")
+        self.assertEqual(invite.get("relationship_scope"), "spouse")
+        self.assertEqual(invite.get("email_delivery_status"), "failed")
+        self.assertEqual(invite.get("email_delivery_error"), "postmark_token_missing")
+        self.assertTrue(str(invite.get("invite_key") or "").startswith("hhinv_"))
+        self.assertEqual(fake_invites.update_many_calls[0]["query"]["email"], "wife@example.com")
+        send_email_mock.assert_called_once()
+        self.assertTrue(send_email_mock.call_args.kwargs.get("is_resend"))
 
     def test_build_invite_response_includes_expired_timestamp(self):
         payload = build_invite_response(
@@ -419,8 +526,12 @@ class HouseholdInviteAndOrderTests(unittest.TestCase):
                 actor_user={"id": "owner-1", "email": "owner@example.com"},
             )
 
+        if updated is None:
+            self.fail("Expected updated member document after billing owner transfer.")
         self.assertEqual(updated.get("member_role"), "billing_owner")
         owner_membership = fake_members.find_one({"_id": "membership-owner"})
+        if owner_membership is None:
+            self.fail("Expected owner membership document to remain present.")
         self.assertEqual(owner_membership.get("member_role"), "co_owner")
         self.assertEqual(fake_projects.doc.get("owner_user_id"), "co-1")
         self.assertEqual(fake_projects.doc.get("owner_email"), "coowner@example.com")

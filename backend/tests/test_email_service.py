@@ -1,4 +1,6 @@
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import cast
 from unittest.mock import patch
 
@@ -37,6 +39,16 @@ class FakePostmarkResponse:
 
 
 class PostmarkEmailLoggingTests(unittest.TestCase):
+    def test_postmark_token_uses_configured_secret_file_when_env_token_missing(self):
+        with TemporaryDirectory() as temp_dir:
+            token_path = Path(temp_dir) / "postmark_token"
+            token_path.write_text("secret-file-token\n", encoding="utf-8")
+            with (
+                patch.object(email_service.settings, "postmark_server_token", ""),
+                patch.object(email_service.settings, "postmark_server_token_file", str(token_path)),
+            ):
+                self.assertEqual(email_service._postmark_token(), "secret-file-token")
+
     def test_password_reset_postmark_block_logs_safe_structured_context(self):
         response = FakePostmarkResponse(
             payload={

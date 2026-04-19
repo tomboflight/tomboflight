@@ -934,6 +934,7 @@
 
       const emailLabel = member.email || member.user_id || "Unassigned member";
       const fullName = memberDisplayName(member);
+      const membershipId = normalizeValue(member?.id || member?._id || member?.membership_id);
       const role = normalizeRole(member.member_role || "viewer");
       const isBillingOwner = role === "billing_owner";
       const isCoOwnerSpouse =
@@ -945,8 +946,9 @@
           : "";
       const targetRank = roleRank(role);
       const targetStatus = normalizeLower(member.status || "active");
+      const hasActionableId = Boolean(membershipId);
       const canTouchTarget =
-        canManage && targetStatus === "active" && !isBillingOwner && targetRank < actorRank;
+        canManage && hasActionableId && targetStatus === "active" && !isBillingOwner && targetRank < actorRank;
       const options = ROLE_OPTIONS.map(
         (roleCode) => {
           const disabled = !canManage || !roleCanAssign(currentMemberRole, roleCode);
@@ -963,6 +965,8 @@
           <button class="btn btn-secondary" type="button" data-member-remove>Remove Member</button>
         </div>
       `
+        : !hasActionableId
+          ? `<p class="card-copy">Member actions are unavailable because this member record is missing an id on this API host.</p>`
         : isBillingOwner
           ? `<p class="card-copy">Billing Owner is the highest household role. To pass ownership, set another active member's role to Billing Owner.</p>`
           : `<p class="card-copy">You can only change or remove members with lower active roles.</p>`;
@@ -983,22 +987,36 @@
       if (roleSave && roleSelect && canTouchTarget) {
         roleSave.addEventListener("click", async function () {
           try {
-            await changeMemberRole(member.id, roleSelect.value);
+            await changeMemberRole(membershipId, roleSelect.value);
             await refreshData();
             setText(inviteStatus, "Member role updated.", "success");
           } catch (error) {
-            setText(inviteStatus, error.message || "Failed to change role.", "error");
+            setText(
+              inviteStatus,
+              readableMessage(
+                error?.detail || error?.message || error?.data || error?.responseBody,
+                "Failed to change role.",
+              ),
+              "error",
+            );
           }
         });
       }
       if (removeButton && canTouchTarget) {
         removeButton.addEventListener("click", async function () {
           try {
-            await removeMember(member.id);
+            await removeMember(membershipId);
             await refreshData();
             setText(inviteStatus, "Member removed.", "success");
           } catch (error) {
-            setText(inviteStatus, error.message || "Failed to remove member.", "error");
+            setText(
+              inviteStatus,
+              readableMessage(
+                error?.detail || error?.message || error?.data || error?.responseBody,
+                "Failed to remove member.",
+              ),
+              "error",
+            );
           }
         });
       }
@@ -1020,13 +1038,15 @@
     items.forEach((invite) => {
       const card = document.createElement("article");
       card.className = "form-panel";
+      const inviteId = normalizeValue(invite?.id || invite?._id || invite?.invite_id);
       const inviteStatusValue = normalizeLower(invite?.status || "pending");
       const emailDeliveryStatus = normalizeLower(invite?.email_delivery_status);
       const emailDeliveryError = normalizeValue(invite?.email_delivery_error);
       const inviteLink = inviteAcceptUrl(invite);
-      const canResend = canManageInvites && (isPending(invite) || isExpired(invite));
-      const canRevoke = canManageInvites && (isPending(invite) || isExpired(invite));
-      const canDelete = canManageInvites;
+      const hasInviteId = Boolean(inviteId);
+      const canResend = hasInviteId && canManageInvites && (isPending(invite) || isExpired(invite));
+      const canRevoke = hasInviteId && canManageInvites && (isPending(invite) || isExpired(invite));
+      const canDelete = hasInviteId && canManageInvites;
       const canCopyLink = canManageInvites && isPending(invite) && Boolean(inviteLink);
       let deliveryText = "Delivery: unknown";
       if (emailDeliveryStatus === "sent") {
@@ -1034,6 +1054,9 @@
       } else if (emailDeliveryStatus === "failed") {
         deliveryText = `Delivery: failed${emailDeliveryError ? ` (${emailDeliveryError})` : ""}`;
       }
+      const missingInviteIdNote = hasInviteId
+        ? ""
+        : `<p class="card-copy">Invite actions are unavailable because this invite record is missing an id on this API host.</p>`;
       card.innerHTML = `
         <strong>${invite.email || "Invite"}</strong>
         <p class="card-copy">Role: ${roleLabel(invite.member_role || "viewer")}</p>
@@ -1044,6 +1067,7 @@
         <p class="card-copy">Created: ${formatDateTime(invite.created_at)}</p>
         <p class="card-copy">Accepted: ${formatDateTime(invite.accepted_at)}</p>
         <p class="card-copy">Expires: ${formatDateTime(invite.expires_at)}</p>
+        ${missingInviteIdNote}
         <div class="inline-actions" style="margin-top:0.75rem;">
           <button class="btn btn-secondary" type="button" data-invite-resend ${canResend ? "" : "disabled"}>Resend Invite</button>
           <button class="btn btn-secondary" type="button" data-invite-revoke ${canRevoke ? "" : "disabled"}>Revoke Invite</button>
@@ -1059,7 +1083,7 @@
       if (resendButton && canResend) {
         resendButton.addEventListener("click", async function () {
           try {
-            const resentInvite = await resendInvite(invite.id);
+            const resentInvite = await resendInvite(inviteId);
             await refreshData();
             const resendFailed =
               normalizeLower(resentInvite?.email_delivery_status) === "failed";
@@ -1074,18 +1098,32 @@
               setText(inviteStatus, "Invite resent.", "success");
             }
           } catch (error) {
-            setText(inviteStatus, error.message || "Failed to resend invite.", "error");
+            setText(
+              inviteStatus,
+              readableMessage(
+                error?.detail || error?.message || error?.data || error?.responseBody,
+                "Failed to resend invite.",
+              ),
+              "error",
+            );
           }
         });
       }
       if (revokeButton && canRevoke) {
         revokeButton.addEventListener("click", async function () {
           try {
-            await revokeInvite(invite.id);
+            await revokeInvite(inviteId);
             await refreshData();
             setText(inviteStatus, "Invite revoked.", "success");
           } catch (error) {
-            setText(inviteStatus, error.message || "Failed to revoke invite.", "error");
+            setText(
+              inviteStatus,
+              readableMessage(
+                error?.detail || error?.message || error?.data || error?.responseBody,
+                "Failed to revoke invite.",
+              ),
+              "error",
+            );
           }
         });
       }
@@ -1106,7 +1144,7 @@
       if (deleteButton && canDelete) {
         deleteButton.addEventListener("click", async function () {
           try {
-            await deleteInvite(invite.id);
+            await deleteInvite(inviteId);
             await refreshData();
             setText(inviteStatus, "Invite removed from history.", "success");
           } catch (error) {
@@ -1119,8 +1157,8 @@
               statusCode === 400 && detail.includes("revoked before deletion");
             if (legacyPendingDeleteGuard) {
               try {
-                await revokeInvite(invite.id);
-                await deleteInvite(invite.id);
+                await revokeInvite(inviteId);
+                await deleteInvite(inviteId);
                 await refreshData();
                 setText(inviteStatus, "Invite removed from history.", "success");
                 return;
@@ -1146,7 +1184,7 @@
             if (statusCode === 404) {
               if (isPending(invite)) {
                 try {
-                  await revokeInvite(invite.id);
+                  await revokeInvite(inviteId);
                   await refreshData();
                   setText(
                     inviteStatus,
@@ -1170,7 +1208,14 @@
               );
               return;
             }
-            setText(inviteStatus, error.message || "Failed to delete invite.", "error");
+            setText(
+              inviteStatus,
+              readableMessage(
+                error?.detail || error?.message || error?.data || error?.responseBody,
+                "Failed to delete invite.",
+              ),
+              "error",
+            );
           }
         });
       }

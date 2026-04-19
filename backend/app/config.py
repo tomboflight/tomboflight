@@ -323,6 +323,17 @@ class Settings(BaseSettings):
             "POSTMARK_TOKEN",
             "POSTMARK_API_KEY",
             "POSTMARK_SERVER_KEY",
+            "POSTMARK_SERVER_API_TOKEN",
+            "POSTMARK_API_SERVER_TOKEN",
+            "POSTMARK_KEY",
+        ),
+    )
+    postmark_server_token_file: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "POSTMARK_SERVER_TOKEN_FILE",
+            "POSTMARK_API_TOKEN_FILE",
+            "POSTMARK_TOKEN_FILE",
         ),
     )
     postmark_from_email: str = Field(

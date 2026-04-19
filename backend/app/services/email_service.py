@@ -4,6 +4,7 @@ import logging
 from datetime import UTC, datetime
 from email.utils import formataddr
 from html import escape
+from pathlib import Path
 from typing import Any
 from urllib.parse import quote_plus, urlsplit, urlunsplit
 
@@ -19,6 +20,13 @@ POSTMARK_EMAIL_ENDPOINT = "https://api.postmarkapp.com/email"
 POSTMARK_TIMEOUT_SECONDS = 10
 DEFAULT_MESSAGE_STREAM = "outbound"
 MAX_POSTMARK_MESSAGE_LOG_LENGTH = 500
+POSTMARK_TOKEN_FILE_CANDIDATES = (
+    "/etc/secrets/POSTMARK_SERVER_TOKEN",
+    "/etc/secrets/POSTMARK_API_TOKEN",
+    "/etc/secrets/POSTMARK_TOKEN",
+    "/etc/secrets/postmark_server_token",
+    "/etc/secrets/postmark_token",
+)
 
 
 def _normalize_text(value: object) -> str:
@@ -29,8 +37,32 @@ def _normalize_email(value: object) -> str:
     return _normalize_text(value).lower()
 
 
+def _load_secret_file(path: str) -> str:
+    normalized = _normalize_text(path)
+    if not normalized:
+        return ""
+    try:
+        return _normalize_text(Path(normalized).read_text(encoding="utf-8"))
+    except Exception:
+        return ""
+
+
 def _postmark_token() -> str:
-    return _normalize_text(settings.postmark_server_token)
+    direct = _normalize_text(settings.postmark_server_token)
+    if direct:
+        return direct
+
+    configured_file = _normalize_text(getattr(settings, "postmark_server_token_file", ""))
+    from_configured_file = _load_secret_file(configured_file)
+    if from_configured_file:
+        return from_configured_file
+
+    for candidate in POSTMARK_TOKEN_FILE_CANDIDATES:
+        token_from_file = _load_secret_file(candidate)
+        if token_from_file:
+            return token_from_file
+
+    return ""
 
 
 def _postmark_from_email() -> str:

@@ -225,6 +225,69 @@ def _persist_invite_email_delivery(
         return False
 
 
+def _find_latest_reusable_invite(*, project_id: str, email: str) -> dict[str, Any] | None:
+    normalized_project_id = _normalize(project_id)
+    normalized_email = _normalize_email(email)
+    if not normalized_project_id or not normalized_email:
+        return None
+    query = {
+        "project_id": normalized_project_id,
+        "email": normalized_email,
+        "status": {"$in": ["pending", "expired"]},
+    }
+    invite_collection = _invites()
+    try:
+        invite = invite_collection.find_one(query, sort=[("created_at", -1)])
+    except TypeError:
+        invite = invite_collection.find_one(query)
+    if invite is None:
+        return None
+    invite = _expire_invite_if_needed(invite)
+    status_value = _normalize(invite.get("status") or "pending").lower()
+    if status_value not in {"pending", "expired"}:
+        return None
+    return invite
+
+
+def _revoke_superseded_pending_invites(*, project_id: str, email: str, keep_invite_id: Any) -> None:
+    normalized_project_id = _normalize(project_id)
+    normalized_email = _normalize_email(email)
+    if not normalized_project_id or not normalized_email or keep_invite_id in (None, ""):
+        return
+    invite_collection = _invites()
+    if not hasattr(invite_collection, "update_many"):
+        return
+    now_iso = _now().isoformat()
+    try:
+        invite_collection.update_many(
+            {
+                "project_id": normalized_project_id,
+                "email": normalized_email,
+                "status": "pending",
+                "_id": {"$ne": keep_invite_id},
+            },
+            {
+                "$set": {
+                    "status": "revoked",
+                    "revoked_at": now_iso,
+                    "updated_at": now_iso,
+                    "revoked_reason": "superseded_by_latest_invite",
+                }
+            },
+        )
+    except Exception as exc:
+        logger.exception(
+            (
+                "household_access_service.revoke_superseded_pending_invites_failed "
+                "project_id=%s email=%s keep_invite_id=%s error=%s"
+            ),
+            normalized_project_id,
+            normalized_email,
+            _normalize(keep_invite_id),
+            str(exc),
+        )
+
+
 def _resolve_actor_role(project: dict[str, Any], actor_user: dict[str, Any]) -> str:
     snapshot = get_project_access_snapshot(
         project,
@@ -356,6 +419,7 @@ def create_household_invite(
         )
         raise ValueError("Invite email is required.")
 
+    normalized_relationship_scope = _normalize_relationship_scope(relationship_scope or "household_member")
     normalized_privacy_scope = _normalize_privacy_scope(privacy_scope or "household_private")
     if normalized_privacy_scope not in PRIVACY_SCOPES:
         logger.warning(
@@ -402,6 +466,91 @@ def create_household_invite(
         )
         raise ValueError("This email already has active workspace access.")
 
+    reusable_invite = _find_latest_reusable_invite(project_id=project_id, email=normalized_email)
+    if reusable_invite is not None:
+        now = _now()
+        invite_key = f"hhinv_{secrets.token_urlsafe(24)}"
+        updates = {
+            "status": "pending",
+            "invite_key": invite_key,
+            "member_role": normalized_role,
+            "relationship_scope": normalized_relationship_scope,
+            "privacy_scope": normalized_privacy_scope,
+            "issuer_user_id": actor_user_id or None,
+            "target_email": normalized_email,
+            "allowed_role": normalized_role,
+            "max_uses": max(1, int(max_uses or 1)),
+            "use_count": 0,
+            "notes": _normalize(notes),
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+            "expires_at": (now + timedelta(days=max(1, int(expires_in_days or 7)))).isoformat(),
+            "accepted_at": None,
+            "revoked_at": None,
+            "expired_at": None,
+        }
+        _invites().update_one({"_id": reusable_invite["_id"]}, {"$set": updates})
+        document = _invites().find_one({"_id": reusable_invite["_id"]}) or {
+            **reusable_invite,
+            **updates,
+            "_id": reusable_invite["_id"],
+        }
+        _revoke_superseded_pending_invites(
+            project_id=_normalize(project_id),
+            email=normalized_email,
+            keep_invite_id=document["_id"],
+        )
+        create_audit_log(
+            "household_invite_reused",
+            actor_user_id or None,
+            "household_invite",
+            str(document["_id"]),
+            {
+                "project_id": _normalize(project_id),
+                "invite_email": normalized_email,
+                "member_role": normalized_role,
+            },
+        )
+        email_delivery: dict[str, Any] = {"sent": True}
+        logger.info(
+            (
+                "household_access_service.create_household_invite.reused_existing "
+                "project_id=%s invite_id=%s invite_email=%s"
+            ),
+            _normalize(project_id),
+            _normalize(document["_id"]),
+            normalized_email,
+        )
+        try:
+            email_delivery = send_household_invite_email(
+                to_email=normalized_email,
+                invite_key=invite_key,
+                project_id=_normalize(project_id),
+                member_role=normalized_role,
+                inviter_email=_normalize_email(actor_user.get("email")),
+                is_resend=True,
+            ) or {"sent": False, "error": "unknown_email_delivery_failure"}
+        except Exception as exc:
+            logger.exception(
+                "household_access_service.create_household_invite.reused_email_exception "
+                "project_id=%s invite_id=%s invite_email=%s error=%s",
+                _normalize(project_id),
+                _normalize(document["_id"]),
+                normalized_email,
+                str(exc),
+            )
+            email_delivery = {
+                "sent": False,
+                "error": str(exc) or type(exc).__name__,
+                "exception_type": type(exc).__name__,
+            }
+        _persist_invite_email_delivery(
+            invite_id=document["_id"],
+            invite_document=document,
+            email_delivery=email_delivery,
+        )
+        return document
+
     now = _now()
     invite_key = f"hhinv_{secrets.token_urlsafe(24)}"
     document = {
@@ -411,7 +560,7 @@ def create_household_invite(
         "key_type": "household_invite_key",
         "status": "pending",
         "member_role": normalized_role,
-        "relationship_scope": _normalize_relationship_scope(relationship_scope or "household_member"),
+        "relationship_scope": normalized_relationship_scope,
         "privacy_scope": normalized_privacy_scope,
         "issuer_user_id": actor_user_id or None,
         "target_email": normalized_email,
@@ -445,7 +594,7 @@ def create_household_invite(
         _normalize(result.inserted_id),
         normalized_email,
         normalized_role,
-        _normalize_relationship_scope(relationship_scope or "household_member"),
+        normalized_relationship_scope,
         normalized_privacy_scope,
     )
     create_audit_log(
@@ -458,6 +607,11 @@ def create_household_invite(
             "invite_email": normalized_email,
             "member_role": normalized_role,
         },
+    )
+    _revoke_superseded_pending_invites(
+        project_id=_normalize(project_id),
+        email=normalized_email,
+        keep_invite_id=result.inserted_id,
     )
     email_delivery: dict[str, Any] = {"sent": True}
     logger.info(
@@ -672,6 +826,11 @@ def resend_household_invite(
     invite = _invites().find_one({"_id": invite["_id"]})
     if invite is None:
         return None
+    _revoke_superseded_pending_invites(
+        project_id=_normalize(invite.get("project_id")),
+        email=_normalize_email(invite.get("email")),
+        keep_invite_id=invite.get("_id"),
+    )
     email_delivery: dict[str, Any] = {"sent": True}
     try:
         email_delivery = send_household_invite_email(
