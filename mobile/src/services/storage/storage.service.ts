@@ -5,16 +5,21 @@ export type SessionSnapshot = {
 };
 
 /**
- * TODO: replace with secure token storage implementation.
+ * Temporary in-memory session store for scaffold behavior.
+ * TODO: Replace with encrypted device storage (for example, expo-secure-store).
  */
+let inMemorySession: SessionSnapshot | null = null;
+
 export const storageService = {
   async getSession(): Promise<SessionSnapshot | null> {
-    return null;
+    return inMemorySession ? { ...inMemorySession } : null;
   },
-  async setSession(_session: SessionSnapshot): Promise<void> {
+  async setSession(session: SessionSnapshot): Promise<void> {
+    inMemorySession = { ...session };
     return;
   },
   async clearSession(): Promise<void> {
+    inMemorySession = null;
     return;
   }
 };

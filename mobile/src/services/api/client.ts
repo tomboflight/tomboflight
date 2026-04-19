@@ -16,30 +16,45 @@ export async function apiRequest<TResponse>(
   options: ApiRequestOptions = {}
 ): Promise<TResponse> {
   const url = buildUrl(path);
+  const controller = new AbortController();
+  const timeoutHandle = setTimeout(() => controller.abort(), API_CONFIG.timeoutMs);
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
     ...options.headers
   };
+
+  if (options.body !== undefined) {
+    headers['Content-Type'] = headers['Content-Type'] || 'application/json';
+  }
 
   if (options.token) {
     headers.Authorization = `Bearer ${options.token}`;
   }
 
-  const response = await fetch(url, {
-    method: options.method ?? 'GET',
-    headers,
-    body: options.body ? JSON.stringify(options.body) : undefined
-  });
+  try {
+    const response = await fetch(url, {
+      method: options.method ?? 'GET',
+      headers,
+      signal: controller.signal,
+      body: options.body !== undefined ? JSON.stringify(options.body) : undefined
+    });
 
-  if (!response.ok) {
-    throw new Error(`API request failed (${response.status}).`);
+    if (!response.ok) {
+      throw new Error(`API request failed (${response.status}).`);
+    }
+
+    if (response.status === 204) {
+      return undefined as TResponse;
+    }
+
+    return (await response.json()) as TResponse;
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('API request timed out.');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutHandle);
   }
-
-  if (response.status === 204) {
-    return undefined as TResponse;
-  }
-
-  return (await response.json()) as TResponse;
 }
 
 function buildUrl(path: string): string {
