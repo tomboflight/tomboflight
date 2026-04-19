@@ -485,6 +485,39 @@
     }
   }
 
+  function inviteAcceptUrl(invite) {
+    const inviteKey = normalizeValue(invite?.invite_key);
+    if (!inviteKey) return "";
+    const projectId = normalizeValue(invite?.project_id || currentProjectId);
+    const params = new URLSearchParams();
+    params.set("invite_key", inviteKey);
+    if (projectId) params.set("project_id", projectId);
+    return `${window.location.origin}/household-access.html?${params.toString()}`;
+  }
+
+  async function copyTextToClipboard(value) {
+    const normalized = normalizeValue(value);
+    if (!normalized) return false;
+    if (navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(normalized);
+      return true;
+    }
+    const node = document.createElement("textarea");
+    node.value = normalized;
+    node.setAttribute("readonly", "readonly");
+    node.style.position = "absolute";
+    node.style.left = "-9999px";
+    document.body.appendChild(node);
+    node.select();
+    let copied = false;
+    try {
+      copied = document.execCommand("copy");
+    } finally {
+      document.body.removeChild(node);
+    }
+    return copied;
+  }
+
   function normalizeInviteStatus(value) {
     const normalized = normalizeLower(value);
     if (normalized === "accepted") return "Accepted";
@@ -779,6 +812,20 @@
     return String(params.get("project_id") || "").trim();
   }
 
+  function clearInviteContextFromUrl(projectId = "") {
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("invite_key");
+      const normalizedProjectId = normalizeValue(projectId || currentProjectId || projectIdFromQuery());
+      if (normalizedProjectId) {
+        url.searchParams.set("project_id", normalizedProjectId);
+      }
+      window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    } catch (_error) {
+      // Non-fatal URL cleanup.
+    }
+  }
+
   function signinRedirectUrlWithInviteContext() {
     const inviteKey = inviteKeyFromQuery();
     const projectId = projectIdFromQuery();
@@ -851,16 +898,23 @@
   }
 
   async function resendInvite(inviteId) {
-    await sendWorkspaceAccessRequest(
+    return await sendWorkspaceAccessRequest(
       workspaceAccessPathAliases(`/workspace-access/invites/${encodeURIComponent(inviteId)}/resend`),
       { method: "POST" },
     );
   }
 
   async function revokeInvite(inviteId) {
-    await sendWorkspaceAccessRequest(
+    return await sendWorkspaceAccessRequest(
       workspaceAccessPathAliases(`/workspace-access/invites/${encodeURIComponent(inviteId)}/revoke`),
       { method: "POST" },
+    );
+  }
+
+  async function deleteInvite(inviteId) {
+    await sendWorkspaceAccessRequest(
+      workspaceAccessPathAliases(`/workspace-access/invites/${encodeURIComponent(inviteId)}`),
+      { method: "DELETE" },
     );
   }
 
@@ -957,31 +1011,59 @@
     items.forEach((invite) => {
       const card = document.createElement("article");
       card.className = "form-panel";
+      const inviteStatusValue = normalizeLower(invite?.status || "pending");
+      const emailDeliveryStatus = normalizeLower(invite?.email_delivery_status);
+      const emailDeliveryError = normalizeValue(invite?.email_delivery_error);
+      const inviteLink = inviteAcceptUrl(invite);
       const canResend = canManageInvites && (isPending(invite) || isExpired(invite));
       const canRevoke = canManageInvites && (isPending(invite) || isExpired(invite));
+      const canDelete = canManageInvites && inviteStatusValue !== "pending";
+      const canCopyLink = canManageInvites && isPending(invite) && Boolean(inviteLink);
+      let deliveryText = "Delivery: unknown";
+      if (emailDeliveryStatus === "sent") {
+        deliveryText = "Delivery: sent";
+      } else if (emailDeliveryStatus === "failed") {
+        deliveryText = `Delivery: failed${emailDeliveryError ? ` (${emailDeliveryError})` : ""}`;
+      }
       card.innerHTML = `
         <strong>${invite.email || "Invite"}</strong>
         <p class="card-copy">Role: ${roleLabel(invite.member_role || "viewer")}</p>
         <p class="card-copy">Relationship: ${relationshipLabel(invite.relationship_scope || "household_member")}</p>
         <p class="card-copy">Privacy: ${privacyLabel(invite.privacy_scope || "household_private")}</p>
         <p class="card-copy">Status: ${normalizeInviteStatus(invite.status || "pending")}</p>
+        <p class="card-copy">${deliveryText}</p>
         <p class="card-copy">Created: ${formatDateTime(invite.created_at)}</p>
         <p class="card-copy">Accepted: ${formatDateTime(invite.accepted_at)}</p>
         <p class="card-copy">Expires: ${formatDateTime(invite.expires_at)}</p>
         <div class="inline-actions" style="margin-top:0.75rem;">
           <button class="btn btn-secondary" type="button" data-invite-resend ${canResend ? "" : "disabled"}>Resend Invite</button>
           <button class="btn btn-secondary" type="button" data-invite-revoke ${canRevoke ? "" : "disabled"}>Revoke Invite</button>
+          <button class="btn btn-secondary" type="button" data-invite-copy-link ${canCopyLink ? "" : "disabled"}>Copy Invite Link</button>
+          <button class="btn btn-secondary" type="button" data-invite-delete ${canDelete ? "" : "disabled"}>Delete</button>
         </div>
       `;
 
       const resendButton = card.querySelector("[data-invite-resend]");
       const revokeButton = card.querySelector("[data-invite-revoke]");
+      const copyLinkButton = card.querySelector("[data-invite-copy-link]");
+      const deleteButton = card.querySelector("[data-invite-delete]");
       if (resendButton && canResend) {
         resendButton.addEventListener("click", async function () {
           try {
-            await resendInvite(invite.id);
+            const resentInvite = await resendInvite(invite.id);
             await refreshData();
-            setText(inviteStatus, "Invite resent.", "success");
+            const resendFailed =
+              normalizeLower(resentInvite?.email_delivery_status) === "failed";
+            const resendError = normalizeValue(resentInvite?.email_delivery_error);
+            if (resendFailed) {
+              setText(
+                inviteStatus,
+                `Invite resent, but email delivery failed${resendError ? ` (${resendError})` : ""}. Copy the invite link and share it directly.`,
+                "warning",
+              );
+            } else {
+              setText(inviteStatus, "Invite resent.", "success");
+            }
           } catch (error) {
             setText(inviteStatus, error.message || "Failed to resend invite.", "error");
           }
@@ -995,6 +1077,31 @@
             setText(inviteStatus, "Invite revoked.", "success");
           } catch (error) {
             setText(inviteStatus, error.message || "Failed to revoke invite.", "error");
+          }
+        });
+      }
+      if (copyLinkButton && canCopyLink) {
+        copyLinkButton.addEventListener("click", async function () {
+          try {
+            const copied = await copyTextToClipboard(inviteLink);
+            if (!copied) {
+              setText(inviteStatus, "Unable to copy invite link automatically.", "error");
+              return;
+            }
+            setText(inviteStatus, "Invite link copied. Share it directly with the recipient.", "success");
+          } catch (error) {
+            setText(inviteStatus, error.message || "Failed to copy invite link.", "error");
+          }
+        });
+      }
+      if (deleteButton && canDelete) {
+        deleteButton.addEventListener("click", async function () {
+          try {
+            await deleteInvite(invite.id);
+            await refreshData();
+            setText(inviteStatus, "Invite removed from history.", "success");
+          } catch (error) {
+            setText(inviteStatus, error.message || "Failed to delete invite.", "error");
           }
         });
       }
@@ -1125,6 +1232,8 @@
     try {
       const membership = await acceptInviteByKey(inviteKey);
       hydrateProjectContextFromMembership(membership);
+      clearInviteContextFromUrl(projectIdFromMembership(membership));
+      clear(acceptLinkStatus);
       setText(acceptStatus, "Invite accepted. Workspace access granted.", "success");
       if (currentProjectId) {
         await refreshData();
@@ -1232,6 +1341,8 @@
       if (acceptForm && inviteKey) {
         const keyInput = acceptForm.querySelector('input[name="invite_key"]');
         if (keyInput) keyInput.value = inviteKey;
+        const detailsNode = acceptForm.closest("details");
+        if (detailsNode) detailsNode.open = true;
       }
 
       bindQuickInviteButtons();
@@ -1240,16 +1351,25 @@
       if (inviteForm) inviteForm.addEventListener("submit", handleInviteSubmit);
       if (acceptForm) acceptForm.addEventListener("submit", handleAcceptSubmit);
 
-      if (!currentProjectId && inviteKey && acceptForm) {
+      if (inviteKey && acceptForm) {
         try {
           const membership = await acceptInviteByKey(inviteKey);
           hydrateProjectContextFromMembership(membership);
+          clearInviteContextFromUrl(projectIdFromMembership(membership));
+          clear(acceptLinkStatus);
+          setText(acceptStatus, "Invite accepted. Workspace access granted.", "success");
         } catch (error) {
           const statusCode = Number(error?.status);
+          const detail = readableMessage(error?.detail || error?.message, "invite auto-accept failed");
           console.warn("[HouseholdAccess] Auto-accept invite skipped.", {
-            detail: readableMessage(error?.detail || error?.message, "invite auto-accept failed"),
+            detail,
             status: Number.isFinite(statusCode) && statusCode > 0 ? statusCode : null,
           });
+          setText(
+            acceptStatus,
+            detail || "We couldn't auto-accept this invite. Use the Accept Invite action below.",
+            "warning",
+          );
           // Keep the page interactive so invite acceptance can still be attempted manually.
         }
       }

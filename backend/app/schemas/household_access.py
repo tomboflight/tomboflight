@@ -107,6 +107,8 @@ def build_invite_response(data: dict[str, Any]) -> dict[str, Any]:
         "email": _normalize_value(data.get("email")).lower(),
         "invite_key": _normalize_value(data.get("invite_key")) or None,
         "status": _normalize_value(data.get("status") or "pending"),
+        "email_delivery_status": _normalize_value(data.get("email_delivery_status")) or None,
+        "email_delivery_error": _normalize_value(data.get("email_delivery_error")) or None,
         "member_role": normalize_project_member_role(data.get("member_role"), default="viewer"),
         "relationship_scope": _normalize_value(data.get("relationship_scope") or "household_member"),
         "privacy_scope": _normalize_privacy_scope_value(data.get("privacy_scope") or "household_private"),

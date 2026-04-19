@@ -694,6 +694,42 @@ def resend_household_invite(
     return invite
 
 
+def delete_household_invite(*, invite_id: str, actor_user: dict[str, Any]) -> bool:
+    oid = _to_oid(invite_id)
+    if oid is None:
+        return False
+    invite = _invites().find_one({"_id": oid})
+    if invite is None:
+        return False
+    invite = _expire_invite_if_needed(invite)
+    project = _find_project(_normalize(invite.get("project_id")))
+    if project is None:
+        return False
+    actor_role = _resolve_actor_role(project, actor_user)
+    if actor_role not in {"billing_owner", "co_owner", "family_manager"}:
+        raise PermissionError("You do not have permission to delete invites.")
+    invite_status = _normalize(invite.get("status") or "pending").lower()
+    if invite_status == "pending":
+        raise ValueError("Pending invites must be revoked before deletion.")
+
+    delete_result = _invites().delete_one({"_id": oid})
+    if int(getattr(delete_result, "deleted_count", 0)) <= 0:
+        return False
+
+    actor_user_id = _normalize(actor_user.get("id") or actor_user.get("_id") or actor_user.get("user_id"))
+    create_audit_log(
+        "household_invite_deleted",
+        actor_user_id or None,
+        "household_invite",
+        str(oid),
+        {
+            "project_id": _normalize(invite.get("project_id")),
+            "invite_status": invite_status,
+        },
+    )
+    return True
+
+
 def update_member_role(
     *,
     project_id: str,

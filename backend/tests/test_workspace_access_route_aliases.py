@@ -26,7 +26,7 @@ class WorkspaceAccessRouteAliasTests(unittest.TestCase):
                     continue
                 if decorator.func.value.id != "legacy_router":
                     continue
-                if decorator.func.attr not in {"get", "post"}:
+                if decorator.func.attr not in {"get", "post", "delete"}:
                     continue
                 if not decorator.args:
                     continue
@@ -43,6 +43,8 @@ class WorkspaceAccessRouteAliasTests(unittest.TestCase):
             '/household-access/invites/{invite_id}/revoke',
             '/workspace_access/invites/{invite_id}/resend',
             '/household-access/invites/{invite_id}/resend',
+            '/workspace_access/invites/{invite_id}',
+            '/household-access/invites/{invite_id}',
             '/workspace_access/project/{project_id}/members/{membership_id}/role',
             '/household-access/project/{project_id}/members/{membership_id}/role',
             '/workspace_access/project/{project_id}/members/{membership_id}/revoke',
