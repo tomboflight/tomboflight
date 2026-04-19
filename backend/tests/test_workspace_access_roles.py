@@ -1,6 +1,7 @@
 import asyncio
 import unittest
 from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import patch
 
 from bson import ObjectId
@@ -130,8 +131,9 @@ class WorkspaceAccessRoleTests(unittest.TestCase):
             notes="",
             created_by="",
         )
-        request = SimpleNamespace(
-            app=SimpleNamespace(state=SimpleNamespace(db=FakeDatabase()))
+        request = cast(
+            Any,
+            SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(db=FakeDatabase()))),
         )
         context = {
             "family": {"_id": "507f1f77bcf86cd799439011"},

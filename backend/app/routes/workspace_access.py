@@ -108,9 +108,13 @@ def _with_member_identity_fields(items: list[dict[str, Any]]) -> list[dict[str, 
     )
     if user_ids:
         object_ids = [ObjectId(value) for value in user_ids if ObjectId.is_valid(value)]
-        lookup = {"$or": [{"id": {"$in": user_ids}}, {"user_id": {"$in": user_ids}}]}
+        lookup_or_clauses: list[dict[str, Any]] = [
+            {"id": {"$in": user_ids}},
+            {"user_id": {"$in": user_ids}},
+        ]
         if object_ids:
-            lookup["$or"].append({"_id": {"$in": object_ids}})
+            lookup_or_clauses.append({"_id": {"$in": object_ids}})
+        lookup: dict[str, Any] = {"$or": lookup_or_clauses}
         for user_doc in db["users"].find(lookup):
             identity = _member_name_payload_from_user_doc(user_doc)
             if not identity:

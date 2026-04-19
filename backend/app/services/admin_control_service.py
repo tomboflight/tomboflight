@@ -4112,10 +4112,10 @@ def super_admin_repair_case_action(
         raise ValueError("Repair action is required.")
 
     payload = dict(payload or {})
-    project_id, order_id = _resolve_case_project_order(normalized_case_id)
     reason = _normalize(payload.get("reason") or payload.get("note"))
     if not reason:
         raise ValueError("A repair reason is required for audit traceability.")
+    project_id, order_id = _resolve_case_project_order(normalized_case_id)
     actor_snapshot = _super_admin_actor_snapshot(actor)
     payload["actor_email"] = actor_snapshot.get("actor_email")
 

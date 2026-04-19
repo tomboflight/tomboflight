@@ -1,5 +1,6 @@
 import unittest
 from datetime import datetime, timezone
+from typing import Any, cast
 from unittest.mock import patch
 
 from app.routes import stripe_webhooks
@@ -106,7 +107,7 @@ class StripeWebhookPersistenceTests(unittest.TestCase):
         }
 
         should_process, claim_token = stripe_webhooks._claim_event_processing(
-            events,
+            cast(Any, events),
             event=event,
             now=now,
         )
@@ -119,7 +120,7 @@ class StripeWebhookPersistenceTests(unittest.TestCase):
         self.assertEqual(stored["checkout_session_id"], "cs_test_123")
 
         stripe_webhooks._mark_event_processed(
-            events,
+            cast(Any, events),
             event_id="evt_123",
             claim_token=claim_token,
             order_result={"order_id": "order-1"},
@@ -130,7 +131,7 @@ class StripeWebhookPersistenceTests(unittest.TestCase):
         self.assertNotIn("processing_claim", events.docs["evt_123"])
 
         duplicate_should_process, _ = stripe_webhooks._claim_event_processing(
-            events,
+            cast(Any, events),
             event=event,
             now=now,
         )
@@ -148,7 +149,7 @@ class StripeWebhookPersistenceTests(unittest.TestCase):
         now = started_at.replace(minute=started_at.minute + 30)
 
         should_process, claim_token = stripe_webhooks._claim_event_processing(
-            events,
+            cast(Any, events),
             event=event,
             now=now,
         )
