@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.core.role_catalog import normalize_project_member_role
 
@@ -20,6 +20,28 @@ class ProjectMemberCreate(BaseModel):
     status: str = Field(default="active", min_length=1, max_length=50)
     invited_by: str | None = None
     joined_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def validate_identifiers_and_sync_aliases(self) -> "ProjectMemberCreate":
+        if not (
+            _as_string(self.user_id)
+            or _as_string(self.user_email)
+            or _as_string(self.email)
+        ):
+            raise ValueError("user_id or email is required.")
+
+        normalized_role = normalize_project_member_role(
+            self.member_role or self.role,
+            default="viewer",
+        )
+        self.member_role = normalized_role
+        self.role = normalized_role
+
+        normalized_email = _as_string(self.email or self.user_email).lower()
+        if normalized_email:
+            self.email = normalized_email
+            self.user_email = normalized_email
+        return self
 
 
 class ProjectMemberResponse(BaseModel):
