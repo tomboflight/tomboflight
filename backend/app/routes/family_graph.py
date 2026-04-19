@@ -3,8 +3,15 @@ from typing import Any
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from app.core.relationship_catalog import normalize_relationship_type
 from app.database import get_database
 from app.dependencies.auth import get_current_user, has_internal_admin_access
+from app.services.viewer_manifest_service import ensure_project_workspace_anchor
+from app.services.workspace_access_service import require_workspace_capability, family_is_visible_to_user
+
+router = APIRouter(prefix="/families", tags=["Family Graph"])
+
+
 from app.services.workspace_access_service import require_workspace_capability
 
 router = APIRouter(prefix="/families", tags=["Family Graph"])
@@ -167,7 +174,9 @@ def get_family_graph(
                 "family_id": rel.get("family_id"),
                 "source_member_id": rel.get("source_member_id"),
                 "target_member_id": rel.get("target_member_id"),
-                "relationship_type": rel.get("relationship_type"),
+                "relationship_type": normalize_relationship_type(
+                    rel.get("relationship_type")
+                ),
                 "notes": rel.get("notes"),
                 "created_by": rel.get("created_by"),
                 "created_at": rel.get("created_at"),

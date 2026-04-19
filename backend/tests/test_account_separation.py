@@ -1,6 +1,8 @@
 import unittest
 from unittest.mock import patch
 
+from fastapi import HTTPException
+
 from app.dependencies import auth as auth_dependencies
 from app.services.auth_service import build_user_response
 
@@ -98,6 +100,67 @@ class AccountSeparationTests(unittest.TestCase):
         self.assertIs(resolved_user, current_user)
         resolve_mock.assert_called_once_with("user-1", project_id="project-2")
         self.assertEqual(current_user["_access_context"]["project_id"], "project-2")
+
+    def test_require_super_admin_rejects_non_super_admin_role(self):
+        current_user = {
+            "id": "user-1",
+            "role": "admin",
+            "_access_context": {
+                "project_id": None,
+                "role_codes": ["admin"],
+                "permissions": ["*"],
+            },
+        }
+        with patch.object(auth_dependencies, "_extract_project_id_from_request", return_value=""):
+            with self.assertRaises(HTTPException) as error:
+                auth_dependencies.require_super_admin(request=object(), current_user=current_user)
+        self.assertEqual(error.exception.status_code, 403)
+
+    def test_require_super_admin_allows_super_admin_role(self):
+        current_user = {
+            "id": "user-1",
+            "role": "super_admin",
+            "_access_context": {
+                "project_id": None,
+                "role_codes": ["super_admin"],
+                "permissions": ["*"],
+            },
+        }
+        with patch.object(auth_dependencies, "_extract_project_id_from_request", return_value=""):
+            resolved = auth_dependencies.require_super_admin(request=object(), current_user=current_user)
+        self.assertIs(resolved, current_user)
+
+    def test_admin_base_role_does_not_grant_full_admin_permissions(self):
+        with (
+            patch.object(
+                auth_dependencies,
+                "_load_user_by_id",
+                return_value={
+                    "_id": "user-1",
+                    "email": "jenn.wood@tomboflight.com",
+                    "role": "admin",
+                    "access_tier": "finance_admin",
+                    "department_role": "finance",
+                },
+            ),
+            patch.object(
+                auth_dependencies,
+                "_db",
+                return_value={
+                    "user_role_assignments": type("Collection", (), {"find": lambda self, *_a, **_k: []})(),
+                    "role_permissions": type("Collection", (), {"find": lambda self, *_a, **_k: []})(),
+                    "role_capabilities": type("Collection", (), {"find": lambda self, *_a, **_k: []})(),
+                    "projects": type("Collection", (), {"count_documents": lambda self, *_a, **_k: 0})(),
+                    "workflow_events": type("Collection", (), {"find_one": lambda self, *_a, **_k: None})(),
+                },
+            ),
+            patch.object(auth_dependencies, "list_user_project_entitlements", return_value=[]),
+        ):
+            context = auth_dependencies.resolve_access_context("user-1")
+        permissions = set(context.get("permissions") or [])
+        self.assertIn("admin.control.billing", permissions)
+        self.assertNotIn("admin.users.write", permissions)
+        self.assertNotIn("admin.intake.write", permissions)
 
 
 if __name__ == "__main__":

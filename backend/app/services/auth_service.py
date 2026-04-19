@@ -199,6 +199,8 @@ def build_user_response(user: dict) -> dict:
         "mfa_enabled": bool(user.get("mfa_enabled")),
         "mfa_enrolled_at": user.get("mfa_enrolled_at"),
         "created_at": user["created_at"],
+        "active_project_id": user.get("active_project_id"),
+        "active_family_id": user.get("active_family_id"),
         "policy_version": user.get("policy_version"),
         "terms_accepted_at": user.get("terms_accepted_at"),
         "privacy_accepted_at": user.get("privacy_accepted_at"),

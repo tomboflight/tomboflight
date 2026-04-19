@@ -3,11 +3,15 @@
 
   const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
 
-  const DEFAULT_LOCAL_API_BASE_URL = "http://127.0.0.1:8000";
+  const DEFAULT_LOCAL_API_BASE_URLS = [
+    "http://127.0.0.1:8000",
+    "http://localhost:8000",
+    "http://[::1]:8000",
+  ];
   const DEFAULT_LIVE_API_BASE_URL = "https://tomboflight-api.onrender.com";
   const DEFAULT_LIVE_API_BASE_URLS = [
-    "https://api.tomboflight.com",
     DEFAULT_LIVE_API_BASE_URL,
+    "https://api.tomboflight.com",
   ];
 
   const TOKEN_KEY = "tol_access_token";
@@ -256,18 +260,20 @@
   // Any module needing role gating should call app.isInternalRole() rather
   // than maintaining its own copy of this set.
   const INTERNAL_ROLE_KEYS = new Set([
-    "admin",
     "super_admin",
-    "root_admin",
-    "platform_admin",
     "operations_admin",
     "finance_admin",
     "marketing_admin",
-    "executive_technology",
-    "operations",
-    "finance",
-    "marketing",
   ]);
+
+  const INTERNAL_ROLE_ALIASES = {
+    root_admin: "super_admin",
+    platform_admin: "super_admin",
+    executive_technology: "super_admin",
+    operations: "operations_admin",
+    finance: "finance_admin",
+    marketing: "marketing_admin",
+  };
 
   function isInternalRole(user) {
     if (!user || typeof user !== "object") return false;
@@ -276,7 +282,8 @@
       String(user.access_tier || "").trim().toLowerCase(),
       String(user.department_role || "").trim().toLowerCase(),
     ].some(function (v) {
-      return v && INTERNAL_ROLE_KEYS.has(v);
+      const normalized = INTERNAL_ROLE_ALIASES[v] || v;
+      return normalized && INTERNAL_ROLE_KEYS.has(normalized);
     });
   }
 
@@ -296,6 +303,24 @@
     );
   }
 
+  function isLikelyApiBaseUrl(value) {
+    try {
+      const parsed = new URL(String(value || "").trim());
+      return parsed.protocol === "https:" || parsed.protocol === "http:";
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  function isFrontendOriginBaseUrl(value) {
+    try {
+      const parsed = new URL(String(value || "").trim());
+      return parsed.origin === window.location.origin;
+    } catch (_error) {
+      return false;
+    }
+  }
+
   function getConfiguredApiBaseUrls() {
     const configuredList =
       window.TOL_CONFIG && Array.isArray(window.TOL_CONFIG.API_BASE_URLS)
@@ -307,16 +332,39 @@
         : "";
 
     const configured = uniqueNonEmptyValues([
-      ...configuredList,
       configuredSingle,
-    ]);
-    if (configured.length) {
-      return configured;
+      ...configuredList,
+    ]).filter(function (candidate) {
+      return isLikelyApiBaseUrl(candidate);
+    });
+    const backendApiBaseUrls = configured.filter(function (candidate) {
+      return !isFrontendOriginBaseUrl(candidate);
+    });
+    if (backendApiBaseUrls.length) {
+      if (isLocalApp()) {
+        return backendApiBaseUrls;
+      }
+      return uniqueNonEmptyValues([
+        ...backendApiBaseUrls,
+        ...DEFAULT_LIVE_API_BASE_URLS,
+      ]);
     }
 
-    return isLocalApp()
-      ? [DEFAULT_LOCAL_API_BASE_URL]
-      : DEFAULT_LIVE_API_BASE_URLS.slice();
+    if (isLocalApp()) {
+      const localHost = String(window.location.hostname || "").toLowerCase();
+      const preferredLocalApiBaseUrl =
+        localHost === "localhost"
+          ? "http://localhost:8000"
+          : localHost === "::1" || localHost === "[::1]"
+          ? "http://[::1]:8000"
+          : "http://127.0.0.1:8000";
+      return uniqueNonEmptyValues([
+        preferredLocalApiBaseUrl,
+        ...DEFAULT_LOCAL_API_BASE_URLS,
+      ]);
+    }
+
+    return DEFAULT_LIVE_API_BASE_URLS.slice();
   }
 
   function getSavedApiBaseUrl() {
@@ -344,7 +392,7 @@
   function getApiBaseUrls() {
     const configured = getConfiguredApiBaseUrls();
     const saved = getSavedApiBaseUrl();
-    if (saved && configured.includes(saved)) {
+    if (saved && configured[0] === saved) {
       return [saved].concat(
         configured.filter(function (item) {
           return item !== saved;
@@ -357,7 +405,7 @@
   function getApiBaseUrl() {
     const configured = getApiBaseUrls();
     const saved = getSavedApiBaseUrl();
-    if (saved && configured.includes(saved)) {
+    if (saved && configured[0] === saved) {
       return saved;
     }
     return configured[0] || "";
@@ -484,14 +532,153 @@
     clearUser();
   }
 
+  function isMeaningfulMessage(value) {
+    const text = String(value || "").trim();
+    if (!text) return false;
+    if (/^\[object Object\](,\s*\[object Object\])*$/i.test(text)) {
+      return false;
+    }
+    return true;
+  }
+
+  function normalizeMessage(value) {
+    const text = String(value || "").trim();
+    return isMeaningfulMessage(text) ? text : "";
+  }
+
+  function validationLocationLabel(location) {
+    if (!Array.isArray(location)) return "";
+    const scopeKeys = new Set(["body", "query", "path", "header", "cookie"]);
+    return location
+      .map(function (part) {
+        return String(part || "").trim();
+      })
+      .filter(Boolean)
+      .filter(function (part) {
+        return !scopeKeys.has(part.toLowerCase());
+      })
+      .join(".");
+  }
+
+  function dedupeMessages(messages) {
+    const seen = new Set();
+    const result = [];
+    (messages || []).forEach(function (message) {
+      const normalized = normalizeMessage(message);
+      if (!normalized) return;
+      const key = normalized.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      result.push(normalized);
+    });
+    return result;
+  }
+
+  function collectErrorMessages(value, seen) {
+    const visited = seen || new Set();
+    if (value === null || typeof value === "undefined") return [];
+
+    if (
+      typeof value === "string" ||
+      typeof value === "number" ||
+      typeof value === "boolean"
+    ) {
+      return normalizeMessage(value) ? [normalizeMessage(value)] : [];
+    }
+
+    if (value instanceof Error) {
+      return dedupeMessages(
+        []
+          .concat(collectErrorMessages(value.message, visited))
+          .concat(collectErrorMessages(value.detail, visited))
+          .concat(collectErrorMessages(value.error, visited))
+          .concat(collectErrorMessages(value.responseBody, visited))
+          .concat(collectErrorMessages(value.data, visited))
+          .concat(collectErrorMessages(value.cause, visited)),
+      );
+    }
+
+    if (Array.isArray(value)) {
+      return dedupeMessages(
+        value.flatMap(function (item) {
+          return collectErrorMessages(item, visited);
+        }),
+      );
+    }
+
+    if (typeof value === "object") {
+      if (visited.has(value)) return [];
+      visited.add(value);
+
+      const messages = [];
+      const candidateMessage = normalizeMessage(
+        value.message ||
+          value.error ||
+          value.reason ||
+          value.description ||
+          value.title ||
+          value.detail ||
+          value.msg,
+      );
+      const location = validationLocationLabel(value.loc);
+      if (candidateMessage) {
+        messages.push(location ? `${location}: ${candidateMessage}` : candidateMessage);
+      }
+
+      ["detail", "message", "error", "errors"].forEach(function (key) {
+        if (!Object.prototype.hasOwnProperty.call(value, key)) return;
+        messages.push(...collectErrorMessages(value[key], visited));
+      });
+
+      Object.entries(value).forEach(function ([key, nestedValue]) {
+        if (
+          [
+            "detail",
+            "message",
+            "error",
+            "errors",
+            "msg",
+            "loc",
+            "ctx",
+            "type",
+            "input",
+            "reason",
+            "description",
+            "title",
+          ].includes(key)
+        ) {
+          return;
+        }
+        const nestedMessages = collectErrorMessages(nestedValue, visited);
+        nestedMessages.forEach(function (nestedMessage) {
+          const normalizedNested = normalizeMessage(nestedMessage);
+          if (!normalizedNested) return;
+          if (normalizedNested.toLowerCase().startsWith(`${key.toLowerCase()}:`)) {
+            messages.push(normalizedNested);
+          } else {
+            messages.push(`${key}: ${normalizedNested}`);
+          }
+        });
+      });
+
+      return dedupeMessages(messages);
+    }
+
+    return normalizeMessage(value) ? [normalizeMessage(value)] : [];
+  }
+
+  function getReadableErrorMessage(value, fallback = "") {
+    const messages = dedupeMessages(collectErrorMessages(value));
+    if (messages.length) {
+      return messages.join(" ");
+    }
+    return normalizeMessage(fallback);
+  }
+
   function parseApiError(data, response) {
-    return (
-      (data &&
-        (data.detail ||
-          data.message ||
-          data.error ||
-          (Array.isArray(data.errors) && data.errors.join(", ")))) ||
-      `Request failed with status ${response.status}`
+    return getReadableErrorMessage(
+      data,
+      `Request failed with status ${response.status}`,
     );
   }
 
@@ -514,7 +701,7 @@
     }
 
     const preferredApiBaseUrl =
-      savedApiBaseUrl && configuredApiBaseUrls.includes(savedApiBaseUrl)
+      savedApiBaseUrl && configuredApiBaseUrls[0] === savedApiBaseUrl
         ? savedApiBaseUrl
         : configuredApiBaseUrls.length > 1
         ? await discoverApiBaseUrl(configuredApiBaseUrls)
@@ -526,6 +713,7 @@
 
     let response = null;
     let lastNetworkError = null;
+    let lastRequestUrl = "";
 
     for (let index = 0; index < apiBaseUrls.length; index += 1) {
       const apiBaseUrl = apiBaseUrls[index];
@@ -561,13 +749,29 @@
           }
         }
 
-        response = await fetch(`${apiBaseUrl}${path}`, requestOptions);
+        const requestUrl = `${apiBaseUrl}${path}`;
+        lastRequestUrl = requestUrl;
+        response = await fetch(requestUrl, requestOptions);
+        const normalizedPath = String(path || "");
+        const shouldRetry404Fallback =
+          normalizedPath.startsWith("/workspace-access/") ||
+          normalizedPath.startsWith("/workspace_access/") ||
+          normalizedPath.startsWith("/household-access/") ||
+          normalizedPath.startsWith("/admin/control-center/");
+        // Some deployments can expose mixed-version backends behind different
+        // API domains where `/health` passes but specific routes lag behind.
+        // For these known cross-host-sensitive routes, retry 404s against the
+        // next configured API base URL before surfacing an error.
         if (
           response &&
           response.status === 404 &&
           hasFallbackCandidate &&
-          String(path || "").startsWith("/admin/control-center")
+          shouldRetry404Fallback
         ) {
+          console.warn("Tomb of Light API fallback retry after 404.", {
+            requestPath: normalizedPath,
+            failedApiBaseUrl: apiBaseUrl,
+          });
           continue;
         }
         saveApiBaseUrl(apiBaseUrl);
@@ -596,6 +800,9 @@
 
     if (!response) {
       const error = new Error(buildNetworkErrorMessage(apiBaseUrls));
+      error.status = 0;
+      error.apiBaseUrls = apiBaseUrls;
+      error.requestUrl = lastRequestUrl;
       if (lastNetworkError) {
         error.cause = lastNetworkError;
       }
@@ -617,7 +824,16 @@
     }
 
     if (!response.ok) {
-      throw new Error(parseApiError(data, response));
+      const error = new Error(parseApiError(data, response));
+      error.status = response.status;
+      error.statusText = response.statusText;
+      error.detail = getReadableErrorMessage(
+        data && (data.detail || data.message || data.error || data),
+      );
+      error.data = data;
+      error.requestUrl = lastRequestUrl;
+      error.responseBody = data;
+      throw error;
     }
 
     return data;
@@ -668,8 +884,14 @@
   function setStatus(node, message, type) {
     if (!node) return;
 
+    const fallbackMessage =
+      type === "error"
+        ? "Something went wrong. Please try again."
+        : "Status updated.";
+    const resolvedMessage = getReadableErrorMessage(message, fallbackMessage);
+
     node.style.display = "block";
-    node.textContent = message;
+    node.textContent = resolvedMessage;
     node.dataset.state = type || "info";
 
     if (type === "error") {
@@ -821,6 +1043,18 @@
     });
   }
 
+  function setupHeaderScrollState() {
+    const header = document.querySelector(".site-header");
+    if (!header) return;
+
+    function syncScrollState() {
+      header.classList.toggle("is-scrolled", window.scrollY > 18);
+    }
+
+    syncScrollState();
+    window.addEventListener("scroll", syncScrollState, { passive: true });
+  }
+
   function markActiveNavLink() {
     const currentPage =
       window.location.pathname.split("/").pop() || "index.html";
@@ -896,6 +1130,7 @@
 
   document.addEventListener("DOMContentLoaded", function () {
     setupMobileMenu();
+    setupHeaderScrollState();
     markActiveNavLink();
     updateCookieStatus();
     setupCookieBanner();
@@ -930,6 +1165,7 @@
     packageSupportsLinkKeys,
     inferPurchaseTypeFromSlug,
     savePendingCheckout,
+    getReadableErrorMessage,
   };
 
   window.TOLApp = sharedApi;

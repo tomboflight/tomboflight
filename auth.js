@@ -4,7 +4,7 @@
   const app = window.TOLApp || window.TOLAuth;
   const POST_LOGIN_REDIRECT = "dashboard.html";
   const SIGNUP_POLICY_VERSION = "2026-03-26";
-  const DASHBOARD_CONTEXT_STORAGE_KEY = "tol_dashboard_context_v1";
+  const DASHBOARD_CONTEXT_STORAGE_KEY = "tol_dashboard_context_v2";
   let hasLogoutBinding = false;
   const HOUSEHOLD_LINK_PACKAGE_CODES = new Set([
     "legacy_plus",
@@ -228,10 +228,18 @@
   }
 
   function getErrorMessage(error) {
+    const sharedParser =
+      app && typeof app.getReadableErrorMessage === "function"
+        ? app.getReadableErrorMessage
+        : null;
+    if (sharedParser) {
+      const parsed = sharedParser(error, "");
+      if (parsed) return parsed;
+    }
     if (!error) return "Unknown error";
     if (typeof error === "string") return error;
     if (error.message) return String(error.message);
-    return String(error);
+    return "Something went wrong. Please try again.";
   }
 
   function isAuthFailure(error) {
@@ -472,6 +480,59 @@
 
   function hasWorkspaceSelectionHints(hints) {
     return Boolean(hints?.projectId || hints?.familyId);
+  }
+
+  function getWorkspaceHintsFromUser(user) {
+    return {
+      projectId: String(
+        user?.active_project_id || user?.activeProjectId || "",
+      ).trim(),
+      familyId: String(
+        user?.active_family_id || user?.activeFamilyId || "",
+      ).trim(),
+    };
+  }
+
+  function mergeWorkspaceSelectionHints(primary, fallback) {
+    const primaryHints =
+      primary && typeof primary === "object"
+        ? {
+            projectId: String(
+              primary.projectId ||
+                primary.project_id ||
+                primary.active_project_id ||
+                "",
+            ).trim(),
+            familyId: String(
+              primary.familyId ||
+                primary.family_id ||
+                primary.active_family_id ||
+                "",
+            ).trim(),
+          }
+        : { projectId: "", familyId: "" };
+    const fallbackHints =
+      fallback && typeof fallback === "object"
+        ? {
+            projectId: String(
+              fallback.projectId ||
+                fallback.project_id ||
+                fallback.active_project_id ||
+                "",
+            ).trim(),
+            familyId: String(
+              fallback.familyId ||
+                fallback.family_id ||
+                fallback.active_family_id ||
+                "",
+            ).trim(),
+          }
+        : { projectId: "", familyId: "" };
+
+    return {
+      projectId: primaryHints.projectId || fallbackHints.projectId,
+      familyId: primaryHints.familyId || fallbackHints.familyId,
+    };
   }
 
   function candidateMatchesWorkspaceHints(candidate, hints) {
@@ -856,15 +917,98 @@
     return await completeAuthenticatedLogin(loginData);
   }
 
+  function getInviteContextFromQuery() {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      return {
+        inviteKey: String(params.get("invite_key") || "").trim(),
+        projectId: String(params.get("project_id") || "").trim(),
+      };
+    } catch (_error) {
+      return { inviteKey: "", projectId: "" };
+    }
+  }
+
+  function buildInviteContextQueryString(context) {
+    const inviteKey = String(context?.inviteKey || "").trim();
+    if (!inviteKey) return "";
+    const params = new URLSearchParams();
+    params.set("invite_key", inviteKey);
+    const projectId = String(context?.projectId || "").trim();
+    if (projectId) params.set("project_id", projectId);
+    return params.toString();
+  }
+
+  function preserveInviteContextOnAuthLinks() {
+    const inviteQueryString = buildInviteContextQueryString(
+      getInviteContextFromQuery(),
+    );
+    if (!inviteQueryString) return;
+
+    document.querySelectorAll("a[href]").forEach(function (link) {
+      const rawHref = String(link.getAttribute("href") || "").trim();
+      if (
+        !rawHref ||
+        rawHref.startsWith("#") ||
+        rawHref.startsWith("mailto:") ||
+        rawHref.startsWith("tel:")
+      ) {
+        return;
+      }
+
+      let parsed;
+      try {
+        parsed = new URL(rawHref, window.location.href);
+      } catch (_error) {
+        return;
+      }
+
+      const filename = String(parsed.pathname.split("/").pop() || "").toLowerCase();
+      if (
+        filename !== "signin.html" &&
+        filename !== "signup.html" &&
+        filename !== "household-access.html"
+      ) {
+        return;
+      }
+
+      const rewrittenPath = String(parsed.pathname.split("/").pop() || filename);
+      const rewrittenSearch = `?${inviteQueryString}`;
+      link.setAttribute("href", `${rewrittenPath}${rewrittenSearch}${parsed.hash}`);
+    });
+  }
+
+  function getPostLoginRedirect() {
+    const inviteQueryString = buildInviteContextQueryString(
+      getInviteContextFromQuery(),
+    );
+    if (!inviteQueryString) {
+      return POST_LOGIN_REDIRECT;
+    }
+    return `household-access.html?${inviteQueryString}`;
+  }
+
   function redirectAfterLogin() {
-    window.location.href = POST_LOGIN_REDIRECT;
+    window.location.href = getPostLoginRedirect();
   }
 
   function getRoleSignals(user) {
+    const roleAliases = {
+      root_admin: "super_admin",
+      platform_admin: "super_admin",
+      executive_technology: "super_admin",
+      operations: "operations_admin",
+      finance: "finance_admin",
+      marketing: "marketing_admin",
+    };
+    const normalizeRole = function (value) {
+      const normalized = normalizeValue(value);
+      return roleAliases[normalized] || normalized;
+    };
     return [
-      normalizeValue(user?.role),
-      normalizeValue(user?.access_tier),
-      normalizeValue(user?.department_role),
+      normalizeRole(user?.access_tier),
+      normalizeRole(user?.department_role),
+      normalizeRole(user?.role),
     ].filter(Boolean);
   }
 
@@ -881,16 +1025,13 @@
     ) {
       return "CEO / Super Admin";
     }
-    if (signals.includes("admin")) {
-      return "Administrative Control";
-    }
-    if (signals.includes("finance_admin") || signals.includes("finance")) {
+    if (signals.includes("finance_admin")) {
       return "CFO";
     }
-    if (signals.includes("operations_admin") || signals.includes("operations")) {
+    if (signals.includes("operations_admin")) {
       return "COO";
     }
-    if (signals.includes("marketing_admin") || signals.includes("marketing")) {
+    if (signals.includes("marketing_admin")) {
       return "CMO";
     }
     return "Internal Admin";
@@ -969,6 +1110,38 @@
       method: "GET",
     });
     return toArray(payload);
+  }
+
+  async function fetchWorkspaceMemberships() {
+    const payload = await app.apiRequest("/workspace-access/my-memberships", {
+      method: "GET",
+    });
+    return toArray(payload);
+  }
+
+  async function fetchProjectEntitlementByProjectId(projectId) {
+    const normalizedProjectId = String(projectId || "").trim();
+    if (!normalizedProjectId) return null;
+
+    try {
+      return await app.apiRequest(
+        `/project-entitlements/project/${encodeURIComponent(normalizedProjectId)}`,
+        {
+          method: "GET",
+        },
+      );
+    } catch (error) {
+      const message = getErrorMessage(error).toLowerCase();
+      if (
+        message.includes("project entitlement not found") ||
+        message.includes("not authorized") ||
+        message.includes("404") ||
+        message.includes("403")
+      ) {
+        return null;
+      }
+      throw error;
+    }
   }
 
   async function fetchProjects() {
@@ -1089,10 +1262,6 @@
       getPackageCodeFromRecord(record);
 
     if (!packageCode || packageCode === "unknown") {
-      return null;
-    }
-
-    if (source === "project" && !activeEntitlement && !paidOrder) {
       return null;
     }
 
@@ -1220,13 +1389,10 @@
   async function getDashboardContext(user, orders, options) {
     let entitlements = [];
     let projects = [];
-    const hints =
-      options && typeof options === "object"
-        ? {
-            projectId: String(options.projectId || "").trim(),
-            familyId: String(options.familyId || "").trim(),
-          }
-        : { projectId: "", familyId: "" };
+    let hints = mergeWorkspaceSelectionHints(
+      options,
+      getWorkspaceHintsFromUser(user),
+    );
 
     try {
       const results = await Promise.all([
@@ -1243,6 +1409,43 @@
     } catch (error) {
       entitlements = [];
       projects = [];
+    }
+
+    if (!hints.projectId) {
+      try {
+        const memberships = await fetchWorkspaceMemberships();
+        const activeMemberships = sortByMostRecent(
+          (Array.isArray(memberships) ? memberships : []).filter(function (item) {
+            return normalizeValue(item?.status || "active") === "active";
+          }),
+        );
+        const membershipProjectId = String(
+          activeMemberships[0]?.project_id || activeMemberships[0]?.projectId || "",
+        ).trim();
+        if (membershipProjectId) {
+          hints = mergeWorkspaceSelectionHints(hints, { projectId: membershipProjectId });
+        }
+      } catch (error) {
+        // Ignore membership lookup failures so dashboard context can still load.
+      }
+    }
+
+    if (hints.projectId) {
+      const alreadyIncludesHintedProject = entitlements.some(function (item) {
+        return getProjectIdFromRecord(item) === hints.projectId;
+      });
+      if (!alreadyIncludesHintedProject) {
+        try {
+          const hintedEntitlement = await fetchProjectEntitlementByProjectId(
+            hints.projectId,
+          );
+          if (hintedEntitlement && hasKnownPackage(hintedEntitlement)) {
+            entitlements = [hintedEntitlement].concat(entitlements);
+          }
+        } catch (error) {
+          // Ignore supplemental entitlement lookup so dashboard context can still load.
+        }
+      }
     }
 
     let currentWorkspace = resolveCurrentWorkspace(
@@ -1342,7 +1545,10 @@
   }
 
   async function getDashboardContextForCurrentPage(user, orders) {
-    const hints = getWorkspaceSelectionHints();
+    const hints = mergeWorkspaceSelectionHints(
+      getWorkspaceSelectionHints(),
+      getWorkspaceHintsFromUser(user),
+    );
     const cached = readCachedDashboardContext(user, hints);
 
     if (cached) {
@@ -1560,10 +1766,10 @@
         return;
       }
 
-      if (password.length < 8) {
+      if (password.length < 12) {
         app.setStatus(
           statusNode,
-          "Password must be at least 8 characters long.",
+          "Password must be at least 12 characters long.",
           "error",
         );
         return;
@@ -2395,6 +2601,7 @@
   }
 
   document.addEventListener("DOMContentLoaded", function () {
+    preserveInviteContextOnAuthLinks();
     protectAuthPages();
     setupSignupForm();
     setupSigninForm();
@@ -2408,6 +2615,7 @@
     redirectAfterLogin,
     fetchOrders,
     fetchProjectEntitlements,
+    fetchProjectEntitlementByProjectId,
     fetchProjects,
     getDashboardContext,
     getDashboardContextForCurrentPage,

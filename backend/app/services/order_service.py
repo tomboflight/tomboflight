@@ -18,7 +18,10 @@ from app.services.project_service import (
     apply_package_purchase_to_project,
     create_project_from_paid_order,
 )
-from app.services.project_entitlement_service import update_project_entitlement_maintenance
+from app.services.project_entitlement_service import (
+    get_project_entitlement,
+    update_project_entitlement_maintenance,
+)
 from app.services.project_entitlement_service import MAINTENANCE_START_DELAY_DAYS
 
 AUTHORITATIVE_ORDER_SOURCES = {
@@ -334,6 +337,17 @@ def create_order_for_user(user: dict[str, Any], payload: Any) -> dict[str, Any]:
     package_code = _normalize_package_code(
         getattr(payload, "package_code", None) or getattr(payload, "package_slug", None)
     )
+    item_type = _normalize(getattr(payload, "item_type", "package")).lower() or "package"
+    target_project_id = _normalize(getattr(payload, "project_id", None))
+    if item_type == "package" and target_project_id:
+        entitlement = get_project_entitlement(target_project_id) or {}
+        entitlement_status = _normalize(entitlement.get("status")).lower() or "active"
+        entitlement_package = _normalize_package_code(entitlement.get("package_code"))
+        if entitlement_status == "active" and entitlement_package == package_code:
+            raise ValueError(
+                "This workspace already has an active package entitlement. Invite members instead of purchasing again."
+            )
+
     order_status = _public_checkout_status(
         getattr(payload, "source", ""),
         getattr(payload, "order_status", ""),
@@ -381,7 +395,6 @@ def create_order_for_user(user: dict[str, Any], payload: Any) -> dict[str, Any]:
         and order_doc["status"] in PAID_ORDER_STATUSES
         and _is_authoritative_order_source(order_doc.get("source"))
     ):
-        target_project_id = _normalize(getattr(payload, "project_id", None))
         order_doc = _attach_project_to_paid_package_order(
             order_id=result.inserted_id,
             order_doc=order_doc,
@@ -393,7 +406,6 @@ def create_order_for_user(user: dict[str, Any], payload: Any) -> dict[str, Any]:
             stripe_payment_link_id=payload.stripe_payment_link_id,
         )
     elif order_doc["item_type"] == "maintenance":
-        target_project_id = _normalize(getattr(payload, "project_id", None))
         if target_project_id:
             project_oid = _to_object_id(target_project_id)
             if project_oid is not None:
@@ -607,12 +619,16 @@ def ensure_order_indexes() -> None:
             return
 
     _ensure_index([("user_id", 1)], name="user_id_1")
+    _ensure_index([("owner_user_id", 1)], name="owner_user_id_1")
     _ensure_index([("email", 1)], name="email_1")
     _ensure_index([("package_code", 1)], name="package_code_1")
     _ensure_index([("package_slug", 1)], name="package_slug_1")
     _ensure_index([("item_type", 1)], name="item_type_1")
     _ensure_index([("billing_plan", 1)], name="billing_plan_1")
     _ensure_index([("created_at", -1)], name="created_at_-1")
+    # project_id is queried on every workspace access check; index is required to
+    # avoid full collection scans that cause request timeouts.
+    _ensure_index([("project_id", 1)], name="project_id_1")
     _ensure_index(
         [("stripe_session_id", 1)],
         name="stripe_session_id_1",

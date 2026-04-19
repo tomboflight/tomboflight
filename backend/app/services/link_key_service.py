@@ -17,6 +17,12 @@ from app.services.project_membership_service import (
     list_accessible_project_ids,
 )
 
+ALLOWED_KEY_TYPES = {
+    "household_invite_key",
+    "branch_link_key",
+    "viewer_share_key",
+}
+
 
 def _utcnow_iso() -> str:
     return datetime.now(UTC).isoformat()
@@ -47,6 +53,16 @@ def _entitlements_collection():
 def _orders_collection():
     db = get_database()
     return db["orders"]
+
+
+def _families_collection():
+    db = get_database()
+    return db["families"]
+
+
+def _users_collection():
+    db = get_database()
+    return db["users"]
 
 
 def _normalize_value(value: Any) -> str:
@@ -124,8 +140,12 @@ def _serialize_key(document: dict[str, Any] | None) -> dict[str, Any] | None:
     return {
         "_id": document.get("_id"),
         "id": str(document.get("_id")),
+        "key_type": str(document.get("key_type") or "branch_link_key"),
         "project_id": str(document.get("project_id") or ""),
         "user_id": str(document.get("user_id") or ""),
+        "issuer_user_id": str(document.get("issuer_user_id") or document.get("user_id") or "") or None,
+        "target_email": _normalize_value(document.get("target_email")) or None,
+        "allowed_role": _normalize_value(document.get("allowed_role")) or None,
         "package_code": document.get("package_code"),
         "package_name": document.get("package_name"),
         "package_lane": document.get("package_lane"),
@@ -138,6 +158,8 @@ def _serialize_key(document: dict[str, Any] | None) -> dict[str, Any] | None:
         "revoked_at": document.get("revoked_at"),
         "expires_at": document.get("expires_at"),
         "expired_at": document.get("expired_at"),
+        "max_uses": int(document.get("max_uses") or 1),
+        "use_count": int(document.get("use_count") or 0),
     }
 
 
@@ -216,6 +238,74 @@ def _get_project_entitlement(project_id: str) -> dict[str, Any] | None:
     return entitlements.find_one({"project_id": str(project_id), "status": "active"}) or entitlements.find_one({"project_id": str(project_id)})
 
 
+def _load_user_identity(user_id: str) -> tuple[str, str]:
+    normalized_user_id = _normalize_value(user_id)
+    if not normalized_user_id:
+        return "", ""
+
+    user = None
+    if ObjectId.is_valid(normalized_user_id):
+        user = _users_collection().find_one({"_id": ObjectId(normalized_user_id)})
+    if user is None:
+        user = _users_collection().find_one(
+            {"$or": [{"id": normalized_user_id}, {"user_id": normalized_user_id}]}
+        )
+
+    resolved_user_id = normalized_user_id
+    resolved_email = ""
+
+    if user is not None:
+        resolved_user_id = _normalize_value(
+            user.get("id") or user.get("_id") or user.get("user_id")
+        ) or normalized_user_id
+        resolved_email = _normalize_value(user.get("email")).lower()
+
+    return resolved_user_id, resolved_email
+
+
+def _family_allows_user_access(
+    family: dict[str, Any] | None,
+    *,
+    user_id: str,
+    user_email: str,
+) -> bool:
+    if not isinstance(family, dict):
+        return False
+
+    owner_user_id = _normalize_value(family.get("owner_user_id"))
+    owner_email = _normalize_value(family.get("owner_email")).lower()
+    shared_user_ids = {
+        _normalize_value(value)
+        for value in (family.get("shared_with_user_ids") or [])
+        if _normalize_value(value)
+    }
+    shared_emails = {
+        _normalize_value(value).lower()
+        for value in (family.get("shared_with_emails") or [])
+        if _normalize_value(value)
+    }
+
+    if user_id and (user_id == owner_user_id or user_id in shared_user_ids):
+        return True
+    if user_email and (user_email == owner_email or user_email in shared_emails):
+        return True
+
+    return False
+
+
+def _project_has_access_signal(project_id: str, project: dict[str, Any]) -> bool:
+    if _get_project_entitlement(project_id) or _get_paid_package_order(project_id):
+        return True
+
+    return bool(
+        _normalize_value(
+            project.get("package_code")
+            or project.get("package_slug")
+            or project.get("package_type")
+        )
+    )
+
+
 def project_supports_link_keys(project_id: str) -> bool:
     entitlement = _get_project_entitlement(project_id)
     if entitlement:
@@ -254,10 +344,10 @@ def user_can_access_project(
         user_email=user_email,
     ):
         return False
-
-    return bool(
-        _get_project_entitlement(project_id) or _get_paid_package_order(project_id)
-    )
+    project = get_project_by_id(project_id)
+    if not project:
+        return False
+    return _project_has_access_signal(str(project.get("_id")), project)
 
 
 def list_accessible_link_key_project_ids(
@@ -412,7 +502,14 @@ def generate_link_key(
     user_id: str,
     user_email: str = "",
     allow_admin: bool = False,
+    key_type: str = "branch_link_key",
+    target_email: str = "",
+    allowed_role: str = "",
+    max_uses: int = 1,
 ) -> dict[str, Any]:
+    normalized_key_type = _normalize_value(key_type).lower() or "branch_link_key"
+    if normalized_key_type not in ALLOWED_KEY_TYPES:
+        raise ValueError("Invalid key type.")
     if not allow_admin and not user_can_access_project(project_id, user_id, user_email):
         raise PermissionError("Not authorized to generate a link key for this project.")
 
@@ -427,19 +524,17 @@ def generate_link_key(
     now = _utcnow_iso()
 
     keys.update_many(
-        {"project_id": str(project_id), "status": "active"},
-        {
-            "$set": {
-                "status": "revoked",
-                "revoked_at": now,
-                "updated_at": now,
-            }
-        },
+        {"project_id": str(project_id), "status": "active", "key_type": normalized_key_type},
+        {"$set": {"status": "revoked", "revoked_at": now, "updated_at": now}},
     )
 
     document = {
+        "key_type": normalized_key_type,
         "project_id": str(project_id),
         "user_id": str(user_id),
+        "issuer_user_id": str(user_id),
+        "target_email": _normalize_value(target_email).lower() or None,
+        "allowed_role": _normalize_value(allowed_role) or None,
         "package_code": project_summary.get("package_code"),
         "package_name": project_summary.get("package_name"),
         "package_lane": project_summary.get("package_lane"),
@@ -452,6 +547,8 @@ def generate_link_key(
         "revoked_at": None,
         "expires_at": None,
         "expired_at": None,
+        "max_uses": max(1, int(max_uses or 1)),
+        "use_count": 0,
     }
     raw_key = _generate_raw_link_key()
     document["key_hash"] = _hash_link_key(raw_key)
@@ -468,7 +565,7 @@ def generate_link_key(
             str(user_id or "") or None,
             "project_link_key",
             str(result.inserted_id),
-            {"project_id": str(project_id)},
+            {"project_id": str(project_id), "key_type": normalized_key_type},
         )
     except Exception:
         pass

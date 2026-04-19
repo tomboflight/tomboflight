@@ -8,13 +8,8 @@
   }
 
   const FAMILY_MANAGER_ROLE_KEYS = new Set([
-    "admin",
     "super_admin",
-    "root_admin",
-    "platform_admin",
     "operations_admin",
-    "executive_technology",
-    "operations",
   ]);
 
   let familyBuilds = [];

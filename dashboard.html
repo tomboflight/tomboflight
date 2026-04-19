@@ -17,6 +17,7 @@
       <header class="site-header">
         <div class="container site-header-inner">
           <a class="brand" href="index.html" aria-label="Tomb of Light home">
+            <img class="brand-logo" src="site-logo-header.png" alt="" aria-hidden="true" />
             <span>Tomb of Light<span class="brand-symbol">™</span></span>
           </a>
 
@@ -36,6 +37,7 @@
             <a href="portrait-upload.html" style="display: none">Portrait Uploads</a>
             <a href="verification-upload.html" style="display: none">Verification Uploads</a>
             <a href="link-keys.html" style="display: none">Link Keys</a>
+            <a href="household-access.html" style="display: none">Members &amp; Access</a>
             <a href="tree-view.html" style="display: none">Family Tree</a>
             <a href="lineage-certificate.html" style="display: none">Lineage Certificate</a>
             <a href="faq.html">Help</a>
@@ -391,7 +393,11 @@
                 </a>
               </div>
 
-              <div class="inline-actions" style="margin-top: 1rem">
+              <div
+                class="inline-actions"
+                style="margin-top: 1rem"
+                data-dashboard-purchase-actions
+              >
                 <a
                   class="btn btn-secondary"
                   href="index.html#pricing"
@@ -401,6 +407,28 @@
                 </a>
                 <a class="btn btn-secondary" href="how-it-works.html">
                   Review Process
+                </a>
+              </div>
+            </div>
+
+            <div class="form-panel portal-household-access-panel" data-dashboard-customer-only>
+              <span class="eyebrow">Household Access</span>
+              <h3>Members &amp; Access</h3>
+              <p class="card-copy">
+                Manage spouse, children, and trusted family member access to this paid workspace.
+              </p>
+              <div class="inline-actions" style="margin-top: 1rem">
+                <a class="btn btn-primary" href="household-access.html" data-dashboard-household-invite-co-owner>
+                  Invite Co-Owner
+                </a>
+                <a class="btn btn-secondary" href="household-access.html" data-dashboard-household-invite-family>
+                  Invite Family Member
+                </a>
+                <a class="btn btn-secondary" href="household-access.html" data-dashboard-household-view-members>
+                  View Members
+                </a>
+                <a class="btn btn-secondary" href="household-access.html" data-dashboard-household-pending-invites>
+                  Pending Invites
                 </a>
               </div>
             </div>
