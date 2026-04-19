@@ -1017,7 +1017,7 @@
       const inviteLink = inviteAcceptUrl(invite);
       const canResend = canManageInvites && (isPending(invite) || isExpired(invite));
       const canRevoke = canManageInvites && (isPending(invite) || isExpired(invite));
-      const canDelete = canManageInvites && inviteStatusValue !== "pending";
+      const canDelete = canManageInvites;
       const canCopyLink = canManageInvites && isPending(invite) && Boolean(inviteLink);
       let deliveryText = "Delivery: unknown";
       if (emailDeliveryStatus === "sent") {
@@ -1101,6 +1101,66 @@
             await refreshData();
             setText(inviteStatus, "Invite removed from history.", "success");
           } catch (error) {
+            const statusCode = Number(error?.status || 0);
+            const detail = readableMessage(
+              error?.detail || error?.message || error?.data || error?.responseBody,
+              "",
+            ).toLowerCase();
+            const legacyPendingDeleteGuard =
+              statusCode === 400 && detail.includes("revoked before deletion");
+            if (legacyPendingDeleteGuard) {
+              try {
+                await revokeInvite(invite.id);
+                await deleteInvite(invite.id);
+                await refreshData();
+                setText(inviteStatus, "Invite removed from history.", "success");
+                return;
+              } catch (secondError) {
+                const secondStatusCode = Number(secondError?.status || 0);
+                if (secondStatusCode === 404) {
+                  await refreshData();
+                  setText(
+                    inviteStatus,
+                    "Invite was revoked. Permanent delete is not available on this server yet.",
+                    "warning",
+                  );
+                  return;
+                }
+                setText(
+                  inviteStatus,
+                  secondError.message || "Failed to delete invite after revoking.",
+                  "error",
+                );
+                return;
+              }
+            }
+            if (statusCode === 404) {
+              if (isPending(invite)) {
+                try {
+                  await revokeInvite(invite.id);
+                  await refreshData();
+                  setText(
+                    inviteStatus,
+                    "Invite was revoked. Permanent delete is not available on this server yet.",
+                    "warning",
+                  );
+                  return;
+                } catch (revokeError) {
+                  setText(
+                    inviteStatus,
+                    revokeError.message || "Delete is unavailable and revoke also failed.",
+                    "error",
+                  );
+                  return;
+                }
+              }
+              setText(
+                inviteStatus,
+                "Delete is unavailable on this server version. Please deploy the latest backend.",
+                "warning",
+              );
+              return;
+            }
             setText(inviteStatus, error.message || "Failed to delete invite.", "error");
           }
         });

@@ -282,24 +282,30 @@ class HouseholdInviteAndOrderTests(unittest.TestCase):
         self.assertEqual(fake_invites.deleted_query, {"_id": "invite-delete-1"})
         audit_log_mock.assert_called_once()
 
-    def test_delete_household_invite_rejects_pending_records(self):
+    def test_delete_household_invite_allows_pending_records(self):
         invite_document = {
             "_id": "invite-delete-pending",
             "project_id": "project-delete-2",
             "status": "pending",
         }
 
+        class FakeDeleteResult:
+            def __init__(self, deleted_count):
+                self.deleted_count = deleted_count
+
         class FakeInvitesCollection:
             def __init__(self, invite):
                 self.invite = dict(invite)
+                self.deleted_query = None
 
             def find_one(self, query):
                 if query.get("_id") == self.invite.get("_id"):
                     return dict(self.invite)
                 return None
 
-            def delete_one(self, _query):
-                raise AssertionError("delete_one should not be called for pending invites")
+            def delete_one(self, query):
+                self.deleted_query = dict(query)
+                return FakeDeleteResult(1)
 
         fake_invites = FakeInvitesCollection(invite_document)
         with (
@@ -311,13 +317,15 @@ class HouseholdInviteAndOrderTests(unittest.TestCase):
                 return_value={"_id": "project-delete-2", "owner_user_id": "owner-1", "owner_email": "owner@example.com"},
             ),
             patch.object(household_access_service, "_resolve_actor_role", return_value="billing_owner"),
+            patch.object(household_access_service, "create_audit_log") as audit_log_mock,
         ):
-            with self.assertRaises(ValueError) as error:
-                household_access_service.delete_household_invite(
-                    invite_id="invite-delete-pending",
-                    actor_user={"id": "owner-1", "email": "owner@example.com"},
-                )
-        self.assertIn("revoked before deletion", str(error.exception))
+            deleted = household_access_service.delete_household_invite(
+                invite_id="invite-delete-pending",
+                actor_user={"id": "owner-1", "email": "owner@example.com"},
+            )
+        self.assertTrue(deleted)
+        self.assertEqual(fake_invites.deleted_query, {"_id": "invite-delete-pending"})
+        audit_log_mock.assert_called_once()
 
 
 if __name__ == "__main__":

@@ -709,8 +709,6 @@ def delete_household_invite(*, invite_id: str, actor_user: dict[str, Any]) -> bo
     if actor_role not in {"billing_owner", "co_owner", "family_manager"}:
         raise PermissionError("You do not have permission to delete invites.")
     invite_status = _normalize(invite.get("status") or "pending").lower()
-    if invite_status == "pending":
-        raise ValueError("Pending invites must be revoked before deletion.")
 
     delete_result = _invites().delete_one({"_id": oid})
     if int(getattr(delete_result, "deleted_count", 0)) <= 0:
