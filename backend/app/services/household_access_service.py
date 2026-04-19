@@ -108,6 +108,16 @@ def _to_oid(value: Any) -> ObjectId | None:
         return None
 
 
+def _id_query(identifier: Any) -> dict[str, Any] | None:
+    normalized = _normalize(identifier)
+    if not normalized:
+        return None
+    oid = _to_oid(normalized)
+    if oid is None:
+        return {"_id": normalized}
+    return {"_id": {"$in": [oid, normalized]}}
+
+
 def _db():
     return get_database()
 
@@ -589,10 +599,10 @@ def accept_household_invite(*, invite_key: str, user: dict[str, Any]) -> dict[st
 
 
 def revoke_household_invite(*, invite_id: str, actor_user: dict[str, Any]) -> dict[str, Any] | None:
-    oid = _to_oid(invite_id)
-    if oid is None:
+    lookup = _id_query(invite_id)
+    if lookup is None:
         return None
-    invite = _invites().find_one({"_id": oid})
+    invite = _invites().find_one(lookup)
     if invite is None:
         return None
     invite = _expire_invite_if_needed(invite)
@@ -603,16 +613,16 @@ def revoke_household_invite(*, invite_id: str, actor_user: dict[str, Any]) -> di
     if actor_role not in {"billing_owner", "co_owner", "family_manager"}:
         raise PermissionError("You do not have permission to revoke invites.")
     now = _now().isoformat()
-    _invites().update_one({"_id": oid}, {"$set": {"status": "revoked", "revoked_at": now, "updated_at": now}})
+    _invites().update_one({"_id": invite["_id"]}, {"$set": {"status": "revoked", "revoked_at": now, "updated_at": now}})
     actor_user_id = _normalize(actor_user.get("id") or actor_user.get("_id") or actor_user.get("user_id"))
     create_audit_log(
         "household_invite_revoked",
         actor_user_id or None,
         "household_invite",
-        str(oid),
+        str(invite["_id"]),
         {"project_id": _normalize(invite.get("project_id"))},
     )
-    return _invites().find_one({"_id": oid})
+    return _invites().find_one({"_id": invite["_id"]})
 
 
 def resend_household_invite(
@@ -621,10 +631,10 @@ def resend_household_invite(
     actor_user: dict[str, Any],
     expires_in_days: int = 7,
 ) -> dict[str, Any] | None:
-    oid = _to_oid(invite_id)
-    if oid is None:
+    lookup = _id_query(invite_id)
+    if lookup is None:
         return None
-    invite = _invites().find_one({"_id": oid})
+    invite = _invites().find_one(lookup)
     if invite is None:
         return None
     invite = _expire_invite_if_needed(invite)
@@ -650,16 +660,16 @@ def resend_household_invite(
         "updated_at": now.isoformat(),
         "expires_at": (now + timedelta(days=max(1, int(expires_in_days or 7)))).isoformat(),
     }
-    _invites().update_one({"_id": oid}, {"$set": updates})
+    _invites().update_one({"_id": invite["_id"]}, {"$set": updates})
     actor_user_id = _normalize(actor_user.get("id") or actor_user.get("_id") or actor_user.get("user_id"))
     create_audit_log(
         "household_invite_resent",
         actor_user_id or None,
         "household_invite",
-        str(oid),
+        str(invite["_id"]),
         {"project_id": _normalize(invite.get("project_id")), "invite_email": _normalize_email(invite.get("email"))},
     )
-    invite = _invites().find_one({"_id": oid})
+    invite = _invites().find_one({"_id": invite["_id"]})
     if invite is None:
         return None
     email_delivery: dict[str, Any] = {"sent": True}
@@ -677,7 +687,7 @@ def resend_household_invite(
             "household_access_service.resend_household_invite.email_exception "
             "project_id=%s invite_id=%s invite_email=%s error=%s",
             _normalize(invite.get("project_id")),
-            _normalize(oid),
+            _normalize(invite.get("_id")),
             _normalize_email(invite.get("email")),
             str(exc),
         )
@@ -687,7 +697,7 @@ def resend_household_invite(
             "exception_type": type(exc).__name__,
         }
     _persist_invite_email_delivery(
-        invite_id=oid,
+        invite_id=invite["_id"],
         invite_document=invite,
         email_delivery=email_delivery,
     )
@@ -695,10 +705,10 @@ def resend_household_invite(
 
 
 def delete_household_invite(*, invite_id: str, actor_user: dict[str, Any]) -> bool:
-    oid = _to_oid(invite_id)
-    if oid is None:
+    lookup = _id_query(invite_id)
+    if lookup is None:
         return False
-    invite = _invites().find_one({"_id": oid})
+    invite = _invites().find_one(lookup)
     if invite is None:
         return False
     invite = _expire_invite_if_needed(invite)
@@ -710,7 +720,7 @@ def delete_household_invite(*, invite_id: str, actor_user: dict[str, Any]) -> bo
         raise PermissionError("You do not have permission to delete invites.")
     invite_status = _normalize(invite.get("status") or "pending").lower()
 
-    delete_result = _invites().delete_one({"_id": oid})
+    delete_result = _invites().delete_one({"_id": invite["_id"]})
     if int(getattr(delete_result, "deleted_count", 0)) <= 0:
         return False
 
@@ -719,7 +729,7 @@ def delete_household_invite(*, invite_id: str, actor_user: dict[str, Any]) -> bo
         "household_invite_deleted",
         actor_user_id or None,
         "household_invite",
-        str(oid),
+        str(invite["_id"]),
         {
             "project_id": _normalize(invite.get("project_id")),
             "invite_status": invite_status,
@@ -735,10 +745,10 @@ def update_member_role(
     member_role: str,
     actor_user: dict[str, Any],
 ) -> dict[str, Any] | None:
-    oid = _to_oid(membership_id)
-    if oid is None:
+    lookup = _id_query(membership_id)
+    if lookup is None:
         return None
-    membership = _members().find_one({"_id": oid, "project_id": _normalize(project_id)})
+    membership = _members().find_one({**lookup, "project_id": _normalize(project_id)})
     if membership is None:
         return None
     project = _find_project(project_id)
@@ -783,11 +793,11 @@ def update_member_role(
                 "project_id": _normalize(project_id),
                 "member_role": "billing_owner",
                 "status": {"$in": sorted(ACTIVE_MEMBER_STATUSES)},
-                "_id": {"$ne": oid},
+                "_id": {"$ne": membership["_id"]},
             },
             {"$set": {"member_role": "co_owner", "updated_at": now}},
         )
-        _members().update_one({"_id": oid}, {"$set": {"member_role": "billing_owner", "updated_at": now}})
+        _members().update_one({"_id": membership["_id"]}, {"$set": {"member_role": "billing_owner", "updated_at": now}})
         create_audit_log(
             "household_billing_owner_transferred",
             actor_user_id or None,
@@ -802,14 +812,14 @@ def update_member_role(
                 "requested_by_email": actor_email or None,
             },
         )
-        return _members().find_one({"_id": oid})
+        return _members().find_one({"_id": membership["_id"]})
 
     if not _can_assign_role(actor_role, next_role):
         raise PermissionError("You do not have permission to assign this role.")
     if _role_rank(next_role) >= _role_rank(actor_role):
         raise PermissionError("You can only assign roles below your own role level.")
     now = _now().isoformat()
-    _members().update_one({"_id": oid}, {"$set": {"member_role": next_role, "updated_at": now}})
+    _members().update_one({"_id": membership["_id"]}, {"$set": {"member_role": next_role, "updated_at": now}})
     create_audit_log(
         "household_role_changed",
         actor_user_id or None,
@@ -821,14 +831,14 @@ def update_member_role(
             "next_role": next_role,
         },
     )
-    return _members().find_one({"_id": oid})
+    return _members().find_one({"_id": membership["_id"]})
 
 
 def revoke_membership(*, project_id: str, membership_id: str, actor_user: dict[str, Any]) -> dict[str, Any] | None:
-    oid = _to_oid(membership_id)
-    if oid is None:
+    lookup = _id_query(membership_id)
+    if lookup is None:
         return None
-    membership = _members().find_one({"_id": oid, "project_id": _normalize(project_id)})
+    membership = _members().find_one({**lookup, "project_id": _normalize(project_id)})
     if membership is None:
         return None
     project = _find_project(project_id)
@@ -843,7 +853,7 @@ def revoke_membership(*, project_id: str, membership_id: str, actor_user: dict[s
     if _role_rank(target_role) >= _role_rank(actor_role):
         raise PermissionError("You can only revoke access for roles below your role level.")
     now = _now().isoformat()
-    _members().update_one({"_id": oid}, {"$set": {"status": "revoked", "updated_at": now}})
+    _members().update_one({"_id": membership["_id"]}, {"$set": {"status": "revoked", "updated_at": now}})
     actor_user_id = _normalize(actor_user.get("id") or actor_user.get("_id") or actor_user.get("user_id"))
     create_audit_log(
         "household_membership_revoked",
@@ -852,7 +862,7 @@ def revoke_membership(*, project_id: str, membership_id: str, actor_user: dict[s
         membership_id,
         {"project_id": _normalize(project_id), "target_role": target_role},
     )
-    return _members().find_one({"_id": oid})
+    return _members().find_one({"_id": membership["_id"]})
 
 
 def list_my_memberships(user: dict[str, Any]) -> list[dict[str, Any]]:

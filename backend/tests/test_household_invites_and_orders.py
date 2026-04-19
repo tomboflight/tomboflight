@@ -263,7 +263,6 @@ class HouseholdInviteAndOrderTests(unittest.TestCase):
 
         fake_invites = FakeInvitesCollection(invite_document)
         with (
-            patch.object(household_access_service, "_to_oid", return_value="invite-delete-1"),
             patch.object(household_access_service, "_invites", return_value=fake_invites),
             patch.object(
                 household_access_service,
@@ -309,7 +308,6 @@ class HouseholdInviteAndOrderTests(unittest.TestCase):
 
         fake_invites = FakeInvitesCollection(invite_document)
         with (
-            patch.object(household_access_service, "_to_oid", return_value="invite-delete-pending"),
             patch.object(household_access_service, "_invites", return_value=fake_invites),
             patch.object(
                 household_access_service,
@@ -403,7 +401,6 @@ class HouseholdInviteAndOrderTests(unittest.TestCase):
         fake_members = FakeMembersCollection(members)
         fake_projects = FakeProjectsCollection(project_document)
         with (
-            patch.object(household_access_service, "_to_oid", side_effect=lambda value: value),
             patch.object(household_access_service, "_members", return_value=fake_members),
             patch.object(household_access_service, "_projects", return_value=fake_projects),
             patch.object(household_access_service, "_find_project", return_value=dict(project_document)),
@@ -446,7 +443,6 @@ class HouseholdInviteAndOrderTests(unittest.TestCase):
                 return None
 
         with (
-            patch.object(household_access_service, "_to_oid", side_effect=lambda value: value),
             patch.object(household_access_service, "_members", return_value=FakeMembersCollection()),
             patch.object(
                 household_access_service,
