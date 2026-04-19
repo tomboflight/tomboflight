@@ -10,7 +10,7 @@ export default function FamilyScreen() {
       todoItems={[
         'TODO: Fetch family records from FastAPI.',
         'TODO: Add member list and profile drill-down.',
-        'TODO: Apply workspace role visibility constraints.'
+        'TODO: Enforce workspace role visibility (billing_owner/co_owner/family_manager).'
       ]}
     />
   );
