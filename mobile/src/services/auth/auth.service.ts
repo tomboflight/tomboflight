@@ -1,5 +1,6 @@
 import { API_ENDPOINTS } from '../../config';
 import { apiRequest } from '../api';
+import { clearAccessToken, getAccessToken, saveAccessToken } from './auth-state';
 
 export type SignInInput = {
   email: string;
@@ -45,16 +46,21 @@ export type PasswordResetResponse = {
 
 /**
  * Uses FastAPI /auth/login.
- * TODO: Persist token/cookie session through secure mobile storage/session manager.
  */
 export async function signIn(input: SignInInput): Promise<AuthTokenResponse> {
-  return apiRequest<AuthTokenResponse>(API_ENDPOINTS.auth.signIn, {
+  const response = await apiRequest<AuthTokenResponse>(API_ENDPOINTS.auth.signIn, {
     method: 'POST',
     body: {
       email: input.email.trim().toLowerCase(),
       password: input.password
     }
   });
+
+  if (response.access_token && !response.mfa_required) {
+    await saveAccessToken(response.access_token);
+  }
+
+  return response;
 }
 
 /**
@@ -87,4 +93,20 @@ export async function requestPasswordReset(email: string): Promise<PasswordReset
       email: email.trim().toLowerCase()
     }
   });
+}
+
+/**
+ * Uses FastAPI /auth/logout and always clears local token state.
+ */
+export async function signOut(): Promise<void> {
+  const token = getAccessToken() || undefined;
+
+  try {
+    await apiRequest(API_ENDPOINTS.auth.logout, {
+      method: 'POST',
+      token
+    });
+  } finally {
+    await clearAccessToken();
+  }
 }

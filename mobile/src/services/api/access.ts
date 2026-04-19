@@ -1,5 +1,6 @@
 import { API_ENDPOINTS, workspaceAccessPathAliases } from '../../config';
 import { ApiError, apiRequest } from './client';
+import { getAccessToken } from '../auth/auth-state';
 
 export type AccessContextPayload = Record<string, unknown>;
 
@@ -22,7 +23,7 @@ export type WorkspaceMembershipsResponse = {
 export async function fetchAccessContext(token?: string): Promise<AccessContextPayload> {
   return apiRequest<AccessContextPayload>(API_ENDPOINTS.users.accessContext, {
     method: 'GET',
-    token
+    token: token || getAccessToken() || undefined
   });
 }
 
@@ -32,13 +33,14 @@ export async function fetchAccessContext(token?: string): Promise<AccessContextP
  */
 export async function fetchMyMemberships(token?: string): Promise<WorkspaceMembershipsResponse> {
   const candidates = workspaceAccessPathAliases(API_ENDPOINTS.workspaceAccess.myMemberships);
+  const resolvedToken = token || getAccessToken() || undefined;
   let lastNotFoundError: ApiError | null = null;
 
   for (const candidatePath of candidates) {
     try {
       return await apiRequest<WorkspaceMembershipsResponse>(candidatePath, {
         method: 'GET',
-        token
+        token: resolvedToken
       });
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) {
