@@ -8,7 +8,8 @@ export default function DashboardScreen() {
       title="Dashboard"
       description="Package-lane dashboard starter for customer progress visibility."
       todoItems={[
-        'TODO: Load package lane cards from FastAPI.',
+        'TODO: Load access context from /users/me/access-context.',
+        'TODO: Load workspace memberships from /workspace-access/my-memberships.',
         'TODO: Show milestone and activity status.',
         'TODO: Add deep links to project, uploads, and certificates.'
       ]}
