@@ -34,6 +34,21 @@ class HouseholdAccessSchemaTests(unittest.TestCase):
         self.assertEqual(payload["max_uses"], 1)
         self.assertEqual(payload["use_count"], 0)
 
+    def test_build_invite_response_includes_email_delivery_fields(self):
+        payload = build_invite_response(
+            {
+                "_id": "invite-email-delivery",
+                "project_id": "project-3",
+                "email": "delivery@example.com",
+                "status": "pending",
+                "member_role": "viewer",
+                "email_delivery_status": "failed",
+                "email_delivery_error": "postmark_token_missing",
+            }
+        )
+        self.assertEqual(payload["email_delivery_status"], "failed")
+        self.assertEqual(payload["email_delivery_error"], "postmark_token_missing")
+
 
 if __name__ == "__main__":
     unittest.main()
