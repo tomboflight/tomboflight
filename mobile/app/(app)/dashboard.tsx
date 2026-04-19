@@ -2,49 +2,110 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ScreenContainer } from '../../src/components/ScreenContainer';
-import { fetchAccessContext, fetchMyMemberships, WorkspaceMembership } from '../../src/services/api';
+import {
+  AccessContextPayload,
+  fetchAccessContext,
+  fetchMyMemberships,
+  mapWorkspaceAccessError,
+  WorkspaceMembership
+} from '../../src/services/api';
 import { appTheme } from '../../src/theme';
 
 type AccessContextSummary = {
+  userId: string;
   email: string;
   role: string;
+  status: string;
   packageLane: string;
+  experienceMode: string;
   activeProjectId: string;
   activeFamilyId: string;
   modules: string[];
   entitlements: string[];
+  projectPermissions: string[];
+  legalAcceptance: {
+    policyVersion: string;
+    termsAcceptedAt: string;
+    privacyAcceptedAt: string;
+    eligibilityAttestedAt: string;
+  };
 };
 
-function toErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message.trim()) {
-    return error.message;
-  }
-  return 'Unable to load dashboard data.';
+type MetricRow = {
+  label: string;
+  count: number;
+};
+
+function asString(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
 }
 
-function toAccessContextSummary(payload: Record<string, unknown>): AccessContextSummary {
-  const asString = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
-  const asStringArray = (value: unknown): string[] =>
-    Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+function asStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item) => asString(item))
+    .filter((item) => item.length > 0);
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+}
+
+function toCountRows(items: WorkspaceMembership[], key: keyof WorkspaceMembership): MetricRow[] {
+  const counts = new Map<string, number>();
+
+  items.forEach((item) => {
+    const normalized = asString(item[key]).toLowerCase() || 'unknown';
+    counts.set(normalized, (counts.get(normalized) || 0) + 1);
+  });
+
+  return Array.from(counts.entries())
+    .map(([label, count]) => ({ label, count }))
+    .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label));
+}
+
+function toAccessContextSummary(payload: AccessContextPayload): AccessContextSummary {
+  const legal = asRecord(payload.legal_acceptance);
 
   return {
+    userId: asString(payload.user_id),
     email: asString(payload.email),
     role: asString(payload.role),
+    status: asString(payload.status),
     packageLane: asString(payload.package_lane),
+    experienceMode: asString(payload.experience_mode),
     activeProjectId: asString(payload.active_project_id),
     activeFamilyId: asString(payload.active_family_id),
     modules: asStringArray(payload.allowed_experience_modules),
-    entitlements: asStringArray(payload.active_entitlements)
+    entitlements: asStringArray(payload.active_entitlements),
+    projectPermissions: asStringArray(payload.project_permissions),
+    legalAcceptance: {
+      policyVersion: asString(legal.policy_version),
+      termsAcceptedAt: asString(legal.terms_accepted_at),
+      privacyAcceptedAt: asString(legal.privacy_accepted_at),
+      eligibilityAttestedAt: asString(legal.eligibility_attested_at)
+    }
   };
 }
 
-function buildMembershipCounts(items: WorkspaceMembership[]): Record<string, number> {
-  const counts: Record<string, number> = {};
-  items.forEach((item) => {
-    const role = String(item.member_role || 'unknown').trim().toLowerCase() || 'unknown';
-    counts[role] = (counts[role] || 0) + 1;
-  });
-  return counts;
+function summarizeMembershipTarget(membership: WorkspaceMembership): string {
+  const name = asString(membership.full_name);
+  const email = asString(membership.email);
+  return name || email || 'Unnamed member';
+}
+
+function summarizeMembershipScope(membership: WorkspaceMembership): string {
+  const relationshipScope = asString(membership.relationship_scope);
+  const privacyScope = asString(membership.privacy_scope);
+
+  if (relationshipScope && privacyScope) {
+    return `${relationshipScope} / ${privacyScope}`;
+  }
+
+  return relationshipScope || privacyScope || 'scope unavailable';
 }
 
 export default function DashboardScreen() {
@@ -62,10 +123,11 @@ export default function DashboardScreen() {
         fetchAccessContext(),
         fetchMyMemberships()
       ]);
+
       setAccessContext(toAccessContextSummary(contextPayload));
-      setMemberships(membershipsPayload.items || []);
+      setMemberships(membershipsPayload.items);
     } catch (error) {
-      setErrorMessage(toErrorMessage(error));
+      setErrorMessage(mapWorkspaceAccessError(error));
     } finally {
       setIsLoading(false);
     }
@@ -75,8 +137,31 @@ export default function DashboardScreen() {
     void loadDashboard();
   }, [loadDashboard]);
 
-  const membershipCounts = useMemo(() => buildMembershipCounts(memberships), [memberships]);
-  const roleCountEntries = useMemo(() => Object.entries(membershipCounts), [membershipCounts]);
+  const roleRows = useMemo(() => toCountRows(memberships, 'member_role'), [memberships]);
+  const statusRows = useMemo(() => toCountRows(memberships, 'status'), [memberships]);
+
+  const recentMemberships = useMemo(() => {
+    return [...memberships]
+      .sort((left, right) => {
+        const leftDate = Date.parse(asString(left.created_at) || asString(left.joined_at) || '');
+        const rightDate = Date.parse(asString(right.created_at) || asString(right.joined_at) || '');
+
+        if (!Number.isNaN(leftDate) && !Number.isNaN(rightDate)) {
+          return rightDate - leftDate;
+        }
+
+        if (!Number.isNaN(rightDate)) {
+          return 1;
+        }
+
+        if (!Number.isNaN(leftDate)) {
+          return -1;
+        }
+
+        return 0;
+      })
+      .slice(0, 5);
+  }, [memberships]);
 
   return (
     <ScreenContainer>
@@ -84,12 +169,12 @@ export default function DashboardScreen() {
         <Text style={styles.badge}>Tomb of Light Mobile</Text>
         <Text style={styles.title}>Dashboard</Text>
         <Text style={styles.description}>
-          Your customer workspace summary, package lane, and membership context.
+          Customer workspace role, package lane, access context, and membership visibility.
         </Text>
       </View>
 
       <Pressable style={styles.refreshButton} onPress={() => void loadDashboard()}>
-        <Text style={styles.refreshText}>Refresh</Text>
+        <Text style={styles.refreshText}>Refresh Workspace Data</Text>
       </Pressable>
 
       {isLoading ? (
@@ -103,48 +188,127 @@ export default function DashboardScreen() {
         <View style={styles.errorCard}>
           <Text style={styles.errorTitle}>Unable to load dashboard</Text>
           <Text style={styles.errorMessage}>{errorMessage}</Text>
-          <Text style={styles.errorHint}>
-            Ensure your API base URL and authenticated session are configured correctly.
-          </Text>
+          <Text style={styles.errorHint}>Sign in again if the current session has expired.</Text>
         </View>
       ) : null}
 
       {!isLoading && !errorMessage && accessContext ? (
         <>
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Account Context</Text>
+            <Text style={styles.cardTitle}>Access Snapshot</Text>
+            <Text style={styles.cardLine}>User ID: {accessContext.userId || 'Unavailable'}</Text>
             <Text style={styles.cardLine}>Email: {accessContext.email || 'Unavailable'}</Text>
             <Text style={styles.cardLine}>Role: {accessContext.role || 'Unavailable'}</Text>
+            <Text style={styles.cardLine}>Status: {accessContext.status || 'Unavailable'}</Text>
             <Text style={styles.cardLine}>Package Lane: {accessContext.packageLane || 'Unavailable'}</Text>
+            <Text style={styles.cardLine}>Experience Mode: {accessContext.experienceMode || 'Unavailable'}</Text>
             <Text style={styles.cardLine}>
-              Active Project: {accessContext.activeProjectId || 'Not selected'}
+              Active Project: {accessContext.activeProjectId || 'No active project'}
             </Text>
             <Text style={styles.cardLine}>
-              Active Family: {accessContext.activeFamilyId || 'Not selected'}
+              Active Family: {accessContext.activeFamilyId || 'No active family'}
             </Text>
+          </View>
+
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Entitlements And Modules</Text>
+
+            <Text style={styles.cardLabel}>Entitlements</Text>
+            <View style={styles.tagWrap}>
+              {accessContext.entitlements.length > 0 ? (
+                accessContext.entitlements.map((entry) => (
+                  <Text key={entry} style={styles.tag}>
+                    {entry}
+                  </Text>
+                ))
+              ) : (
+                <Text style={styles.cardLine}>No entitlements returned.</Text>
+              )}
+            </View>
+
+            <Text style={styles.cardLabel}>Allowed Modules</Text>
+            <View style={styles.tagWrap}>
+              {accessContext.modules.length > 0 ? (
+                accessContext.modules.map((entry) => (
+                  <Text key={entry} style={styles.tag}>
+                    {entry}
+                  </Text>
+                ))
+              ) : (
+                <Text style={styles.cardLine}>No modules returned.</Text>
+              )}
+            </View>
+
+            <Text style={styles.cardLabel}>Project Permissions</Text>
+            <View style={styles.tagWrap}>
+              {accessContext.projectPermissions.length > 0 ? (
+                accessContext.projectPermissions.map((entry) => (
+                  <Text key={entry} style={styles.tagMuted}>
+                    {entry}
+                  </Text>
+                ))
+              ) : (
+                <Text style={styles.cardLine}>No explicit project permissions returned.</Text>
+              )}
+            </View>
           </View>
 
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Workspace Memberships</Text>
-            <Text style={styles.cardLine}>Memberships: {memberships.length}</Text>
-            {roleCountEntries.length > 0 ? (
-              roleCountEntries.map(([role, count]) => (
-                <Text key={role} style={styles.cardLine}>
-                  {role}: {count}
+            <Text style={styles.cardLine}>Total memberships: {memberships.length}</Text>
+
+            <Text style={styles.cardLabel}>Role Distribution</Text>
+            {roleRows.length > 0 ? (
+              roleRows.map((row) => (
+                <Text key={row.label} style={styles.cardLine}>
+                  {row.label}: {row.count}
                 </Text>
               ))
             ) : (
-              <Text style={styles.cardLine}>No memberships found.</Text>
+              <Text style={styles.cardLine}>No memberships available.</Text>
+            )}
+
+            <Text style={styles.cardLabel}>Status Distribution</Text>
+            {statusRows.length > 0 ? (
+              statusRows.map((row) => (
+                <Text key={row.label} style={styles.cardLine}>
+                  {row.label}: {row.count}
+                </Text>
+              ))
+            ) : (
+              <Text style={styles.cardLine}>No membership statuses available.</Text>
             )}
           </View>
 
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Entitlements & Modules</Text>
+            <Text style={styles.cardTitle}>Recent Membership Context</Text>
+            {recentMemberships.length > 0 ? (
+              recentMemberships.map((membership) => (
+                <View key={membership.id || `${membership.project_id || 'project'}-${membership.email || 'member'}`} style={styles.memberRow}>
+                  <Text style={styles.memberName}>{summarizeMembershipTarget(membership)}</Text>
+                  <Text style={styles.memberMeta}>Role: {asString(membership.member_role) || 'unknown'}</Text>
+                  <Text style={styles.memberMeta}>Scope: {summarizeMembershipScope(membership)}</Text>
+                  <Text style={styles.memberMeta}>Project: {asString(membership.project_id) || 'unknown'}</Text>
+                </View>
+              ))
+            ) : (
+              <Text style={styles.cardLine}>No membership records found for this account.</Text>
+            )}
+          </View>
+
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Legal Acceptance</Text>
             <Text style={styles.cardLine}>
-              Entitlements: {accessContext.entitlements.length > 0 ? accessContext.entitlements.join(', ') : 'None'}
+              Policy Version: {accessContext.legalAcceptance.policyVersion || 'Unavailable'}
             </Text>
             <Text style={styles.cardLine}>
-              Modules: {accessContext.modules.length > 0 ? accessContext.modules.join(', ') : 'None'}
+              Terms Accepted: {accessContext.legalAcceptance.termsAcceptedAt || 'Not yet recorded'}
+            </Text>
+            <Text style={styles.cardLine}>
+              Privacy Accepted: {accessContext.legalAcceptance.privacyAcceptedAt || 'Not yet recorded'}
+            </Text>
+            <Text style={styles.cardLine}>
+              Eligibility Attested: {accessContext.legalAcceptance.eligibilityAttestedAt || 'Not yet recorded'}
             </Text>
           </View>
         </>
@@ -236,11 +400,62 @@ const styles = StyleSheet.create({
   cardTitle: {
     color: appTheme.colors.textPrimary,
     fontSize: appTheme.typography.heading,
-    fontWeight: '600'
+    fontWeight: '700'
+  },
+  cardLabel: {
+    color: appTheme.colors.textPrimary,
+    fontSize: appTheme.typography.caption,
+    fontWeight: '700',
+    marginTop: 4
   },
   cardLine: {
     color: appTheme.colors.textSecondary,
     fontSize: appTheme.typography.body,
     lineHeight: 22
+  },
+  tagWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: appTheme.spacing.xs,
+    marginBottom: 6
+  },
+  tag: {
+    borderWidth: 1,
+    borderColor: '#BFD7FF',
+    borderRadius: appTheme.radius.md,
+    backgroundColor: '#EFF5FF',
+    color: appTheme.colors.primary,
+    fontSize: appTheme.typography.caption,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    overflow: 'hidden'
+  },
+  tagMuted: {
+    borderWidth: 1,
+    borderColor: appTheme.colors.border,
+    borderRadius: appTheme.radius.md,
+    backgroundColor: '#F7F9FC',
+    color: appTheme.colors.textSecondary,
+    fontSize: appTheme.typography.caption,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    overflow: 'hidden'
+  },
+  memberRow: {
+    borderWidth: 1,
+    borderColor: appTheme.colors.border,
+    borderRadius: appTheme.radius.md,
+    backgroundColor: '#FBFDFF',
+    padding: appTheme.spacing.sm,
+    gap: 2
+  },
+  memberName: {
+    color: appTheme.colors.textPrimary,
+    fontSize: appTheme.typography.body,
+    fontWeight: '600'
+  },
+  memberMeta: {
+    color: appTheme.colors.textSecondary,
+    fontSize: appTheme.typography.caption
   }
 });

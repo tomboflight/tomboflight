@@ -20,6 +20,40 @@ export class ApiError extends Error {
   }
 }
 
+function asString(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function extractDetailMessage(detail: unknown): string {
+  if (!detail) {
+    return '';
+  }
+
+  if (typeof detail === 'string') {
+    return detail.trim();
+  }
+
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) => extractDetailMessage(item))
+      .filter((value) => value.length > 0);
+    return messages.join(' ').trim();
+  }
+
+  if (typeof detail === 'object') {
+    const record = detail as Record<string, unknown>;
+    const preferredKeys = ['detail', 'message', 'msg', 'error'];
+    for (const key of preferredKeys) {
+      const message = extractDetailMessage(record[key]);
+      if (message) {
+        return message;
+      }
+    }
+  }
+
+  return '';
+}
+
 /**
  * Minimal API client starter.
  * TODO: map backend errors to typed mobile errors.
@@ -70,6 +104,9 @@ export async function apiRequest<TResponse>(
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
       throw new Error('API request timed out.');
+    }
+    if (error instanceof TypeError) {
+      throw new Error('Unable to reach Tomb of Light services. Check your connection and try again.');
     }
     throw error;
   } finally {
@@ -123,14 +160,13 @@ async function toApiError(response: Response): Promise<ApiError> {
         message?: unknown;
       };
       detail = payload.detail ?? payload.message ?? payload;
-
-      if (typeof payload.detail === 'string' && payload.detail.trim()) {
-        message = payload.detail;
-      } else if (typeof payload.message === 'string' && payload.message.trim()) {
-        message = payload.message;
-      }
+      message =
+        extractDetailMessage(payload.detail) ||
+        extractDetailMessage(payload.message) ||
+        extractDetailMessage(payload) ||
+        message;
     } else {
-      const rawText = (await response.text()).trim();
+      const rawText = asString(await response.text());
       if (rawText) {
         detail = rawText;
         message = rawText;

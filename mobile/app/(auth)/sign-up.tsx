@@ -3,15 +3,8 @@ import { Link, useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { ScreenContainer } from '../../src/components/ScreenContainer';
-import { signIn, signUp } from '../../src/services/auth';
+import { mapAuthError, signIn, signUp } from '../../src/services/auth';
 import { appTheme } from '../../src/theme';
-
-function toErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message.trim()) {
-    return error.message;
-  }
-  return 'Unable to create account. Please try again.';
-}
 
 function normalizeEmail(input: string): string {
   return input.trim().toLowerCase();
@@ -86,7 +79,7 @@ export default function SignUpScreen() {
 
       router.replace('/(app)/dashboard');
     } catch (error) {
-      setErrorMessage(toErrorMessage(error));
+      setErrorMessage(mapAuthError(error, 'signUp'));
     } finally {
       setIsSubmitting(false);
     }
