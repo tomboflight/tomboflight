@@ -1,4 +1,5 @@
 import unittest
+from typing import Any, cast
 from unittest.mock import patch
 
 from fastapi import HTTPException
@@ -65,7 +66,7 @@ class AccountSeparationTests(unittest.TestCase):
             ),
             patch.object(auth_dependencies, "resolve_access_context") as resolve_mock,
         ):
-            resolved_user = dependency(request=object(), current_user=current_user)
+            resolved_user = dependency(request=cast(Any, object()), current_user=current_user)
 
         self.assertIs(resolved_user, current_user)
         resolve_mock.assert_not_called()
@@ -95,7 +96,7 @@ class AccountSeparationTests(unittest.TestCase):
                 },
             ) as resolve_mock,
         ):
-            resolved_user = dependency(request=object(), current_user=current_user)
+            resolved_user = dependency(request=cast(Any, object()), current_user=current_user)
 
         self.assertIs(resolved_user, current_user)
         resolve_mock.assert_called_once_with("user-1", project_id="project-2")
@@ -113,7 +114,7 @@ class AccountSeparationTests(unittest.TestCase):
         }
         with patch.object(auth_dependencies, "_extract_project_id_from_request", return_value=""):
             with self.assertRaises(HTTPException) as error:
-                auth_dependencies.require_super_admin(request=object(), current_user=current_user)
+                auth_dependencies.require_super_admin(request=cast(Any, object()), current_user=current_user)
         self.assertEqual(error.exception.status_code, 403)
 
     def test_require_super_admin_allows_super_admin_role(self):
@@ -127,7 +128,7 @@ class AccountSeparationTests(unittest.TestCase):
             },
         }
         with patch.object(auth_dependencies, "_extract_project_id_from_request", return_value=""):
-            resolved = auth_dependencies.require_super_admin(request=object(), current_user=current_user)
+            resolved = auth_dependencies.require_super_admin(request=cast(Any, object()), current_user=current_user)
         self.assertIs(resolved, current_user)
 
     def test_admin_base_role_does_not_grant_full_admin_permissions(self):

@@ -88,6 +88,7 @@ class AssetDeliveryRouteTests(unittest.TestCase):
             )
 
         self.assertIsNotNone(order)
+        assert order is not None
         self.assertEqual(order.get("status"), "paid")
         self.assertEqual(order.get("id"), str(paid_order_id))
         self.assertIn("project_id", order)
@@ -110,6 +111,7 @@ class AssetDeliveryRouteTests(unittest.TestCase):
             )
 
         self.assertIsNotNone(order)
+        assert order is not None
         self.assertEqual(order.get("id"), "order-1")
 
 

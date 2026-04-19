@@ -257,7 +257,11 @@ def _build_union_nodes(people: dict[str, dict[str, Any]], relationships: list[di
         target_id = _string_or_none(rel.get("target_member_id"))
         if rel_type not in spouse_types or not source_id or not target_id:
             continue
-        key = tuple(sorted([source_id, target_id]))
+        key = (
+            (source_id, target_id)
+            if source_id <= target_id
+            else (target_id, source_id)
+        )
         spouse_pairs[key] = rel_type
 
     parents_by_child: dict[str, list[str]] = {}
