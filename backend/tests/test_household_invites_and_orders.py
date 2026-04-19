@@ -327,6 +327,143 @@ class HouseholdInviteAndOrderTests(unittest.TestCase):
         self.assertEqual(fake_invites.deleted_query, {"_id": "invite-delete-pending"})
         audit_log_mock.assert_called_once()
 
+    def test_update_member_role_transfers_billing_owner(self):
+        now_iso = "2026-04-19T21:00:00+00:00"
+        project_document = {
+            "_id": "project-transfer-1",
+            "owner_user_id": "owner-1",
+            "owner_email": "owner@example.com",
+        }
+        members = [
+            {
+                "_id": "membership-owner",
+                "project_id": "project-transfer-1",
+                "user_id": "owner-1",
+                "email": "owner@example.com",
+                "member_role": "billing_owner",
+                "status": "active",
+            },
+            {
+                "_id": "membership-target",
+                "project_id": "project-transfer-1",
+                "user_id": "co-1",
+                "email": "coowner@example.com",
+                "member_role": "co_owner",
+                "status": "active",
+            },
+        ]
+
+        class FakeMembersCollection:
+            def __init__(self, docs):
+                self.docs = [dict(doc) for doc in docs]
+
+            def _match(self, doc, query):
+                for key, expected in (query or {}).items():
+                    if key == "$or":
+                        if not any(self._match(doc, candidate) for candidate in expected):
+                            return False
+                        continue
+                    if key == "_id" and isinstance(expected, dict) and "$ne" in expected:
+                        if doc.get("_id") == expected["$ne"]:
+                            return False
+                        continue
+                    if key == "status" and isinstance(expected, dict) and "$in" in expected:
+                        if doc.get("status") not in expected["$in"]:
+                            return False
+                        continue
+                    if doc.get(key) != expected:
+                        return False
+                return True
+
+            def find_one(self, query, sort=None):  # noqa: ARG002
+                for doc in self.docs:
+                    if self._match(doc, query):
+                        return dict(doc)
+                return None
+
+            def update_one(self, query, update, upsert=False):  # noqa: ARG002
+                for doc in self.docs:
+                    if self._match(doc, query):
+                        doc.update((update.get("$set") or {}))
+                        return
+
+            def update_many(self, query, update):
+                for doc in self.docs:
+                    if self._match(doc, query):
+                        doc.update((update.get("$set") or {}))
+
+        class FakeProjectsCollection:
+            def __init__(self, doc):
+                self.doc = dict(doc)
+
+            def update_one(self, query, update):
+                if query.get("_id") == self.doc.get("_id"):
+                    self.doc.update((update.get("$set") or {}))
+
+        fake_members = FakeMembersCollection(members)
+        fake_projects = FakeProjectsCollection(project_document)
+        with (
+            patch.object(household_access_service, "_to_oid", side_effect=lambda value: value),
+            patch.object(household_access_service, "_members", return_value=fake_members),
+            patch.object(household_access_service, "_projects", return_value=fake_projects),
+            patch.object(household_access_service, "_find_project", return_value=dict(project_document)),
+            patch.object(household_access_service, "_resolve_actor_role", return_value="billing_owner"),
+            patch.object(
+                household_access_service,
+                "_now",
+                return_value=SimpleNamespace(isoformat=lambda: now_iso),
+            ),
+            patch.object(household_access_service, "create_audit_log") as audit_log_mock,
+        ):
+            updated = household_access_service.update_member_role(
+                project_id="project-transfer-1",
+                membership_id="membership-target",
+                member_role="billing_owner",
+                actor_user={"id": "owner-1", "email": "owner@example.com"},
+            )
+
+        self.assertEqual(updated.get("member_role"), "billing_owner")
+        owner_membership = fake_members.find_one({"_id": "membership-owner"})
+        self.assertEqual(owner_membership.get("member_role"), "co_owner")
+        self.assertEqual(fake_projects.doc.get("owner_user_id"), "co-1")
+        self.assertEqual(fake_projects.doc.get("owner_email"), "coowner@example.com")
+        self.assertEqual(audit_log_mock.call_args.args[0], "household_billing_owner_transferred")
+
+    def test_update_member_role_blocks_direct_billing_owner_self_demotion(self):
+        member_document = {
+            "_id": "membership-owner",
+            "project_id": "project-transfer-2",
+            "user_id": "owner-1",
+            "email": "owner@example.com",
+            "member_role": "billing_owner",
+            "status": "active",
+        }
+
+        class FakeMembersCollection:
+            def find_one(self, query, sort=None):  # noqa: ARG002
+                if query.get("_id") == member_document.get("_id"):
+                    return dict(member_document)
+                return None
+
+        with (
+            patch.object(household_access_service, "_to_oid", side_effect=lambda value: value),
+            patch.object(household_access_service, "_members", return_value=FakeMembersCollection()),
+            patch.object(
+                household_access_service,
+                "_find_project",
+                return_value={"_id": "project-transfer-2", "owner_user_id": "owner-1", "owner_email": "owner@example.com"},
+            ),
+            patch.object(household_access_service, "_resolve_actor_role", return_value="billing_owner"),
+        ):
+            with self.assertRaises(PermissionError) as error:
+                household_access_service.update_member_role(
+                    project_id="project-transfer-2",
+                    membership_id="membership-owner",
+                    member_role="co_owner",
+                    actor_user={"id": "owner-1", "email": "owner@example.com"},
+                )
+        self.assertIn("Use billing owner transfer", str(error.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

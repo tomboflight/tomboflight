@@ -745,14 +745,71 @@ def update_member_role(
     if project is None:
         return None
     actor_role = _resolve_actor_role(project, actor_user)
+    actor_user_id = _normalize(actor_user.get("id") or actor_user.get("_id") or actor_user.get("user_id"))
+    actor_email = _normalize_email(actor_user.get("email"))
+    current_role = normalize_project_member_role(membership.get("member_role"), default="viewer")
     next_role = normalize_project_member_role(member_role, default="viewer")
+
+    if current_role == "billing_owner" and next_role != "billing_owner":
+        raise PermissionError(
+            "Use billing owner transfer to pass ownership before changing the current billing owner role."
+        )
+
+    if next_role == "billing_owner":
+        if actor_role != "billing_owner":
+            raise PermissionError("Only the current billing owner can transfer billing owner access.")
+        target_status = _normalize(membership.get("status") or "active").lower()
+        if target_status not in ACTIVE_MEMBER_STATUSES:
+            raise ValueError("Only active members can receive billing owner access.")
+        if current_role == "billing_owner":
+            return membership
+
+        now = _now().isoformat()
+        project_doc_id = project.get("_id")
+        if project_doc_id is not None:
+            _projects().update_one(
+                {"_id": project_doc_id},
+                {
+                    "$set": {
+                        "owner_user_id": _normalize(membership.get("user_id")) or None,
+                        "owner_email": _normalize_email(membership.get("email")) or None,
+                        "updated_at": now,
+                    }
+                },
+            )
+
+        _members().update_many(
+            {
+                "project_id": _normalize(project_id),
+                "member_role": "billing_owner",
+                "status": {"$in": sorted(ACTIVE_MEMBER_STATUSES)},
+                "_id": {"$ne": oid},
+            },
+            {"$set": {"member_role": "co_owner", "updated_at": now}},
+        )
+        _members().update_one({"_id": oid}, {"$set": {"member_role": "billing_owner", "updated_at": now}})
+        create_audit_log(
+            "household_billing_owner_transferred",
+            actor_user_id or None,
+            "project_member",
+            membership_id,
+            {
+                "project_id": _normalize(project_id),
+                "previous_owner_user_id": _normalize(project.get("owner_user_id")) or None,
+                "previous_owner_email": _normalize_email(project.get("owner_email")) or None,
+                "next_owner_user_id": _normalize(membership.get("user_id")) or None,
+                "next_owner_email": _normalize_email(membership.get("email")) or None,
+                "requested_by_email": actor_email or None,
+            },
+        )
+        return _members().find_one({"_id": oid})
+
     if not _can_assign_role(actor_role, next_role):
         raise PermissionError("You do not have permission to assign this role.")
     if _role_rank(next_role) >= _role_rank(actor_role):
         raise PermissionError("You can only assign roles below your own role level.")
     now = _now().isoformat()
     _members().update_one({"_id": oid}, {"$set": {"member_role": next_role, "updated_at": now}})
-    actor_user_id = _normalize(actor_user.get("id") or actor_user.get("_id") or actor_user.get("user_id"))
     create_audit_log(
         "household_role_changed",
         actor_user_id or None,

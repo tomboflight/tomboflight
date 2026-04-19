@@ -944,13 +944,28 @@
           ? "Co-Owner (Spouse) with parity for household access management."
           : "";
       const targetRank = roleRank(role);
-      const canTouchTarget = canManage && !isBillingOwner && targetRank < actorRank;
+      const targetStatus = normalizeLower(member.status || "active");
+      const canTouchTarget =
+        canManage && targetStatus === "active" && !isBillingOwner && targetRank < actorRank;
       const options = ROLE_OPTIONS.map(
         (roleCode) => {
           const disabled = !canManage || !roleCanAssign(currentMemberRole, roleCode);
           return `<option value="${roleCode}" ${roleCode === role ? "selected" : ""} ${disabled ? "disabled" : ""}>${roleLabel(roleCode)}</option>`;
         },
       ).join("");
+      const memberActionMarkup = canTouchTarget
+        ? `
+        <label>Change Role
+          <select data-member-role-select>${options}</select>
+        </label>
+        <div class="inline-actions" style="margin-top:0.75rem;">
+          <button class="btn btn-secondary" type="button" data-member-role-save>Change Role</button>
+          <button class="btn btn-secondary" type="button" data-member-remove>Remove Member</button>
+        </div>
+      `
+        : isBillingOwner
+          ? `<p class="card-copy">Billing Owner is the highest household role. To pass ownership, set another active member's role to Billing Owner.</p>`
+          : `<p class="card-copy">You can only change or remove members with lower active roles.</p>`;
       card.innerHTML = `
         <strong>${fullName}</strong>
         <p class="card-copy">Email: ${emailLabel}</p>
@@ -959,13 +974,7 @@
         <p class="card-copy">Relationship: ${relationshipLabel(member.relationship_scope || "household_member")}</p>
         <p class="card-copy">Privacy: ${privacyLabel(member.privacy_scope || "household_private")}</p>
         <p class="card-copy">Status: ${member.status || "active"}</p>
-        <label>Change Role
-          <select ${canTouchTarget ? "" : "disabled"} data-member-role-select>${options}</select>
-        </label>
-        <div class="inline-actions" style="margin-top:0.75rem;">
-          <button class="btn btn-secondary" type="button" data-member-role-save ${canTouchTarget ? "" : "disabled"}>Change Role</button>
-          <button class="btn btn-secondary" type="button" data-member-remove ${canTouchTarget ? "" : "disabled"}>Remove Member</button>
-        </div>
+        ${memberActionMarkup}
       `;
 
       const roleSave = card.querySelector("[data-member-role-save]");
