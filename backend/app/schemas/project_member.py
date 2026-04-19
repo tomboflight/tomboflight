@@ -9,6 +9,8 @@ from app.core.role_catalog import normalize_project_member_role
 
 
 class ProjectMemberCreate(BaseModel):
+    """Accepts both legacy and current role/email field names for compatibility."""
+
     project_id: str = Field(..., min_length=1)
     user_id: str | None = None
     user_email: str | None = None
@@ -21,6 +23,8 @@ class ProjectMemberCreate(BaseModel):
 
 
 class ProjectMemberResponse(BaseModel):
+    """Returns both legacy and current role/email field names for compatibility."""
+
     id: str
     project_id: str
     user_id: str | None = None
