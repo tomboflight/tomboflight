@@ -5,6 +5,9 @@ from typing import Any
 
 from bson import ObjectId
 
+from app.core.relationship_catalog import (
+    LINKED_HOUSEHOLD_RELATIONSHIP_TYPE,
+)
 from app.database import get_database
 from app.schemas.link_request import LinkRequestCreate
 from app.services.audit_log_service import create_audit_log
@@ -142,6 +145,8 @@ def create_link_request(
     source_key_doc = get_active_key_doc_for_project(source_project_id)
     if source_key_doc is None:
         raise ValueError("Generate a link key for your workspace before requesting a link.")
+    if _normalize_value(source_key_doc.get("key_type") or "branch_link_key") != "branch_link_key":
+        raise ValueError("The active source key must be a branch link key.")
 
     target_key_doc = get_key_doc_by_value(target_key)
     if target_key_doc is None:
@@ -156,6 +161,8 @@ def create_link_request(
         except Exception:
             pass
         raise ValueError("Target link key was not found or is no longer active.")
+    if _normalize_value(target_key_doc.get("key_type") or "branch_link_key") != "branch_link_key":
+        raise ValueError("The target key must be a branch link key.")
 
     target_project_id = str(target_key_doc.get("project_id") or "").strip()
     if not target_project_id:
@@ -373,7 +380,8 @@ def approve_link_request(
                 {
                     "source_household_id": source_household_id,
                     "target_household_id": target_household_id,
-                    "relationship_type": "linked_household",
+                    # This non-ancestry relationship marker is intentionally excluded from lineage traversal.
+                    "relationship_type": LINKED_HOUSEHOLD_RELATIONSHIP_TYPE,
                     "link_status": "approved",
                     "linked_by_key": request.get("source_key"),
                     "source_key": request.get("source_key"),

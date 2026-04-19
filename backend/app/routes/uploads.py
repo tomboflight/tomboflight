@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 import re
 import secrets
 import shutil
@@ -37,10 +38,17 @@ from app.services.upload_service import (
 from app.services.r2_storage_service import generate_private_download_url
 from app.services.upload_scan_service import scan_uploaded_file
 from app.services.audit_log_service import create_audit_log
+from app.services.privacy_access_service import (
+    can_access_cinematic_asset,
+    can_access_privacy_scope,
+    normalize_privacy_scope,
+)
 from app.services.tree_service import list_linked_family_ids
 from app.services.workspace_access_service import (
     count_workspace_uploads,
+    family_is_visible_to_user,
     require_workspace_capability,
+    require_workspace_member_role,
     resolve_workspace_context,
 )
 
@@ -97,8 +105,26 @@ ALLOWED_QUERY_CATEGORIES = {
     "verification_evidence",
 }
 ALLOWED_VAULT_SCOPE = {"personal", "family_shared"}
-ALLOWED_VISIBILITY_SCOPE = {"private", "family_shared", "linked_family_shared", "internal_only"}
+ALLOWED_VISIBILITY_SCOPE = {
+    "private_to_owner",
+    "private_to_owner_and_co_owner",
+    "household_private",
+    "branch_shared",
+    "linked_family_shared",
+    "public_memorial",
+    "minor_protected",
+    "private",
+    "family_shared",
+    "internal_only",
+}
 ALLOWED_PRIVACY_CLASSIFICATION = {
+    "private_to_owner",
+    "private_to_owner_and_co_owner",
+    "household_private",
+    "branch_shared",
+    "linked_family_shared",
+    "public_memorial",
+    "minor_protected",
     "public",
     "shared",
     "household_only",
@@ -110,22 +136,33 @@ ALLOWED_PRIVACY_CLASSIFICATION = {
 class UploadPrivacyUpdatePayload(BaseModel):
     vault_scope: Literal["personal", "family_shared"] | None = None
     visibility_scope: Literal[
-        "private",
-        "family_shared",
+        "private_to_owner",
+        "private_to_owner_and_co_owner",
+        "household_private",
+        "branch_shared",
         "linked_family_shared",
-        "internal_only",
+        "public_memorial",
+        "minor_protected",
     ] | None = None
     customer_visible: bool | None = None
     internal_only: bool | None = None
     share_with_linked_families: bool | None = None
     privacy_notes: str = Field(default="", max_length=500)
     privacy_classification: Literal[
-        "public",
-        "shared",
-        "household_only",
-        "owner_only",
-        "admin_only",
+        "private_to_owner",
+        "private_to_owner_and_co_owner",
+        "household_private",
+        "branch_shared",
+        "linked_family_shared",
+        "public_memorial",
+        "minor_protected",
     ] | None = None
+
+
+class UploadCinematicApprovalPayload(BaseModel):
+    approved_for_cinematic: bool = Field(default=True)
+    verification_status: str = Field(default="approved", max_length=50)
+    consent_status: str = Field(default="approved", max_length=50)
 
 
 def _normalize_value(value: Any) -> str:
@@ -232,14 +269,14 @@ def _require_family_access_by_family_id(
     if not family:
         raise HTTPException(status_code=404, detail="Family not found.")
 
-    if _is_admin(current_user):
+    if has_internal_admin_access(current_user):
         return family
 
     current_user_id = _current_user_id(current_user)
     current_user_email = _current_user_email(current_user)
     current_user_name = _current_user_display_name(current_user)
 
-    if not _family_is_visible_to_user(
+    if not family_is_visible_to_user(
         family=family,
         current_user_id=current_user_id,
         current_user_email=current_user_email,
@@ -397,7 +434,17 @@ def _require_upload_management_access(
 
     current_user_id = _current_user_id(current_user)
     uploaded_by_user_id = _normalize_value(upload_record.get("uploaded_by_user_id"))
+    member_role = _normalize_value(context.get("member_role"))
+    if current_user_id == uploaded_by_user_id:
+        return upload_record, context
+
+    if member_role in {"billing_owner", "co_owner", "family_manager"}:
+        return upload_record, context
+
     project_owner_user_id = _normalize_value((context.get("project") or {}).get("owner_user_id"))
+    if current_user_id == project_owner_user_id:
+        return upload_record, context
+
     if current_user_id not in {uploaded_by_user_id, project_owner_user_id}:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -574,29 +621,31 @@ def _normalize_vault_scope(value: Any, default: str = "personal") -> str:
 
 def _normalize_visibility_scope(value: Any, default: str = "private") -> str:
     normalized = _normalize_value(value).lower()
-    return normalized if normalized in ALLOWED_VISIBILITY_SCOPE else default
+    if normalized in ALLOWED_VISIBILITY_SCOPE:
+        return normalize_privacy_scope(normalized)
+    return normalize_privacy_scope(default)
 
 
 def _visibility_flags(scope: str) -> dict[str, bool]:
     """Return default privacy flags for a given visibility scope."""
-    normalized_scope = _normalize_visibility_scope(scope, default="private")
-    if normalized_scope == "internal_only":
-        return {
-            "customer_visible": False,
-            "internal_only": True,
-            "share_with_linked_families": False,
-        }
-    if normalized_scope == "private":
+    normalized_scope = _normalize_visibility_scope(scope, default="private_to_owner")
+    if normalized_scope == "private_to_owner":
         return {
             "customer_visible": False,
             "internal_only": False,
             "share_with_linked_families": False,
         }
-    if normalized_scope == "linked_family_shared":
+    if normalized_scope == "private_to_owner_and_co_owner":
         return {
             "customer_visible": True,
             "internal_only": False,
-            "share_with_linked_families": True,
+            "share_with_linked_families": False,
+        }
+    if normalized_scope in {"linked_family_shared", "branch_shared", "public_memorial"}:
+        return {
+            "customer_visible": True,
+            "internal_only": False,
+            "share_with_linked_families": normalized_scope == "linked_family_shared",
         }
     return {
         "customer_visible": True,
@@ -611,22 +660,27 @@ def _classification_from_flags(
     internal_only: bool,
     customer_visible: bool,
 ) -> str:
-    if internal_only or visibility_scope == "internal_only":
-        return "admin_only"
-    if visibility_scope == "private":
-        return "owner_only"
-    if visibility_scope == "linked_family_shared":
-        return "shared"
-    if customer_visible:
-        return "household_only"
-    return "owner_only"
+    normalized_scope = _normalize_visibility_scope(visibility_scope, "private_to_owner")
+    if internal_only:
+        return "private_to_owner"
+    if normalized_scope in {
+        "private_to_owner",
+        "private_to_owner_and_co_owner",
+        "household_private",
+        "branch_shared",
+        "linked_family_shared",
+        "public_memorial",
+        "minor_protected",
+    }:
+        return normalized_scope
+    return "household_private" if customer_visible else "private_to_owner"
 
 
 def _normalize_privacy_classification(value: Any, *, fallback: str) -> str:
-    normalized = _normalize_value(value).lower()
+    normalized = normalize_privacy_scope(value)
     if normalized in ALLOWED_PRIVACY_CLASSIFICATION:
         return normalized
-    return fallback
+    return normalize_privacy_scope(fallback)
 
 
 def _can_access_classification(
@@ -640,20 +694,16 @@ def _can_access_classification(
     # workflows can still operate across all vault privacy classes.
     if context.get("is_admin"):
         return True
-    normalized = _normalize_privacy_classification(classification, fallback="owner_only")
+    normalized = _normalize_privacy_classification(classification, fallback="private_to_owner")
     user_id = _current_user_id(current_user)
     uploaded_by_user_id = _normalize_value(upload_record.get("uploaded_by_user_id"))
-    if normalized == "public":
-        return True
-    if normalized == "shared":
-        return not bool(upload_record.get("internal_only"))
-    if normalized == "household_only":
-        return bool(upload_record.get("customer_visible")) and not bool(upload_record.get("internal_only"))
-    if normalized == "owner_only":
-        return bool(user_id and uploaded_by_user_id and user_id == uploaded_by_user_id)
-    if normalized == "admin_only":
-        return False
-    return False
+    return can_access_privacy_scope(
+        privacy_scope=normalized,
+        member_role=context.get("member_role") or "viewer",
+        relationship_scope=context.get("relationship_scope") or "household_member",
+        link_status=context.get("link_status") or "active",
+        is_owner=bool(user_id and uploaded_by_user_id and user_id == uploaded_by_user_id),
+    )
 
 
 def _validate_upload_file(
@@ -775,14 +825,21 @@ def _apply_customer_visibility_filter(
     query["$or"] = [
         {
             "uploaded_by_user_id": current_user_id,
-            "privacy_classification": {"$ne": "admin_only"},
+            "privacy_classification": {"$nin": ["admin_only"]},
         },
         {
             "customer_visible": True,
             "internal_only": {"$ne": True},
-            "privacy_classification": {"$nin": ["owner_only", "admin_only"]},
+            "privacy_classification": {
+                "$nin": [
+                    "owner_only",
+                    "admin_only",
+                    "private_to_owner",
+                ]
+            },
         },
         {"privacy_classification": "public"},
+        {"privacy_classification": "public_memorial"},
     ]
 
 
@@ -856,6 +913,11 @@ async def upload_member_photo(
         capabilities=("can_upload_portraits",),
         detail="Your active package does not include upload access.",
     )
+    require_workspace_member_role(
+        context,
+        allowed_roles=("billing_owner", "co_owner", "family_manager", "contributor"),
+        detail="Your role is read-only for uploads.",
+    )
 
     db = get_database()
     if db is None:
@@ -919,6 +981,11 @@ async def upload_verification_evidence(
         member_id=member_id,
         capabilities=("can_upload_verification_docs",),
         detail="Your active package does not include upload access.",
+    )
+    require_workspace_member_role(
+        context,
+        allowed_roles=("billing_owner", "co_owner", "family_manager", "contributor"),
+        detail="Your role is read-only for uploads.",
     )
 
     db = get_database()
@@ -1210,6 +1277,78 @@ def update_upload_privacy(
     }
 
 
+@router.post("/{upload_id}/cinematic-approval")
+def update_upload_cinematic_approval(
+    upload_id: str,
+    payload: UploadCinematicApprovalPayload,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    db = get_database()
+    if db is None:
+        raise HTTPException(status_code=500, detail="Database is not connected.")
+
+    upload_record, context = _require_upload_management_access(upload_id, db, current_user)
+    if not context.get("is_admin") and _normalize_value(context.get("member_role")) not in {
+        "billing_owner",
+        "co_owner",
+        "family_manager",
+    }:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to approve cinematic assets.",
+        )
+    now = datetime.now(UTC).isoformat()
+    db["uploaded_files"].update_one(
+        {"_id": ObjectId(upload_id)},
+        {
+            "$set": {
+                "approved_for_cinematic": bool(payload.approved_for_cinematic),
+                "approved_by": _actor_label(current_user),
+                "approved_by_user_id": _current_user_id(current_user),
+                "verification_status": _normalize_value(payload.verification_status).lower() or "approved",
+                "consent_status": _normalize_value(payload.consent_status).lower() or "approved",
+                "updated_at": now,
+            }
+        },
+    )
+    updated = db["uploaded_files"].find_one({"_id": ObjectId(upload_id)}) or upload_record
+    return {"upload": _public_upload_record(updated)}
+
+
+@router.get("/cinematic/family/{family_id}")
+def list_cinematic_assets(
+    family_id: str,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    context = require_workspace_capability(
+        current_user,
+        family_id=family_id,
+        capabilities=("can_upload_verification_docs", "can_upload_portraits"),
+        detail="Your active package does not include cinematic asset access.",
+    )
+    db = get_database()
+    if db is None:
+        raise HTTPException(status_code=500, detail="Database is not connected.")
+    query = {
+        "family_id": _normalize_value((context.get("family") or {}).get("_id")),
+        "approved_for_cinematic": True,
+    }
+    records = list(db["uploaded_files"].find(query).sort("created_at", -1))
+    user_id = _current_user_id(current_user)
+    visible = [
+        record
+        for record in records
+        if can_access_cinematic_asset(
+            asset=record,
+            member_role=context.get("member_role") or "viewer",
+            relationship_scope=context.get("relationship_scope") or "household_member",
+            link_status=context.get("link_status") or "active",
+            is_owner=user_id == _normalize_value(record.get("uploaded_by_user_id")),
+        )
+    ]
+    return {"family_id": family_id, "count": len(visible), "items": _serialize_uploads(visible)}
+
+
 @router.get("/{upload_id}/download")
 def download_upload(
     upload_id: str,
@@ -1292,11 +1431,10 @@ def delete_upload(
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")
 
-    upload_record, _context = _require_upload_access(
+    upload_record, _context = _require_upload_management_access(
         upload_id,
         db,
         current_user,
-        detail="Your active package does not include upload access.",
     )
 
     relative_path = _normalize_value(upload_record.get("relative_path"))

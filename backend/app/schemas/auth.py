@@ -101,6 +101,8 @@ class UserResponse(BaseModel):
     mfa_enabled: bool = False
     mfa_enrolled_at: Optional[str] = None
     created_at: str
+    active_project_id: Optional[str] = None
+    active_family_id: Optional[str] = None
 
     policy_version: Optional[str] = None
     terms_accepted_at: Optional[str] = None

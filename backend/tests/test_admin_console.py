@@ -44,6 +44,22 @@ class FakeCollection:
         query = query or {}
         return len([document for document in self.documents if self._matches(document, query)])
 
+    def update_one(self, query, update):
+        updated = 0
+        for document in self.documents:
+            if self._matches(document, query):
+                for key, value in (update.get("$set") or {}).items():
+                    document[key] = value
+                updated = 1
+                break
+        return type("Result", (), {"matched_count": updated, "modified_count": updated})()
+
+    def insert_one(self, payload):
+        document = dict(payload)
+        document.setdefault("_id", ObjectId())
+        self.documents.append(document)
+        return type("Result", (), {"inserted_id": document["_id"]})()
+
     def _get_nested(self, document, key):
         current = document
         for part in key.split("."):
@@ -117,6 +133,9 @@ class AdminPermissionContextTests(unittest.TestCase):
             context = auth_dependencies.resolve_access_context(str(user_id))
 
         permissions = set(context["permissions"])
+        capabilities = set(context["capabilities"])
+        self.assertIn("manage_billing", capabilities)
+        self.assertNotIn("manage_roles", capabilities)
         self.assertNotIn("*", permissions)
         self.assertIn("admin.control.billing", permissions)
         self.assertIn("admin.orders.read", permissions)
@@ -177,6 +196,18 @@ class AdminControlAccessProfileTests(unittest.TestCase):
         self.assertNotIn("sync_package", profile["allowed_actions"])
         self.assertNotIn("generate_entitlement", profile["allowed_actions"])
         self.assertEqual(profile["allowed_bulk_actions"], [])
+
+    def test_officer_role_takes_precedence_over_generic_admin_role(self):
+        current_user = {
+            "role": "admin",
+            "access_tier": "finance_admin",
+            "_access_context": {
+                "role_codes": ["admin", "finance_admin"],
+                "permissions": ["admin.control.view", "admin.control.billing"],
+            },
+        }
+        profile = admin_control_service.admin_control_access_profile(current_user)
+        self.assertEqual(profile["role_key"], "finance_admin")
 
     def test_wildcard_profile_gets_all_console_controls(self):
         current_user = {
@@ -526,6 +557,180 @@ class AdminUserQueueTests(unittest.TestCase):
         self.assertEqual(result["repaired_count"], 0)
         self.assertEqual(result["failed_count"], 1)
         self.assertEqual(result["failed"][0]["error"], "Linked project not found.")
+
+
+class SuperAdminControlsTests(unittest.TestCase):
+    def test_super_admin_update_user_updates_profile_fields(self):
+        user_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "users": [
+                    {
+                        "_id": user_id,
+                        "email": "before@example.com",
+                        "full_name": "Before Name",
+                        "role": "user",
+                        "status": "active",
+                    }
+                ]
+            }
+        )
+
+        with patch.object(admin_control_service, "get_database", return_value=db):
+            result = admin_control_service.super_admin_update_user(
+                user_id=str(user_id),
+                payload={
+                    "email": "after@example.com",
+                    "full_name": "After Name",
+                    "phone_number": "555-0101",
+                    "mailing_address": "123 Main St",
+                    "birthday": "1980-01-02",
+                    "status": "suspended",
+                    "role": "super_admin",
+                },
+                actor={"_id": ObjectId(), "email": "ceo@example.com"},
+            )
+
+        self.assertEqual(result["before"]["email"], "before@example.com")
+        self.assertEqual(result["after"]["email"], "after@example.com")
+        self.assertEqual(result["after"]["full_name"], "After Name")
+        self.assertEqual(result["after"]["status"], "suspended")
+        self.assertEqual(result["after"]["role"], "super_admin")
+
+    def test_super_admin_package_change_preview_and_apply(self):
+        project_id = ObjectId()
+        order_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "projects": [
+                    {
+                        "_id": project_id,
+                        "owner_email": "customer@example.com",
+                        "owner_user_id": str(ObjectId()),
+                        "package_code": "legacy_snapshot",
+                        "package_slug": "legacy_snapshot",
+                        "package_name": "Legacy Snapshot",
+                        "project_lane": "portrait",
+                        "status": "build_ready",
+                        "phase": "intake_approved",
+                    }
+                ],
+                "orders": [
+                    {
+                        "_id": order_id,
+                        "email": "customer@example.com",
+                        "status": "paid",
+                        "item_type": "package",
+                        "package_code": "legacy_snapshot",
+                        "package_slug": "legacy_snapshot",
+                        "package_name": "Legacy Snapshot",
+                        "project_id": project_id,
+                    }
+                ],
+                "project_entitlements": [],
+            }
+        )
+
+        with (
+            patch.object(admin_control_service, "get_database", return_value=db),
+            patch.object(admin_control_service, "get_project_entitlement", return_value=None),
+            patch.object(
+                admin_control_service,
+                "repair_record",
+                return_value={
+                    "project": {"package_code": "legacy_plus", "project_lane": "household"},
+                    "order": {"package_code": "legacy_plus", "status": "complete"},
+                    "entitlement": {"package_code": "legacy_plus", "package_lane": "household"},
+                },
+            ),
+        ):
+            preview = admin_control_service.super_admin_preview_package_change(
+                project_id=str(project_id),
+                package_code="legacy_plus",
+                project_lane="household",
+                order_status="complete",
+            )
+            applied = admin_control_service.super_admin_apply_package_change(
+                project_id=str(project_id),
+                package_code="legacy_plus",
+                project_lane="household",
+                order_status="complete",
+                actor={"_id": ObjectId(), "email": "ceo@example.com"},
+            )
+
+        self.assertTrue(preview["changes"])
+        self.assertEqual(preview["validation"]["target_lane"], "household")
+        self.assertEqual(applied["after"]["project"]["package_code"], "legacy_plus")
+        self.assertEqual(applied["after"]["order"]["status"], "complete")
+        self.assertEqual(applied["after"]["entitlement"]["package_lane"], "household")
+
+    def test_super_admin_repair_case_requires_reason(self):
+        with self.assertRaisesRegex(ValueError, "repair reason is required"):
+            admin_control_service.super_admin_repair_case_action(
+                case_id="project-1",
+                action="repair_package_lane",
+                payload={},
+                actor={"_id": ObjectId(), "email": "super@example.com", "role": "super_admin"},
+            )
+
+    def test_super_admin_repair_case_logs_audit_and_returns_alert_diff(self):
+        actor = {"_id": ObjectId(), "email": "super@example.com", "role": "super_admin"}
+        with (
+            patch.object(admin_control_service, "_resolve_case_project_order", return_value=("project-1", "order-1")),
+            patch.object(
+                admin_control_service,
+                "customer_case_workspace",
+                side_effect=[{"alerts": ["before"]}, {"alerts": ["after"]}],
+            ),
+            patch.object(
+                admin_control_service,
+                "_super_admin_repair_invite",
+                return_value={
+                    "target_type": "household_invite",
+                    "target_id": "invite-1",
+                    "before": {"status": "expired"},
+                    "after": {"status": "pending"},
+                    "project_id": "project-1",
+                },
+            ),
+            patch.object(admin_control_service, "write_audit_log") as write_audit_log,
+        ):
+            result = admin_control_service.super_admin_repair_case_action(
+                case_id="project-1",
+                action="resend_invite",
+                payload={"reason": "Fix broken invite", "invite_id": "invite-1"},
+                actor=actor,
+            )
+        self.assertEqual(result["status"], "repaired")
+        self.assertEqual(result["before_workspace_alerts"], ["before"])
+        self.assertEqual(result["after_workspace_alerts"], ["after"])
+        self.assertTrue(write_audit_log.called)
+
+
+class AdminConsoleOverviewTests(unittest.TestCase):
+    def test_admin_overview_includes_postmark_runtime_configuration_flags(self):
+        db = FakeDatabase(
+            {
+                "users": [],
+                "projects": [],
+                "orders": [],
+                "project_entitlements": [],
+            }
+        )
+        with (
+            patch.object(admin_control_service, "get_database", return_value=db),
+            patch.object(admin_control_service.settings, "postmark_server_token", "token-123"),
+            patch.object(admin_control_service.settings, "postmark_from_email", "noreply@example.com"),
+        ):
+            payload = admin_control_service.admin_console_overview(limit=5)
+
+        self.assertEqual(
+            payload["system_health"]["postmark"],
+            {
+                "token_configured": True,
+                "from_address_configured": True,
+            },
+        )
 
 
 if __name__ == "__main__":

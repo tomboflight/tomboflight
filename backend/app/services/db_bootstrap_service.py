@@ -127,6 +127,8 @@ CORE_COLLECTIONS: dict[str, list[tuple[list[tuple[str, int]], dict]]] = {
     ],
     "projects": [
         ([("name", ASCENDING)], {"name": "idx_projects_name"}),
+        ([("owner_user_id", ASCENDING)], {"name": "idx_projects_owner_user_id"}),
+        ([("owner_email", ASCENDING)], {"name": "idx_projects_owner_email"}),
         ([("created_at", ASCENDING)], {"name": "idx_projects_created_at"}),
         ([("owner_user_id", ASCENDING)], {"name": "idx_projects_owner_user_id"}),
         ([("owner_email", ASCENDING)], {"name": "idx_projects_owner_email"}),
@@ -151,6 +153,17 @@ CORE_COLLECTIONS: dict[str, list[tuple[list[tuple[str, int]], dict]]] = {
                 },
             },
         ),
+    ],
+    "project_members": [
+        (
+            [("project_id", ASCENDING), ("user_id", ASCENDING)],
+            {"unique": True, "name": "idx_project_members_project_user_unique"},
+        ),
+        ([("project_id", ASCENDING)], {"name": "idx_project_members_project_id"}),
+        ([("user_id", ASCENDING)], {"name": "idx_project_members_user_id"}),
+        ([("user_email", ASCENDING)], {"name": "idx_project_members_user_email"}),
+        ([("status", ASCENDING)], {"name": "idx_project_members_status"}),
+        ([("role", ASCENDING)], {"name": "idx_project_members_role"}),
     ],
     "project_entitlements": [
         (

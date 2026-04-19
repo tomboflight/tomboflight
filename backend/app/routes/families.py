@@ -13,6 +13,7 @@ from app.schemas.family import FamilyCreate, FamilyResponse, build_family_respon
 from app.services.workspace_access_service import (
     list_accessible_families_for_user,
     require_workspace_capability,
+    require_workspace_member_role,
 )
 
 router = APIRouter(prefix="/families", tags=["Families"])
@@ -107,7 +108,7 @@ def get_families(user: dict[str, Any] = Depends(get_current_user)):
 
     results: list[FamilyResponse] = []
 
-    if _is_admin(user):
+    if has_internal_admin_access(user):
         for family in docs:
             built = _safe_build_family_response(family)
             if built is not None:
@@ -138,7 +139,7 @@ def create_family_route(
 
     current_user_id = _current_user_id(user)
     current_user_email = _current_user_email(user)
-    is_admin = _is_admin(user)
+    is_admin = has_internal_admin_access(user)
 
     family_name = str(payload.family_name).strip()
     created_by = str(payload.created_by).strip() if payload.created_by else ""
@@ -175,6 +176,11 @@ def create_family_route(
             project_id=project_id,
             capabilities=("can_build_family_tree", "can_open_family_intake"),
             detail="Your active package does not include family build access.",
+        )
+        require_workspace_member_role(
+            context,
+            allowed_roles=("billing_owner", "co_owner", "family_manager"),
+            detail="Your role cannot create a new family workspace root.",
         )
         project = context["project"]
 

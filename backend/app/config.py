@@ -317,7 +317,7 @@ class Settings(BaseSettings):
     # Email / Postmark
     postmark_server_token: str = Field(
         default="",
-        validation_alias=AliasChoices("POSTMARK_SERVER_TOKEN"),
+        validation_alias=AliasChoices("POSTMARK_SERVER_TOKEN", "POSTMARK_API_TOKEN"),
     )
     postmark_from_email: str = Field(
         default="admin@tomboflight.com",
