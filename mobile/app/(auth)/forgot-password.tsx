@@ -3,15 +3,8 @@ import { Link } from 'expo-router';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { ScreenContainer } from '../../src/components/ScreenContainer';
-import { requestPasswordReset } from '../../src/services/auth';
+import { mapAuthError, requestPasswordReset } from '../../src/services/auth';
 import { appTheme } from '../../src/theme';
-
-function toErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message.trim()) {
-    return error.message;
-  }
-  return 'Unable to submit reset request. Please try again.';
-}
 
 export default function ForgotPasswordScreen() {
   const [email, setEmail] = useState('');
@@ -34,7 +27,7 @@ export default function ForgotPasswordScreen() {
       const result = await requestPasswordReset(normalizedEmail);
       setSuccessMessage(result.message || 'If that account exists, reset instructions were sent.');
     } catch (error) {
-      setErrorMessage(toErrorMessage(error));
+      setErrorMessage(mapAuthError(error, 'passwordReset'));
     } finally {
       setIsSubmitting(false);
     }
