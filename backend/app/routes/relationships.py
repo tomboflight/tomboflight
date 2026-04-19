@@ -11,6 +11,7 @@ from app.dependencies.auth import (
 from app.schemas.relationship import RelationshipCreate, RelationshipResponse
 from app.services.relationship_guardrails import RelationshipGuardrailService
 from app.services.workspace_access_service import (
+    family_is_visible_to_user,
     require_workspace_capability,
     require_workspace_member_role,
 )
