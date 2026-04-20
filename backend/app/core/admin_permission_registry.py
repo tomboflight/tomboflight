@@ -198,8 +198,6 @@ OFFICER_PROFILE_FIELDS: dict[str, dict[str, str]] = {
 
 def normalize_officer_role(value: Any) -> str:
     normalized = str(value or "").strip().lower()
-    if normalized == "superadmin":
-        normalized = "super_admin"
     return normalize_role_code(normalized)
 
 
@@ -217,4 +215,3 @@ def normalized_officer_role_mapping() -> dict[str, list[str]]:
         if roles:
             normalized_mapping[normalized_email] = sorted(set(roles))
     return normalized_mapping
-

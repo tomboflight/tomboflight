@@ -138,7 +138,7 @@
         card(
           "A",
           "Control Center",
-          "Review only the queues and tools your permissions allow in the customer operations workspace.",
+          "Review uploads, mint readiness, orders, entitlements, and user records based on your assigned permissions.",
           "admin-control-center.html",
           "Open Control Center",
         ),
@@ -149,7 +149,7 @@
         card(
           "B",
           "Intake Queue",
-          "Review intake submissions, provision workspaces, and move approved records through operations.",
+          "Review submitted intake records, move them through approval, and provision workspaces by lane.",
           "admin-intake-queue.html",
           "Open Intake Queue",
         ),
@@ -160,7 +160,7 @@
         card(
           "C",
           "Family Manager",
-          "Open lineage workspace controls for operational household and network servicing.",
+          "Load household and network family builds, add members, and manage lineage relationships.",
           "admin-family-manager.html",
           "Open Family Manager",
         ),
