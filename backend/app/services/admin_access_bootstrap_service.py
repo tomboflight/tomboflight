@@ -157,7 +157,7 @@ def _sync_officer_assignments(db, now_iso: str) -> dict[str, Any]:
 
         stale_filter = {
             "user_id": user_id,
-            "role_code": {"$in": sorted(required_role_codes - set(expected_roles))},
+            "role_code": {"$in": list(required_role_codes - set(expected_roles))},
             "status": {"$in": ["active", "enabled", ""]},
         }
         if stale_filter["role_code"]["$in"]:
@@ -193,4 +193,3 @@ def bootstrap_admin_access_controls() -> dict[str, Any]:
         "role_permissions": role_permission_stats,
         "officers": officer_stats,
     }
-

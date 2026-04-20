@@ -138,7 +138,7 @@
         card(
           "A",
           "Control Center",
-          "Review uploads, mint readiness, orders, entitlements, and user records based on your assigned permissions.",
+          "Review uploads, mint readiness, orders, entitlements, user records, and audit-visible data based on your assigned permissions.",
           "admin-control-center.html",
           "Open Control Center",
         ),
