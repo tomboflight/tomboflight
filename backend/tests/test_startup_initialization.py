@@ -20,6 +20,7 @@ class StartupInitializationTests(unittest.TestCase):
             patch.object(main_module, "initialize_mint_record_indexes") as mint_record_init_mock,
             patch.object(main_module, "initialize_mint_job_indexes") as mint_job_init_mock,
             patch.object(main_module, "ensure_stripe_event_indexes") as stripe_init_mock,
+            patch.object(main_module, "bootstrap_admin_access_controls") as admin_access_bootstrap_mock,
             patch.object(main_module, "close_mongo_connection") as close_mock,
         ):
             asyncio.run(_run())
@@ -32,6 +33,7 @@ class StartupInitializationTests(unittest.TestCase):
         mint_record_init_mock.assert_called_once()
         mint_job_init_mock.assert_called_once()
         stripe_init_mock.assert_called_once()
+        admin_access_bootstrap_mock.assert_called_once()
         close_mock.assert_called_once()
 
 

@@ -38,6 +38,13 @@ CORE_COLLECTIONS: dict[str, list[tuple[list[tuple[str, int]], dict]]] = {
         ),
         ([("status", ASCENDING)], {"name": "idx_role_permissions_status"}),
     ],
+    "role_capabilities": [
+        (
+            [("role_code", ASCENDING), ("capability_code", ASCENDING)],
+            {"unique": True, "name": "idx_role_capabilities_role_capability_unique"},
+        ),
+        ([("status", ASCENDING)], {"name": "idx_role_capabilities_status"}),
+    ],
     "user_role_assignments": [
         (
             [("user_id", ASCENDING), ("role_code", ASCENDING)],

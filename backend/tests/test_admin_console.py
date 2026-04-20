@@ -226,6 +226,73 @@ class AdminControlAccessProfileTests(unittest.TestCase):
         self.assertIn("queue_for_mint_review", profile["allowed_actions"])
         self.assertIn("repair-all-safe-records", profile["allowed_bulk_actions"])
 
+    def test_cfo_profile_excludes_operations_and_mint_menus(self):
+        current_user = {
+            "role": "admin",
+            "access_tier": "cfo_admin",
+            "_access_context": {
+                "role_codes": ["finance_admin"],
+                "permissions": ["admin.control.view", "admin.control.billing", "admin.orders.read"],
+            },
+        }
+        profile = admin_control_service.admin_control_access_profile(current_user)
+        self.assertIn("orders", profile["allowed_queues"])
+        self.assertNotIn("mint_queue", profile["allowed_queues"])
+        self.assertNotIn("upload_review", profile["allowed_queues"])
+
+    def test_cmo_profile_exposes_marketing_only_scope(self):
+        current_user = {
+            "role": "admin",
+            "access_tier": "cmo_admin",
+            "_access_context": {
+                "role_codes": ["marketing_admin"],
+                "permissions": ["admin.marketing.content.read", "admin.analytics.read"],
+            },
+        }
+        profile = admin_control_service.admin_control_access_profile(current_user)
+        self.assertEqual(profile["allowed_queues"], [])
+        self.assertEqual(profile["allowed_tabs"], [])
+        self.assertEqual(profile["allowed_bulk_actions"], [])
+
+    def test_coo_profile_has_operations_without_billing_controls(self):
+        current_user = {
+            "role": "admin",
+            "access_tier": "coo_admin",
+            "_access_context": {
+                "role_codes": ["operations_admin"],
+                "permissions": [
+                    "admin.access",
+                    "admin.control.view",
+                    "admin.intake.review",
+                    "admin.intake.write",
+                    "verification.review",
+                ],
+            },
+        }
+        profile = admin_control_service.admin_control_access_profile(current_user)
+        self.assertIn("customer_cases", profile["allowed_queues"])
+        self.assertNotIn("orders", profile["allowed_queues"])
+        self.assertNotIn("billing_maintenance", profile["allowed_queues"])
+
+    def test_executive_tech_profile_includes_control_center_and_audit(self):
+        current_user = {
+            "role": "admin",
+            "department_role": "executive_tech_admin",
+            "_access_context": {
+                "role_codes": ["executive_tech_admin"],
+                "permissions": [
+                    "admin.control.view",
+                    "admin.control.write",
+                    "admin.control.mint",
+                    "admin.audit.read",
+                ],
+            },
+        }
+        profile = admin_control_service.admin_control_access_profile(current_user)
+        self.assertIn("overview", profile["allowed_queues"])
+        self.assertIn("mint_queue", profile["allowed_queues"])
+        self.assertIn("audit", profile["allowed_queues"])
+
 
 class AdminUserQueueTests(unittest.TestCase):
     def test_users_queue_lists_customer_and_admin_accounts(self):

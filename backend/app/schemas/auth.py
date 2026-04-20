@@ -103,6 +103,9 @@ class UserResponse(BaseModel):
     created_at: str
     active_project_id: Optional[str] = None
     active_family_id: Optional[str] = None
+    role_codes: list[str] = Field(default_factory=list)
+    capabilities: list[str] = Field(default_factory=list)
+    permissions: list[str] = Field(default_factory=list)
 
     policy_version: Optional[str] = None
     terms_accepted_at: Optional[str] = None

@@ -261,15 +261,23 @@
   // than maintaining its own copy of this set.
   const INTERNAL_ROLE_KEYS = new Set([
     "super_admin",
+    "executive_tech_admin",
     "operations_admin",
     "finance_admin",
     "marketing_admin",
   ]);
 
   const INTERNAL_ROLE_ALIASES = {
+    superadmin: "super_admin",
     root_admin: "super_admin",
     platform_admin: "super_admin",
-    executive_technology: "super_admin",
+    executive_technology: "executive_tech_admin",
+    executive_tech_admin: "executive_tech_admin",
+    "executive-tech-admin": "executive_tech_admin",
+    cto_admin: "executive_tech_admin",
+    cfo_admin: "finance_admin",
+    cmo_admin: "marketing_admin",
+    coo_admin: "operations_admin",
     operations: "operations_admin",
     finance: "finance_admin",
     marketing: "marketing_admin",
@@ -277,10 +285,14 @@
 
   function isInternalRole(user) {
     if (!user || typeof user !== "object") return false;
+    const roleCodes = Array.isArray(user.role_codes) ? user.role_codes : [];
     return [
       String(user.role || "").trim().toLowerCase(),
       String(user.access_tier || "").trim().toLowerCase(),
       String(user.department_role || "").trim().toLowerCase(),
+      ...roleCodes.map(function (value) {
+        return String(value || "").trim().toLowerCase();
+      }),
     ].some(function (v) {
       const normalized = INTERNAL_ROLE_ALIASES[v] || v;
       return normalized && INTERNAL_ROLE_KEYS.has(normalized);

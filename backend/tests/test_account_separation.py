@@ -163,6 +163,62 @@ class AccountSeparationTests(unittest.TestCase):
         self.assertNotIn("admin.users.write", permissions)
         self.assertNotIn("admin.intake.write", permissions)
 
+    def test_larry_dual_role_assignments_are_resolved(self):
+        with (
+            patch.object(
+                auth_dependencies,
+                "_load_user_by_id",
+                return_value={
+                    "_id": "user-1",
+                    "email": "l.robinson@tomboflight.com",
+                    "role": "admin",
+                    "access_tier": "super_admin",
+                    "department_role": "executive_tech_admin",
+                },
+            ),
+            patch.object(
+                auth_dependencies,
+                "_db",
+                return_value={
+                    "user_role_assignments": type(
+                        "Collection",
+                        (),
+                        {
+                            "find": lambda self, *_a, **_k: [
+                                {"role_code": "SUPERADMIN", "status": "active"},
+                                {"role_code": "EXECUTIVE_TECH_ADMIN", "status": "active"},
+                            ]
+                        },
+                    )(),
+                    "role_permissions": type("Collection", (), {"find": lambda self, *_a, **_k: []})(),
+                    "role_capabilities": type("Collection", (), {"find": lambda self, *_a, **_k: []})(),
+                    "projects": type("Collection", (), {"count_documents": lambda self, *_a, **_k: 0})(),
+                    "workflow_events": type("Collection", (), {"find_one": lambda self, *_a, **_k: None})(),
+                },
+            ),
+            patch.object(auth_dependencies, "list_user_project_entitlements", return_value=[]),
+        ):
+            context = auth_dependencies.resolve_access_context("user-1")
+
+        role_codes = set(context.get("role_codes") or [])
+        self.assertIn("super_admin", role_codes)
+        self.assertIn("executive_tech_admin", role_codes)
+        self.assertIn("*", set(context.get("permissions") or []))
+
+    def test_require_permission_denies_unauthorized_route(self):
+        dependency = auth_dependencies.require_permission("admin.control.mint")
+        current_user = {"id": "user-1"}
+
+        with patch.object(
+            auth_dependencies,
+            "_get_or_resolve_access_context",
+            return_value={"permissions": ["admin.control.billing"]},
+        ):
+            with self.assertRaises(HTTPException) as error:
+                dependency(request=cast(Any, object()), current_user=current_user)
+
+        self.assertEqual(error.exception.status_code, 403)
+
 
 if __name__ == "__main__":
     unittest.main()

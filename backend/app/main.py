@@ -61,6 +61,7 @@ from app.routes.orders import (
     router as orders_router,
 )
 from app.services.project_entitlement_service import ensure_project_entitlement_indexes
+from app.services.admin_access_bootstrap_service import bootstrap_admin_access_controls
 from app.routes.package_catalog import router as package_catalog_router
 from app.routes.presence import router as presence_router
 from app.routes.projects import router as projects_router
@@ -125,6 +126,10 @@ async def lifespan(app: FastAPI):
     initialize_mint_record_indexes()
     initialize_mint_job_indexes()
     ensure_stripe_event_indexes()
+    try:
+        bootstrap_admin_access_controls()
+    except Exception as exc:
+        logger.warning("Admin access bootstrap sync skipped: %s", exc)
     logger.info("Connected to MongoDB database.")
     yield
     close_mongo_connection()
