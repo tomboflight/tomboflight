@@ -1,6 +1,6 @@
 const envBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL;
 const extraBaseUrl = getExpoExtraBaseUrl();
-const defaultBaseUrl = 'https://api.tomboflight.com';
+const defaultBaseUrl = 'https://tomboflight-api.onrender.com';
 const WORKSPACE_ACCESS_CANONICAL_PREFIX = '/workspace-access';
 const WORKSPACE_ACCESS_PREFIX_ALIASES = [
   '/workspace-access',

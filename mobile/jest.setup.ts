@@ -3,7 +3,7 @@
 jest.mock('expo-constants', () => ({
   expoConfig: {
     extra: {
-      apiBaseUrl: 'https://api.tomboflight.com'
+      apiBaseUrl: 'https://tomboflight-api.onrender.com'
     }
   }
 }));

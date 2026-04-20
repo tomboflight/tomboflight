@@ -20,6 +20,30 @@ export class ApiError extends Error {
   }
 }
 
+export type ApiConnectivityIssue = 'network' | 'timeout';
+
+export class ApiConnectivityError extends Error {
+  readonly issue: ApiConnectivityIssue;
+  readonly url: string;
+  readonly method: string;
+  readonly likelyCors: boolean;
+
+  constructor(args: {
+    issue: ApiConnectivityIssue;
+    message: string;
+    url: string;
+    method: string;
+    likelyCors?: boolean;
+  }) {
+    super(args.message);
+    this.name = 'ApiConnectivityError';
+    this.issue = args.issue;
+    this.url = args.url;
+    this.method = args.method;
+    this.likelyCors = Boolean(args.likelyCors);
+  }
+}
+
 function asString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
@@ -63,6 +87,7 @@ export async function apiRequest<TResponse>(
   options: ApiRequestOptions = {}
 ): Promise<TResponse> {
   const url = buildUrl(path);
+  const method = options.method ?? 'GET';
   const controller = new AbortController();
   const timeoutHandle = setTimeout(() => controller.abort(), API_CONFIG.timeoutMs);
   const headers: Record<string, string> = {
@@ -76,9 +101,9 @@ export async function apiRequest<TResponse>(
 
   try {
     const response = await fetch(url, {
-      method: options.method ?? 'GET',
+      method,
       headers,
-      credentials: options.credentials ?? 'include',
+      credentials: options.credentials ?? 'same-origin',
       signal: controller.signal,
       body
     });
@@ -103,10 +128,15 @@ export async function apiRequest<TResponse>(
     return undefined as TResponse;
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error('API request timed out.');
+      throw new ApiConnectivityError({
+        issue: 'timeout',
+        message: 'The request timed out before Tomb of Light services responded.',
+        url,
+        method
+      });
     }
     if (error instanceof TypeError) {
-      throw new Error('Unable to reach Tomb of Light services. Check your connection and try again.');
+      throw toNetworkError(url, method);
     }
     throw error;
   } finally {
@@ -177,4 +207,31 @@ async function toApiError(response: Response): Promise<ApiError> {
   }
 
   return new ApiError(response.status, message, detail);
+}
+
+function toNetworkError(url: string, method: string): ApiConnectivityError {
+  const likelyCors = isLikelyCorsMismatch(url);
+
+  return new ApiConnectivityError({
+    issue: 'network',
+    message: likelyCors
+      ? 'Unable to reach Tomb of Light services from this web app origin. API CORS may be blocking this request.'
+      : 'Unable to reach Tomb of Light services. Check your network connection and try again.',
+    url,
+    method,
+    likelyCors
+  });
+}
+
+function isLikelyCorsMismatch(url: string): boolean {
+  if (typeof window === 'undefined' || !window.location) {
+    return false;
+  }
+
+  try {
+    const requestOrigin = new URL(url).origin;
+    return requestOrigin !== window.location.origin;
+  } catch {
+    return false;
+  }
 }
