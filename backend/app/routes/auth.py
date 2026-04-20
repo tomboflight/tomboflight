@@ -1,10 +1,16 @@
+import logging
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from app.config import settings
 from app.core.security import create_csrf_token, decode_access_token
-from app.dependencies.auth import COOKIE_NAME, get_current_user, require_capability
+from app.dependencies.auth import (
+    COOKIE_NAME,
+    get_current_user,
+    require_capability,
+    resolve_access_context,
+)
 from app.schemas.auth import (
     MfaDisableRequest,
     MfaEnrollmentBeginRequest,
@@ -45,6 +51,7 @@ from app.services.rate_limit_service import (
 from app.services.audit_log_service import create_audit_log
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
+logger = logging.getLogger(__name__)
 
 SameSiteMode = Literal["lax", "strict", "none"]
 COOKIE_MAX_AGE_SECONDS = int(settings.access_token_expire_minutes or 60) * 60
@@ -380,8 +387,19 @@ def me(response: Response, current_user: dict = Depends(get_current_user)):
         context = build_access_context(current_user)
     except Exception:
         context = {}
+    try:
+        effective_access = resolve_access_context(
+            _current_user_id(current_user),
+            user_email=str(current_user.get("email") or ""),
+        )
+    except Exception as exc:
+        logger.warning("Unable to resolve effective access context for /auth/me: %s", exc)
+        effective_access = {}
     payload["active_project_id"] = context.get("active_project_id")
     payload["active_family_id"] = context.get("active_family_id")
+    payload["role_codes"] = list(effective_access.get("role_codes") or [])
+    payload["capabilities"] = list(effective_access.get("capabilities") or [])
+    payload["permissions"] = list(effective_access.get("permissions") or [])
     return payload
 
 

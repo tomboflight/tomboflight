@@ -6,15 +6,23 @@
 
   const INTERNAL_ROLE_KEYS = new Set([
     "super_admin",
+    "executive_tech_admin",
     "operations_admin",
     "finance_admin",
     "marketing_admin",
   ]);
 
   const ROLE_ALIASES = {
+    superadmin: "super_admin",
     root_admin: "super_admin",
     platform_admin: "super_admin",
-    executive_technology: "super_admin",
+    executive_technology: "executive_tech_admin",
+    executive_tech_admin: "executive_tech_admin",
+    "executive-tech-admin": "executive_tech_admin",
+    cto_admin: "executive_tech_admin",
+    cfo_admin: "finance_admin",
+    cmo_admin: "marketing_admin",
+    coo_admin: "operations_admin",
     operations: "operations_admin",
     finance: "finance_admin",
     marketing: "marketing_admin",
@@ -134,10 +142,12 @@
   }
 
   function getInternalRoleKey(me) {
+    const roleCodes = Array.isArray(me && me.role_codes) ? me.role_codes : [];
     const values = [
       normalizeRole(me && me.access_tier),
       normalizeRole(me && me.department_role),
       normalizeRole(me && me.role),
+      ...roleCodes.map(normalizeRole),
     ].filter(Boolean);
     const direct = values.find(function (value) {
       return INTERNAL_ROLE_KEYS.has(value);

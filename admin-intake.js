@@ -9,6 +9,7 @@
 
   const INTAKE_REVIEW_ROLE_KEYS = new Set([
     "super_admin",
+    "executive_tech_admin",
     "operations_admin",
   ]);
 
@@ -224,15 +225,23 @@
   }
 
   function ensureAdminAccess(me) {
+    const roleCodes = Array.isArray(me && me.role_codes) ? me.role_codes : [];
     const values = [
       normalizeValue(me && me.role),
       normalizeValue(me && me.access_tier),
       normalizeValue(me && me.department_role),
+      ...roleCodes.map(normalizeValue),
     ];
+    const permissions = new Set(
+      (Array.isArray(me && me.permissions) ? me.permissions : []).map(normalizeValue),
+    );
 
     const hasAccess = values.some(function (value) {
       return INTAKE_REVIEW_ROLE_KEYS.has(value);
-    });
+    }) ||
+      permissions.has("*") ||
+      permissions.has("admin.intake.review") ||
+      permissions.has("admin.intake.write");
 
     if (!hasAccess) {
       const error = new Error("Admin access is required to use this page.");

@@ -8,15 +8,23 @@
 
   const INTERNAL_ROLE_KEYS = new Set([
     "super_admin",
+    "executive_tech_admin",
     "operations_admin",
     "finance_admin",
     "marketing_admin",
   ]);
 
   const ROLE_ALIASES = {
+    superadmin: "super_admin",
     root_admin: "super_admin",
     platform_admin: "super_admin",
-    executive_technology: "super_admin",
+    executive_technology: "executive_tech_admin",
+    executive_tech_admin: "executive_tech_admin",
+    "executive-tech-admin": "executive_tech_admin",
+    cto_admin: "executive_tech_admin",
+    cfo_admin: "finance_admin",
+    cmo_admin: "marketing_admin",
+    coo_admin: "operations_admin",
     operations: "operations_admin",
     finance: "finance_admin",
     marketing: "marketing_admin",
@@ -43,10 +51,12 @@
   }
 
   function getRoleSignals(me) {
+    const roleCodes = Array.isArray(me && me.role_codes) ? me.role_codes : [];
     return [
       normalizeRole(me && me.access_tier),
       normalizeRole(me && me.department_role),
       normalizeRole(me && me.role),
+      ...roleCodes.map(normalizeRole),
     ].filter(Boolean);
   }
 
@@ -91,6 +101,7 @@
     const roleKey = getInternalRoleKey(me);
 
     if (roleKey === "super_admin") return "CEO / Super Admin";
+    if (roleKey === "executive_tech_admin") return "Executive Technical Admin";
     if (roleKey === "operations_admin") {
       return "COO";
     }
@@ -103,90 +114,59 @@
     return "Internal Control";
   }
 
+  function getPermissionSet(me) {
+    const values = Array.isArray(me && me.permissions) ? me.permissions : [];
+    return new Set(
+      values.map(function (value) {
+        return normalizeValue(value);
+      }),
+    );
+  }
+
+  function hasPermission(me, requiredCodes) {
+    const permissions = getPermissionSet(me);
+    if (permissions.has("*")) return true;
+    return requiredCodes.some(function (permission) {
+      return permissions.has(normalizeValue(permission));
+    });
+  }
+
   function getRoleCards(me) {
-    const roleKey = getInternalRoleKey(me);
-
-    if (
-      [
-        "super_admin",
-      ].includes(roleKey)
-    ) {
-      return [
+    const cards = [];
+    if (hasPermission(me, ["admin.control.view"])) {
+      cards.push(
         card(
           "A",
           "Control Center",
-          "Review uploads, oversee mint records, inspect orders, entitlements, user records, and audit history from one internal workspace.",
+          "Review uploads, mint readiness, orders, entitlements, user records, and audit-visible data based on your assigned permissions.",
           "admin-control-center.html",
           "Open Control Center",
         ),
+      );
+    }
+    if (hasPermission(me, ["admin.intake.review", "admin.intake.write"])) {
+      cards.push(
         card(
           "B",
           "Intake Queue",
-          "Review submitted intake records, move them through approval, and provision package workspaces correctly by lane.",
+          "Review submitted intake records, move them through approval, and provision workspaces by lane.",
           "admin-intake-queue.html",
           "Open Intake Queue",
         ),
+      );
+    }
+    if (hasPermission(me, ["admin.access"])) {
+      cards.push(
         card(
           "C",
           "Family Manager",
-          "Load real household and network family builds, add members, and manage lineage relationships in the live platform.",
+          "Load household and network family builds, add members, and manage lineage relationships.",
           "admin-family-manager.html",
           "Open Family Manager",
         ),
-      ];
+      );
     }
-
-    if (roleKey === "operations_admin") {
-      return [
-        card(
-          "A",
-          "Control Center",
-          "Review uploads, monitor onchain anchor readiness, and troubleshoot provisioned workspaces from one operations console.",
-          "admin-control-center.html",
-          "Open Control Center",
-        ),
-        card(
-          "B",
-          "Intake Queue",
-          "Review submitted intake records, move them through approval, and provision package workspaces correctly by lane.",
-          "admin-intake-queue.html",
-          "Open Intake Queue",
-        ),
-        card(
-          "C",
-          "Family Manager",
-          "Load real household and network family builds, add members, and manage lineage relationships in the live platform.",
-          "admin-family-manager.html",
-          "Open Family Manager",
-        ),
-      ];
-    }
-
-    if (roleKey === "finance_admin") {
-      return [
-        card(
-          "A",
-          "Control Center",
-          "Review order records, project entitlements, mint status, and audit events tied to protected package delivery.",
-          "admin-control-center.html",
-          "Open Control Center",
-        ),
-      ];
-    }
-
-    if (roleKey === "marketing_admin") {
-      return [
-        card(
-          "A",
-          "Control Center",
-          "Review users, projects, and audit-visible customer records published to your internal marketing scope.",
-          "admin-control-center.html",
-          "Open Control Center",
-        ),
-      ];
-    }
-
-    return [];
+    return cards;
   }
 
   function applyAdminPortalTheme(me) {

@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.core.package_catalog import get_package, normalize_package_code
 from app.core.package_type_catalog import normalize_package_type
 from app.database import close_mongo_connection, connect_to_mongo
+from app.services.admin_access_bootstrap_service import bootstrap_admin_access_controls
 from app.services.entitlement_service import resolve_project_entitlements
 from app.services.project_entitlement_service import upsert_project_entitlement
 from app.services.project_membership_service import ensure_project_owner_membership
@@ -40,25 +41,25 @@ ADMIN_ACCOUNTS: dict[str, dict[str, str]] = {
     "jenn.wood@tomboflight.com": {
         "full_name": "Jennifer Wood",
         "business_title": "CFO",
-        "department_role": "finance",
+        "department_role": "finance_admin",
         "access_tier": "finance_admin",
     },
     "k.goffigan@tomboflight.com": {
         "full_name": "Keith Goffigan",
         "business_title": "COO",
-        "department_role": "operations",
+        "department_role": "operations_admin",
         "access_tier": "operations_admin",
     },
     "l.robinson@tomboflight.com": {
         "full_name": "Larry Robinson",
-        "business_title": "CEO / Super Admin",
-        "department_role": "executive_technology",
+        "business_title": "CEO",
+        "department_role": "executive_tech_admin",
         "access_tier": "super_admin",
     },
     "marquis.l.floyd@tomboflight.com": {
         "full_name": "Marquis Floyd",
         "business_title": "CMO",
-        "department_role": "marketing",
+        "department_role": "marketing_admin",
         "access_tier": "marketing_admin",
     },
 }
@@ -520,6 +521,11 @@ def main() -> int:
             actions=actions,
             admin_users=admin_users,
         )
+        if args.apply:
+            sync_stats = bootstrap_admin_access_controls()
+            _record_action(actions, "synced_admin_access_controls", stats=sync_stats)
+        else:
+            _record_action(actions, "would_sync_admin_access_controls")
     finally:
         close_mongo_connection()
 

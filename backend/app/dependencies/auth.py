@@ -7,6 +7,11 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.config import settings
+from app.core.admin_permission_registry import (
+    CAPABILITY_PERMISSIONS,
+    ROLE_CAPABILITIES,
+    ROLE_PERMISSION_MAP,
+)
 from app.core.package_catalog import get_package
 from app.core.role_catalog import (
     INTERNAL_ADMIN_ROLE_CODES,
@@ -508,91 +513,6 @@ def require_super_admin(
     )
 
 
-ROLE_CAPABILITIES: dict[str, set[str]] = {
-    # Deprecated generic admin role: no implicit capability grants.
-    "admin": set(),
-    "super_admin": {"*"},
-    "operations_admin": {
-        "manage_user_contact",
-        "manage_orders",
-        "manage_entitlements",
-        "manage_packages",
-        "manage_projects",
-        "manage_families",
-        "run_admin_repairs",
-        "view_audit_all",
-    },
-    "finance_admin": {
-        "manage_billing",
-        "manage_orders",
-        "view_audit_all",
-        "read_finance_scope",
-    },
-    "marketing_admin": {
-        "manage_marketing_content",
-        "read_analytics",
-    },
-    "user": set(),
-}
-
-CAPABILITY_PERMISSIONS: dict[str, set[str]] = {
-    "manage_roles": {"admin.users.write"},
-    "manage_users_full": {"admin.users.read", "admin.users.write"},
-    "manage_user_contact": {"admin.users.read", "admin.control.view", "admin.control.write"},
-    "manage_orders": {"admin.orders.read", "admin.orders.repair", "admin.control.billing"},
-    "manage_entitlements": {"admin.entitlements.read", "admin.entitlements.write"},
-    "manage_packages": {"admin.control.write"},
-    "manage_projects": {"admin.control.view", "project.workflow.transition"},
-    "manage_families": {"admin.access", "admin.intake.review", "admin.intake.write"},
-    "manage_billing": {"admin.control.billing"},
-    "manage_marketing_content": {
-        "admin.marketing.content.read",
-        "admin.marketing.content.write",
-    },
-    "view_audit_all": {"admin.audit.read"},
-    "run_admin_repairs": {"admin.control.write", "admin.control.mint"},
-    "read_finance_scope": {"admin.entitlements.read", "admin.control.view"},
-    "read_analytics": {"admin.analytics.read"},
-}
-
-LEGACY_ROLE_PERMISSIONS: dict[str, set[str]] = {
-    # Deprecated generic admin role: no implicit permission grants.
-    "admin": set(),
-    "super_admin": {"*"},
-    "operations_admin": {
-        "admin.access",
-        "admin.audit.read",
-        "admin.control.view",
-        "admin.control.write",
-        "admin.control.billing",
-        "admin.control.mint",
-        "admin.entitlements.read",
-        "admin.entitlements.write",
-        "admin.intake.review",
-        "admin.intake.write",
-        "admin.orders.read",
-        "admin.orders.repair",
-        "projects.create",
-        "verification.review",
-        "uploads.admin.review",
-        "project.workflow.transition",
-    },
-    "finance_admin": {
-        "admin.audit.read",
-        "admin.control.view",
-        "admin.control.billing",
-        "admin.entitlements.read",
-        "admin.orders.read",
-        "admin.orders.repair",
-    },
-    "marketing_admin": {
-        "admin.marketing.content.read",
-        "admin.marketing.content.write",
-        "admin.analytics.read",
-    },
-    "user": {"projects.read", "uploads.read", "uploads.write"},
-}
-
 WORKFLOW_ALLOWED_TRANSITIONS: dict[str, set[str]] = {
     "": {"draft", "purchased", "build_ready"},
     "draft": {"purchased", "build_ready"},
@@ -716,7 +636,7 @@ def _collect_permissions_for_roles(role_codes: set[str], capabilities: set[str])
         return permissions
 
     for role_code in role_codes:
-        permissions.update(LEGACY_ROLE_PERMISSIONS.get(role_code, set()))
+        permissions.update(ROLE_PERMISSION_MAP.get(role_code, set()))
 
     docs = _db()["role_permissions"].find(
         {
