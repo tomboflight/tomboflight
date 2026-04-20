@@ -15,7 +15,12 @@ type ScreenContainerProps = {
 export function ScreenContainer({ children, contentStyle }: ScreenContainerProps) {
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={[styles.content, contentStyle]}>
+      <ScrollView
+        contentContainerStyle={[styles.content, contentStyle]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        contentInsetAdjustmentBehavior="automatic"
+      >
         <View>{children}</View>
       </ScrollView>
     </SafeAreaView>

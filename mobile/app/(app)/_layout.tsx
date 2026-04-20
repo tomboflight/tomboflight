@@ -6,8 +6,7 @@ import { useAuthState } from '../../src/hooks';
 import { appTheme } from '../../src/theme';
 
 /**
- * Customer app shell.
- * TODO: Refine navigation IA as features mature.
+ * Customer app shell with focused primary navigation.
  */
 export default function AppLayout() {
   const authState = useAuthState();
@@ -32,9 +31,16 @@ export default function AppLayout() {
         headerShadowVisible: false,
         tabBarActiveTintColor: appTheme.colors.primary,
         tabBarInactiveTintColor: '#7A8AA3',
+        tabBarLabelStyle: {
+          fontSize: 12,
+          fontWeight: '600'
+        },
         tabBarStyle: {
           backgroundColor: appTheme.colors.surface,
-          borderTopColor: appTheme.colors.border
+          borderTopColor: appTheme.colors.border,
+          height: 64,
+          paddingBottom: 8,
+          paddingTop: 8
         }
       }}
     >
@@ -42,11 +48,11 @@ export default function AppLayout() {
       <Tabs.Screen name="project" options={{ title: 'Project' }} />
       <Tabs.Screen name="family" options={{ title: 'Family' }} />
       <Tabs.Screen name="tree" options={{ title: 'Tree' }} />
-      <Tabs.Screen name="uploads" options={{ title: 'Uploads' }} />
-      <Tabs.Screen name="certificates" options={{ title: 'Certificates' }} />
-      <Tabs.Screen name="billing" options={{ title: 'Billing' }} />
       <Tabs.Screen name="settings" options={{ title: 'Settings' }} />
-      <Tabs.Screen name="support" options={{ title: 'Support' }} />
+      <Tabs.Screen name="uploads" options={{ title: 'Uploads', href: null }} />
+      <Tabs.Screen name="certificates" options={{ title: 'Certificates', href: null }} />
+      <Tabs.Screen name="billing" options={{ title: 'Billing', href: null }} />
+      <Tabs.Screen name="support" options={{ title: 'Support', href: null }} />
     </Tabs>
   );
 }

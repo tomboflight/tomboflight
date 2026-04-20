@@ -12,10 +12,12 @@ Customer-facing mobile app scaffold for Tomb of Light.
 ## Commands
 
 ```bash
+nvm use
 npm install
 npx expo install
 npm run typecheck
 npm run start
+npm run build:web
 ```
 
 ## Notes
