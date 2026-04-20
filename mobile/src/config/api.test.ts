@@ -35,7 +35,7 @@ describe('api config', () => {
     process.env.EXPO_PUBLIC_API_BASE_URL = 'http://api.tomboflight.com';
 
     const { API_CONFIG } = require('./api') as typeof import('./api');
-    expect(API_CONFIG.baseUrl).toBe('https://api.tomboflight.com');
+    expect(API_CONFIG.baseUrl).toBe('https://tomboflight-api.onrender.com');
   });
 
   it('allows localhost HTTP for local development', () => {
@@ -43,5 +43,12 @@ describe('api config', () => {
 
     const { API_CONFIG } = require('./api') as typeof import('./api');
     expect(API_CONFIG.baseUrl).toBe('http://localhost:8000');
+  });
+
+  it('uses Render API as default base URL', () => {
+    delete process.env.EXPO_PUBLIC_API_BASE_URL;
+
+    const { API_CONFIG } = require('./api') as typeof import('./api');
+    expect(API_CONFIG.baseUrl).toBe('https://tomboflight-api.onrender.com');
   });
 });

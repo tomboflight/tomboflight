@@ -1,5 +1,5 @@
 import { API_ENDPOINTS } from '../../config';
-import { ApiError, apiRequest } from '../api';
+import { ApiConnectivityError, ApiError, apiRequest } from '../api';
 import { clearAccessToken, getAccessToken, saveAccessToken } from './auth-state';
 
 export type SignInInput = {
@@ -157,6 +157,22 @@ function statusFallback(status: number, action: AuthAction): string {
     return 'Too many attempts. Please wait a moment and try again.';
   }
 
+  if (status === 422) {
+    if (action === 'signUp') {
+      return 'Some sign-up fields are invalid. Review your input and try again.';
+    }
+
+    if (action === 'passwordReset') {
+      return 'Reset request details are invalid. Confirm your email and try again.';
+    }
+
+    if (action === 'mfaEnroll' || action === 'mfaVerify') {
+      return 'The verification code format is invalid. Check the code and try again.';
+    }
+
+    return 'Sign-in details are invalid. Confirm your email and password format.';
+  }
+
   if (status >= 500) {
     return 'Tomb of Light services are temporarily unavailable. Please try again shortly.';
   }
@@ -177,6 +193,18 @@ function statusFallback(status: number, action: AuthAction): string {
 }
 
 export function mapAuthError(error: unknown, action: AuthAction): string {
+  if (error instanceof ApiConnectivityError) {
+    if (error.issue === 'timeout') {
+      return 'Tomb of Light services took too long to respond. Please try again.';
+    }
+
+    if (error.likelyCors) {
+      return 'This web app origin is not currently allowed by the API CORS policy.';
+    }
+
+    return 'Unable to reach Tomb of Light services. Check your connection and try again.';
+  }
+
   if (error instanceof ApiError) {
     const detailMessage = getApiDetailText(error.detail);
     if (detailMessage) {
