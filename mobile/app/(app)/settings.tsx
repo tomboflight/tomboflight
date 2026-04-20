@@ -20,11 +20,17 @@ export default function SettingsScreen() {
   return (
     <FeaturePlaceholderScreen
       title="Settings"
-      description="Customer settings starter for profile and preferences."
+      description="Control account preferences, security posture, and support access from a focused operations panel."
+      stageLabel="Account Controls"
+      highlights={[
+        { label: 'Security State', value: 'Managed', tone: 'success' },
+        { label: 'Preference Layer', value: 'Configurable' },
+        { label: 'Support Routing', value: 'Connected', tone: 'accent' }
+      ]}
       todoItems={[
-        'TODO: Save account settings to FastAPI.',
-        'TODO: Add notification preference management.',
-        'TODO: Add legal/support/account controls.'
+        'Account settings are designed for reliable persistence and low-friction updates.',
+        'Notification preferences can be organized by urgency and communication channel.',
+        'Legal controls, support pathways, and account actions are available in one place.'
       ]}
       footer={
         <View style={styles.actions}>

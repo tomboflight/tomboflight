@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ScreenContainer } from '../../src/components/ScreenContainer';
@@ -108,13 +108,25 @@ function summarizeMembershipScope(membership: WorkspaceMembership): string {
   return relationshipScope || privacyScope || 'scope unavailable';
 }
 
+function membershipKey(membership: WorkspaceMembership, index: number): string {
+  return (
+    asString(membership.id) ||
+    `${asString(membership.project_id) || 'project'}-${asString(membership.user_id) || asString(membership.email) || 'member'}-${index}`
+  );
+}
+
 export default function DashboardScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
   const [accessContext, setAccessContext] = useState<AccessContextSummary | null>(null);
   const [memberships, setMemberships] = useState<WorkspaceMembership[]>([]);
+  const requestSequence = useRef(0);
+  const mountedRef = useRef(true);
 
   const loadDashboard = useCallback(async () => {
+    const requestId = requestSequence.current + 1;
+    requestSequence.current = requestId;
+
     setIsLoading(true);
     setErrorMessage('');
 
@@ -124,17 +136,31 @@ export default function DashboardScreen() {
         fetchMyMemberships()
       ]);
 
+      if (!mountedRef.current || requestId !== requestSequence.current) {
+        return;
+      }
+
       setAccessContext(toAccessContextSummary(contextPayload));
-      setMemberships(membershipsPayload.items);
+      setMemberships(Array.isArray(membershipsPayload.items) ? membershipsPayload.items : []);
     } catch (error) {
+      if (!mountedRef.current || requestId !== requestSequence.current) {
+        return;
+      }
+
       setErrorMessage(mapWorkspaceAccessError(error));
     } finally {
-      setIsLoading(false);
+      if (mountedRef.current && requestId === requestSequence.current) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
+    mountedRef.current = true;
     void loadDashboard();
+    return () => {
+      mountedRef.current = false;
+    };
   }, [loadDashboard]);
 
   const roleRows = useMemo(() => toCountRows(memberships, 'member_role'), [memberships]);
@@ -173,8 +199,14 @@ export default function DashboardScreen() {
         </Text>
       </View>
 
-      <Pressable style={styles.refreshButton} onPress={() => void loadDashboard()}>
-        <Text style={styles.refreshText}>Refresh Workspace Data</Text>
+      <Pressable
+        style={[styles.refreshButton, isLoading && styles.refreshButtonDisabled]}
+        onPress={() => void loadDashboard()}
+        disabled={isLoading}
+        accessibilityRole="button"
+        accessibilityLabel="Refresh workspace data"
+      >
+        <Text style={styles.refreshText}>{isLoading ? 'Refreshing...' : 'Refresh Workspace Data'}</Text>
       </Pressable>
 
       {isLoading ? (
@@ -283,8 +315,8 @@ export default function DashboardScreen() {
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Recent Membership Context</Text>
             {recentMemberships.length > 0 ? (
-              recentMemberships.map((membership) => (
-                <View key={membership.id || `${membership.project_id || 'project'}-${membership.email || 'member'}`} style={styles.memberRow}>
+              recentMemberships.map((membership, index) => (
+                <View key={membershipKey(membership, index)} style={styles.memberRow}>
                   <Text style={styles.memberName}>{summarizeMembershipTarget(membership)}</Text>
                   <Text style={styles.memberMeta}>Role: {asString(membership.member_role) || 'unknown'}</Text>
                   <Text style={styles.memberMeta}>Scope: {summarizeMembershipScope(membership)}</Text>
@@ -354,6 +386,9 @@ const styles = StyleSheet.create({
     color: appTheme.colors.surface,
     fontSize: appTheme.typography.caption,
     fontWeight: '700'
+  },
+  refreshButtonDisabled: {
+    opacity: 0.72
   },
   loadingCard: {
     backgroundColor: appTheme.colors.surface,

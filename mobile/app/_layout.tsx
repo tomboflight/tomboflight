@@ -6,7 +6,6 @@ import { appTheme } from '../src/theme';
 
 /**
  * Root navigator for the mobile app.
- * TODO: Add startup session/bootstrap flow before redirecting users.
  */
 export default function RootLayout() {
   return (

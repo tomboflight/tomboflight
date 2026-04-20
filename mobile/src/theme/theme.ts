@@ -4,15 +4,15 @@
  */
 export const appTheme = {
   colors: {
-    primary: '#1677FF',
-    primaryPressed: '#0E63D9',
-    background: '#F5F8FC',
+    primary: '#1157CC',
+    primaryPressed: '#0D46A6',
+    background: '#EEF3FA',
     surface: '#FFFFFF',
-    border: '#D8E1EE',
-    textPrimary: '#0B1B35',
-    textSecondary: '#4E617E',
+    border: '#CBD7EA',
+    textPrimary: '#081733',
+    textSecondary: '#44597A',
     success: '#1AAB8B',
-    warning: '#E7A530',
+    warning: '#D88E12',
     error: '#D64545'
   },
   spacing: {
@@ -29,7 +29,7 @@ export const appTheme = {
   },
   typography: {
     title: 28,
-    heading: 22,
+    heading: 23,
     body: 16,
     caption: 13
   }
