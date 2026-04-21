@@ -197,28 +197,23 @@ class AdminControlAccessProfileTests(unittest.TestCase):
         self.assertTrue(admin_control_service.admin_control_bulk_action_allowed(current_user, "repair-missing-entitlements"))
         self.assertFalse(admin_control_service.admin_control_bulk_action_allowed(current_user, "refresh-mint-readiness"))
 
-    def test_marketing_profile_is_read_only_with_user_visibility(self):
+    def test_marketing_profile_is_marketing_queue_only(self):
         current_user = {
             "role": "marketing",
             "_access_context": {
-                "role_codes": ["marketing"],
+                "role_codes": ["marketing_admin"],
                 "permissions": [
-                    "admin.access",
-                    "admin.audit.read",
-                    "admin.control.view",
-                    "admin.orders.read",
-                    "admin.users.read",
+                    "admin.analytics.read",
+                    "admin.marketing.content.read",
                 ],
             },
         }
 
         profile = admin_control_service.admin_control_access_profile(current_user)
 
-        self.assertIn("users", profile["allowed_queues"])
-        self.assertIn("customer_cases", profile["allowed_queues"])
-        self.assertIn("run_readiness_check", profile["allowed_actions"])
-        self.assertNotIn("sync_package", profile["allowed_actions"])
-        self.assertNotIn("generate_entitlement", profile["allowed_actions"])
+        self.assertIn("traffic_awareness", profile["allowed_queues"])
+        self.assertIn("marketing_reports", profile["allowed_queues"])
+        self.assertEqual(profile["allowed_actions"], [])
         self.assertEqual(profile["allowed_bulk_actions"], [])
 
     def test_officer_role_takes_precedence_over_generic_admin_role(self):
@@ -276,8 +271,19 @@ class AdminControlAccessProfileTests(unittest.TestCase):
             },
         }
         profile = admin_control_service.admin_control_access_profile(current_user)
-        self.assertEqual(profile["allowed_queues"], [])
-        self.assertEqual(profile["allowed_tabs"], [])
+        self.assertEqual(
+            profile["allowed_queues"],
+            [
+                "traffic_awareness",
+                "funnel_conversion",
+                "package_demand",
+                "campaign_performance",
+                "content_performance",
+                "marketing_reports",
+            ],
+        )
+        self.assertEqual(profile["allowed_tabs"], ["marketing_dashboard"])
+        self.assertEqual(profile["allowed_actions"], [])
         self.assertEqual(profile["allowed_bulk_actions"], [])
 
     def test_coo_profile_has_operations_without_billing_controls(self):
@@ -1060,6 +1066,88 @@ class CfoScopeAndFinanceHistoryTests(unittest.TestCase):
         self.assertIn("generate_entitlement", quick_actions)
         self.assertNotIn("queue_for_mint_review", quick_actions)
 
+    def test_overview_includes_marketing_sections_with_live_and_unavailable_flags(self):
+        project_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "users": [],
+                "projects": [
+                    {
+                        "_id": project_id,
+                        "owner_email": "marquis.l.floyd@tomboflight.com",
+                        "owner_user_id": str(ObjectId()),
+                        "name": "Marketing Project",
+                        "package_code": "legacy_snapshot",
+                        "project_lane": "portrait",
+                        "status": "build_ready",
+                        "phase": "intake_approved",
+                    }
+                ],
+                "orders": [
+                    {
+                        "_id": ObjectId(),
+                        "email": "marquis.l.floyd@tomboflight.com",
+                        "project_id": project_id,
+                        "status": "paid",
+                        "item_type": "package",
+                        "package_code": "legacy_snapshot",
+                        "campaign": "spring_launch",
+                        "source": "direct",
+                        "promo_code": "SPRING25",
+                    }
+                ],
+                "project_entitlements": [],
+                "audit_logs": [],
+                "payroll_runs": [],
+                "finance_events": [],
+                "analytics_events": [
+                    {
+                        "_id": ObjectId(),
+                        "event_type": "page_view",
+                        "page_path": "/",
+                        "source": "direct",
+                        "campaign": "spring_launch",
+                    },
+                    {
+                        "_id": ObjectId(),
+                        "event_type": "cta_click",
+                        "cta_location": "hero",
+                    },
+                ],
+            }
+        )
+        with (
+            patch.object(admin_control_service, "get_database", return_value=db),
+            patch.object(
+                admin_control_service,
+                "run_readiness_check",
+                return_value={
+                    "mint_review_ready": False,
+                    "mint_eligible": False,
+                    "mint_already_completed": False,
+                    "package_synced": True,
+                    "lane_assigned": True,
+                    "order_linked": True,
+                    "entitlement_exists": False,
+                    "summary": "ok",
+                    "blocking_reasons": [],
+                },
+            ),
+            patch.object(admin_control_service, "get_project_entitlement", return_value=None),
+        ):
+            payload = admin_control_service.admin_console_overview(limit=5)
+
+        sections = payload.get("marketing_sections") or {}
+        self.assertIn("traffic_awareness", sections)
+        self.assertIn("funnel_conversion", sections)
+        self.assertIn("package_demand", sections)
+        self.assertIn("campaign_performance", sections)
+        self.assertIn("content_performance", sections)
+        self.assertIn("marketing_reports", sections)
+        self.assertTrue(sections["traffic_awareness"]["visitors"]["live"])
+        self.assertTrue(sections["funnel_conversion"]["purchases_completed"]["live"])
+        self.assertFalse(sections["content_performance"]["page_dropoff_points"]["live"])
+
     def test_larry_inherits_cfo_scope_through_superadmin_and_executive_tech(self):
         larry_user = {
             "role": "admin",
@@ -1075,6 +1163,21 @@ class CfoScopeAndFinanceHistoryTests(unittest.TestCase):
         self.assertIn("reports_exports", profile["allowed_queues"])
         self.assertIn("mint_queue", profile["allowed_queues"])
         self.assertTrue(admin_control_service.admin_control_queue_allowed(larry_user, "reports_exports"))
+
+    def test_larry_inherits_cmo_scope_through_superadmin_and_executive_tech(self):
+        larry_user = {
+            "role": "admin",
+            "department_role": "executive_tech_admin",
+            "_access_context": {
+                "role_codes": ["super_admin", "executive_tech_admin", "marketing_admin"],
+                "permissions": ["*"],
+            },
+        }
+        profile = admin_control_service.admin_control_access_profile(larry_user)
+        self.assertIn("traffic_awareness", profile["allowed_queues"])
+        self.assertIn("marketing_reports", profile["allowed_queues"])
+        self.assertIn("mint_queue", profile["allowed_queues"])
+        self.assertTrue(admin_control_service.admin_control_queue_allowed(larry_user, "marketing_reports"))
 
     def test_sync_package_persists_canonical_order_lane_fields(self):
         project_id = ObjectId()

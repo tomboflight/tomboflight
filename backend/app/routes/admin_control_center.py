@@ -183,7 +183,7 @@ def _assert_bulk_action_allowed(current_user: dict[str, Any], action: str) -> No
 
 @router.get("/access-profile")
 def get_admin_control_access_profile(
-    current_user: dict[str, Any] = Depends(require_permission("admin.control.view")),
+    current_user: dict[str, Any] = Depends(require_any_permission(["admin.control.view", "admin.analytics.read"])),
 ):
     return admin_control_access_profile(current_user)
 
@@ -191,7 +191,7 @@ def get_admin_control_access_profile(
 @router.get("/overview")
 def get_admin_control_overview(
     limit: int = Query(default=20, ge=1, le=100),
-    current_user: dict[str, Any] = Depends(require_permission("admin.control.view")),
+    current_user: dict[str, Any] = Depends(require_any_permission(["admin.control.view", "admin.analytics.read"])),
 ):
     del current_user
     try:
