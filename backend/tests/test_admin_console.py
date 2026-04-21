@@ -175,6 +175,17 @@ class AdminControlAccessProfileTests(unittest.TestCase):
                 "reports_exports",
             ],
         )
+        self.assertEqual(
+            profile["allowed_tabs"],
+            [
+                "identity",
+                "package_lane",
+                "orders_billing",
+                "project",
+                "entitlements",
+                "audit_timeline",
+            ],
+        )
         self.assertNotIn("orders", profile["allowed_queues"])
         self.assertNotIn("entitlements", profile["allowed_queues"])
         self.assertTrue(admin_control_service.admin_control_queue_allowed(current_user, "money_now"))
@@ -813,6 +824,301 @@ class AdminConsoleOverviewTests(unittest.TestCase):
                 "from_address_configured": True,
             },
         )
+
+    def test_finance_sections_use_consistent_keys_and_non_placeholder_states(self):
+        db = FakeDatabase(
+            {
+                "users": [],
+                "projects": [],
+                "orders": [],
+                "project_entitlements": [],
+                "audit_logs": [],
+                "payroll_runs": [],
+                "finance_events": [],
+            }
+        )
+        with patch.object(admin_control_service, "get_database", return_value=db):
+            payload = admin_control_service.admin_console_overview(limit=5)
+        sections = payload["finance_sections"]
+        self.assertIn("subscriptions_maintenance", sections)
+        self.assertIn("reports_exports", sections)
+        self.assertNotIn("subscriptions_and_maintenance", sections)
+        self.assertNotIn("reports_and_exports", sections)
+        self.assertFalse(sections["payroll"]["write_pipeline_live"])
+        self.assertEqual(sections["payroll"]["snapshot_mode"], "read_only")
+        self.assertFalse(sections["reports_exports"]["export_generation_live"])
+        self.assertNotIn("monthly_finance_export", sections["reports_exports"])
+
+    def test_overview_backfills_typed_finance_events(self):
+        order_id = ObjectId()
+        project_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "users": [],
+                "projects": [],
+                "orders": [
+                    {
+                        "_id": order_id,
+                        "email": "jenn.wood@tomboflight.com",
+                        "project_id": project_id,
+                        "status": "refunded",
+                        "item_type": "package",
+                        "package_code": "legacy_snapshot",
+                        "amount": 199,
+                        "refund_amount": 50,
+                        "credit_amount": 20,
+                        "adjustment_amount": -10,
+                    }
+                ],
+                "project_entitlements": [],
+                "audit_logs": [],
+                "payroll_runs": [],
+                "finance_events": [],
+            }
+        )
+        with patch.object(admin_control_service, "get_database", return_value=db):
+            admin_control_service.admin_console_overview(limit=5)
+        event_types = {
+            item.get("event_type")
+            for item in db["finance_events"].documents
+        }
+        self.assertIn("refund_recorded", event_types)
+        self.assertIn("credit_recorded", event_types)
+        self.assertIn("billing_adjustment", event_types)
+
+
+class CfoScopeAndFinanceHistoryTests(unittest.TestCase):
+    def test_finance_admin_workspace_filters_non_finance_tabs_and_sections(self):
+        project_id = ObjectId()
+        order_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "users": [
+                    {
+                        "_id": ObjectId(),
+                        "email": "jenn.wood@tomboflight.com",
+                        "full_name": "Jennifer Wood",
+                        "role": "finance_admin",
+                        "status": "active",
+                    }
+                ],
+                "projects": [
+                    {
+                        "_id": project_id,
+                        "owner_email": "jenn.wood@tomboflight.com",
+                        "owner_user_id": str(ObjectId()),
+                        "name": "Jennifer Finance Project",
+                        "package_code": "legacy_snapshot",
+                        "package_slug": "legacy_snapshot",
+                        "project_lane": "portrait",
+                        "status": "build_ready",
+                        "phase": "intake_approved",
+                    }
+                ],
+                "orders": [
+                    {
+                        "_id": order_id,
+                        "email": "jenn.wood@tomboflight.com",
+                        "project_id": project_id,
+                        "status": "refunded",
+                        "item_type": "package",
+                        "package_code": "legacy_snapshot",
+                        "amount": 200,
+                        "refund_amount": 50,
+                    }
+                ],
+                "project_entitlements": [],
+                "uploaded_files": [
+                    {
+                        "_id": ObjectId(),
+                        "project_id": project_id,
+                        "filename": "private-upload.jpg",
+                        "category": "member_photo",
+                        "status": "received",
+                    }
+                ],
+                "audit_logs": [],
+                "families": [],
+                "households": [],
+                "finance_events": [],
+            }
+        )
+        finance_user = {
+            "role": "finance",
+            "_access_context": {
+                "role_codes": ["finance_admin"],
+                "permissions": [
+                    "admin.control.view",
+                    "admin.control.billing",
+                    "admin.orders.read",
+                    "admin.entitlements.read",
+                    "admin.audit.read",
+                ],
+            },
+        }
+        with (
+            patch.object(admin_control_service, "get_database", return_value=db),
+            patch.object(admin_control_service, "get_project_entitlement", return_value=None),
+            patch.object(
+                admin_control_service,
+                "run_readiness_check",
+                return_value={
+                    "mint_review_ready": True,
+                    "mint_eligible": False,
+                    "mint_already_completed": False,
+                    "blocking_reasons": ["mint_blocked"],
+                    "package_synced": True,
+                    "lane_assigned": True,
+                    "order_linked": True,
+                    "entitlement_exists": False,
+                    "summary": "Finance case summary",
+                },
+            ),
+            patch.object(admin_control_service, "_mint_record_snapshot", return_value={"current_status": "queued"}),
+        ):
+            workspace = admin_control_service.customer_case_workspace(
+                str(project_id),
+                current_user=finance_user,
+            )
+        self.assertNotIn("uploads", workspace)
+        self.assertNotIn("uploads_verification", workspace["tabs"])
+        self.assertNotIn("mint_readiness", workspace["tabs"])
+        self.assertNotIn("uploads_summary", workspace["tabs"]["project"])
+        self.assertIn("finance_history", workspace["tabs"]["orders_billing"])
+        self.assertNotIn("mint_blocked", workspace["alerts"])
+        self.assertNotIn("upload_review_pending", workspace["alerts"])
+
+    def test_finance_admin_case_list_filters_actions_to_finance_scope(self):
+        project_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "projects": [
+                    {
+                        "_id": project_id,
+                        "owner_email": "jenn.wood@tomboflight.com",
+                        "owner_user_id": str(ObjectId()),
+                        "name": "Finance Queue Project",
+                        "package_code": "legacy_snapshot",
+                        "project_lane": "portrait",
+                        "status": "build_ready",
+                        "phase": "intake_approved",
+                    }
+                ],
+                "orders": [
+                    {
+                        "_id": ObjectId(),
+                        "email": "jenn.wood@tomboflight.com",
+                        "project_id": project_id,
+                        "status": "paid",
+                        "item_type": "package",
+                        "package_code": "legacy_snapshot",
+                    }
+                ],
+                "project_entitlements": [],
+                "uploaded_files": [],
+                "audit_logs": [],
+                "users": [],
+                "families": [],
+                "mint_records": [],
+            }
+        )
+        finance_user = {
+            "role": "finance",
+            "_access_context": {
+                "role_codes": ["finance_admin"],
+                "permissions": [
+                    "admin.control.view",
+                    "admin.control.billing",
+                    "admin.orders.read",
+                    "admin.entitlements.read",
+                    "admin.audit.read",
+                ],
+            },
+        }
+        with (
+            patch.object(admin_control_service, "get_database", return_value=db),
+            patch.object(admin_control_service, "get_project_entitlement", return_value=None),
+            patch.object(
+                admin_control_service,
+                "run_readiness_check",
+                return_value={
+                    "mint_review_ready": False,
+                    "mint_eligible": False,
+                    "mint_already_completed": False,
+                    "blocking_reasons": [],
+                },
+            ),
+            patch.object(admin_control_service, "count_workspace_uploads", return_value=0),
+        ):
+            payload = admin_control_service.list_customer_cases(
+                queue="money_now",
+                limit=5,
+                current_user=finance_user,
+            )
+        self.assertTrue(payload["items"])
+        quick_actions = set(payload["items"][0]["quick_actions"])
+        self.assertIn("generate_entitlement", quick_actions)
+        self.assertNotIn("queue_for_mint_review", quick_actions)
+
+    def test_larry_inherits_cfo_scope_through_superadmin_and_executive_tech(self):
+        larry_user = {
+            "role": "admin",
+            "department_role": "executive_tech_admin",
+            "_access_context": {
+                "role_codes": ["super_admin", "executive_tech_admin", "finance_admin"],
+                "permissions": ["*"],
+            },
+        }
+        profile = admin_control_service.admin_control_access_profile(larry_user)
+        self.assertIn("money_now", profile["allowed_queues"])
+        self.assertIn("payroll", profile["allowed_queues"])
+        self.assertIn("reports_exports", profile["allowed_queues"])
+        self.assertIn("mint_queue", profile["allowed_queues"])
+        self.assertTrue(admin_control_service.admin_control_queue_allowed(larry_user, "reports_exports"))
+
+    def test_sync_package_persists_canonical_order_lane_fields(self):
+        project_id = ObjectId()
+        order_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "projects": [
+                    {
+                        "_id": project_id,
+                        "owner_email": "customer@example.com",
+                        "owner_user_id": str(ObjectId()),
+                        "name": "Package Sync Project",
+                        "package_code": "legacy_plus",
+                        "package_slug": "legacy_plus",
+                        "project_lane": "household",
+                    }
+                ],
+                "orders": [
+                    {
+                        "_id": order_id,
+                        "email": "customer@example.com",
+                        "project_id": project_id,
+                        "status": "paid",
+                        "item_type": "package",
+                        "package_code": "legacy_snapshot",
+                        "package_slug": "legacy_snapshot",
+                    }
+                ],
+                "project_entitlements": [],
+                "finance_events": [],
+            }
+        )
+        with (
+            patch.object(admin_control_service, "get_database", return_value=db),
+            patch.object(admin_control_service, "get_project_entitlement", return_value=None),
+        ):
+            result = admin_control_service.sync_package(project_id=str(project_id))
+        self.assertEqual(result["order"]["package_code"], "legacy_plus")
+        self.assertEqual(result["order"]["lane"], "household")
+        stored_order = db["orders"].find_one({"_id": order_id}) or {}
+        self.assertEqual(stored_order.get("package_code"), "legacy_plus")
+        self.assertEqual(stored_order.get("package_slug"), "legacy_plus")
+        self.assertEqual(stored_order.get("lane"), "household")
+        self.assertEqual(stored_order.get("package_lane"), "household")
 
 
 if __name__ == "__main__":

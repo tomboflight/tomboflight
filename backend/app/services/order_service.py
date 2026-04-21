@@ -59,6 +59,12 @@ def _normalize_package_code(value: Optional[str]) -> str:
     return normalized or "unknown"
 
 
+def _package_lane_for_code(package_code: str) -> str:
+    package = get_package(_normalize_package_code(package_code)) or {}
+    lane = _normalize(str(package.get("package_lane") or "")).lower()
+    return lane or "unknown"
+
+
 def _normalize_status(value: Any) -> str:
     return _normalize(str(value or "")).lower()
 
@@ -244,9 +250,21 @@ def _link_order_to_project(
     project_oid = _coerce_object_id(project.get("_id") or project.get("id"))
     if project_oid is None:
         return
+    project_package_code = _normalize_package_code(
+        project.get("package_code") or project.get("package_slug") or order_doc.get("package_code")
+    )
+    project_lane = _normalize(str(project.get("project_lane") or project.get("lane") or "")).lower() or _package_lane_for_code(project_package_code)
     orders.update_one(
         {"_id": order_id},
-        {"$set": {"project_id": project_oid}},
+        {
+            "$set": {
+                "project_id": project_oid,
+                "package_code": project_package_code,
+                "package_slug": project_package_code,
+                "lane": project_lane,
+                "package_lane": project_lane,
+            }
+        },
     )
     order_doc["project_id"] = project_oid
 
@@ -318,6 +336,8 @@ def _serialize_order(order: dict[str, Any]) -> dict[str, Any]:
         "email": order["email"],
         "package_code": package_code,
         "package_slug": package_code,
+        "lane": order.get("lane") or order.get("package_lane") or _package_lane_for_code(package_code),
+        "package_lane": order.get("package_lane") or order.get("lane") or _package_lane_for_code(package_code),
         "package_name": order.get("package_name", ""),
         "price_label": order.get("price_label", ""),
         "item_type": order.get("item_type", "package"),
@@ -376,6 +396,8 @@ def create_order_for_user(user: dict[str, Any], payload: Any) -> dict[str, Any]:
         "email": user["email"],
         "package_code": package_code,
         "package_slug": package_code,
+        "lane": _package_lane_for_code(package_code),
+        "package_lane": _package_lane_for_code(package_code),
         "package_name": payload.package_name,
         "price_label": payload.price_label,
         "item_type": getattr(payload, "item_type", "package"),
@@ -499,6 +521,8 @@ def repair_paid_package_order_access(limit: int = 500) -> dict[str, Any]:
         update_fields: dict[str, Any] = {
             "package_code": package_code,
             "package_slug": package_code,
+            "lane": _package_lane_for_code(package_code),
+            "package_lane": _package_lane_for_code(package_code),
             "item_type": "package",
             "billing_plan": order_doc.get("billing_plan") or "one_time",
             "status": "paid",
@@ -1005,6 +1029,8 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
             "email": email,
             "package_code": package_code,
             "package_slug": package_code,
+            "lane": _package_lane_for_code(package_code),
+            "package_lane": _package_lane_for_code(package_code),
             "package_name": package_name,
             "price_label": price_label,
             "item_type": item_type,
@@ -1051,6 +1077,8 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
         "email": email,
         "package_code": package_code,
         "package_slug": package_code,
+        "lane": _package_lane_for_code(package_code),
+        "package_lane": _package_lane_for_code(package_code),
         "package_name": package_name,
         "price_label": price_label,
         "item_type": item_type,
