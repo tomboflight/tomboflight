@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from datetime import UTC, datetime
@@ -17,6 +18,13 @@ from app.core.package_type_catalog import normalize_package_type
 from app.database import close_mongo_connection, connect_to_mongo
 from app.services.admin_access_bootstrap_service import bootstrap_admin_access_controls
 from app.services.entitlement_service import resolve_project_entitlements
+from app.services.mint_record_service import (
+    approve_admin_mint_record,
+    approve_customer_mint_record,
+    create_mint_record,
+    mark_mint_minted,
+    resolve_canonical_mint_status,
+)
 from app.services.project_entitlement_service import upsert_project_entitlement
 from app.services.project_membership_service import ensure_project_owner_membership
 
@@ -83,6 +91,19 @@ ADMIN_UNSET_FIELDS = [
     "customer_package_name",
     "creator_credit",
 ]
+
+TARGET_PERSONAL_ACCOUNT_EXPERIENCE: dict[str, dict[str, str]] = {
+    "queenjwood@gmail.com": {
+        "package_code": "digital_legacy_portrait",
+        "project_name": "Jennifer Wood Digital Legacy Portrait",
+        "wallet_address": "0x1111111111111111111111111111111111111111",
+    },
+    "mlfloyd00@gmail.com": {
+        "package_code": "digital_legacy_portrait",
+        "project_name": "Marquis Floyd Digital Legacy Portrait",
+        "wallet_address": "0x2222222222222222222222222222222222222222",
+    },
+}
 
 
 def _now() -> datetime:
@@ -187,6 +208,22 @@ def _normalize_personal_accounts(
                     "creator_user_id": _doc_id(creator),
                     "creator_email": creator.get("email"),
                     "creator_name": creator.get("full_name") or "Larry Robinson",
+                }
+            )
+        if email in TARGET_PERSONAL_ACCOUNT_EXPERIENCE:
+            package_code = normalize_package_code(
+                TARGET_PERSONAL_ACCOUNT_EXPERIENCE[email].get("package_code")
+            )
+            package = get_package(package_code) or {}
+            set_fields.update(
+                {
+                    "package_code": package_code,
+                    "package_name": package.get("display_name") or "Digital Legacy Portrait",
+                    "package_lane": normalize_package_type(package.get("package_lane"), default="portrait"),
+                    "verification_status": "verified",
+                    "identity_verification_status": "verified",
+                    "account_verification_state": "complete",
+                    "mint_readiness_status": "minted",
                 }
             )
 
@@ -439,6 +476,319 @@ def _refresh_personal_project_entitlements(
             )
 
 
+def _project_ref_value(project_id: str) -> ObjectId | str:
+    return _oid(project_id) or project_id
+
+
+def _id_text(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _tx_hash(email: str, project_id: str) -> str:
+    digest = hashlib.sha256(f"{email}:{project_id}:minted".encode("utf-8")).hexdigest()
+    return f"0x{digest}"
+
+
+def _token_id(email: str, project_id: str) -> str:
+    digest = hashlib.sha256(f"{email}:{project_id}:token".encode("utf-8")).hexdigest()
+    return str(int(digest[:16], 16))
+
+
+def _ensure_target_personal_account_experience(
+    db,
+    *,
+    apply: bool,
+    actions: list[dict[str, Any]],
+    users: dict[str, dict[str, Any]],
+) -> None:
+    now = _now()
+    for email, config in TARGET_PERSONAL_ACCOUNT_EXPERIENCE.items():
+        user = users.get(email)
+        if not user:
+            continue
+        user_id = _doc_id(user)
+        package_code = normalize_package_code(config.get("package_code"))
+        package = get_package(package_code) or {}
+        package_name = package.get("display_name") or "Digital Legacy Portrait"
+        package_lane = normalize_package_type(package.get("package_lane"), default="portrait")
+        project = db["projects"].find_one(
+            {"$or": [{"owner_user_id": user_id}, {"owner_email": email}]},
+            sort=[("updated_at", -1), ("created_at", -1)],
+        )
+
+        project_fields = {
+            "name": config.get("project_name"),
+            "project_name": config.get("project_name"),
+            "owner_user_id": user_id,
+            "owner_email": email,
+            "package_code": package_code,
+            "package_slug": package_code,
+            "package_type": package_code,
+            "package_name": package_name,
+            "project_lane": package_lane,
+            "lane": package_lane,
+            "item_type": "package",
+            "billing_plan": "one_time",
+            "status": "delivered",
+            "phase": "delivery_complete",
+            "source": "fictional_personal_account_bootstrap",
+            "updated_at": now,
+        }
+        if project is None:
+            if not apply:
+                _record_action(actions, "would_create_target_project", email=email, project=project_fields)
+                continue
+            project_insert = dict(project_fields)
+            project_insert["created_at"] = now
+            result = db["projects"].insert_one(project_insert)
+            project = db["projects"].find_one({"_id": result.inserted_id}) or {
+                "_id": result.inserted_id,
+                **project_insert,
+            }
+            _record_action(actions, "created_target_project", email=email, project_id=_doc_id(project))
+        else:
+            _update_one(
+                db["projects"],
+                {"_id": project["_id"]},
+                set_fields=project_fields,
+                apply=apply,
+                actions=actions,
+                label=f"{email} project package normalization",
+            )
+            project = db["projects"].find_one({"_id": project["_id"]}) or project
+        project_id = _doc_id(project)
+        family_id = _id_text(project.get("family_id"))
+
+        order = db["orders"].find_one({"email": email}, sort=[("created_at", -1)])
+        order_fields = {
+            "email": email,
+            "user_id": _project_ref_value(user_id),
+            "project_id": _project_ref_value(project_id),
+            "package_code": package_code,
+            "package_slug": package_code,
+            "package_type": package_code,
+            "package_name": package_name,
+            "item_type": "package",
+            "billing_plan": "one_time",
+            "status": "paid",
+            "price_label": "$399",
+            "updated_at": now,
+        }
+        if order is None:
+            if not apply:
+                _record_action(actions, "would_create_target_order", email=email, order=order_fields)
+            else:
+                order_insert = dict(order_fields)
+                order_insert["created_at"] = now
+                db["orders"].insert_one(order_insert)
+                _record_action(actions, "created_target_order", email=email, project_id=project_id)
+        else:
+            _update_one(
+                db["orders"],
+                {"_id": order["_id"]},
+                set_fields=order_fields,
+                apply=apply,
+                actions=actions,
+                label=f"{email} paid package order",
+            )
+
+        if not apply:
+            _record_action(
+                actions,
+                "would_refresh_target_entitlement",
+                email=email,
+                project_id=project_id,
+                package_code=package_code,
+            )
+        else:
+            ensure_project_owner_membership(project)
+            entitlement = upsert_project_entitlement(
+                project_id=project_id,
+                user_id=user_id,
+                package_code=package_code,
+                active_addons=[],
+                maintenance_plan="monthly",
+                status="active",
+            )
+            _record_action(
+                actions,
+                "refreshed_target_entitlement",
+                email=email,
+                project_id=project_id,
+                entitlement_id=(entitlement or {}).get("id"),
+            )
+
+        upload = db["uploaded_files"].find_one(
+            {"project_id": {"$in": [_project_ref_value(project_id), project_id]}},
+            sort=[("created_at", -1)],
+        )
+        if upload is None:
+            upload_doc = {
+                "project_id": _project_ref_value(project_id),
+                "family_id": _project_ref_value(family_id) if family_id else None,
+                "category": "verification_evidence",
+                "status": "approved",
+                "verification_status": "approved",
+                "uploaded_by": email,
+                "filename": f"{package_code}-evidence.txt",
+                "original_filename": f"{package_code}-evidence.txt",
+                "created_at": now,
+                "updated_at": now,
+            }
+            if not apply:
+                _record_action(actions, "would_create_target_upload", email=email, project_id=project_id)
+            else:
+                db["uploaded_files"].insert_one(upload_doc)
+                _record_action(actions, "created_target_upload", email=email, project_id=project_id)
+
+        record_query = {
+            "project_id": _project_ref_value(project_id),
+            "full_name": user.get("full_name") or config.get("project_name"),
+            "verification_type": "identity_review",
+        }
+        verification_record = db["verification_records"].find_one(record_query)
+        verification_fields = {
+            "project_id": _project_ref_value(project_id),
+            "family_id": _project_ref_value(family_id) if family_id else None,
+            "full_name": user.get("full_name") or config.get("project_name"),
+            "verification_type": "identity_review",
+            "record_type": "identity_review",
+            "verification_method": "admin_review",
+            "verification_status": "verified",
+            "status": "verified",
+            "reviewed_by": "system.account-separation",
+            "verified_by": "system.account-separation",
+            "review_notes": "Fictional demo account verification completed.",
+            "notes": "Fictional demo account verification completed.",
+            "reviewed_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+        }
+        if verification_record is None:
+            verification_fields["created_at"] = now.isoformat()
+            if not apply:
+                _record_action(
+                    actions,
+                    "would_create_target_verification_record",
+                    email=email,
+                    project_id=project_id,
+                )
+            else:
+                db["verification_records"].insert_one(verification_fields)
+                _record_action(
+                    actions,
+                    "created_target_verification_record",
+                    email=email,
+                    project_id=project_id,
+                )
+        else:
+            _update_one(
+                db["verification_records"],
+                {"_id": verification_record["_id"]},
+                set_fields=verification_fields,
+                apply=apply,
+                actions=actions,
+                label=f"{email} verification record",
+            )
+
+        canonical = resolve_canonical_mint_status(project_id, include_history=False)
+        if canonical.get("current_status") == "minted":
+            _record_action(actions, "target_project_already_minted", email=email, project_id=project_id)
+            continue
+        if not apply:
+            _record_action(actions, "would_mark_target_project_minted", email=email, project_id=project_id)
+            continue
+        mint_record = create_mint_record(
+            project_id,
+            version_strategy="force_new_version",
+            poster_style="abstract_cover",
+            public_title_opt_in=False,
+        )
+        mint_record_id = str(mint_record.get("id"))
+        approve_admin_mint_record(
+            mint_record_id,
+            approved_by_email="ops@tomboflight.com",
+            notes="Fictional completion for personal demo account.",
+        )
+        approve_customer_mint_record(
+            mint_record_id,
+            approved_by_user_id=user_id,
+            approved_by_email=email,
+            notes="Customer approval for fictional demo profile.",
+            wallet_address=config.get("wallet_address"),
+            approved_poster_opt_in=False,
+            public_title_opt_in=False,
+            public_title=None,
+            public_title_kind="none",
+        )
+        minted = mark_mint_minted(
+            mint_record_id,
+            token_id=_token_id(email, project_id),
+            tx_hash=_tx_hash(email, project_id),
+            minted_by="account_separation_script",
+        )
+        _record_action(
+            actions,
+            "marked_target_project_minted",
+            email=email,
+            project_id=project_id,
+            mint_record_id=mint_record_id,
+            token_id=minted.get("token_id"),
+        )
+
+
+def _target_account_standings(db, users: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    standings: list[dict[str, Any]] = []
+    for email in TARGET_PERSONAL_ACCOUNT_EXPERIENCE:
+        user = users.get(email)
+        if not user:
+            continue
+        user_id = _doc_id(user)
+        projects = list(
+            db["projects"]
+            .find({"$or": [{"owner_user_id": user_id}, {"owner_email": email}]})
+            .sort("updated_at", -1)
+        )
+        project_ids = [_doc_id(project) for project in projects if _doc_id(project)]
+        canonical_status = "none"
+        latest_project_id = project_ids[0] if project_ids else ""
+        if latest_project_id:
+            canonical = resolve_canonical_mint_status(latest_project_id, include_history=False)
+            canonical_status = str(canonical.get("current_status") or "none")
+        paid_orders = db["orders"].count_documents({"email": email, "status": {"$in": ["paid", "succeeded", "completed"]}})
+        active_entitlements = db["project_entitlements"].count_documents(
+            {
+                "user_id": {"$in": [_project_ref_value(user_id), user_id]},
+                "status": "active",
+            }
+        )
+        upload_count = db["uploaded_files"].count_documents(
+            {"project_id": {"$in": [_project_ref_value(pid) for pid in project_ids] + project_ids}}
+        )
+        verification_count = db["verification_records"].count_documents(
+            {
+                "verification_status": "verified",
+                "$or": [
+                    {"project_id": {"$in": [_project_ref_value(pid) for pid in project_ids] + project_ids}},
+                    {"full_name": user.get("full_name")},
+                ],
+            }
+        )
+        standings.append(
+            {
+                "email": email,
+                "full_name": user.get("full_name"),
+                "project_count": len(projects),
+                "latest_project_id": latest_project_id or None,
+                "paid_order_count": paid_orders,
+                "active_entitlement_count": active_entitlements,
+                "verified_record_count": verification_count,
+                "uploaded_file_count": upload_count,
+                "canonical_mint_status": canonical_status,
+            }
+        )
+    return standings
+
+
 def _deactivate_admin_entitlements(
     db,
     *,
@@ -492,6 +842,7 @@ def main() -> int:
     args = parser.parse_args()
 
     actions: list[dict[str, Any]] = []
+    account_standings: list[dict[str, Any]] = []
     db = connect_to_mongo()
     try:
         creator = _require_user(db, "l.robinson@tomboflight.com")
@@ -515,6 +866,12 @@ def main() -> int:
             actions=actions,
             users=personal_users,
         )
+        _ensure_target_personal_account_experience(
+            db,
+            apply=args.apply,
+            actions=actions,
+            users=personal_users,
+        )
         _deactivate_admin_entitlements(
             db,
             apply=args.apply,
@@ -526,10 +883,20 @@ def main() -> int:
             _record_action(actions, "synced_admin_access_controls", stats=sync_stats)
         else:
             _record_action(actions, "would_sync_admin_access_controls")
+        account_standings = _target_account_standings(db, personal_users)
     finally:
         close_mongo_connection()
 
-    print(json.dumps({"mode": "apply" if args.apply else "dry_run", "actions": actions}, indent=2))
+    print(
+        json.dumps(
+            {
+                "mode": "apply" if args.apply else "dry_run",
+                "actions": actions,
+                "account_standings": account_standings,
+            },
+            indent=2,
+        )
+    )
     return 0
 
 
