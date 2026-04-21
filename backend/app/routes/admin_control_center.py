@@ -353,7 +353,9 @@ def get_project_readiness(
 def queue_project_for_mint_review(
     project_id: str,
     payload: EnableMintReviewPayload | None = None,
-    current_user: dict[str, Any] = Depends(require_permission("admin.control.mint")),
+    current_user: dict[str, Any] = Depends(
+        require_any_permission(["admin.control.mint", "admin.control.mint.readiness"])
+    ),
 ):
     del current_user
     try:

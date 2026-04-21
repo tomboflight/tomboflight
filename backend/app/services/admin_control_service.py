@@ -96,7 +96,7 @@ CASE_ACTION_PERMISSIONS: dict[str, set[str]] = {
     "refresh_entitlement": {"admin.control.billing"},
     "run_readiness_check": {"admin.control.view"},
     "refresh_case_data": {"admin.control.view"},
-    "queue_for_mint_review": {"admin.control.mint"},
+    "queue_for_mint_review": {"admin.control.mint.readiness"},
     "repair_mint_status": {"admin.control.mint"},
     "rebuild_mint_summary": {"admin.control.mint"},
     "resync_mint_receipt": {"admin.control.mint"},
@@ -149,7 +149,7 @@ TAB_PERMISSIONS: dict[str, set[str]] = {
     "orders_billing": {"admin.control.billing", "admin.orders.read"},
     "entitlements": {"admin.control.billing", "admin.entitlements.read"},
     "uploads_verification": {"uploads.admin.review", "verification.review"},
-    "mint_readiness": {"admin.control.mint"},
+    "mint_readiness": {"admin.control.mint.readiness"},
     "audit_timeline": {"admin.audit.read"},
 }
 
@@ -236,7 +236,6 @@ OPERATIONS_ACTION_ALLOWLIST = [
 OPERATIONS_BULK_ACTION_ALLOWLIST = [
     "assign-missing-lanes",
     "normalize-broken-package-records",
-    "refresh-mint-readiness",
     "repair-selected-records",
     "repair-all-safe-records",
 ]

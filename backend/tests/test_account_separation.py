@@ -205,6 +205,61 @@ class AccountSeparationTests(unittest.TestCase):
         self.assertIn("executive_tech_admin", role_codes)
         self.assertIn("*", set(context.get("permissions") or []))
 
+    def test_keith_operations_scope_gets_mint_readiness_but_not_mint_repair(self):
+        with (
+            patch.object(
+                auth_dependencies,
+                "_load_user_by_id",
+                return_value={
+                    "_id": "user-2",
+                    "email": "k.goffigan@tomboflight.com",
+                    "role": "admin",
+                    "access_tier": "operations_admin",
+                    "department_role": "operations_admin",
+                },
+            ),
+            patch.object(
+                auth_dependencies,
+                "_db",
+                return_value={
+                    "user_role_assignments": type(
+                        "Collection",
+                        (),
+                        {
+                            "find": lambda self, *_a, **_k: [
+                                {"role_code": "operations_admin", "status": "active"},
+                            ]
+                        },
+                    )(),
+                    "role_permissions": type("Collection", (), {"find": lambda self, *_a, **_k: []})(),
+                    "role_capabilities": type("Collection", (), {"find": lambda self, *_a, **_k: []})(),
+                    "projects": type("Collection", (), {"count_documents": lambda self, *_a, **_k: 0})(),
+                    "workflow_events": type("Collection", (), {"find_one": lambda self, *_a, **_k: None})(),
+                },
+            ),
+            patch.object(auth_dependencies, "list_user_project_entitlements", return_value=[]),
+        ):
+            context = auth_dependencies.resolve_access_context("user-2")
+
+        permissions = set(context.get("permissions") or [])
+        self.assertIn("admin.control.mint.readiness", permissions)
+        self.assertNotIn("admin.control.mint", permissions)
+
+    def test_require_any_permission_allows_mint_review_handoff_scope(self):
+        dependency = auth_dependencies.require_any_permission(
+            ["admin.control.mint", "admin.control.mint.readiness"]
+        )
+        current_user = {"id": "user-2"}
+
+        with patch.object(
+            auth_dependencies,
+            "_get_or_resolve_access_context",
+            return_value={"permissions": ["admin.control.mint.readiness"]},
+        ):
+            resolved_user = dependency(request=cast(Any, object()), current_user=current_user)
+
+        self.assertIs(resolved_user, current_user)
+
     def test_require_permission_denies_unauthorized_route(self):
         dependency = auth_dependencies.require_permission("admin.control.mint")
         current_user = {"id": "user-1"}

@@ -296,7 +296,7 @@ class AdminControlAccessProfileTests(unittest.TestCase):
                     "admin.access",
                     "admin.control.view",
                     "admin.control.write",
-                    "admin.control.mint",
+                    "admin.control.mint.readiness",
                     "admin.audit.read",
                     "admin.intake.review",
                     "admin.intake.write",
@@ -318,10 +318,13 @@ class AdminControlAccessProfileTests(unittest.TestCase):
             ],
         )
         self.assertIn("project", profile["allowed_tabs"])
+        self.assertIn("mint_readiness", profile["allowed_tabs"])
         self.assertIn("uploads_verification", profile["allowed_tabs"])
         self.assertNotIn("orders_billing", profile["allowed_tabs"])
         self.assertIn("repair_record", profile["allowed_actions"])
+        self.assertIn("queue_for_mint_review", profile["allowed_actions"])
         self.assertNotIn("generate_entitlement", profile["allowed_actions"])
+        self.assertNotIn("refresh-mint-readiness", profile["allowed_bulk_actions"])
         self.assertNotIn("money_now", profile["allowed_queues"])
         self.assertNotIn("marketing_reports", profile["allowed_queues"])
 
