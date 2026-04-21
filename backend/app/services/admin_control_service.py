@@ -370,8 +370,6 @@ def admin_control_access_profile(current_user: dict[str, Any]) -> dict[str, Any]
             for queue in FINANCE_QUEUE_ALLOWLIST
             if _has_any_permission(permissions, QUEUE_PERMISSIONS.get(queue, {"admin.control.billing"}))
         ]
-        if not allowed_queues and _has_any_permission(permissions, {"admin.control.billing", "admin.orders.read"}):
-            allowed_queues = list(FINANCE_QUEUE_ALLOWLIST)
         allowed_tabs = [
             tab
             for tab in FINANCE_TAB_ALLOWLIST
@@ -408,7 +406,7 @@ def admin_control_queue_allowed(
 ) -> bool:
     normalized_queue = _normalize(queue).lower()
     if not normalized_queue:
-        normalized_queue = "customer_cases"
+        return False
     profile = admin_control_access_profile(current_user)
     return normalized_queue in set(profile.get("allowed_queues") or [])
 
@@ -1643,7 +1641,19 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
     unlinked_payments = 0
     lane_sales = {"portrait": 0, "household": 0, "network": 0, "organization": 0}
 
-    for order in db["orders"].find({}).sort("created_at", -1).limit(10000):
+    finance_statuses = set(PAID_ORDER_STATUSES) | {
+        "failed",
+        "payment_failed",
+        "declined",
+        "pending",
+        "open",
+        "unpaid",
+        "past_due",
+        "incomplete",
+        "refunded",
+        "refund",
+    }
+    for order in db["orders"].find({"status": {"$in": list(finance_statuses)}}).sort("created_at", -1).limit(5000):
         status_value = _normalize(order.get("status")).lower()
         amount = _order_amount(order)
         order_dt = _coerce_datetime(order.get("created_at") or order.get("updated_at"))
@@ -1714,7 +1724,12 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
     manual_override_log = int(
         db["audit_logs"].count_documents({"action": {"$regex": "manual|override", "$options": "i"}})
     )
-    payroll_runs = list(db["payroll_runs"].find({}).sort("period_end", -1).limit(12))
+    payroll_runs = list(
+        db["payroll_runs"]
+        .find({"period_end": {"$exists": True, "$ne": None}})
+        .sort("period_end", -1)
+        .limit(12)
+    )
     payroll_current = payroll_runs[0] if payroll_runs else {}
     processed_payroll_history = len(
         [run for run in payroll_runs if _normalize(run.get("status")).lower() in {"processed", "completed"}]
