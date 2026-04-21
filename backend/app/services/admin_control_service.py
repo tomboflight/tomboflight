@@ -46,6 +46,12 @@ INTERNAL_ROLE_KEYS = set(INTERNAL_ADMIN_ROLE_CODES) | {"admin"}
 
 ADMIN_CONTROL_QUEUES = [
     "overview",
+    "traffic_awareness",
+    "funnel_conversion",
+    "package_demand",
+    "campaign_performance",
+    "content_performance",
+    "marketing_reports",
     "money_now",
     "subscriptions_maintenance",
     "package_revenue",
@@ -64,6 +70,7 @@ ADMIN_CONTROL_QUEUES = [
     "system_health",
 ]
 ADMIN_CONTROL_TABS = [
+    "marketing_dashboard",
     "identity",
     "package_lane",
     "orders_billing",
@@ -99,6 +106,12 @@ BULK_ACTION_PERMISSIONS: dict[str, set[str]] = {
 }
 QUEUE_PERMISSIONS: dict[str, set[str]] = {
     "overview": {"admin.control.view"},
+    "traffic_awareness": {"admin.analytics.read"},
+    "funnel_conversion": {"admin.analytics.read"},
+    "package_demand": {"admin.analytics.read"},
+    "campaign_performance": {"admin.analytics.read"},
+    "content_performance": {"admin.analytics.read"},
+    "marketing_reports": {"admin.analytics.read"},
     "money_now": {"admin.control.billing", "admin.orders.read"},
     "subscriptions_maintenance": {"admin.control.billing", "admin.entitlements.read"},
     "package_revenue": {"admin.control.billing", "admin.orders.read"},
@@ -117,6 +130,7 @@ QUEUE_PERMISSIONS: dict[str, set[str]] = {
     "audit": {"admin.audit.read"},
 }
 TAB_PERMISSIONS: dict[str, set[str]] = {
+    "marketing_dashboard": {"admin.analytics.read"},
     "identity": {"admin.control.view"},
     "package_lane": {"admin.control.view"},
     "project": {"admin.control.view"},
@@ -171,6 +185,17 @@ FINANCE_EVENT_TYPES = {
     "package_downgrade",
     "package_change",
 }
+MARKETING_QUEUE_ALLOWLIST = [
+    "traffic_awareness",
+    "funnel_conversion",
+    "package_demand",
+    "campaign_performance",
+    "content_performance",
+    "marketing_reports",
+]
+MARKETING_TAB_ALLOWLIST = [
+    "marketing_dashboard",
+]
 
 SUPER_ADMIN_USER_STATUS_VALUES = {
     "active",
@@ -401,6 +426,19 @@ def admin_control_access_profile(current_user: dict[str, Any]) -> dict[str, Any]
             for action in FINANCE_BULK_ACTION_ALLOWLIST
             if _has_any_permission(permissions, BULK_ACTION_PERMISSIONS.get(action, {"admin.control.billing"}))
         ]
+    elif primary_role == "marketing_admin":
+        allowed_queues = [
+            queue
+            for queue in MARKETING_QUEUE_ALLOWLIST
+            if _has_any_permission(permissions, QUEUE_PERMISSIONS.get(queue, {"admin.analytics.read"}))
+        ]
+        allowed_tabs = [
+            tab
+            for tab in MARKETING_TAB_ALLOWLIST
+            if _has_any_permission(permissions, TAB_PERMISSIONS.get(tab, {"admin.analytics.read"}))
+        ]
+        allowed_actions = []
+        allowed_bulk_actions = []
 
     return {
         "role_key": primary_role,
@@ -1958,6 +1996,394 @@ def project_workspace_snapshot(
     return payload
 
 
+def _marketing_metric(value: Any, *, live: bool, status_note: str | None = None) -> dict[str, Any]:
+    return {
+        "value": value if live else None,
+        "live": bool(live),
+        "status": "live" if live else "unavailable",
+        "status_note": status_note if not live else None,
+    }
+
+
+def _collection_exists(db: Any, name: str) -> bool:
+    if hasattr(db, "list_collection_names"):
+        try:
+            return name in set(db.list_collection_names())
+        except Exception:
+            return False
+    return True
+
+
+def _analytics_event_stream(db: Any) -> tuple[list[dict[str, Any]], bool]:
+    if not _collection_exists(db, "analytics_events"):
+        return [], False
+    events = list(db["analytics_events"].find({}).sort("created_at", -1).limit(5000))
+    return events, True
+
+
+def _marketing_sections_payload(
+    *,
+    db: Any,
+    paid_orders_count: int,
+    lane_sales: dict[str, int],
+    upgrades_count: int,
+) -> dict[str, Any]:
+    analytics_events, analytics_live = _analytics_event_stream(db)
+
+    visitors = 0
+    sessions = 0
+    cta_clicks = 0
+    signup_starts = 0
+    signup_completions = 0
+    intake_starts = 0
+    intake_completions = 0
+    checkout_starts = 0
+    event_purchases = 0
+    landing_page_counts: dict[str, int] = {}
+    source_counts: dict[str, int] = {}
+    campaign_visit_counts: dict[str, int] = {}
+    campaign_signup_counts: dict[str, int] = {}
+    campaign_purchase_event_counts: dict[str, int] = {}
+    homepage_views = 0
+    hero_cta_clicks = 0
+    pricing_engagement = 0
+    testimonial_engagement = 0
+    dropoff_counts: dict[str, int] = {}
+
+    source_buckets = {"organic": 0, "direct": 0, "referral": 0, "paid": 0}
+    has_source_breakdown = False
+
+    for event in analytics_events:
+        event_type = _normalize(event.get("event_type") or event.get("action")).lower()
+        page_path = _normalize(event.get("page_path") or event.get("path")).lower()
+        source = _normalize(event.get("source") or event.get("utm_source") or event.get("traffic_source")).lower()
+        campaign = _normalize(event.get("campaign") or event.get("utm_campaign")).lower()
+        cta_location = _normalize(event.get("cta_location") or event.get("cta_slot")).lower()
+        section = _normalize(event.get("section") or event.get("module")).lower()
+        dropoff_stage = _normalize(event.get("dropoff_stage") or event.get("funnel_stage")).lower()
+        event_id = _normalize(event.get("event_id") or event.get("_id"))
+
+        if event_type in {"page_view", "landing_page_view"}:
+            if page_path:
+                landing_page_counts[page_path] = landing_page_counts.get(page_path, 0) + 1
+            if page_path in {"", "/", "/index", "/index.html", "/home", "/homepage"}:
+                homepage_views += 1
+
+        if event_type in {"visitor", "visitor_seen", "visit", "page_view"}:
+            visitors += 1
+        if event_type in {"session_start", "session"}:
+            sessions += 1
+        if event_type in {"cta_click", "hero_cta_click"}:
+            cta_clicks += 1
+            if cta_location in {"hero", "home_hero"}:
+                hero_cta_clicks += 1
+        if event_type in {"signup_start", "sign_up_start"}:
+            signup_starts += 1
+        if event_type in {"signup_complete", "sign_up_complete", "signup_completed"}:
+            signup_completions += 1
+        if event_type in {"intake_start"}:
+            intake_starts += 1
+        if event_type in {"intake_complete", "intake_completed"}:
+            intake_completions += 1
+        if event_type in {"checkout_start"}:
+            checkout_starts += 1
+        if event_type in {"purchase_complete", "purchase_completed"}:
+            event_purchases += 1
+            if campaign:
+                campaign_purchase_event_counts[campaign] = campaign_purchase_event_counts.get(campaign, 0) + 1
+
+        if event_type in {"section_view", "pricing_view"} and section in {"pricing", "packages", "package_pricing"}:
+            pricing_engagement += 1
+        if event_type in {"section_view", "testimonial_view", "testimonial_click"} and section in {"testimonials", "testimonial"}:
+            testimonial_engagement += 1
+
+        if event_type in {"page_dropoff", "dropoff", "funnel_dropoff"}:
+            key = dropoff_stage or page_path or "unknown"
+            dropoff_counts[key] = dropoff_counts.get(key, 0) + 1
+
+        if source:
+            source_counts[source] = source_counts.get(source, 0) + 1
+            if source in source_buckets:
+                source_buckets[source] += 1
+                has_source_breakdown = True
+            elif source in {"google", "bing", "search"}:
+                source_buckets["organic"] += 1
+                has_source_breakdown = True
+            elif source in {"facebook_ads", "google_ads", "paid_social", "paid_search", "ads"}:
+                source_buckets["paid"] += 1
+                has_source_breakdown = True
+            elif source in {"referral", "partner", "affiliate"}:
+                source_buckets["referral"] += 1
+                has_source_breakdown = True
+            elif source in {"direct"}:
+                source_buckets["direct"] += 1
+                has_source_breakdown = True
+
+        if campaign and event_type in {"visit", "page_view", "landing_page_view", "campaign_visit"}:
+            campaign_visit_counts[campaign] = campaign_visit_counts.get(campaign, 0) + 1
+        if campaign and event_type in {"signup_complete", "sign_up_complete", "signup_completed"}:
+            campaign_signup_counts[campaign] = campaign_signup_counts.get(campaign, 0) + 1
+
+        if not campaign and event_type in {"campaign_visit", "campaign_click"}:
+            synthetic_campaign = f"campaign:{event_id or 'unknown'}"
+            campaign_visit_counts[synthetic_campaign] = campaign_visit_counts.get(synthetic_campaign, 0) + 1
+
+    lane_interest = {"portrait": 0, "household": 0, "network": 0, "organization": 0}
+    for project in db["projects"].find({}, {"project_lane": 1, "lane": 1, "package_code": 1, "package_slug": 1}).limit(5000):
+        lane_value = _normalize(project.get("project_lane") or project.get("lane")).lower()
+        if lane_value not in lane_interest:
+            lane_value = _package_lane_for_code(
+                _normalize(project.get("package_code") or project.get("package_slug"))
+            )
+        if lane_value in lane_interest:
+            lane_interest[lane_value] += 1
+
+    total_lane_interest = sum(lane_interest.values())
+    total_lane_conversions = int(sum(lane_sales.values()))
+    package_conversion_rate = (
+        round((float(total_lane_conversions) / float(total_lane_interest)) * 100.0, 2)
+        if total_lane_interest > 0
+        else 0.0
+    )
+
+    campaign_order_purchases: dict[str, int] = {}
+    campaign_source_purchases: dict[str, int] = {}
+    promo_referral_use = 0
+    for order in db["orders"].find({}).sort("created_at", -1).limit(5000):
+        if not _is_paid_package_order(order):
+            continue
+        campaign_value = _normalize(
+            order.get("campaign") or order.get("utm_campaign") or order.get("campaign_code")
+        ).lower()
+        source_value = _normalize(
+            order.get("source") or order.get("utm_source") or order.get("traffic_source")
+        ).lower()
+        promo_code = _normalize(order.get("promo_code") or order.get("promotion_code"))
+        referral_code = _normalize(order.get("referral_code"))
+        if campaign_value:
+            campaign_order_purchases[campaign_value] = campaign_order_purchases.get(campaign_value, 0) + 1
+        if campaign_value or source_value:
+            key = f"{campaign_value or 'unknown_campaign'}::{source_value or 'unknown_source'}"
+            campaign_source_purchases[key] = campaign_source_purchases.get(key, 0) + 1
+        if promo_code or referral_code:
+            promo_referral_use += 1
+
+    campaign_keys = sorted(
+        set(campaign_visit_counts.keys())
+        | set(campaign_signup_counts.keys())
+        | set(campaign_purchase_event_counts.keys())
+        | set(campaign_order_purchases.keys())
+    )
+    campaign_conversion_rows: list[dict[str, Any]] = []
+    for key in campaign_keys:
+        visits = int(campaign_visit_counts.get(key, 0))
+        signups = int(campaign_signup_counts.get(key, 0))
+        purchases = int(campaign_order_purchases.get(key, 0) or campaign_purchase_event_counts.get(key, 0))
+        campaign_conversion_rows.append(
+            {
+                "campaign": key,
+                "visits": visits,
+                "signups": signups,
+                "purchases": purchases,
+                "conversion_rate": round((float(purchases) / float(visits)) * 100.0, 2) if visits > 0 else 0.0,
+            }
+        )
+
+    campaign_source_rows: list[dict[str, Any]] = []
+    for key, purchases in sorted(campaign_source_purchases.items()):
+        campaign, source = key.split("::", 1)
+        campaign_source_rows.append({"campaign": campaign, "source": source, "purchases": purchases})
+
+    top_landing_pages = [
+        {"page": page, "visits": count}
+        for page, count in sorted(landing_page_counts.items(), key=lambda item: item[1], reverse=True)[:10]
+    ]
+    top_sources = [
+        {"source": source, "visits": count}
+        for source, count in sorted(source_counts.items(), key=lambda item: item[1], reverse=True)[:10]
+    ]
+    top_campaign_traffic = [
+        {"campaign": campaign, "visits": count}
+        for campaign, count in sorted(campaign_visit_counts.items(), key=lambda item: item[1], reverse=True)[:10]
+    ]
+    dropoff_points = [
+        {"point": point, "count": count}
+        for point, count in sorted(dropoff_counts.items(), key=lambda item: item[1], reverse=True)[:10]
+    ]
+
+    reports = {
+        "funnel_export": {
+            "available": True,
+            "status": "live",
+            "status_note": None,
+        },
+        "campaign_export": {
+            "available": bool(campaign_conversion_rows),
+            "status": "live" if campaign_conversion_rows else "unavailable",
+            "status_note": None if campaign_conversion_rows else "Campaign-tagged events are not yet captured in live analytics.",
+        },
+        "source_attribution_export": {
+            "available": bool(top_sources),
+            "status": "live" if top_sources else "unavailable",
+            "status_note": None if top_sources else "Source attribution fields are not yet present in live analytics events.",
+        },
+        "page_performance_export": {
+            "available": bool(top_landing_pages),
+            "status": "live" if top_landing_pages else "unavailable",
+            "status_note": None if top_landing_pages else "Page performance events are not yet captured in a live analytics stream.",
+        },
+        "package_interest_export": {
+            "available": True,
+            "status": "live",
+            "status_note": None,
+        },
+    }
+
+    return {
+        "traffic_awareness": {
+            "visitors": _marketing_metric(visitors, live=analytics_live, status_note="Visitor tracking is not yet live."),
+            "sessions": _marketing_metric(sessions, live=analytics_live, status_note="Session tracking is not yet live."),
+            "top_landing_pages": _marketing_metric(
+                top_landing_pages,
+                live=analytics_live,
+                status_note="Landing-page telemetry is not yet live.",
+            ),
+            "traffic_sources": _marketing_metric(
+                top_sources,
+                live=analytics_live,
+                status_note="Traffic-source attribution is not yet live.",
+            ),
+            "campaign_traffic": _marketing_metric(
+                top_campaign_traffic,
+                live=analytics_live,
+                status_note="Campaign traffic telemetry is not yet live.",
+            ),
+            "channel_breakdown": _marketing_metric(
+                source_buckets,
+                live=analytics_live and has_source_breakdown,
+                status_note="Organic/direct/referral/paid channel breakdown is not yet live.",
+            ),
+        },
+        "funnel_conversion": {
+            "cta_clicks": _marketing_metric(cta_clicks, live=analytics_live, status_note="CTA click telemetry is not yet live."),
+            "signup_starts": _marketing_metric(
+                signup_starts,
+                live=analytics_live,
+                status_note="Signup start telemetry is not yet live.",
+            ),
+            "signup_completions": _marketing_metric(
+                signup_completions,
+                live=analytics_live,
+                status_note="Signup completion telemetry is not yet live.",
+            ),
+            "intake_starts": _marketing_metric(
+                intake_starts,
+                live=analytics_live,
+                status_note="Intake start telemetry is not yet live.",
+            ),
+            "intake_completions": _marketing_metric(
+                intake_completions,
+                live=analytics_live,
+                status_note="Intake completion telemetry is not yet live.",
+            ),
+            "checkout_starts": _marketing_metric(
+                checkout_starts,
+                live=analytics_live,
+                status_note="Checkout start telemetry is not yet live.",
+            ),
+            "purchases_completed": _marketing_metric(
+                paid_orders_count,
+                live=True,
+            ),
+            "upgrade_conversions": _marketing_metric(
+                upgrades_count,
+                live=True,
+            ),
+        },
+        "package_demand": {
+            "portrait_lane_interest_conversion": _marketing_metric(
+                {"interest": lane_interest["portrait"], "conversions": lane_sales["portrait"]},
+                live=True,
+            ),
+            "household_lane_interest_conversion": _marketing_metric(
+                {"interest": lane_interest["household"], "conversions": lane_sales["household"]},
+                live=True,
+            ),
+            "network_lane_interest_conversion": _marketing_metric(
+                {"interest": lane_interest["network"], "conversions": lane_sales["network"]},
+                live=True,
+            ),
+            "organization_lane_interest_conversion": _marketing_metric(
+                {"interest": lane_interest["organization"], "conversions": lane_sales["organization"]},
+                live=True,
+            ),
+            "package_page_views": _marketing_metric(
+                int(sum(count for page, count in landing_page_counts.items() if "package" in page)),
+                live=analytics_live,
+                status_note="Package page-view telemetry is not yet live.",
+            ),
+            "package_conversion_rate": _marketing_metric(
+                package_conversion_rate,
+                live=True,
+            ),
+        },
+        "campaign_performance": {
+            "campaign_visits": _marketing_metric(
+                int(sum(campaign_visit_counts.values())),
+                live=analytics_live,
+                status_note="Campaign visit telemetry is not yet live.",
+            ),
+            "campaign_signups": _marketing_metric(
+                int(sum(campaign_signup_counts.values())),
+                live=analytics_live,
+                status_note="Campaign signup telemetry is not yet live.",
+            ),
+            "campaign_purchases": _marketing_metric(
+                int(sum(campaign_order_purchases.values())),
+                live=bool(campaign_order_purchases),
+                status_note="Campaign purchase attribution is not yet live in paid-order records.",
+            ),
+            "conversion_by_campaign_source": _marketing_metric(
+                campaign_conversion_rows or campaign_source_rows,
+                live=bool(campaign_conversion_rows or campaign_source_rows),
+                status_note="Campaign/source conversion attribution is not yet live.",
+            ),
+            "promo_referral_use": _marketing_metric(
+                promo_referral_use,
+                live=True,
+            ),
+        },
+        "content_performance": {
+            "homepage_performance": _marketing_metric(
+                {"views": homepage_views},
+                live=analytics_live,
+                status_note="Homepage performance telemetry is not yet live.",
+            ),
+            "hero_cta_performance": _marketing_metric(
+                {"cta_clicks": hero_cta_clicks},
+                live=analytics_live,
+                status_note="Hero CTA telemetry is not yet live.",
+            ),
+            "pricing_package_engagement": _marketing_metric(
+                pricing_engagement,
+                live=analytics_live,
+                status_note="Pricing/package section engagement telemetry is not yet live.",
+            ),
+            "testimonial_engagement": _marketing_metric(
+                testimonial_engagement,
+                live=analytics_live,
+                status_note="Testimonial engagement telemetry is not yet live.",
+            ),
+            "page_dropoff_points": _marketing_metric(
+                dropoff_points,
+                live=analytics_live and bool(dropoff_points),
+                status_note="Page dropoff telemetry is not yet live.",
+            ),
+        },
+        "marketing_reports": reports,
+    }
+
+
 def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
     db = _db()
     users_total = int(db["users"].count_documents({}))
@@ -2105,6 +2531,13 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
     ]
     net_revenue = gross_revenue - refunds_this_month
 
+    marketing_sections = _marketing_sections_payload(
+        db=db,
+        paid_orders_count=paid_orders,
+        lane_sales=lane_sales,
+        upgrades_count=upgrades_count,
+    )
+
     return {
         "summary": {
             "total_users": users_total,
@@ -2194,6 +2627,7 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
                 "recent_events": recent_finance_events,
             },
         },
+        "marketing_sections": marketing_sections,
         "priority_repairs": {
             "paid_order_without_project_link": priority_repairs["paid_order_without_project_link"][:limit],
             "project_without_entitlement": priority_repairs["project_without_entitlement"][:limit],

@@ -43,11 +43,18 @@
     cases: [],
     workspace: null,
     packageOptions: [],
+    marketingSections: {},
   };
   const DEFAULT_ROLE_KEY = "user";
 
   const QUEUE_META = {
     overview: ["Overview", "Executive repair posture across active customer operations."],
+    traffic_awareness: ["Traffic & Awareness", "Visitors, sessions, landing pages, and source visibility."],
+    funnel_conversion: ["Funnel Conversion", "CTA to purchase funnel conversion checkpoints."],
+    package_demand: ["Package Demand", "Lane demand and conversion for Tomb of Light packages."],
+    campaign_performance: ["Campaign Performance", "Campaign/source visits, signups, purchases, and conversion."],
+    content_performance: ["Content Performance", "Homepage, hero CTA, pricing, testimonial, and dropoff telemetry."],
+    marketing_reports: ["Marketing Reports", "Funnel, campaign, attribution, page, and package-interest export readiness."],
     money_now: ["Money Now", "Gross/net revenue, collected totals, refunds, failures, and unpaid balances."],
     subscriptions_maintenance: ["Subscriptions & Maintenance", "Active plans, renewals due, past-due subscriptions, and recovery signals."],
     package_revenue: ["Package Revenue", "Lane package sales volume with upgrade and downgrade visibility."],
@@ -187,6 +194,10 @@
   function isAllowedBulkAction(action) {
     const normalized = normalizeLower(action);
     return state.allowedBulkActions.includes(normalized);
+  }
+
+  function isMarketingRole() {
+    return state.roleKey === "marketing_admin";
   }
 
   async function loadAccessProfile() {
@@ -473,11 +484,16 @@
     });
   }
 
-  function renderTopSummary(summary, financeSections) {
+  function renderTopSummary(summary, financeSections, marketingSections) {
     const node = document.querySelector("[data-admin-top-summary]");
     if (!node) return;
+    const isMarketing = isMarketingRole();
     const isFinanceRole = state.roleKey === "finance_admin";
     const moneyNow = (financeSections && financeSections.money_now) || {};
+    const traffic = (marketingSections && marketingSections.traffic_awareness) || {};
+    const funnel = (marketingSections && marketingSections.funnel_conversion) || {};
+    const campaign = (marketingSections && marketingSections.campaign_performance) || {};
+    const packageDemand = (marketingSections && marketingSections.package_demand) || {};
     const cards = isFinanceRole
       ? [
           ["Gross Revenue", moneyNow.gross_revenue],
@@ -488,14 +504,23 @@
           ["Failed Payments", moneyNow.failed_payments],
           ["Unpaid Balances", moneyNow.unpaid_balances],
         ]
-      : [
+      : isMarketing
+        ? [
+            ["Visitors", (traffic.visitors || {}).live ? (traffic.visitors || {}).value : "unavailable"],
+            ["Sessions", (traffic.sessions || {}).live ? (traffic.sessions || {}).value : "unavailable"],
+            ["CTA Clicks", (funnel.cta_clicks || {}).live ? (funnel.cta_clicks || {}).value : "unavailable"],
+            ["Purchases", (funnel.purchases_completed || {}).live ? (funnel.purchases_completed || {}).value : "unavailable"],
+            ["Campaign Visits", (campaign.campaign_visits || {}).live ? (campaign.campaign_visits || {}).value : "unavailable"],
+            ["Package Conversion %", (packageDemand.package_conversion_rate || {}).live ? (packageDemand.package_conversion_rate || {}).value : "unavailable"],
+          ]
+        : [
           ["Total Users", summary.total_users],
           ["Active Projects", summary.total_active_projects],
           ["Paid Orders", summary.paid_orders],
           ["Missing Entitlements", summary.missing_entitlements],
           ["Mint-Ready Projects", summary.mint_ready_projects],
           ["Data Mismatches", summary.projects_with_data_mismatch],
-        ];
+          ];
     node.innerHTML = cards
       .map(function (item, index) {
         return `
@@ -508,12 +533,15 @@
       .join("");
   }
 
-  function renderPriorityRepairs(priority, financeSections) {
+  function renderPriorityRepairs(priority, financeSections, marketingSections) {
     const node = document.querySelector("[data-admin-priority-repairs]");
     if (!node) return;
+    const isMarketing = isMarketingRole();
     const isFinanceRole = state.roleKey === "finance_admin";
     const financeIntegrity = (financeSections && financeSections.finance_integrity) || {};
     const payroll = (financeSections && financeSections.payroll) || {};
+    const reports = (marketingSections && marketingSections.marketing_reports) || {};
+    const reportEntries = Object.entries(reports);
     const cards = isFinanceRole
       ? [
           ["Unlinked Payments", financeIntegrity.unlinked_payments || 0],
@@ -523,12 +551,18 @@
           ["Manual Override Log", financeIntegrity.manual_override_log || 0],
           ["Pending Payroll Review", payroll.pending_payroll_review || 0],
         ]
-      : [
+      : isMarketing
+        ? reportEntries.map(function (entry) {
+            const key = entry[0];
+            const value = entry[1] || {};
+            return [titleize(key), value.available ? "live" : "unavailable"];
+          })
+        : [
           ["Paid order without project link", (priority.paid_order_without_project_link || []).length],
           ["Project without entitlement", (priority.project_without_entitlement || []).length],
           ["Package without lane", (priority.package_without_lane || []).length],
           ["Mint-eligible blocked", (priority.mint_eligible_blocked || []).length],
-        ];
+          ];
     node.innerHTML = cards
       .map(function (item) {
         return `
@@ -544,18 +578,71 @@
   async function loadOverview() {
     try {
       const payload = await fetchJson("/admin/control-center/overview?limit=24");
-      renderTopSummary(payload.summary || {}, payload.finance_sections || {});
-      renderPriorityRepairs(payload.priority_repairs || {}, payload.finance_sections || {});
+      state.marketingSections = payload.marketing_sections || {};
+      renderTopSummary(payload.summary || {}, payload.finance_sections || {}, payload.marketing_sections || {});
+      renderPriorityRepairs(payload.priority_repairs || {}, payload.finance_sections || {}, payload.marketing_sections || {});
+      if (isMarketingRole()) renderMarketingQueuePanel();
     } catch (error) {
       console.error("Overview load failed:", error);
-      renderTopSummary({}, {});
-      renderPriorityRepairs({}, {});
+      state.marketingSections = {};
+      renderTopSummary({}, {}, {});
+      renderPriorityRepairs({}, {}, {});
+      if (isMarketingRole()) renderMarketingQueuePanel();
     }
+  }
+
+  function renderMarketingMetric(label, metric) {
+    const payload = metric || {};
+    const isLive = Boolean(payload.live);
+    const value = isLive ? payload.value : "Unavailable";
+    const note = !isLive && payload.status_note ? `<p class="card-copy">${escapeHtml(payload.status_note)}</p>` : "";
+    const displayValue =
+      value && typeof value === "object"
+        ? `<pre class="card-copy">${escapeHtml(JSON.stringify(value, null, 2))}</pre>`
+        : `<strong>${escapeHtml(String(value ?? "—"))}</strong>`;
+    return `
+      <article class="admin-dossier-card">
+        <div class="admin-card-header">
+          <span class="admin-card-badge">${isLive ? "L" : "N"}</span>
+          <h3 class="admin-card-title">${escapeHtml(label)}</h3>
+        </div>
+        ${displayValue}
+        ${!isLive ? '<p class="card-copy">Status: non-live</p>' : ""}
+        ${note}
+      </article>
+    `;
+  }
+
+  function renderMarketingQueuePanel() {
+    const node = document.querySelector("[data-admin-case-list]");
+    if (!node) return;
+    const sections = state.marketingSections || {};
+    const queueSection = sections[state.queue] || {};
+    const entries = Object.entries(queueSection);
+    if (!entries.length) {
+      node.innerHTML = `
+        <div class="admin-empty-state">
+          <h3>No marketing metrics available</h3>
+          <p class="card-copy">This section has no live metrics yet for Tomb of Light.</p>
+        </div>
+      `;
+      return;
+    }
+
+    node.innerHTML = entries
+      .map(function (entry) {
+        return renderMarketingMetric(titleize(entry[0]), entry[1]);
+      })
+      .join("");
   }
 
   function renderCaseList() {
     const node = document.querySelector("[data-admin-case-list]");
     if (!node) return;
+    if (isMarketingRole()) {
+      renderMarketingQueuePanel();
+      return;
+    }
     const cases = Array.isArray(state.cases) ? state.cases : [];
     const canRepairSelected = isAllowedBulkAction("repair-selected-records");
     if (!cases.length) {
@@ -1196,6 +1283,18 @@
   }
 
   async function loadCases() {
+    if (isMarketingRole()) {
+      state.cases = [];
+      state.selectedCaseId = "";
+      state.workspace = null;
+      renderCaseList();
+      renderCaseHeader();
+      renderCaseContext();
+      updateActionAvailability();
+      updateBulkActionAvailability();
+      clearPageStatus();
+      return;
+    }
     const meta = QUEUE_META[state.queue] || QUEUE_META.customer_cases;
     setPageStatus(`Loading ${meta[0].toLowerCase()}...`, "info");
     try {
@@ -1630,12 +1729,26 @@
     const titleNode = document.querySelector("[data-admin-control-title]");
     const statusNode = document.querySelector("[data-admin-control-status]");
     if (titleNode) {
-      titleNode.textContent = "Customer Operations Workspace";
+      titleNode.textContent = isMarketingRole() ? "Marketing Command Center" : "Customer Operations Workspace";
     }
     if (statusNode) {
       const queueCount = Array.isArray(state.allowedQueues) ? state.allowedQueues.length : 0;
-      statusNode.textContent = `Search-first case operations are active for role: ${state.roleKey || DEFAULT_ROLE_KEY} across ${queueCount} permitted queue${queueCount === 1 ? "" : "s"}.`;
+      statusNode.textContent = isMarketingRole()
+        ? `Marketing command center is active for role: ${state.roleKey || DEFAULT_ROLE_KEY} across ${queueCount} permitted section${queueCount === 1 ? "" : "s"}.`
+        : `Search-first case operations are active for role: ${state.roleKey || DEFAULT_ROLE_KEY} across ${queueCount} permitted queue${queueCount === 1 ? "" : "s"}.`;
     }
+  }
+
+  function configureMarketingLayout() {
+    if (!isMarketingRole()) return;
+    const searchPanel = document.querySelector(".admin-command-search");
+    if (searchPanel) searchPanel.hidden = true;
+    const workspacePanel = document.querySelector(".admin-case-workspace-panel");
+    if (workspacePanel) workspacePanel.hidden = true;
+    const contextPanel = document.querySelector(".admin-case-context-panel");
+    if (contextPanel) contextPanel.hidden = true;
+    const railHeading = document.querySelector(".admin-case-rail h3");
+    if (railHeading) railHeading.textContent = "Marketing Rail";
   }
 
   async function setupPage() {
@@ -1661,6 +1774,7 @@
       setPageStatus(error.message || "Unable to load access profile.", "error");
     }
 
+    configureMarketingLayout();
     updateRoleSummary();
     applyRailSelection();
     applyTabSelection();
