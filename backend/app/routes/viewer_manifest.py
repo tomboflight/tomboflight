@@ -17,9 +17,7 @@ def get_viewer_manifest(
     require_any_package_capability(
         current_user,
         "can_use_viewer",
-        "can_upload_portraits",
-        "can_build_family_tree",
-        "can_build_org_chart",
+        "can_use_secure_share_viewer",
         detail="Your active package does not include viewer access.",
     )
 
