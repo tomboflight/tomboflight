@@ -164,8 +164,21 @@ class AdminControlAccessProfileTests(unittest.TestCase):
 
         profile = admin_control_service.admin_control_access_profile(current_user)
 
-        self.assertIn("orders", profile["allowed_queues"])
-        self.assertIn("entitlements", profile["allowed_queues"])
+        self.assertEqual(
+            profile["allowed_queues"],
+            [
+                "money_now",
+                "subscriptions_maintenance",
+                "package_revenue",
+                "finance_integrity",
+                "payroll",
+                "reports_exports",
+            ],
+        )
+        self.assertNotIn("orders", profile["allowed_queues"])
+        self.assertNotIn("entitlements", profile["allowed_queues"])
+        self.assertTrue(admin_control_service.admin_control_queue_allowed(current_user, "money_now"))
+        self.assertFalse(admin_control_service.admin_control_queue_allowed(current_user, "mint_queue"))
         self.assertNotIn("mint_queue", profile["allowed_queues"])
         self.assertNotIn("upload_review", profile["allowed_queues"])
         self.assertTrue(admin_control_service.admin_control_action_allowed(current_user, "generate_entitlement"))
@@ -236,7 +249,9 @@ class AdminControlAccessProfileTests(unittest.TestCase):
             },
         }
         profile = admin_control_service.admin_control_access_profile(current_user)
-        self.assertIn("orders", profile["allowed_queues"])
+        self.assertIn("money_now", profile["allowed_queues"])
+        self.assertIn("reports_exports", profile["allowed_queues"])
+        self.assertNotIn("customer_cases", profile["allowed_queues"])
         self.assertNotIn("mint_queue", profile["allowed_queues"])
         self.assertNotIn("upload_review", profile["allowed_queues"])
 

@@ -14,6 +14,7 @@ from app.services.admin_control_service import (
     admin_control_access_profile,
     admin_control_action_allowed,
     admin_control_bulk_action_allowed,
+    admin_control_queue_allowed,
     admin_console_overview,
     assign_lane,
     assign_missing_lanes,
@@ -206,7 +207,11 @@ async def get_customer_cases(
     limit: int = Query(default=50, ge=1, le=200),
     current_user: dict[str, Any] = Depends(require_permission("admin.control.view")),
 ):
-    del current_user
+    if not admin_control_queue_allowed(current_user, queue):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Admin control queue '{queue}' is not permitted for this role.",
+        )
     return await asyncio.to_thread(list_customer_cases, search=search, queue=queue, limit=limit)
 
 

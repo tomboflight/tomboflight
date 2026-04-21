@@ -48,6 +48,12 @@
 
   const QUEUE_META = {
     overview: ["Overview", "Executive repair posture across active customer operations."],
+    money_now: ["Money Now", "Gross/net revenue, collected totals, refunds, failures, and unpaid balances."],
+    subscriptions_maintenance: ["Subscriptions & Maintenance", "Active plans, renewals due, past-due subscriptions, and recovery signals."],
+    package_revenue: ["Package Revenue", "Lane package sales volume with upgrade and downgrade visibility."],
+    finance_integrity: ["Finance Integrity", "Unlinked payments, order/entitlement mismatch, override, and duplicate-risk signals."],
+    payroll: ["Payroll", "Payroll due dates, totals, processed history, pending review, and export readiness."],
+    reports_exports: ["Reports & Exports", "Finance/tax/refund/subscription/payroll/package export access."],
     customer_cases: ["Customer Cases", "Search and open the full case workspace."],
     orders: ["Orders", "Paid orders that need project linkage or billing review."],
     projects: ["Projects", "Active project records, lanes, phases, and source state."],
@@ -467,17 +473,29 @@
     });
   }
 
-  function renderTopSummary(summary) {
+  function renderTopSummary(summary, financeSections) {
     const node = document.querySelector("[data-admin-top-summary]");
     if (!node) return;
-    const cards = [
-      ["Total Users", summary.total_users],
-      ["Active Projects", summary.total_active_projects],
-      ["Paid Orders", summary.paid_orders],
-      ["Missing Entitlements", summary.missing_entitlements],
-      ["Mint-Ready Projects", summary.mint_ready_projects],
-      ["Data Mismatches", summary.projects_with_data_mismatch],
-    ];
+    const isFinanceRole = state.roleKey === "finance_admin";
+    const moneyNow = (financeSections && financeSections.money_now) || {};
+    const cards = isFinanceRole
+      ? [
+          ["Gross Revenue", moneyNow.gross_revenue],
+          ["Net Revenue", moneyNow.net_revenue],
+          ["Collected Today", moneyNow.collected_today],
+          ["Collected Month", moneyNow.collected_month],
+          ["Refunds This Month", moneyNow.refunds_this_month],
+          ["Failed Payments", moneyNow.failed_payments],
+          ["Unpaid Balances", moneyNow.unpaid_balances],
+        ]
+      : [
+          ["Total Users", summary.total_users],
+          ["Active Projects", summary.total_active_projects],
+          ["Paid Orders", summary.paid_orders],
+          ["Missing Entitlements", summary.missing_entitlements],
+          ["Mint-Ready Projects", summary.mint_ready_projects],
+          ["Data Mismatches", summary.projects_with_data_mismatch],
+        ];
     node.innerHTML = cards
       .map(function (item, index) {
         return `
@@ -490,15 +508,27 @@
       .join("");
   }
 
-  function renderPriorityRepairs(priority) {
+  function renderPriorityRepairs(priority, financeSections) {
     const node = document.querySelector("[data-admin-priority-repairs]");
     if (!node) return;
-    const cards = [
-      ["Paid order without project link", (priority.paid_order_without_project_link || []).length],
-      ["Project without entitlement", (priority.project_without_entitlement || []).length],
-      ["Package without lane", (priority.package_without_lane || []).length],
-      ["Mint-eligible blocked", (priority.mint_eligible_blocked || []).length],
-    ];
+    const isFinanceRole = state.roleKey === "finance_admin";
+    const financeIntegrity = (financeSections && financeSections.finance_integrity) || {};
+    const payroll = (financeSections && financeSections.payroll) || {};
+    const cards = isFinanceRole
+      ? [
+          ["Unlinked Payments", financeIntegrity.unlinked_payments || 0],
+          ["Order/Project Mismatch", financeIntegrity.order_project_mismatch || 0],
+          ["Entitlement Mismatch", financeIntegrity.entitlement_mismatch || 0],
+          ["Refunded but Access Active", financeIntegrity.refunded_but_still_active_access || 0],
+          ["Manual Override Log", financeIntegrity.manual_override_log || 0],
+          ["Pending Payroll Review", payroll.pending_payroll_review || 0],
+        ]
+      : [
+          ["Paid order without project link", (priority.paid_order_without_project_link || []).length],
+          ["Project without entitlement", (priority.project_without_entitlement || []).length],
+          ["Package without lane", (priority.package_without_lane || []).length],
+          ["Mint-eligible blocked", (priority.mint_eligible_blocked || []).length],
+        ];
     node.innerHTML = cards
       .map(function (item) {
         return `
@@ -514,12 +544,12 @@
   async function loadOverview() {
     try {
       const payload = await fetchJson("/admin/control-center/overview?limit=24");
-      renderTopSummary(payload.summary || {});
-      renderPriorityRepairs(payload.priority_repairs || {});
+      renderTopSummary(payload.summary || {}, payload.finance_sections || {});
+      renderPriorityRepairs(payload.priority_repairs || {}, payload.finance_sections || {});
     } catch (error) {
       console.error("Overview load failed:", error);
-      renderTopSummary({});
-      renderPriorityRepairs({});
+      renderTopSummary({}, {});
+      renderPriorityRepairs({}, {});
     }
   }
 

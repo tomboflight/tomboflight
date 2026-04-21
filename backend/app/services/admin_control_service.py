@@ -46,6 +46,12 @@ INTERNAL_ROLE_KEYS = set(INTERNAL_ADMIN_ROLE_CODES) | {"admin"}
 
 ADMIN_CONTROL_QUEUES = [
     "overview",
+    "money_now",
+    "subscriptions_maintenance",
+    "package_revenue",
+    "finance_integrity",
+    "payroll",
+    "reports_exports",
     "customer_cases",
     "orders",
     "projects",
@@ -93,6 +99,12 @@ BULK_ACTION_PERMISSIONS: dict[str, set[str]] = {
 }
 QUEUE_PERMISSIONS: dict[str, set[str]] = {
     "overview": {"admin.control.view"},
+    "money_now": {"admin.control.billing", "admin.orders.read"},
+    "subscriptions_maintenance": {"admin.control.billing", "admin.entitlements.read"},
+    "package_revenue": {"admin.control.billing", "admin.orders.read"},
+    "finance_integrity": {"admin.control.billing", "admin.audit.read"},
+    "payroll": {"admin.control.billing"},
+    "reports_exports": {"admin.control.billing"},
     "customer_cases": {"admin.control.view"},
     "projects": {"admin.control.view"},
     "system_health": {"admin.control.view"},
@@ -114,6 +126,35 @@ TAB_PERMISSIONS: dict[str, set[str]] = {
     "mint_readiness": {"admin.control.mint"},
     "audit_timeline": {"admin.audit.read"},
 }
+
+FINANCE_QUEUE_ALLOWLIST = [
+    "money_now",
+    "subscriptions_maintenance",
+    "package_revenue",
+    "finance_integrity",
+    "payroll",
+    "reports_exports",
+]
+FINANCE_TAB_ALLOWLIST = [
+    "identity",
+    "package_lane",
+    "orders_billing",
+    "project",
+    "entitlements",
+    "audit_timeline",
+]
+FINANCE_ACTION_ALLOWLIST = [
+    "link_order_to_project",
+    "generate_entitlement",
+    "refresh_entitlement",
+    "run_readiness_check",
+    "refresh_case_data",
+]
+FINANCE_BULK_ACTION_ALLOWLIST = [
+    "repair-missing-entitlements",
+    "link-unlinked-paid-orders",
+    "repair-selected-records",
+]
 
 SUPER_ADMIN_USER_STATUS_VALUES = {
     "active",
@@ -323,6 +364,30 @@ def admin_control_access_profile(current_user: dict[str, Any]) -> dict[str, Any]
 
     primary_role = resolve_primary_role_code(role_codes, default="user")
 
+    if primary_role == "finance_admin":
+        allowed_queues = [
+            queue
+            for queue in FINANCE_QUEUE_ALLOWLIST
+            if _has_any_permission(permissions, QUEUE_PERMISSIONS.get(queue, {"admin.control.billing"}))
+        ]
+        if not allowed_queues and _has_any_permission(permissions, {"admin.control.billing", "admin.orders.read"}):
+            allowed_queues = list(FINANCE_QUEUE_ALLOWLIST)
+        allowed_tabs = [
+            tab
+            for tab in FINANCE_TAB_ALLOWLIST
+            if _has_any_permission(permissions, TAB_PERMISSIONS.get(tab, {"admin.control.billing"}))
+        ]
+        allowed_actions = [
+            action
+            for action in FINANCE_ACTION_ALLOWLIST
+            if _has_any_permission(permissions, CASE_ACTION_PERMISSIONS.get(action, {"admin.control.billing"}))
+        ]
+        allowed_bulk_actions = [
+            action
+            for action in FINANCE_BULK_ACTION_ALLOWLIST
+            if _has_any_permission(permissions, BULK_ACTION_PERMISSIONS.get(action, {"admin.control.billing"}))
+        ]
+
     return {
         "role_key": primary_role,
         "role_codes": role_codes,
@@ -335,6 +400,17 @@ def admin_control_access_profile(current_user: dict[str, Any]) -> dict[str, Any]
         "is_wildcard": "*" in permissions,
         "is_super_admin": primary_role in SUPER_ADMIN_ROLE_CODES,
     }
+
+
+def admin_control_queue_allowed(
+    current_user: dict[str, Any],
+    queue: str,
+) -> bool:
+    normalized_queue = _normalize(queue).lower()
+    if not normalized_queue:
+        normalized_queue = "customer_cases"
+    profile = admin_control_access_profile(current_user)
+    return normalized_queue in set(profile.get("allowed_queues") or [])
 
 
 def admin_control_action_allowed(
@@ -1516,6 +1592,26 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
     users_total = int(db["users"].count_documents({}))
     active_projects = int(db["projects"].count_documents({"status": {"$ne": "archived"}}))
     paid_orders = int(db["orders"].count_documents({"status": {"$in": list(PAID_ORDER_STATUSES)}}))
+    now = _now()
+    month_start = datetime(now.year, now.month, 1, tzinfo=UTC)
+
+    def _amount(value: Any) -> float:
+        if isinstance(value, (int, float)):
+            return float(value)
+        normalized = _normalize(value).replace(",", "")
+        if not normalized:
+            return 0.0
+        try:
+            return float(normalized)
+        except ValueError:
+            return 0.0
+
+    def _order_amount(order: dict[str, Any]) -> float:
+        for key in ("amount", "amount_total", "total_amount", "subtotal", "price"):
+            value = _amount(order.get(key))
+            if value:
+                return value
+        return 0.0
 
     project_ids = [
         _normalize(item.get("_id"))
@@ -1536,6 +1632,51 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
         "package_without_lane": [],
         "mint_eligible_blocked": [],
     }
+
+    gross_revenue = 0.0
+    successful_payments = 0
+    failed_payments = 0
+    unpaid_balances = 0
+    collected_today = 0.0
+    collected_month = 0.0
+    refunds_this_month = 0.0
+    unlinked_payments = 0
+    lane_sales = {"portrait": 0, "household": 0, "network": 0, "organization": 0}
+
+    for order in db["orders"].find({}).sort("created_at", -1).limit(10000):
+        status_value = _normalize(order.get("status")).lower()
+        amount = _order_amount(order)
+        order_dt = _coerce_datetime(order.get("created_at") or order.get("updated_at"))
+
+        if _is_paid_package_order(order):
+            successful_payments += 1
+            gross_revenue += amount
+            if order_dt and order_dt.date() == now.date():
+                collected_today += amount
+            if order_dt and order_dt >= month_start:
+                collected_month += amount
+            if not _normalize(order.get("project_id")):
+                unlinked_payments += 1
+
+            lane_value = _normalize(order.get("lane") or order.get("package_lane")).lower()
+            if lane_value not in lane_sales:
+                lane_value = _normalize(
+                    canonicalize_package_identifier(
+                        order.get("package_code") or order.get("package_slug")
+                    ).get("package_lane")
+                ).lower()
+            if lane_value in lane_sales:
+                lane_sales[lane_value] += 1
+        elif status_value in {"failed", "payment_failed", "declined"}:
+            failed_payments += 1
+        elif status_value in {"pending", "open", "unpaid", "past_due", "incomplete"}:
+            unpaid_balances += 1
+
+        refund_value = _amount(order.get("refund_amount") or order.get("refunded_amount"))
+        if refund_value > 0 and order_dt and order_dt >= month_start:
+            refunds_this_month += refund_value
+        elif status_value in {"refunded", "refund"} and order_dt and order_dt >= month_start:
+            refunds_this_month += amount
 
     for project in db["projects"].find({}).sort("updated_at", -1).limit(500):
         project_id = _normalize(project.get("_id"))
@@ -1570,6 +1711,18 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
 
     postmark_token_configured = bool(_normalize(settings.postmark_server_token))
     postmark_from_address_configured = bool(_normalize_email(settings.postmark_from_email))
+    manual_override_log = int(
+        db["audit_logs"].count_documents({"action": {"$regex": "manual|override", "$options": "i"}})
+    )
+    payroll_runs = list(db["payroll_runs"].find({}).sort("period_end", -1).limit(12))
+    payroll_current = payroll_runs[0] if payroll_runs else {}
+    processed_payroll_history = len(
+        [run for run in payroll_runs if _normalize(run.get("status")).lower() in {"processed", "completed"}]
+    )
+    pending_payroll_review = len(
+        [run for run in payroll_runs if _normalize(run.get("status")).lower() in {"pending", "review"}]
+    )
+    net_revenue = gross_revenue - refunds_this_month
 
     return {
         "summary": {
@@ -1579,6 +1732,69 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
             "missing_entitlements": len(missing_entitlements),
             "mint_ready_projects": mint_ready_count,
             "projects_with_data_mismatch": len(mismatches),
+            "gross_revenue": round(gross_revenue, 2),
+            "net_revenue": round(net_revenue, 2),
+            "successful_payments": successful_payments,
+            "failed_payments": failed_payments,
+            "unpaid_balances": unpaid_balances,
+            "collected_today": round(collected_today, 2),
+            "collected_month": round(collected_month, 2),
+            "refunds_this_month": round(refunds_this_month, 2),
+            "unlinked_payments": unlinked_payments,
+            "manual_override_log": manual_override_log,
+        },
+        "finance_sections": {
+            "money_now": {
+                "gross_revenue": round(gross_revenue, 2),
+                "net_revenue": round(net_revenue, 2),
+                "collected_today": round(collected_today, 2),
+                "collected_month": round(collected_month, 2),
+                "refunds_this_month": round(refunds_this_month, 2),
+                "failed_payments": failed_payments,
+                "unpaid_balances": unpaid_balances,
+            },
+            "subscriptions_and_maintenance": {
+                "active_maintenance_plans": int(db["project_entitlements"].count_documents({"maintenance_status": {"$in": ["active", "started"]}})),
+                "renewals_due": int(db["project_entitlements"].count_documents({"maintenance_status": {"$in": ["due", "renewal_due"]}})),
+                "past_due_subscriptions": int(db["project_entitlements"].count_documents({"maintenance_status": {"$in": ["past_due", "overdue"]}})),
+                "churned_subscriptions": int(db["project_entitlements"].count_documents({"maintenance_status": {"$in": ["canceled", "cancelled", "churned"]}})),
+                "recovered_failed_subscriptions": int(db["audit_logs"].count_documents({"action": {"$regex": "subscription.*recover|recover.*subscription", "$options": "i"}})),
+            },
+            "package_revenue": {
+                "portrait_lane_sales": lane_sales["portrait"],
+                "household_lane_sales": lane_sales["household"],
+                "network_lane_sales": lane_sales["network"],
+                "organization_lane_sales": lane_sales["organization"],
+                "upgrades": int(db["audit_logs"].count_documents({"action": {"$regex": "upgrade", "$options": "i"}})),
+                "downgrades": int(db["audit_logs"].count_documents({"action": {"$regex": "downgrade", "$options": "i"}})),
+            },
+            "finance_integrity": {
+                "unlinked_payments": unlinked_payments,
+                "order_project_mismatch": len(priority_repairs["paid_order_without_project_link"]),
+                "entitlement_mismatch": len(priority_repairs["project_without_entitlement"]),
+                "refunded_but_still_active_access": int(
+                    db["project_entitlements"].count_documents(
+                        {"status": {"$in": ["active", "enabled"]}, "maintenance_status": {"$in": ["refunded", "canceled", "cancelled"]}}
+                    )
+                ),
+                "duplicate_risk_records": int(db["users"].count_documents({"status": {"$in": ["duplicate", "conflict", "pending_merge"]}})),
+                "manual_override_log": manual_override_log,
+            },
+            "payroll": {
+                "next_payroll_due": _serialize_datetime(payroll_current.get("next_due_at")),
+                "payroll_total_this_period": round(_amount(payroll_current.get("total_amount")), 2),
+                "processed_payroll_history": processed_payroll_history,
+                "pending_payroll_review": pending_payroll_review,
+                "payroll_export_ready": bool(payroll_runs),
+            },
+            "reports_and_exports": {
+                "monthly_finance_export": True,
+                "tax_export": True,
+                "refund_report": True,
+                "subscription_report": True,
+                "payroll_report": bool(payroll_runs),
+                "package_performance_report": True,
+            },
         },
         "priority_repairs": {
             "paid_order_without_project_link": priority_repairs["paid_order_without_project_link"][:limit],
@@ -2059,6 +2275,28 @@ def _operator_guidance_items(
 def _case_queue_match(queue: str, alerts: list[str]) -> bool:
     normalized = _normalize(queue).lower()
     if normalized in {"", "all", "overview", "customer_cases", "projects", "system_health"}:
+        return True
+    if normalized == "money_now":
+        return True
+    if normalized == "subscriptions_maintenance":
+        return "maintenance_not_started" in alerts
+    if normalized == "package_revenue":
+        return True
+    if normalized == "finance_integrity":
+        return any(
+            alert in {
+                "paid_order_not_linked",
+                "missing_entitlement",
+                "package_mismatch_order",
+                "package_mismatch_entitlement",
+                "lane_mismatch_entitlement",
+                "duplicate_admin_user_identity",
+            }
+            for alert in alerts
+        )
+    if normalized == "payroll":
+        return False
+    if normalized == "reports_exports":
         return True
     if normalized == "orders":
         return "paid_order_not_linked" in alerts
