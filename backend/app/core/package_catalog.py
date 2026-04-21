@@ -433,7 +433,7 @@ PACKAGE_CONTROL_POLICY: dict[str, dict[str, Any]] = {
             "allows_automatic_anchor": False,
             "requires_runtime_flag_for_auto_mint": True,
         },
-        "maintenance_default": "monthly",
+        "maintenance_default": "none",
         "mint_policy": {
             "product_includes_onchain_anchor": False,
             "auto_mint_enabled": False,

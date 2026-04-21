@@ -7,6 +7,7 @@ from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from app.dependencies.auth import get_current_user
+from app.dependencies.auth import has_internal_admin_access
 from app.schemas.household_access import (
     HouseholdInviteAccept,
     HouseholdInviteCreate,
@@ -28,6 +29,7 @@ from app.services.household_access_service import (
 )
 from app.database import get_database
 from app.services.project_membership_service import get_project_access_snapshot
+from app.services.workspace_access_service import resolve_workspace_context
 
 router = APIRouter(prefix="/workspace-access", tags=["Workspace Access"])
 legacy_router = APIRouter(tags=["Workspace Access"])
@@ -60,6 +62,19 @@ def _assert_project_access(project_id: str, current_user: dict[str, Any]) -> Non
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to access this workspace.",
         )
+
+
+def _assert_household_management_enabled(project_id: str, current_user: dict[str, Any]) -> None:
+    if has_internal_admin_access(current_user):
+        return
+    context = resolve_workspace_context(current_user, project_id=project_id)
+    entitlements = context.get("resolved_entitlements") or {}
+    if bool(entitlements.get("can_build_household")):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Your active package does not include household member management.",
+    )
 
 
 def _member_name_payload_from_user_doc(user_doc: dict[str, Any] | None) -> dict[str, str]:
@@ -163,6 +178,7 @@ def get_my_memberships_legacy(current_user: dict[str, Any] = Depends(get_current
 @router.get("/project/{project_id}/members")
 def get_project_members(project_id: str, current_user: dict[str, Any] = Depends(get_current_user)):
     _assert_project_access(project_id, current_user)
+    _assert_household_management_enabled(project_id, current_user)
     items = _with_member_identity_fields(list_project_members(project_id))
     return {"items": [build_membership_response(item) for item in items]}
 
@@ -176,6 +192,7 @@ def get_project_members_legacy(project_id: str, current_user: dict[str, Any] = D
 @router.get("/project/{project_id}/invites")
 def get_project_invites(project_id: str, current_user: dict[str, Any] = Depends(get_current_user)):
     _assert_project_access(project_id, current_user)
+    _assert_household_management_enabled(project_id, current_user)
     invites = list_project_invites(project_id)
     return {"items": [build_invite_response(item) for item in invites]}
 
@@ -194,6 +211,7 @@ def create_invite(
     request: Request,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
+    _assert_household_management_enabled(project_id, current_user)
     actor_user_id = _current_user_id(current_user)
     actor_email = str(current_user.get("email") or "").strip().lower() or None
     logger.info(
@@ -385,6 +403,7 @@ def change_member_role(
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
     _assert_project_access(project_id, current_user)
+    _assert_household_management_enabled(project_id, current_user)
     try:
         membership = update_member_role(
             project_id=project_id,
@@ -428,6 +447,7 @@ def revoke_member(
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
     _assert_project_access(project_id, current_user)
+    _assert_household_management_enabled(project_id, current_user)
     try:
         membership = revoke_membership(
             project_id=project_id,

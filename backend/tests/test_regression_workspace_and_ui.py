@@ -101,6 +101,12 @@ class TreeAndHeaderRegressionTests(unittest.TestCase):
         self.assertIn(".portal-dashboard-body .site-header.is-scrolled .brand-logo {", styles_css)
         self.assertIn("transform: scale(1.08);", styles_css)
 
+    def test_dashboard_household_nav_is_not_forced_for_portrait_lane(self):
+        dashboard_js = (REPO_ROOT / "dashboard-intake.js").read_text(encoding="utf-8")
+        self.assertIn("showHouseholdAccess: false", dashboard_js)
+        self.assertIn('applyNavVisibility("household-access.html", config.showHouseholdAccess);', dashboard_js)
+        self.assertNotIn('applyNavVisibility("household-access.html", true);', dashboard_js)
+
 
 if __name__ == "__main__":
     unittest.main()
