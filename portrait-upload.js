@@ -91,6 +91,66 @@
     ).trim();
   }
 
+  function getPackageCodeFromContext(context) {
+    return normalizeValue(
+      context?.packageCode ||
+        context?.activeProject?.package_code ||
+        context?.activeProject?.packageCode ||
+        context?.resolvedEntitlements?.package_code ||
+        "",
+    );
+  }
+
+  function isLegacySnapshotContext(context) {
+    return getPackageCodeFromContext(context) === "legacy_snapshot";
+  }
+
+  function resolveMembersFromManifest(manifest) {
+    const seen = new Set();
+    const members = [];
+    const states = Array.isArray(manifest?.states) ? manifest.states : [];
+
+    states.forEach(function (state) {
+      const memberId = String(state?.member_id || "").trim();
+      if (!memberId || seen.has(memberId)) return;
+      seen.add(memberId);
+      members.push({
+        id: memberId,
+        display_name: String(state?.title || "Portrait Subject").trim() || "Portrait Subject",
+        generation: 1,
+      });
+    });
+
+    const primaryMemberId = String(manifest?.primary_member_id || "").trim();
+    if (primaryMemberId && !seen.has(primaryMemberId)) {
+      members.unshift({
+        id: primaryMemberId,
+        display_name: "Portrait Subject",
+        generation: 1,
+      });
+    }
+
+    return members;
+  }
+
+  async function loadLegacySnapshotMembersFromManifest(familyId) {
+    const projectId = getProjectIdFromContext(currentContext);
+    if (!projectId) {
+      return [];
+    }
+
+    const query = new URLSearchParams();
+    query.set("project_id", projectId);
+    if (familyId) {
+      query.set("family_id", familyId);
+    }
+
+    const manifest = await app.apiRequest(`/viewer/manifest?${query.toString()}`, {
+      method: "GET",
+    });
+    return resolveMembersFromManifest(manifest);
+  }
+
   function withWorkspaceHref(href, context, familyIdOverride) {
     if (!href) return href;
 
@@ -447,28 +507,33 @@
       setFamilyIdInUrl(familyId);
       updateNav(currentContext, familyId);
 
-      let graph = await app.apiRequest(
-        `/families/${encodeURIComponent(familyId)}/graph`,
-        { method: "GET" },
-      );
+      let members = [];
+      if (isLegacySnapshotContext(currentContext)) {
+        members = await loadLegacySnapshotMembersFromManifest(familyId);
+      } else {
+        let graph = await app.apiRequest(
+          `/families/${encodeURIComponent(familyId)}/graph`,
+          { method: "GET" },
+        );
 
-      let members = Array.isArray(graph.members) ? graph.members : [];
+        members = Array.isArray(graph.members) ? graph.members : [];
 
-      if (!members.length) {
-        const projectId = getProjectIdFromContext(currentContext);
-        if (projectId) {
-          try {
-            await app.apiRequest(
-              `/viewer/manifest?project_id=${encodeURIComponent(projectId)}&family_id=${encodeURIComponent(familyId)}`,
-              { method: "GET" },
-            );
-            graph = await app.apiRequest(
-              `/families/${encodeURIComponent(familyId)}/graph`,
-              { method: "GET" },
-            );
-            members = Array.isArray(graph.members) ? graph.members : [];
-          } catch (retryError) {
-            console.warn("Portrait member backfill retry failed:", retryError);
+        if (!members.length) {
+          const projectId = getProjectIdFromContext(currentContext);
+          if (projectId) {
+            try {
+              await app.apiRequest(
+                `/viewer/manifest?project_id=${encodeURIComponent(projectId)}&family_id=${encodeURIComponent(familyId)}`,
+                { method: "GET" },
+              );
+              graph = await app.apiRequest(
+                `/families/${encodeURIComponent(familyId)}/graph`,
+                { method: "GET" },
+              );
+              members = Array.isArray(graph.members) ? graph.members : [];
+            } catch (retryError) {
+              console.warn("Portrait member backfill retry failed:", retryError);
+            }
           }
         }
       }
