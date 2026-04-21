@@ -103,11 +103,7 @@ def get_family_graph(
     context = require_workspace_capability(
         current_user,
         family_id=family_id,
-        capabilities=(
-            "can_build_family_tree",
-            "can_upload_verification_docs",
-            "can_upload_portraits",
-        ),
+        capabilities=("can_build_family_tree",),
         detail="Your active package does not include access to this family workspace.",
     )
 

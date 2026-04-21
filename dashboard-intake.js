@@ -1023,6 +1023,7 @@
         showCertificate: canBuildFamilyTree,
         showVerification: true,
         showLinkKeys: canUseLinkKeys,
+        showHouseholdAccess: false,
         navTree: false,
         navCertificate: false,
         navIntake: false,
@@ -1084,6 +1085,7 @@
         showCertificate: canBuildFamilyTree,
         showVerification: true,
         showLinkKeys: canUseLinkKeys,
+        showHouseholdAccess: false,
         navTree: false,
         navCertificate: false,
         navIntake: false,
@@ -1144,6 +1146,7 @@
         showCertificate: canUseCertificate,
         showVerification: true,
         showLinkKeys: canUseLinkKeys,
+        showHouseholdAccess: true,
         navTree: canBuildFamilyTree,
         navCertificate: canUseCertificate,
         navIntake: canOpenFamilyIntake,
@@ -1203,6 +1206,7 @@
       showCertificate: canUseCertificate,
       showVerification: true,
       showLinkKeys: canUseLinkKeys,
+      showHouseholdAccess: true,
       navTree: canBuildFamilyTree,
       navCertificate: canUseCertificate,
       navIntake: canOpenFamilyIntake,
@@ -1365,7 +1369,7 @@
     );
     applyNavVisibility("verification-upload.html", config.showVerification);
     applyNavVisibility("link-keys.html", config.navLinkKeys);
-    applyNavVisibility("household-access.html", true);
+    applyNavVisibility("household-access.html", config.showHouseholdAccess);
 
     applyAction('.site-nav a[href^="tree-view.html"]', {
       href: withFamilyId("tree-view.html", context),
@@ -1384,7 +1388,7 @@
 
     applyAction('.site-nav a[href^="household-access.html"]', {
       href: withFamilyId("household-access.html", context),
-      show: true,
+      show: config.showHouseholdAccess,
     });
 
     applyAction('.site-nav a[href^="portrait-upload.html"]', {
@@ -1431,12 +1435,12 @@
       "[data-dashboard-household-invite-co-owner], [data-dashboard-household-invite-family], [data-dashboard-household-pending-invites]",
       {
         href: withFamilyId("household-access.html", context),
-        show: showHouseholdInviteActions,
+        show: showHouseholdInviteActions && config.showHouseholdAccess,
       },
     );
     applyAction("[data-dashboard-household-view-members]", {
       href: withFamilyId("household-access.html", context),
-      show: true,
+      show: config.showHouseholdAccess,
     });
 
     applyAction(
