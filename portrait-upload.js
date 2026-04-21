@@ -511,28 +511,44 @@
       if (isLegacySnapshotContext(currentContext)) {
         members = await loadLegacySnapshotMembersFromManifest(familyId);
       } else {
-        let graph = await app.apiRequest(
-          `/families/${encodeURIComponent(familyId)}/graph`,
-          { method: "GET" },
-        );
-
-        members = Array.isArray(graph.members) ? graph.members : [];
+        const projectId = getProjectIdFromContext(currentContext);
+        if (projectId) {
+          try {
+            const manifest = await app.apiRequest(
+              `/viewer/manifest?project_id=${encodeURIComponent(projectId)}&family_id=${encodeURIComponent(familyId)}`,
+              { method: "GET" },
+            );
+            if (normalizeValue(manifest?.mode) === "secure_share") {
+              members = resolveMembersFromManifest(manifest);
+            }
+          } catch (manifestError) {
+            console.warn("Portrait manifest member resolution failed:", manifestError);
+          }
+        }
 
         if (!members.length) {
-          const projectId = getProjectIdFromContext(currentContext);
-          if (projectId) {
-            try {
-              await app.apiRequest(
-                `/viewer/manifest?project_id=${encodeURIComponent(projectId)}&family_id=${encodeURIComponent(familyId)}`,
-                { method: "GET" },
-              );
-              graph = await app.apiRequest(
-                `/families/${encodeURIComponent(familyId)}/graph`,
-                { method: "GET" },
-              );
-              members = Array.isArray(graph.members) ? graph.members : [];
-            } catch (retryError) {
-              console.warn("Portrait member backfill retry failed:", retryError);
+          let graph = await app.apiRequest(
+            `/families/${encodeURIComponent(familyId)}/graph`,
+            { method: "GET" },
+          );
+
+          members = Array.isArray(graph.members) ? graph.members : [];
+
+          if (!members.length) {
+            if (projectId) {
+              try {
+                await app.apiRequest(
+                  `/viewer/manifest?project_id=${encodeURIComponent(projectId)}&family_id=${encodeURIComponent(familyId)}`,
+                  { method: "GET" },
+                );
+                graph = await app.apiRequest(
+                  `/families/${encodeURIComponent(familyId)}/graph`,
+                  { method: "GET" },
+                );
+                members = Array.isArray(graph.members) ? graph.members : [];
+              } catch (retryError) {
+                console.warn("Portrait member backfill retry failed:", retryError);
+              }
             }
           }
         }

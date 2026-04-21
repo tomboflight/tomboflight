@@ -1,8 +1,10 @@
+import inspect
 import re
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from app.routes import viewer_manifest
 from app.services import viewer_manifest_service
 
 
@@ -28,6 +30,14 @@ class _FakeDatabase:
 
 
 class LegacySnapshotViewerBoundariesTests(unittest.TestCase):
+    def test_viewer_manifest_route_uses_secure_share_capability_not_upload_or_tree_caps(self):
+        source = inspect.getsource(viewer_manifest.get_viewer_manifest)
+        self.assertIn('"can_use_viewer"', source)
+        self.assertIn('"can_use_secure_share_viewer"', source)
+        self.assertNotIn('"can_upload_portraits"', source)
+        self.assertNotIn('"can_build_family_tree"', source)
+        self.assertNotIn('"can_build_org_chart"', source)
+
     def test_legacy_snapshot_manifest_is_secure_share_mode(self):
         project = {
             "_id": "project-legacy",
@@ -136,10 +146,15 @@ class LegacySnapshotUploadBoundariesTests(unittest.TestCase):
         self.assertIn("loadLegacySnapshotMembersFromManifest", portrait_source)
         self.assertIn("resolveMembersFromManifest", portrait_source)
         self.assertRegex(portrait_source, required_pattern)
+        self.assertIn('normalizeValue(manifest?.mode) === "secure_share"', portrait_source)
 
         self.assertIn("loadLegacySnapshotMembersFromManifest", verification_source)
         self.assertIn("resolveMembersFromManifest", verification_source)
         self.assertRegex(verification_source, required_pattern)
+        self.assertIn(
+            'normalizeValue(manifest?.mode) === "secure_share"',
+            verification_source,
+        )
 
 
 if __name__ == "__main__":
