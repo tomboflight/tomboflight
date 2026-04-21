@@ -295,16 +295,35 @@ class AdminControlAccessProfileTests(unittest.TestCase):
                 "permissions": [
                     "admin.access",
                     "admin.control.view",
+                    "admin.control.write",
+                    "admin.control.mint",
+                    "admin.audit.read",
                     "admin.intake.review",
                     "admin.intake.write",
+                    "uploads.admin.review",
                     "verification.review",
                 ],
             },
         }
         profile = admin_control_service.admin_control_access_profile(current_user)
-        self.assertIn("customer_cases", profile["allowed_queues"])
-        self.assertNotIn("orders", profile["allowed_queues"])
-        self.assertNotIn("billing_maintenance", profile["allowed_queues"])
+        self.assertEqual(
+            profile["allowed_queues"],
+            [
+                "intake_onboarding",
+                "verification_upload_review",
+                "workspace_access_invites",
+                "build_fulfillment",
+                "exceptions_escalations",
+                "ops_reports",
+            ],
+        )
+        self.assertIn("project", profile["allowed_tabs"])
+        self.assertIn("uploads_verification", profile["allowed_tabs"])
+        self.assertNotIn("orders_billing", profile["allowed_tabs"])
+        self.assertIn("repair_record", profile["allowed_actions"])
+        self.assertNotIn("generate_entitlement", profile["allowed_actions"])
+        self.assertNotIn("money_now", profile["allowed_queues"])
+        self.assertNotIn("marketing_reports", profile["allowed_queues"])
 
     def test_executive_tech_profile_includes_control_center_and_audit(self):
         current_user = {
@@ -395,6 +414,40 @@ class AdminUserQueueTests(unittest.TestCase):
         self.assertEqual(workspace["tabs"]["identity"]["admin_user_relationship"], "customer_record")
         self.assertEqual(workspace["tabs"]["project"]["related_projects"], [])
         self.assertEqual(workspace["tabs"]["entitlements"]["entitlement_status"], "missing")
+
+    def test_user_case_workspace_logs_sensitive_access_audit(self):
+        customer_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "users": [
+                    {
+                        "_id": customer_id,
+                        "email": "customer@example.com",
+                        "full_name": "Customer Person",
+                        "role": "user",
+                        "status": "active",
+                    }
+                ],
+                "projects": [],
+                "orders": [],
+                "project_entitlements": [],
+                "uploaded_files": [],
+                "audit_logs": [],
+            }
+        )
+        with (
+            patch.object(admin_control_service, "get_database", return_value=db),
+            patch.object(admin_control_service, "write_audit_log") as write_audit_log,
+        ):
+            admin_control_service.customer_case_workspace(
+                f"user:{customer_id}",
+                current_user={"_id": ObjectId(), "email": "k.goffigan@tomboflight.com"},
+            )
+        self.assertTrue(write_audit_log.called)
+        self.assertEqual(
+            write_audit_log.call_args.kwargs.get("action"),
+            "admin_control_center.operations.sensitive_record_access",
+        )
 
     def test_project_case_workspace_isolates_related_records_to_selected_project(self):
         larry_user_id = ObjectId()
@@ -1148,6 +1201,33 @@ class CfoScopeAndFinanceHistoryTests(unittest.TestCase):
         self.assertTrue(sections["funnel_conversion"]["purchases_completed"]["live"])
         self.assertFalse(sections["content_performance"]["page_dropoff_points"]["live"])
 
+    def test_overview_includes_operations_sections_and_ops_report_export(self):
+        db = FakeDatabase(
+            {
+                "users": [],
+                "projects": [],
+                "orders": [],
+                "project_entitlements": [],
+                "audit_logs": [],
+                "payroll_runs": [],
+                "finance_events": [],
+                "verification_records": [],
+                "uploaded_files": [],
+                "household_invites": [],
+                "project_members": [],
+            }
+        )
+        with patch.object(admin_control_service, "get_database", return_value=db):
+            overview = admin_control_service.admin_console_overview(limit=5)
+            exported = admin_control_service.export_operations_report()
+        self.assertIn("operations_sections", overview)
+        self.assertIn("intake_onboarding", overview["operations_sections"])
+        self.assertIn("ops_reports", overview["operations_sections"])
+        self.assertFalse(overview["operations_sections"]["ops_reports"]["sla_turnaround_indicators"]["live"])
+        self.assertEqual(exported["report_type"], "operations_control_center")
+        self.assertEqual(exported["format"], "json")
+        self.assertIn("ops_reports", exported["sections"])
+
     def test_larry_inherits_cfo_scope_through_superadmin_and_executive_tech(self):
         larry_user = {
             "role": "admin",
@@ -1178,6 +1258,23 @@ class CfoScopeAndFinanceHistoryTests(unittest.TestCase):
         self.assertIn("marketing_reports", profile["allowed_queues"])
         self.assertIn("mint_queue", profile["allowed_queues"])
         self.assertTrue(admin_control_service.admin_control_queue_allowed(larry_user, "marketing_reports"))
+
+    def test_larry_inherits_coo_scope_through_superadmin_and_executive_tech(self):
+        larry_user = {
+            "role": "admin",
+            "department_role": "executive_tech_admin",
+            "_access_context": {
+                "role_codes": ["super_admin", "executive_tech_admin", "operations_admin"],
+                "permissions": ["*"],
+            },
+        }
+        profile = admin_control_service.admin_control_access_profile(larry_user)
+        self.assertIn("intake_onboarding", profile["allowed_queues"])
+        self.assertIn("verification_upload_review", profile["allowed_queues"])
+        self.assertIn("workspace_access_invites", profile["allowed_queues"])
+        self.assertIn("ops_reports", profile["allowed_queues"])
+        self.assertIn("mint_queue", profile["allowed_queues"])
+        self.assertTrue(admin_control_service.admin_control_queue_allowed(larry_user, "ops_reports"))
 
     def test_sync_package_persists_canonical_order_lane_fields(self):
         project_id = ObjectId()

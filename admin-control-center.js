@@ -44,11 +44,18 @@
     workspace: null,
     packageOptions: [],
     marketingSections: {},
+    operationsSections: {},
   };
   const DEFAULT_ROLE_KEY = "user";
 
   const QUEUE_META = {
     overview: ["Overview", "Executive repair posture across active customer operations."],
+    intake_onboarding: ["Intake & Onboarding", "New accounts/projects, intake progression, and stalled intake visibility."],
+    verification_upload_review: ["Verification & Upload Review", "Upload review, verification pending states, and aging verification queues."],
+    workspace_access_invites: ["Workspace Access & Invites", "Invite delivery health, expiration risk, and member access mismatches."],
+    build_fulfillment: ["Build & Fulfillment", "Project/build progression, readiness gates, and fulfillment blocking states."],
+    exceptions_escalations: ["Exceptions & Escalations", "Operational exceptions requiring manual review or executive escalation."],
+    ops_reports: ["Ops Reports", "Queue totals, aging, throughput, and operations export tooling."],
     traffic_awareness: ["Traffic & Awareness", "Visitors, sessions, landing pages, and source visibility."],
     funnel_conversion: ["Funnel Conversion", "CTA to purchase funnel conversion checkpoints."],
     package_demand: ["Package Demand", "Lane demand and conversion for Tomb of Light packages."],
@@ -198,6 +205,10 @@
 
   function isMarketingRole() {
     return state.roleKey === "marketing_admin";
+  }
+
+  function isOperationsRole() {
+    return state.roleKey === "operations_admin";
   }
 
   async function loadAccessProfile() {
@@ -488,6 +499,7 @@
     const node = document.querySelector("[data-admin-top-summary]");
     if (!node) return;
     const isMarketing = isMarketingRole();
+    const isOpsRole = isOperationsRole();
     const isFinanceRole = state.roleKey === "finance_admin";
     const moneyNow = (financeSections && financeSections.money_now) || {};
     const traffic = (marketingSections && marketingSections.traffic_awareness) || {};
@@ -513,14 +525,23 @@
             ["Campaign Visits", (campaign.campaign_visits || {}).live ? (campaign.campaign_visits || {}).value : "unavailable"],
             ["Package Conversion %", (packageDemand.package_conversion_rate || {}).live ? (packageDemand.package_conversion_rate || {}).value : "unavailable"],
           ]
-        : [
+        : isOpsRole
+          ? [
+              ["Intake Started", (((state.operationsSections || {}).intake_onboarding || {}).intake_started || {}).value || 0],
+              ["Verification Pending", (((state.operationsSections || {}).verification_upload_review || {}).verification_pending || {}).value || 0],
+              ["Pending Invites", (((state.operationsSections || {}).workspace_access_invites || {}).pending_invites || {}).value || 0],
+              ["Blocked Projects", (((state.operationsSections || {}).build_fulfillment || {}).blocked_projects || {}).value || 0],
+              ["Manual Review Queue", (((state.operationsSections || {}).exceptions_escalations || {}).manual_review_queue || {}).value || 0],
+              ["Queue Totals", (((state.operationsSections || {}).ops_reports || {}).queue_totals || {}).value || 0],
+            ]
+          : [
           ["Total Users", summary.total_users],
           ["Active Projects", summary.total_active_projects],
           ["Paid Orders", summary.paid_orders],
           ["Missing Entitlements", summary.missing_entitlements],
           ["Mint-Ready Projects", summary.mint_ready_projects],
           ["Data Mismatches", summary.projects_with_data_mismatch],
-          ];
+            ];
     node.innerHTML = cards
       .map(function (item, index) {
         return `
@@ -537,6 +558,7 @@
     const node = document.querySelector("[data-admin-priority-repairs]");
     if (!node) return;
     const isMarketing = isMarketingRole();
+    const isOpsRole = isOperationsRole();
     const isFinanceRole = state.roleKey === "finance_admin";
     const financeIntegrity = (financeSections && financeSections.finance_integrity) || {};
     const payroll = (financeSections && financeSections.payroll) || {};
@@ -557,12 +579,21 @@
             const value = entry[1] || {};
             return [titleize(key), value.available ? "live" : "unavailable"];
           })
-        : [
+        : isOpsRole
+          ? [
+              ["Stuck Intake", (((state.operationsSections || {}).intake_onboarding || {}).stuck_intake || {}).value || 0],
+              ["Aging Verification Queue", (((state.operationsSections || {}).verification_upload_review || {}).aging_verification_queue || {}).value || 0],
+              ["Failed Invite Deliveries", (((state.operationsSections || {}).workspace_access_invites || {}).failed_invite_deliveries || {}).value || 0],
+              ["Waiting on Customer", (((state.operationsSections || {}).build_fulfillment || {}).waiting_on_customer || {}).value || 0],
+              ["Stuck Linkage", (((state.operationsSections || {}).exceptions_escalations || {}).stuck_linkage || {}).value || 0],
+              ["Exec Escalations", (((state.operationsSections || {}).exceptions_escalations || {}).projects_needing_executive_escalation || {}).value || 0],
+            ]
+          : [
           ["Paid order without project link", (priority.paid_order_without_project_link || []).length],
           ["Project without entitlement", (priority.project_without_entitlement || []).length],
           ["Package without lane", (priority.package_without_lane || []).length],
           ["Mint-eligible blocked", (priority.mint_eligible_blocked || []).length],
-          ];
+            ];
     node.innerHTML = cards
       .map(function (item) {
         return `
@@ -579,12 +610,14 @@
     try {
       const payload = await fetchJson("/admin/control-center/overview?limit=24");
       state.marketingSections = payload.marketing_sections || {};
+      state.operationsSections = payload.operations_sections || {};
       renderTopSummary(payload.summary || {}, payload.finance_sections || {}, payload.marketing_sections || {});
       renderPriorityRepairs(payload.priority_repairs || {}, payload.finance_sections || {}, payload.marketing_sections || {});
       if (isMarketingRole()) renderMarketingQueuePanel();
     } catch (error) {
       console.error("Overview load failed:", error);
       state.marketingSections = {};
+      state.operationsSections = {};
       renderTopSummary({}, {}, {});
       renderPriorityRepairs({}, {}, {});
       if (isMarketingRole()) renderMarketingQueuePanel();
@@ -636,17 +669,72 @@
       .join("");
   }
 
+  function renderOperationsMetric(label, metric) {
+    const payload = metric || {};
+    const isLive = Boolean(payload.live);
+    const value = Object.prototype.hasOwnProperty.call(payload, "value") ? payload.value : payload;
+    const displayValue =
+      value && typeof value === "object"
+        ? `<pre class="card-copy">${escapeHtml(JSON.stringify(value, null, 2))}</pre>`
+        : `<strong>${escapeHtml(String(value ?? "—"))}</strong>`;
+    return `
+      <article class="admin-dossier-card">
+        <div class="admin-card-header">
+          <span class="admin-card-badge">${isLive ? "L" : "N"}</span>
+          <h3 class="admin-card-title">${escapeHtml(label)}</h3>
+        </div>
+        ${displayValue}
+        ${isLive ? "" : `<p class="card-copy">Status: ${escapeHtml(payload.status || "unavailable")}</p>`}
+        ${payload.status_note ? `<p class="card-copy">${escapeHtml(payload.status_note)}</p>` : ""}
+      </article>
+    `;
+  }
+
+  function renderOperationsQueuePanel() {
+    const sections = state.operationsSections || {};
+    const queueSection = sections[state.queue] || {};
+    const entries = Object.entries(queueSection);
+    if (!entries.length) {
+      return `
+        <div class="admin-empty-state">
+          <h3>No operations metrics available</h3>
+          <p class="card-copy">This Tomb of Light operations section has no live metrics yet.</p>
+        </div>
+      `;
+    }
+    const exportAction =
+      state.queue === "ops_reports"
+        ? `<div class="inline-actions" style="margin-bottom: 0.75rem;"><button class="btn btn-primary" type="button" data-admin-export-ops-report>Export Ops Report</button></div>`
+        : "";
+    return `
+      ${exportAction}
+      <div class="admin-ops-metrics-grid">
+        ${entries
+          .map(function (entry) {
+            return renderOperationsMetric(titleize(entry[0]), entry[1]);
+          })
+          .join("")}
+      </div>
+    `;
+  }
+
   function renderCaseList() {
     const node = document.querySelector("[data-admin-case-list]");
     if (!node) return;
+    const operationsPanel = isOperationsRole() ? renderOperationsQueuePanel() : "";
     if (isMarketingRole()) {
       renderMarketingQueuePanel();
+      return;
+    }
+    if (isOperationsRole() && state.queue === "ops_reports") {
+      node.innerHTML = operationsPanel;
       return;
     }
     const cases = Array.isArray(state.cases) ? state.cases : [];
     const canRepairSelected = isAllowedBulkAction("repair-selected-records");
     if (!cases.length) {
       node.innerHTML = `
+        ${operationsPanel}
         <div class="admin-empty-state">
           <div class="card-number">C</div>
           <h3>No case results</h3>
@@ -656,7 +744,7 @@
       return;
     }
 
-    node.innerHTML = cases
+    node.innerHTML = `${operationsPanel}${cases
       .map(function (item) {
         const alerts = Array.isArray(item.alerts) ? item.alerts : [];
         const guidance = getGuidanceItems(item.operator_guidance);
@@ -703,7 +791,7 @@
           </article>
         `;
       })
-      .join("");
+      .join("")}`;
   }
 
   function summarizeTabValue(value) {
@@ -1295,6 +1383,18 @@
       clearPageStatus();
       return;
     }
+    if (isOperationsRole() && state.queue === "ops_reports") {
+      state.cases = [];
+      state.selectedCaseId = "";
+      state.workspace = null;
+      renderCaseList();
+      renderCaseHeader();
+      renderCaseContext();
+      updateActionAvailability();
+      updateBulkActionAvailability();
+      clearPageStatus();
+      return;
+    }
     const meta = QUEUE_META[state.queue] || QUEUE_META.customer_cases;
     setPageStatus(`Loading ${meta[0].toLowerCase()}...`, "info");
     try {
@@ -1407,6 +1507,29 @@
       setPageStatus("Case action completed.", "success");
     } catch (error) {
       setPageStatus(error.message || "Case action failed.", "error");
+    }
+  }
+
+  async function exportOpsReport() {
+    if (!isOperationsRole() || !isAllowedQueue("ops_reports")) {
+      setPageStatus("Your role cannot export operations reports.", "error");
+      return;
+    }
+    setPageStatus("Generating operations report export...", "info");
+    try {
+      const payload = await fetchJson("/admin/control-center/ops-reports/export");
+      const blob = new Blob([JSON.stringify(payload || {}, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "tomb-of-light-ops-report.json";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setPageStatus("Operations report exported.", "success");
+    } catch (error) {
+      setPageStatus(error.message || "Unable to export operations report.", "error");
     }
   }
 
@@ -1636,6 +1759,12 @@
         if (bulkActionButton.disabled || bulkActionButton.classList.contains("is-disabled")) return;
         const action = bulkActionButton.getAttribute("data-admin-bulk-action");
         if (action) runBulkAction(action);
+        return;
+      }
+
+      const exportOpsButton = target.closest("[data-admin-export-ops-report]");
+      if (exportOpsButton) {
+        exportOpsReport();
         return;
       }
 

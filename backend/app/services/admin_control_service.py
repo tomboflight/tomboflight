@@ -46,6 +46,12 @@ INTERNAL_ROLE_KEYS = set(INTERNAL_ADMIN_ROLE_CODES) | {"admin"}
 
 ADMIN_CONTROL_QUEUES = [
     "overview",
+    "intake_onboarding",
+    "verification_upload_review",
+    "workspace_access_invites",
+    "build_fulfillment",
+    "exceptions_escalations",
+    "ops_reports",
     "traffic_awareness",
     "funnel_conversion",
     "package_demand",
@@ -106,6 +112,12 @@ BULK_ACTION_PERMISSIONS: dict[str, set[str]] = {
 }
 QUEUE_PERMISSIONS: dict[str, set[str]] = {
     "overview": {"admin.control.view"},
+    "intake_onboarding": {"admin.intake.review", "admin.control.view"},
+    "verification_upload_review": {"uploads.admin.review", "verification.review"},
+    "workspace_access_invites": {"admin.control.view"},
+    "build_fulfillment": {"admin.control.view"},
+    "exceptions_escalations": {"admin.control.view"},
+    "ops_reports": {"admin.control.view"},
     "traffic_awareness": {"admin.analytics.read"},
     "funnel_conversion": {"admin.analytics.read"},
     "package_demand": {"admin.analytics.read"},
@@ -195,6 +207,38 @@ MARKETING_QUEUE_ALLOWLIST = [
 ]
 MARKETING_TAB_ALLOWLIST = [
     "marketing_dashboard",
+]
+OPERATIONS_QUEUE_ALLOWLIST = [
+    "intake_onboarding",
+    "verification_upload_review",
+    "workspace_access_invites",
+    "build_fulfillment",
+    "exceptions_escalations",
+    "ops_reports",
+]
+OPERATIONS_TAB_ALLOWLIST = [
+    "identity",
+    "package_lane",
+    "project",
+    "uploads_verification",
+    "mint_readiness",
+    "audit_timeline",
+]
+OPERATIONS_ACTION_ALLOWLIST = [
+    "sync_package",
+    "normalize_package",
+    "assign_lane",
+    "repair_record",
+    "run_readiness_check",
+    "queue_for_mint_review",
+    "refresh_case_data",
+]
+OPERATIONS_BULK_ACTION_ALLOWLIST = [
+    "assign-missing-lanes",
+    "normalize-broken-package-records",
+    "refresh-mint-readiness",
+    "repair-selected-records",
+    "repair-all-safe-records",
 ]
 
 SUPER_ADMIN_USER_STATUS_VALUES = {
@@ -405,7 +449,28 @@ def admin_control_access_profile(current_user: dict[str, Any]) -> dict[str, Any]
 
     primary_role = resolve_primary_role_code(role_codes, default="user")
 
-    if primary_role == "finance_admin":
+    if primary_role == "operations_admin":
+        allowed_queues = [
+            queue
+            for queue in OPERATIONS_QUEUE_ALLOWLIST
+            if _has_any_permission(permissions, QUEUE_PERMISSIONS.get(queue, {"admin.control.view"}))
+        ]
+        allowed_tabs = [
+            tab
+            for tab in OPERATIONS_TAB_ALLOWLIST
+            if _has_any_permission(permissions, TAB_PERMISSIONS.get(tab, {"admin.control.view"}))
+        ]
+        allowed_actions = [
+            action
+            for action in OPERATIONS_ACTION_ALLOWLIST
+            if _has_any_permission(permissions, CASE_ACTION_PERMISSIONS.get(action, {"admin.control.view"}))
+        ]
+        allowed_bulk_actions = [
+            action
+            for action in OPERATIONS_BULK_ACTION_ALLOWLIST
+            if _has_any_permission(permissions, BULK_ACTION_PERMISSIONS.get(action, {"admin.control.view"}))
+        ]
+    elif primary_role == "finance_admin":
         allowed_queues = [
             queue
             for queue in FINANCE_QUEUE_ALLOWLIST
@@ -2421,6 +2486,40 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
     refunds_this_month = 0.0
     unlinked_payments = 0
     lane_sales = {"portrait": 0, "household": 0, "network": 0, "organization": 0}
+    seven_days_ago = now - timedelta(days=7)
+    three_days_ago = now - timedelta(days=3)
+    fourteen_days_ago = now - timedelta(days=14)
+
+    new_projects_accounts = 0
+    intake_started = 0
+    intake_completed = 0
+    incomplete_intake = 0
+    stuck_intake = 0
+    missing_consent_or_steps = 0
+
+    uploads_awaiting_review = 0
+    verification_pending = 0
+    rejected_or_incomplete_uploads = 0
+    missing_records = 0
+    aging_verification_queue = 0
+
+    pending_invites = 0
+    expired_invites = 0
+    failed_invite_deliveries = 0
+    access_mismatches = 0
+    member_role_access_issues = 0
+
+    build_stage_in_progress = 0
+    certificate_readiness = 0
+    blocked_projects = 0
+    waiting_on_customer = 0
+    ready_for_next_step = 0
+
+    stuck_linkage = 0
+    stuck_entitlements = 0
+    unresolved_admin_cases = 0
+    manual_review_queue = 0
+    executive_escalations = 0
 
     finance_statuses = set(PAID_ORDER_STATUSES) | {
         "failed",
@@ -2473,6 +2572,37 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
     for project in db["projects"].find({}).sort("updated_at", -1).limit(500):
         project_id = _normalize(project.get("_id"))
         readiness = run_readiness_check(project_id=project_id)
+        created_at = _coerce_datetime(project.get("created_at"))
+        updated_at = _coerce_datetime(project.get("updated_at"))
+        phase_value = _normalize(project.get("phase")).lower()
+        intake_status = _normalize(project.get("intake_status")).lower()
+        build_status = _normalize(project.get("status")).lower()
+        upload_count = int(db["uploaded_files"].count_documents({"project_id": project_id}))
+        if created_at and created_at >= seven_days_ago:
+            new_projects_accounts += 1
+        if phase_value.startswith("intake") or intake_status in {"started", "in_progress", "pending"}:
+            intake_started += 1
+        if readiness.get("intake_approved") or phase_value in INTAKE_APPROVED_PHASES:
+            intake_completed += 1
+        if phase_value.startswith("intake") and not readiness.get("intake_approved"):
+            incomplete_intake += 1
+            if updated_at and updated_at < three_days_ago:
+                stuck_intake += 1
+        if intake_status in {"missing_consent", "missing_steps", "blocked"}:
+            missing_consent_or_steps += 1
+        if upload_count <= 0 and not readiness.get("mint_already_completed"):
+            missing_records += 1
+            waiting_on_customer += 1
+        if build_status in {"build_started", "in_production", "qa_review", "quality_review", "client_review"}:
+            build_stage_in_progress += 1
+        if readiness.get("mint_review_ready"):
+            certificate_readiness += 1
+            ready_for_next_step += 1
+        if readiness.get("blocking_reasons"):
+            blocked_projects += 1
+            manual_review_queue += 1
+            if updated_at and updated_at < fourteen_days_ago:
+                executive_escalations += 1
         if readiness.get("mint_review_ready"):
             mint_ready_count += 1
         if not readiness.get("package_synced") or not readiness.get("lane_assigned") or not readiness.get("order_linked") or not readiness.get("entitlement_exists"):
@@ -2485,6 +2615,7 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
             )
         if not readiness.get("entitlement_exists"):
             priority_repairs["project_without_entitlement"].append(project_id)
+            stuck_entitlements += 1
         if not readiness.get("lane_assigned"):
             priority_repairs["package_without_lane"].append(project_id)
         if readiness.get("mint_review_ready") and not readiness.get("mint_eligible"):
@@ -2493,6 +2624,7 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
     for order in db["orders"].find({"status": {"$in": list(PAID_ORDER_STATUSES)}}).sort("created_at", -1).limit(500):
         if _normalize(order.get("project_id")):
             continue
+        stuck_linkage += 1
         priority_repairs["paid_order_without_project_link"].append(
             {
                 "order_id": _normalize(order.get("_id")),
@@ -2500,6 +2632,49 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
                 "package_name": _normalize(order.get("package_name")) or None,
             }
         )
+
+    uploads_awaiting_review = int(
+        db["uploaded_files"].count_documents(
+            {"status": {"$in": ["pending", "awaiting_review", "uploaded", "received"]}}
+        )
+    )
+    rejected_or_incomplete_uploads = int(
+        db["uploaded_files"].count_documents(
+            {"status": {"$in": ["rejected", "incomplete", "needs_resubmission"]}}
+        )
+    )
+    verification_pending = int(
+        db["verification_records"].count_documents(
+            {"status": {"$in": ["pending", "awaiting_review", "in_review"]}}
+        )
+    )
+    for record in db["verification_records"].find(
+        {"status": {"$in": ["pending", "awaiting_review", "in_review"]}}
+    ).limit(5000):
+        created_at = _coerce_datetime(record.get("created_at") or record.get("updated_at"))
+        if created_at and created_at < three_days_ago:
+            aging_verification_queue += 1
+
+    for invite in db["household_invites"].find({}).limit(5000):
+        status_value = _normalize(invite.get("status")).lower()
+        if status_value == "pending":
+            pending_invites += 1
+        if status_value == "expired":
+            expired_invites += 1
+        if _normalize(invite.get("email_delivery_status")).lower() == "failed":
+            failed_invite_deliveries += 1
+
+    for member in db["project_members"].find({}).limit(5000):
+        link_status = _normalize(member.get("link_status") or member.get("status")).lower()
+        member_role = _normalize(member.get("member_role")).lower()
+        if link_status and link_status not in {"active", "accepted"}:
+            access_mismatches += 1
+        if not member_role or member_role in {"unknown", "invalid"}:
+            member_role_access_issues += 1
+
+    unresolved_admin_cases = len(mismatches)
+    new_accounts = int(db["users"].count_documents({"created_at": {"$gte": seven_days_ago}}))
+    new_projects_accounts += new_accounts
 
     postmark_token_configured = bool(_normalize(settings.postmark_server_token))
     postmark_from_address_configured = bool(_normalize_email(settings.postmark_from_email))
@@ -2628,6 +2803,52 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
             },
         },
         "marketing_sections": marketing_sections,
+        "operations_sections": {
+            "intake_onboarding": {
+                "new_projects_accounts": {"value": new_projects_accounts, "live": True, "status": "live"},
+                "intake_started": {"value": intake_started, "live": True, "status": "live"},
+                "intake_completed": {"value": intake_completed, "live": True, "status": "live"},
+                "incomplete_intake": {"value": incomplete_intake, "live": True, "status": "live"},
+                "stuck_intake": {"value": stuck_intake, "live": True, "status": "live"},
+                "missing_consent_or_steps": {"value": missing_consent_or_steps, "live": True, "status": "live"},
+            },
+            "verification_upload_review": {
+                "uploads_awaiting_review": {"value": uploads_awaiting_review, "live": True, "status": "live"},
+                "verification_pending": {"value": verification_pending, "live": True, "status": "live"},
+                "rejected_or_incomplete_uploads": {"value": rejected_or_incomplete_uploads, "live": True, "status": "live"},
+                "missing_records": {"value": missing_records, "live": True, "status": "live"},
+                "aging_verification_queue": {"value": aging_verification_queue, "live": True, "status": "live"},
+            },
+            "workspace_access_invites": {
+                "pending_invites": {"value": pending_invites, "live": True, "status": "live"},
+                "expired_invites": {"value": expired_invites, "live": True, "status": "live"},
+                "failed_invite_deliveries": {"value": failed_invite_deliveries, "live": True, "status": "live"},
+                "access_mismatches": {"value": access_mismatches, "live": True, "status": "live"},
+                "member_role_access_issues": {"value": member_role_access_issues, "live": True, "status": "live"},
+            },
+            "build_fulfillment": {
+                "project_readiness": {"value": {"ready_for_next_step": ready_for_next_step, "blocked": blocked_projects}, "live": True, "status": "live"},
+                "lineage_family_build_stage": {"value": build_stage_in_progress, "live": True, "status": "live"},
+                "certificate_readiness": {"value": certificate_readiness, "live": True, "status": "live"},
+                "blocked_projects": {"value": blocked_projects, "live": True, "status": "live"},
+                "waiting_on_customer": {"value": waiting_on_customer, "live": True, "status": "live"},
+                "ready_for_next_step": {"value": ready_for_next_step, "live": True, "status": "live"},
+            },
+            "exceptions_escalations": {
+                "stuck_linkage": {"value": stuck_linkage, "live": True, "status": "live"},
+                "stuck_entitlements_impacting_ops": {"value": stuck_entitlements, "live": True, "status": "live"},
+                "unresolved_admin_cases": {"value": unresolved_admin_cases, "live": True, "status": "live"},
+                "manual_review_queue": {"value": manual_review_queue, "live": True, "status": "live"},
+                "projects_needing_executive_escalation": {"value": executive_escalations, "live": True, "status": "live"},
+            },
+            "ops_reports": {
+                "queue_totals": {"value": intake_started + verification_pending + pending_invites + build_stage_in_progress + manual_review_queue, "live": True, "status": "live"},
+                "aging_by_queue": {"value": {"intake": stuck_intake, "verification": aging_verification_queue, "escalation": executive_escalations}, "live": True, "status": "live"},
+                "completion_throughput": {"value": {"intake_completed": intake_completed, "ready_for_next_step": ready_for_next_step}, "live": True, "status": "live"},
+                "sla_turnaround_indicators": {"value": None, "live": False, "status": "unavailable", "status_note": "SLA turnaround metrics are not yet live."},
+                "export_ops_report": {"value": "available", "live": True, "status": "live"},
+            },
+        },
         "priority_repairs": {
             "paid_order_without_project_link": priority_repairs["paid_order_without_project_link"][:limit],
             "project_without_entitlement": priority_repairs["project_without_entitlement"][:limit],
@@ -2641,6 +2862,17 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
                 "from_address_configured": postmark_from_address_configured,
             }
         },
+    }
+
+
+def export_operations_report() -> dict[str, Any]:
+    payload = admin_console_overview(limit=200)
+    return {
+        "generated_at": _serialize_datetime(_now()),
+        "report_type": "operations_control_center",
+        "format": "json",
+        "sections": payload.get("operations_sections") or {},
+        "status": "live",
     }
 
 
@@ -3118,10 +3350,45 @@ def _operator_guidance_items(
     return items[:8]
 
 
-def _case_queue_match(queue: str, alerts: list[str]) -> bool:
+def _case_queue_match(
+    queue: str,
+    alerts: list[str],
+    *,
+    project: dict[str, Any] | None = None,
+    readiness: dict[str, Any] | None = None,
+) -> bool:
     normalized = _normalize(queue).lower()
     if normalized in {"", "all", "overview", "customer_cases", "projects", "system_health"}:
         return True
+    if normalized == "intake_onboarding":
+        phase = _normalize((project or {}).get("phase")).lower()
+        status_value = _normalize((project or {}).get("status")).lower()
+        if phase.startswith("intake"):
+            return True
+        return status_value in {"new", "pending", "intake_started", "intake_in_progress"} or "upload_review_pending" in alerts
+    if normalized == "verification_upload_review":
+        return "upload_review_pending" in alerts or bool(readiness and not readiness.get("mint_already_completed"))
+    if normalized == "workspace_access_invites":
+        return any(
+            alert in {"duplicate_admin_user_identity", "paid_order_not_linked"}
+            for alert in alerts
+        )
+    if normalized == "build_fulfillment":
+        return bool(project)
+    if normalized == "exceptions_escalations":
+        return any(
+            alert
+            in {
+                "missing_entitlement",
+                "lane_unknown",
+                "paid_order_not_linked",
+                "mint_blocked",
+                "duplicate_admin_user_identity",
+            }
+            for alert in alerts
+        )
+    if normalized == "ops_reports":
+        return False
     if normalized == "money_now":
         return True
     if normalized == "subscriptions_maintenance":
@@ -4245,7 +4512,7 @@ def list_customer_cases(
             readiness=readiness,
             warnings=package_fields.get("warnings") or [],
         )
-        if not _case_queue_match(queue, alerts):
+        if not _case_queue_match(queue, alerts, project=project, readiness=readiness):
             continue
 
         owner_email = _normalize_email(project.get("owner_email"))
@@ -4645,31 +4912,43 @@ def customer_case_workspace(
     if not normalized_case_id:
         raise ValueError("Case id is required.")
 
+    workspace_payload: dict[str, Any]
     if normalized_case_id.startswith("user:"):
         user_id = normalized_case_id.split(":", 1)[1]
         user = _find_case_user(user_id=user_id)
         if user is None:
             raise ValueError("User account case not found.")
-        return _filter_workspace_for_access(_build_user_workspace_payload(user), current_user)
-
-    if normalized_case_id.startswith("order:"):
+        workspace_payload = _filter_workspace_for_access(_build_user_workspace_payload(user), current_user)
+    elif normalized_case_id.startswith("order:"):
         order_id = normalized_case_id.split(":", 1)[1]
         order = _order_by_id(order_id)
         if order is None:
             raise ValueError("Order case not found.")
         project = _project_by_id(_normalize(order.get("project_id")))
-        return _filter_workspace_for_access(_build_case_workspace_payload(
+        workspace_payload = _filter_workspace_for_access(_build_case_workspace_payload(
             case_id=normalized_case_id,
             project=project,
             order=order,
         ), current_user)
-
-    project, order = _resolve_project_order_context(normalized_case_id)
-    return _filter_workspace_for_access(_build_case_workspace_payload(
-        case_id=normalized_case_id,
-        project=project,
-        order=order,
-    ), current_user)
+    else:
+        project, order = _resolve_project_order_context(normalized_case_id)
+        workspace_payload = _filter_workspace_for_access(_build_case_workspace_payload(
+            case_id=normalized_case_id,
+            project=project,
+            order=order,
+        ), current_user)
+    _write_admin_action_audit(
+        actor=current_user,
+        action="operations.sensitive_record_access",
+        target_type="customer_case",
+        target_id=normalized_case_id,
+        context={"surface": "admin_control_center.workspace"},
+        details={
+            "viewed_tabs": sorted((workspace_payload.get("tabs") or {}).keys()),
+            "alerts": list(workspace_payload.get("alerts") or []),
+        },
+    )
+    return workspace_payload
 
 
 def normalize_broken_package_records(*, limit: int = 500) -> dict[str, Any]:
