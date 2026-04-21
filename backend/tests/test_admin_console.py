@@ -825,7 +825,7 @@ class AdminConsoleOverviewTests(unittest.TestCase):
             },
         )
 
-    def test_finance_sections_use_consistent_keys_and_non_placeholder_states(self):
+    def test_finance_sections_use_consistent_keys_and_explicit_non_live_states(self):
         db = FakeDatabase(
             {
                 "users": [],

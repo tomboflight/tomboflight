@@ -561,9 +561,20 @@ def _package_lane_for_code(package_code: str) -> str:
     return lane if lane in ALLOWED_LANES else "unknown"
 
 
+def _finance_event_key_part(value: Any) -> str:
+    return _normalize(value).replace("|", "¦")
+
+
 def _build_finance_event_key(*, order_id: str, event_type: str, amount: float, occurred_at: datetime | None) -> str:
     occurred_text = occurred_at.isoformat() if occurred_at else "none"
-    return f"{_normalize(order_id)}::{_normalize(event_type)}::{round(float(amount), 2)}::{occurred_text}"
+    return "|".join(
+        [
+            _finance_event_key_part(order_id),
+            _finance_event_key_part(event_type),
+            _finance_event_key_part(round(float(amount), 2)),
+            _finance_event_key_part(occurred_text),
+        ]
+    )
 
 
 def _write_finance_event(
@@ -714,9 +725,8 @@ def _record_package_transition_event(
     if not before_code or not after_code or before_code == after_code:
         return
     before_package = get_package(before_code) or {}
-    after_package = get_package(after_code) or {}
     before_price = _coerce_amount(before_package.get("base_price_usd"))
-    after_price = _coerce_amount(after_package.get("base_price_usd"))
+    after_price = _coerce_amount((get_package(after_code) or {}).get("base_price_usd"))
     event_type = "package_change"
     if after_price > before_price:
         event_type = "package_upgrade"
@@ -1276,7 +1286,8 @@ def _serialize_project(project: dict[str, Any]) -> dict[str, Any]:
 def sync_package(*, project_id: str, order_id: str = "") -> dict[str, Any]:
     db = _db()
     project, order = _resolve_project_order_context(project_id, preferred_order_id=order_id)
-    previous_order_package = _normalize((order or {}).get("package_code") or (order or {}).get("package_slug"))
+    order_ref = order or {}
+    previous_order_package = _normalize(order_ref.get("package_code") or order_ref.get("package_slug"))
     entitlement = get_project_entitlement(_normalize(project.get("_id")))
     package_fields = _package_fields_from_context(project, order, entitlement)
     project_doc_id = _to_object_id(_normalize(project.get("_id")))
@@ -1759,7 +1770,8 @@ def run_readiness_check(*, project_id: str, order_id: str = "") -> dict[str, Any
     package_fields = _package_fields_from_context(project, order, entitlement)
 
     project_package_code = normalize_package_code(_normalize(project.get("package_code") or project.get("package_slug")))
-    order_package_code = normalize_package_code(_normalize((order or {}).get("package_code") or (order or {}).get("package_slug")))
+    order_ref = order or {}
+    order_package_code = normalize_package_code(_normalize(order_ref.get("package_code") or order_ref.get("package_slug")))
     entitlement_package_code = normalize_package_code(_normalize((entitlement or {}).get("package_code")))
     package_synced = bool(project_package_code and order_package_code and project_package_code == order_package_code == package_fields["package_code"])
     if entitlement:
@@ -2250,9 +2262,9 @@ def _link_order_to_project_document(order: dict[str, Any], project: dict[str, An
     if project_oid is None:
         return False
 
-    package_code = normalize_package_code(
-        _normalize(project.get("package_code") or project.get("package_slug") or order.get("package_code") or order.get("package_slug"))
-    )
+    project_package = _normalize(project.get("package_code") or project.get("package_slug"))
+    order_package = _normalize(order.get("package_code") or order.get("package_slug"))
+    package_code = normalize_package_code(project_package or order_package)
     package_name = _normalize(project.get("package_name") or order.get("package_name"))
     lane = _project_lane_value(project) or _package_lane_for_code(package_code)
     db["orders"].update_one(

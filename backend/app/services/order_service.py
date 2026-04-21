@@ -253,7 +253,8 @@ def _link_order_to_project(
     project_package_code = _normalize_package_code(
         project.get("package_code") or project.get("package_slug") or order_doc.get("package_code")
     )
-    project_lane = _normalize(str(project.get("project_lane") or project.get("lane") or "")).lower() or _package_lane_for_code(project_package_code)
+    raw_project_lane = _normalize(str(project.get("project_lane") or project.get("lane") or "")).lower()
+    project_lane = raw_project_lane or _package_lane_for_code(project_package_code)
     orders.update_one(
         {"_id": order_id},
         {
