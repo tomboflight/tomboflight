@@ -365,6 +365,10 @@
     return fallback;
   }
 
+  function isSecureShareMode(manifest = currentManifest) {
+    return String(manifest?.mode || "").trim() === "secure_share";
+  }
+
   function renderPathList(manifest) {
     if (!pathList) return;
 
@@ -418,13 +422,13 @@
 
   function applyControlVisibility(manifest) {
     const canLineageNavigate =
-      manifest.mode !== "secure_share" &&
+      !isSecureShareMode(manifest) &&
       isControlEnabled("allow_lineage_navigation", true);
     const canZoom =
-      manifest.mode !== "secure_share" &&
+      !isSecureShareMode(manifest) &&
       isControlEnabled("allow_zoom", true);
-    const canReset = manifest.mode !== "secure_share";
-    const canNarration = manifest.mode !== "secure_share";
+    const canReset = !isSecureShareMode(manifest);
+    const canNarration = !isSecureShareMode(manifest);
 
     if (navLeftBtn) navLeftBtn.style.display = canLineageNavigate ? "" : "none";
     if (navRightBtn) navRightBtn.style.display = canLineageNavigate ? "" : "none";

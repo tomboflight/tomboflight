@@ -123,6 +123,7 @@ def _lane_from_project(project: dict[str, Any]) -> str:
 
 
 def _is_legacy_snapshot_project(project: dict[str, Any]) -> bool:
+    """Return True when the workspace package is Legacy Snapshot secure-share tier."""
     package_code = normalize_package_code(_normalize_value(project.get("package_code")))
     return package_code == "legacy_snapshot"
 
