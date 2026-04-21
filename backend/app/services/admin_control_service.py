@@ -2577,7 +2577,7 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
         phase_value = _normalize(project.get("phase")).lower()
         intake_status = _normalize(project.get("intake_status")).lower()
         build_status = _normalize(project.get("status")).lower()
-        upload_count = count_workspace_uploads(project_id=project_id)
+        upload_count = int(db["uploaded_files"].count_documents({"project_id": project_id}))
         if created_at and created_at >= seven_days_ago:
             new_projects_accounts += 1
         if phase_value.startswith("intake") or intake_status in {"started", "in_progress", "pending"}:

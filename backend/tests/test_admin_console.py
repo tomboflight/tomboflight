@@ -444,7 +444,10 @@ class AdminUserQueueTests(unittest.TestCase):
                 current_user={"_id": ObjectId(), "email": "k.goffigan@tomboflight.com"},
             )
         self.assertTrue(write_audit_log.called)
-        self.assertEqual(write_audit_log.call_args.kwargs.get("action"), "operations.sensitive_record_access")
+        self.assertEqual(
+            write_audit_log.call_args.kwargs.get("action"),
+            "admin_control_center.operations.sensitive_record_access",
+        )
 
     def test_project_case_workspace_isolates_related_records_to_selected_project(self):
         larry_user_id = ObjectId()
