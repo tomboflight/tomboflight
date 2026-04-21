@@ -20,6 +20,7 @@ from app.services.admin_control_service import (
     assign_missing_lanes,
     customer_case_workspace,
     execute_case_action,
+    export_operations_report,
     enable_mint_review,
     generate_entitlement,
     link_order_to_project,
@@ -198,6 +199,18 @@ def get_admin_control_overview(
         return admin_console_overview(limit=limit)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+
+
+@router.get("/ops-reports/export")
+def get_operations_report_export(
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.view")),
+):
+    if not admin_control_queue_allowed(current_user, "ops_reports"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Operations report export is not permitted for this role.",
+        )
+    return export_operations_report()
 
 
 @router.get("/cases")
