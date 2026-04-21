@@ -550,9 +550,12 @@ def _db():
 
 
 def _extract_project_id_from_request(request: Request) -> str | None:
+    path_params = getattr(request, "path_params", None)
+    query_params = getattr(request, "query_params", None)
+
     candidates = [
-        request.path_params.get("project_id"),
-        request.query_params.get("project_id"),
+        path_params.get("project_id") if hasattr(path_params, "get") else None,
+        query_params.get("project_id") if hasattr(query_params, "get") else None,
     ]
     for candidate in candidates:
         normalized = _normalize_value(candidate)
