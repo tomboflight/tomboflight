@@ -69,6 +69,7 @@ class LegacySnapshotGatingRegressionTests(unittest.TestCase):
                 return_value={"resolved_entitlements": {"can_build_household": True}},
             ),
             patch.object(workspace_access, "list_project_members", return_value=[]),
+            patch.object(workspace_access, "_with_member_identity_fields", side_effect=lambda items: items),
         ):
             payload = workspace_access.get_project_members(
                 "project-1",
