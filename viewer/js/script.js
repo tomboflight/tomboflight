@@ -23,6 +23,9 @@
   const pathList = document.getElementById("pathList");
   const navLeftBtn = document.getElementById("navLeftBtn");
   const navRightBtn = document.getElementById("navRightBtn");
+  const zoomOutBtn = document.getElementById("zoomOutBtn");
+  const zoomInBtn = document.getElementById("zoomInBtn");
+  const resetViewerBtn = document.getElementById("resetViewerBtn");
   const backLink = document.getElementById("backLink");
 
   const stage = document.getElementById("viewerStage");
@@ -335,6 +338,8 @@
       states: normalizedStates,
       project: manifest?.project || null,
       family: manifest?.family || null,
+      controls:
+        manifest && typeof manifest.controls === "object" ? manifest.controls : {},
     };
 
     normalized.stateMap = normalized.states.reduce(function (acc, item) {
@@ -346,6 +351,18 @@
     });
 
     return normalized;
+  }
+
+  function isControlEnabled(controlKey, fallback = true) {
+    if (!currentManifest) return fallback;
+    const controls = currentManifest.controls || {};
+    if (Object.prototype.hasOwnProperty.call(controls, controlKey)) {
+      return Boolean(controls[controlKey]);
+    }
+    if (currentManifest.mode === "secure_share") {
+      return false;
+    }
+    return fallback;
   }
 
   function renderPathList(manifest) {
@@ -399,6 +416,29 @@
     }
   }
 
+  function applyControlVisibility(manifest) {
+    const canLineageNavigate =
+      manifest.mode !== "secure_share" &&
+      isControlEnabled("allow_lineage_navigation", true);
+    const canZoom =
+      manifest.mode !== "secure_share" &&
+      isControlEnabled("allow_zoom", true);
+    const canReset = manifest.mode !== "secure_share";
+    const canNarration = manifest.mode !== "secure_share";
+
+    if (navLeftBtn) navLeftBtn.style.display = canLineageNavigate ? "" : "none";
+    if (navRightBtn) navRightBtn.style.display = canLineageNavigate ? "" : "none";
+    if (zoomOutBtn) zoomOutBtn.style.display = canZoom ? "" : "none";
+    if (zoomInBtn) zoomInBtn.style.display = canZoom ? "" : "none";
+    if (resetViewerBtn) resetViewerBtn.style.display = canReset ? "" : "none";
+    if (narrationToggleBtn) narrationToggleBtn.style.display = canNarration ? "" : "none";
+    if (!isControlEnabled("allow_gaze_navigation", true)) {
+      cHeld = false;
+      setHoveredPortal("");
+      setEyeHintsVisible(false);
+    }
+  }
+
   function applyManifest(manifest) {
     currentManifest = normalizeManifest(manifest || DEMO_MANIFEST);
     statesById = currentManifest.stateMap;
@@ -408,6 +448,7 @@
     updateHeaderCopy(currentManifest);
     updateNavLabels();
     renderPathList(currentManifest);
+    applyControlVisibility(currentManifest);
   }
 
   function setEmptyState(copy) {
@@ -455,6 +496,7 @@
 
   function startNarrationAutoAdvance() {
     if (EMBED_MODE) return;
+    if (!isControlEnabled("allow_narration_auto_advance", true)) return;
     if (narrationInterval) clearInterval(narrationInterval);
 
     narrationInterval = setInterval(function () {
@@ -481,6 +523,7 @@
 
   function toggleNarration() {
     if (EMBED_MODE) return;
+    if (!isControlEnabled("allow_narration_auto_advance", true)) return;
     isPlaying = !isPlaying;
     if (narrationToggleBtn) {
       narrationToggleBtn.textContent = isPlaying
@@ -497,6 +540,7 @@
 
   function pauseNarrationForManualControl() {
     if (EMBED_MODE || !isPlaying) return;
+    if (!isControlEnabled("allow_narration_auto_advance", true)) return;
     isPlaying = false;
     if (narrationToggleBtn) {
       narrationToggleBtn.textContent = "Resume Narration";
@@ -590,6 +634,7 @@
 
   function onKeyDown(e) {
     if (EMBED_MODE) return;
+    if (!isControlEnabled("allow_gaze_navigation", true)) return;
     if (e.key === "c" || e.key === "C") {
       cHeld = true;
       setEyeHintsVisible(true);
@@ -597,6 +642,7 @@
   }
 
   function onKeyUp(e) {
+    if (!isControlEnabled("allow_gaze_navigation", true)) return;
     if (e.key === "c" || e.key === "C") {
       cHeld = false;
       setEyeHintsVisible(false);
@@ -672,6 +718,7 @@
 
   function selectBranch(targetStateId) {
     if (EMBED_MODE || !targetStateId) return;
+    if (!isControlEnabled("allow_branch_navigation", true)) return;
     markInteraction();
     pauseNarrationForManualControl();
     applyState(targetStateId);
@@ -679,6 +726,11 @@
 
   function renderBranchOptions() {
     if (!branchOptions) return;
+    if (!isControlEnabled("allow_branch_navigation", true)) {
+      clearElement(branchOptions);
+      branchOptions.style.display = "none";
+      return;
+    }
 
     const branchOptionsForState = Array.isArray(
       currentManifest?.branchOptionsByState?.[state],
@@ -703,22 +755,26 @@
   }
 
   function onGazeShellPointerEnter(event) {
+    if (!isControlEnabled("allow_gaze_navigation", true)) return;
     if (!cHeld || !portalCanInteract()) return;
     setHoveredPortal(resolvePortalSideFromPointer(event));
   }
 
   function onGazeShellPointerMove(event) {
+    if (!isControlEnabled("allow_gaze_navigation", true)) return;
     if (!cHeld || !portalCanInteract()) return;
     setHoveredPortal(resolvePortalSideFromPointer(event));
   }
 
   function onGazeShellPointerLeave() {
+    if (!isControlEnabled("allow_gaze_navigation", true)) return;
     if (!cHeld) return;
     setHoveredPortal("");
   }
 
   function onGazeShellClick() {
     if (EMBED_MODE || !portalCanInteract()) return;
+    if (!isControlEnabled("allow_gaze_navigation", true)) return;
     if (hoveredPortalSide === "left") {
       onEyeLeftClick();
       return;
@@ -792,6 +848,7 @@
 
   function navigateParents() {
     if (EMBED_MODE) return;
+    if (!isControlEnabled("allow_lineage_navigation", true)) return;
     markInteraction();
     const next = resolveLeftTarget();
     if (next) animatePortalTransition("left", next);
@@ -799,6 +856,7 @@
 
   function navigateDescendants() {
     if (EMBED_MODE) return;
+    if (!isControlEnabled("allow_lineage_navigation", true)) return;
     markInteraction();
     const next = resolveRightTarget();
     if (next) animatePortalTransition("right", next);
@@ -806,6 +864,7 @@
 
   function zoomIn() {
     if (EMBED_MODE) return;
+    if (!isControlEnabled("allow_zoom", true)) return;
     markInteraction();
     pauseNarrationForManualControl();
     setZoom(scale + ZOOM_STEP, true);
@@ -813,6 +872,7 @@
 
   function zoomOut() {
     if (EMBED_MODE) return;
+    if (!isControlEnabled("allow_zoom", true)) return;
     markInteraction();
     pauseNarrationForManualControl();
     setZoom(scale - ZOOM_STEP, true);
@@ -820,6 +880,7 @@
 
   function resetViewer() {
     if (EMBED_MODE) return;
+    if (!isControlEnabled("allow_zoom", true)) return;
     setZoom(1, false);
     applyState(currentManifest?.initialStateId || stateOrder[0] || "");
     if (isPlaying) startNarrationAutoAdvance();
@@ -827,6 +888,7 @@
 
   function onWheel(e) {
     if (EMBED_MODE) return;
+    if (!isControlEnabled("allow_gaze_navigation", true)) return;
     e.preventDefault();
 
     pendingWheelDelta += e.deltaY;

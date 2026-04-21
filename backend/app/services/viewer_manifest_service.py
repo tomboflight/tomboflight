@@ -7,7 +7,7 @@ from bson import ObjectId
 
 from app.core.package_type_catalog import normalize_package_type
 from app.core.state_catalog import normalize_visibility_state
-from app.core.package_catalog import get_package
+from app.core.package_catalog import get_package, normalize_package_code
 from app.database import get_database
 from app.dependencies.auth import has_internal_admin_access
 from app.services.project_service import list_projects
@@ -120,6 +120,11 @@ def _lane_from_project(project: dict[str, Any]) -> str:
 
     package = get_package(_normalize_value(project.get("package_code")))
     return normalize_package_type((package or {}).get("package_lane"), default="portrait")
+
+
+def _is_legacy_snapshot_project(project: dict[str, Any]) -> bool:
+    package_code = normalize_package_code(_normalize_value(project.get("package_code")))
+    return package_code == "legacy_snapshot"
 
 
 def _find_submission_for_project(project: dict[str, Any]) -> dict[str, Any] | None:
@@ -497,6 +502,7 @@ def _build_empty_state(
     lane: str,
     family: dict[str, Any] | None,
     project: dict[str, Any],
+    secure_share_only: bool = False,
 ) -> dict[str, Any]:
     workspace_name = (
         _normalize_value((family or {}).get("family_name"))
@@ -516,9 +522,14 @@ def _build_empty_state(
         )
     else:
         status = "Awaiting Portrait Upload"
-        description = (
-            "Upload your portrait in Verification Uploads to activate your private cinematic viewer automatically."
-        )
+        if secure_share_only:
+            description = (
+                "Upload your portrait in Verification Uploads to activate your protected secure share page."
+            )
+        else:
+            description = (
+                "Upload your portrait in Verification Uploads to activate your private cinematic viewer automatically."
+            )
 
     return {
         "id": "workspace-anchor",
@@ -672,6 +683,7 @@ def build_viewer_manifest(
     )
 
     lane = _lane_from_project(project)
+    secure_share_only = lane == "portrait" and _is_legacy_snapshot_project(project)
     family_id_value = _normalize_value((family_doc or {}).get("_id") or project.get("family_id"))
     members: list[dict[str, Any]] = []
     if family_id_value:
@@ -721,6 +733,10 @@ def build_viewer_manifest(
                 description = (
                     f"Cinematic command portrait view for {title} inside your protected organization workspace."
                 )
+            elif secure_share_only:
+                description = (
+                    f"Protected secure share portrait for {title} inside your private legacy workspace."
+                )
             states.append(
                 {
                     "id": f"member-{member_id}",
@@ -743,6 +759,7 @@ def build_viewer_manifest(
                 lane=lane,
                 family=family_doc,
                 project=project,
+                secure_share_only=secure_share_only,
             )
         )
 
@@ -768,12 +785,20 @@ def build_viewer_manifest(
         path_title = "Family Flow"
         nav_labels = {"left": "Origins", "right": "Forward Line"}
     else:
-        hero_title = "Private Portrait Viewer"
-        hero_body = (
-            "Move through the portrait sequence attached to your protected legacy workspace."
-        )
-        path_title = "Portrait Flow"
-        nav_labels = {"left": "Origins", "right": "Forward View"}
+        if secure_share_only:
+            hero_title = "Protected Secure Share"
+            hero_body = (
+                "View your protected portrait deliverable through a secure share experience."
+            )
+            path_title = "Secure Share"
+            nav_labels = {"left": "Previous", "right": "Next"}
+        else:
+            hero_title = "Private Portrait Viewer"
+            hero_body = (
+                "Move through the portrait sequence attached to your protected legacy workspace."
+            )
+            path_title = "Portrait Flow"
+            nav_labels = {"left": "Origins", "right": "Forward View"}
 
     path_items = [
         f"{state['title']} — {state['status']}"
@@ -781,19 +806,28 @@ def build_viewer_manifest(
     ]
 
     return {
-        "mode": "dynamic",
+        "mode": "secure_share" if secure_share_only else "dynamic",
         "navigation_mode": "sequence",
         "hero_kicker": package_name,
         "hero_title": hero_title,
         "hero_body": hero_body,
         "workspace_name": workspace_name,
         "instructions": (
-            "Hold C to reveal the Iris Gate. Hover the left or right side of the gaze field to arm your line, then scroll in to enter. "
+            "Use the protected secure share viewer to review your approved portrait deliverable."
+            if secure_share_only
+            else "Hold C to reveal the Iris Gate. Hover the left or right side of the gaze field to arm your line, then scroll in to enter. "
             "Scroll out to return. Use the zoom buttons below only when you want a closer look at the portrait. (Full viewer only)"
         ),
         "path_title": path_title,
         "path_items": path_items,
         "nav_labels": nav_labels,
+        "controls": {
+            "allow_lineage_navigation": not secure_share_only,
+            "allow_zoom": not secure_share_only,
+            "allow_branch_navigation": not secure_share_only,
+            "allow_gaze_navigation": not secure_share_only,
+            "allow_narration_auto_advance": not secure_share_only,
+        },
         "states": states,
         "initial_state_id": states[0]["id"] if states else "",
         "branch_options_by_state": {},
