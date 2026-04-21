@@ -155,6 +155,22 @@ FINANCE_BULK_ACTION_ALLOWLIST = [
     "link-unlinked-paid-orders",
     "repair-selected-records",
 ]
+FINANCE_WORKSPACE_ALERT_EXCLUDE = {
+    "upload_review_pending",
+    "mint_blocked",
+    "mint_runtime_disabled",
+    "project_not_build_ready",
+    "project_not_intake_approved",
+}
+FINANCE_EVENT_TYPES = {
+    "payment_captured",
+    "refund_recorded",
+    "credit_recorded",
+    "billing_adjustment",
+    "package_upgrade",
+    "package_downgrade",
+    "package_change",
+}
 
 SUPER_ADMIN_USER_STATUS_VALUES = {
     "active",
@@ -486,6 +502,306 @@ def _db():
     if db is None:
         raise ValueError("Database is not connected.")
     return db
+
+
+def ensure_finance_event_indexes() -> None:
+    db = _db()
+    collection = db["finance_events"]
+    if not hasattr(collection, "create_index"):
+        return
+    try:
+        collection.create_index([("event_key", 1)], name="event_key_1", unique=True, sparse=True)
+    except Exception:
+        pass
+    try:
+        collection.create_index([("occurred_at", -1)], name="occurred_at_-1")
+    except Exception:
+        pass
+    try:
+        collection.create_index([("event_type", 1)], name="event_type_1")
+    except Exception:
+        pass
+    try:
+        collection.create_index([("order_id", 1)], name="order_id_1")
+    except Exception:
+        pass
+    try:
+        collection.create_index([("project_id", 1)], name="project_id_1")
+    except Exception:
+        pass
+    try:
+        collection.create_index([("customer_email", 1)], name="customer_email_1")
+    except Exception:
+        pass
+
+
+def _coerce_amount(value: Any) -> float:
+    if isinstance(value, (int, float)):
+        return float(value)
+    normalized = _normalize(value).replace(",", "")
+    if not normalized:
+        return 0.0
+    try:
+        return float(normalized)
+    except ValueError:
+        return 0.0
+
+
+def _order_amount_value(order: dict[str, Any]) -> float:
+    for key in ("amount", "amount_total", "total_amount", "subtotal", "price"):
+        amount = _coerce_amount(order.get(key))
+        if amount:
+            return amount
+    return 0.0
+
+
+def _package_lane_for_code(package_code: str) -> str:
+    package = get_package(normalize_package_code(package_code) or "")
+    lane = _normalize((package or {}).get("package_lane")).lower()
+    return lane if lane in ALLOWED_LANES else "unknown"
+
+
+def _finance_event_key_part(value: Any) -> str:
+    return _normalize(value).replace("|", "¦")
+
+
+def _build_finance_event_key(*, order_id: str, event_type: str, amount: float, occurred_at: datetime | None) -> str:
+    occurred_text = occurred_at.isoformat() if occurred_at else "none"
+    return "|".join(
+        [
+            _finance_event_key_part(order_id),
+            _finance_event_key_part(event_type),
+            _finance_event_key_part(round(float(amount), 2)),
+            _finance_event_key_part(occurred_text),
+        ]
+    )
+
+
+def _write_finance_event(
+    *,
+    event_type: str,
+    order_id: str = "",
+    project_id: str = "",
+    customer_email: str = "",
+    customer_user_id: str = "",
+    amount: float = 0.0,
+    currency: str = "usd",
+    occurred_at: datetime | None = None,
+    source: str = "system",
+    details: dict[str, Any] | None = None,
+) -> None:
+    normalized_type = _normalize(event_type).lower()
+    if normalized_type not in FINANCE_EVENT_TYPES:
+        return
+    normalized_order_id = _normalize(order_id)
+    normalized_project_id = _normalize(project_id)
+    normalized_customer_email = _normalize_email(customer_email)
+    if not (normalized_order_id or normalized_project_id or normalized_customer_email):
+        return
+    ensure_finance_event_indexes()
+    db = _db()
+    collection = db["finance_events"]
+    event_amount = round(float(amount or 0.0), 2)
+    occurred = occurred_at or _now()
+    event_key = _build_finance_event_key(
+        order_id=normalized_order_id or normalized_project_id or normalized_customer_email,
+        event_type=normalized_type,
+        amount=event_amount,
+        occurred_at=occurred,
+    )
+    if collection.find_one({"event_key": event_key}):
+        return
+    collection.insert_one(
+        {
+            "event_key": event_key,
+            "event_type": normalized_type,
+            "order_id": normalized_order_id or None,
+            "project_id": normalized_project_id or None,
+            "customer_email": normalized_customer_email or None,
+            "customer_user_id": _normalize_object_id(customer_user_id) or None,
+            "amount": event_amount,
+            "currency": _normalize(currency).lower() or "usd",
+            "occurred_at": occurred,
+            "source": _normalize(source) or "system",
+            "details": details or {},
+            "created_at": _now(),
+        }
+    )
+
+
+def _record_order_finance_events(order: dict[str, Any], *, source: str) -> None:
+    if not isinstance(order, dict):
+        return
+    order_id = _normalize(order.get("_id"))
+    if not order_id:
+        return
+    order_status = _normalize(order.get("status")).lower()
+    order_amount = _order_amount_value(order)
+    order_dt = _coerce_datetime(order.get("updated_at") or order.get("created_at"))
+    order_package = normalize_package_code(_normalize(order.get("package_code") or order.get("package_slug")))
+    order_lane = _normalize(order.get("lane") or order.get("package_lane")).lower() or _package_lane_for_code(order_package)
+
+    if _is_paid_package_order(order):
+        _write_finance_event(
+            event_type="payment_captured",
+            order_id=order_id,
+            project_id=_normalize_object_id(order.get("project_id")),
+            customer_email=_normalize_email(order.get("email")),
+            customer_user_id=_normalize_object_id(order.get("user_id")),
+            amount=order_amount,
+            occurred_at=order_dt,
+            source=source,
+            details={
+                "status": order_status,
+                "package_code": order_package,
+                "package_lane": order_lane,
+            },
+        )
+
+    refund_amount = _coerce_amount(order.get("refund_amount") or order.get("refunded_amount"))
+    if refund_amount > 0 or order_status in {"refunded", "refund"}:
+        _write_finance_event(
+            event_type="refund_recorded",
+            order_id=order_id,
+            project_id=_normalize_object_id(order.get("project_id")),
+            customer_email=_normalize_email(order.get("email")),
+            customer_user_id=_normalize_object_id(order.get("user_id")),
+            amount=refund_amount if refund_amount > 0 else order_amount,
+            occurred_at=_coerce_datetime(order.get("refunded_at") or order.get("updated_at") or order.get("created_at")),
+            source=source,
+            details={"status": order_status, "package_code": order_package},
+        )
+
+    credit_amount = _coerce_amount(
+        order.get("credit_amount")
+        or order.get("credited_amount")
+        or order.get("customer_credit_amount")
+        or order.get("credit_usd")
+    )
+    if credit_amount > 0:
+        _write_finance_event(
+            event_type="credit_recorded",
+            order_id=order_id,
+            project_id=_normalize_object_id(order.get("project_id")),
+            customer_email=_normalize_email(order.get("email")),
+            customer_user_id=_normalize_object_id(order.get("user_id")),
+            amount=credit_amount,
+            occurred_at=_coerce_datetime(order.get("credited_at") or order.get("updated_at") or order.get("created_at")),
+            source=source,
+            details={"status": order_status, "package_code": order_package},
+        )
+
+    adjustment_amount = _coerce_amount(
+        order.get("adjustment_amount")
+        or order.get("billing_adjustment_amount")
+        or order.get("manual_adjustment_amount")
+    )
+    if adjustment_amount != 0:
+        _write_finance_event(
+            event_type="billing_adjustment",
+            order_id=order_id,
+            project_id=_normalize_object_id(order.get("project_id")),
+            customer_email=_normalize_email(order.get("email")),
+            customer_user_id=_normalize_object_id(order.get("user_id")),
+            amount=adjustment_amount,
+            occurred_at=_coerce_datetime(order.get("adjusted_at") or order.get("updated_at") or order.get("created_at")),
+            source=source,
+            details={"status": order_status, "package_code": order_package},
+        )
+
+
+def _record_package_transition_event(
+    *,
+    order_id: str = "",
+    project_id: str = "",
+    customer_email: str = "",
+    customer_user_id: str = "",
+    before_package_code: str,
+    after_package_code: str,
+    source: str,
+) -> None:
+    before_code = normalize_package_code(before_package_code)
+    after_code = normalize_package_code(after_package_code)
+    if not before_code or not after_code or before_code == after_code:
+        return
+    before_package = get_package(before_code) or {}
+    before_price = _coerce_amount(before_package.get("base_price_usd"))
+    after_price = _coerce_amount((get_package(after_code) or {}).get("base_price_usd"))
+    event_type = "package_change"
+    if after_price > before_price:
+        event_type = "package_upgrade"
+    elif after_price < before_price:
+        event_type = "package_downgrade"
+    _write_finance_event(
+        event_type=event_type,
+        order_id=order_id,
+        project_id=project_id,
+        customer_email=customer_email,
+        customer_user_id=customer_user_id,
+        amount=after_price - before_price,
+        occurred_at=_now(),
+        source=source,
+        details={
+            "before_package_code": before_code,
+            "after_package_code": after_code,
+            "before_package_lane": _package_lane_for_code(before_code),
+            "after_package_lane": _package_lane_for_code(after_code),
+            "before_base_price_usd": before_price,
+            "after_base_price_usd": after_price,
+        },
+    )
+
+
+def _serialize_finance_event(event: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": _normalize_object_id(event.get("_id")) or None,
+        "event_type": _normalize(event.get("event_type")) or "unknown",
+        "order_id": _normalize_object_id(event.get("order_id")) or None,
+        "project_id": _normalize_object_id(event.get("project_id")) or None,
+        "customer_email": _normalize_email(event.get("customer_email")) or None,
+        "customer_user_id": _normalize_object_id(event.get("customer_user_id")) or None,
+        "amount": round(_coerce_amount(event.get("amount")), 2),
+        "currency": _normalize(event.get("currency")) or "usd",
+        "occurred_at": _serialize_datetime(event.get("occurred_at") or event.get("created_at")),
+        "source": _normalize(event.get("source")) or "system",
+        "details": event.get("details") or {},
+    }
+
+
+def _finance_event_query(
+    *,
+    project_id: str = "",
+    order_id: str = "",
+    owner_email: str = "",
+) -> dict[str, Any]:
+    filters: list[dict[str, Any]] = []
+    normalized_project_id = _normalize(project_id)
+    normalized_order_id = _normalize(order_id)
+    normalized_owner_email = _normalize_email(owner_email)
+    if normalized_project_id:
+        filters.append({"project_id": {"$in": _document_id_candidates(normalized_project_id)}})
+    if normalized_order_id:
+        filters.append({"order_id": {"$in": _document_id_candidates(normalized_order_id)}})
+    if normalized_owner_email:
+        filters.append({"customer_email": normalized_owner_email})
+    return {"$or": filters} if filters else {}
+
+
+def _collect_finance_events(
+    *,
+    project_id: str = "",
+    order_id: str = "",
+    owner_email: str = "",
+    limit: int = 40,
+) -> list[dict[str, Any]]:
+    db = _db()
+    query = _finance_event_query(project_id=project_id, order_id=order_id, owner_email=owner_email)
+    if not query:
+        return []
+    items: list[dict[str, Any]] = []
+    for item in db["finance_events"].find(query).sort("occurred_at", -1).limit(max(1, min(limit, 200))):
+        items.append(_serialize_finance_event(item))
+    return items
 
 
 def _to_object_id(value: Any) -> ObjectId | None:
@@ -970,6 +1286,8 @@ def _serialize_project(project: dict[str, Any]) -> dict[str, Any]:
 def sync_package(*, project_id: str, order_id: str = "") -> dict[str, Any]:
     db = _db()
     project, order = _resolve_project_order_context(project_id, preferred_order_id=order_id)
+    order_ref = order or {}
+    previous_order_package = _normalize(order_ref.get("package_code") or order_ref.get("package_slug"))
     entitlement = get_project_entitlement(_normalize(project.get("_id")))
     package_fields = _package_fields_from_context(project, order, entitlement)
     project_doc_id = _to_object_id(_normalize(project.get("_id")))
@@ -995,6 +1313,8 @@ def sync_package(*, project_id: str, order_id: str = "") -> dict[str, Any]:
                     "package_code": package_fields["package_code"],
                     "package_slug": package_fields["package_slug"],
                     "package_name": package_fields["package_name"],
+                    "lane": package_fields["project_lane"],
+                    "package_lane": package_fields["project_lane"],
                 }
             },
         )
@@ -1002,6 +1322,16 @@ def sync_package(*, project_id: str, order_id: str = "") -> dict[str, Any]:
     refreshed_project, refreshed_order = _resolve_project_order_context(
         _normalize(project.get("_id")),
         preferred_order_id=_normalize((order or {}).get("_id")),
+    )
+    refreshed_order_id = _normalize((refreshed_order or {}).get("_id"))
+    _record_package_transition_event(
+        order_id=refreshed_order_id,
+        project_id=_normalize(project.get("_id")),
+        customer_email=_normalize_email(project.get("owner_email")),
+        customer_user_id=_normalize(project.get("owner_user_id")),
+        before_package_code=previous_order_package or _normalize(project.get("package_code")),
+        after_package_code=package_fields["package_code"],
+        source="admin_control.sync_package",
     )
     return {
         "project": _serialize_project(refreshed_project),
@@ -1291,6 +1621,8 @@ def super_admin_preview_package_change(
         "package_code": normalized_package,
         "package_slug": normalized_package,
         "package_name": _normalize(package_profile.get("display_name")) or normalized_package,
+        "lane": target_lane if order else None,
+        "package_lane": target_lane if order else None,
         "status": requested_order_status if order else None,
     }
     entitlement_after = {
@@ -1308,6 +1640,8 @@ def super_admin_preview_package_change(
             "package_code": _normalize((order or {}).get("package_code")),
             "package_slug": _normalize((order or {}).get("package_slug")),
             "package_name": _normalize((order or {}).get("package_name")),
+            "lane": _normalize((order or {}).get("lane")),
+            "package_lane": _normalize((order or {}).get("package_lane")),
             "status": _normalize((order or {}).get("status")) if order else None,
         },
         "entitlement": {
@@ -1363,6 +1697,8 @@ def super_admin_apply_package_change(
     db["projects"].update_one({"_id": project_oid}, {"$set": project_after})
 
     order_id = _normalize(preview.get("order_id"))
+    before_order_package = _normalize(((preview.get("before") or {}).get("order") or {}).get("package_code"))
+    before_project_package = _normalize(((preview.get("before") or {}).get("project") or {}).get("package_code"))
     if order_id:
         order_doc = _order_by_id(order_id)
         if order_doc is not None:
@@ -1388,6 +1724,15 @@ def super_admin_apply_package_change(
         after=after_snapshot,
         context={"surface": "admin_control_center.super_admin", "order_id": order_id or None},
         details={"changes": preview.get("changes") or []},
+    )
+    _record_package_transition_event(
+        order_id=order_id,
+        project_id=resolved_project_id,
+        customer_email=_normalize((after_snapshot.get("project") or {}).get("owner_email")),
+        customer_user_id=_normalize((after_snapshot.get("project") or {}).get("owner_user_id")),
+        before_package_code=before_order_package or before_project_package,
+        after_package_code=_normalize((after_snapshot.get("project") or {}).get("package_code")),
+        source="admin_control.super_admin_package_change",
     )
     return {
         "project_id": resolved_project_id,
@@ -1425,7 +1770,8 @@ def run_readiness_check(*, project_id: str, order_id: str = "") -> dict[str, Any
     package_fields = _package_fields_from_context(project, order, entitlement)
 
     project_package_code = normalize_package_code(_normalize(project.get("package_code") or project.get("package_slug")))
-    order_package_code = normalize_package_code(_normalize((order or {}).get("package_code") or (order or {}).get("package_slug")))
+    order_ref = order or {}
+    order_package_code = normalize_package_code(_normalize(order_ref.get("package_code") or order_ref.get("package_slug")))
     entitlement_package_code = normalize_package_code(_normalize((entitlement or {}).get("package_code")))
     package_synced = bool(project_package_code and order_package_code and project_package_code == order_package_code == package_fields["package_code"])
     if entitlement:
@@ -1559,7 +1905,11 @@ def enable_mint_review(*, project_id: str, order_id: str = "") -> dict[str, Any]
     }
 
 
-def project_workspace_snapshot(project_id: str) -> dict[str, Any]:
+def project_workspace_snapshot(
+    project_id: str,
+    *,
+    current_user: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     project, order = _resolve_project_order_context(project_id)
     project_id_str = _normalize(project.get("_id"))
     entitlement = get_project_entitlement(project_id_str)
@@ -1572,9 +1922,19 @@ def project_workspace_snapshot(project_id: str) -> dict[str, Any]:
         cursor = db["orders"].find(
             {"project_id": {"$in": _project_id_candidates(project_id_str)}}
         ).sort("created_at", -1).limit(10)
-        related_orders = [_serialize_order(item) for item in cursor if _serialize_order(item)]
+        for item in cursor:
+            _record_order_finance_events(item, source="project_workspace_snapshot")
+            serialized = _serialize_order(item)
+            if serialized:
+                related_orders.append(serialized)
 
-    return {
+    finance_events = _collect_finance_events(
+        project_id=project_id_str,
+        order_id=_normalize((order or {}).get("_id")),
+        owner_email=_normalize_email(project.get("owner_email")),
+    )
+
+    payload = {
         "project": _serialize_project(project),
         "order": _serialize_order(order),
         "package": package_fields,
@@ -1582,7 +1942,20 @@ def project_workspace_snapshot(project_id: str) -> dict[str, Any]:
         "entitlement": entitlement,
         "readiness": readiness,
         "related_orders": related_orders,
+        "finance_history": finance_events,
     }
+    finance_profile = _finance_admin_profile(current_user)
+    if finance_profile is None:
+        return payload
+    filtered_readiness = payload.get("readiness") or {}
+    payload["readiness"] = {
+        "package_synced": bool(filtered_readiness.get("package_synced")),
+        "lane_assigned": bool(filtered_readiness.get("lane_assigned")),
+        "order_linked": bool(filtered_readiness.get("order_linked")),
+        "entitlement_exists": bool(filtered_readiness.get("entitlement_exists")),
+        "summary": _normalize(filtered_readiness.get("summary")) or "Finance scope snapshot",
+    }
+    return payload
 
 
 def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
@@ -1592,24 +1965,6 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
     paid_orders = int(db["orders"].count_documents({"status": {"$in": list(PAID_ORDER_STATUSES)}}))
     now = _now()
     month_start = datetime(now.year, now.month, 1, tzinfo=UTC)
-
-    def _amount(value: Any) -> float:
-        if isinstance(value, (int, float)):
-            return float(value)
-        normalized = _normalize(value).replace(",", "")
-        if not normalized:
-            return 0.0
-        try:
-            return float(normalized)
-        except ValueError:
-            return 0.0
-
-    def _order_amount(order: dict[str, Any]) -> float:
-        for key in ("amount", "amount_total", "total_amount", "subtotal", "price"):
-            value = _amount(order.get(key))
-            if value:
-                return value
-        return 0.0
 
     project_ids = [
         _normalize(item.get("_id"))
@@ -1655,8 +2010,9 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
     }
     for order in db["orders"].find({"status": {"$in": list(finance_statuses)}}).sort("created_at", -1).limit(5000):
         status_value = _normalize(order.get("status")).lower()
-        amount = _order_amount(order)
+        amount = _order_amount_value(order)
         order_dt = _coerce_datetime(order.get("created_at") or order.get("updated_at"))
+        _record_order_finance_events(order, source="admin_console_overview")
 
         if _is_paid_package_order(order):
             successful_payments += 1
@@ -1682,7 +2038,7 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
         elif status_value in {"pending", "open", "unpaid", "past_due", "incomplete"}:
             unpaid_balances += 1
 
-        refund_value = _amount(order.get("refund_amount") or order.get("refunded_amount"))
+        refund_value = _coerce_amount(order.get("refund_amount") or order.get("refunded_amount"))
         if refund_value > 0 and order_dt and order_dt >= month_start:
             refunds_this_month += refund_value
         elif status_value in {"refunded", "refund"} and order_dt and order_dt >= month_start:
@@ -1737,6 +2093,16 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
     pending_payroll_review = len(
         [run for run in payroll_runs if _normalize(run.get("status")).lower() in {"pending", "review"}]
     )
+    finance_events = db["finance_events"]
+    upgrades_count = int(finance_events.count_documents({"event_type": "package_upgrade"}))
+    downgrades_count = int(finance_events.count_documents({"event_type": "package_downgrade"}))
+    refund_event_count = int(finance_events.count_documents({"event_type": "refund_recorded"}))
+    credit_event_count = int(finance_events.count_documents({"event_type": "credit_recorded"}))
+    adjustment_event_count = int(finance_events.count_documents({"event_type": "billing_adjustment"}))
+    recent_finance_events = [
+        _serialize_finance_event(item)
+        for item in finance_events.find({}).sort("occurred_at", -1).limit(20)
+    ]
     net_revenue = gross_revenue - refunds_this_month
 
     return {
@@ -1768,7 +2134,7 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
                 "failed_payments": failed_payments,
                 "unpaid_balances": unpaid_balances,
             },
-            "subscriptions_and_maintenance": {
+            "subscriptions_maintenance": {
                 "active_maintenance_plans": int(db["project_entitlements"].count_documents({"maintenance_status": {"$in": ["active", "started"]}})),
                 "renewals_due": int(db["project_entitlements"].count_documents({"maintenance_status": {"$in": ["due", "renewal_due"]}})),
                 "past_due_subscriptions": int(db["project_entitlements"].count_documents({"maintenance_status": {"$in": ["past_due", "overdue"]}})),
@@ -1780,8 +2146,8 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
                 "household_lane_sales": lane_sales["household"],
                 "network_lane_sales": lane_sales["network"],
                 "organization_lane_sales": lane_sales["organization"],
-                "upgrades": int(db["audit_logs"].count_documents({"action": {"$regex": "upgrade", "$options": "i"}})),
-                "downgrades": int(db["audit_logs"].count_documents({"action": {"$regex": "downgrade", "$options": "i"}})),
+                "upgrades": upgrades_count,
+                "downgrades": downgrades_count,
             },
             "finance_integrity": {
                 "unlinked_payments": unlinked_payments,
@@ -1794,21 +2160,38 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
                 ),
                 "duplicate_risk_records": int(db["users"].count_documents({"status": {"$in": ["duplicate", "conflict", "pending_merge"]}})),
                 "manual_override_log": manual_override_log,
+                "refund_event_count": refund_event_count,
+                "credit_event_count": credit_event_count,
+                "adjustment_event_count": adjustment_event_count,
             },
             "payroll": {
                 "next_payroll_due": _serialize_datetime(payroll_current.get("next_due_at")),
-                "payroll_total_this_period": round(_amount(payroll_current.get("total_amount")), 2),
+                "payroll_total_this_period": round(_coerce_amount(payroll_current.get("total_amount")), 2),
                 "processed_payroll_history": processed_payroll_history,
                 "pending_payroll_review": pending_payroll_review,
-                "payroll_export_ready": bool(payroll_runs),
+                "snapshot_mode": "read_only",
+                "write_pipeline_live": False,
+                "workflow_actions_enabled": False,
+                "status_note": "Payroll is currently a read-only snapshot; write workflows are not yet live.",
             },
-            "reports_and_exports": {
-                "monthly_finance_export": True,
-                "tax_export": True,
-                "refund_report": True,
-                "subscription_report": True,
-                "payroll_report": bool(payroll_runs),
-                "package_performance_report": True,
+            "reports_exports": {
+                "export_generation_live": False,
+                "status_note": "Finance export generation is not yet live.",
+                "available_exports": [],
+                "unavailable_exports": [
+                    "monthly_finance_export",
+                    "tax_export",
+                    "refund_report",
+                    "subscription_report",
+                    "payroll_report",
+                    "package_performance_report",
+                ],
+            },
+            "finance_history": {
+                "refund_records": refund_event_count,
+                "credit_records": credit_event_count,
+                "billing_adjustments": adjustment_event_count,
+                "recent_events": recent_finance_events,
             },
         },
         "priority_repairs": {
@@ -1879,9 +2262,23 @@ def _link_order_to_project_document(order: dict[str, Any], project: dict[str, An
     if project_oid is None:
         return False
 
+    project_package = _normalize(project.get("package_code") or project.get("package_slug"))
+    order_package = _normalize(order.get("package_code") or order.get("package_slug"))
+    package_code = normalize_package_code(project_package or order_package)
+    package_name = _normalize(project.get("package_name") or order.get("package_name"))
+    lane = _project_lane_value(project) or _package_lane_for_code(package_code)
     db["orders"].update_one(
         {"_id": order["_id"]},
-        {"$set": {"project_id": project_oid}},
+        {
+            "$set": {
+                "project_id": project_oid,
+                "package_code": package_code or _normalize(order.get("package_code")),
+                "package_slug": package_code or _normalize(order.get("package_slug")),
+                "package_name": package_name or _normalize(order.get("package_name")),
+                "lane": lane,
+                "package_lane": lane,
+            }
+        },
     )
     return True
 
@@ -2522,6 +2919,43 @@ def _serialize_user_case(user: dict[str, Any]) -> dict[str, Any]:
         "mint_blocking_reasons": [],
         "updated_at": _serialize_datetime(user.get("updated_at") or user.get("last_login_at") or user.get("created_at")),
     }
+
+
+def _finance_admin_profile(current_user: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(current_user, dict):
+        return None
+    profile = admin_control_access_profile(current_user)
+    if _normalize(profile.get("role_key")).lower() != "finance_admin":
+        return None
+    return profile
+
+
+def _filter_guidance_for_finance(guidance_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    allowed_actions = set(FINANCE_ACTION_ALLOWLIST)
+    filtered: list[dict[str, Any]] = []
+    for item in guidance_items:
+        recommended = _normalize(item.get("recommended_action")).lower()
+        code = _normalize(item.get("code")).lower()
+        if recommended and recommended not in allowed_actions:
+            continue
+        if code in FINANCE_WORKSPACE_ALERT_EXCLUDE:
+            continue
+        filtered.append(item)
+    return filtered
+
+
+def _filter_case_item_for_access(item: dict[str, Any], current_user: dict[str, Any] | None) -> dict[str, Any]:
+    finance_profile = _finance_admin_profile(current_user)
+    if finance_profile is None:
+        return item
+    allowed_actions = set(finance_profile.get("allowed_actions") or [])
+    alerts = [alert for alert in (item.get("alerts") or []) if _normalize(alert).lower() not in FINANCE_WORKSPACE_ALERT_EXCLUDE]
+    guidance = _filter_guidance_for_finance(item.get("operator_guidance") or [])
+    item["alerts"] = alerts
+    item["operator_guidance"] = guidance
+    item["quick_actions"] = [action for action in (item.get("quick_actions") or []) if _normalize(action).lower() in allowed_actions]
+    item["mint_blocking_reasons"] = []
+    return item
 
 
 def _list_user_account_cases(
@@ -3313,18 +3747,23 @@ def _build_user_workspace_payload(user: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def list_customer_cases(*, search: str = "", limit: int = 50, queue: str = "customer_cases") -> dict[str, Any]:
+def list_customer_cases(
+    *,
+    search: str = "",
+    limit: int = 50,
+    queue: str = "customer_cases",
+    current_user: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     db = _db()
     safe_limit = max(1, min(limit, 200))
     normalized_queue = _normalize(queue).lower()
     if normalized_queue == "users":
-        return {
-            "items": _list_user_account_cases(
-                db=db,
-                search=search,
-                safe_limit=safe_limit,
-            )
-        }
+        items = _list_user_account_cases(
+            db=db,
+            search=search,
+            safe_limit=safe_limit,
+        )
+        return {"items": [_filter_case_item_for_access(item, current_user) for item in items]}
 
     user_emails, user_ids, family_ids, mint_project_ids = _search_seed_sets(search)
 
@@ -3385,10 +3824,11 @@ def list_customer_cases(*, search: str = "", limit: int = 50, queue: str = "cust
         ).strip() or _normalize(project.get("name")) or "Unknown Customer"
 
         cases.append(
-            {
-                "case_id": project_id,
-                "project_id": project_id,
-                "order_id": readiness_order_id or None,
+            _filter_case_item_for_access(
+                {
+                    "case_id": project_id,
+                    "project_id": project_id,
+                    "order_id": readiness_order_id or None,
                 "name": user_name,
                 "email": owner_email or None,
                 "role": _normalize((user or {}).get("role")) or "customer",
@@ -3419,9 +3859,11 @@ def list_customer_cases(*, search: str = "", limit: int = 50, queue: str = "cust
                     "repair_record",
                     "refresh_case_data",
                 ],
-                "mint_blocking_reasons": list((readiness or {}).get("blocking_reasons") or []),
-                "updated_at": _serialize_datetime(project.get("updated_at") or project.get("created_at")),
-            }
+                    "mint_blocking_reasons": list((readiness or {}).get("blocking_reasons") or []),
+                    "updated_at": _serialize_datetime(project.get("updated_at") or project.get("created_at")),
+                },
+                current_user,
+            )
         )
         if len(cases) >= safe_limit:
             break
@@ -3452,7 +3894,8 @@ def list_customer_cases(*, search: str = "", limit: int = 50, queue: str = "cust
                 continue
 
             cases.append(
-                {
+                _filter_case_item_for_access(
+                    {
                     "case_id": f"order:{order_id}",
                     "project_id": _normalize((project or {}).get("_id")) or None,
                     "order_id": order_id,
@@ -3481,7 +3924,9 @@ def list_customer_cases(*, search: str = "", limit: int = 50, queue: str = "cust
                     ],
                     "mint_blocking_reasons": [],
                     "updated_at": _serialize_datetime(order.get("created_at")),
-                }
+                },
+                current_user,
+            )
             )
             if len(cases) >= safe_limit:
                 break
@@ -3519,6 +3964,16 @@ def _build_case_workspace_payload(
     related_orders = _workspace_related_orders(
         project_id=project_id,
         primary_order=order,
+    )
+    for related_order in related_orders:
+        order_doc = _order_by_id(_normalize(related_order.get("id")))
+        if order_doc:
+            _record_order_finance_events(order_doc, source="customer_case_workspace")
+    finance_events = _collect_finance_events(
+        project_id=project_id,
+        order_id=order_id,
+        owner_email=owner_email,
+        limit=40,
     )
 
     project_snapshot = _serialize_project(project) if project else None
@@ -3639,6 +4094,7 @@ def _build_case_workspace_payload(
                 or _serialize_datetime((entitlement or {}).get("maintenance_renews_at")),
                 "primary_order": order_snapshot,
                 "related_orders": related_orders,
+                "finance_history": finance_events,
             },
             "project": {
                 "project_name": (project_snapshot or {}).get("name"),
@@ -3706,7 +4162,51 @@ def _build_case_workspace_payload(
     }
 
 
-def customer_case_workspace(case_id: str) -> dict[str, Any]:
+def _filter_workspace_for_access(workspace: dict[str, Any], current_user: dict[str, Any] | None) -> dict[str, Any]:
+    finance_profile = _finance_admin_profile(current_user)
+    if finance_profile is None:
+        return workspace
+
+    filtered = dict(workspace)
+    tabs = dict(filtered.get("tabs") or {})
+    allowed_tabs = set(FINANCE_TAB_ALLOWLIST)
+    filtered["tabs"] = {tab: value for tab, value in tabs.items() if tab in allowed_tabs}
+    filtered.pop("uploads", None)
+    filtered_alerts = [
+        alert
+        for alert in (filtered.get("alerts") or [])
+        if _normalize(alert).lower() not in FINANCE_WORKSPACE_ALERT_EXCLUDE
+    ]
+    filtered["alerts"] = filtered_alerts
+    filtered["operator_guidance"] = _filter_guidance_for_finance(filtered.get("operator_guidance") or [])
+    readiness = dict(filtered.get("readiness") or {})
+    filtered["readiness"] = {
+        "package_synced": bool(readiness.get("package_synced")),
+        "lane_assigned": bool(readiness.get("lane_assigned")),
+        "order_linked": bool(readiness.get("order_linked")),
+        "entitlement_exists": bool(readiness.get("entitlement_exists")),
+        "summary": _normalize(readiness.get("summary")) or "Finance scope snapshot",
+    }
+
+    project_tab = dict((filtered.get("tabs") or {}).get("project") or {})
+    project_tab.pop("uploads_summary", None)
+    if "project" in filtered["tabs"]:
+        filtered["tabs"]["project"] = project_tab
+
+    orders_tab = dict((filtered.get("tabs") or {}).get("orders_billing") or {})
+    events = orders_tab.get("finance_history")
+    if not isinstance(events, list):
+        events = []
+    orders_tab["finance_history"] = [event for event in events if _normalize(event.get("event_type")) in FINANCE_EVENT_TYPES]
+    filtered["tabs"]["orders_billing"] = orders_tab
+    return filtered
+
+
+def customer_case_workspace(
+    case_id: str,
+    *,
+    current_user: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     normalized_case_id = _normalize(case_id)
     if not normalized_case_id:
         raise ValueError("Case id is required.")
@@ -3716,7 +4216,7 @@ def customer_case_workspace(case_id: str) -> dict[str, Any]:
         user = _find_case_user(user_id=user_id)
         if user is None:
             raise ValueError("User account case not found.")
-        return _build_user_workspace_payload(user)
+        return _filter_workspace_for_access(_build_user_workspace_payload(user), current_user)
 
     if normalized_case_id.startswith("order:"):
         order_id = normalized_case_id.split(":", 1)[1]
@@ -3724,18 +4224,18 @@ def customer_case_workspace(case_id: str) -> dict[str, Any]:
         if order is None:
             raise ValueError("Order case not found.")
         project = _project_by_id(_normalize(order.get("project_id")))
-        return _build_case_workspace_payload(
+        return _filter_workspace_for_access(_build_case_workspace_payload(
             case_id=normalized_case_id,
             project=project,
             order=order,
-        )
+        ), current_user)
 
     project, order = _resolve_project_order_context(normalized_case_id)
-    return _build_case_workspace_payload(
+    return _filter_workspace_for_access(_build_case_workspace_payload(
         case_id=normalized_case_id,
         project=project,
         order=order,
-    )
+    ), current_user)
 
 
 def normalize_broken_package_records(*, limit: int = 500) -> dict[str, Any]:
@@ -3893,7 +4393,7 @@ def execute_case_action(
         project_id = ""
 
     if normalized_action in {"refresh_case_data"}:
-        payload = customer_case_workspace(normalized_case_id)
+        payload = customer_case_workspace(normalized_case_id, current_user=actor)
         _write_admin_action_audit(
             actor=actor,
             action=normalized_action,

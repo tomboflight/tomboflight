@@ -212,7 +212,13 @@ async def get_customer_cases(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"Admin control queue '{queue}' is not permitted for this role.",
         )
-    return await asyncio.to_thread(list_customer_cases, search=search, queue=queue, limit=limit)
+    return await asyncio.to_thread(
+        list_customer_cases,
+        search=search,
+        queue=queue,
+        limit=limit,
+        current_user=current_user,
+    )
 
 
 @router.get("/cases/{case_id}")
@@ -220,9 +226,8 @@ async def get_customer_case_workspace(
     case_id: str,
     current_user: dict[str, Any] = Depends(require_permission("admin.control.view")),
 ):
-    del current_user
     try:
-        return await asyncio.to_thread(customer_case_workspace, case_id)
+        return await asyncio.to_thread(customer_case_workspace, case_id, current_user=current_user)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
@@ -254,9 +259,8 @@ def get_project_workspace_snapshot(
     project_id: str,
     current_user: dict[str, Any] = Depends(require_permission("admin.control.view")),
 ):
-    del current_user
     try:
-        return project_workspace_snapshot(project_id)
+        return project_workspace_snapshot(project_id, current_user=current_user)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
