@@ -181,9 +181,9 @@ def test_command_structure_network_manifest_uses_organization_command_mode_and_o
     mode_map = {item["id"]: bool(item["available"]) for item in manifest.get("viewer_modes", [])}
     assert mode_map == {
         "current_command_view": True,
-        "historical_date_view": False,
-        "succession_timeline": False,
-        "officer_wall": False,
+        "historical_date_view": True,
+        "succession_timeline": True,
+        "officer_wall": True,
         "continuity_map": False,
         "linked_organization_view": False,
     }

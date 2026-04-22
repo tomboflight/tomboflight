@@ -116,3 +116,25 @@ class LinkedOrganizationCreate(BaseModel):
     linked_organization_id: str = Field(min_length=1)
     link_type: str = Field(min_length=1)
     notes: str | None = None
+
+
+class SupportRecordVerifyPayload(BaseModel):
+    status: Literal["verified", "rejected", "needs_more_info"]
+    note: str | None = None
+
+
+class AdminSeatInvitePayload(BaseModel):
+    project_id: str = Field(min_length=1)
+    email: str = Field(min_length=3)
+    role: Literal["organization_admin", "viewer", "contributor"]
+
+
+class OrganizationNotePayload(BaseModel):
+    project_id: str = Field(min_length=1)
+    note: str = Field(min_length=1)
+    visibility: Literal["internal", "workspace"] = "workspace"
+
+
+class WhiteGloveRequestPayload(BaseModel):
+    project_id: str = Field(min_length=1)
+    note: str | None = None

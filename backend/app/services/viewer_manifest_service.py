@@ -938,15 +938,15 @@ def build_viewer_manifest(
     if lane == "organization":
         manifest["viewer_modes"] = [
             {"id": "current_command_view", "available": True},
-            {"id": "historical_date_view", "available": False},
-            {"id": "succession_timeline", "available": False},
-            {"id": "officer_wall", "available": False},
+            {"id": "historical_date_view", "available": True},
+            {"id": "succession_timeline", "available": True},
+            {"id": "officer_wall", "available": True},
             {"id": "continuity_map", "available": False},
             {"id": "linked_organization_view", "available": False},
         ]
         manifest["family"] = None
         manifest["instructions"] = (
             "Navigate protected organization command portraits. "
-            "Unavailable command views remain locked until configured."
+            "Historical command snapshots, succession timeline, and officer wall are available."
         )
     return manifest

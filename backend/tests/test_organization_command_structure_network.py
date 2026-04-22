@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from unittest.mock import patch
 
 import pytest
@@ -43,8 +44,12 @@ class FakeCollection:
     def count_documents(self, query: dict) -> int:
         return len([d for d in self.docs if self._matches(d, query)])
 
-    def find_one(self, query: dict):
-        for doc in self.docs:
+    def find_one(self, query: dict, sort=None):
+        docs = self.docs
+        if sort:
+            key, direction = sort[0]
+            docs = sorted(docs, key=lambda item: item.get(key), reverse=direction < 0)
+        for doc in docs:
             if self._matches(doc, query):
                 return doc
         return None
@@ -82,6 +87,51 @@ def _setup_fake_db():
     with patch("app.services.organization_service.get_database", return_value=db):
         organization_service.ensure_organization_indexes()
     return db
+
+
+def _seed_org_graph(db: FakeDB) -> None:
+    with patch("app.services.organization_service.get_database", return_value=db):
+        organization_service.upsert_organization_profile(
+            {
+                "organization_id": "org1",
+                "project_id": "proj1",
+                "organization_name": "Joint Task Force",
+                "organization_type": "military",
+            },
+            actor_user_id="u1",
+        )
+        organization_service.create_organization_node("org1", {"node_key": "n1", "node_name": "Command", "node_type": "command"}, actor_user_id="u1")
+        organization_service.create_role_seat("org1", {"node_id": "n1", "role_key": "r1", "role_name": "Commander"}, actor_user_id="u1")
+        organization_service.create_person("org1", {"person_id": "p1", "full_name": "Alex Prime", "status": "active"}, actor_user_id="u1")
+        organization_service.create_person("org1", {"person_id": "p2", "full_name": "Bailey Former", "status": "former"}, actor_user_id="u1")
+        organization_service.create_assignment(
+            "org1",
+            {
+                "assignment_id": "a1",
+                "node_id": "n1",
+                "role_seat_id": "r1",
+                "person_id": "p2",
+                "start_date": "2019-01-01",
+                "end_date": "2021-01-01",
+                "status": "completed",
+                "acting_or_interim": False,
+            },
+            actor_user_id="u1",
+        )
+        organization_service.create_assignment(
+            "org1",
+            {
+                "assignment_id": "a2",
+                "node_id": "n1",
+                "role_seat_id": "r1",
+                "person_id": "p1",
+                "start_date": "2021-01-02",
+                "end_date": None,
+                "status": "active",
+                "acting_or_interim": False,
+            },
+            actor_user_id="u1",
+        )
 
 
 def test_family_or_household_lane_cannot_access_org_routes():
@@ -265,11 +315,105 @@ def test_command_structure_button_matrix_unavailable_buttons_are_clearly_marked(
     buttons = payload["buttons"]
     by_name = {item["button"]: item for item in buttons}
 
-    assert by_name["Verify Support Record"]["status"] == "unavailable"
-    assert by_name["View Historical Date"]["status"] == "unavailable"
-    assert by_name["View Succession Timeline"]["status"] == "unavailable"
-    assert by_name["View Officer Wall"]["status"] == "unavailable"
-    assert by_name["Export Command Roster"]["status"] == "unavailable"
-    assert by_name["Invite Admin Seat"]["status"] == "unavailable"
-    assert by_name["Add Ops / Support Note"]["status"] == "unavailable"
-    assert by_name["Request White-Glove Review"]["status"] == "unavailable"
+    assert by_name["Verify Support Record"]["status"] == "live"
+    assert by_name["View Historical Date"]["status"] == "live"
+    assert by_name["View Succession Timeline"]["status"] == "live"
+    assert by_name["View Officer Wall"]["status"] == "live"
+    assert by_name["Export Command Roster"]["status"] == "live"
+    assert by_name["Invite Admin Seat"]["status"] == "live"
+    assert by_name["Add Ops / Support Note"]["status"] == "live"
+    assert by_name["Request White-Glove Review"]["status"] == "live"
+
+
+def test_historical_snapshot_and_succession_timeline_are_assignment_based():
+    db = _setup_fake_db()
+    _seed_org_graph(db)
+    with patch("app.services.organization_service.get_database", return_value=db):
+        historical = organization_service.get_historical_snapshot("org1", snapshot_date=date.fromisoformat("2020-06-01"))
+        roles = historical["nodes"][0]["role_seats"]
+        assert roles[0]["filled"] is True
+        assert roles[0]["person"]["person_id"] == "p2"
+
+        succession = organization_service.get_role_seat_succession("org1", "r1")
+        assert [item["assignment_id"] for item in succession] == ["a1", "a2"]
+
+
+def test_officer_wall_support_verification_export_and_notes_white_glove_are_live():
+    db = _setup_fake_db()
+    _seed_org_graph(db)
+    with patch("app.services.organization_service.get_database", return_value=db):
+        wall = organization_service.get_officer_wall("org1")
+        assert {item["person"]["person_id"] for item in wall} == {"p1", "p2"}
+        assert "former" in {item["status"] for item in wall}
+
+        organization_service.create_support_record(
+            "org1",
+            {
+                "support_record_id": "s1",
+                "target_type": "assignment",
+                "target_id": "a2",
+                "upload_id": "u1",
+            },
+            actor_user_id="u1",
+        )
+        verified = organization_service.verify_support_record("org1", "s1", verification_status="verified", note="ok", actor_user_id="u1")
+        assert verified["verification_status"] == "verified"
+
+        roster = organization_service.export_command_roster("org1")
+        assert len(roster) == 1
+        assert roster[0]["person"] == "Alex Prime"
+
+        invite = organization_service.create_admin_invite(
+            "org1",
+            {"project_id": "proj1", "email": "admin@example.com", "role": "organization_admin"},
+            actor_user_id="u1",
+        )
+        invite_dup = organization_service.create_admin_invite(
+            "org1",
+            {"project_id": "proj1", "email": "admin@example.com", "role": "organization_admin"},
+            actor_user_id="u1",
+        )
+        assert invite["_id"] == invite_dup["_id"]
+
+        note = organization_service.create_organization_note(
+            "org1",
+            {"project_id": "proj1", "note": "internal check", "visibility": "internal"},
+            actor_user_id="u1",
+        )
+        assert note["visibility"] == "internal"
+
+        request = organization_service.create_white_glove_request(
+            "org1",
+            {"project_id": "proj1", "note": "assist"},
+            actor_user_id="u1",
+        )
+        request_dup = organization_service.create_white_glove_request(
+            "org1",
+            {"project_id": "proj1", "note": "assist"},
+            actor_user_id="u1",
+        )
+        assert request_dup["status"] == "requested"
+        assert request_dup["_id"] == request["_id"]
+
+
+def test_transition_duplicate_protection_is_retry_safe():
+    db = _setup_fake_db()
+    with patch("app.services.organization_service.get_database", return_value=db):
+        created = organization_service.create_transition(
+            "org1",
+            {"transition_id": "t1", "event_type": "appointed", "event_date": "2024-01-01"},
+            actor_user_id="u1",
+        )
+        assert created["transition_id"] == "t1"
+        with pytest.raises(ValueError):
+            organization_service.create_transition(
+                "org1",
+                {"transition_id": "t1", "event_type": "appointed", "event_date": "2024-01-01"},
+                actor_user_id="u1",
+            )
+        created2 = organization_service.create_transition(
+            "org1",
+            {"transition_id": "t2", "event_type": "appointed", "event_date": "2024-01-01"},
+            actor_user_id="u1",
+        )
+        assert created2["transition_id"] == "t2"
