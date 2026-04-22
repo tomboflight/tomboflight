@@ -132,6 +132,7 @@ class LinkRequestApprovalTests(unittest.TestCase):
             patch.object(link_request_service, "get_database", return_value=db),
             patch.object(link_request_service, "user_can_access_project", return_value=True),
             patch.object(link_request_service, "project_supports_link_keys", return_value=True),
+            patch.object(link_request_service, "_assert_household_branch_capacity", return_value=None),
             patch.object(
                 link_request_service,
                 "get_active_key_doc_for_project",
@@ -195,6 +196,7 @@ class LinkRequestApprovalTests(unittest.TestCase):
                 "project_supports_link_keys",
                 side_effect=lambda project_id: project_id == "project-b",
             ),
+            patch.object(link_request_service, "_assert_household_branch_capacity", return_value=None),
         ):
             with self.assertRaises(ValueError):
                 link_request_service.approve_link_request(
@@ -205,6 +207,172 @@ class LinkRequestApprovalTests(unittest.TestCase):
                 )
 
         self.assertEqual(len(db["household_links"].documents), 0)
+
+    def test_approve_link_request_rejects_when_family_branch_cap_would_be_exceeded(self):
+        request_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "link_requests": [
+                    {
+                        "_id": request_id,
+                        "source_project_id": "project-a",
+                        "target_project_id": "project-b",
+                        "source_household_id": "household-a",
+                        "target_household_id": "household-b",
+                        "source_key": "SRC-KEY",
+                        "target_key": "TGT-KEY",
+                        "status": "pending",
+                    }
+                ],
+                "household_links": [
+                    {
+                        "source_household_id": "household-a",
+                        "target_household_id": "household-c",
+                        "link_status": "approved",
+                    },
+                    {
+                        "source_household_id": "household-a",
+                        "target_household_id": "household-d",
+                        "link_status": "approved",
+                    },
+                ],
+                "project_entitlements": [
+                    {
+                        "project_id": "project-a",
+                        "status": "active",
+                        "package_code": "family_estate_concierge",
+                        "active_addons": [],
+                        "resolved_entitlements": {
+                            "can_link_households": True,
+                            "max_households": 0,
+                            "max_family_branches": 3,
+                        },
+                    },
+                    {
+                        "project_id": "project-b",
+                        "status": "active",
+                        "package_code": "family_estate_concierge",
+                        "active_addons": [],
+                        "resolved_entitlements": {
+                            "can_link_households": True,
+                            "max_households": 0,
+                            "max_family_branches": 3,
+                        },
+                    },
+                ],
+            }
+        )
+
+        with (
+            patch.object(link_request_service, "get_database", return_value=db),
+            patch.object(link_request_service, "user_can_access_project", return_value=True),
+            patch.object(link_request_service, "project_supports_link_keys", return_value=True),
+            patch.object(
+                link_request_service,
+                "get_active_key_doc_for_project",
+                side_effect=lambda project_id: {
+                    "key_value": "SRC-KEY" if project_id == "project-a" else "TGT-KEY"
+                },
+            ),
+            patch.object(
+                link_request_service,
+                "get_project_summary",
+                side_effect=lambda project_id: {
+                    "project_name": project_id,
+                    "package_code": "family_estate_concierge",
+                    "household_id": "household-a"
+                    if project_id == "project-a"
+                    else "household-b",
+                },
+            ),
+        ):
+            with self.assertRaises(ValueError):
+                link_request_service.approve_link_request(
+                    str(request_id),
+                    approved_by="Approver",
+                    approver_user_id="user-1",
+                    is_admin=False,
+                )
+
+        self.assertEqual(len(db["household_links"].documents), 2)
+
+    def test_approve_link_request_enforces_branch_cap_when_active_addons_try_to_expand_scope(self):
+        request_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "link_requests": [
+                    {
+                        "_id": request_id,
+                        "source_project_id": "project-a",
+                        "target_project_id": "project-b",
+                        "source_household_id": "household-a",
+                        "target_household_id": "household-b",
+                        "source_key": "SRC-KEY",
+                        "target_key": "TGT-KEY",
+                        "status": "pending",
+                    }
+                ],
+                "household_links": [
+                    {
+                        "source_household_id": "household-a",
+                        "target_household_id": "household-c",
+                        "link_status": "approved",
+                    },
+                    {
+                        "source_household_id": "household-a",
+                        "target_household_id": "household-d",
+                        "link_status": "approved",
+                    },
+                ],
+                "project_entitlements": [
+                    {
+                        "project_id": "project-a",
+                        "status": "active",
+                        "package_code": "family_estate_concierge",
+                        "active_addons": ["extra_branch", "extra_linked_household"],
+                    },
+                    {
+                        "project_id": "project-b",
+                        "status": "active",
+                        "package_code": "family_estate_concierge",
+                        "active_addons": ["extra_branch"],
+                    },
+                ],
+            }
+        )
+
+        with (
+            patch.object(link_request_service, "get_database", return_value=db),
+            patch.object(link_request_service, "user_can_access_project", return_value=True),
+            patch.object(link_request_service, "project_supports_link_keys", return_value=True),
+            patch.object(
+                link_request_service,
+                "get_active_key_doc_for_project",
+                side_effect=lambda project_id: {
+                    "key_value": "SRC-KEY" if project_id == "project-a" else "TGT-KEY"
+                },
+            ),
+            patch.object(
+                link_request_service,
+                "get_project_summary",
+                side_effect=lambda project_id: {
+                    "project_name": project_id,
+                    "package_code": "family_estate_concierge",
+                    "household_id": "household-a"
+                    if project_id == "project-a"
+                    else "household-b",
+                },
+            ),
+        ):
+            with self.assertRaises(ValueError):
+                link_request_service.approve_link_request(
+                    str(request_id),
+                    approved_by="Approver",
+                    approver_user_id="user-1",
+                    is_admin=False,
+                )
+
+        self.assertEqual(len(db["household_links"].documents), 2)
 
 
 class LinkedTreeTests(unittest.TestCase):
