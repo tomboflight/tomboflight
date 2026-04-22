@@ -48,6 +48,9 @@ def _current_user_email(user: dict[str, Any]) -> str:
 
 
 def _display_name(member: dict[str, Any]) -> str:
+    full_name = _normalize_value(member.get("full_name"))
+    if full_name:
+        return full_name
     joined = f"{_normalize_value(member.get('first_name'))} {_normalize_value(member.get('last_name'))}".strip()
     return joined or _normalize_value(member.get("display_name")) or "Unknown Member"
 
@@ -315,6 +318,7 @@ def _serialize_project_summary(project: dict[str, Any]) -> dict[str, Any]:
         "package_code": _normalize_value(project.get("package_code")),
         "lane": _lane_from_project(project),
         "family_id": _normalize_value(project.get("family_id")) or None,
+        "organization_id": _normalize_value(project.get("organization_id")) or None,
     }
 
 
@@ -327,6 +331,33 @@ def load_project_workspace_anchor(
     db = get_database()
     if db is None:
         return None, None, project
+    lane = _lane_from_project(project)
+
+    if lane == "organization":
+        project_id = _normalize_value(project.get("_id") or project.get("id"))
+        organization_id = _normalize_value(project.get("organization_id")) or project_id
+        profile = db["organization_profiles"].find_one({"organization_id": organization_id})
+        primary_person = db["organization_people"].find_one(
+            {"organization_id": organization_id},
+            sort=[("created_at", 1)],
+        )
+        return (
+            {
+                "organization_id": organization_id,
+                "project_id": project_id,
+                "family_name": _normalize_value(
+                    (profile or {}).get("display_name")
+                    or (profile or {}).get("organization_name")
+                    or project.get("project_name")
+                    or project.get("name")
+                    or "Command Workspace"
+                ),
+                "description": _normalize_value((profile or {}).get("description")),
+                "visibility": _coerce_visibility((profile or {}).get("visibility")),
+            },
+            primary_person,
+            project,
+        )
 
     submission = submission or _find_submission_for_project(project)
     families = db["families"]
@@ -393,6 +424,12 @@ def ensure_project_workspace_anchor(
     lane = _lane_from_project(project)
     if lane not in {"portrait", "household", "network", "organization"}:
         return None, None, project
+
+    if lane == "organization":
+        return load_project_workspace_anchor(
+            project=project,
+            submission=submission,
+        )
 
     submission = submission or _find_submission_for_project(project)
 
@@ -717,7 +754,15 @@ def build_viewer_manifest(
     can_use_narration = bool(resolved_entitlements.get("can_use_narration"))
     family_id_value = _normalize_value((family_doc or {}).get("_id") or project.get("family_id"))
     members: list[dict[str, Any]] = []
-    if family_id_value:
+    if lane == "organization":
+        organization_id = _normalize_value(project.get("organization_id")) or _normalize_value(
+            project.get("_id") or project.get("id")
+        )
+        if organization_id:
+            members = list(
+                db["organization_people"].find({"organization_id": organization_id}),
+            )
+    elif family_id_value:
         members = list(
             db["family_members"].find(
                 {"family_id": {"$in": _family_id_candidates(family_id_value)}},
@@ -738,12 +783,20 @@ def build_viewer_manifest(
         project_id_value = _normalize_value(project.get("_id") or project.get("id"))
         valid_member_views: list[tuple[dict[str, Any], dict[str, Any]]] = []
         for member in ordered_members:
-            upload_record = _resolve_member_photo_upload(
-                db=db,
-                member=member,
-                project_id=project_id_value,
-                family_id=family_id_value,
-            )
+            if lane == "organization":
+                upload_record = None
+                upload_id = _normalize_value(member.get("photo_upload_id"))
+                if upload_id and ObjectId.is_valid(upload_id):
+                    candidate = db["uploaded_files"].find_one({"_id": ObjectId(upload_id)})
+                    if candidate and _normalize_value(candidate.get("project_id")) == project_id_value:
+                        upload_record = candidate
+            else:
+                upload_record = _resolve_member_photo_upload(
+                    db=db,
+                    member=member,
+                    project_id=project_id_value,
+                    family_id=family_id_value,
+                )
             if upload_record is not None:
                 valid_member_views.append((member, upload_record))
 
@@ -836,8 +889,29 @@ def build_viewer_manifest(
         for state in states[:6]
     ]
 
-    return {
-        "mode": "secure_share" if secure_share_only else "dynamic",
+    mode = "secure_share" if secure_share_only else "dynamic"
+    if lane == "organization":
+        mode = "organization_command"
+
+    controls = {
+        "allow_lineage_navigation": not secure_share_only,
+        "allow_zoom": (not secure_share_only) and max_zoom_layers > 0,
+        "allow_branch_navigation": not secure_share_only,
+        "allow_gaze_navigation": not secure_share_only,
+        "allow_narration_auto_advance": (not secure_share_only) and can_use_narration,
+        "max_zoom_layers": max(0, max_zoom_layers),
+    }
+    if lane == "organization":
+        controls = {
+            "allow_command_navigation": True,
+            "allow_zoom": max_zoom_layers > 0,
+            "allow_role_navigation": True,
+            "allow_narration_auto_advance": False,
+            "max_zoom_layers": max(0, max_zoom_layers),
+        }
+
+    manifest = {
+        "mode": mode,
         "navigation_mode": "sequence",
         "hero_kicker": package_name,
         "hero_title": hero_title,
@@ -852,14 +926,7 @@ def build_viewer_manifest(
         "path_title": path_title,
         "path_items": path_items,
         "nav_labels": nav_labels,
-        "controls": {
-            "allow_lineage_navigation": not secure_share_only,
-            "allow_zoom": (not secure_share_only) and max_zoom_layers > 0,
-            "allow_branch_navigation": not secure_share_only,
-            "allow_gaze_navigation": not secure_share_only,
-            "allow_narration_auto_advance": (not secure_share_only) and can_use_narration,
-            "max_zoom_layers": max(0, max_zoom_layers),
-        },
+        "controls": controls,
         "states": states,
         "initial_state_id": states[0]["id"] if states else "",
         "branch_options_by_state": {},
@@ -868,3 +935,18 @@ def build_viewer_manifest(
         "primary_member_id": primary_member_id or None,
         "has_uploaded_portraits": any(_normalize_value(state.get("image")) for state in states),
     }
+    if lane == "organization":
+        manifest["viewer_modes"] = [
+            {"id": "current_command_view", "available": True},
+            {"id": "historical_date_view", "available": False},
+            {"id": "succession_timeline", "available": False},
+            {"id": "officer_wall", "available": False},
+            {"id": "continuity_map", "available": False},
+            {"id": "linked_organization_view", "available": False},
+        ]
+        manifest["family"] = None
+        manifest["instructions"] = (
+            "Navigate protected organization command portraits. "
+            "Unavailable command views remain locked until configured."
+        )
+    return manifest
