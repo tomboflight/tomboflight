@@ -213,3 +213,63 @@ def test_node_cap_and_sensitive_audit_log_written():
             current_user={"id": "u1", "email": "u1@example.com"},
         )
         assert audit_mock.call_count >= 2
+
+
+def test_command_structure_button_matrix_has_all_phase4_buttons_and_no_family_wording():
+    with patch("app.routes.organizations.require_package_capability", return_value={"id": "u1"}):
+        payload = organizations.get_command_structure_button_matrix(current_user={"id": "u1"})
+
+    buttons = payload["buttons"]
+    labels = {item["button"] for item in buttons}
+    assert len(labels) == 23
+    expected = {
+        "Create Organization Profile",
+        "Choose Organization Template",
+        "Add Organization Node",
+        "Add Role Seat",
+        "Add Person / Officer",
+        "Assign Person to Role",
+        "End Term / Mark Former",
+        "Replace Leader / Officer",
+        "Mark Retired / Emeritus / Transferred / Deceased",
+        "Add Transition Event",
+        "Upload Support Record",
+        "Verify Support Record",
+        "Open Leadership Viewer",
+        "View Current Command Structure",
+        "View Historical Date",
+        "View Succession Timeline",
+        "View Officer Wall",
+        "Link Organization",
+        "Review Link Request",
+        "Export Command Roster",
+        "Invite Admin Seat",
+        "Add Ops / Support Note",
+        "Request White-Glove Review",
+    }
+    assert labels == expected
+
+    for item in buttons:
+        assert item["status"] in {"live", "hidden", "unavailable"}
+        blob = " ".join(str(value).lower() for value in item.values())
+        assert "family" not in blob
+        assert "spouse" not in blob
+        assert "child" not in blob
+        assert "parent" not in blob
+        assert "household" not in blob
+
+
+def test_command_structure_button_matrix_unavailable_buttons_are_clearly_marked():
+    with patch("app.routes.organizations.require_package_capability", return_value={"id": "u1"}):
+        payload = organizations.get_command_structure_button_matrix(current_user={"id": "u1"})
+    buttons = payload["buttons"]
+    by_name = {item["button"]: item for item in buttons}
+
+    assert by_name["Verify Support Record"]["status"] == "unavailable"
+    assert by_name["View Historical Date"]["status"] == "unavailable"
+    assert by_name["View Succession Timeline"]["status"] == "unavailable"
+    assert by_name["View Officer Wall"]["status"] == "unavailable"
+    assert by_name["Export Command Roster"]["status"] == "unavailable"
+    assert by_name["Invite Admin Seat"]["status"] == "unavailable"
+    assert by_name["Add Ops / Support Note"]["status"] == "unavailable"
+    assert by_name["Request White-Glove Review"]["status"] == "unavailable"
