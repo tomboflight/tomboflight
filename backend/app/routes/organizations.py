@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import csv
+from datetime import date
+from io import StringIO
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import Response
 
 from app.dependencies.auth import (
     get_current_user,
@@ -10,27 +14,41 @@ from app.dependencies.auth import (
     require_package_capability,
 )
 from app.schemas.organization import (
+    AdminSeatInvitePayload,
     AssignmentCreate,
     EndAssignmentPayload,
     LinkedOrganizationCreate,
+    OrganizationNotePayload,
     OrganizationNodeCreate,
     OrganizationPersonCreate,
     OrganizationProfileUpsert,
     ReplaceRoleSeatPayload,
     RoleSeatCreate,
     SupportRecordCreate,
+    SupportRecordVerifyPayload,
     TransitionEventCreate,
+    WhiteGloveRequestPayload,
 )
+from app.database import get_database
+from app.services.project_membership_service import get_project_access_snapshot
 from app.services.audit_log_service import write_audit_log
 from app.services.organization_service import (
+    create_admin_invite,
     create_assignment,
     create_linked_organization,
+    create_organization_note,
     create_organization_node,
     create_person,
     create_role_seat,
     create_support_record,
     create_transition,
+    create_white_glove_request,
     end_assignment,
+    export_command_roster,
+    get_historical_snapshot,
+    get_officer_wall,
+    get_role_seat_succession,
+    get_succession_timeline,
     list_assignments,
     list_links,
     list_organization_nodes,
@@ -41,6 +59,7 @@ from app.services.organization_service import (
     list_transitions,
     replace_role_seat_assignment,
     upsert_organization_profile,
+    verify_support_record,
 )
 
 router = APIRouter(prefix="/organizations", tags=["Organizations"])
@@ -68,6 +87,23 @@ def _require_org_lane(current_user: dict[str, Any]) -> None:
         "can_open_org_intake",
         detail="Command Structure Network entitlement is required for organization routes.",
     )
+
+
+def _require_org_project_access(organization_id: str, project_id: str, current_user: dict[str, Any]) -> None:
+    db = get_database()
+    project = db["projects"].find_one({"_id": project_id})
+    if project is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found.")
+    project_org = str(project.get("organization_id") or "").strip()
+    if project_org != organization_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Project is not mapped to the requested organization.")
+    snapshot = get_project_access_snapshot(
+        project,
+        user_id=_actor_user_id(current_user),
+        email=str(current_user.get("email") or ""),
+    )
+    if not bool(snapshot.get("accessible")):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Workspace/project access is required.")
 
 
 def _command_structure_button_matrix() -> list[dict[str, Any]]:
@@ -184,13 +220,13 @@ def _command_structure_button_matrix() -> list[dict[str, Any]]:
         },
         {
             "button": "Verify Support Record",
-            "status": "unavailable",
-            "route_service": "No dedicated organization support-record verification route/service yet.",
-            "permission_gate": "N/A",
-            "entitlement_gate": "N/A",
-            "audit_behavior": "N/A",
-            "duplicate_prevention_behavior": "N/A",
-            "error_state": "Show explicit unavailable state until verification workflow route is implemented.",
+            "status": "live",
+            "route_service": "POST /organizations/{org_id}/support-records/{support_record_id}/verify -> verify_support_record",
+            "permission_gate": "uploads.write",
+            "entitlement_gate": "can_open_org_intake",
+            "audit_behavior": "organization.support_record.verify",
+            "duplicate_prevention_behavior": "Idempotent record-level status update; retries overwrite same support record instead of creating duplicates.",
+            "error_state": "400 invalid status or record not found; 403/401 auth errors.",
         },
         {
             "button": "Open Leadership Viewer",
@@ -214,33 +250,33 @@ def _command_structure_button_matrix() -> list[dict[str, Any]]:
         },
         {
             "button": "View Historical Date",
-            "status": "unavailable",
-            "route_service": "Viewer mode exists but historical_date_view is currently available=false.",
-            "permission_gate": "N/A",
-            "entitlement_gate": "N/A",
-            "audit_behavior": "N/A",
-            "duplicate_prevention_behavior": "N/A",
-            "error_state": "Show unavailable badge in UI; do not render as live action.",
+            "status": "live",
+            "route_service": "GET /organizations/{org_id}/viewer/historical?project_id={project_id}&date=YYYY-MM-DD -> get_historical_snapshot",
+            "permission_gate": "projects.read",
+            "entitlement_gate": "can_open_org_intake",
+            "audit_behavior": "none",
+            "duplicate_prevention_behavior": "Read-only snapshot endpoint based on assignment tenure.",
+            "error_state": "400 invalid date or project mismatch; 403/401 auth errors.",
         },
         {
             "button": "View Succession Timeline",
-            "status": "unavailable",
-            "route_service": "Viewer mode exists but succession_timeline is currently available=false.",
-            "permission_gate": "N/A",
-            "entitlement_gate": "N/A",
-            "audit_behavior": "N/A",
-            "duplicate_prevention_behavior": "N/A",
-            "error_state": "Show unavailable badge in UI; do not render as live action.",
+            "status": "live",
+            "route_service": "GET /organizations/{org_id}/role-seats/{role_seat_id}/succession + GET /organizations/{org_id}/viewer/succession-timeline",
+            "permission_gate": "projects.read",
+            "entitlement_gate": "can_open_org_intake",
+            "audit_behavior": "none",
+            "duplicate_prevention_behavior": "Read-only assignment history endpoint; no overwrite of historical records.",
+            "error_state": "400 project mismatch; 403/401 auth errors.",
         },
         {
             "button": "View Officer Wall",
-            "status": "unavailable",
-            "route_service": "Viewer mode exists but officer_wall is currently available=false.",
-            "permission_gate": "N/A",
-            "entitlement_gate": "N/A",
-            "audit_behavior": "N/A",
-            "duplicate_prevention_behavior": "N/A",
-            "error_state": "Show unavailable badge in UI; do not render as live action.",
+            "status": "live",
+            "route_service": "GET /organizations/{org_id}/viewer/officer-wall?project_id={project_id}",
+            "permission_gate": "projects.read",
+            "entitlement_gate": "can_open_org_intake",
+            "audit_behavior": "none",
+            "duplicate_prevention_behavior": "Read-only aggregation of organization-native people and assignments.",
+            "error_state": "400 project mismatch; 403/401 auth errors.",
         },
         {
             "button": "Link Organization",
@@ -264,43 +300,43 @@ def _command_structure_button_matrix() -> list[dict[str, Any]]:
         },
         {
             "button": "Export Command Roster",
-            "status": "unavailable",
-            "route_service": "No organization roster export route/service yet.",
-            "permission_gate": "N/A",
-            "entitlement_gate": "N/A",
-            "audit_behavior": "N/A",
-            "duplicate_prevention_behavior": "N/A",
-            "error_state": "Show unavailable badge and block action.",
+            "status": "live",
+            "route_service": "GET /organizations/{org_id}/exports/command-roster?project_id={project_id}&format=csv|json",
+            "permission_gate": "projects.read",
+            "entitlement_gate": "can_open_org_intake",
+            "audit_behavior": "organization.command_roster.export",
+            "duplicate_prevention_behavior": "Read-only export generation.",
+            "error_state": "400 unsupported format or project mismatch; 403/401 auth errors.",
         },
         {
             "button": "Invite Admin Seat",
-            "status": "unavailable",
-            "route_service": "No organization-specific admin-seat invitation route/service yet.",
-            "permission_gate": "N/A",
-            "entitlement_gate": "N/A",
-            "audit_behavior": "N/A",
-            "duplicate_prevention_behavior": "N/A",
-            "error_state": "Show unavailable badge and block action.",
+            "status": "live",
+            "route_service": "POST /organizations/{org_id}/admin-seats/invite -> create_admin_invite",
+            "permission_gate": "uploads.write",
+            "entitlement_gate": "can_open_org_intake",
+            "audit_behavior": "organization.admin_seat.invite",
+            "duplicate_prevention_behavior": "Unique pending invite constraint by organization + project + email + role.",
+            "error_state": "400 invalid payload or project mismatch; 403/401 auth errors.",
         },
         {
             "button": "Add Ops / Support Note",
-            "status": "unavailable",
-            "route_service": "No dedicated ops/support note endpoint for command structure network yet.",
-            "permission_gate": "N/A",
-            "entitlement_gate": "N/A",
-            "audit_behavior": "N/A",
-            "duplicate_prevention_behavior": "N/A",
-            "error_state": "Show unavailable badge and block action.",
+            "status": "live",
+            "route_service": "POST /organizations/{org_id}/notes -> create_organization_note",
+            "permission_gate": "uploads.write",
+            "entitlement_gate": "can_open_org_intake",
+            "audit_behavior": "organization.note.create (+ internal note audit)",
+            "duplicate_prevention_behavior": "Creates organization-scoped notes only; avoids non-organization note collections.",
+            "error_state": "400 invalid payload or project mismatch; 403/401 auth errors.",
         },
         {
             "button": "Request White-Glove Review",
-            "status": "unavailable",
-            "route_service": "No command-structure white-glove review request route/service yet.",
-            "permission_gate": "N/A",
-            "entitlement_gate": "N/A",
-            "audit_behavior": "N/A",
-            "duplicate_prevention_behavior": "N/A",
-            "error_state": "Show unavailable badge and block action.",
+            "status": "live",
+            "route_service": "POST /organizations/{org_id}/white-glove-review/request -> create_white_glove_request",
+            "permission_gate": "uploads.write",
+            "entitlement_gate": "can_open_org_intake",
+            "audit_behavior": "organization.white_glove.request",
+            "duplicate_prevention_behavior": "Single open request allowed per organization/project; retries return existing open case.",
+            "error_state": "400 project mismatch; 403/401 auth errors.",
         },
     ]
 
@@ -506,6 +542,28 @@ def post_support_records(
     return item
 
 
+@router.post("/{org_id}/support-records/{support_record_id}/verify")
+def post_verify_support_record(
+    org_id: str,
+    support_record_id: str,
+    payload: SupportRecordVerifyPayload,
+    current_user: dict[str, Any] = Depends(require_permission("uploads.write")),
+):
+    _require_org_lane(current_user)
+    try:
+        item = verify_support_record(
+            org_id,
+            support_record_id,
+            verification_status=payload.status,
+            note=payload.note,
+            actor_user_id=_actor_user_id(current_user),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    _audit(current_user, "organization.support_record.verify", "support_record", support_record_id, details={"organization_id": org_id, "status": payload.status})
+    return item
+
+
 @router.get("/{org_id}/links")
 def get_links(org_id: str, current_user: dict[str, Any] = Depends(require_permission("projects.read"))):
     _require_org_lane(current_user)
@@ -524,4 +582,111 @@ def post_links(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     _audit(current_user, "organization.link.create", "organization_link", f"{org_id}:{payload.linked_organization_id}:{payload.link_type}", details={"organization_id": org_id})
+    return item
+
+
+@router.get("/{org_id}/viewer/historical")
+def get_viewer_historical(
+    org_id: str,
+    project_id: str = Query(..., min_length=1),
+    date_value: date = Query(..., alias="date"),
+    current_user: dict[str, Any] = Depends(require_permission("projects.read")),
+):
+    _require_org_lane(current_user)
+    _require_org_project_access(org_id, project_id, current_user)
+    return get_historical_snapshot(org_id, snapshot_date=date_value)
+
+
+@router.get("/{org_id}/role-seats/{role_seat_id}/succession")
+def get_role_seat_succession_route(
+    org_id: str,
+    role_seat_id: str,
+    project_id: str = Query(..., min_length=1),
+    current_user: dict[str, Any] = Depends(require_permission("projects.read")),
+):
+    _require_org_lane(current_user)
+    _require_org_project_access(org_id, project_id, current_user)
+    return {"organization_id": org_id, "role_seat_id": role_seat_id, "items": get_role_seat_succession(org_id, role_seat_id)}
+
+
+@router.get("/{org_id}/viewer/succession-timeline")
+def get_succession_timeline_route(
+    org_id: str,
+    project_id: str = Query(..., min_length=1),
+    current_user: dict[str, Any] = Depends(require_permission("projects.read")),
+):
+    _require_org_lane(current_user)
+    _require_org_project_access(org_id, project_id, current_user)
+    return {"organization_id": org_id, "items": get_succession_timeline(org_id)}
+
+
+@router.get("/{org_id}/viewer/officer-wall")
+def get_officer_wall_route(
+    org_id: str,
+    project_id: str = Query(..., min_length=1),
+    current_user: dict[str, Any] = Depends(require_permission("projects.read")),
+):
+    _require_org_lane(current_user)
+    _require_org_project_access(org_id, project_id, current_user)
+    return {"organization_id": org_id, "items": get_officer_wall(org_id)}
+
+
+@router.get("/{org_id}/exports/command-roster")
+def get_command_roster_export(
+    org_id: str,
+    project_id: str = Query(..., min_length=1),
+    format: str = Query("json", pattern="^(json|csv)$"),
+    current_user: dict[str, Any] = Depends(require_permission("projects.read")),
+):
+    _require_org_lane(current_user)
+    _require_org_project_access(org_id, project_id, current_user)
+    rows = export_command_roster(org_id)
+    _audit(current_user, "organization.command_roster.export", "organization", org_id, details={"organization_id": org_id, "project_id": project_id, "format": format})
+    if format == "json":
+        return {"organization_id": org_id, "items": rows}
+    output = StringIO()
+    fields = ["organization_name", "node", "role_seat", "person", "title_rank", "start_date", "status"]
+    writer = csv.DictWriter(output, fieldnames=fields)
+    writer.writeheader()
+    for row in rows:
+        writer.writerow(row)
+    return Response(content=output.getvalue(), media_type="text/csv")
+
+
+@router.post("/{org_id}/admin-seats/invite", status_code=status.HTTP_201_CREATED)
+def post_admin_seat_invite(
+    org_id: str,
+    payload: AdminSeatInvitePayload,
+    current_user: dict[str, Any] = Depends(require_permission("uploads.write")),
+):
+    _require_org_lane(current_user)
+    _require_org_project_access(org_id, payload.project_id, current_user)
+    item = create_admin_invite(org_id, payload.model_dump(), actor_user_id=_actor_user_id(current_user))
+    _audit(current_user, "organization.admin_seat.invite", "organization_admin_invite", f"{org_id}:{payload.project_id}:{payload.email}:{payload.role}", details={"organization_id": org_id, "project_id": payload.project_id})
+    return item
+
+
+@router.post("/{org_id}/notes", status_code=status.HTTP_201_CREATED)
+def post_organization_note(
+    org_id: str,
+    payload: OrganizationNotePayload,
+    current_user: dict[str, Any] = Depends(require_permission("uploads.write")),
+):
+    _require_org_lane(current_user)
+    _require_org_project_access(org_id, payload.project_id, current_user)
+    item = create_organization_note(org_id, payload.model_dump(), actor_user_id=_actor_user_id(current_user))
+    _audit(current_user, "organization.note.create", "organization_note", str(item.get("created_at")), details={"organization_id": org_id, "project_id": payload.project_id, "visibility": payload.visibility, "sensitive": payload.visibility == "internal"})
+    return item
+
+
+@router.post("/{org_id}/white-glove-review/request", status_code=status.HTTP_201_CREATED)
+def post_white_glove_review_request(
+    org_id: str,
+    payload: WhiteGloveRequestPayload,
+    current_user: dict[str, Any] = Depends(require_permission("uploads.write")),
+):
+    _require_org_lane(current_user)
+    _require_org_project_access(org_id, payload.project_id, current_user)
+    item = create_white_glove_request(org_id, payload.model_dump(), actor_user_id=_actor_user_id(current_user))
+    _audit(current_user, "organization.white_glove.request", "organization_white_glove_request", f"{org_id}:{payload.project_id}", details={"organization_id": org_id, "project_id": payload.project_id, "status": item.get("status")})
     return item

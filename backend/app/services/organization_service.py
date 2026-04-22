@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 from pymongo import ASCENDING
@@ -82,6 +82,21 @@ def ensure_organization_indexes() -> None:
         ],
         unique=True,
         name="organization_link_natural_key_uniq",
+    )
+    _collection("organization_transitions").create_index(
+        [("organization_id", ASCENDING), ("transition_id", ASCENDING)],
+        unique=True,
+        name="organization_transition_id_uniq",
+    )
+    _collection("organization_admin_invites").create_index(
+        [("organization_id", ASCENDING), ("project_id", ASCENDING), ("email", ASCENDING), ("role", ASCENDING), ("status", ASCENDING)],
+        unique=True,
+        name="organization_admin_invite_pending_uniq",
+    )
+    _collection("organization_white_glove_requests").create_index(
+        [("organization_id", ASCENDING), ("project_id", ASCENDING), ("status", ASCENDING)],
+        unique=True,
+        name="organization_white_glove_open_request_uniq",
     )
 
 
@@ -273,7 +288,10 @@ def create_transition(organization_id: str, payload: dict[str, Any], *, actor_us
 
     collection = _collection("organization_transitions")
     doc = {"organization_id": organization_id, **payload, "created_at": _utcnow(), "created_by": actor_user_id}
-    collection.insert_one(doc)
+    try:
+        collection.insert_one(doc)
+    except DuplicateKeyError as exc:
+        raise ValueError("Duplicate transition for organization_id + transition_id.") from exc
     return collection.find_one({"organization_id": organization_id, "transition_id": payload["transition_id"]}) or {}
 
 
@@ -312,3 +330,195 @@ def create_linked_organization(organization_id: str, payload: dict[str, Any], *,
 
 def list_links(organization_id: str) -> list[dict[str, Any]]:
     return list(_collection("organization_links").find({"organization_id": organization_id}))
+
+
+def _as_date(value: Any) -> date | None:
+    if isinstance(value, date):
+        return value
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        return date.fromisoformat(raw)
+    except ValueError:
+        return None
+
+
+def get_historical_snapshot(organization_id: str, *, snapshot_date: date) -> dict[str, Any]:
+    nodes = list_organization_nodes(organization_id)
+    role_seats = list_role_seats(organization_id)
+    assignments = list_assignments(organization_id)
+    people = {item.get("person_id"): item for item in list_people(organization_id)}
+    roles_by_node: dict[str, list[dict[str, Any]]] = {}
+    for role in role_seats:
+        roles_by_node.setdefault(str(role.get("node_id")), []).append(role)
+
+    def assignment_for_role(role_seat_id: str) -> dict[str, Any] | None:
+        matches: list[dict[str, Any]] = []
+        for assignment in assignments:
+            if assignment.get("role_seat_id") != role_seat_id:
+                continue
+            started = _as_date(assignment.get("start_date"))
+            ended = _as_date(assignment.get("end_date"))
+            if started and started > snapshot_date:
+                continue
+            if ended and ended < snapshot_date:
+                continue
+            matches.append(assignment)
+        matches.sort(key=lambda item: (_as_date(item.get("start_date")) or date.min, str(item.get("assignment_id") or "")), reverse=True)
+        return matches[0] if matches else None
+
+    items: list[dict[str, Any]] = []
+    for node in nodes:
+        node_payload = {**node, "role_seats": []}
+        for role in roles_by_node.get(str(node.get("node_key")), []) + roles_by_node.get(str(node.get("node_id")), []):
+            assignment = assignment_for_role(str(role.get("role_key") or role.get("role_seat_id") or ""))
+            if assignment is None:
+                assignment = assignment_for_role(str(role.get("role_seat_id") or role.get("role_key") or ""))
+            person = people.get((assignment or {}).get("person_id")) if assignment else None
+            node_payload["role_seats"].append(
+                {
+                    **role,
+                    "assignment": assignment,
+                    "person": person,
+                    "filled": assignment is not None,
+                }
+            )
+        items.append(node_payload)
+    return {"organization_id": organization_id, "snapshot_date": snapshot_date.isoformat(), "nodes": items}
+
+
+def get_role_seat_succession(organization_id: str, role_seat_id: str) -> list[dict[str, Any]]:
+    assignments = [item for item in list_assignments(organization_id) if str(item.get("role_seat_id")) == role_seat_id]
+    assignments.sort(key=lambda item: (_as_date(item.get("start_date")) or date.min, _as_date(item.get("end_date")) or date.max))
+    return assignments
+
+
+def get_succession_timeline(organization_id: str) -> list[dict[str, Any]]:
+    role_seats = list_role_seats(organization_id)
+    return [
+        {"role_seat_id": str(role.get("role_seat_id") or role.get("role_key") or ""), "history": get_role_seat_succession(organization_id, str(role.get("role_seat_id") or role.get("role_key") or ""))}
+        for role in role_seats
+    ]
+
+
+def get_officer_wall(organization_id: str) -> list[dict[str, Any]]:
+    people = {str(item.get("person_id")): item for item in list_people(organization_id)}
+    assignments = list_assignments(organization_id)
+    output: list[dict[str, Any]] = []
+    status_priority = ["active", "former", "retired", "transferred", "resigned", "deceased", "emeritus", "honorary", "acting", "interim", "unknown"]
+    for person_id, person in people.items():
+        history = [item for item in assignments if str(item.get("person_id")) == person_id]
+        normalized_status = "unknown"
+        for candidate in status_priority:
+            if any(str(item.get("status") or "").strip().lower() == candidate for item in history) or str(person.get("status") or "").strip().lower() == candidate:
+                normalized_status = candidate
+                break
+        output.append({"person": person, "assignments": history, "status": normalized_status})
+    return output
+
+
+def verify_support_record(
+    organization_id: str,
+    support_record_id: str,
+    *,
+    verification_status: str,
+    note: str | None,
+    actor_user_id: str,
+) -> dict[str, Any]:
+    collection = _collection("organization_support_records")
+    existing = collection.find_one({"organization_id": organization_id, "support_record_id": support_record_id})
+    if existing is None:
+        raise ValueError("Support record not found.")
+    updates = {
+        "verification_status": verification_status,
+        "verification_note": note,
+        "verified_by": actor_user_id,
+        "verified_at": _utcnow(),
+    }
+    collection.update_one({"_id": existing["_id"]}, {"$set": updates})
+    return collection.find_one({"_id": existing["_id"]}) or {}
+
+
+def export_command_roster(organization_id: str) -> list[dict[str, Any]]:
+    profiles = list_organization_profiles(organization_id)
+    org_name = str((profiles[0] if profiles else {}).get("organization_name") or organization_id)
+    nodes = {str(item.get("node_key") or item.get("node_id")): item for item in list_organization_nodes(organization_id)}
+    role_seats = {str(item.get("role_key") or item.get("role_seat_id")): item for item in list_role_seats(organization_id)}
+    people = {str(item.get("person_id")): item for item in list_people(organization_id)}
+    assignments = [item for item in list_assignments(organization_id) if str(item.get("status") or "").lower() in {"active", "current", "acting", "interim"}]
+    rows: list[dict[str, Any]] = []
+    for item in assignments:
+        node = nodes.get(str(item.get("node_id")))
+        role = role_seats.get(str(item.get("role_seat_id"))) or role_seats.get(str(item.get("role_key")))
+        person = people.get(str(item.get("person_id")))
+        rows.append(
+            {
+                "organization_name": org_name,
+                "node": (node or {}).get("node_name"),
+                "role_seat": (role or {}).get("role_name"),
+                "person": (person or {}).get("full_name"),
+                "title_rank": item.get("title_at_time") or item.get("rank_at_time"),
+                "start_date": item.get("start_date"),
+                "status": item.get("status"),
+            }
+        )
+    return rows
+
+
+def create_admin_invite(organization_id: str, payload: dict[str, Any], *, actor_user_id: str) -> dict[str, Any]:
+    collection = _collection("organization_admin_invites")
+    doc = {"organization_id": organization_id, **payload, "status": "pending", "created_at": _utcnow(), "created_by": actor_user_id}
+    existing = collection.find_one(
+        {
+            "organization_id": organization_id,
+            "project_id": payload.get("project_id"),
+            "email": payload.get("email"),
+            "role": payload.get("role"),
+            "status": "pending",
+        }
+    )
+    if existing is not None:
+        return existing
+    try:
+        collection.insert_one(doc)
+    except DuplicateKeyError:
+        existing = collection.find_one(
+            {
+                "organization_id": organization_id,
+                "project_id": payload.get("project_id"),
+                "email": payload.get("email"),
+                "role": payload.get("role"),
+                "status": "pending",
+            }
+        )
+        if existing is not None:
+            return existing
+        raise
+    return collection.find_one({"organization_id": organization_id, "project_id": payload.get("project_id"), "email": payload.get("email"), "role": payload.get("role"), "status": "pending"}) or {}
+
+
+def create_organization_note(organization_id: str, payload: dict[str, Any], *, actor_user_id: str) -> dict[str, Any]:
+    collection = _collection("organization_notes")
+    doc = {"organization_id": organization_id, **payload, "created_at": _utcnow(), "created_by": actor_user_id}
+    collection.insert_one(doc)
+    return doc
+
+
+def create_white_glove_request(organization_id: str, payload: dict[str, Any], *, actor_user_id: str) -> dict[str, Any]:
+    collection = _collection("organization_white_glove_requests")
+    existing = collection.find_one(
+        {"organization_id": organization_id, "project_id": payload.get("project_id"), "status": {"$in": ["requested", "in_review"]}}
+    )
+    if existing is not None:
+        return existing
+    doc = {
+        "organization_id": organization_id,
+        "project_id": payload.get("project_id"),
+        "status": "requested",
+        "requested_note": payload.get("note"),
+        "created_at": _utcnow(),
+        "created_by": actor_user_id,
+    }
+    collection.insert_one(doc)
+    return collection.find_one({"organization_id": organization_id, "project_id": payload.get("project_id"), "status": {"$in": ["requested", "in_review"]}}) or doc
