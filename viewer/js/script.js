@@ -429,7 +429,9 @@
       !isSecureShareMode(manifest) &&
       isControlEnabled("allow_zoom", true);
     const canReset = !isSecureShareMode(manifest);
-    const canNarration = !isSecureShareMode(manifest);
+    const canNarration =
+      !isSecureShareMode(manifest) &&
+      isControlEnabled("allow_narration_auto_advance", true);
 
     if (navLeftBtn) navLeftBtn.style.display = canLineageNavigate ? "" : "none";
     if (navRightBtn) navRightBtn.style.display = canLineageNavigate ? "" : "none";
@@ -437,6 +439,11 @@
     if (zoomInBtn) zoomInBtn.style.display = canZoom ? "" : "none";
     if (resetViewerBtn) resetViewerBtn.style.display = canReset ? "" : "none";
     if (narrationToggleBtn) narrationToggleBtn.style.display = canNarration ? "" : "none";
+    if (!canNarration) {
+      isPlaying = false;
+      stopNarrationAutoAdvance();
+      showNarration("");
+    }
     if (!isControlEnabled("allow_gaze_navigation", true)) {
       cHeld = false;
       setHoveredPortal("");
@@ -476,6 +483,10 @@
 
   function showNarration(text) {
     if (!narrationDisplay) return;
+    if (!isControlEnabled("allow_narration_auto_advance", true)) {
+      narrationDisplay.style.opacity = "0";
+      return;
+    }
 
     if (narrationFadeTimeout) {
       clearTimeout(narrationFadeTimeout);

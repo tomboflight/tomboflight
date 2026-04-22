@@ -6,6 +6,7 @@ from fastapi import HTTPException
 
 from app.core.package_catalog import get_package, get_package_control_profile
 from app.routes import family_graph, workspace_access
+from app.services.entitlement_service import can_purchase_addon, resolve_project_entitlements
 
 
 class LegacySnapshotPackageContractTests(unittest.TestCase):
@@ -120,6 +121,61 @@ class HouseholdFoundationPackageContractTests(unittest.TestCase):
         self.assertIsNotNone(profile)
         assert profile is not None
         self.assertEqual(str(profile.get("maintenance_default")), "none")
+
+
+class HeirloomLegacyTreePackageContractTests(unittest.TestCase):
+    def test_heirloom_legacy_tree_contract_fields(self):
+        package = get_package("heirloom_legacy_tree")
+        self.assertIsNotNone(package)
+        assert package is not None
+        self.assertEqual(package.get("package_lane"), "household")
+        self.assertEqual(package.get("max_members"), 15)
+        self.assertEqual(package.get("max_uploads"), 50)
+        self.assertEqual(package.get("max_zoom_layers"), 4)
+        self.assertEqual(package.get("max_storage_gb"), 10)
+        self.assertTrue(bool(package.get("can_build_household")))
+        self.assertTrue(bool(package.get("can_open_family_intake")))
+        self.assertTrue(bool(package.get("can_build_family_tree")))
+        self.assertTrue(bool(package.get("can_use_viewer")))
+        self.assertTrue(bool(package.get("can_use_lineage_certificate")))
+        self.assertTrue(bool(package.get("narration_ready_structure")))
+        self.assertFalse(bool(package.get("can_use_narration")))
+        self.assertFalse(bool(package.get("can_link_households")))
+        self.assertFalse(bool(package.get("can_use_link_keys")))
+        self.assertFalse(bool(package.get("can_manage_link_keys")))
+        self.assertFalse(bool(package.get("maintenance_starts_on_delivery")))
+        self.assertCountEqual(
+            list(package.get("allowed_addons") or []),
+            ["rush_delivery", "on_site_photo_scanning"],
+        )
+
+    def test_heirloom_legacy_tree_maintenance_default_is_none(self):
+        profile = get_package_control_profile("heirloom_legacy_tree")
+        self.assertIsNotNone(profile)
+        assert profile is not None
+        self.assertEqual(str(profile.get("maintenance_default")), "none")
+
+
+class EntitlementAddonBoundaryTests(unittest.TestCase):
+    def test_heirloom_disallows_addons_that_expand_hard_caps(self):
+        resolved = resolve_project_entitlements(
+            "heirloom_legacy_tree",
+            [
+                "extra_mapped_person",
+                "extra_zoom_layer",
+                "extra_storage",
+                # Intentional duplicate verifies idempotent addon processing.
+                "extra_mapped_person",
+                "rush_delivery",
+            ],
+        )
+        self.assertEqual(resolved.get("max_members"), 15)
+        self.assertEqual(resolved.get("max_zoom_layers"), 4)
+        self.assertEqual(resolved.get("max_storage_gb"), 10)
+        self.assertEqual(list(resolved.get("active_addons") or []), ["rush_delivery"])
+
+    def test_heirloom_cannot_purchase_extra_storage_addon(self):
+        self.assertFalse(can_purchase_addon("heirloom_legacy_tree", "extra_storage"))
 
 
 class LegacySnapshotGatingRegressionTests(unittest.TestCase):
