@@ -190,6 +190,7 @@ class LegacySnapshotUploadBoundariesTests(unittest.TestCase):
         self.assertIn("resolveMembersFromManifest", portrait_source)
         self.assertRegex(portrait_source, required_pattern)
         self.assertIn('normalizeValue(manifest?.mode) === "secure_share"', portrait_source)
+        self.assertIn("!canBuildFamilyTree", portrait_source)
 
         self.assertIn("loadLegacySnapshotMembersFromManifest", verification_source)
         self.assertIn("resolveMembersFromManifest", verification_source)
@@ -198,6 +199,7 @@ class LegacySnapshotUploadBoundariesTests(unittest.TestCase):
             'normalizeValue(manifest?.mode) === "secure_share"',
             verification_source,
         )
+        self.assertIn("!canBuildFamilyTree", verification_source)
 
 
 if __name__ == "__main__":
