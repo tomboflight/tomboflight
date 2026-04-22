@@ -170,6 +170,50 @@ class LegacySnapshotViewerBoundariesTests(unittest.TestCase):
         self.assertEqual(manifest.get("mode"), "dynamic")
         self.assertTrue(bool(controls.get("allow_zoom")))
         self.assertEqual(controls.get("max_zoom_layers"), 2)
+        self.assertFalse(bool(controls.get("allow_narration_auto_advance")))
+
+    def test_heirloom_manifest_limits_zoom_and_disables_narration_playback(self):
+        project = {
+            "_id": "project-heirloom",
+            "project_name": "Heirloom Workspace",
+            "package_code": "heirloom_legacy_tree",
+            "package_name": "Heirloom Legacy Tree",
+        }
+        family = {"_id": "family-heirloom", "family_name": "Heirloom Family"}
+        primary_member = {"_id": "member-heirloom", "generation": 1}
+
+        with (
+            patch.object(
+                viewer_manifest_service,
+                "get_database",
+                return_value=_FakeDatabase({"family_members": []}),
+            ),
+            patch.object(
+                viewer_manifest_service,
+                "resolve_project_for_viewer",
+                return_value=project,
+            ),
+            patch.object(
+                viewer_manifest_service,
+                "_find_submission_for_project",
+                return_value=None,
+            ),
+            patch.object(
+                viewer_manifest_service,
+                "load_project_workspace_anchor",
+                return_value=(family, primary_member, project),
+            ),
+        ):
+            manifest = viewer_manifest_service.build_viewer_manifest(
+                current_user={"id": "user-1", "email": "owner@example.com"},
+                project_id="project-heirloom",
+            )
+
+        controls = manifest.get("controls") or {}
+        self.assertEqual(manifest.get("mode"), "dynamic")
+        self.assertTrue(bool(controls.get("allow_zoom")))
+        self.assertEqual(controls.get("max_zoom_layers"), 4)
+        self.assertFalse(bool(controls.get("allow_narration_auto_advance")))
 
     def test_legacy_portrait_intro_manifest_is_secure_share_mode(self):
         project = {

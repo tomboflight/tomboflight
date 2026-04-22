@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 from copy import deepcopy
 from typing import Any
 
 from app.core.package_catalog import get_addon, get_package
+
+_logger = logging.getLogger(__name__)
 
 
 def _normalize(value: Any) -> str:
@@ -31,15 +34,36 @@ def resolve_project_entitlements(
     package = get_package_or_raise(package_code)
     entitlements = deepcopy(package)
     entitlements["active_addons"] = []
+    allowed_addons = {
+        str(addon_code).strip()
+        for addon_code in (package.get("allowed_addons") or [])
+        if str(addon_code).strip()
+    }
+    processed_addons: set[str] = set()
 
     for raw_addon_code in active_addon_codes or []:
         addon = get_addon_or_raise(raw_addon_code)
         addon_code = str(addon.get("addon_code") or raw_addon_code).strip()
+        if not addon_code or addon_code in processed_addons:
+            continue
+        processed_addons.add(addon_code)
+
+        if addon_code not in allowed_addons:
+            _logger.warning(
+                "Skipping addon '%s' because it is not allowed for package '%s'.",
+                addon_code,
+                package.get("package_code"),
+            )
+            continue
 
         if package["package_lane"] not in addon.get("allowed_lanes", []):
-            raise ValueError(
-                f"Addon '{addon_code}' is not allowed for lane '{package['package_lane']}'"
+            _logger.warning(
+                "Skipping addon '%s' because lane '%s' is not in allowed lanes %s.",
+                addon_code,
+                package.get("package_lane"),
+                addon.get("allowed_lanes", []),
             )
+            continue
 
         entitlements["active_addons"].append(addon_code)
 
@@ -85,6 +109,12 @@ def resolve_project_entitlements(
 def can_purchase_addon(package_code: str, addon_code: str) -> bool:
     package = get_package_or_raise(package_code)
     addon = get_addon_or_raise(addon_code)
+    allowed_addons = {
+        str(value).strip() for value in (package.get("allowed_addons") or []) if str(value).strip()
+    }
+    normalized_addon_code = str(addon.get("addon_code") or addon_code).strip()
+    if normalized_addon_code not in allowed_addons:
+        return False
     return package["package_lane"] in addon.get("allowed_lanes", [])
 
 

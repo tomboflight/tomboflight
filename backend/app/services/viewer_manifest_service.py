@@ -714,6 +714,7 @@ def build_viewer_manifest(
     secure_share_only = lane == "portrait" and _is_secure_share_portrait_project(project)
     resolved_entitlements = _resolve_viewer_entitlements(project)
     max_zoom_layers = _coerce_int(resolved_entitlements.get("max_zoom_layers")) or 0
+    can_use_narration = bool(resolved_entitlements.get("can_use_narration"))
     family_id_value = _normalize_value((family_doc or {}).get("_id") or project.get("family_id"))
     members: list[dict[str, Any]] = []
     if family_id_value:
@@ -856,7 +857,7 @@ def build_viewer_manifest(
             "allow_zoom": (not secure_share_only) and max_zoom_layers > 0,
             "allow_branch_navigation": not secure_share_only,
             "allow_gaze_navigation": not secure_share_only,
-            "allow_narration_auto_advance": not secure_share_only,
+            "allow_narration_auto_advance": (not secure_share_only) and can_use_narration,
             "max_zoom_layers": max(0, max_zoom_layers),
         },
         "states": states,

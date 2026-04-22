@@ -351,6 +351,9 @@
         profile?.can_use_secure_share_viewer ?? false,
       ),
       can_use_narration: Boolean(profile?.can_use_narration ?? false),
+      narration_ready_structure: Boolean(
+        profile?.narration_ready_structure ?? false,
+      ),
       can_use_lineage_certificate:
         typeof profile?.can_use_lineage_certificate === "boolean"
           ? profile.can_use_lineage_certificate

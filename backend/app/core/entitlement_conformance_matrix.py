@@ -46,6 +46,7 @@ def _feature_access_from_package(package: dict[str, Any]) -> dict[str, Any]:
         "can_upload_verification_docs": bool(entitlements.get("can_upload_verification_docs")),
         "can_use_viewer": bool(entitlements.get("can_use_viewer")),
         "can_use_narration": bool(entitlements.get("can_use_narration")),
+        "narration_ready_structure": bool(entitlements.get("narration_ready_structure")),
         "can_use_lineage_certificate": bool(entitlements.get("can_use_lineage_certificate")),
         "can_open_family_intake": bool(entitlements.get("can_open_family_intake")),
         "can_open_org_intake": bool(entitlements.get("can_open_org_intake")),
