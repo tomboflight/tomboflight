@@ -7,7 +7,6 @@
   const DASHBOARD_CONTEXT_STORAGE_KEY = "tol_dashboard_context_v2";
   let hasLogoutBinding = false;
   const HOUSEHOLD_LINK_PACKAGE_CODES = new Set([
-    "legacy_plus",
     "family_estate_concierge",
   ]);
 
@@ -353,6 +352,9 @@
       can_use_narration: Boolean(profile?.can_use_narration ?? false),
       narration_ready_structure: Boolean(
         profile?.narration_ready_structure ?? false,
+      ),
+      premium_archive_structure: Boolean(
+        profile?.premium_archive_structure ?? false,
       ),
       can_use_lineage_certificate:
         typeof profile?.can_use_lineage_certificate === "boolean"

@@ -13,7 +13,11 @@ from bson import ObjectId
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.core.package_catalog import get_package, normalize_package_code
+from app.core.package_catalog import (
+    get_package,
+    get_package_control_profile,
+    normalize_package_code,
+)
 from app.core.package_type_catalog import normalize_package_type
 from app.database import close_mongo_connection, connect_to_mongo
 from app.services.admin_access_bootstrap_service import bootstrap_admin_access_controls
@@ -98,6 +102,11 @@ TARGET_PERSONAL_ACCOUNT_EXPERIENCE: dict[str, dict[str, str]] = {
         "project_name": "Jennifer Wood Digital Legacy Portrait",
         "wallet_address": "0x1111111111111111111111111111111111111111",
     },
+    "larrycr27@gmail.com": {
+        "package_code": "legacy_plus",
+        "project_name": "Larry Robinson Legacy Plus",
+        "wallet_address": "0x3333333333333333333333333333333333333333",
+    },
     "mlfloyd00@gmail.com": {
         "package_code": "digital_legacy_portrait",
         "project_name": "Marquis Floyd Digital Legacy Portrait",
@@ -137,6 +146,14 @@ def _serialize(value: Any) -> Any:
 
 def _record_action(actions: list[dict[str, Any]], action: str, **details: Any) -> None:
     actions.append({"action": action, **_serialize(details)})
+
+
+def _maintenance_plan_for_package(package_code: str) -> str:
+    profile = get_package_control_profile(package_code) or {}
+    normalized = str(profile.get("maintenance_default") or "none").strip().lower()
+    if normalized in {"monthly", "yearly", "none"}:
+        return normalized
+    return "none"
 
 
 def _update_one(
@@ -423,7 +440,7 @@ def _normalize_project_order_and_entitlement(
         user_id=genesis_user_id,
         package_code=package_code,
         active_addons=[],
-        maintenance_plan="monthly",
+        maintenance_plan=_maintenance_plan_for_package(package_code),
         status="active",
     )
     _record_action(actions, "upserted_entitlement", entitlement=entitlement)
@@ -464,7 +481,7 @@ def _refresh_personal_project_entitlements(
                 user_id=user_id,
                 package_code=package_code,
                 active_addons=[],
-                maintenance_plan="monthly",
+                maintenance_plan=_maintenance_plan_for_package(package_code),
                 status="active",
             )
             _record_action(
@@ -607,7 +624,7 @@ def _ensure_target_personal_account_experience(
                 user_id=user_id,
                 package_code=package_code,
                 active_addons=[],
-                maintenance_plan="monthly",
+                maintenance_plan=_maintenance_plan_for_package(package_code),
                 status="active",
             )
             _record_action(
