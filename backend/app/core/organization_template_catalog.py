@@ -339,9 +339,11 @@ ORGANIZATION_TEMPLATE_CATALOG: dict[str, dict[str, Any]] = {
         "display_label": "Elected Office",
         "suggested_profile_fields": [
             "office_name",
+            "office_level",
             "chamber",
             "district",
             "jurisdiction",
+            "jurisdiction_level",
             "state",
             "county",
             "municipality",
@@ -370,6 +372,11 @@ ORGANIZATION_TEMPLATE_CATALOG: dict[str, dict[str, Any]] = {
             "Mayor",
             "Council Member",
             "Commissioner",
+            "School Board Member",
+            "Sheriff",
+            "Attorney General",
+            "Clerk",
+            "Auditor",
             "Chief of Staff",
             "Deputy Chief of Staff",
             "Legislative Director",
@@ -415,6 +422,28 @@ ORGANIZATION_TEMPLATE_CATALOG: dict[str, dict[str, Any]] = {
             "staff_directory",
             "office_memo",
             "public_biography",
+        ],
+        "supported_jurisdiction_levels": [
+            "federal",
+            "state",
+            "county",
+            "city",
+            "local",
+        ],
+        "supported_office_examples": [
+            "U.S. Senate office",
+            "U.S. House of Representatives office",
+            "State Senate office",
+            "State House / Assembly office",
+            "Governor's office",
+            "Mayor's office",
+            "City Council office",
+            "County Commissioner office",
+            "School Board office",
+            "Sheriff's office",
+            "Attorney General office",
+            "Clerk / Treasurer / Auditor office",
+            "Political campaign organization",
         ],
     },
     "legislative_body": {
@@ -1229,10 +1258,21 @@ def get_organization_template(organization_type: Any) -> dict[str, Any] | None:
         return None
     template = deepcopy(ORGANIZATION_TEMPLATE_CATALOG[normalized])
     template["organization_type"] = normalized
+    template["suggested_structural_nodes"] = deepcopy(template.get("suggested_nodes") or [])
     template["customization"] = {
         **deepcopy(_DEFAULT_CUSTOMIZATION),
         **deepcopy(template.get("customization") or {}),
     }
+    if template["organization_type"] == "custom":
+        custom_caps = template.get("custom_template_capabilities") or {}
+        if (
+            "allow_custom_transition_events" in custom_caps
+            and "allow_custom_transition_event_types" not in custom_caps
+        ):
+            custom_caps["allow_custom_transition_event_types"] = bool(
+                custom_caps.get("allow_custom_transition_events")
+            )
+        template["custom_template_capabilities"] = custom_caps
     return template
 
 

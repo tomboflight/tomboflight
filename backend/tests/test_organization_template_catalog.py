@@ -19,6 +19,10 @@ class OrganizationTemplateCatalogTests(unittest.TestCase):
         catalog = get_organization_template_catalog()
         templates = catalog.get("templates") or {}
         self.assertEqual(set(templates.keys()), set(ORGANIZATION_TYPE_OPTIONS))
+        self.assertEqual(
+            list((templates.get("military_unit") or {}).get("suggested_structural_nodes") or []),
+            list((templates.get("military_unit") or {}).get("suggested_nodes") or []),
+        )
 
     def test_templates_are_helper_only_and_customizable(self):
         catalog = get_organization_template_catalog()
@@ -40,9 +44,19 @@ class OrganizationTemplateCatalogTests(unittest.TestCase):
     def test_elected_office_template_includes_requested_samples(self):
         templates = get_organization_template_catalog().get("templates") or {}
         elected = templates.get("elected_office") or {}
+        self.assertIn("office_level", list(elected.get("suggested_profile_fields") or []))
         self.assertIn("district", list(elected.get("suggested_profile_fields") or []))
         self.assertIn("Main Office", list(elected.get("suggested_nodes") or []))
         self.assertIn("Senator", list(elected.get("suggested_role_seats") or []))
+        self.assertIn("Sheriff", list(elected.get("suggested_role_seats") or []))
+        self.assertIn(
+            "county",
+            list(elected.get("supported_jurisdiction_levels") or []),
+        )
+        self.assertIn(
+            "U.S. Senate office",
+            list(elected.get("supported_office_examples") or []),
+        )
         self.assertIn(
             "committee_assignment_changed",
             list(elected.get("suggested_transition_event_types") or []),
@@ -74,6 +88,7 @@ class OrganizationTemplateCatalogTests(unittest.TestCase):
         self.assertTrue(bool(capabilities.get("allow_custom_nodes")))
         self.assertTrue(bool(capabilities.get("allow_custom_role_seats")))
         self.assertTrue(bool(capabilities.get("allow_custom_transition_events")))
+        self.assertTrue(bool(capabilities.get("allow_custom_transition_event_types")))
         self.assertTrue(bool(capabilities.get("allow_custom_support_record_labels")))
         self.assertTrue(bool(capabilities.get("allow_custom_statuses")))
         self.assertTrue(bool(capabilities.get("allow_custom_hierarchy_labels")))
