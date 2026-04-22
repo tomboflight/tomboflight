@@ -8,6 +8,7 @@ from app.core.package_catalog import (
     get_package_catalog,
     list_package_control_profiles,
 )
+from app.core.organization_template_catalog import get_organization_template_catalog
 from app.core.package_mapping import get_canonical_package_map
 from app.services.entitlement_service import (
     can_purchase_addon,
@@ -27,7 +28,13 @@ def get_package_catalog_route():
         "package_map": get_canonical_package_map(),
         "package_identifier_map": get_package_identifier_map(),
         "control_profiles": list_package_control_profiles(),
+        "organization_templates": get_organization_template_catalog(),
     }
+
+
+@router.get("/organization-templates")
+def get_organization_templates_route():
+    return get_organization_template_catalog()
 
 
 @router.get("/conformance-matrix")
