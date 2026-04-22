@@ -2,7 +2,10 @@ import unittest
 
 from app.core.organization_template_catalog import (
     ORGANIZATION_TYPE_OPTIONS,
+    get_organization_template,
     get_organization_template_catalog,
+    get_subtypes_by_organization_type,
+    get_suggested_role_seats_by_organization_type,
 )
 from app.routes.package_catalog import get_organization_templates_route
 
@@ -79,6 +82,14 @@ class OrganizationTemplateCatalogTests(unittest.TestCase):
             "badge_assignment_record",
             list(police.get("suggested_support_record_types") or []),
         )
+        fire = templates.get("fire_department") or {}
+        self.assertIn("Fire Chief", list(fire.get("suggested_role_seats") or []))
+
+    def test_unknown_organization_type_uses_custom_fallback(self):
+        template = get_organization_template("some_unknown_org_type")
+        self.assertIsNotNone(template)
+        assert template is not None
+        self.assertEqual(template.get("organization_type"), "custom")
 
     def test_custom_template_has_required_enforcement(self):
         templates = get_organization_template_catalog().get("templates") or {}
@@ -102,7 +113,49 @@ class OrganizationTemplateCatalogTests(unittest.TestCase):
     def test_route_returns_catalog(self):
         payload = get_organization_templates_route()
         self.assertIn("organization_type_options", payload)
+        self.assertIn("shared_dropdowns", payload)
         self.assertIn("templates", payload)
+
+    def test_masonic_role_seats_and_fields_are_complete(self):
+        templates = get_organization_template_catalog().get("templates") or {}
+        masonic = templates.get("masonic_lodge") or {}
+        seats = list(masonic.get("suggested_role_seats") or [])
+        for required in (
+            "Senior Deacon",
+            "Junior Deacon",
+            "Marshal",
+            "Tyler",
+            "Past Master",
+            "Emeritus Officer",
+        ):
+            self.assertIn(required, seats)
+        profile_fields = list(masonic.get("suggested_profile_fields") or [])
+        self.assertIn("nation_state", profile_fields)
+        self.assertIn("lodge_status", profile_fields)
+
+    def test_corporate_role_seats_and_fields_are_complete(self):
+        templates = get_organization_template_catalog().get("templates") or {}
+        corporation = templates.get("corporation") or {}
+        seats = list(corporation.get("suggested_role_seats") or [])
+        for required in ("CTO", "CMO", "CHRO", "Division President", "Department Head"):
+            self.assertIn(required, seats)
+        profile_fields = list(corporation.get("suggested_profile_fields") or [])
+        for required in (
+            "legal_entity_name",
+            "subsidiary",
+            "division",
+            "department",
+            "board",
+            "regional_office",
+            "executive_office",
+        ):
+            self.assertIn(required, profile_fields)
+
+    def test_helper_functions_return_subtypes_and_role_seats(self):
+        police_subtypes = get_subtypes_by_organization_type("police_department")
+        self.assertTrue(any(option.get("key") == "municipal_police" for option in police_subtypes))
+        corp_seats = get_suggested_role_seats_by_organization_type("corporation")
+        self.assertIn("CTO", corp_seats)
 
 
 if __name__ == "__main__":

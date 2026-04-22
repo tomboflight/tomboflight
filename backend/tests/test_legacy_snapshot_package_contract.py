@@ -251,15 +251,22 @@ class CommandStructureNetworkPackageContractTests(unittest.TestCase):
         self.assertEqual(package.get("organization_node_limit"), 15)
         self.assertEqual(package.get("max_uploads"), 25)
         self.assertTrue(bool(package.get("organization_nodes_enabled")))
+        self.assertTrue(bool(package.get("organization_profile_enabled")))
         self.assertTrue(bool(package.get("protected_workspace")))
         self.assertTrue(bool(package.get("guided_intake")))
         self.assertTrue(bool(package.get("command_role_mapping_tools")))
+        self.assertTrue(bool(package.get("role_seats_enabled")))
+        self.assertTrue(bool(package.get("officer_assignment_history")))
+        self.assertTrue(bool(package.get("transition_events_enabled")))
         self.assertTrue(bool(package.get("structured_organization_lineage")))
         self.assertTrue(bool(package.get("verification_support_record_workflows")))
         self.assertTrue(bool(package.get("leadership_structure_viewer")))
+        self.assertTrue(bool(package.get("historical_command_view")))
+        self.assertTrue(bool(package.get("succession_timeline")))
         self.assertTrue(bool(package.get("linked_organization_support")))
         self.assertTrue(bool(package.get("command_officer_continuity")))
         self.assertTrue(bool(package.get("admin_seat_expansion_paths")))
+        self.assertTrue(bool(package.get("organization_command_scope")))
         self.assertTrue(bool(package.get("can_build_org_chart")))
         self.assertTrue(bool(package.get("can_link_org_units")))
         self.assertTrue(bool(package.get("can_use_viewer")))
@@ -271,6 +278,10 @@ class CommandStructureNetworkPackageContractTests(unittest.TestCase):
         self.assertFalse(bool(package.get("can_manage_link_keys")))
         self.assertFalse(bool(package.get("family_household_scope")))
         self.assertFalse(bool(package.get("family_branch_network_scope")))
+        self.assertFalse(bool(package.get("family_tree_builder")))
+        self.assertFalse(bool(package.get("household_builder")))
+        self.assertFalse(bool(package.get("relationship_editor")))
+        self.assertFalse(bool(package.get("spouse_child_parent_relationships")))
         self.assertFalse(bool(package.get("maintenance_included")))
         self.assertCountEqual(
             list(package.get("allowed_addons") or []),
@@ -282,6 +293,7 @@ class CommandStructureNetworkPackageContractTests(unittest.TestCase):
                 "command_report_addon",
             ],
         )
+        self.assertNotIn("family_estate_concierge", list(package.get("upgrade_targets") or []))
 
     def test_command_structure_network_maintenance_default_is_none(self):
         profile = get_package_control_profile("command_structure_network")
