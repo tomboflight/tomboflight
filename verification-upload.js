@@ -503,7 +503,13 @@
               `/viewer/manifest?project_id=${encodeURIComponent(projectId)}&family_id=${encodeURIComponent(familyId)}`,
               { method: "GET" },
             );
-            if (normalizeValue(manifest?.mode) === "secure_share") {
+            const canBuildFamilyTree = Boolean(
+              currentContext?.resolvedEntitlements?.can_build_family_tree,
+            );
+            if (
+              normalizeValue(manifest?.mode) === "secure_share" ||
+              !canBuildFamilyTree
+            ) {
               members = resolveMembersFromManifest(manifest);
             }
           } catch (manifestError) {
