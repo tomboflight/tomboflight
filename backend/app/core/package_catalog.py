@@ -72,6 +72,7 @@ ADDON_CODE_ALIASES: dict[str, str] = {
 }
 
 PROJECT_LANES = frozenset({"portrait", "household", "network", "organization"})
+COMMAND_STRUCTURE_ORG_NODE_LIMIT = 15
 
 PACKAGE_CATALOG: dict[str, dict[str, Any]] = {
     "legacy_snapshot": {
@@ -397,7 +398,9 @@ PACKAGE_CATALOG: dict[str, dict[str, Any]] = {
         "maintenance_starts_on_delivery": True,
         "max_households": 0,
         "max_members": 0,
-        "max_org_nodes": 15,
+        "max_org_nodes": COMMAND_STRUCTURE_ORG_NODE_LIMIT,
+        "organization_node_limit": COMMAND_STRUCTURE_ORG_NODE_LIMIT,
+        "organization_nodes_enabled": True,
         "max_uploads": 25,
         "max_zoom_layers": 2,
         "max_storage_gb": 5,
@@ -415,8 +418,20 @@ PACKAGE_CATALOG: dict[str, dict[str, Any]] = {
         "can_open_org_intake": True,
         "can_use_link_keys": False,
         "can_manage_link_keys": False,
+        "protected_workspace": True,
+        "guided_intake": True,
+        "command_role_mapping_tools": True,
+        "structured_organization_lineage": True,
+        "verification_support_record_workflows": True,
+        "leadership_structure_viewer": True,
+        "linked_organization_support": True,
+        "command_officer_continuity": True,
+        "admin_seat_expansion_paths": True,
+        "family_household_scope": False,
+        "family_branch_network_scope": False,
+        "organization_command_scope": True,
+        "maintenance_included": False,
         "allowed_addons": [
-            "extra_org_node",
             "extra_org_level",
             "extra_admin_seat",
             "extra_storage",
@@ -549,7 +564,7 @@ PACKAGE_CONTROL_POLICY: dict[str, dict[str, Any]] = {
             "allows_automatic_anchor": True,
             "requires_runtime_flag_for_auto_mint": True,
         },
-        "maintenance_default": "monthly",
+        "maintenance_default": "none",
         "mint_policy": {
             "product_includes_onchain_anchor": True,
             "auto_mint_enabled": False,

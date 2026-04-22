@@ -241,6 +241,55 @@ class FamilyEstateConciergePackageContractTests(unittest.TestCase):
         self.assertEqual(str(profile.get("maintenance_default")), "none")
 
 
+class CommandStructureNetworkPackageContractTests(unittest.TestCase):
+    def test_command_structure_network_contract_fields(self):
+        package = get_package("command_structure_network")
+        self.assertIsNotNone(package)
+        assert package is not None
+        self.assertEqual(package.get("package_lane"), "organization")
+        self.assertEqual(package.get("max_org_nodes"), 15)
+        self.assertEqual(package.get("organization_node_limit"), 15)
+        self.assertEqual(package.get("max_uploads"), 25)
+        self.assertTrue(bool(package.get("organization_nodes_enabled")))
+        self.assertTrue(bool(package.get("protected_workspace")))
+        self.assertTrue(bool(package.get("guided_intake")))
+        self.assertTrue(bool(package.get("command_role_mapping_tools")))
+        self.assertTrue(bool(package.get("structured_organization_lineage")))
+        self.assertTrue(bool(package.get("verification_support_record_workflows")))
+        self.assertTrue(bool(package.get("leadership_structure_viewer")))
+        self.assertTrue(bool(package.get("linked_organization_support")))
+        self.assertTrue(bool(package.get("command_officer_continuity")))
+        self.assertTrue(bool(package.get("admin_seat_expansion_paths")))
+        self.assertTrue(bool(package.get("can_build_org_chart")))
+        self.assertTrue(bool(package.get("can_link_org_units")))
+        self.assertTrue(bool(package.get("can_use_viewer")))
+        self.assertTrue(bool(package.get("can_open_org_intake")))
+        self.assertFalse(bool(package.get("can_build_household")))
+        self.assertFalse(bool(package.get("can_build_family_tree")))
+        self.assertFalse(bool(package.get("can_link_households")))
+        self.assertFalse(bool(package.get("can_use_link_keys")))
+        self.assertFalse(bool(package.get("can_manage_link_keys")))
+        self.assertFalse(bool(package.get("family_household_scope")))
+        self.assertFalse(bool(package.get("family_branch_network_scope")))
+        self.assertFalse(bool(package.get("maintenance_included")))
+        self.assertCountEqual(
+            list(package.get("allowed_addons") or []),
+            [
+                "extra_org_level",
+                "extra_admin_seat",
+                "extra_storage",
+                "rush_delivery",
+                "command_report_addon",
+            ],
+        )
+
+    def test_command_structure_network_maintenance_default_is_none(self):
+        profile = get_package_control_profile("command_structure_network")
+        self.assertIsNotNone(profile)
+        assert profile is not None
+        self.assertEqual(str(profile.get("maintenance_default")), "none")
+
+
 class EntitlementAddonBoundaryTests(unittest.TestCase):
     def test_heirloom_disallows_addons_that_expand_hard_caps(self):
         resolved = resolve_project_entitlements(
@@ -310,6 +359,24 @@ class EntitlementAddonBoundaryTests(unittest.TestCase):
             can_purchase_addon("family_estate_concierge", "extra_linked_household")
         )
         self.assertFalse(can_purchase_addon("family_estate_concierge", "extra_branch"))
+
+    def test_command_structure_network_disallows_org_node_cap_expansion_addon(self):
+        resolved = resolve_project_entitlements(
+            "command_structure_network",
+            [
+                "extra_org_node",
+                "extra_admin_seat",
+                "command_report_addon",
+            ],
+        )
+        self.assertEqual(resolved.get("max_org_nodes"), 15)
+        self.assertEqual(
+            list(resolved.get("active_addons") or []),
+            ["extra_admin_seat", "command_report_addon"],
+        )
+
+    def test_command_structure_network_cannot_purchase_extra_org_node_addon(self):
+        self.assertFalse(can_purchase_addon("command_structure_network", "extra_org_node"))
 
 
 class LegacySnapshotGatingRegressionTests(unittest.TestCase):

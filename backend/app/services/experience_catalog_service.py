@@ -95,6 +95,10 @@ def get_lane_chambers(package_lane: str) -> list[str]:
 def derive_allowed_modules(package_lane: str, resolved_entitlements: dict[str, Any]) -> list[str]:
     lane = normalize_lane(package_lane)
     entitlements = resolved_entitlements or {}
+    has_org_lineage = lane == "organization" and bool(
+        entitlements.get("structured_organization_lineage")
+        or entitlements.get("can_build_org_chart")
+    )
 
     modules = ["entry_chamber"]
     if lane == "portrait" or bool(entitlements.get("can_upload_portraits")):
@@ -105,7 +109,7 @@ def derive_allowed_modules(package_lane: str, resolved_entitlements: dict[str, A
         modules.append("network_chamber")
     if lane == "organization":
         modules.append("admin_workspace")
-    if bool(entitlements.get("can_build_family_tree")):
+    if bool(entitlements.get("can_build_family_tree")) or has_org_lineage:
         modules.append("lineage_chamber")
     if bool(
         entitlements.get("can_upload_portraits")

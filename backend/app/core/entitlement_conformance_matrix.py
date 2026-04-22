@@ -53,6 +53,19 @@ def _feature_access_from_package(package: dict[str, Any]) -> dict[str, Any]:
         "can_open_org_intake": bool(entitlements.get("can_open_org_intake")),
         "can_use_link_keys": bool(entitlements.get("can_use_link_keys")),
         "can_manage_link_keys": bool(entitlements.get("can_manage_link_keys")),
+        "protected_workspace": bool(entitlements.get("protected_workspace")),
+        "guided_intake": bool(entitlements.get("guided_intake")),
+        "command_role_mapping_tools": bool(entitlements.get("command_role_mapping_tools")),
+        "structured_organization_lineage": bool(entitlements.get("structured_organization_lineage")),
+        "verification_support_record_workflows": bool(
+            entitlements.get("verification_support_record_workflows")
+        ),
+        "leadership_structure_viewer": bool(entitlements.get("leadership_structure_viewer")),
+        "linked_organization_support": bool(entitlements.get("linked_organization_support")),
+        "command_officer_continuity": bool(entitlements.get("command_officer_continuity")),
+        "admin_seat_expansion_paths": bool(entitlements.get("admin_seat_expansion_paths")),
+        "family_household_scope": bool(entitlements.get("family_household_scope")),
+        "family_branch_network_scope": bool(entitlements.get("family_branch_network_scope")),
         "workspace_modules_enabled": derive_allowed_modules(package_lane, entitlements),
     }
 
@@ -64,6 +77,7 @@ def _hard_limits_from_package(package: dict[str, Any]) -> dict[str, Any]:
         "max_members": int(package.get("max_members") or 0),
         "max_households": int(package.get("max_households") or 0),
         "max_org_nodes": int(package.get("max_org_nodes") or 0),
+        "organization_node_limit": int(package.get("organization_node_limit") or 0),
         "max_zoom_layers": int(package.get("max_zoom_layers") or 0),
     }
 
@@ -157,6 +171,7 @@ def validate_entitlement_conformance_matrix(matrix: dict[str, Any]) -> list[str]
                 "max_members",
                 "max_households",
                 "max_org_nodes",
+                "organization_node_limit",
                 "max_zoom_layers",
             ):
                 if limit_key not in hard_limits:

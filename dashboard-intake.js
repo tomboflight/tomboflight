@@ -990,6 +990,9 @@
       resolved.can_upload_verification_docs || resolved.can_upload_portraits,
     );
     const canUseLinkKeys = Boolean(resolved.can_use_link_keys);
+    const hasLinkedOrganizationSupport = Boolean(
+      resolved.linked_organization_support || resolved.can_link_org_units,
+    );
     const canOpenFamilyIntake = Boolean(resolved.can_open_family_intake);
     const canOpenOrgIntake = Boolean(resolved.can_open_org_intake);
 
@@ -1060,8 +1063,8 @@
         presenceBadge: "Organization Lane Active",
         presenceTitle:
           "Your command structure workspace is live and connected.",
-        presenceCopy: canUseLinkKeys
-          ? "Tomb of Light is now reading from your organization package, role structure scope, supporting record workflow, and link capabilities."
+        presenceCopy: hasLinkedOrganizationSupport
+          ? "Tomb of Light is now reading from your organization package, role structure scope, supporting record workflow, and linked organization support."
           : "Tomb of Light is now reading from your organization package, role structure scope, and supporting record workflow.",
         stages: [
           { title: "Organization Root", subtitle: "Connected" },
@@ -1070,12 +1073,12 @@
             subtitle: canOpenOrgIntake ? "Configured" : "Prepared",
           },
           {
-            title: "Link Capabilities",
-            subtitle: canUseLinkKeys ? "Enabled" : "Unavailable",
+            title: "Linked Organization Support",
+            subtitle: hasLinkedOrganizationSupport ? "Enabled" : "Unavailable",
           },
         ],
-        workspaceCopy: canUseLinkKeys
-          ? "Your organization workspace connects package access, command structure planning, uploads, and link capabilities in one place."
+        workspaceCopy: hasLinkedOrganizationSupport
+          ? "Your organization workspace connects package access, command structure planning, uploads, and linked organization support in one place."
           : "Your organization workspace connects package access, command structure planning, uploads, and guided record handling in one place.",
         primaryActionText: "Upload Structure Records",
         primaryActionHref: "verification-upload.html",
@@ -1102,14 +1105,14 @@
           },
           {
             title: "Supporting Records & Expansion",
-            copy: canUseLinkKeys
-              ? "Upload supporting materials, use link capabilities, and expand the structure when needed."
+            copy: hasLinkedOrganizationSupport
+              ? "Upload supporting materials, use linked organization support, and expand the structure when needed."
               : "Upload supporting records and materials tied to the organization build.",
           },
         ],
         platformStatusTitle: "Entitled Tools",
-        platformStatusCopy: canUseLinkKeys
-          ? "This organization lane includes structure workflows, verification uploads, and link capabilities."
+        platformStatusCopy: hasLinkedOrganizationSupport
+          ? "This organization lane includes structure workflows, verification uploads, and linked organization support."
           : "This organization lane includes structure and verification workflows. Expansion options are available if you need more scope.",
         upgradeText: "View Expansion Options",
         upgradeHref: "index.html#pricing",
