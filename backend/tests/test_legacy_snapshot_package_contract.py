@@ -39,6 +39,32 @@ class LegacySnapshotPackageContractTests(unittest.TestCase):
         self.assertTrue(bool(package.get("can_upload_verification_docs")))
 
 
+class LegacyPortraitIntroPackageContractTests(unittest.TestCase):
+    def test_legacy_portrait_intro_contract_fields(self):
+        package = get_package("legacy_portrait_intro")
+        self.assertIsNotNone(package)
+        assert package is not None
+        self.assertEqual(package.get("package_lane"), "portrait")
+        self.assertEqual(package.get("max_uploads"), 5)
+        self.assertEqual(package.get("max_members"), 1)
+        self.assertEqual(package.get("max_zoom_layers"), 0)
+        self.assertFalse(bool(package.get("can_use_viewer")))
+        self.assertTrue(bool(package.get("can_use_secure_share_viewer")))
+        self.assertTrue(bool(package.get("can_upload_portraits")))
+        self.assertTrue(bool(package.get("can_upload_verification_docs")))
+        self.assertFalse(bool(package.get("can_build_household")))
+        self.assertFalse(bool(package.get("can_build_family_tree")))
+        self.assertFalse(bool(package.get("can_link_households")))
+        self.assertFalse(bool(package.get("can_use_link_keys")))
+        self.assertGreater(len(list(package.get("upgrade_targets") or [])), 0)
+
+    def test_legacy_portrait_intro_maintenance_default_is_not_auto_enabled(self):
+        profile = get_package_control_profile("legacy_portrait_intro")
+        self.assertIsNotNone(profile)
+        assert profile is not None
+        self.assertEqual(str(profile.get("maintenance_default")), "none")
+
+
 class LegacySnapshotGatingRegressionTests(unittest.TestCase):
     def test_family_graph_route_no_longer_uses_upload_capabilities_for_tree_access(self):
         source = inspect.getsource(family_graph.get_family_graph)

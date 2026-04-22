@@ -347,6 +347,9 @@
           ? profile.can_link_org_units
           : lane === "organization",
       can_use_viewer: Boolean(profile?.can_use_viewer ?? true),
+      can_use_secure_share_viewer: Boolean(
+        profile?.can_use_secure_share_viewer ?? false,
+      ),
       can_use_narration: Boolean(profile?.can_use_narration ?? false),
       can_use_lineage_certificate:
         typeof profile?.can_use_lineage_certificate === "boolean"

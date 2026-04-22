@@ -143,7 +143,8 @@ PACKAGE_CATALOG: dict[str, dict[str, Any]] = {
         "can_link_org_units": False,
         "can_upload_portraits": True,
         "can_upload_verification_docs": True,
-        "can_use_viewer": True,
+        "can_use_viewer": False,
+        "can_use_secure_share_viewer": True,
         "can_use_narration": False,
         "can_use_lineage_certificate": False,
         "can_open_family_intake": False,
@@ -450,7 +451,7 @@ PACKAGE_CONTROL_POLICY: dict[str, dict[str, Any]] = {
             "allows_automatic_anchor": False,
             "requires_runtime_flag_for_auto_mint": True,
         },
-        "maintenance_default": "monthly",
+        "maintenance_default": "none",
         "mint_policy": {
             "product_includes_onchain_anchor": False,
             "auto_mint_enabled": False,
