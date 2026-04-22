@@ -86,7 +86,7 @@ class LegacySnapshotViewerBoundariesTests(unittest.TestCase):
         self.assertIn("secure share", str(manifest.get("instructions", "")).lower())
         self.assertNotIn("hold c", str(manifest.get("instructions", "")).lower())
 
-    def test_non_legacy_portrait_manifest_remains_dynamic(self):
+    def test_non_legacy_portrait_manifest_honors_zero_zoom_layers(self):
         project = {
             "_id": "project-portrait",
             "project_name": "Portrait Workspace",
@@ -124,10 +124,52 @@ class LegacySnapshotViewerBoundariesTests(unittest.TestCase):
             )
 
         self.assertEqual(manifest.get("mode"), "dynamic")
-        self.assertTrue(bool((manifest.get("controls") or {}).get("allow_zoom")))
+        self.assertFalse(bool((manifest.get("controls") or {}).get("allow_zoom")))
         self.assertTrue(
             bool((manifest.get("controls") or {}).get("allow_lineage_navigation"))
         )
+
+    def test_household_foundation_manifest_exposes_two_zoom_layers(self):
+        project = {
+            "_id": "project-household",
+            "project_name": "Household Workspace",
+            "package_code": "household_foundation",
+            "package_name": "Household Foundation",
+        }
+        family = {"_id": "family-household", "family_name": "Household Family"}
+        primary_member = {"_id": "member-household", "generation": 1}
+
+        with (
+            patch.object(
+                viewer_manifest_service,
+                "get_database",
+                return_value=_FakeDatabase({"family_members": []}),
+            ),
+            patch.object(
+                viewer_manifest_service,
+                "resolve_project_for_viewer",
+                return_value=project,
+            ),
+            patch.object(
+                viewer_manifest_service,
+                "_find_submission_for_project",
+                return_value=None,
+            ),
+            patch.object(
+                viewer_manifest_service,
+                "load_project_workspace_anchor",
+                return_value=(family, primary_member, project),
+            ),
+        ):
+            manifest = viewer_manifest_service.build_viewer_manifest(
+                current_user={"id": "user-1", "email": "owner@example.com"},
+                project_id="project-household",
+            )
+
+        controls = manifest.get("controls") or {}
+        self.assertEqual(manifest.get("mode"), "dynamic")
+        self.assertTrue(bool(controls.get("allow_zoom")))
+        self.assertEqual(controls.get("max_zoom_layers"), 2)
 
     def test_legacy_portrait_intro_manifest_is_secure_share_mode(self):
         project = {

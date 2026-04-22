@@ -10,6 +10,8 @@ from app.core.state_catalog import normalize_visibility_state
 from app.core.package_catalog import get_package, normalize_package_code
 from app.database import get_database
 from app.dependencies.auth import has_internal_admin_access
+from app.services.entitlement_service import resolve_project_entitlements
+from app.services.project_entitlement_service import get_project_entitlement
 from app.services.project_service import list_projects
 
 DEFAULT_EYE_TARGETS = {
@@ -126,6 +128,31 @@ def _is_secure_share_portrait_project(project: dict[str, Any]) -> bool:
     """Return True when the workspace package maps to a secure-share portrait viewer mode."""
     package_code = normalize_package_code(_normalize_value(project.get("package_code")))
     return package_code in {"legacy_snapshot", "legacy_portrait_intro"}
+
+
+def _resolve_viewer_entitlements(project: dict[str, Any]) -> dict[str, Any]:
+    package_code = normalize_package_code(_normalize_value(project.get("package_code")))
+    package = get_package(package_code) or {}
+    project_id = _normalize_value(project.get("_id") or project.get("id"))
+
+    active_addons: list[str] = []
+    if project_id:
+        try:
+            entitlement = get_project_entitlement(project_id) or {}
+        except Exception:
+            entitlement = {}
+        resolved = entitlement.get("resolved_entitlements") or {}
+        if isinstance(resolved, dict) and resolved:
+            return resolved
+        active_addons = list((entitlement or {}).get("active_addons") or [])
+
+    if package_code:
+        try:
+            return resolve_project_entitlements(package_code, active_addons)
+        except Exception:
+            return package
+
+    return package
 
 
 def _find_submission_for_project(project: dict[str, Any]) -> dict[str, Any] | None:
@@ -685,6 +712,8 @@ def build_viewer_manifest(
 
     lane = _lane_from_project(project)
     secure_share_only = lane == "portrait" and _is_secure_share_portrait_project(project)
+    resolved_entitlements = _resolve_viewer_entitlements(project)
+    max_zoom_layers = _coerce_int(resolved_entitlements.get("max_zoom_layers")) or 0
     family_id_value = _normalize_value((family_doc or {}).get("_id") or project.get("family_id"))
     members: list[dict[str, Any]] = []
     if family_id_value:
@@ -824,10 +853,11 @@ def build_viewer_manifest(
         "nav_labels": nav_labels,
         "controls": {
             "allow_lineage_navigation": not secure_share_only,
-            "allow_zoom": not secure_share_only,
+            "allow_zoom": (not secure_share_only) and max_zoom_layers > 0,
             "allow_branch_navigation": not secure_share_only,
             "allow_gaze_navigation": not secure_share_only,
             "allow_narration_auto_advance": not secure_share_only,
+            "max_zoom_layers": max(0, max_zoom_layers),
         },
         "states": states,
         "initial_state_id": states[0]["id"] if states else "",
