@@ -72,6 +72,7 @@ ADDON_CODE_ALIASES: dict[str, str] = {
 }
 
 PROJECT_LANES = frozenset({"portrait", "household", "network", "organization"})
+COMMAND_STRUCTURE_ORG_NODE_LIMIT = 15
 
 PACKAGE_CATALOG: dict[str, dict[str, Any]] = {
     "legacy_snapshot": {
@@ -397,8 +398,8 @@ PACKAGE_CATALOG: dict[str, dict[str, Any]] = {
         "maintenance_starts_on_delivery": True,
         "max_households": 0,
         "max_members": 0,
-        "max_org_nodes": 15,
-        "organization_node_limit": 15,
+        "max_org_nodes": COMMAND_STRUCTURE_ORG_NODE_LIMIT,
+        "organization_node_limit": COMMAND_STRUCTURE_ORG_NODE_LIMIT,
         "organization_nodes_enabled": True,
         "max_uploads": 25,
         "max_zoom_layers": 2,

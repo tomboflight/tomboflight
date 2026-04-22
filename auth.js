@@ -424,9 +424,19 @@
       admin_seat_expansion_paths: Boolean(
         profile?.admin_seat_expansion_paths ?? lane === "organization",
       ),
-      family_household_scope: Boolean(profile?.family_household_scope ?? lane !== "organization"),
+      family_household_scope:
+        typeof profile?.family_household_scope === "boolean"
+          ? profile.family_household_scope
+          : Boolean(
+              profile?.can_build_household ||
+                profile?.can_build_family_tree ||
+                lane === "household" ||
+                lane === "network",
+            ),
       family_branch_network_scope: Boolean(
-        profile?.family_branch_network_scope ?? lane === "network",
+        profile?.family_branch_network_scope ??
+          profile?.can_link_households ??
+          lane === "network",
       ),
       premium_consultation_path: Boolean(
         profile?.premium_consultation_path ?? false,

@@ -27,6 +27,7 @@ class EntitlementConformanceMatrixTests(unittest.TestCase):
             "max_members",
             "max_households",
             "max_org_nodes",
+            "organization_node_limit",
             "max_zoom_layers",
         }
 
