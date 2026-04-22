@@ -58,7 +58,7 @@ class LegacyPortraitIntroPackageContractTests(unittest.TestCase):
         self.assertFalse(bool(package.get("can_use_link_keys")))
         self.assertGreater(len(list(package.get("upgrade_targets") or [])), 0)
 
-    def test_legacy_portrait_intro_maintenance_default_is_not_auto_enabled(self):
+    def test_legacy_portrait_intro_maintenance_default_is_none(self):
         profile = get_package_control_profile("legacy_portrait_intro")
         self.assertIsNotNone(profile)
         assert profile is not None

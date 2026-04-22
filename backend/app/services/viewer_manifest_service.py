@@ -123,7 +123,7 @@ def _lane_from_project(project: dict[str, Any]) -> str:
 
 
 def _is_secure_share_portrait_project(project: dict[str, Any]) -> bool:
-    """Return True when the workspace package is a secure-share-only portrait tier."""
+    """Return True when the workspace package maps to a secure-share portrait viewer mode."""
     package_code = normalize_package_code(_normalize_value(project.get("package_code")))
     return package_code in {"legacy_snapshot", "legacy_portrait_intro"}
 
