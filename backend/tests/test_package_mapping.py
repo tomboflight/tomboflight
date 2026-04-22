@@ -30,6 +30,7 @@ class PackageMappingTests(unittest.TestCase):
         self.assertIn("package_map", payload)
         self.assertIn("packages", payload["package_map"])
         self.assertIn("digital-legacy-portrait", payload["package_map"]["packages"])
+        self.assertIn("organization_templates", payload)
 
     def test_admin_repairs_routes_registered(self):
         paths = {str(getattr(route, "path", "")) for route in admin_control_router.routes}
