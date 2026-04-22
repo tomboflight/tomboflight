@@ -131,6 +131,7 @@ class LinkRequestApprovalTests(unittest.TestCase):
         with (
             patch.object(link_request_service, "get_database", return_value=db),
             patch.object(link_request_service, "user_can_access_project", return_value=True),
+            patch.object(link_request_service, "project_supports_link_keys", return_value=True),
             patch.object(
                 link_request_service,
                 "get_active_key_doc_for_project",

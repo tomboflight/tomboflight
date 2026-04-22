@@ -31,7 +31,7 @@ class ApplyProjectEntitlementPayload(BaseModel):
     user_id: str = Field(min_length=1)
     package_code: str = Field(min_length=1)
     active_addons: list[str] = Field(default_factory=list)
-    maintenance_plan: str = Field(default="")
+    maintenance_plan: str | None = Field(default=None)
     delivered_at: datetime | None = None
     status: str = Field(default="active")
 
