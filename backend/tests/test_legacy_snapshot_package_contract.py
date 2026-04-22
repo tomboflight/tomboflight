@@ -189,6 +189,58 @@ class LegacyPlusPackageContractTests(unittest.TestCase):
         self.assertEqual(str(profile.get("maintenance_default")), "none")
 
 
+class FamilyEstateConciergePackageContractTests(unittest.TestCase):
+    def test_family_estate_concierge_contract_fields(self):
+        package = get_package("family_estate_concierge")
+        self.assertIsNotNone(package)
+        assert package is not None
+        self.assertEqual(package.get("package_lane"), "network")
+        self.assertEqual(package.get("max_households"), 3)
+        self.assertEqual(package.get("max_family_branches"), 3)
+        self.assertEqual(package.get("max_uploads"), 250)
+        self.assertEqual(package.get("max_storage_gb"), 50)
+        self.assertTrue(bool(package.get("can_build_household")))
+        self.assertTrue(bool(package.get("can_build_family_tree")))
+        self.assertTrue(bool(package.get("can_link_households")))
+        self.assertTrue(bool(package.get("can_use_link_keys")))
+        self.assertTrue(bool(package.get("can_manage_link_keys")))
+        self.assertTrue(bool(package.get("can_use_viewer")))
+        self.assertTrue(bool(package.get("can_use_narration")))
+        self.assertTrue(bool(package.get("can_use_lineage_certificate")))
+        self.assertTrue(bool(package.get("protected_workspace")))
+        self.assertTrue(bool(package.get("guided_intake")))
+        self.assertTrue(bool(package.get("premium_consultation_path")))
+        self.assertTrue(bool(package.get("custom_structure_planning")))
+        self.assertTrue(bool(package.get("white_glove_project_handling")))
+        self.assertTrue(bool(package.get("linked_household_structure")))
+        self.assertTrue(bool(package.get("network_branch_scope")))
+        self.assertTrue(bool(package.get("high_capacity_archival_support")))
+        self.assertTrue(bool(package.get("continuity_stewardship_options")))
+        self.assertTrue(bool(package.get("lineage_experience_support")))
+        self.assertFalse(bool(package.get("organization_command_scope")))
+        self.assertFalse(bool(package.get("maintenance_included")))
+        self.assertFalse(bool(package.get("can_build_org_chart")))
+        self.assertFalse(bool(package.get("can_link_org_units")))
+        self.assertCountEqual(
+            list(package.get("allowed_addons") or []),
+            [
+                "extra_mapped_person",
+                "extra_zoom_layer",
+                "extra_storage",
+                "rush_delivery",
+                "on_site_photo_scanning",
+                "additional_narration_minute",
+                "white_glove_archive_support",
+            ],
+        )
+
+    def test_family_estate_concierge_maintenance_default_is_none(self):
+        profile = get_package_control_profile("family_estate_concierge")
+        self.assertIsNotNone(profile)
+        assert profile is not None
+        self.assertEqual(str(profile.get("maintenance_default")), "none")
+
+
 class EntitlementAddonBoundaryTests(unittest.TestCase):
     def test_heirloom_disallows_addons_that_expand_hard_caps(self):
         resolved = resolve_project_entitlements(
@@ -237,6 +289,27 @@ class EntitlementAddonBoundaryTests(unittest.TestCase):
         self.assertFalse(can_purchase_addon("legacy_plus", "extra_zoom_layer"))
         self.assertFalse(can_purchase_addon("legacy_plus", "extra_storage"))
         self.assertFalse(can_purchase_addon("legacy_plus", "extra_linked_household"))
+
+    def test_family_estate_concierge_disallows_silent_branch_cap_expansion_addons(self):
+        resolved = resolve_project_entitlements(
+            "family_estate_concierge",
+            [
+                "extra_linked_household",
+                "extra_branch",
+                "white_glove_archive_support",
+            ],
+        )
+        self.assertEqual(resolved.get("max_households"), 3)
+        self.assertEqual(
+            list(resolved.get("active_addons") or []),
+            ["white_glove_archive_support"],
+        )
+
+    def test_family_estate_concierge_cannot_purchase_silent_branch_cap_expansion_addons(self):
+        self.assertFalse(
+            can_purchase_addon("family_estate_concierge", "extra_linked_household")
+        )
+        self.assertFalse(can_purchase_addon("family_estate_concierge", "extra_branch"))
 
 
 class LegacySnapshotGatingRegressionTests(unittest.TestCase):

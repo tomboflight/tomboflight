@@ -5,11 +5,13 @@ from typing import Any
 
 from bson import ObjectId
 
+from app.core.package_catalog import get_package
 from app.core.relationship_catalog import (
     LINKED_HOUSEHOLD_RELATIONSHIP_TYPE,
 )
 from app.database import get_database
 from app.schemas.link_request import LinkRequestCreate
+from app.services.entitlement_service import resolve_project_entitlements
 from app.services.audit_log_service import create_audit_log
 from app.services.link_key_service import (
     get_active_key_doc_for_project,
@@ -47,8 +49,155 @@ def _projects_collection():
     return db["projects"]
 
 
+def _households_collection():
+    db = get_database()
+    return db["households"]
+
+
+def _entitlements_collection():
+    db = get_database()
+    return db["project_entitlements"]
+
+
 def _normalize_value(value: Any) -> str:
     return str(value or "").strip()
+
+
+def _project_id_candidates(project_id: str) -> list[Any]:
+    candidates: list[Any] = [str(project_id)]
+    object_id = _to_object_id(project_id)
+    if object_id is not None:
+        candidates.append(object_id)
+    return candidates
+
+
+def _project_entitlement(project_id: str) -> dict[str, Any] | None:
+    query = {"project_id": {"$in": _project_id_candidates(project_id)}}
+    return _entitlements_collection().find_one(
+        {
+            **query,
+            "status": "active",
+        }
+    ) or _entitlements_collection().find_one(query)
+
+
+def _resolve_project_link_scope(project_id: str) -> dict[str, Any]:
+    summary = get_project_summary(project_id) or {}
+    entitlement = _project_entitlement(project_id) or {}
+    package_code = _normalize_value(
+        entitlement.get("package_code") or summary.get("package_code")
+    )
+    active_addons = list(entitlement.get("active_addons") or [])
+
+    resolved: dict[str, Any] = {}
+    embedded_resolved = entitlement.get("resolved_entitlements")
+    if isinstance(embedded_resolved, dict) and embedded_resolved:
+        resolved = embedded_resolved
+
+    if not resolved and package_code:
+        try:
+            resolved = resolve_project_entitlements(package_code, active_addons)
+        except Exception:
+            resolved = {}
+
+    if not resolved and package_code:
+        resolved = get_package(package_code) or {}
+
+    return {
+        "can_link_households": bool(resolved.get("can_link_households")),
+        "max_households": max(0, int(resolved.get("max_households") or 0)),
+    }
+
+
+def _household_ids_for_project(project_id: str) -> set[str]:
+    household_ids: set[str] = set()
+    summary = get_project_summary(project_id) or {}
+    summary_household_id = _normalize_value(summary.get("household_id"))
+    if summary_household_id:
+        household_ids.add(summary_household_id)
+
+    project = _projects_collection().find_one(
+        {
+            "_id": {"$in": [value for value in _project_id_candidates(project_id) if isinstance(value, ObjectId)]}
+        }
+    )
+    project_household_id = _normalize_value((project or {}).get("household_id"))
+    if project_household_id:
+        household_ids.add(project_household_id)
+
+    households = _households_collection().find(
+        {"project_id": {"$in": _project_id_candidates(project_id)}}
+    )
+    for household in households:
+        for candidate in (
+            _normalize_value(household.get("household_id")),
+            _normalize_value(household.get("_id")),
+        ):
+            if candidate:
+                household_ids.add(candidate)
+
+    return household_ids
+
+
+def _linked_household_component(seed_household_ids: set[str]) -> set[str]:
+    if not seed_household_ids:
+        return set()
+
+    visited: set[str] = set()
+    queue = list(seed_household_ids)
+
+    while queue:
+        current = _normalize_value(queue.pop(0))
+        if not current or current in visited:
+            continue
+        visited.add(current)
+
+        links = _household_links_collection().find(
+            {
+                "$or": [
+                    {"source_household_id": current, "link_status": "approved"},
+                    {"target_household_id": current, "link_status": "approved"},
+                ]
+            }
+        )
+        for link in links:
+            source_id = _normalize_value(link.get("source_household_id"))
+            target_id = _normalize_value(link.get("target_household_id"))
+            if source_id and source_id not in visited:
+                queue.append(source_id)
+            if target_id and target_id not in visited:
+                queue.append(target_id)
+
+    return visited
+
+
+def _assert_household_branch_capacity(source_project_id: str, target_project_id: str) -> None:
+    source_scope = _resolve_project_link_scope(source_project_id)
+    target_scope = _resolve_project_link_scope(target_project_id)
+
+    if not source_scope.get("can_link_households"):
+        raise ValueError(
+            "The requesting workspace package does not include linked-household structure."
+        )
+    if not target_scope.get("can_link_households"):
+        raise ValueError(
+            "The receiving workspace package does not include linked-household structure."
+        )
+
+    source_component = _linked_household_component(
+        _household_ids_for_project(source_project_id)
+    )
+    target_component = _linked_household_component(
+        _household_ids_for_project(target_project_id)
+    )
+    merged_households = source_component | target_component
+
+    for side, scope in (("requesting", source_scope), ("receiving", target_scope)):
+        max_households = int(scope.get("max_households") or 0)
+        if max_households > 0 and len(merged_households) > max_households:
+            raise ValueError(
+                f"Linking these branches would exceed the {side} workspace branch limit ({max_households})."
+            )
 
 
 def _enrich_request(document: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -177,6 +326,8 @@ def create_link_request(
     target_project = get_project_summary(target_project_id)
     if not target_project:
         raise ValueError("Target project not found.")
+
+    _assert_household_branch_capacity(source_project_id, target_project_id)
 
     existing = _requests_collection().find_one(
         {
@@ -343,6 +494,8 @@ def approve_link_request(
         raise ValueError("The requesting workspace no longer supports link capabilities.")
     if not project_supports_link_keys(target_project_id):
         raise ValueError("The receiving workspace no longer supports link capabilities.")
+
+    _assert_household_branch_capacity(source_project_id, target_project_id)
 
     _validate_active_handshake_keys(request)
 

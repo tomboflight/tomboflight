@@ -372,6 +372,43 @@
       can_manage_link_keys: Boolean(
         profile?.can_manage_link_keys ?? packageSupportsLinkKeys(normalizedCode),
       ),
+      protected_workspace: Boolean(profile?.protected_workspace ?? true),
+      guided_intake: Boolean(
+        profile?.guided_intake ?? profile?.can_open_family_intake ?? false,
+      ),
+      premium_consultation_path: Boolean(
+        profile?.premium_consultation_path ?? false,
+      ),
+      custom_structure_planning: Boolean(
+        profile?.custom_structure_planning ?? false,
+      ),
+      white_glove_project_handling: Boolean(
+        profile?.white_glove_project_handling ?? false,
+      ),
+      linked_household_structure: Boolean(
+        profile?.linked_household_structure ?? profile?.can_link_households ?? false,
+      ),
+      network_branch_scope: Boolean(profile?.network_branch_scope ?? lane === "network"),
+      max_family_branches: Number.isFinite(Number(profile?.max_family_branches))
+        ? Number(profile.max_family_branches)
+        : Number.isFinite(Number(profile?.max_households))
+        ? Number(profile.max_households)
+        : 0,
+      high_capacity_archival_support: Boolean(
+        profile?.high_capacity_archival_support ?? false,
+      ),
+      continuity_stewardship_options: Boolean(
+        profile?.continuity_stewardship_options ?? false,
+      ),
+      lineage_experience_support: Boolean(
+        profile?.lineage_experience_support ??
+          lane === "household" ||
+          lane === "network",
+      ),
+      organization_command_scope: Boolean(
+        profile?.organization_command_scope ?? lane === "organization",
+      ),
+      maintenance_included: Boolean(profile?.maintenance_included ?? false),
       allowed_addons: [],
       upgrade_targets: [],
     };

@@ -15,9 +15,6 @@
 
   const LINK_KEY_ENABLED_PACKAGES = new Set([
     "digital_legacy_portrait",
-    "household_foundation",
-    "heirloom_legacy_tree",
-    "legacy_plus",
     "family_estate_concierge",
   ]);
 
