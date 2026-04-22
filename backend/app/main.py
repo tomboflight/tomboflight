@@ -60,9 +60,11 @@ from app.routes.orders import (
     initialize_order_indexes,
     router as orders_router,
 )
+from app.routes.organizations import router as organizations_router
 from app.services.project_entitlement_service import ensure_project_entitlement_indexes
 from app.services.admin_access_bootstrap_service import bootstrap_admin_access_controls
 from app.services.admin_control_service import ensure_finance_event_indexes
+from app.services.organization_service import ensure_organization_indexes
 from app.routes.package_catalog import router as package_catalog_router
 from app.routes.presence import router as presence_router
 from app.routes.projects import router as projects_router
@@ -128,6 +130,7 @@ async def lifespan(app: FastAPI):
     initialize_mint_job_indexes()
     ensure_stripe_event_indexes()
     ensure_finance_event_indexes()
+    ensure_organization_indexes()
     try:
         bootstrap_admin_access_controls()
     except Exception as exc:
@@ -201,6 +204,7 @@ app.include_router(db_bootstrap_router)
 app.include_router(admin_maintenance_router)
 app.include_router(graph_integrity_router)
 app.include_router(orders_router)
+app.include_router(organizations_router)
 app.include_router(package_catalog_router)
 app.include_router(uploads_router)
 app.include_router(workspace_access_router)
