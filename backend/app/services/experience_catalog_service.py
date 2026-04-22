@@ -105,7 +105,13 @@ def derive_allowed_modules(package_lane: str, resolved_entitlements: dict[str, A
         modules.append("network_chamber")
     if lane == "organization":
         modules.append("admin_workspace")
-    if bool(entitlements.get("can_build_family_tree")):
+    if bool(entitlements.get("can_build_family_tree")) or (
+        lane == "organization"
+        and bool(
+            entitlements.get("structured_organization_lineage")
+            or entitlements.get("can_build_org_chart")
+        )
+    ):
         modules.append("lineage_chamber")
     if bool(
         entitlements.get("can_upload_portraits")

@@ -374,7 +374,59 @@
       ),
       protected_workspace: Boolean(profile?.protected_workspace ?? true),
       guided_intake: Boolean(
-        profile?.guided_intake ?? profile?.can_open_family_intake ?? false,
+        profile?.guided_intake ??
+          profile?.can_open_family_intake ??
+          profile?.can_open_org_intake ??
+          false,
+      ),
+      command_role_mapping_tools: Boolean(
+        profile?.command_role_mapping_tools ?? lane === "organization",
+      ),
+      structured_organization_lineage: Boolean(
+        profile?.structured_organization_lineage ?? lane === "organization",
+      ),
+      verification_support_record_workflows: Boolean(
+        profile?.verification_support_record_workflows ??
+          profile?.can_upload_verification_docs ??
+          false,
+      ),
+      organization_nodes_enabled: Boolean(
+        profile?.organization_nodes_enabled ?? lane === "organization",
+      ),
+      organization_node_limit: Number.isFinite(Number(profile?.organization_node_limit))
+        ? Number(profile.organization_node_limit)
+        : Number.isFinite(Number(profile?.max_org_nodes))
+        ? Number(profile.max_org_nodes)
+        : 0,
+      max_org_nodes: Number.isFinite(Number(profile?.max_org_nodes))
+        ? Number(profile.max_org_nodes)
+        : Number.isFinite(Number(profile?.organization_node_limit))
+        ? Number(profile.organization_node_limit)
+        : 0,
+      max_uploads: Number.isFinite(Number(profile?.max_uploads))
+        ? Number(profile.max_uploads)
+        : 0,
+      leadership_structure_viewer: Boolean(
+        profile?.leadership_structure_viewer ??
+          profile?.can_use_viewer ??
+          lane === "organization",
+      ),
+      linked_organization_support: Boolean(
+        profile?.linked_organization_support ??
+          profile?.can_link_org_units ??
+          false,
+      ),
+      command_officer_continuity: Boolean(
+        profile?.command_officer_continuity ??
+          profile?.continuity_stewardship_options ??
+          lane === "organization",
+      ),
+      admin_seat_expansion_paths: Boolean(
+        profile?.admin_seat_expansion_paths ?? lane === "organization",
+      ),
+      family_household_scope: Boolean(profile?.family_household_scope ?? lane !== "organization"),
+      family_branch_network_scope: Boolean(
+        profile?.family_branch_network_scope ?? lane === "network",
       ),
       premium_consultation_path: Boolean(
         profile?.premium_consultation_path ?? false,
