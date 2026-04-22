@@ -141,8 +141,8 @@
       can_use_lineage_certificate: true,
       can_open_family_intake: true,
       can_open_org_intake: false,
-      can_use_link_keys: true,
-      can_manage_link_keys: true,
+      can_use_link_keys: false,
+      can_manage_link_keys: false,
     },
     heirloom_legacy_tree: {
       display_name: "Heirloom Legacy Tree",
