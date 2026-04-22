@@ -91,6 +91,37 @@ class DigitalLegacyPortraitPackageContractTests(unittest.TestCase):
         self.assertEqual(str(profile.get("maintenance_default")), "none")
 
 
+class HouseholdFoundationPackageContractTests(unittest.TestCase):
+    def test_household_foundation_contract_fields(self):
+        package = get_package("household_foundation")
+        self.assertIsNotNone(package)
+        assert package is not None
+        self.assertEqual(package.get("package_lane"), "household")
+        self.assertEqual(package.get("max_members"), 6)
+        self.assertEqual(package.get("max_uploads"), 20)
+        self.assertEqual(package.get("max_zoom_layers"), 2)
+        self.assertEqual(package.get("max_storage_gb"), 3)
+        self.assertTrue(bool(package.get("can_build_household")))
+        self.assertTrue(bool(package.get("can_open_family_intake")))
+        self.assertTrue(bool(package.get("can_build_family_tree")))
+        self.assertTrue(bool(package.get("can_use_lineage_certificate")))
+        self.assertFalse(bool(package.get("can_link_households")))
+        self.assertFalse(bool(package.get("can_use_link_keys")))
+        self.assertFalse(bool(package.get("can_manage_link_keys")))
+        self.assertFalse(bool(package.get("can_use_narration")))
+        self.assertFalse(bool(package.get("maintenance_starts_on_delivery")))
+        self.assertCountEqual(
+            list(package.get("allowed_addons") or []),
+            ["rush_delivery", "on_site_photo_scanning"],
+        )
+
+    def test_household_foundation_maintenance_default_is_none(self):
+        profile = get_package_control_profile("household_foundation")
+        self.assertIsNotNone(profile)
+        assert profile is not None
+        self.assertEqual(str(profile.get("maintenance_default")), "none")
+
+
 class LegacySnapshotGatingRegressionTests(unittest.TestCase):
     def test_family_graph_route_no_longer_uses_upload_capabilities_for_tree_access(self):
         source = inspect.getsource(family_graph.get_family_graph)

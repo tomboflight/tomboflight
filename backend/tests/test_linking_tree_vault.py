@@ -131,6 +131,7 @@ class LinkRequestApprovalTests(unittest.TestCase):
         with (
             patch.object(link_request_service, "get_database", return_value=db),
             patch.object(link_request_service, "user_can_access_project", return_value=True),
+            patch.object(link_request_service, "project_supports_link_keys", return_value=True),
             patch.object(
                 link_request_service,
                 "get_active_key_doc_for_project",
@@ -165,6 +166,45 @@ class LinkRequestApprovalTests(unittest.TestCase):
         self.assertEqual(links[0]["source_household_id"], "household-a")
         self.assertEqual(links[0]["target_household_id"], "household-b")
         self.assertEqual(links[0]["link_status"], "approved")
+
+    def test_approve_link_request_rejects_when_workspace_lacks_link_capability(self):
+        request_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "link_requests": [
+                    {
+                        "_id": request_id,
+                        "source_project_id": "project-a",
+                        "target_project_id": "project-b",
+                        "source_household_id": "household-a",
+                        "target_household_id": "household-b",
+                        "source_key": "SRC-KEY",
+                        "target_key": "TGT-KEY",
+                        "status": "pending",
+                    }
+                ],
+                "household_links": [],
+            }
+        )
+
+        with (
+            patch.object(link_request_service, "get_database", return_value=db),
+            patch.object(link_request_service, "user_can_access_project", return_value=True),
+            patch.object(
+                link_request_service,
+                "project_supports_link_keys",
+                side_effect=lambda project_id: project_id == "project-b",
+            ),
+        ):
+            with self.assertRaises(ValueError):
+                link_request_service.approve_link_request(
+                    str(request_id),
+                    approved_by="Approver",
+                    approver_user_id="user-1",
+                    is_admin=False,
+                )
+
+        self.assertEqual(len(db["household_links"].documents), 0)
 
 
 class LinkedTreeTests(unittest.TestCase):

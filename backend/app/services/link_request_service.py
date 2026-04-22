@@ -335,6 +335,15 @@ def approve_link_request(
     if str(request.get("status") or "").strip().lower() == "approved":
         return _enrich_request(request)
 
+    source_project_id = _normalize_value(request.get("source_project_id"))
+    target_project_id = _normalize_value(request.get("target_project_id"))
+    if not source_project_id or not target_project_id:
+        raise ValueError("Link request project references are invalid.")
+    if not project_supports_link_keys(source_project_id):
+        raise ValueError("The requesting workspace no longer supports link capabilities.")
+    if not project_supports_link_keys(target_project_id):
+        raise ValueError("The receiving workspace no longer supports link capabilities.")
+
     _validate_active_handshake_keys(request)
 
     now = _utcnow_iso()

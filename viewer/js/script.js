@@ -182,6 +182,7 @@
 
   const NARRATION_DISPLAY_DURATION_MS = 4500;
   const AUTO_ADVANCE_INTERVAL_MS = 5000;
+  const DEFAULT_ZOOM_LAYERS = 2;
   const DEFAULT_DYNAMIC_EYE_TARGETS = {
     left: { x: 18, y: 50 },
     right: { x: 82, y: 50 },
@@ -198,8 +199,8 @@
 
   let scale = 1;
   const SCALE_MIN = 0.65;
-  const SCALE_MAX = 1.25;
   const ZOOM_STEP = 0.12;
+  let scaleMax = 1.25;
   const WHEEL_NAVIGATION_THRESHOLD = 48;
   const WHEEL_NAVIGATION_COOLDOWN_MS = 720;
 
@@ -445,6 +446,13 @@
 
   function applyManifest(manifest) {
     currentManifest = normalizeManifest(manifest || DEMO_MANIFEST);
+    const configuredZoomLayers = Number(currentManifest?.controls?.max_zoom_layers);
+    if (Number.isFinite(configuredZoomLayers) && configuredZoomLayers > 0) {
+      scaleMax = 1 + configuredZoomLayers * ZOOM_STEP;
+    } else {
+      scaleMax = 1 + DEFAULT_ZOOM_LAYERS * ZOOM_STEP;
+    }
+    setZoom(1, false);
     statesById = currentManifest.stateMap;
     stateOrder = currentManifest.stateOrder;
     state = currentManifest.initialStateId || stateOrder[0] || "";
@@ -554,7 +562,7 @@
 
   function setZoom(nextScale, smooth = true) {
     if (!viewerImage) return;
-    scale = clamp(nextScale, SCALE_MIN, SCALE_MAX);
+    scale = clamp(nextScale, SCALE_MIN, scaleMax);
     viewerImage.style.transition = smooth ? "transform 120ms ease" : "none";
     viewerImage.style.transform = `translateZ(0) scale(${scale})`;
   }
