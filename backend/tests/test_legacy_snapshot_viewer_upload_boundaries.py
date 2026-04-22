@@ -129,6 +129,49 @@ class LegacySnapshotViewerBoundariesTests(unittest.TestCase):
             bool((manifest.get("controls") or {}).get("allow_lineage_navigation"))
         )
 
+    def test_legacy_portrait_intro_manifest_is_secure_share_mode(self):
+        project = {
+            "_id": "project-portrait-intro",
+            "project_name": "Portrait Intro Workspace",
+            "package_code": "legacy_portrait_intro",
+            "package_name": "Legacy Portrait Intro",
+        }
+        family = {"_id": "family-portrait-intro", "family_name": "Portrait Intro Family"}
+        primary_member = {"_id": "member-portrait-intro", "generation": 1}
+
+        with (
+            patch.object(
+                viewer_manifest_service,
+                "get_database",
+                return_value=_FakeDatabase({"family_members": []}),
+            ),
+            patch.object(
+                viewer_manifest_service,
+                "resolve_project_for_viewer",
+                return_value=project,
+            ),
+            patch.object(
+                viewer_manifest_service,
+                "_find_submission_for_project",
+                return_value=None,
+            ),
+            patch.object(
+                viewer_manifest_service,
+                "load_project_workspace_anchor",
+                return_value=(family, primary_member, project),
+            ),
+        ):
+            manifest = viewer_manifest_service.build_viewer_manifest(
+                current_user={"id": "user-1", "email": "owner@example.com"},
+                project_id="project-portrait-intro",
+            )
+
+        self.assertEqual(manifest.get("mode"), "secure_share")
+        self.assertFalse(bool((manifest.get("controls") or {}).get("allow_zoom")))
+        self.assertFalse(
+            bool((manifest.get("controls") or {}).get("allow_lineage_navigation"))
+        )
+
 
 class LegacySnapshotUploadBoundariesTests(unittest.TestCase):
     def test_upload_pages_have_legacy_snapshot_manifest_member_fallback(self):

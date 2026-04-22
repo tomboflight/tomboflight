@@ -122,10 +122,10 @@ def _lane_from_project(project: dict[str, Any]) -> str:
     return normalize_package_type((package or {}).get("package_lane"), default="portrait")
 
 
-def _is_legacy_snapshot_project(project: dict[str, Any]) -> bool:
-    """Return True when the workspace package is Legacy Snapshot secure-share tier."""
+def _is_secure_share_portrait_project(project: dict[str, Any]) -> bool:
+    """Return True when the workspace package maps to a secure-share portrait viewer mode."""
     package_code = normalize_package_code(_normalize_value(project.get("package_code")))
-    return package_code == "legacy_snapshot"
+    return package_code in {"legacy_snapshot", "legacy_portrait_intro"}
 
 
 def _find_submission_for_project(project: dict[str, Any]) -> dict[str, Any] | None:
@@ -684,7 +684,7 @@ def build_viewer_manifest(
     )
 
     lane = _lane_from_project(project)
-    secure_share_only = lane == "portrait" and _is_legacy_snapshot_project(project)
+    secure_share_only = lane == "portrait" and _is_secure_share_portrait_project(project)
     family_id_value = _normalize_value((family_doc or {}).get("_id") or project.get("family_id"))
     members: list[dict[str, Any]] = []
     if family_id_value:
