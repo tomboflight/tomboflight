@@ -3,31 +3,13 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-ORGANIZATION_TYPE_OPTIONS: list[str] = [
-    "military_unit",
-    "police_department",
-    "fire_department",
-    "emergency_services",
-    "government_agency",
-    "elected_office",
-    "legislative_body",
-    "political_campaign",
-    "court_or_judicial_office",
-    "masonic_lodge",
-    "fraternal_order",
-    "church_or_ministry",
-    "nonprofit",
-    "corporation",
-    "small_business",
-    "school_or_university",
-    "hospital_or_healthcare_system",
-    "union_or_labor_organization",
-    "tribal_government",
-    "civic_association",
-    "sports_team_or_league",
-    "foundation",
-    "custom",
-]
+from app.core.dropdown_registry import (
+    ORGANIZATION_TYPE_OPTIONS,
+    get_all_organization_types,
+    get_organization_subtypes,
+    get_safe_organization_type,
+    get_shared_dropdowns,
+)
 
 _DEFAULT_CUSTOMIZATION: dict[str, Any] = {
     "template_is_helper_only": True,
@@ -604,7 +586,9 @@ ORGANIZATION_TEMPLATE_CATALOG: dict[str, dict[str, Any]] = {
             "lodge_name",
             "lodge_number",
             "jurisdiction",
+            "nation_state",
             "grand_lodge_affiliation",
+            "lodge_status",
             "charter_date",
             "meeting_location",
         ],
@@ -623,6 +607,12 @@ ORGANIZATION_TEMPLATE_CATALOG: dict[str, dict[str, Any]] = {
             "Treasurer",
             "Secretary",
             "Chaplain",
+            "Senior Deacon",
+            "Junior Deacon",
+            "Marshal",
+            "Tyler",
+            "Past Master",
+            "Emeritus Officer",
             "Trustee",
         ],
         "suggested_transition_event_types": [
@@ -791,12 +781,17 @@ ORGANIZATION_TEMPLATE_CATALOG: dict[str, dict[str, Any]] = {
         "display_label": "Corporation",
         "suggested_profile_fields": [
             "company_name",
+            "legal_entity_name",
             "industry",
             "jurisdiction",
             "headquarters",
             "region",
+            "subsidiary",
             "division",
-            "business_unit",
+            "department",
+            "board",
+            "regional_office",
+            "executive_office",
         ],
         "suggested_nodes": [
             "Executive Office",
@@ -813,9 +808,14 @@ ORGANIZATION_TEMPLATE_CATALOG: dict[str, dict[str, Any]] = {
             "President",
             "COO",
             "CFO",
+            "CTO",
+            "CMO",
+            "CHRO",
             "General Counsel",
             "Chief of Staff",
             "Vice President",
+            "Division President",
+            "Department Head",
             "Director",
             "Manager",
             "Board Chair",
@@ -1253,7 +1253,7 @@ def list_organization_type_options() -> list[str]:
 
 
 def get_organization_template(organization_type: Any) -> dict[str, Any] | None:
-    normalized = _normalize(organization_type)
+    normalized = get_safe_organization_type(organization_type)
     if normalized not in ORGANIZATION_TEMPLATE_CATALOG:
         return None
     template = deepcopy(ORGANIZATION_TEMPLATE_CATALOG[normalized])
@@ -1284,5 +1284,18 @@ def get_organization_template_catalog() -> dict[str, Any]:
     return {
         "templates_are_helpers": True,
         "organization_type_options": list_organization_type_options(),
+        "organization_type_dropdown": get_all_organization_types(),
+        "shared_dropdowns": get_shared_dropdowns(),
         "templates": {key: value for key, value in templates.items() if value is not None},
     }
+
+
+def get_suggested_role_seats_by_organization_type(organization_type: Any) -> list[str]:
+    template = get_organization_template(organization_type)
+    if template is None:
+        return []
+    return list(template.get("suggested_role_seats") or [])
+
+
+def get_subtypes_by_organization_type(organization_type: Any) -> list[dict[str, str]]:
+    return get_organization_subtypes(organization_type)
