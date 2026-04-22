@@ -464,8 +464,7 @@
       ),
       lineage_experience_support: Boolean(
         profile?.lineage_experience_support ??
-          lane === "household" ||
-          lane === "network",
+          (lane === "household" || lane === "network"),
       ),
       organization_command_scope: Boolean(
         profile?.organization_command_scope ?? lane === "organization",
