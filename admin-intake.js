@@ -13,6 +13,10 @@
     "operations_admin",
   ]);
 
+  // Link-key issuance is restricted to packages that explicitly enable
+  // can_use_link_keys in the backend package catalog contract.
+  // household_foundation/heirloom_legacy_tree/legacy_plus were removed here
+  // to match backend truth (they do not include link-key entitlement).
   const LINK_KEY_ENABLED_PACKAGES = new Set([
     "digital_legacy_portrait",
     "family_estate_concierge",

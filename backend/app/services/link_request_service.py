@@ -71,6 +71,11 @@ def _project_id_candidates(project_id: str) -> list[Any]:
     return candidates
 
 
+def _project_object_id_candidates(project_id: str) -> list[ObjectId]:
+    object_id = _to_object_id(project_id)
+    return [object_id] if object_id is not None else []
+
+
 def _project_entitlement(project_id: str) -> dict[str, Any] | None:
     query = {"project_id": {"$in": _project_id_candidates(project_id)}}
     return _entitlements_collection().find_one(
@@ -103,9 +108,14 @@ def _resolve_project_link_scope(project_id: str) -> dict[str, Any]:
     if not resolved and package_code:
         resolved = get_package(package_code) or {}
 
+    max_households = int(resolved.get("max_households") or 0)
+    max_family_branches = int(resolved.get("max_family_branches") or 0)
+    effective_max_households = (
+        max_family_branches if max_family_branches > 0 else max_households
+    )
     return {
         "can_link_households": bool(resolved.get("can_link_households")),
-        "max_households": max(0, int(resolved.get("max_households") or 0)),
+        "max_households": max(0, effective_max_households),
     }
 
 
@@ -118,7 +128,7 @@ def _household_ids_for_project(project_id: str) -> set[str]:
 
     project = _projects_collection().find_one(
         {
-            "_id": {"$in": [value for value in _project_id_candidates(project_id) if isinstance(value, ObjectId)]}
+            "_id": {"$in": _project_object_id_candidates(project_id)}
         }
     )
     project_household_id = _normalize_value((project or {}).get("household_id"))
