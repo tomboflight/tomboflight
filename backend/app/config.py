@@ -350,6 +350,14 @@ class Settings(BaseSettings):
     )
 
     allowed_origins: str = Field(
+        default=("https://tomboflight.com," "https://www.tomboflight.com"),
+        validation_alias=AliasChoices("ALLOWED_ORIGINS"),
+    )
+    local_dev_cors_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("LOCAL_DEV_CORS_ENABLED"),
+    )
+    local_dev_cors_origins: str = Field(
         default=(
             "http://127.0.0.1:5500,"
             "http://localhost:5500,"
@@ -357,10 +365,11 @@ class Settings(BaseSettings):
             "http://127.0.0.1:8000,"
             "http://localhost:8000,"
             "http://[::1]:8000,"
-            "https://tomboflight.com,"
-            "https://www.tomboflight.com"
+            "http://127.0.0.1:8081,"
+            "http://localhost:8081,"
+            "http://[::1]:8081"
         ),
-        validation_alias=AliasChoices("ALLOWED_ORIGINS"),
+        validation_alias=AliasChoices("LOCAL_DEV_CORS_ORIGINS"),
     )
 
     upload_storage_dir: str = Field(
@@ -396,13 +405,41 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    @staticmethod
+    def _parse_origin_list(value: str) -> list[str]:
+        parts = str(value or "").replace("\n", ",").replace(";", ",").split(",")
+        seen: set[str] = set()
+        parsed: list[str] = []
+        for raw in parts:
+            origin = str(raw).strip().rstrip("/")
+            if not origin or origin == "*" or origin in seen:
+                continue
+            seen.add(origin)
+            parsed.append(origin)
+        return parsed
+
+    @property
+    def is_production_environment(self) -> bool:
+        return str(self.environment or "").strip().lower() in {"production", "prod"}
+
+    @property
+    def local_dev_cors_enabled_effective(self) -> bool:
+        return self.local_dev_cors_enabled or not self.is_production_environment
+
     @property
     def allowed_origins_list(self) -> list[str]:
-        return [
-            origin.strip()
-            for origin in self.allowed_origins.split(",")
-            if origin.strip()
-        ]
+        configured = self._parse_origin_list(self.allowed_origins)
+        if self.local_dev_cors_enabled_effective:
+            configured.extend(self._parse_origin_list(self.local_dev_cors_origins))
+
+        deduped: list[str] = []
+        seen: set[str] = set()
+        for origin in configured:
+            if origin in seen:
+                continue
+            seen.add(origin)
+            deduped.append(origin)
+        return deduped
 
     @property
     def upload_image_content_types_list(self) -> list[str]:

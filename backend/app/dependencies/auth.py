@@ -118,12 +118,25 @@ def _allowed_cookie_auth_origins() -> set[str]:
     if normalized:
         return normalized
 
-    return {
+    defaults = {
         "https://tomboflight.com",
         "https://www.tomboflight.com",
-        "http://127.0.0.1:5500",
-        "http://localhost:5500",
     }
+    if getattr(settings, "local_dev_cors_enabled_effective", False):
+        defaults.update(
+            {
+                "http://127.0.0.1:5500",
+                "http://localhost:5500",
+                "http://[::1]:5500",
+                "http://127.0.0.1:8000",
+                "http://localhost:8000",
+                "http://[::1]:8000",
+                "http://127.0.0.1:8081",
+                "http://localhost:8081",
+                "http://[::1]:8081",
+            }
+        )
+    return defaults
 
 
 def _enforce_cookie_auth_origin(request: Request) -> None:
