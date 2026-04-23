@@ -104,12 +104,25 @@ def _resolve_allowed_origins() -> list[str]:
     if cleaned:
         return list(dict.fromkeys(cleaned))
 
-    return [
+    defaults = [
         "https://tomboflight.com",
         "https://www.tomboflight.com",
-        "http://127.0.0.1:5500",
-        "http://localhost:5500",
     ]
+    if getattr(settings, "local_dev_cors_enabled_effective", False):
+        defaults.extend(
+            [
+                "http://127.0.0.1:5500",
+                "http://localhost:5500",
+                "http://[::1]:5500",
+                "http://127.0.0.1:8000",
+                "http://localhost:8000",
+                "http://[::1]:8000",
+                "http://127.0.0.1:8081",
+                "http://localhost:8081",
+                "http://[::1]:8081",
+            ]
+        )
+    return defaults
 
 
 def _is_secure_request(request: Request) -> bool:
