@@ -8,7 +8,10 @@ from pymongo.database import Database
 
 from app.database import get_database
 from app.services.audit_log_service import write_audit_log
-from app.services.mint_policy_service import describe_project_mint_eligibility
+from app.services.mint_policy_service import (
+    READINESS_REASON_DETAILS,
+    describe_project_mint_eligibility,
+)
 
 TERMINAL_STATUSES = {"paid", "waived", "included", "executed"}
 
@@ -257,8 +260,17 @@ def get_project_mint_readiness(project_id: str) -> dict[str, Any]:
     eligibility = describe_project_mint_eligibility(project)
     fee_ok, fee_reason = mint_fee_satisfied(project)
     reasons = list(eligibility.get("reasons") or [])
+    blocking_details = list(eligibility.get("blocking_details") or [])
     if not fee_ok and fee_reason:
         reasons.append(fee_reason)
+        blocking_details.append(
+            {
+                "code": fee_reason,
+                "message": (READINESS_REASON_DETAILS.get(fee_reason) or {}).get("message")
+                or fee_reason.replace("_", " "),
+                "flag": (READINESS_REASON_DETAILS.get(fee_reason) or {}).get("flag"),
+            }
+        )
     return {
         "project_id": project_id,
         "mint_eligible": bool(eligibility.get("eligible")),
@@ -267,4 +279,10 @@ def get_project_mint_readiness(project_id: str) -> dict[str, Any]:
         "ready_for_mint_preparation": bool(eligibility.get("eligible")),
         "ready_for_mint_execution": bool(eligibility.get("eligible")) and fee_ok,
         "blocking_reasons": reasons,
+        "blocking_details": blocking_details,
+        "missing_readiness_flags": [
+            str(detail.get("flag")).strip()
+            for detail in blocking_details
+            if str(detail.get("flag") or "").strip()
+        ],
     }

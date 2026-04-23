@@ -668,6 +668,43 @@ def admin_reset_user_security(
         pass
 
 
+def revoke_user_sessions(
+    *,
+    user_id: str,
+    actor_user_id: str | None = None,
+    reason: str = "logout",
+) -> bool:
+    user = get_user_by_id(user_id)
+    if not user:
+        return False
+    next_version = _session_version(user) + 1
+    db = get_database()
+    db.users.update_one(
+        {"_id": user["_id"]},
+        {
+            "$set": {
+                "session_token_version": next_version,
+                "last_logout_at": _now_iso(),
+            }
+        },
+    )
+    try:
+        create_audit_log(
+            "session_revoked",
+            actor_user_id or user_id,
+            "user",
+            str(user["_id"]),
+            {
+                "reason": _normalize_text(reason) or "logout",
+                "email": _normalize_text(user.get("email")).lower(),
+                "session_token_version": next_version,
+            },
+        )
+    except Exception:
+        pass
+    return True
+
+
 def request_password_reset(
     email: str,
     *,

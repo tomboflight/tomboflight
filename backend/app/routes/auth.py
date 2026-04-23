@@ -35,7 +35,9 @@ from app.services.auth_service import (
     change_password,
     disable_mfa_for_user,
     get_user_by_id,
+    get_user_by_email,
     register_user,
+    revoke_user_sessions,
     request_password_reset,
     reset_password_with_token,
     verify_mfa_enrollment,
@@ -221,6 +223,24 @@ def login(payload: UserLogin, request: Request, response: Response):
 
 @router.post("/logout")
 def logout(request: Request, response: Response):
+    token = (
+        request.cookies.get(COOKIE_NAME)
+        or (
+            request.headers.get("authorization", "").split(" ", 1)[1]
+            if request.headers.get("authorization", "").lower().startswith("bearer ")
+            else ""
+        )
+    )
+    payload = decode_access_token(str(token or ""))
+    user_id = _extract_user_id_from_token(str(token or ""))
+    if not user_id and payload:
+        user = get_user_by_email(str(payload.get("sub") or "").strip().lower())
+        user_id = _current_user_id(user or {})
+    if user_id:
+        try:
+            revoke_user_sessions(user_id=user_id, actor_user_id=user_id, reason="logout")
+        except Exception:
+            pass
     _clear_auth_cookie(response, request)
     _apply_no_store(response)
     return {"success": True, "message": "Logged out successfully."}

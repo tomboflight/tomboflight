@@ -13,8 +13,7 @@ class StartupInitializationTests(unittest.TestCase):
 
         with (
             patch.object(main_module, "validate_nft_runtime_configuration_on_startup") as validate_mock,
-            patch.object(main_module, "connect_to_mongo") as connect_mock,
-            patch.object(main_module, "get_database", return_value={"db": "ok"}) as get_db_mock,
+            patch.object(main_module, "connect_to_mongo", return_value={"db": "ok"}) as connect_mock,
             patch.object(main_module, "initialize_order_indexes") as order_init_mock,
             patch.object(main_module, "ensure_project_entitlement_indexes") as entitlement_init_mock,
             patch.object(main_module, "initialize_mint_record_indexes") as mint_record_init_mock,
@@ -29,7 +28,6 @@ class StartupInitializationTests(unittest.TestCase):
 
         validate_mock.assert_called_once()
         connect_mock.assert_called_once()
-        get_db_mock.assert_called_once()
         order_init_mock.assert_called_once()
         entitlement_init_mock.assert_called_once()
         mint_record_init_mock.assert_called_once()
@@ -38,6 +36,38 @@ class StartupInitializationTests(unittest.TestCase):
         finance_init_mock.assert_called_once()
         organization_init_mock.assert_called_once()
         admin_access_bootstrap_mock.assert_called_once()
+        close_mock.assert_called_once()
+
+    def test_lifespan_degraded_mode_when_mongo_unavailable(self):
+        async def _run():
+            async with main_module.lifespan(main_module.app):
+                return None
+
+        with (
+            patch.object(main_module, "validate_nft_runtime_configuration_on_startup") as validate_mock,
+            patch.object(main_module, "connect_to_mongo", return_value=None) as connect_mock,
+            patch.object(main_module, "initialize_order_indexes") as order_init_mock,
+            patch.object(main_module, "ensure_project_entitlement_indexes") as entitlement_init_mock,
+            patch.object(main_module, "initialize_mint_record_indexes") as mint_record_init_mock,
+            patch.object(main_module, "initialize_mint_job_indexes") as mint_job_init_mock,
+            patch.object(main_module, "ensure_stripe_event_indexes") as stripe_init_mock,
+            patch.object(main_module, "ensure_finance_event_indexes") as finance_init_mock,
+            patch.object(main_module, "ensure_organization_indexes") as organization_init_mock,
+            patch.object(main_module, "bootstrap_admin_access_controls") as admin_access_bootstrap_mock,
+            patch.object(main_module, "close_mongo_connection") as close_mock,
+        ):
+            asyncio.run(_run())
+
+        validate_mock.assert_called_once()
+        connect_mock.assert_called_once()
+        order_init_mock.assert_not_called()
+        entitlement_init_mock.assert_not_called()
+        mint_record_init_mock.assert_not_called()
+        mint_job_init_mock.assert_not_called()
+        stripe_init_mock.assert_not_called()
+        finance_init_mock.assert_not_called()
+        organization_init_mock.assert_not_called()
+        admin_access_bootstrap_mock.assert_not_called()
         close_mock.assert_called_once()
 
 

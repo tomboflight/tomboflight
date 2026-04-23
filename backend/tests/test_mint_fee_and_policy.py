@@ -46,6 +46,8 @@ class MintReadinessTests(unittest.TestCase):
         self.assertIn("public_safe_approval_incomplete", payload["reasons"])
         self.assertIn("delivery_manifest_not_finalized", payload["reasons"])
         self.assertIn("collectible_not_preparing", payload["reasons"])
+        self.assertTrue(any(item["code"] == "public_safe_approval_incomplete" for item in payload["blocking_details"]))
+        self.assertIn("public_safe_approved", payload["missing_readiness_flags"])
 
     def test_mint_fee_satisfied_for_included_credit(self):
         project = {
@@ -76,6 +78,39 @@ class MintQueueFeeGateTests(unittest.TestCase):
 
         self.assertEqual(ctx.exception.status_code, 409)
         self.assertIn("mint_fee_unpaid_or_unwaived", str(ctx.exception.detail))
+
+    def test_mint_readiness_returns_human_blocking_details(self):
+        project = {
+            "_id": "p1",
+            "package_code": "digital_legacy_portrait",
+            "status": "build_ready",
+            "phase": "intake_approved",
+            "public_safe_approved": True,
+            "delivery_manifest_finalized": True,
+            "mint_collectible_preparing": True,
+            "mint_fee_status": "quoted",
+        }
+        with (
+            patch.object(mint_fee_service, "_project", return_value=project),
+            patch.object(
+                mint_fee_service,
+                "describe_project_mint_eligibility",
+                return_value={
+                    "eligible": True,
+                    "reasons": [],
+                    "mint_policy": {"product_includes_onchain_anchor": True},
+                    "blocking_details": [],
+                },
+            ),
+            patch.object(mint_fee_service, "_base_mint_fee_state", return_value={"mint_fee_status": "quoted"}),
+            patch.object(mint_fee_service, "mint_fee_satisfied", return_value=(False, "mint_fee_unpaid_or_unwaived")),
+        ):
+            readiness = mint_fee_service.get_project_mint_readiness("p1")
+
+        self.assertFalse(readiness["ready_for_mint_execution"])
+        self.assertIn("mint_fee_unpaid_or_unwaived", readiness["blocking_reasons"])
+        self.assertTrue(any(item["code"] == "mint_fee_unpaid_or_unwaived" for item in readiness["blocking_details"]))
+        self.assertIn("mint_fee_satisfied", readiness["missing_readiness_flags"])
 
 
 if __name__ == "__main__":
