@@ -55,6 +55,7 @@ ROLE_CAPABILITIES: dict[str, set[str]] = {
     # Deprecated generic admin role: no implicit capability grants.
     "admin": set(),
     "super_admin": {"*"},
+    "ceo_super_admin": {"*"},
     "executive_tech_admin": {
         "manage_roles",
         "manage_users_full",
@@ -94,6 +95,7 @@ ROLE_PERMISSION_MAP: dict[str, set[str]] = {
     # Deprecated generic admin role: no implicit permission grants.
     "admin": set(),
     "super_admin": {"*"},
+    "ceo_super_admin": {"*"},
     "executive_tech_admin": {
         "admin.access",
         "admin.audit.read",
@@ -148,6 +150,10 @@ ROLE_METADATA: dict[str, dict[str, str]] = {
         "name": "Super Admin",
         "description": "Break-glass emergency full override controls.",
     },
+    "ceo_super_admin": {
+        "name": "CEO Super Admin",
+        "description": "CEO-level full platform controls with required audit logging.",
+    },
     "executive_tech_admin": {
         "name": "Executive Technical Admin",
         "description": "Executive technical operations and admin control center access.",
@@ -167,7 +173,8 @@ ROLE_METADATA: dict[str, dict[str, str]] = {
 }
 
 OFFICER_ROLE_MAPPING: dict[str, list[str]] = {
-    "l.robinson@tomboflight.com": ["SUPERADMIN", "EXECUTIVE_TECH_ADMIN"],
+    "l.robinson@tomboflight.com": ["CEO_SUPER_ADMIN", "EXECUTIVE_TECH_ADMIN"],
+    "l.robinson@tomboflight": ["CEO_SUPER_ADMIN", "EXECUTIVE_TECH_ADMIN"],
     "marquis.l.floyd@tomboflight.com": ["CMO_ADMIN"],
     "jenn.wood@tomboflight.com": ["CFO_ADMIN"],
     "k.goffigan@tomboflight.com": ["COO_ADMIN"],

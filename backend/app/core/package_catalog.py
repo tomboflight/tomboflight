@@ -74,6 +74,106 @@ ADDON_CODE_ALIASES: dict[str, str] = {
 PROJECT_LANES = frozenset({"portrait", "household", "network", "organization"})
 COMMAND_STRUCTURE_ORG_NODE_LIMIT = 15
 
+ALLOWED_VISIBILITY_SCOPES = [
+    "private_to_owner",
+    "private_to_owner_and_co_owner",
+    "household_private",
+    "branch_shared",
+    "linked_family_shared",
+    "public_memorial",
+    "minor_protected",
+]
+
+BASE_ALLOWED_ASSET_TYPES = [
+    "portrait_photo",
+    "group_photo",
+    "document",
+    "certificate",
+    "verification_evidence",
+]
+
+EXTENDED_ALLOWED_ASSET_TYPES = BASE_ALLOWED_ASSET_TYPES + [
+    "private_voice_message",
+    "private_video_message",
+    "narration_audio",
+    "memorial_media",
+]
+
+VAULT_ENTITLEMENT_BY_PACKAGE: dict[str, dict[str, Any]] = {
+    "legacy_snapshot": {
+        "can_use_personal_vault": True,
+        "can_use_household_vault": False,
+        "can_use_future_message_vault": False,
+        "can_use_linked_household_vault": False,
+        "can_use_organization_records_vault": False,
+        "can_use_scheduled_reveal": False,
+        "allowed_asset_types": BASE_ALLOWED_ASSET_TYPES,
+    },
+    "legacy_portrait_intro": {
+        "can_use_personal_vault": True,
+        "can_use_household_vault": False,
+        "can_use_future_message_vault": False,
+        "can_use_linked_household_vault": False,
+        "can_use_organization_records_vault": False,
+        "can_use_scheduled_reveal": False,
+        "allowed_asset_types": BASE_ALLOWED_ASSET_TYPES,
+    },
+    "digital_legacy_portrait": {
+        "can_use_personal_vault": True,
+        "can_use_household_vault": False,
+        "can_use_future_message_vault": False,
+        "can_use_linked_household_vault": False,
+        "can_use_organization_records_vault": False,
+        "can_use_scheduled_reveal": True,
+        "allowed_asset_types": EXTENDED_ALLOWED_ASSET_TYPES,
+    },
+    "household_foundation": {
+        "can_use_personal_vault": False,
+        "can_use_household_vault": True,
+        "can_use_future_message_vault": False,
+        "can_use_linked_household_vault": False,
+        "can_use_organization_records_vault": False,
+        "can_use_scheduled_reveal": True,
+        "allowed_asset_types": EXTENDED_ALLOWED_ASSET_TYPES,
+    },
+    "heirloom_legacy_tree": {
+        "can_use_personal_vault": False,
+        "can_use_household_vault": True,
+        "can_use_future_message_vault": True,
+        "can_use_linked_household_vault": False,
+        "can_use_organization_records_vault": False,
+        "can_use_scheduled_reveal": True,
+        "allowed_asset_types": EXTENDED_ALLOWED_ASSET_TYPES,
+    },
+    "legacy_plus": {
+        "can_use_personal_vault": False,
+        "can_use_household_vault": True,
+        "can_use_future_message_vault": True,
+        "can_use_linked_household_vault": False,
+        "can_use_organization_records_vault": False,
+        "can_use_scheduled_reveal": True,
+        "allowed_asset_types": EXTENDED_ALLOWED_ASSET_TYPES,
+    },
+    "family_estate_concierge": {
+        "can_use_personal_vault": False,
+        "can_use_household_vault": True,
+        "can_use_future_message_vault": True,
+        "can_use_linked_household_vault": True,
+        "can_use_organization_records_vault": False,
+        "can_use_scheduled_reveal": True,
+        "allowed_asset_types": EXTENDED_ALLOWED_ASSET_TYPES,
+    },
+    "command_structure_network": {
+        "can_use_personal_vault": False,
+        "can_use_household_vault": False,
+        "can_use_future_message_vault": False,
+        "can_use_linked_household_vault": False,
+        "can_use_organization_records_vault": True,
+        "can_use_scheduled_reveal": False,
+        "allowed_asset_types": ["document", "certificate", "verification_evidence", "private_voice_message"],
+    },
+}
+
 PACKAGE_CATALOG: dict[str, dict[str, Any]] = {
     "legacy_snapshot": {
         "package_code": "legacy_snapshot",
@@ -719,7 +819,8 @@ ADDON_CATALOG: dict[str, dict[str, Any]] = {
 def _copy_package(value: dict[str, Any]) -> dict[str, Any]:
     package = deepcopy(value)
     package["package_lane"] = normalize_package_type(package.get("package_lane"))
-    return package
+    package_code = str(package.get("package_code") or "").strip()
+    return _with_vault_entitlements(package_code, package)
 
 
 def get_package_catalog() -> dict[str, dict[str, Any]]:
@@ -850,3 +951,40 @@ def get_addon(addon_code: str) -> dict[str, Any] | None:
         return None
     value = ADDON_CATALOG.get(normalized)
     return deepcopy(value) if value else None
+
+
+def _with_vault_entitlements(package_code: str, package: dict[str, Any]) -> dict[str, Any]:
+    entitlements = deepcopy(VAULT_ENTITLEMENT_BY_PACKAGE.get(package_code) or {})
+    package.update(entitlements)
+    package["allowed_visibility_scopes"] = deepcopy(ALLOWED_VISIBILITY_SCOPES)
+    return package
+
+
+def get_public_package_catalog() -> list[dict[str, Any]]:
+    packages: list[dict[str, Any]] = []
+    for package_code, raw in PACKAGE_CATALOG.items():
+        package = _with_vault_entitlements(package_code, _copy_package(raw))
+        control_profile = get_package_control_profile(package_code) or {}
+        mint_policy = dict(control_profile.get("mint_policy") or {})
+        package["maintenance_meaning"] = {
+            "covers": [
+                "storage continuity",
+                "protected access",
+                "retrieval",
+                "role-based workspace continuity",
+                "package-compatible platform updates",
+                "delivery continuity",
+                "normal support for the delivered project",
+            ],
+            "does_not_cover": [
+                "a new build",
+                "new branch creation",
+                "genealogy research",
+                "major redesign",
+                "add-ons not purchased",
+            ],
+        }
+        package["verification_meaning"] = "Verification is a private evidence and review path used to support trusted lineage records."
+        package["minting_available"] = bool(mint_policy.get("product_includes_onchain_anchor"))
+        packages.append(package)
+    return packages
