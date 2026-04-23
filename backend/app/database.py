@@ -2,12 +2,17 @@ from pymongo import MongoClient
 from pymongo.database import Database
 import certifi
 import logging
+from typing import Any
 
 from app.config import settings
 
 client: MongoClient | None = None
 db: Database | None = None
 logger = logging.getLogger(__name__)
+
+
+class DatabaseUnavailableError(RuntimeError):
+    """Raised when a DB-required code path is invoked without an active DB connection."""
 
 
 def connect_to_mongo() -> Database | None:
@@ -39,8 +44,21 @@ def connect_to_mongo() -> Database | None:
 
 def get_database() -> Database:
     if db is None:
-        raise RuntimeError("Database connection has not been initialized.")
+        raise DatabaseUnavailableError("Database connection is currently unavailable.")
     return db
+
+
+def get_service_state() -> dict[str, Any]:
+    database_connected = db is not None
+    degraded_reasons = [] if database_connected else ["database_unavailable"]
+    ready = database_connected
+    service_mode = "ok" if ready else "degraded"
+    return {
+        "database_connected": database_connected,
+        "service_mode": service_mode,
+        "ready": ready,
+        "degraded_reasons": degraded_reasons,
+    }
 
 
 def close_mongo_connection() -> None:

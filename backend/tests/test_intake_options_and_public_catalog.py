@@ -14,6 +14,9 @@ class IntakeOptionsTests(unittest.TestCase):
         self.assertIn("privacy_scope", dropdowns)
         self.assertEqual(payload["defaults"]["where_should_this_belong"], "auto")
         self.assertEqual(payload["defaults"]["release_mode"], "immediate")
+        scheduled_option = next(item for item in dropdowns["release_mode"] if item["key"] == "scheduled")
+        self.assertIn("planned", scheduled_option["label"].lower())
+        self.assertIn("private beta", scheduled_option["label"].lower())
 
     def test_privacy_scope_mapping_targets_existing_canonical_values(self):
         mapping = get_privacy_scope_canonical_map()
@@ -27,6 +30,8 @@ class PublicCatalogEntitlementTests(unittest.TestCase):
         self.assertTrue(packages["digital_legacy_portrait"]["can_use_scheduled_reveal"])
         self.assertTrue(packages["family_estate_concierge"]["can_use_linked_household_vault"])
         self.assertTrue(packages["command_structure_network"]["can_use_organization_records_vault"])
+        self.assertEqual(packages["digital_legacy_portrait"]["scheduled_reveal_status"], "planned_private_beta")
+        self.assertFalse(packages["digital_legacy_portrait"]["scheduled_reveal_auto_executor_live"])
 
     def test_package_copy_includes_allowed_visibility_scopes(self):
         package = get_package("legacy_snapshot")

@@ -1062,5 +1062,10 @@ def get_public_package_catalog() -> list[dict[str, Any]]:
             "Private vault materials are not minted by default. "
             "Only approved delivery-safe collectible assets are eligible for blockchain minting."
         )
+        package["scheduled_reveal_status"] = "planned_private_beta"
+        package["scheduled_reveal_copy"] = (
+            "Scheduled reveal is currently planned/private beta and is not generally available for automatic timed release."
+        )
+        package["scheduled_reveal_auto_executor_live"] = False
         packages.append(package)
     return packages
