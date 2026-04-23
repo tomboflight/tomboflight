@@ -523,7 +523,7 @@
     } else if (isPaid && mintEnabled && !isMinted && !isMintPending) {
       primaryStatusText =
         "Your TOMB OF LIGHT digital collectible is active. " +
-        "Your package includes on-chain minting.";
+        "Your package includes a controlled on-chain minting step once approvals and readiness checks are complete.";
       primaryBadgeText = "Active";
       primaryBadgeClass = "badge-info";
     } else if (!isPaid && !hasAnyFile && !isMinted) {
@@ -624,7 +624,7 @@
       } else {
         mintCopy =
           "Your package is eligible for on-chain minting. " +
-          "Anchor details will appear here once the minting process is initiated.";
+          "Anchor details will appear here once the controlled minting process is approved and initiated.";
       }
       setText("[data-delivery-mint-copy]", mintCopy);
 
