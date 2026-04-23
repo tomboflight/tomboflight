@@ -143,7 +143,7 @@ INTAKE_DROPDOWN_REGISTRY: dict[str, list[dict[str, str]]] = {
     ],
     "release_mode": [
         {"key": "immediate", "label": "Immediate"},
-        {"key": "scheduled", "label": "Scheduled (planned)"},
+        {"key": "scheduled", "label": "Scheduled (planned / private beta; no automatic release yet)"},
         {"key": "manual", "label": "Manual"},
     ],
     "verification_choice": [

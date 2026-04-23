@@ -1,11 +1,17 @@
 from contextlib import asynccontextmanager
 import logging
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.config import settings
-from app.database import close_mongo_connection, connect_to_mongo
+from app.database import (
+    DatabaseUnavailableError,
+    close_mongo_connection,
+    connect_to_mongo,
+    get_service_state,
+)
 
 from app.routes.admin_intake_submissions import (
     router as admin_intake_submissions_router,
@@ -195,6 +201,23 @@ async def add_security_headers(request: Request, call_next):
     return response
 
 
+@app.exception_handler(DatabaseUnavailableError)
+async def handle_database_unavailable(_: Request, exc: DatabaseUnavailableError):
+    service_state = get_service_state()
+    payload = {
+        "error": {
+            "code": "database_unavailable",
+            "message": str(exc) or "Database is currently unavailable.",
+            "status_code": status.HTTP_503_SERVICE_UNAVAILABLE,
+        },
+        **service_state,
+    }
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content=payload,
+    )
+
+
 # ----------------------------
 # Core Routes
 # ----------------------------
@@ -283,6 +306,8 @@ app.include_router(audit_logs_router)
 
 @app.get("/")
 def root():
+    service_state = get_service_state()
+    status_label = "ok" if service_state["ready"] else service_state["service_mode"]
     environment = str(settings.environment or "development").strip().lower()
     is_production = environment in {"production", "prod"}
     if is_production:
@@ -291,16 +316,21 @@ def root():
             "app_name": settings.app_name,
             "version": settings.app_version,
             "environment": settings.environment,
-            "status": "ok",
+            "status": status_label,
+            **service_state,
         }
     return {
         "message": "Tomb of Light backend is running.",
         "app_name": settings.app_name,
         "version": settings.app_version,
         "environment": settings.environment,
+        "status": status_label,
+        **service_state,
         "allowed_origins": _resolve_allowed_origins(),
         "routes": [
             "/health",
+            "/health/live",
+            "/health/ready",
             "/auth/signup",
             "/auth/login",
             "/auth/logout",
