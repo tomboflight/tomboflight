@@ -568,6 +568,13 @@ PACKAGE_CONTROL_POLICY: dict[str, dict[str, Any]] = {
             "token_type": None,
             "included_anchor_count": 0,
             "requires_customer_public_safe_approval": False,
+            "mint_fee_model": "service_plus_network",
+            "minting_included": False,
+            "minting_service_fee_usd": 199,
+            "default_network_fee_policy": "quoted_variable",
+            "additional_mint_service_fee_usd": 199,
+            "remint_service_fee_usd": 149,
+            "network_fee_quote_usd": 0,
         },
     },
     "legacy_portrait_intro": {
@@ -584,6 +591,13 @@ PACKAGE_CONTROL_POLICY: dict[str, dict[str, Any]] = {
             "token_type": None,
             "included_anchor_count": 0,
             "requires_customer_public_safe_approval": False,
+            "mint_fee_model": "service_plus_network",
+            "minting_included": False,
+            "minting_service_fee_usd": 199,
+            "default_network_fee_policy": "quoted_variable",
+            "additional_mint_service_fee_usd": 199,
+            "remint_service_fee_usd": 149,
+            "network_fee_quote_usd": 0,
         },
     },
     "digital_legacy_portrait": {
@@ -600,6 +614,13 @@ PACKAGE_CONTROL_POLICY: dict[str, dict[str, Any]] = {
             "token_type": "portrait_anchor",
             "included_anchor_count": 1,
             "requires_customer_public_safe_approval": True,
+            "mint_fee_model": "flat_included",
+            "minting_included": True,
+            "minting_service_fee_usd": 199,
+            "default_network_fee_policy": "quoted_variable",
+            "additional_mint_service_fee_usd": 199,
+            "remint_service_fee_usd": 149,
+            "network_fee_quote_usd": 0,
         },
     },
     "household_foundation": {
@@ -616,6 +637,13 @@ PACKAGE_CONTROL_POLICY: dict[str, dict[str, Any]] = {
             "token_type": "household_anchor",
             "included_anchor_count": 1,
             "requires_customer_public_safe_approval": True,
+            "mint_fee_model": "flat_included",
+            "minting_included": True,
+            "minting_service_fee_usd": 199,
+            "default_network_fee_policy": "quoted_variable",
+            "additional_mint_service_fee_usd": 199,
+            "remint_service_fee_usd": 149,
+            "network_fee_quote_usd": 0,
         },
     },
     "heirloom_legacy_tree": {
@@ -632,6 +660,13 @@ PACKAGE_CONTROL_POLICY: dict[str, dict[str, Any]] = {
             "token_type": "household_anchor",
             "included_anchor_count": 1,
             "requires_customer_public_safe_approval": True,
+            "mint_fee_model": "flat_included",
+            "minting_included": True,
+            "minting_service_fee_usd": 199,
+            "default_network_fee_policy": "quoted_variable",
+            "additional_mint_service_fee_usd": 199,
+            "remint_service_fee_usd": 149,
+            "network_fee_quote_usd": 0,
         },
     },
     "legacy_plus": {
@@ -648,6 +683,13 @@ PACKAGE_CONTROL_POLICY: dict[str, dict[str, Any]] = {
             "token_type": "household_anchor",
             "included_anchor_count": 1,
             "requires_customer_public_safe_approval": True,
+            "mint_fee_model": "flat_included",
+            "minting_included": True,
+            "minting_service_fee_usd": 199,
+            "default_network_fee_policy": "quoted_variable",
+            "additional_mint_service_fee_usd": 199,
+            "remint_service_fee_usd": 149,
+            "network_fee_quote_usd": 0,
         },
     },
     "family_estate_concierge": {
@@ -664,6 +706,13 @@ PACKAGE_CONTROL_POLICY: dict[str, dict[str, Any]] = {
             "token_type": "branch_anchor",
             "included_anchor_count": 3,
             "requires_customer_public_safe_approval": True,
+            "mint_fee_model": "flat_included",
+            "minting_included": True,
+            "minting_service_fee_usd": 199,
+            "default_network_fee_policy": "quoted_variable",
+            "additional_mint_service_fee_usd": 199,
+            "remint_service_fee_usd": 149,
+            "network_fee_quote_usd": 0,
         },
     },
     "command_structure_network": {
@@ -680,6 +729,13 @@ PACKAGE_CONTROL_POLICY: dict[str, dict[str, Any]] = {
             "token_type": "organization_anchor",
             "included_anchor_count": 1,
             "requires_customer_public_safe_approval": True,
+            "mint_fee_model": "service_plus_network",
+            "minting_included": False,
+            "minting_service_fee_usd": 299,
+            "default_network_fee_policy": "quoted_variable",
+            "additional_mint_service_fee_usd": 199,
+            "remint_service_fee_usd": 149,
+            "network_fee_quote_usd": 0,
         },
     },
 }
@@ -932,6 +988,13 @@ def get_package_control_profile(package_code: str) -> dict[str, Any] | None:
             "requires_customer_public_safe_approval": bool(
                 mint_policy.get("requires_customer_public_safe_approval")
             ),
+            "mint_fee_model": str(mint_policy.get("mint_fee_model") or "service_plus_network"),
+            "minting_included": bool(mint_policy.get("minting_included", int(mint_policy.get("included_anchor_count") or 0) > 0)),
+            "minting_service_fee_usd": float(mint_policy.get("minting_service_fee_usd") or 0),
+            "default_network_fee_policy": str(mint_policy.get("default_network_fee_policy") or "quoted_variable"),
+            "additional_mint_service_fee_usd": float(mint_policy.get("additional_mint_service_fee_usd") or 0),
+            "remint_service_fee_usd": float(mint_policy.get("remint_service_fee_usd") or 0),
+            "network_fee_quote_usd": float(mint_policy.get("network_fee_quote_usd") or 0),
         },
     }
 
@@ -986,5 +1049,18 @@ def get_public_package_catalog() -> list[dict[str, Any]]:
         }
         package["verification_meaning"] = "Verification is a private evidence and review path used to support trusted lineage records."
         package["minting_available"] = bool(mint_policy.get("product_includes_onchain_anchor"))
+        package["minting_included"] = bool(mint_policy.get("minting_included", False))
+        package["included_anchor_count"] = int(mint_policy.get("included_anchor_count") or 0)
+        package["mint_fee_model"] = str(mint_policy.get("mint_fee_model") or "service_plus_network")
+        package["minting_service_fee_usd"] = float(mint_policy.get("minting_service_fee_usd") or 0)
+        package["additional_mint_service_fee_usd"] = float(mint_policy.get("additional_mint_service_fee_usd") or 0)
+        package["remint_service_fee_usd"] = float(mint_policy.get("remint_service_fee_usd") or 0)
+        package["default_network_fee_policy"] = str(mint_policy.get("default_network_fee_policy") or "quoted_variable")
+        package["minting_copy"] = (
+            "Blockchain / NFT minting is a separate one-time production step unless explicitly included in your package. "
+            "This fee covers collectible preparation, metadata creation, mint execution, and applicable blockchain network costs. "
+            "Private vault materials are not minted by default. "
+            "Only approved delivery-safe collectible assets are eligible for blockchain minting."
+        )
         packages.append(package)
     return packages

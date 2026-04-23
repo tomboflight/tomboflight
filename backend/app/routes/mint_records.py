@@ -14,6 +14,7 @@ from app.schemas.mint_record import (
 )
 from app.services.mint_job_service import queue_mint_pipeline, sync_receipt_for_mint_record
 from app.services.mint_maintenance_service import run_mint_maintenance
+from app.services.mint_fee_service import get_project_mint_readiness
 from app.services.mint_policy_service import describe_project_mint_eligibility
 from app.services.mint_record_service import (
     approve_admin_mint_record,
@@ -80,6 +81,19 @@ def _project_for_request(current_user: dict[str, Any], project_id: str) -> dict[
         )
     return project
 
+
+
+
+def _require_mint_fee_ready(project_id: str) -> None:
+    readiness = get_project_mint_readiness(project_id)
+    if not readiness.get("ready_for_mint_execution"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Mint fee and readiness requirements are not satisfied: "
+                + ", ".join(readiness.get("blocking_reasons") or ["mint_not_ready"])
+            ),
+        )
 
 def _require_project_match(project_id: str, mint_record_id: str) -> dict[str, Any]:
     record = get_mint_record(mint_record_id)
@@ -322,6 +336,17 @@ def approve_project_mint_record_customer_admin(
         ) from exc
 
 
+
+
+@router.post("/projects/{project_id}/digital-collectible/prepare")
+def prepare_project_digital_collectible(
+    project_id: str,
+    payload: PrepareMintRecordPayload,
+    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+):
+    return prepare_project_mint_record(project_id, payload, current_user)
+
+
 @router.post("/projects/{project_id}/mint-records/{mint_record_id}/queue")
 def queue_project_mint_record(
     project_id: str,
@@ -347,6 +372,8 @@ def queue_project_mint_record(
                 + ", ".join(eligibility.get("reasons") or ["unknown_reason"])
             ),
         )
+
+    _require_mint_fee_ready(project_id)
 
     try:
         return {
@@ -407,6 +434,17 @@ def sync_project_mint_record(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(exc),
         ) from exc
+
+
+
+
+@router.post("/admin/projects/{project_id}/mint")
+def execute_project_mint(
+    project_id: str,
+    mint_record_id: str,
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.mint")),
+):
+    return queue_project_mint_record(project_id, mint_record_id, current_user)
 
 
 @router.get("/tokens/{public_token_id}")

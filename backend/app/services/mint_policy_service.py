@@ -29,6 +29,8 @@ BUILD_READY_PHASES = {
     "archived",
 }
 
+MINT_FEE_STATUS_READY = {"paid", "waived", "included", "executed"}
+
 def _normalize(value: Any) -> str:
     return str(value or "").strip()
 
@@ -76,6 +78,19 @@ def _project_has_build_state(project: dict[str, Any]) -> bool:
     )
 
 
+
+
+def _project_public_safe_approved(project: dict[str, Any]) -> bool:
+    return bool(
+        project.get("public_safe_approved")
+        or project.get("public_safe_approval_complete")
+        or project.get("delivery_safe_approved")
+    )
+
+
+def _delivery_manifest_finalized(project: dict[str, Any]) -> bool:
+    return bool(project.get("delivery_manifest_finalized") or project.get("public_manifest_finalized"))
+
 def get_package_mint_policy(package_code: str) -> dict[str, Any]:
     identity = resolve_package_identity(package_code)
     normalized_code = _normalize(identity.get("package_code")) or _normalize(package_code)
@@ -110,6 +125,13 @@ def get_package_mint_policy(package_code: str) -> dict[str, Any]:
             base_policy.get("requires_customer_public_safe_approval")
         ),
         "included_anchor_count": int(base_policy.get("included_anchor_count") or 0),
+        "mint_fee_model": str(base_policy.get("mint_fee_model") or "service_plus_network"),
+        "minting_included": bool(base_policy.get("minting_included", int(base_policy.get("included_anchor_count") or 0) > 0)),
+        "minting_service_fee_usd": float(base_policy.get("minting_service_fee_usd") or 0),
+        "additional_mint_service_fee_usd": float(base_policy.get("additional_mint_service_fee_usd") or 0),
+        "remint_service_fee_usd": float(base_policy.get("remint_service_fee_usd") or 0),
+        "network_fee_quote_usd": float(base_policy.get("network_fee_quote_usd") or 0),
+        "default_network_fee_policy": str(base_policy.get("default_network_fee_policy") or "quoted_variable"),
         "runtime_enabled": _runtime_enabled(token_type),
     }
 
@@ -143,6 +165,15 @@ def describe_project_mint_eligibility(project: dict[str, Any]) -> dict[str, Any]
         and not policy.get("runtime_enabled")
     ):
         reasons.append("mint_runtime_disabled")
+
+    if policy.get("product_includes_onchain_anchor") and not _project_public_safe_approved(project):
+        reasons.append("public_safe_approval_incomplete")
+
+    if policy.get("product_includes_onchain_anchor") and not _delivery_manifest_finalized(project):
+        reasons.append("delivery_manifest_not_finalized")
+
+    if policy.get("product_includes_onchain_anchor") and not bool(project.get("mint_collectible_preparing") or project.get("mint_preparation_started")):
+        reasons.append("collectible_not_preparing")
 
     return {
         "project_id": _normalize(project.get("_id") or project.get("id")),

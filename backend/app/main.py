@@ -52,6 +52,7 @@ from app.routes.mint_jobs import (
     router as mint_jobs_router,
 )
 from app.routes.mint_policy import router as mint_policy_router
+from app.routes.mint_fees import router as mint_fees_router
 from app.routes.mint_records import (
     initialize_mint_record_indexes,
     router as mint_records_router,
@@ -228,6 +229,7 @@ app.include_router(workspace_access_router)
 app.include_router(workspace_access_legacy_router)
 app.include_router(viewer_manifest_router)
 app.include_router(mint_policy_router)
+app.include_router(mint_fees_router)
 app.include_router(mint_records_router)
 app.include_router(mint_jobs_router)
 app.include_router(asset_delivery_router)
