@@ -79,7 +79,7 @@ def apply_project_entitlement(
             user_id=payload.user_id,
             package_code=payload.package_code,
             active_addons=payload.active_addons,
-            maintenance_plan=payload.maintenance_plan,
+            maintenance_plan=payload.maintenance_plan or "none",
             delivered_at=payload.delivered_at,
             status=payload.status,
         )
