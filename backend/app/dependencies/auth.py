@@ -563,12 +563,18 @@ def _db():
 
 
 def _extract_project_id_from_request(request: Request) -> str | None:
+    def _safe_get(value: Any, key: str) -> Any:
+        getter = getattr(value, "get", None)
+        if callable(getter):
+            return getter(key)
+        return None
+
     path_params = getattr(request, "path_params", None)
     query_params = getattr(request, "query_params", None)
 
     candidates = [
-        path_params.get("project_id") if hasattr(path_params, "get") else None,
-        query_params.get("project_id") if hasattr(query_params, "get") else None,
+        _safe_get(path_params, "project_id"),
+        _safe_get(query_params, "project_id"),
     ]
     for candidate in candidates:
         normalized = _normalize_value(candidate)

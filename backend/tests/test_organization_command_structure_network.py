@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+from typing import Any, cast
 from unittest.mock import patch
 
 import pytest
@@ -48,7 +49,11 @@ class FakeCollection:
         docs = self.docs
         if sort:
             key, direction = sort[0]
-            docs = sorted(docs, key=lambda item: item.get(key), reverse=direction < 0)
+            docs = sorted(
+                docs,
+                key=lambda item: cast(Any, item.get(key)),
+                reverse=direction < 0,
+            )
         for doc in docs:
             if self._matches(doc, query):
                 return doc

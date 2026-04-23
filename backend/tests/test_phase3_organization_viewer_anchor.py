@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Any, cast
 from unittest.mock import patch
 
 from bson import ObjectId
@@ -17,7 +18,9 @@ class _InsertResult:
 class _Cursor(list):
     def sort(self, key, direction):
         reverse = int(direction) < 0
-        return _Cursor(sorted(self, key=lambda doc: doc.get(key), reverse=reverse))
+        return _Cursor(
+            sorted(self, key=lambda doc: cast(Any, doc.get(key)), reverse=reverse)
+        )
 
 
 class _Collection:
@@ -30,7 +33,7 @@ class _Collection:
         if sort and matches:
             key, direction = sort[0]
             reverse = int(direction) < 0
-            matches.sort(key=lambda doc: doc.get(key), reverse=reverse)
+            matches.sort(key=lambda doc: cast(Any, doc.get(key)), reverse=reverse)
         return dict(matches[0]) if matches else None
 
     def find(self, query=None):
