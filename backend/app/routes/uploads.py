@@ -33,6 +33,7 @@ from app.dependencies.auth import (
 from app.services.upload_service import (
     serialize_upload_record,
     store_member_photo_upload,
+    store_private_media_upload,
     store_verification_evidence_upload,
 )
 from app.services.r2_storage_service import generate_private_download_url
@@ -82,6 +83,31 @@ EVIDENCE_ALLOWED_EXTENSIONS = {
 }
 EVIDENCE_MAX_BYTES = settings.upload_max_document_bytes
 
+PRIVATE_MEDIA_ALLOWED_CONTENT_TYPES = {
+    "audio/mpeg",
+    "audio/mp4",
+    "audio/wav",
+    "audio/x-wav",
+    "audio/webm",
+    "audio/ogg",
+    "video/mp4",
+    "video/webm",
+    "video/quicktime",
+    "video/ogg",
+}
+PRIVATE_MEDIA_ALLOWED_EXTENSIONS = {
+    ".mp3",
+    ".m4a",
+    ".wav",
+    ".webm",
+    ".ogg",
+    ".mp4",
+    ".mov",
+    ".ogv",
+}
+PRIVATE_MEDIA_ALLOWED_ASSET_TYPES = {"private_voice_message", "private_video_message"}
+PRIVATE_MEDIA_ALLOWED_PRIVACY_SCOPES = {"private_to_owner", "private_to_owner_and_co_owner"}
+
 ALLOWED_VERIFICATION_TYPES = {
     "government_id",
     "birth_certificate",
@@ -103,6 +129,7 @@ ALLOWED_EVIDENCE_KINDS = {
 ALLOWED_QUERY_CATEGORIES = {
     "member_photo",
     "verification_evidence",
+    "private_media",
 }
 ALLOWED_VAULT_SCOPE = {"personal", "family_shared"}
 ALLOWED_VISIBILITY_SCOPE = {
@@ -754,6 +781,25 @@ def _validate_upload_file(
     upload.file.seek(0)
 
 
+def _enforce_allowed_asset_type(
+    *,
+    context: dict[str, Any],
+    asset_type: str,
+) -> None:
+    if bool(context.get("is_admin")):
+        return
+    allowed = {
+        _normalize_value(value).lower()
+        for value in (context.get("resolved_entitlements") or {}).get("allowed_asset_types") or []
+        if _normalize_value(value)
+    }
+    if allowed and _normalize_value(asset_type).lower() not in allowed:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your active package does not permit this private media type.",
+        )
+
+
 def _as_int(value: Any, default: int = 0) -> int:
     try:
         return int(value)
@@ -1040,6 +1086,81 @@ async def upload_verification_evidence(
 
     return {
         "message": "Verification evidence uploaded successfully.",
+        "upload": _public_upload_record(upload_record),
+        "member_id": member_id,
+        "family_id": actual_family_id,
+    }
+
+
+@router.post("/private-media")
+async def upload_private_media(
+    family_id: str = Form(...),
+    member_id: str = Form(...),
+    asset_type: str = Form(...),
+    privacy_scope: str = Form("private_to_owner"),
+    file: UploadFile = File(...),
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    context = require_workspace_capability(
+        current_user,
+        family_id=family_id,
+        member_id=member_id,
+        capabilities=("can_upload_verification_docs", "can_upload_portraits"),
+        detail="Your active package does not include upload access.",
+    )
+    require_workspace_member_role(
+        context,
+        allowed_roles=("billing_owner", "co_owner", "family_manager", "contributor"),
+        detail="Your role is read-only for uploads.",
+    )
+
+    db = get_database()
+    if db is None:
+        raise HTTPException(status_code=500, detail="Database is not connected.")
+
+    normalized_asset_type = _normalize_value(asset_type).lower()
+    if normalized_asset_type not in PRIVATE_MEDIA_ALLOWED_ASSET_TYPES:
+        raise HTTPException(status_code=400, detail="Invalid private media asset type.")
+
+    normalized_privacy_scope = _normalize_visibility_scope(privacy_scope, "private_to_owner")
+    if normalized_privacy_scope not in PRIVATE_MEDIA_ALLOWED_PRIVACY_SCOPES:
+        raise HTTPException(status_code=400, detail="Invalid private media privacy scope.")
+
+    _enforce_allowed_asset_type(context=context, asset_type=normalized_asset_type)
+    _validate_upload_file(
+        file,
+        allowed_content_types=PRIVATE_MEDIA_ALLOWED_CONTENT_TYPES,
+        allowed_extensions=PRIVATE_MEDIA_ALLOWED_EXTENSIONS,
+        max_bytes=EVIDENCE_MAX_BYTES,
+        label="private media",
+    )
+
+    member = context["member"]
+    actual_family_id = _normalize_value(member.get("family_id"))
+    if _normalize_value(family_id) != actual_family_id:
+        raise HTTPException(status_code=400, detail="family_id does not match the selected member.")
+
+    _enforce_workspace_upload_limit(context)
+    _enforce_workspace_storage_limit(
+        context=context,
+        db=db,
+        incoming_size_bytes=_upload_size_bytes(file),
+    )
+
+    upload_record = await store_private_media_upload(
+        db=db,
+        project_id=_normalize_value(context["project"].get("_id")),
+        family_id=actual_family_id,
+        member_id=member_id,
+        asset_type=normalized_asset_type,
+        privacy_scope=normalized_privacy_scope,
+        upload=file,
+        uploaded_by=_actor_label(current_user),
+        uploaded_by_user_id=_current_user_id(current_user),
+    )
+    upload_record = _scan_and_quarantine_upload(db=db, upload_record=upload_record)
+    return {
+        "message": "Private media uploaded successfully.",
         "upload": _public_upload_record(upload_record),
         "member_id": member_id,
         "family_id": actual_family_id,

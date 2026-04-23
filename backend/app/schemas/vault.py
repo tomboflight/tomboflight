@@ -8,25 +8,34 @@ VaultScope = Literal["personal", "household", "linked_family", "memorial"]
 VaultPrivacy = Literal["private_owner", "selected_relatives", "household_admins", "all_linked", "public_memorial"]
 VaultPermissionRole = Literal["owner", "steward", "editor", "viewer", "executor"]
 VaultItemType = Literal["photo", "document", "audio", "video", "note", "heirloom_record", "letter", "certificate", "other"]
+VaultReleaseState = Literal["draft", "scheduled", "released"]
 
 
 class VaultItemCreate(BaseModel):
     project_id: str = Field(..., min_length=1)
+    family_id: Optional[str] = Field(default=None)
+    member_id: Optional[str] = Field(default=None)
     title: str = Field(..., min_length=1, max_length=200)
     description: Optional[str] = Field(default=None, max_length=2000)
     item_type: VaultItemType = Field(default="other")
     vault_scope: VaultScope = Field(default="personal")
     privacy: VaultPrivacy = Field(default="private_owner")
+    release_state: VaultReleaseState = Field(default="draft")
+    reveal_at: Optional[datetime] = Field(default=None)
     collection_id: Optional[str] = Field(default=None)
     tags: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class VaultItemUpdate(BaseModel):
+    family_id: Optional[str] = None
+    member_id: Optional[str] = None
     title: Optional[str] = Field(default=None, min_length=1, max_length=200)
     description: Optional[str] = Field(default=None, max_length=2000)
     vault_scope: Optional[VaultScope] = None
     privacy: Optional[VaultPrivacy] = None
+    release_state: Optional[VaultReleaseState] = None
+    reveal_at: Optional[datetime] = None
     collection_id: Optional[str] = None
     tags: Optional[list[str]] = None
     metadata: Optional[dict[str, Any]] = None

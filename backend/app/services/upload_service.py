@@ -15,12 +15,37 @@ CHUNK_SIZE = 1024 * 1024
 IMAGE_CONTENT_TYPES = set(settings.upload_image_content_types_list)
 DOCUMENT_CONTENT_TYPES = set(settings.upload_document_content_types_list)
 EVIDENCE_CONTENT_TYPES = IMAGE_CONTENT_TYPES | DOCUMENT_CONTENT_TYPES
+PRIVATE_VOICE_CONTENT_TYPES = {
+    "audio/mpeg",
+    "audio/mp4",
+    "audio/wav",
+    "audio/x-wav",
+    "audio/webm",
+    "audio/ogg",
+}
+PRIVATE_VIDEO_CONTENT_TYPES = {
+    "video/mp4",
+    "video/webm",
+    "video/quicktime",
+    "video/ogg",
+}
+PRIVATE_MEDIA_CONTENT_TYPES = PRIVATE_VOICE_CONTENT_TYPES | PRIVATE_VIDEO_CONTENT_TYPES
 
 EXTENSION_BY_CONTENT_TYPE = {
     "image/jpeg": ".jpg",
     "image/png": ".png",
     "image/webp": ".webp",
     "application/pdf": ".pdf",
+    "audio/mpeg": ".mp3",
+    "audio/mp4": ".m4a",
+    "audio/wav": ".wav",
+    "audio/x-wav": ".wav",
+    "audio/webm": ".webm",
+    "audio/ogg": ".ogg",
+    "video/mp4": ".mp4",
+    "video/webm": ".webm",
+    "video/quicktime": ".mov",
+    "video/ogg": ".ogv",
 }
 
 
@@ -315,4 +340,96 @@ async def store_verification_evidence_upload(
     result = db["uploaded_files"].insert_one(upload_record)
     upload_record["_id"] = result.inserted_id
 
+    return serialize_upload_record(upload_record)
+
+
+async def store_private_media_upload(
+    *,
+    db: Any,
+    project_id: str,
+    family_id: str,
+    member_id: str,
+    asset_type: str,
+    privacy_scope: str,
+    upload: UploadFile,
+    uploaded_by: str,
+    uploaded_by_user_id: str = "",
+) -> dict[str, Any]:
+    normalized_asset_type = str(asset_type or "").strip().lower()
+    normalized_privacy_scope = str(privacy_scope or "").strip().lower() or "private_to_owner"
+    content_type = str(upload.content_type or "").strip().lower()
+    if content_type not in PRIVATE_MEDIA_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unsupported private media type.",
+        )
+
+    if normalized_asset_type == "private_voice_message" and content_type not in PRIVATE_VOICE_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unsupported voice media type.",
+        )
+
+    if normalized_asset_type == "private_video_message" and content_type not in PRIVATE_VIDEO_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unsupported video media type.",
+        )
+
+    original_filename = _safe_original_filename(upload.filename)
+    extension = _extension_for_upload(original_filename, content_type)
+    family_token = _safe_path_token(family_id)
+    member_token = _safe_path_token(member_id)
+    asset_token = _safe_path_token(normalized_asset_type or "private_media")
+    stored_filename = f"{uuid4().hex}{extension}"
+    relative_path = Path("private_media") / family_token / member_token / asset_token / stored_filename
+    absolute_path = _upload_root() / relative_path
+
+    size_bytes = await _save_upload_to_disk(
+        upload=upload,
+        destination=absolute_path,
+        max_bytes=settings.upload_max_document_bytes,
+    )
+
+    now_iso = datetime.now(UTC).isoformat()
+    customer_visible = normalized_privacy_scope == "private_to_owner_and_co_owner"
+    upload_record = {
+        "project_id": project_id,
+        "family_id": family_id,
+        "member_id": member_id,
+        "category": "private_media",
+        "internal_only": False,
+        "customer_visible": customer_visible,
+        "vault_scope": "personal",
+        "visibility_scope": normalized_privacy_scope,
+        "privacy_scope": normalized_privacy_scope,
+        "privacy_classification": normalized_privacy_scope,
+        "relationship_scope": "self",
+        "branch_id": "",
+        "person_ids": [member_id],
+        "asset_type": normalized_asset_type or "private_media",
+        "verification_status": "pending",
+        "consent_status": "pending",
+        "approved_for_cinematic": False,
+        "approved_by": None,
+        "share_with_linked_families": False,
+        "evidence_kind": "",
+        "verification_type": "",
+        "original_filename": original_filename,
+        "stored_filename": stored_filename,
+        "relative_path": str(relative_path).replace("\\", "/"),
+        "content_type": content_type,
+        "size_bytes": size_bytes,
+        "uploaded_by": uploaded_by,
+        "uploaded_by_user_id": uploaded_by_user_id,
+        "storage_provider": "local_disk",
+        "scan_status": "pending",
+        "scan_detail": "",
+        "quarantined": False,
+        "quarantine_reason": "",
+        "created_at": now_iso,
+        "updated_at": now_iso,
+    }
+    result = db["uploaded_files"].insert_one(upload_record)
+    upload_record["_id"] = result.inserted_id
     return serialize_upload_record(upload_record)

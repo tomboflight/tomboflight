@@ -5,7 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.database import close_mongo_connection, connect_to_mongo, get_database
+from app.database import close_mongo_connection, connect_to_mongo
 
 from app.routes.admin_intake_submissions import (
     router as admin_intake_submissions_router,
@@ -138,20 +138,23 @@ def _is_secure_request(request: Request) -> bool:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     validate_nft_runtime_configuration_on_startup()
-    connect_to_mongo()
-    app.state.db = get_database()
-    initialize_order_indexes()
-    ensure_project_entitlement_indexes()
-    initialize_mint_record_indexes()
-    initialize_mint_job_indexes()
-    ensure_stripe_event_indexes()
-    ensure_finance_event_indexes()
-    ensure_organization_indexes()
-    try:
-        bootstrap_admin_access_controls()
-    except Exception as exc:
-        logger.warning("Admin access bootstrap sync skipped: %s", exc)
-    logger.info("Connected to MongoDB database.")
+    db = connect_to_mongo()
+    app.state.db = db
+    if db is not None:
+        initialize_order_indexes()
+        ensure_project_entitlement_indexes()
+        initialize_mint_record_indexes()
+        initialize_mint_job_indexes()
+        ensure_stripe_event_indexes()
+        ensure_finance_event_indexes()
+        ensure_organization_indexes()
+        try:
+            bootstrap_admin_access_controls()
+        except Exception as exc:
+            logger.warning("Admin access bootstrap sync skipped: %s", exc)
+        logger.info("Connected to MongoDB database.")
+    else:
+        logger.warning("MongoDB unavailable at startup; running in degraded mode.")
     yield
     close_mongo_connection()
     logger.info("MongoDB connection closed.")
@@ -311,6 +314,7 @@ def root():
             "/intake-submissions/my-list?limit=10",
             "/uploads/member-photo",
             "/uploads/verification-evidence",
+            "/uploads/private-media",
             "/uploads/member/{member_id}",
             "/uploads/family/{family_id}",
             "/uploads/{upload_id}/download",

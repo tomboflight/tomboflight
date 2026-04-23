@@ -10,11 +10,12 @@ db: Database | None = None
 logger = logging.getLogger(__name__)
 
 
-def connect_to_mongo() -> Database:
+def connect_to_mongo() -> Database | None:
     global client, db
 
     if not settings.mongodb_uri:
-        raise RuntimeError("MongoDB URI is not set.")
+        logger.warning("MongoDB URI is not set; starting without database connectivity.")
+        return None
 
     try:
         client = MongoClient(
@@ -32,7 +33,8 @@ def connect_to_mongo() -> Database:
     except Exception as exc:
         client = None
         db = None
-        raise RuntimeError(f"MongoDB connection failed: {exc}") from exc
+        logger.error("MongoDB connection failed; starting without database connectivity: %s", exc)
+        return None
 
 
 def get_database() -> Database:

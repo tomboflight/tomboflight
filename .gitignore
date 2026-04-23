@@ -20,6 +20,7 @@ build/
 # Environment files
 .env
 .env.*
+!backend/.env.example
 
 # Python / FastAPI backend
 backend/venv/
