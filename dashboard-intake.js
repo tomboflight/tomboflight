@@ -245,7 +245,7 @@
   function reasonLabel(reason) {
     const normalized = normalizeValue(reason);
     if (normalized === "build_not_ready") return "Build completion is still pending.";
-    if (normalized === "package_not_included") return "This package does not include automatic on-chain minting.";
+    if (normalized === "package_not_included") return "This package does not include on-chain minting.";
     if (normalized === "mint_runtime_disabled") return "Minting is temporarily offline.";
     return humanizeStatus(normalized || "unavailable");
   }
@@ -342,7 +342,7 @@
     if (!policy.product_includes_onchain_anchor) {
       return {
         badge: "Not Included",
-        copy: "This package does not include an automatic on-chain Legacy Anchor.",
+        copy: "This package does not include an on-chain Legacy Anchor.",
         note: "Upgrade into an eligible package to unlock Base Mainnet anchor minting and public-safe proof records.",
       };
     }
