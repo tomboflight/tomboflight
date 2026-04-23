@@ -2,6 +2,8 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from app.database import get_database
+
 from app.dependencies.auth import (
     get_current_user,
     has_internal_admin_access,
@@ -11,6 +13,7 @@ from app.schemas.experience import ExperienceLaneResponse
 from app.schemas.project import ProjectCreate, ProjectResponse, build_project_response
 from app.services.access_context_service import describe_project_experience_lane
 from app.services.project_service import create_project, list_projects
+from app.services.project_entitlement_service import get_project_entitlement
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
@@ -69,3 +72,43 @@ def get_project_experience_lane(
         return describe_project_experience_lane(current_user, project_id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.get("/{project_id}/limits")
+def get_project_limits(
+    project_id: str,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    current_user_id = _current_user_id(current_user)
+    current_user_email = _current_user_email(current_user)
+
+    projects = list_projects(
+        owner_user_id=current_user_id,
+        owner_email=current_user_email,
+        is_admin=has_internal_admin_access(current_user),
+    )
+    if not any(str(project.get("id") or project.get("_id") or "") == project_id for project in projects):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found.")
+
+    entitlement = get_project_entitlement(project_id)
+    resolved = dict((entitlement or {}).get("resolved_entitlements") or {})
+
+    db = get_database()
+    uploads = list(db["uploaded_files"].find({"project_id": project_id, "quarantined": {"$ne": True}}))
+    usage_upload_count = len(uploads)
+    usage_storage_bytes = int(sum(int(item.get("size_bytes") or 0) for item in uploads))
+
+    return {
+        "project_id": project_id,
+        "limits": {
+            "max_uploads": resolved.get("max_uploads"),
+            "max_storage_gb": resolved.get("max_storage_gb"),
+            "max_members": resolved.get("max_members"),
+            "max_households": resolved.get("max_households"),
+            "max_org_nodes": resolved.get("max_org_nodes"),
+        },
+        "usage": {
+            "uploads": usage_upload_count,
+            "storage_bytes": usage_storage_bytes,
+        },
+    }

@@ -32,6 +32,7 @@ from app.routes.identity_anchor import router as identity_anchor_router
 from app.routes.experience import router as experience_router
 from app.routes.identity_links import router as identity_links_router
 from app.routes.intake import router as intake_router
+from app.routes.intake_options import router as intake_options_router
 from app.routes.intake_submissions import router as intake_submissions_router
 from app.routes.issued_certificates import router as issued_certificates_router
 from app.routes.lineage_certificate import router as lineage_certificate_router
@@ -66,6 +67,7 @@ from app.services.admin_access_bootstrap_service import bootstrap_admin_access_c
 from app.services.admin_control_service import ensure_finance_event_indexes
 from app.services.organization_service import ensure_organization_indexes
 from app.routes.package_catalog import router as package_catalog_router
+from app.routes.package_catalog_public import router as package_catalog_public_router
 from app.routes.presence import router as presence_router
 from app.routes.projects import router as projects_router
 from app.routes.project_entitlements import router as project_entitlements_router
@@ -196,6 +198,7 @@ app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(billing_router)
 app.include_router(intake_router)
+app.include_router(intake_options_router)
 app.include_router(intake_submissions_router)
 app.include_router(admin_intake_submissions_router)
 app.include_router(admin_control_center_router)
@@ -219,6 +222,7 @@ app.include_router(graph_integrity_router)
 app.include_router(orders_router)
 app.include_router(organizations_router)
 app.include_router(package_catalog_router)
+app.include_router(package_catalog_public_router)
 app.include_router(uploads_router)
 app.include_router(workspace_access_router)
 app.include_router(workspace_access_legacy_router)
