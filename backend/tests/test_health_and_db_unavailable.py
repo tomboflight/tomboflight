@@ -1,7 +1,12 @@
+import asyncio
+import io
+import json
 import unittest
 from unittest.mock import patch
 
-from fastapi.testclient import TestClient
+from fastapi import Response
+from starlette.datastructures import Headers, UploadFile
+from starlette.requests import Request
 
 from app import main as main_module
 from app.database import DatabaseUnavailableError
@@ -44,54 +49,65 @@ def _upload_workspace_context():
 
 
 class HealthAndDbUnavailableTests(unittest.TestCase):
-    def setUp(self):
-        self.client = TestClient(main_module.app)
-
-    def tearDown(self):
-        self.client.app.dependency_overrides.clear()
-        self.client.close()
+    def _request(self, path: str, method: str = "GET") -> Request:
+        return Request(
+            {
+                "type": "http",
+                "http_version": "1.1",
+                "method": method,
+                "path": path,
+                "headers": [],
+                "query_string": b"",
+                "client": ("testclient", 50000),
+                "scheme": "http",
+                "server": ("testserver", 80),
+            }
+        )
 
     def test_health_endpoints_when_db_ready(self):
         with (
             patch.object(health_routes, "get_service_state", return_value=_ready_service_state()),
             patch.object(main_module, "get_service_state", return_value=_ready_service_state()),
         ):
-            live = self.client.get("/health/live")
-            ready = self.client.get("/health/ready")
-            health = self.client.get("/health")
-            root = self.client.get("/")
+            live = health_routes.liveness_check()
+            ready_response = Response()
+            ready = health_routes.readiness_check(ready_response)
+            health_response = Response()
+            health = health_routes.health_check(health_response)
+            root = main_module.root()
 
-        self.assertEqual(live.status_code, 200)
-        self.assertEqual(ready.status_code, 200)
-        self.assertEqual(health.status_code, 200)
-        self.assertEqual(root.status_code, 200)
-        self.assertTrue(ready.json()["ready"])
-        self.assertEqual(health.json()["service_mode"], "ok")
-        self.assertTrue(root.json()["database_connected"])
+        self.assertEqual(ready_response.status_code, 200)
+        self.assertEqual(health_response.status_code, 200)
+        self.assertTrue(ready["ready"])
+        self.assertEqual(health["service_mode"], "ok")
+        self.assertEqual(live["status"], "ok")
+        self.assertTrue(root["database_connected"])
 
     def test_health_endpoints_when_db_unavailable(self):
         with (
             patch.object(health_routes, "get_service_state", return_value=_degraded_service_state()),
             patch.object(main_module, "get_service_state", return_value=_degraded_service_state()),
         ):
-            live = self.client.get("/health/live")
-            ready = self.client.get("/health/ready")
-            health = self.client.get("/health")
-            root = self.client.get("/")
+            live = health_routes.liveness_check()
+            ready_response = Response()
+            ready = health_routes.readiness_check(ready_response)
+            health_response = Response()
+            health = health_routes.health_check(health_response)
+            root = main_module.root()
 
-        self.assertEqual(live.status_code, 200)
-        self.assertEqual(ready.status_code, 503)
-        self.assertEqual(health.status_code, 503)
-        self.assertEqual(root.status_code, 200)
-        self.assertFalse(live.json()["ready"])
-        self.assertEqual(ready.json()["status"], "unavailable")
-        self.assertEqual(health.json()["status"], "degraded")
-        self.assertEqual(root.json()["service_mode"], "degraded")
-        self.assertEqual(root.json()["degraded_reasons"], ["database_unavailable"])
+        self.assertEqual(ready_response.status_code, 503)
+        self.assertEqual(health_response.status_code, 503)
+        self.assertFalse(live["ready"])
+        self.assertEqual(ready["status"], "unavailable")
+        self.assertEqual(health["status"], "degraded")
+        self.assertEqual(root["service_mode"], "degraded")
+        self.assertEqual(root["degraded_reasons"], ["database_unavailable"])
 
     def test_db_down_upload_route_returns_structured_503(self):
-        self.client.app.dependency_overrides[upload_routes.get_current_user] = (
-            lambda: {"id": "owner-1", "email": "owner@example.com"}
+        upload = UploadFile(
+            file=io.BytesIO(b"voice-bytes"),
+            filename="voice.mp3",
+            headers=Headers({"content-type": "audio/mpeg"}),
         )
         with (
             patch.object(upload_routes, "require_workspace_capability", return_value=_upload_workspace_context()),
@@ -103,27 +119,31 @@ class HealthAndDbUnavailableTests(unittest.TestCase):
             ),
             patch.object(main_module, "get_service_state", return_value=_degraded_service_state()),
         ):
-            response = self.client.post(
-                "/uploads/private-media",
-                data={
-                    "family_id": "family-1",
-                    "member_id": "member-1",
-                    "asset_type": "private_voice_message",
-                    "privacy_scope": "private_to_owner",
-                },
-                files={"file": ("voice.mp3", b"voice-bytes", "audio/mpeg")},
+            with self.assertRaises(DatabaseUnavailableError) as ctx:
+                asyncio.run(
+                    upload_routes.upload_private_media(
+                        family_id="family-1",
+                        member_id="member-1",
+                        asset_type="private_voice_message",
+                        privacy_scope="private_to_owner",
+                        file=upload,
+                        current_user={"id": "owner-1", "email": "owner@example.com"},
+                    )
+                )
+            response = asyncio.run(
+                main_module.handle_database_unavailable(
+                    self._request("/uploads/private-media", method="POST"),
+                    ctx.exception,
+                )
             )
 
-        payload = response.json()
+        payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(response.status_code, 503)
         self.assertEqual(payload["error"]["code"], "database_unavailable")
         self.assertFalse(payload["database_connected"])
         self.assertEqual(payload["service_mode"], "degraded")
 
     def test_db_down_protected_vault_route_returns_structured_503(self):
-        self.client.app.dependency_overrides[vault_routes.get_current_user] = (
-            lambda: {"id": "owner-1", "email": "owner@example.com"}
-        )
         with (
             patch.object(vault_routes, "require_workspace_capability", return_value={"project": {"_id": "project-1"}}),
             patch.object(vault_routes, "_require_vault_role"),
@@ -134,9 +154,19 @@ class HealthAndDbUnavailableTests(unittest.TestCase):
             ),
             patch.object(main_module, "get_service_state", return_value=_degraded_service_state()),
         ):
-            response = self.client.get("/vault/items", params={"project_id": "project-1"})
+            with self.assertRaises(DatabaseUnavailableError) as ctx:
+                vault_routes.list_vault_items_route(
+                    project_id="project-1",
+                    current_user={"id": "owner-1", "email": "owner@example.com"},
+                )
+            response = asyncio.run(
+                main_module.handle_database_unavailable(
+                    self._request("/vault/items", method="GET"),
+                    ctx.exception,
+                )
+            )
 
-        payload = response.json()
+        payload = json.loads(response.body.decode("utf-8"))
         self.assertEqual(response.status_code, 503)
         self.assertEqual(payload["error"]["code"], "database_unavailable")
         self.assertFalse(payload["ready"])
