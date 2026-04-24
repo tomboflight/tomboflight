@@ -6,6 +6,7 @@ from app.core.package_catalog import (
     get_addon_catalog,
     get_package_identifier_map,
     get_package_catalog,
+    get_public_package_catalog,
     list_package_control_profiles,
 )
 from app.core.organization_template_catalog import get_organization_template_catalog
@@ -90,3 +91,8 @@ def check_addon_compatibility_route(package_code: str, addon_code: str):
         "addon_code": addon_code,
         "allowed": allowed,
     }
+
+
+@router.get("/public")
+def get_public_package_catalog_route():
+    return {"packages": get_public_package_catalog()}

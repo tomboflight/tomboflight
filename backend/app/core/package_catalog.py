@@ -74,6 +74,106 @@ ADDON_CODE_ALIASES: dict[str, str] = {
 PROJECT_LANES = frozenset({"portrait", "household", "network", "organization"})
 COMMAND_STRUCTURE_ORG_NODE_LIMIT = 15
 
+ALLOWED_VISIBILITY_SCOPES = [
+    "private_to_owner",
+    "private_to_owner_and_co_owner",
+    "household_private",
+    "branch_shared",
+    "linked_family_shared",
+    "public_memorial",
+    "minor_protected",
+]
+
+BASE_ALLOWED_ASSET_TYPES = [
+    "portrait_photo",
+    "group_photo",
+    "document",
+    "certificate",
+    "verification_evidence",
+]
+
+EXTENDED_ALLOWED_ASSET_TYPES = BASE_ALLOWED_ASSET_TYPES + [
+    "private_voice_message",
+    "private_video_message",
+    "narration_audio",
+    "memorial_media",
+]
+
+VAULT_ENTITLEMENT_BY_PACKAGE: dict[str, dict[str, Any]] = {
+    "legacy_snapshot": {
+        "can_use_personal_vault": True,
+        "can_use_household_vault": False,
+        "can_use_future_message_vault": False,
+        "can_use_linked_household_vault": False,
+        "can_use_organization_records_vault": False,
+        "can_use_scheduled_reveal": False,
+        "allowed_asset_types": BASE_ALLOWED_ASSET_TYPES,
+    },
+    "legacy_portrait_intro": {
+        "can_use_personal_vault": True,
+        "can_use_household_vault": False,
+        "can_use_future_message_vault": False,
+        "can_use_linked_household_vault": False,
+        "can_use_organization_records_vault": False,
+        "can_use_scheduled_reveal": False,
+        "allowed_asset_types": BASE_ALLOWED_ASSET_TYPES,
+    },
+    "digital_legacy_portrait": {
+        "can_use_personal_vault": True,
+        "can_use_household_vault": False,
+        "can_use_future_message_vault": False,
+        "can_use_linked_household_vault": False,
+        "can_use_organization_records_vault": False,
+        "can_use_scheduled_reveal": True,
+        "allowed_asset_types": EXTENDED_ALLOWED_ASSET_TYPES,
+    },
+    "household_foundation": {
+        "can_use_personal_vault": False,
+        "can_use_household_vault": True,
+        "can_use_future_message_vault": False,
+        "can_use_linked_household_vault": False,
+        "can_use_organization_records_vault": False,
+        "can_use_scheduled_reveal": True,
+        "allowed_asset_types": EXTENDED_ALLOWED_ASSET_TYPES,
+    },
+    "heirloom_legacy_tree": {
+        "can_use_personal_vault": False,
+        "can_use_household_vault": True,
+        "can_use_future_message_vault": True,
+        "can_use_linked_household_vault": False,
+        "can_use_organization_records_vault": False,
+        "can_use_scheduled_reveal": True,
+        "allowed_asset_types": EXTENDED_ALLOWED_ASSET_TYPES,
+    },
+    "legacy_plus": {
+        "can_use_personal_vault": False,
+        "can_use_household_vault": True,
+        "can_use_future_message_vault": True,
+        "can_use_linked_household_vault": False,
+        "can_use_organization_records_vault": False,
+        "can_use_scheduled_reveal": True,
+        "allowed_asset_types": EXTENDED_ALLOWED_ASSET_TYPES,
+    },
+    "family_estate_concierge": {
+        "can_use_personal_vault": False,
+        "can_use_household_vault": True,
+        "can_use_future_message_vault": True,
+        "can_use_linked_household_vault": True,
+        "can_use_organization_records_vault": False,
+        "can_use_scheduled_reveal": True,
+        "allowed_asset_types": EXTENDED_ALLOWED_ASSET_TYPES,
+    },
+    "command_structure_network": {
+        "can_use_personal_vault": False,
+        "can_use_household_vault": False,
+        "can_use_future_message_vault": False,
+        "can_use_linked_household_vault": False,
+        "can_use_organization_records_vault": True,
+        "can_use_scheduled_reveal": False,
+        "allowed_asset_types": ["document", "certificate", "verification_evidence", "private_voice_message"],
+    },
+}
+
 PACKAGE_CATALOG: dict[str, dict[str, Any]] = {
     "legacy_snapshot": {
         "package_code": "legacy_snapshot",
@@ -468,6 +568,13 @@ PACKAGE_CONTROL_POLICY: dict[str, dict[str, Any]] = {
             "token_type": None,
             "included_anchor_count": 0,
             "requires_customer_public_safe_approval": False,
+            "mint_fee_model": "service_plus_network",
+            "minting_included": False,
+            "minting_service_fee_usd": 199,
+            "default_network_fee_policy": "quoted_variable",
+            "additional_mint_service_fee_usd": 199,
+            "remint_service_fee_usd": 149,
+            "network_fee_quote_usd": 0,
         },
     },
     "legacy_portrait_intro": {
@@ -484,6 +591,13 @@ PACKAGE_CONTROL_POLICY: dict[str, dict[str, Any]] = {
             "token_type": None,
             "included_anchor_count": 0,
             "requires_customer_public_safe_approval": False,
+            "mint_fee_model": "service_plus_network",
+            "minting_included": False,
+            "minting_service_fee_usd": 199,
+            "default_network_fee_policy": "quoted_variable",
+            "additional_mint_service_fee_usd": 199,
+            "remint_service_fee_usd": 149,
+            "network_fee_quote_usd": 0,
         },
     },
     "digital_legacy_portrait": {
@@ -500,6 +614,13 @@ PACKAGE_CONTROL_POLICY: dict[str, dict[str, Any]] = {
             "token_type": "portrait_anchor",
             "included_anchor_count": 1,
             "requires_customer_public_safe_approval": True,
+            "mint_fee_model": "flat_included",
+            "minting_included": True,
+            "minting_service_fee_usd": 199,
+            "default_network_fee_policy": "quoted_variable",
+            "additional_mint_service_fee_usd": 199,
+            "remint_service_fee_usd": 149,
+            "network_fee_quote_usd": 0,
         },
     },
     "household_foundation": {
@@ -516,6 +637,13 @@ PACKAGE_CONTROL_POLICY: dict[str, dict[str, Any]] = {
             "token_type": "household_anchor",
             "included_anchor_count": 1,
             "requires_customer_public_safe_approval": True,
+            "mint_fee_model": "flat_included",
+            "minting_included": True,
+            "minting_service_fee_usd": 199,
+            "default_network_fee_policy": "quoted_variable",
+            "additional_mint_service_fee_usd": 199,
+            "remint_service_fee_usd": 149,
+            "network_fee_quote_usd": 0,
         },
     },
     "heirloom_legacy_tree": {
@@ -532,6 +660,13 @@ PACKAGE_CONTROL_POLICY: dict[str, dict[str, Any]] = {
             "token_type": "household_anchor",
             "included_anchor_count": 1,
             "requires_customer_public_safe_approval": True,
+            "mint_fee_model": "flat_included",
+            "minting_included": True,
+            "minting_service_fee_usd": 199,
+            "default_network_fee_policy": "quoted_variable",
+            "additional_mint_service_fee_usd": 199,
+            "remint_service_fee_usd": 149,
+            "network_fee_quote_usd": 0,
         },
     },
     "legacy_plus": {
@@ -548,6 +683,13 @@ PACKAGE_CONTROL_POLICY: dict[str, dict[str, Any]] = {
             "token_type": "household_anchor",
             "included_anchor_count": 1,
             "requires_customer_public_safe_approval": True,
+            "mint_fee_model": "flat_included",
+            "minting_included": True,
+            "minting_service_fee_usd": 199,
+            "default_network_fee_policy": "quoted_variable",
+            "additional_mint_service_fee_usd": 199,
+            "remint_service_fee_usd": 149,
+            "network_fee_quote_usd": 0,
         },
     },
     "family_estate_concierge": {
@@ -564,6 +706,13 @@ PACKAGE_CONTROL_POLICY: dict[str, dict[str, Any]] = {
             "token_type": "branch_anchor",
             "included_anchor_count": 3,
             "requires_customer_public_safe_approval": True,
+            "mint_fee_model": "flat_included",
+            "minting_included": True,
+            "minting_service_fee_usd": 199,
+            "default_network_fee_policy": "quoted_variable",
+            "additional_mint_service_fee_usd": 199,
+            "remint_service_fee_usd": 149,
+            "network_fee_quote_usd": 0,
         },
     },
     "command_structure_network": {
@@ -580,6 +729,13 @@ PACKAGE_CONTROL_POLICY: dict[str, dict[str, Any]] = {
             "token_type": "organization_anchor",
             "included_anchor_count": 1,
             "requires_customer_public_safe_approval": True,
+            "mint_fee_model": "service_plus_network",
+            "minting_included": False,
+            "minting_service_fee_usd": 299,
+            "default_network_fee_policy": "quoted_variable",
+            "additional_mint_service_fee_usd": 199,
+            "remint_service_fee_usd": 149,
+            "network_fee_quote_usd": 0,
         },
     },
 }
@@ -719,7 +875,8 @@ ADDON_CATALOG: dict[str, dict[str, Any]] = {
 def _copy_package(value: dict[str, Any]) -> dict[str, Any]:
     package = deepcopy(value)
     package["package_lane"] = normalize_package_type(package.get("package_lane"))
-    return package
+    package_code = str(package.get("package_code") or "").strip()
+    return _with_vault_entitlements(package_code, package)
 
 
 def get_package_catalog() -> dict[str, dict[str, Any]]:
@@ -831,6 +988,13 @@ def get_package_control_profile(package_code: str) -> dict[str, Any] | None:
             "requires_customer_public_safe_approval": bool(
                 mint_policy.get("requires_customer_public_safe_approval")
             ),
+            "mint_fee_model": str(mint_policy.get("mint_fee_model") or "service_plus_network"),
+            "minting_included": bool(mint_policy.get("minting_included", int(mint_policy.get("included_anchor_count") or 0) > 0)),
+            "minting_service_fee_usd": float(mint_policy.get("minting_service_fee_usd") or 0),
+            "default_network_fee_policy": str(mint_policy.get("default_network_fee_policy") or "quoted_variable"),
+            "additional_mint_service_fee_usd": float(mint_policy.get("additional_mint_service_fee_usd") or 0),
+            "remint_service_fee_usd": float(mint_policy.get("remint_service_fee_usd") or 0),
+            "network_fee_quote_usd": float(mint_policy.get("network_fee_quote_usd") or 0),
         },
     }
 
@@ -850,3 +1014,58 @@ def get_addon(addon_code: str) -> dict[str, Any] | None:
         return None
     value = ADDON_CATALOG.get(normalized)
     return deepcopy(value) if value else None
+
+
+def _with_vault_entitlements(package_code: str, package: dict[str, Any]) -> dict[str, Any]:
+    entitlements = deepcopy(VAULT_ENTITLEMENT_BY_PACKAGE.get(package_code) or {})
+    package.update(entitlements)
+    package["allowed_visibility_scopes"] = deepcopy(ALLOWED_VISIBILITY_SCOPES)
+    return package
+
+
+def get_public_package_catalog() -> list[dict[str, Any]]:
+    packages: list[dict[str, Any]] = []
+    for package_code, raw in PACKAGE_CATALOG.items():
+        package = _with_vault_entitlements(package_code, _copy_package(raw))
+        control_profile = get_package_control_profile(package_code) or {}
+        mint_policy = dict(control_profile.get("mint_policy") or {})
+        package["maintenance_meaning"] = {
+            "covers": [
+                "storage continuity",
+                "protected access",
+                "retrieval",
+                "role-based workspace continuity",
+                "package-compatible platform updates",
+                "delivery continuity",
+                "normal support for the delivered project",
+            ],
+            "does_not_cover": [
+                "a new build",
+                "new branch creation",
+                "genealogy research",
+                "major redesign",
+                "add-ons not purchased",
+            ],
+        }
+        package["verification_meaning"] = "Verification is a private evidence and review path used to support trusted lineage records."
+        package["minting_available"] = bool(mint_policy.get("product_includes_onchain_anchor"))
+        package["minting_included"] = bool(mint_policy.get("minting_included", False))
+        package["included_anchor_count"] = int(mint_policy.get("included_anchor_count") or 0)
+        package["mint_fee_model"] = str(mint_policy.get("mint_fee_model") or "service_plus_network")
+        package["minting_service_fee_usd"] = float(mint_policy.get("minting_service_fee_usd") or 0)
+        package["additional_mint_service_fee_usd"] = float(mint_policy.get("additional_mint_service_fee_usd") or 0)
+        package["remint_service_fee_usd"] = float(mint_policy.get("remint_service_fee_usd") or 0)
+        package["default_network_fee_policy"] = str(mint_policy.get("default_network_fee_policy") or "quoted_variable")
+        package["minting_copy"] = (
+            "Blockchain / NFT minting is a separate one-time production step unless explicitly included in your package. "
+            "This fee covers collectible preparation, metadata creation, mint execution, and applicable blockchain network costs. "
+            "Private vault materials are not minted by default. "
+            "Only approved delivery-safe collectible assets are eligible for blockchain minting."
+        )
+        package["scheduled_reveal_status"] = "planned_private_beta"
+        package["scheduled_reveal_copy"] = (
+            "Scheduled reveal is currently planned/private beta and is not generally available for automatic timed release."
+        )
+        package["scheduled_reveal_auto_executor_live"] = False
+        packages.append(package)
+    return packages

@@ -81,6 +81,92 @@ ORGANIZATION_SUBTYPE_OPTIONS: dict[str, list[dict[str, str]]] = {
     ],
 }
 
+
+
+INTAKE_DROPDOWN_REGISTRY: dict[str, list[dict[str, str]]] = {
+    "who_are_you_adding": [
+        {"key": "myself", "label": "Myself"},
+        {"key": "parent", "label": "Parent"},
+        {"key": "child", "label": "Child"},
+        {"key": "spouse_or_partner", "label": "Spouse or Partner"},
+        {"key": "sibling", "label": "Sibling"},
+        {"key": "grandparent", "label": "Grandparent"},
+        {"key": "grandchild", "label": "Grandchild"},
+        {"key": "other_relative", "label": "Other Relative"},
+        {"key": "household_member", "label": "Household Member"},
+        {"key": "linked_household_member", "label": "Linked Household Member"},
+        {"key": "organization_member", "label": "Organization Member"},
+    ],
+    "exact_relationship_type": [
+        {"key": "biological_parent", "label": "Biological Parent"},
+        {"key": "adoptive_parent", "label": "Adoptive Parent"},
+        {"key": "step_parent", "label": "Step Parent"},
+        {"key": "guardian", "label": "Guardian"},
+        {"key": "spouse", "label": "Spouse"},
+        {"key": "former_spouse", "label": "Former Spouse"},
+        {"key": "sibling", "label": "Sibling"},
+        {"key": "household_member", "label": "Household Member"},
+        {"key": "linked_household", "label": "Linked Household"},
+    ],
+    "where_should_this_belong": [
+        {"key": "auto", "label": "Let Tomb of Light place this automatically"},
+        {"key": "main_household_line", "label": "Main Household Line"},
+        {"key": "linked_household_branch", "label": "Linked Household Branch"},
+        {"key": "organization_structure", "label": "Organization Structure"},
+    ],
+    "what_are_you_uploading": [
+        {"key": "portrait_photo", "label": "Portrait Photo"},
+        {"key": "group_photo", "label": "Group Photo"},
+        {"key": "document", "label": "Document"},
+        {"key": "certificate", "label": "Certificate"},
+        {"key": "private_voice_message", "label": "Private Voice Message"},
+        {"key": "private_video_message", "label": "Private Video Message"},
+        {"key": "narration_audio", "label": "Narration Audio"},
+        {"key": "memorial_media", "label": "Memorial Media"},
+        {"key": "verification_evidence", "label": "Verification Evidence"},
+    ],
+    "who_does_this_item_belong_to": [
+        {"key": "project", "label": "Project"},
+        {"key": "household", "label": "Household"},
+        {"key": "specific_person", "label": "Specific Person"},
+        {"key": "relationship_record", "label": "Relationship Record"},
+        {"key": "organization_unit", "label": "Organization Unit"},
+    ],
+    "privacy_scope": [
+        {"key": "only_me", "label": "Only Me"},
+        {"key": "me_and_co_owner", "label": "Me and Co-Owner"},
+        {"key": "household_private", "label": "Household Private"},
+        {"key": "branch_shared", "label": "Branch Shared"},
+        {"key": "linked_household_shared", "label": "Linked Household Shared"},
+        {"key": "public_memorial", "label": "Public Memorial"},
+        {"key": "minor_protected", "label": "Minor Protected"},
+    ],
+    "release_mode": [
+        {"key": "immediate", "label": "Immediate"},
+        {"key": "scheduled", "label": "Scheduled (planned / private beta; no automatic release yet)"},
+        {"key": "manual", "label": "Manual"},
+    ],
+    "verification_choice": [
+        {"key": "no_verification_needed", "label": "No Verification Needed"},
+        {"key": "attach_supporting_evidence", "label": "Attach Supporting Evidence"},
+        {
+            "key": "this_is_evidence_for_existing_person_or_relationship",
+            "label": "Evidence for Existing Person or Relationship",
+        },
+    ],
+}
+
+
+PRIVACY_SCOPE_CANONICAL_MAP: dict[str, str] = {
+    "only_me": "private_to_owner",
+    "me_and_co_owner": "private_to_owner_and_co_owner",
+    "household_private": "household_private",
+    "branch_shared": "branch_shared",
+    "linked_household_shared": "linked_family_shared",
+    "public_memorial": "public_memorial",
+    "minor_protected": "minor_protected",
+}
+
 SHARED_DROPDOWN_REGISTRY: dict[str, list[dict[str, str]]] = {
     "organization_type": [
         {"key": key, "label": ORGANIZATION_TYPE_LABELS[key]} for key in ORGANIZATION_TYPE_OPTIONS
@@ -161,3 +247,11 @@ def assert_no_duplicate_dropdown_keys() -> None:
                     f"Dropdown group '{group_key}' contains duplicate key '{option_key}'."
                 )
             seen.add(option_key)
+
+
+def get_intake_dropdowns() -> dict[str, list[dict[str, str]]]:
+    return deepcopy(INTAKE_DROPDOWN_REGISTRY)
+
+
+def get_privacy_scope_canonical_map() -> dict[str, str]:
+    return deepcopy(PRIVACY_SCOPE_CANONICAL_MAP)

@@ -1,11 +1,17 @@
 from contextlib import asynccontextmanager
 import logging
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.config import settings
-from app.database import close_mongo_connection, connect_to_mongo, get_database
+from app.database import (
+    DatabaseUnavailableError,
+    close_mongo_connection,
+    connect_to_mongo,
+    get_service_state,
+)
 
 from app.routes.admin_intake_submissions import (
     router as admin_intake_submissions_router,
@@ -32,6 +38,7 @@ from app.routes.identity_anchor import router as identity_anchor_router
 from app.routes.experience import router as experience_router
 from app.routes.identity_links import router as identity_links_router
 from app.routes.intake import router as intake_router
+from app.routes.intake_options import router as intake_options_router
 from app.routes.intake_submissions import router as intake_submissions_router
 from app.routes.issued_certificates import router as issued_certificates_router
 from app.routes.lineage_certificate import router as lineage_certificate_router
@@ -51,6 +58,7 @@ from app.routes.mint_jobs import (
     router as mint_jobs_router,
 )
 from app.routes.mint_policy import router as mint_policy_router
+from app.routes.mint_fees import router as mint_fees_router
 from app.routes.mint_records import (
     initialize_mint_record_indexes,
     router as mint_records_router,
@@ -66,6 +74,7 @@ from app.services.admin_access_bootstrap_service import bootstrap_admin_access_c
 from app.services.admin_control_service import ensure_finance_event_indexes
 from app.services.organization_service import ensure_organization_indexes
 from app.routes.package_catalog import router as package_catalog_router
+from app.routes.package_catalog_public import router as package_catalog_public_router
 from app.routes.presence import router as presence_router
 from app.routes.projects import router as projects_router
 from app.routes.project_entitlements import router as project_entitlements_router
@@ -135,20 +144,23 @@ def _is_secure_request(request: Request) -> bool:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     validate_nft_runtime_configuration_on_startup()
-    connect_to_mongo()
-    app.state.db = get_database()
-    initialize_order_indexes()
-    ensure_project_entitlement_indexes()
-    initialize_mint_record_indexes()
-    initialize_mint_job_indexes()
-    ensure_stripe_event_indexes()
-    ensure_finance_event_indexes()
-    ensure_organization_indexes()
-    try:
-        bootstrap_admin_access_controls()
-    except Exception as exc:
-        logger.warning("Admin access bootstrap sync skipped: %s", exc)
-    logger.info("Connected to MongoDB database.")
+    db = connect_to_mongo()
+    app.state.db = db
+    if db is not None:
+        initialize_order_indexes()
+        ensure_project_entitlement_indexes()
+        initialize_mint_record_indexes()
+        initialize_mint_job_indexes()
+        ensure_stripe_event_indexes()
+        ensure_finance_event_indexes()
+        ensure_organization_indexes()
+        try:
+            bootstrap_admin_access_controls()
+        except Exception as exc:
+            logger.warning("Admin access bootstrap sync skipped: %s", exc)
+        logger.info("Connected to MongoDB database.")
+    else:
+        logger.warning("MongoDB unavailable at startup; running in degraded mode.")
     yield
     close_mongo_connection()
     logger.info("MongoDB connection closed.")
@@ -189,6 +201,23 @@ async def add_security_headers(request: Request, call_next):
     return response
 
 
+@app.exception_handler(DatabaseUnavailableError)
+async def handle_database_unavailable(_: Request, exc: DatabaseUnavailableError):
+    service_state = get_service_state()
+    payload = {
+        "error": {
+            "code": "database_unavailable",
+            "message": str(exc) or "Database is currently unavailable.",
+            "status_code": status.HTTP_503_SERVICE_UNAVAILABLE,
+        },
+        **service_state,
+    }
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content=payload,
+    )
+
+
 # ----------------------------
 # Core Routes
 # ----------------------------
@@ -196,6 +225,7 @@ app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(billing_router)
 app.include_router(intake_router)
+app.include_router(intake_options_router)
 app.include_router(intake_submissions_router)
 app.include_router(admin_intake_submissions_router)
 app.include_router(admin_control_center_router)
@@ -219,11 +249,13 @@ app.include_router(graph_integrity_router)
 app.include_router(orders_router)
 app.include_router(organizations_router)
 app.include_router(package_catalog_router)
+app.include_router(package_catalog_public_router)
 app.include_router(uploads_router)
 app.include_router(workspace_access_router)
 app.include_router(workspace_access_legacy_router)
 app.include_router(viewer_manifest_router)
 app.include_router(mint_policy_router)
+app.include_router(mint_fees_router)
 app.include_router(mint_records_router)
 app.include_router(mint_jobs_router)
 app.include_router(asset_delivery_router)
@@ -274,6 +306,8 @@ app.include_router(audit_logs_router)
 
 @app.get("/")
 def root():
+    service_state = get_service_state()
+    status_label = "ok" if service_state["ready"] else service_state["service_mode"]
     environment = str(settings.environment or "development").strip().lower()
     is_production = environment in {"production", "prod"}
     if is_production:
@@ -282,16 +316,21 @@ def root():
             "app_name": settings.app_name,
             "version": settings.app_version,
             "environment": settings.environment,
-            "status": "ok",
+            "status": status_label,
+            **service_state,
         }
     return {
         "message": "Tomb of Light backend is running.",
         "app_name": settings.app_name,
         "version": settings.app_version,
         "environment": settings.environment,
+        "status": status_label,
+        **service_state,
         "allowed_origins": _resolve_allowed_origins(),
         "routes": [
             "/health",
+            "/health/live",
+            "/health/ready",
             "/auth/signup",
             "/auth/login",
             "/auth/logout",
@@ -305,6 +344,7 @@ def root():
             "/intake-submissions/my-list?limit=10",
             "/uploads/member-photo",
             "/uploads/verification-evidence",
+            "/uploads/private-media",
             "/uploads/member/{member_id}",
             "/uploads/family/{family_id}",
             "/uploads/{upload_id}/download",

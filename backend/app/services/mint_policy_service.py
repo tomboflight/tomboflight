@@ -29,6 +29,39 @@ BUILD_READY_PHASES = {
     "archived",
 }
 
+MINT_FEE_STATUS_READY = {"paid", "waived", "included", "executed"}
+
+READINESS_REASON_DETAILS: dict[str, dict[str, str]] = {
+    "package_not_included": {
+        "message": "This package does not include on-chain minting.",
+        "flag": "product_includes_onchain_anchor",
+    },
+    "build_not_ready": {
+        "message": "Project workflow state is not build-ready.",
+        "flag": "build_ready_state",
+    },
+    "mint_runtime_disabled": {
+        "message": "Mint runtime flags are disabled for this token type.",
+        "flag": "runtime_enabled",
+    },
+    "public_safe_approval_incomplete": {
+        "message": "Public-safe approval is incomplete.",
+        "flag": "public_safe_approved",
+    },
+    "delivery_manifest_not_finalized": {
+        "message": "Delivery/public manifest has not been finalized.",
+        "flag": "delivery_manifest_finalized",
+    },
+    "collectible_not_preparing": {
+        "message": "Collectible preparation has not started.",
+        "flag": "mint_collectible_preparing",
+    },
+    "mint_fee_unpaid_or_unwaived": {
+        "message": "Mint fee requirements are not yet satisfied.",
+        "flag": "mint_fee_satisfied",
+    },
+}
+
 def _normalize(value: Any) -> str:
     return str(value or "").strip()
 
@@ -76,6 +109,19 @@ def _project_has_build_state(project: dict[str, Any]) -> bool:
     )
 
 
+
+
+def _project_public_safe_approved(project: dict[str, Any]) -> bool:
+    return bool(
+        project.get("public_safe_approved")
+        or project.get("public_safe_approval_complete")
+        or project.get("delivery_safe_approved")
+    )
+
+
+def _delivery_manifest_finalized(project: dict[str, Any]) -> bool:
+    return bool(project.get("delivery_manifest_finalized") or project.get("public_manifest_finalized"))
+
 def get_package_mint_policy(package_code: str) -> dict[str, Any]:
     identity = resolve_package_identity(package_code)
     normalized_code = _normalize(identity.get("package_code")) or _normalize(package_code)
@@ -110,6 +156,13 @@ def get_package_mint_policy(package_code: str) -> dict[str, Any]:
             base_policy.get("requires_customer_public_safe_approval")
         ),
         "included_anchor_count": int(base_policy.get("included_anchor_count") or 0),
+        "mint_fee_model": str(base_policy.get("mint_fee_model") or "service_plus_network"),
+        "minting_included": bool(base_policy.get("minting_included", int(base_policy.get("included_anchor_count") or 0) > 0)),
+        "minting_service_fee_usd": float(base_policy.get("minting_service_fee_usd") or 0),
+        "additional_mint_service_fee_usd": float(base_policy.get("additional_mint_service_fee_usd") or 0),
+        "remint_service_fee_usd": float(base_policy.get("remint_service_fee_usd") or 0),
+        "network_fee_quote_usd": float(base_policy.get("network_fee_quote_usd") or 0),
+        "default_network_fee_policy": str(base_policy.get("default_network_fee_policy") or "quoted_variable"),
         "runtime_enabled": _runtime_enabled(token_type),
     }
 
@@ -144,6 +197,24 @@ def describe_project_mint_eligibility(project: dict[str, Any]) -> dict[str, Any]
     ):
         reasons.append("mint_runtime_disabled")
 
+    if policy.get("product_includes_onchain_anchor") and not _project_public_safe_approved(project):
+        reasons.append("public_safe_approval_incomplete")
+
+    if policy.get("product_includes_onchain_anchor") and not _delivery_manifest_finalized(project):
+        reasons.append("delivery_manifest_not_finalized")
+
+    if policy.get("product_includes_onchain_anchor") and not bool(project.get("mint_collectible_preparing") or project.get("mint_preparation_started")):
+        reasons.append("collectible_not_preparing")
+
+    blocking_details = [
+        {
+            "code": reason,
+            "message": (READINESS_REASON_DETAILS.get(reason) or {}).get("message")
+            or reason.replace("_", " "),
+            "flag": (READINESS_REASON_DETAILS.get(reason) or {}).get("flag"),
+        }
+        for reason in reasons
+    ]
     return {
         "project_id": _normalize(project.get("_id") or project.get("id")),
         "package_code": package_code,
@@ -151,6 +222,10 @@ def describe_project_mint_eligibility(project: dict[str, Any]) -> dict[str, Any]
         "mint_policy": policy,
         "eligible": len(reasons) == 0,
         "reasons": reasons,
+        "blocking_details": blocking_details,
+        "missing_readiness_flags": [
+            detail["flag"] for detail in blocking_details if _normalize(detail.get("flag"))
+        ],
     }
 
 
