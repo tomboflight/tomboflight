@@ -26,10 +26,12 @@ npm run build:web
 # Same-Mac local backend testing
 EXPO_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
 EXPO_PUBLIC_ENV=development
+EXPO_PUBLIC_SUPPORT_EMAIL=support@tomboflight.com
 
 # Phone on same LAN (replace with your Mac IP)
 EXPO_PUBLIC_API_BASE_URL=http://192.168.1.50:8000
 EXPO_PUBLIC_ENV=development
+EXPO_PUBLIC_SUPPORT_EMAIL=support@tomboflight.com
 ```
 
 ## EAS Build Profiles

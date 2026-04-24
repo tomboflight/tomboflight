@@ -163,12 +163,30 @@ def list_issued_certificates(
     )
     try:
         records = service.list_certificates(limit=limit)
+        issued_records = []
+
+        if isinstance(records, dict):
+            payload_records = records.get("issued_certificates")
+            if isinstance(payload_records, list):
+                issued_records = payload_records
+        elif isinstance(records, list):
+            issued_records = records
 
         if has_internal_admin_access(current_user):
-            return records
+            if isinstance(records, dict):
+                return records
+
+            return {
+                "success": True,
+                "count": len(issued_records),
+                "issued_certificates": issued_records,
+            }
 
         visible_records = []
-        for record in records:
+        for record in issued_records:
+            if not isinstance(record, dict):
+                continue
+
             family_id = _extract_family_id_from_record(record)
             if not family_id:
                 continue
@@ -179,7 +197,11 @@ def list_issued_certificates(
             except HTTPException:
                 continue
 
-        return visible_records
+        return {
+            "success": True,
+            "count": len(visible_records),
+            "issued_certificates": visible_records,
+        }
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

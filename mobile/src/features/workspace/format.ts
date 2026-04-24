@@ -67,6 +67,29 @@ export function formatTimestamp(value: unknown, fallback = 'Unavailable'): strin
   }
 }
 
+export function formatBytes(value: unknown, fallback = 'Unavailable'): string {
+  const parsed = asNumber(value);
+  if (parsed === null || parsed < 0) {
+    return fallback;
+  }
+
+  if (parsed < 1024) {
+    return `${Math.round(parsed)} B`;
+  }
+
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let current = parsed / 1024;
+  let unitIndex = 0;
+
+  while (current >= 1024 && unitIndex < units.length - 1) {
+    current /= 1024;
+    unitIndex += 1;
+  }
+
+  const precision = current >= 100 ? 0 : current >= 10 ? 1 : 2;
+  return `${current.toFixed(precision)} ${units[unitIndex]}`;
+}
+
 export function truthyFlags(record: Record<string, unknown>, prefix: string): string[] {
   return Object.entries(record)
     .filter(([key, value]) => key.startsWith(prefix) && Boolean(value))

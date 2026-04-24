@@ -111,6 +111,141 @@ export type ProjectMembersResponse = {
   items: WorkspaceMembership[];
 };
 
+export type UploadRecordPayload = {
+  id?: string;
+  project_id?: string;
+  family_id?: string;
+  member_id?: string;
+  category?: string;
+  evidence_kind?: string;
+  verification_type?: string;
+  original_filename?: string;
+  content_type?: string;
+  size_bytes?: number;
+  uploaded_by?: string;
+  uploaded_by_user_id?: string;
+  vault_scope?: string;
+  visibility_scope?: string;
+  privacy_scope?: string;
+  relationship_scope?: string;
+  verification_status?: string;
+  consent_status?: string;
+  approved_for_cinematic?: boolean;
+  customer_visible?: boolean;
+  internal_only?: boolean;
+  quarantined?: boolean;
+  scan_status?: string;
+  created_at?: string;
+  download_path?: string;
+  [key: string]: unknown;
+};
+
+export type FamilyUploadsPayload = {
+  family_id?: string;
+  count?: number;
+  uploads?: UploadRecordPayload[];
+  [key: string]: unknown;
+};
+
+export type CinematicAssetsPayload = {
+  family_id?: string;
+  count?: number;
+  items?: UploadRecordPayload[];
+  [key: string]: unknown;
+};
+
+export type IssuedCertificateRecordPayload = {
+  id?: string;
+  record_type?: string;
+  certificate_id?: string;
+  base_certificate_id?: string;
+  family_id?: string;
+  family_name?: string;
+  status?: string;
+  version?: number;
+  integrity_hash?: string;
+  issued_at?: string;
+  issued_by?: string;
+  notes?: string;
+  is_latest?: boolean;
+  created_at?: string;
+  updated_at?: string;
+  certificate_payload?: Record<string, unknown>;
+  [key: string]: unknown;
+};
+
+export type IssuedCertificatesListPayload = {
+  success?: boolean;
+  count?: number;
+  issued_certificates: IssuedCertificateRecordPayload[];
+};
+
+export type BillingConfigPayload = {
+  publishable_key?: string;
+  max_cards?: number;
+  portal_return_url?: string | null;
+  [key: string]: unknown;
+};
+
+export type BillingPaymentMethodPayload = {
+  id?: string;
+  brand?: string | null;
+  last4?: string | null;
+  exp_month?: number | null;
+  exp_year?: number | null;
+  funding?: string | null;
+  is_default?: boolean;
+  created_at?: string | null;
+  [key: string]: unknown;
+};
+
+export type BillingSubscriptionPayload = {
+  id?: string;
+  status?: string;
+  collection_method?: string | null;
+  cancel_at_period_end?: boolean;
+  current_period_end?: string | null;
+  default_payment_method_id?: string | null;
+  product_names?: string[];
+  [key: string]: unknown;
+};
+
+export type BillingOverviewPayload = {
+  customer_id?: string | null;
+  chain_label?: string | null;
+  max_cards?: number;
+  cards_on_file?: number;
+  can_add_card?: boolean;
+  default_payment_method_id?: string | null;
+  payment_methods?: BillingPaymentMethodPayload[];
+  subscriptions?: BillingSubscriptionPayload[];
+  [key: string]: unknown;
+};
+
+export type BillingPortalSessionPayload = {
+  url?: string;
+  [key: string]: unknown;
+};
+
+export type OrderPayload = {
+  id?: string;
+  user_id?: string;
+  email?: string;
+  package_code?: string;
+  package_slug?: string;
+  package_name?: string;
+  price_label?: string;
+  item_type?: string;
+  billing_plan?: string;
+  source?: string;
+  status?: string;
+  project_id?: string | null;
+  stripe_session_id?: string | null;
+  stripe_payment_link_id?: string | null;
+  created_at?: string;
+  [key: string]: unknown;
+};
+
 function withAuthToken(token?: string): string | undefined {
   return token || getAccessToken() || undefined;
 }
@@ -145,6 +280,58 @@ function normalizeMemberships(payload: unknown): ProjectMembersResponse {
   }
 
   return { items: [] };
+}
+
+function normalizeUploadList(payload: unknown, key: 'uploads' | 'items'): UploadRecordPayload[] {
+  if (!payload || typeof payload !== 'object') {
+    return [];
+  }
+
+  const record = payload as Record<string, unknown>;
+  const items = record[key];
+  if (!Array.isArray(items)) {
+    return [];
+  }
+
+  return items.filter((entry) => Boolean(entry && typeof entry === 'object')) as UploadRecordPayload[];
+}
+
+function normalizeIssuedCertificates(payload: unknown): IssuedCertificatesListPayload {
+  if (Array.isArray(payload)) {
+    const items = payload.filter((entry) => Boolean(entry && typeof entry === 'object')) as IssuedCertificateRecordPayload[];
+    return {
+      success: true,
+      count: items.length,
+      issued_certificates: items
+    };
+  }
+
+  if (payload && typeof payload === 'object') {
+    const record = payload as Record<string, unknown>;
+    const issued = record.issued_certificates;
+    if (Array.isArray(issued)) {
+      const items = issued.filter((entry) => Boolean(entry && typeof entry === 'object')) as IssuedCertificateRecordPayload[];
+      return {
+        success: typeof record.success === 'boolean' ? record.success : true,
+        count: typeof record.count === 'number' ? record.count : items.length,
+        issued_certificates: items
+      };
+    }
+  }
+
+  return {
+    success: true,
+    count: 0,
+    issued_certificates: []
+  };
+}
+
+function normalizeOrders(payload: unknown): OrderPayload[] {
+  if (!Array.isArray(payload)) {
+    return [];
+  }
+
+  return payload.filter((entry) => Boolean(entry && typeof entry === 'object')) as OrderPayload[];
 }
 
 export function mapWorkspaceDataError(error: unknown): string {
@@ -315,4 +502,140 @@ export async function fetchViewerManifest(
     method: 'GET',
     token: withAuthToken(token)
   });
+}
+
+export async function fetchFamilyUploads(
+  familyId: string,
+  args: {
+    category?: string;
+  } = {},
+  token?: string
+): Promise<FamilyUploadsPayload> {
+  const normalizedFamilyId = String(familyId || '').trim();
+  if (!normalizedFamilyId) {
+    throw new Error('Family id is required to load uploads.');
+  }
+
+  const params = new URLSearchParams();
+  const category = String(args.category || '').trim();
+  if (category) {
+    params.set('category', category);
+  }
+
+  const basePath = API_ENDPOINTS.uploads.byFamily(normalizedFamilyId);
+  const path = params.toString() ? `${basePath}?${params.toString()}` : basePath;
+  const payload = await apiRequest<unknown>(path, {
+    method: 'GET',
+    token: withAuthToken(token)
+  });
+
+  if (payload && typeof payload === 'object') {
+    const record = payload as Record<string, unknown>;
+    return {
+      ...record,
+      family_id: String(record.family_id || '').trim(),
+      count: typeof record.count === 'number' ? record.count : 0,
+      uploads: normalizeUploadList(record, 'uploads')
+    };
+  }
+
+  return {
+    family_id: normalizedFamilyId,
+    count: 0,
+    uploads: []
+  };
+}
+
+export async function fetchCinematicAssets(
+  familyId: string,
+  token?: string
+): Promise<CinematicAssetsPayload> {
+  const normalizedFamilyId = String(familyId || '').trim();
+  if (!normalizedFamilyId) {
+    throw new Error('Family id is required to load cinematic assets.');
+  }
+
+  const payload = await apiRequest<unknown>(API_ENDPOINTS.uploads.cinematicByFamily(normalizedFamilyId), {
+    method: 'GET',
+    token: withAuthToken(token)
+  });
+
+  if (payload && typeof payload === 'object') {
+    const record = payload as Record<string, unknown>;
+    const items = Array.isArray(record.items)
+      ? (record.items.filter((entry) => Boolean(entry && typeof entry === 'object')) as UploadRecordPayload[])
+      : [];
+
+    return {
+      ...record,
+      family_id: String(record.family_id || '').trim(),
+      count: typeof record.count === 'number' ? record.count : items.length,
+      items
+    };
+  }
+
+  return {
+    family_id: normalizedFamilyId,
+    count: 0,
+    items: []
+  };
+}
+
+export async function fetchIssuedCertificates(
+  args: {
+    limit?: number;
+  } = {},
+  token?: string
+): Promise<IssuedCertificatesListPayload> {
+  const params = new URLSearchParams();
+  if (typeof args.limit === 'number' && Number.isFinite(args.limit)) {
+    params.set('limit', String(Math.max(1, Math.min(200, Math.floor(args.limit)))));
+  }
+
+  const path = params.toString() ? `${API_ENDPOINTS.issuedCertificates.list}?${params.toString()}` : API_ENDPOINTS.issuedCertificates.list;
+  const payload = await apiRequest<unknown>(path, {
+    method: 'GET',
+    token: withAuthToken(token)
+  });
+
+  return normalizeIssuedCertificates(payload);
+}
+
+export async function fetchBillingConfig(token?: string): Promise<BillingConfigPayload> {
+  return apiRequest<BillingConfigPayload>(API_ENDPOINTS.billing.config, {
+    method: 'GET',
+    token: withAuthToken(token)
+  });
+}
+
+export async function fetchBillingOverview(token?: string): Promise<BillingOverviewPayload> {
+  return apiRequest<BillingOverviewPayload>(API_ENDPOINTS.billing.overview, {
+    method: 'GET',
+    token: withAuthToken(token)
+  });
+}
+
+export async function createBillingPortalSession(
+  args: {
+    returnUrl?: string;
+  } = {},
+  token?: string
+): Promise<BillingPortalSessionPayload> {
+  const returnUrl = String(args.returnUrl || '').trim();
+  const body = returnUrl ? { return_url: returnUrl } : undefined;
+
+  return apiRequest<BillingPortalSessionPayload>(API_ENDPOINTS.billing.portalSession, {
+    method: 'POST',
+    token: withAuthToken(token),
+    body
+  });
+}
+
+export async function fetchMyOrders(token?: string): Promise<OrderPayload[]> {
+  const payload = await apiRequest<unknown>(API_ENDPOINTS.orders.myOrders, {
+    method: 'GET',
+    token: withAuthToken(token)
+  });
+
+  return normalizeOrders(payload);
 }

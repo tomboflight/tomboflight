@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useRouter } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ScreenContainer } from '../../src/components/ScreenContainer';
 import { signOut } from '../../src/services/auth';
@@ -95,15 +95,35 @@ export default function SettingsScreen() {
   }, [loadSettings]);
 
   const onSignOut = useCallback(async () => {
-    setIsSigningOut(true);
-
-    try {
-      await signOut();
-    } finally {
-      setIsSigningOut(false);
-      router.replace('/(auth)/sign-in');
+    if (isSigningOut) {
+      return;
     }
-  }, [router]);
+
+    Alert.alert('Sign Out', 'Sign out of Tomb of Light on this device?', [
+      {
+        text: 'Cancel',
+        style: 'cancel'
+      },
+      {
+        text: 'Sign Out',
+        style: 'destructive',
+        onPress: () => {
+          setIsSigningOut(true);
+
+          void (async () => {
+            try {
+              await signOut();
+            } finally {
+              if (mountedRef.current) {
+                setIsSigningOut(false);
+              }
+              router.replace('/(auth)/sign-in');
+            }
+          })();
+        }
+      }
+    ]);
+  }, [isSigningOut, router]);
 
   const legalAcceptance = asRecord(profile?.legal_acceptance);
 
