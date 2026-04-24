@@ -354,6 +354,8 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     backgroundColor: appTheme.colors.primary,
     borderRadius: appTheme.radius.md,
+    minHeight: 44,
+    justifyContent: 'center',
     paddingVertical: 10,
     paddingHorizontal: 16
   },

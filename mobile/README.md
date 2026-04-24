@@ -36,16 +36,16 @@ EXPO_PUBLIC_ENV=development
 
 ```bash
 # Development build (dev client)
-npx eas build --profile development --platform ios
-npx eas build --profile development --platform android
+npx eas-cli build --profile development --platform ios
+npx eas-cli build --profile development --platform android
 
 # Internal preview build
-npx eas build --profile preview --platform ios
-npx eas build --profile preview --platform android
+npx eas-cli build --profile preview --platform ios
+npx eas-cli build --profile preview --platform android
 
 # Production build
-npx eas build --profile production --platform ios
-npx eas build --profile production --platform android
+npx eas-cli build --profile production --platform ios
+npx eas-cli build --profile production --platform android
 ```
 
 ## Notes

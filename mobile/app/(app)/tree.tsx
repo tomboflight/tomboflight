@@ -353,6 +353,8 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     backgroundColor: appTheme.colors.primary,
     borderRadius: appTheme.radius.md,
+    minHeight: 44,
+    justifyContent: 'center',
     paddingVertical: 10,
     paddingHorizontal: 16
   },
@@ -395,6 +397,8 @@ const styles = StyleSheet.create({
     backgroundColor: appTheme.colors.primary,
     borderRadius: appTheme.radius.md,
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 46,
     paddingVertical: 12
   },
   primaryButtonText: {
@@ -408,6 +412,8 @@ const styles = StyleSheet.create({
     borderColor: appTheme.colors.border,
     borderRadius: appTheme.radius.md,
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 46,
     paddingVertical: 12
   },
   secondaryButtonText: {

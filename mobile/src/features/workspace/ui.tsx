@@ -287,6 +287,8 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     backgroundColor: appTheme.colors.primary,
     borderRadius: appTheme.radius.md,
+    minHeight: 44,
+    justifyContent: 'center',
     paddingVertical: 10,
     paddingHorizontal: 14
   },
@@ -351,13 +353,16 @@ const styles = StyleSheet.create({
   keyValue: {
     color: appTheme.colors.textPrimary,
     fontSize: appTheme.typography.body,
-    fontWeight: '600'
+    fontWeight: '600',
+    lineHeight: 22,
+    flexShrink: 1
   },
   primaryButton: {
     backgroundColor: appTheme.colors.primary,
     borderRadius: appTheme.radius.md,
     alignItems: 'center',
     justifyContent: 'center',
+    minHeight: 46,
     paddingVertical: 12,
     paddingHorizontal: 14
   },
@@ -373,6 +378,7 @@ const styles = StyleSheet.create({
     borderRadius: appTheme.radius.md,
     alignItems: 'center',
     justifyContent: 'center',
+    minHeight: 46,
     paddingVertical: 12,
     paddingHorizontal: 14
   },

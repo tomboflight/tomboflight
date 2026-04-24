@@ -13,7 +13,7 @@
       },
       "env": {
         "EXPO_PUBLIC_ENV": "development",
-        "EXPO_PUBLIC_API_BASE_URL": "http://127.0.0.1:8000"
+        "EXPO_PUBLIC_API_BASE_URL": "https://tomboflight-api.onrender.com"
       }
     },
     "preview": {
