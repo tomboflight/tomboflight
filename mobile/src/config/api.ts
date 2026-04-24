@@ -8,6 +8,36 @@ const WORKSPACE_ACCESS_PREFIX_ALIASES = [
   '/household-access'
 ] as const;
 
+function isPrivateNetworkHost(hostname: string): boolean {
+  const normalized = hostname.trim().toLowerCase();
+
+  if (!normalized) {
+    return false;
+  }
+
+  if (normalized === 'localhost' || normalized === '127.0.0.1' || normalized === '::1') {
+    return true;
+  }
+
+  if (normalized.endsWith('.local')) {
+    return true;
+  }
+
+  if (/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(normalized)) {
+    return true;
+  }
+
+  if (/^192\.168\.\d{1,3}\.\d{1,3}$/.test(normalized)) {
+    return true;
+  }
+
+  if (/^172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}$/.test(normalized)) {
+    return true;
+  }
+
+  return false;
+}
+
 function getExpoExtraBaseUrl(): string | undefined {
   try {
     const constants = require('expo-constants') as {
@@ -30,12 +60,11 @@ function resolveApiBaseUrl(): string {
 
   try {
     const parsed = new URL(candidate);
-    const localHosts = new Set(['localhost', '127.0.0.1']);
-    const isLocal = localHosts.has(parsed.hostname);
     const isSecure = parsed.protocol === 'https:';
+    const isLocalNetwork = isPrivateNetworkHost(parsed.hostname);
 
-    // Only allow plaintext HTTP for explicit local development hosts.
-    if (!isSecure && !isLocal) {
+    // Allow plaintext HTTP only for local + private network development hosts.
+    if (!isSecure && !isLocalNetwork) {
       return defaultBaseUrl;
     }
 
@@ -75,7 +104,24 @@ export const API_ENDPOINTS = {
     profile: '/users/me/profile'
   },
   workspaceAccess: {
-    myMemberships: '/workspace-access/my-memberships'
+    myMemberships: '/workspace-access/my-memberships',
+    projectMembers: (projectId: string) =>
+      `/workspace-access/project/${encodeURIComponent(projectId)}/members`
+  },
+  projects: {
+    list: '/projects',
+    experienceLane: (projectId: string) =>
+      `/projects/${encodeURIComponent(projectId)}/experience-lane`
+  },
+  projectEntitlements: {
+    byProject: (projectId: string) =>
+      `/project-entitlements/project/${encodeURIComponent(projectId)}`
+  },
+  tree: {
+    byFamily: (familyId: string) => `/tree/${encodeURIComponent(familyId)}`
+  },
+  viewer: {
+    manifest: '/viewer/manifest'
   }
 } as const;
 

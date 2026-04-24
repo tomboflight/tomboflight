@@ -24,12 +24,16 @@ export type WorkspaceMembership = {
   user_id?: string | null;
   email?: string | null;
   full_name?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
   member_role?: string;
   relationship_scope?: string;
   privacy_scope?: string;
   status?: string;
+  invited_by_user_id?: string | null;
   joined_at?: string | null;
   created_at?: string | null;
+  updated_at?: string | null;
   [key: string]: unknown;
 };
 
