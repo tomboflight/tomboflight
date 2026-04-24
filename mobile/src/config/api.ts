@@ -117,6 +117,21 @@ export const API_ENDPOINTS = {
     byProject: (projectId: string) =>
       `/project-entitlements/project/${encodeURIComponent(projectId)}`
   },
+  uploads: {
+    byFamily: (familyId: string) => `/uploads/family/${encodeURIComponent(familyId)}`,
+    cinematicByFamily: (familyId: string) => `/uploads/cinematic/family/${encodeURIComponent(familyId)}`
+  },
+  issuedCertificates: {
+    list: '/issued-certificates'
+  },
+  billing: {
+    config: '/billing/config',
+    overview: '/billing/overview',
+    portalSession: '/billing/portal-session'
+  },
+  orders: {
+    myOrders: '/orders/my-orders'
+  },
   tree: {
     byFamily: (familyId: string) => `/tree/${encodeURIComponent(familyId)}`
   },

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ScreenContainer } from '../../src/components/ScreenContainer';
@@ -245,6 +246,36 @@ export default function DashboardScreen() {
             </View>
           </SectionCard>
 
+          <SectionCard title="Next Actions" subtitle="Jump to the most used mobile workflows.">
+            <View style={styles.actionGrid}>
+              <Link href="/(app)/project" asChild>
+                <Pressable style={styles.actionButton} accessibilityRole="button" accessibilityLabel="Open project">
+                  <Text style={styles.actionButtonText}>Project</Text>
+                </Pressable>
+              </Link>
+              <Link href="/(app)/family" asChild>
+                <Pressable style={styles.actionButton} accessibilityRole="button" accessibilityLabel="Open family">
+                  <Text style={styles.actionButtonText}>Family</Text>
+                </Pressable>
+              </Link>
+              <Link href="/(app)/uploads" asChild>
+                <Pressable style={styles.actionButton} accessibilityRole="button" accessibilityLabel="Open uploads">
+                  <Text style={styles.actionButtonText}>Uploads</Text>
+                </Pressable>
+              </Link>
+              <Link href="/(app)/billing" asChild>
+                <Pressable style={styles.actionButton} accessibilityRole="button" accessibilityLabel="Open billing">
+                  <Text style={styles.actionButtonText}>Billing</Text>
+                </Pressable>
+              </Link>
+              <Link href="/(app)/support" asChild>
+                <Pressable style={styles.actionButtonWide} accessibilityRole="button" accessibilityLabel="Open support">
+                  <Text style={styles.actionButtonText}>Support</Text>
+                </Pressable>
+              </Link>
+            </View>
+          </SectionCard>
+
           <SectionCard title="Account Access Snapshot" subtitle="Authenticated identity and policy-bound status.">
             <View style={styles.rows}>
               <KeyValueRow label="Email" value={accessContext.email || 'Unavailable'} />
@@ -399,6 +430,42 @@ const styles = StyleSheet.create({
   },
   rows: {
     gap: appTheme.spacing.sm
+  },
+  actionGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: appTheme.spacing.sm
+  },
+  actionButton: {
+    minWidth: '31%',
+    flexGrow: 1,
+    borderWidth: 1,
+    borderColor: appTheme.colors.border,
+    borderRadius: appTheme.radius.md,
+    backgroundColor: '#F6F9FE',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 46,
+    paddingVertical: 10,
+    paddingHorizontal: 12
+  },
+  actionButtonWide: {
+    minWidth: '48%',
+    flexGrow: 1,
+    borderWidth: 1,
+    borderColor: appTheme.colors.border,
+    borderRadius: appTheme.radius.md,
+    backgroundColor: '#F6F9FE',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 46,
+    paddingVertical: 10,
+    paddingHorizontal: 12
+  },
+  actionButtonText: {
+    color: appTheme.colors.textPrimary,
+    fontSize: appTheme.typography.body,
+    fontWeight: '600'
   },
   sectionLabel: {
     marginTop: 2,

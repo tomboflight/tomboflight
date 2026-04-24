@@ -26,6 +26,7 @@
     "extra_storage",
     "portrait_polish",
     "tribute_narration",
+    "rush_delivery",
     "extra_mapped_person",
     "extra_zoom_layer",
     "additional_narration_minute",
