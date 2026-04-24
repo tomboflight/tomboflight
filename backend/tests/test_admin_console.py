@@ -863,6 +863,43 @@ class SuperAdminControlsTests(unittest.TestCase):
 
 
 class AdminConsoleOverviewTests(unittest.TestCase):
+    def test_overview_summary_counts_customer_and_admin_users_separately(self):
+        db = FakeDatabase(
+            {
+                "users": [
+                    {"_id": ObjectId(), "email": "l.robinson@tomboflight.com", "account_type": "business_admin"},
+                    {"_id": ObjectId(), "email": "customer-paid@example.com", "account_type": "customer"},
+                    {"_id": ObjectId(), "email": "customer-unpaid@example.com", "account_type": "customer"},
+                ],
+                "projects": [],
+                "orders": [
+                    {
+                        "_id": ObjectId(),
+                        "email": "customer-paid@example.com",
+                        "status": "paid",
+                        "item_type": "package",
+                        "package_code": "legacy_snapshot",
+                    }
+                ],
+                "project_entitlements": [],
+                "audit_logs": [],
+                "payroll_runs": [],
+                "finance_events": [],
+                "uploaded_files": [],
+                "verification_records": [],
+                "household_invites": [],
+                "project_members": [],
+            }
+        )
+        with patch.object(admin_control_service, "get_database", return_value=db):
+            payload = admin_control_service.admin_console_overview(limit=5)
+        summary = payload["summary"]
+        self.assertEqual(summary["total_users"], 3)
+        self.assertEqual(summary["total_business_admin_users"], 1)
+        self.assertEqual(summary["total_customer_users"], 2)
+        self.assertEqual(summary["paid_customer_users"], 1)
+        self.assertEqual(summary["signed_up_no_purchase_users"], 1)
+
     def test_admin_overview_includes_postmark_runtime_configuration_flags(self):
         db = FakeDatabase(
             {

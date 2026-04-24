@@ -174,7 +174,6 @@ ROLE_METADATA: dict[str, dict[str, str]] = {
 
 OFFICER_ROLE_MAPPING: dict[str, list[str]] = {
     "l.robinson@tomboflight.com": ["CEO_SUPER_ADMIN", "EXECUTIVE_TECH_ADMIN"],
-    "l.robinson@tomboflight": ["CEO_SUPER_ADMIN", "EXECUTIVE_TECH_ADMIN"],
     "marquis.l.floyd@tomboflight.com": ["CMO_ADMIN"],
     "jenn.wood@tomboflight.com": ["CFO_ADMIN"],
     "k.goffigan@tomboflight.com": ["COO_ADMIN"],

@@ -2451,8 +2451,13 @@ def _marketing_sections_payload(
 def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
     db = _db()
     users_total = int(db["users"].count_documents({}))
+    users_total_admin = int(db["users"].count_documents({"account_type": "business_admin"}))
+    users_total_customer = max(users_total - users_total_admin, 0)
     active_projects = int(db["projects"].count_documents({"status": {"$ne": "archived"}}))
     paid_orders = int(db["orders"].count_documents({"status": {"$in": list(PAID_ORDER_STATUSES)}}))
+    pending_orders = int(
+        db["orders"].count_documents({"status": {"$in": ["pending", "open", "unpaid", "past_due", "incomplete"]}})
+    )
     now = _now()
     month_start = datetime(now.year, now.month, 1, tzinfo=UTC)
 
@@ -2475,6 +2480,7 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
         "package_without_lane": [],
         "mint_eligible_blocked": [],
     }
+    users_with_orders: set[str] = set()
 
     gross_revenue = 0.0
     successful_payments = 0
@@ -2533,6 +2539,9 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
         "refund",
     }
     for order in db["orders"].find({"status": {"$in": list(finance_statuses)}}).sort("created_at", -1).limit(5000):
+        order_email = _normalize_email(order.get("email"))
+        if order_email:
+            users_with_orders.add(order_email)
         status_value = _normalize(order.get("status")).lower()
         amount = _order_amount_value(order)
         order_dt = _coerce_datetime(order.get("created_at") or order.get("updated_at"))
@@ -2674,6 +2683,32 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
     unresolved_admin_cases = len(mismatches)
     new_accounts = int(db["users"].count_documents({"created_at": {"$gte": seven_days_ago}}))
     new_projects_accounts += new_accounts
+    paid_customers = 0
+    signed_up_no_purchase = 0
+    for user in db["users"].find({}):
+        if _normalize(user.get("account_type")).lower() == "business_admin":
+            continue
+        email = _normalize_email(user.get("email"))
+        if email and email in users_with_orders:
+            paid_customers += 1
+        else:
+            signed_up_no_purchase += 1
+    delivered_projects = int(db["projects"].count_documents({"status": {"$in": ["delivered", "completed"]}}))
+    upload_review_pending_projects = len(
+        {
+            _normalize(item.get("project_id"))
+            for item in db["uploaded_files"].find({"status": {"$in": ["pending", "awaiting_review", "uploaded", "received"]}})
+            if _normalize(item.get("project_id"))
+        }
+    )
+    verification_pending_projects = len(
+        {
+            _normalize(item.get("project_id"))
+            for item in db["verification_records"].find({"status": {"$in": ["pending", "awaiting_review", "in_review"]}})
+            if _normalize(item.get("project_id"))
+        }
+    )
+    mint_blocked_projects = blocked_projects
 
     postmark_token_configured = bool(_normalize(settings.postmark_server_token))
     postmark_from_address_configured = bool(_normalize_email(settings.postmark_from_email))
@@ -2715,11 +2750,21 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
     return {
         "summary": {
             "total_users": users_total,
+            "total_customer_users": users_total_customer,
+            "total_business_admin_users": users_total_admin,
+            "signed_up_no_purchase_users": signed_up_no_purchase,
+            "paid_customer_users": paid_customers,
             "total_active_projects": active_projects,
+            "delivered_projects": delivered_projects,
             "paid_orders": paid_orders,
+            "pending_orders": pending_orders,
             "missing_entitlements": len(missing_entitlements),
+            "missing_package_lane": len(priority_repairs["package_without_lane"]),
             "mint_ready_projects": mint_ready_count,
+            "mint_blocked_projects": mint_blocked_projects,
             "projects_with_data_mismatch": len(mismatches),
+            "upload_review_pending_projects": upload_review_pending_projects,
+            "verification_pending_projects": verification_pending_projects,
             "gross_revenue": round(gross_revenue, 2),
             "net_revenue": round(net_revenue, 2),
             "successful_payments": successful_payments,
