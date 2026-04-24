@@ -1,12 +1,12 @@
 import React from 'react';
-import { ScrollView, StyleSheet, View, ViewStyle } from 'react-native';
+import { ScrollView, StyleProp, StyleSheet, ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { appTheme } from '../theme';
 
 type ScreenContainerProps = {
   children: React.ReactNode;
-  contentStyle?: ViewStyle;
+  contentStyle?: StyleProp<ViewStyle>;
 };
 
 /**
@@ -19,9 +19,11 @@ export function ScreenContainer({ children, contentStyle }: ScreenContainerProps
         contentContainerStyle={[styles.content, contentStyle]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        automaticallyAdjustKeyboardInsets={true}
         contentInsetAdjustmentBehavior="automatic"
       >
-        <View>{children}</View>
+        {children}
       </ScrollView>
     </SafeAreaView>
   );
@@ -34,6 +36,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: appTheme.spacing.lg,
+    paddingBottom: appTheme.spacing.xl + appTheme.spacing.md,
     gap: appTheme.spacing.lg
   }
 });

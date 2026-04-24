@@ -1,6 +1,7 @@
 import React from 'react';
 import { Redirect, Tabs } from 'expo-router';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuthState } from '../../src/hooks';
 import { appTheme } from '../../src/theme';
@@ -10,6 +11,7 @@ import { appTheme } from '../../src/theme';
  */
 export default function AppLayout() {
   const authState = useAuthState();
+  const insets = useSafeAreaInsets();
 
   if (authState.status === 'idle' || authState.status === 'loading') {
     return (
@@ -35,11 +37,15 @@ export default function AppLayout() {
           fontSize: 12,
           fontWeight: '600'
         },
+        tabBarHideOnKeyboard: true,
+        tabBarItemStyle: {
+          paddingVertical: 2
+        },
         tabBarStyle: {
           backgroundColor: appTheme.colors.surface,
           borderTopColor: appTheme.colors.border,
-          height: 64,
-          paddingBottom: 8,
+          height: 56 + insets.bottom,
+          paddingBottom: Math.max(insets.bottom, 8),
           paddingTop: 8
         }
       }}
