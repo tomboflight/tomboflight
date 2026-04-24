@@ -8,15 +8,19 @@
     "userInterfaceStyle": "light",
     "plugins": [
       "expo-router",
+      "expo-dev-client",
       "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.tomboflight.mobile"
     },
-    "android": {},
+    "android": {
+      "package": "com.tomboflight.mobile"
+    },
     "extra": {
       "apiBaseUrl": "https://tomboflight-api.onrender.com"
     }
