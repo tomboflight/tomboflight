@@ -579,22 +579,22 @@ def _build_empty_state(
     if lane == "organization":
         status = "Awaiting Command Portraits"
         description = (
-            f"{NO_APPROVED_MANIFEST_MESSAGE} Upload your first leadership or organization portrait in Verification Uploads to activate this cinematic workspace."
+            "Upload your first leadership or organization portrait in Verification Uploads to activate this cinematic workspace."
         )
     elif lane in {"household", "network"}:
         status = "Awaiting Family Portraits"
         description = (
-            f"{NO_APPROVED_MANIFEST_MESSAGE} Upload portraits for yourself or your family members in Verification Uploads to populate this cinematic viewer automatically."
+            "Upload portraits for yourself or your family members in Verification Uploads to populate this cinematic viewer automatically."
         )
     else:
         status = "Awaiting Portrait Upload"
         if secure_share_only:
             description = (
-                f"{NO_APPROVED_MANIFEST_MESSAGE} Upload your portrait in Verification Uploads to activate your protected secure share page."
+                "Upload your portrait in Verification Uploads to activate your protected secure share page."
             )
         else:
             description = (
-                f"{NO_APPROVED_MANIFEST_MESSAGE} Upload your portrait in Verification Uploads to activate your private cinematic viewer automatically."
+                "Upload your portrait in Verification Uploads to activate your private cinematic viewer automatically."
             )
 
     return {

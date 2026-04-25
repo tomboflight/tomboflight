@@ -4,6 +4,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from bson import ObjectId
+
 from app.routes import viewer_manifest
 from app.services import viewer_manifest_service
 
@@ -288,10 +290,75 @@ class LegacySnapshotUploadBoundariesTests(unittest.TestCase):
         self.assertIn("!canBuildFamilyTree", verification_source)
 
     def test_viewer_manifest_upload_resolution_enforces_project_family_member_scope(self):
-        source = inspect.getsource(viewer_manifest_service._resolve_member_photo_upload)
-        self.assertIn('_normalize_value(upload.get("project_id")) != project_id', source)
-        self.assertIn('_normalize_value(upload.get("family_id")) != family_id', source)
-        self.assertIn('_normalize_value(upload.get("member_id")) != member_id', source)
+        class _UploadCursor:
+            def __init__(self, docs):
+                self._docs = list(docs)
+
+            def sort(self, *_args, **_kwargs):
+                return self
+
+            def __iter__(self):
+                return iter(self._docs)
+
+        class _UploadsCollection:
+            def __init__(self, docs):
+                self._docs = list(docs)
+
+            def find(self, query):
+                def _matches(doc):
+                    return all(doc.get(key) == value for key, value in query.items())
+
+                return _UploadCursor([doc for doc in self._docs if _matches(doc)])
+
+            def find_one(self, query):
+                target_id = query.get("_id")
+                for doc in self._docs:
+                    if doc.get("_id") == target_id:
+                        return doc
+                return None
+
+        class _FakeUploadDB:
+            def __init__(self, docs):
+                self._uploads = _UploadsCollection(docs)
+
+            def __getitem__(self, name):
+                if name == "uploaded_files":
+                    return self._uploads
+                raise KeyError(name)
+
+        upload_foreign = {
+            "_id": ObjectId(),
+            "category": "member_photo",
+            "project_id": "project-foreign",
+            "family_id": "family-foreign",
+            "member_id": "member-foreign",
+            "relative_path": "uploads/foreign.jpg",
+        }
+        upload_valid = {
+            "_id": ObjectId(),
+            "category": "member_photo",
+            "project_id": "project-1",
+            "family_id": "family-1",
+            "member_id": "member-1",
+            "relative_path": "uploads/member-1.jpg",
+        }
+        db = _FakeUploadDB([upload_foreign, upload_valid])
+
+        blocked = viewer_manifest_service._resolve_member_photo_upload(
+            db=db,
+            member={"_id": "member-1", "photo_upload_id": str(upload_foreign["_id"])},
+            project_id="project-1",
+            family_id="family-1",
+        )
+        self.assertIsNone(blocked)
+
+        allowed = viewer_manifest_service._resolve_member_photo_upload(
+            db=db,
+            member={"_id": "member-1", "photo_upload_id": str(upload_valid["_id"])},
+            project_id="project-1",
+            family_id="family-1",
+        )
+        self.assertEqual(allowed, upload_valid)
 
 
 if __name__ == "__main__":
