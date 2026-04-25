@@ -655,7 +655,7 @@
     );
 
     const uploads = submission.uploads || {};
-    renderReviewBlock(uploadsNode, "Uploads", "5", [
+    renderReviewBlock(uploadsNode, "Upload Plan", "5", [
       `Approx. Upload Count: ${uploads.approx_upload_count || "—"}`,
       `Primary Asset Type: ${uploads.primary_asset_type || "—"}`,
       `Key Portraits: ${uploads.key_portraits || "—"}`,

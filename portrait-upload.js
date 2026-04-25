@@ -62,6 +62,18 @@
     node.textContent = "";
   }
 
+  function uploadStatusLabel(upload) {
+    if (upload.quarantined) return "quarantined — under security review";
+    const vs = String(upload.verification_status || "").toLowerCase();
+    if (vs === "rejected") return "rejected";
+    if (vs === "needs_correction") return "needs correction";
+    if (upload.approved_for_cinematic) return "approved for cinematic use";
+    if (vs === "approved") return "approved";
+    if (vs === "pending") return "pending review";
+    if (upload.id || upload._id) return "uploaded";
+    return "pending review";
+  }
+
   function getFamilyIdFromUrl() {
     const params = new URLSearchParams(window.location.search);
     return params.get("family_id") || "";
@@ -702,6 +714,7 @@
             <div class="card-number">${index + 1}</div>
             ${preview}
             <h3>${escapeHtml(upload.original_filename || "Uploaded Portrait")}</h3>
+            <p class="card-copy"><strong>Status:</strong> ${escapeHtml(uploadStatusLabel(upload))}</p>
             <p class="card-copy"><strong>Category:</strong> ${escapeHtml(upload.category || "member_photo")}</p>
             <p class="card-copy"><strong>Content Type:</strong> ${escapeHtml(upload.content_type || "—")}</p>
             <p class="card-copy"><strong>Size:</strong> ${escapeHtml(upload.size_bytes ?? "—")}</p>
