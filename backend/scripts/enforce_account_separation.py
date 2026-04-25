@@ -849,14 +849,24 @@ def _deactivate_admin_entitlements(
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Enforce Tomb of Light personal/admin account separation."
+        description="Audit Tomb of Light personal/admin account separation (dry-run only)."
     )
     parser.add_argument(
         "--apply",
         action="store_true",
-        help="Write changes. Omit for a dry-run report.",
+        help="Deprecated and disabled. This script is audit-only and will not apply writes.",
     )
     args = parser.parse_args()
+    if args.apply:
+        print(
+            json.dumps(
+                {
+                    "mode": "rejected",
+                    "error": "--apply is disabled for production safety; run without --apply for audit output only.",
+                }
+            )
+        )
+        return 2
 
     actions: list[dict[str, Any]] = []
     account_standings: list[dict[str, Any]] = []
@@ -907,7 +917,7 @@ def main() -> int:
     print(
         json.dumps(
             {
-                "mode": "apply" if args.apply else "dry_run",
+                "mode": "audit_only",
                 "actions": actions,
                 "account_standings": account_standings,
             },

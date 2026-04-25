@@ -1,6 +1,5 @@
 // viewer/js/script.js
 // Tomb of Light — Cinematic Viewer
-// Public mode keeps the Moreland demo.
 // Signed-in mode loads a customer-specific viewer manifest from the API.
 
 (() => {
@@ -187,6 +186,44 @@
     left: { x: 18, y: 50 },
     right: { x: 82, y: 50 },
   };
+  const UNAVAILABLE_MANIFEST = {
+    mode: "unavailable",
+    navigation_mode: "sequence",
+    hero_kicker: "Private Viewer",
+    hero_title: "Viewer Access Required",
+    hero_body: "This viewer loads only with an authenticated project manifest.",
+    instructions:
+      "Return to your dashboard and open the viewer from your entitled project workspace.",
+    path_title: "Viewer Status",
+    path_items: ["No viewer manifest is currently available."],
+    nav_labels: {
+      left: "Previous",
+      right: "Next",
+    },
+    initial_state_id: "unavailable",
+    controls: {
+      allow_lineage_navigation: false,
+      allow_zoom: false,
+      allow_reset: false,
+      allow_narration_auto_advance: false,
+      allow_gaze_navigation: false,
+      allow_branch_navigation: false,
+    },
+    states: [
+      {
+        id: "unavailable",
+        image: "",
+        title: "Viewer Unavailable",
+        status: "Manifest required",
+        node: "Private viewer",
+        description: "No production viewer data is available for this session.",
+        narration: "",
+        left_state_id: "",
+        right_state_id: "",
+        eye_targets: DEFAULT_DYNAMIC_EYE_TARGETS,
+      },
+    ],
+  };
 
   let currentManifest = null;
   let statesById = {};
@@ -311,15 +348,15 @@
     });
 
     const normalized = {
-      mode: String(manifest?.mode || "demo").trim() || "demo",
+      mode: String(manifest?.mode || "dynamic").trim() || "dynamic",
       navigationMode,
-      heroKicker: String(manifest?.hero_kicker || "Genesis Prototype").trim(),
+      heroKicker: String(manifest?.hero_kicker || "Private Viewer").trim(),
       heroTitle: String(
-        manifest?.hero_title || "Interactive Family Lineage",
+        manifest?.hero_title || "Private Family Viewer",
       ).trim(),
       heroBody: String(manifest?.hero_body || "").trim(),
       instructions: String(manifest?.instructions || "").trim(),
-      pathTitle: String(manifest?.path_title || "Lineage Flow").trim(),
+      pathTitle: String(manifest?.path_title || "Viewer Path").trim(),
       pathItems: Array.isArray(manifest?.path_items)
         ? manifest.path_items.map(function (item) {
             return String(item || "").trim();
@@ -417,7 +454,7 @@
     if (manifest.mode === "dynamic") {
       document.title = `Tomb of Light | ${manifest.heroTitle}`;
     } else {
-      document.title = "Tomb of Light | Genesis Prototype";
+      document.title = "Tomb of Light | Private Viewer";
     }
   }
 
@@ -452,7 +489,7 @@
   }
 
   function applyManifest(manifest) {
-    currentManifest = normalizeManifest(manifest || DEMO_MANIFEST);
+    currentManifest = normalizeManifest(manifest || UNAVAILABLE_MANIFEST);
     const configuredZoomLayers = Number(currentManifest?.controls?.max_zoom_layers);
     if (Number.isFinite(configuredZoomLayers) && configuredZoomLayers > 0) {
       scaleMax = 1 + configuredZoomLayers * ZOOM_STEP;
@@ -991,7 +1028,7 @@
         return manifest;
       }
     } catch (error) {
-      console.warn("Viewer manifest fallback to demo:", error);
+      console.warn("Viewer manifest request failed:", error);
     }
 
     return null;
@@ -1034,7 +1071,7 @@
 
   async function boot() {
     const liveManifest = await loadDynamicManifest();
-    applyManifest(liveManifest || DEMO_MANIFEST);
+    applyManifest(liveManifest || UNAVAILABLE_MANIFEST);
     bindEvents();
     await applyState(currentManifest.initialStateId || stateOrder[0] || "");
     startNarrationAutoAdvance();
