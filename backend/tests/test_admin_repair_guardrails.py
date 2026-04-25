@@ -19,7 +19,7 @@ from app.services import admin_control_service
 
 class FakeCursor(list):
     def sort(self, field_name, direction):
-        return FakeCursor(sorted(self, key=lambda item: str(item.get(field_name) or ""), reverse=direction < 0))
+        return FakeCursor(sorted(self, key=lambda item: str(item.get(field_name) or ""), reverse=direction == -1))
 
     def limit(self, n):
         return FakeCursor(self[:n])
@@ -91,7 +91,7 @@ class FakeCollection:
                     elif actual not in values:
                         return False
                 else:
-                    return False
+                    raise NotImplementedError(f"FakeCollection does not support query operator: {list(expected.keys())}")
             elif actual != expected:
                 return False
         return True

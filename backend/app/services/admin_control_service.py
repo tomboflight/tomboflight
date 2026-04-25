@@ -1879,7 +1879,7 @@ def super_admin_apply_package_change(
             # existing order.  Only package metadata (code/slug/name/lane) is
             # safe to normalise here; payment state must come from real Stripe
             # webhook processing.
-            order_updates.pop("status", None)
+            order_updates.pop("status", None)  # strip payment state – must never be written here
             db["orders"].update_one({"_id": order_doc.get("_id")}, {"$set": order_updates})
 
     repaired = repair_record(project_id=resolved_project_id, order_id=order_id)
@@ -3966,6 +3966,21 @@ def _validated_role_value(role_value: str) -> str:
     return normalized_role
 
 
+def _is_internal_admin_account(user: dict[str, Any]) -> bool:
+    """Return True if the user is an internal admin account.
+
+    Used to guard super_admin role escalation: only users who are already
+    internal team members (identified by an existing admin role or explicit
+    business_admin account type) may be promoted to super_admin.
+    """
+    existing_role = normalize_role_code(_normalize(user.get("role"))) or "user"
+    if existing_role in INTERNAL_ROLE_KEYS:
+        return True
+    if _normalize(user.get("account_type")).lower() == "business_admin":
+        return True
+    return False
+
+
 def super_admin_update_user(
     *,
     user_id: str,
@@ -4003,14 +4018,11 @@ def super_admin_update_user(
         # user is already an internal admin account (not a customer account).
         # This prevents accidental or malicious escalation of customer accounts
         # to the highest privilege level.
-        if new_role in SUPER_ADMIN_ROLE_CODES:
-            existing_role = normalize_role_code(_normalize(user.get("role"))) or "user"
-            is_internal = existing_role in INTERNAL_ROLE_KEYS or _normalize(user.get("account_type")).lower() == "business_admin"
-            if not is_internal:
-                raise ValueError(
-                    "super_admin role can only be granted to existing internal admin accounts. "
-                    "The target user's current role must already be an internal admin role."
-                )
+        if new_role in SUPER_ADMIN_ROLE_CODES and not _is_internal_admin_account(user):
+            raise ValueError(
+                "super_admin role can only be granted to existing internal admin accounts. "
+                "The target user's current role must already be an internal admin role."
+            )
         updates["role"] = new_role
     if "access_tier" in payload:
         updates["access_tier"] = normalize_role_code(_normalize(payload.get("access_tier"))) or None
