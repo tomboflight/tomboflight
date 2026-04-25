@@ -72,6 +72,15 @@
     node.textContent = "";
   }
 
+  function isEntitlementError(msg) {
+    return (
+      msg.includes("can_upload") ||
+      msg.includes("entitlement") ||
+      msg.includes("package") ||
+      msg.includes("permission")
+    );
+  }
+
   function uploadStatusLabel(upload) {
     if (upload.quarantined) return "quarantined — under security review";
     const vs = String(upload.verification_status || "").toLowerCase();
@@ -163,8 +172,7 @@
       }
     } catch (error) {
       const msg = error.message || "Unable to load family record.";
-      if (msg.includes("can_upload") || msg.includes("entitlement") ||
-          msg.includes("package") || msg.includes("permission")) {
+      if (isEntitlementError(msg)) {
         setStatus(
           familyStatus,
           "Your active package does not include vault file access. Contact support if you believe this is an error.",
@@ -221,6 +229,9 @@
       currentContext = context;
 
       const entitlements = context?.resolved_entitlements || {};
+      // The backend /uploads/private-media endpoint requires can_upload_portraits
+      // OR can_upload_verification_docs — vault access is gated by the same
+      // entitlements, so we mirror that check here.
       const canUpload =
         entitlements.can_upload_portraits ||
         entitlements.can_upload_verification_docs;
@@ -494,8 +505,7 @@
           );
         } catch (error) {
           const msg = error.message || "Upload failed. Please try again.";
-          if (msg.includes("can_upload") || msg.includes("entitlement") ||
-              msg.includes("package") || msg.includes("permission")) {
+          if (isEntitlementError(msg)) {
             setStatus(
               uploadStatus,
               "Your active package does not allow vault file uploads. Contact support or upgrade your package.",
