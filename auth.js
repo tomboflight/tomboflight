@@ -1154,19 +1154,9 @@
     return "Internal Admin";
   }
 
-  function isPrototypeCustomer(user) {
-    return (
-      normalizeValue(user?.account_type) === "prototype_customer" ||
-      normalizeValue(user?.prototype_key) === "genesis_prototype" ||
-      normalizeValue(user?.email) === "larry.frontend.test2@tomboflight.com"
-    );
-  }
-
   function getCustomerAccountLabel(user, packageName) {
     const packageLabel = String(packageName || "").trim();
-    const baseLabel = isPrototypeCustomer(user)
-      ? "Genesis Prototype Customer"
-      : "Customer Account";
+    const baseLabel = "Customer Account";
     return packageLabel ? `${baseLabel} - ${packageLabel}` : baseLabel;
   }
 
