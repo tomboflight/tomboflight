@@ -133,6 +133,7 @@ class SuperAdminPackageChangePayload(BaseModel):
     package_code: str = Field(min_length=1)
     project_lane: str = Field(default="")
     order_status: str = Field(default="")
+    reason: str = Field(default="", description="Required for apply operations to maintain audit traceability.")
 
 
 class SuperAdminRepairPayload(BaseModel):
@@ -284,9 +285,8 @@ def sync_project_package(
     payload: SyncPackagePayload | None = None,
     current_user: dict[str, Any] = Depends(require_permission("admin.control.write")),
 ):
-    del current_user
     try:
-        return sync_package(project_id=project_id, order_id=(payload.order_id if payload else ""))
+        return sync_package(project_id=project_id, order_id=(payload.order_id if payload else ""), actor=current_user)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
@@ -296,9 +296,8 @@ def assign_project_lane(
     project_id: str,
     current_user: dict[str, Any] = Depends(require_permission("admin.control.write")),
 ):
-    del current_user
     try:
-        return assign_lane(project_id=project_id)
+        return assign_lane(project_id=project_id, actor=current_user)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
@@ -309,11 +308,11 @@ def link_project_to_order(
     payload: LinkOrderPayload | None = None,
     current_user: dict[str, Any] = Depends(require_permission("admin.control.billing")),
 ):
-    del current_user
     try:
         return link_order_to_project(
             order_id=order_id,
             project_id=(payload.project_id if payload else ""),
+            actor=current_user,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
@@ -325,12 +324,12 @@ def generate_project_entitlement(
     payload: GenerateEntitlementPayload | None = None,
     current_user: dict[str, Any] = Depends(require_permission("admin.control.billing")),
 ):
-    del current_user
     try:
         return generate_entitlement(
             project_id=project_id,
             order_id=(payload.order_id if payload else ""),
             force=bool(payload.force) if payload else True,
+            actor=current_user,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
@@ -357,9 +356,8 @@ def queue_project_for_mint_review(
         require_any_permission(["admin.control.mint", "admin.control.mint.readiness"])
     ),
 ):
-    del current_user
     try:
-        return enable_mint_review(project_id=project_id, order_id=(payload.order_id if payload else ""))
+        return enable_mint_review(project_id=project_id, order_id=(payload.order_id if payload else ""), actor=current_user)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
@@ -370,9 +368,8 @@ def repair_project_record(
     payload: RepairRecordPayload | None = None,
     current_user: dict[str, Any] = Depends(require_permission("admin.control.write")),
 ):
-    del current_user
     try:
-        return repair_record(project_id=project_id, order_id=(payload.order_id if payload else ""))
+        return repair_record(project_id=project_id, order_id=(payload.order_id if payload else ""), actor=current_user)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
@@ -382,9 +379,8 @@ def repair_project_mint_state(
     project_id: str,
     current_user: dict[str, Any] = Depends(require_permission("admin.control.mint")),
 ):
-    del current_user
     try:
-        return repair_project_mint_status(project_id=project_id)
+        return repair_project_mint_status(project_id=project_id, actor=current_user)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
@@ -394,9 +390,8 @@ def resync_project_mint_receipt(
     project_id: str,
     current_user: dict[str, Any] = Depends(require_permission("admin.control.mint")),
 ):
-    del current_user
     try:
-        return resync_current_mint_receipt(project_id=project_id)
+        return resync_current_mint_receipt(project_id=project_id, actor=current_user)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
@@ -404,7 +399,7 @@ def resync_project_mint_receipt(
 @router.post("/bulk/repair-missing-entitlements")
 def bulk_repair_entitlements(
     payload: BulkRepairPayload | None = None,
-    current_user: dict[str, Any] = Depends(require_permission("admin.control.view")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.billing")),
 ):
     _assert_bulk_action_allowed(current_user, "repair-missing-entitlements")
     result = repair_missing_entitlements(limit=(payload.limit if payload else BULK_ACTION_DEFAULT_LIMIT))
@@ -415,7 +410,7 @@ def bulk_repair_entitlements(
 @router.post("/repairs/missing-entitlements")
 def repair_missing_entitlements_route(
     payload: BulkRepairPayload | None = None,
-    current_user: dict[str, Any] = Depends(require_permission("admin.control.view")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.billing")),
 ):
     return bulk_repair_entitlements(payload=payload, current_user=current_user)
 
@@ -423,7 +418,7 @@ def repair_missing_entitlements_route(
 @router.post("/bulk/assign-missing-lanes")
 def bulk_assign_lanes(
     payload: BulkRepairPayload | None = None,
-    current_user: dict[str, Any] = Depends(require_permission("admin.control.view")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.write")),
 ):
     _assert_bulk_action_allowed(current_user, "assign-missing-lanes")
     result = assign_missing_lanes(limit=(payload.limit if payload else BULK_ACTION_DEFAULT_LIMIT))
@@ -434,7 +429,7 @@ def bulk_assign_lanes(
 @router.post("/repairs/missing-lanes")
 def repair_missing_lanes_route(
     payload: BulkRepairPayload | None = None,
-    current_user: dict[str, Any] = Depends(require_permission("admin.control.view")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.write")),
 ):
     return bulk_assign_lanes(payload=payload, current_user=current_user)
 
@@ -442,7 +437,7 @@ def repair_missing_lanes_route(
 @router.post("/bulk/link-unlinked-paid-orders")
 def bulk_link_paid_orders(
     payload: BulkRepairPayload | None = None,
-    current_user: dict[str, Any] = Depends(require_permission("admin.control.view")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.billing")),
 ):
     _assert_bulk_action_allowed(current_user, "link-unlinked-paid-orders")
     result = link_unlinked_paid_orders(limit=(payload.limit if payload else BULK_ACTION_DEFAULT_LIMIT))
@@ -453,7 +448,7 @@ def bulk_link_paid_orders(
 @router.post("/repairs/unlinked-paid-orders")
 def link_unlinked_paid_orders_route(
     payload: BulkRepairPayload | None = None,
-    current_user: dict[str, Any] = Depends(require_permission("admin.control.view")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.billing")),
 ):
     return bulk_link_paid_orders(payload=payload, current_user=current_user)
 
@@ -461,7 +456,7 @@ def link_unlinked_paid_orders_route(
 @router.post("/bulk/normalize-broken-package-records")
 def bulk_normalize_package_records(
     payload: BulkRepairPayload | None = None,
-    current_user: dict[str, Any] = Depends(require_permission("admin.control.view")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.write")),
 ):
     _assert_bulk_action_allowed(current_user, "normalize-broken-package-records")
     result = normalize_broken_package_records(limit=(payload.limit if payload else BULK_ACTION_DEFAULT_LIMIT))
@@ -472,7 +467,7 @@ def bulk_normalize_package_records(
 @router.post("/bulk/refresh-mint-readiness")
 def bulk_refresh_mint_readiness(
     payload: BulkRepairPayload | None = None,
-    current_user: dict[str, Any] = Depends(require_permission("admin.control.view")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.mint")),
 ):
     _assert_bulk_action_allowed(current_user, "refresh-mint-readiness")
     result = refresh_mint_readiness(limit=(payload.limit if payload else BULK_ACTION_DEFAULT_LIMIT))
@@ -494,7 +489,7 @@ def bulk_repair_selected_records(
 @router.post("/bulk/repair-all-safe-records")
 def bulk_repair_all_safe_records(
     payload: BulkRepairPayload | None = None,
-    current_user: dict[str, Any] = Depends(require_permission("admin.control.view")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.write")),
 ):
     _assert_bulk_action_allowed(current_user, "repair-all-safe-records")
     result = repair_all_safe_records(limit=(payload.limit if payload else BULK_ACTION_DEFAULT_LIMIT))
@@ -583,6 +578,11 @@ def super_admin_apply_project_package_change(
     payload: SuperAdminPackageChangePayload,
     current_user: dict[str, Any] = Depends(require_super_admin),
 ):
+    if not (payload.reason or "").strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="A reason is required for package-change apply to maintain audit traceability.",
+        )
     try:
         return super_admin_apply_package_change(
             project_id=project_id,

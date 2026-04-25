@@ -1385,7 +1385,7 @@ def _serialize_project(project: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def sync_package(*, project_id: str, order_id: str = "") -> dict[str, Any]:
+def sync_package(*, project_id: str, order_id: str = "", actor: dict[str, Any] | None = None) -> dict[str, Any]:
     db = _db()
     project, order = _resolve_project_order_context(project_id, preferred_order_id=order_id)
     order_ref = order or {}
@@ -1396,6 +1396,7 @@ def sync_package(*, project_id: str, order_id: str = "") -> dict[str, Any]:
     if project_doc_id is None:
         raise ValueError("Invalid project identifier.")
 
+    before_package = _normalize(project.get("package_code") or project.get("package_slug"))
     project_updates = {
         "package_code": package_fields["package_code"],
         "package_slug": package_fields["package_slug"],
@@ -1435,6 +1436,15 @@ def sync_package(*, project_id: str, order_id: str = "") -> dict[str, Any]:
         after_package_code=package_fields["package_code"],
         source="admin_control.sync_package",
     )
+    _write_admin_action_audit(
+        actor=actor,
+        action="repair.sync_package",
+        target_type="project",
+        target_id=_normalize(project.get("_id")),
+        before={"package_code": before_package, "project_lane": _normalize(project.get("project_lane"))},
+        after={"package_code": package_fields["package_code"], "project_lane": package_fields["project_lane"]},
+        context={"surface": "admin_control_center.repair"},
+    )
     return {
         "project": _serialize_project(refreshed_project),
         "order": _serialize_order(refreshed_order),
@@ -1442,12 +1452,13 @@ def sync_package(*, project_id: str, order_id: str = "") -> dict[str, Any]:
     }
 
 
-def assign_lane(*, project_id: str) -> dict[str, Any]:
+def assign_lane(*, project_id: str, actor: dict[str, Any] | None = None) -> dict[str, Any]:
     db = _db()
     project = _project_by_id(project_id)
     if project is None:
         raise ValueError("Project not found.")
 
+    before_lane = _normalize(project.get("project_lane")).lower()
     entitlement = get_project_entitlement(_normalize(project.get("_id")))
     package_fields = _package_fields_from_context(project, None, entitlement)
     lane = package_fields["project_lane"]
@@ -1475,10 +1486,19 @@ def assign_lane(*, project_id: str) -> dict[str, Any]:
             user_id_text=_resolve_entitlement_user_id(project, None),
         )
 
+    _write_admin_action_audit(
+        actor=actor,
+        action="repair.assign_lane",
+        target_type="project",
+        target_id=_normalize(project.get("_id")),
+        before={"project_lane": before_lane},
+        after={"project_lane": lane},
+        context={"surface": "admin_control_center.repair"},
+    )
     return {"project_id": _normalize(project.get("_id")), "project_lane": lane, "entitlement_updated": bool(entitlement)}
 
 
-def link_order_to_project(*, order_id: str, project_id: str = "") -> dict[str, Any]:
+def link_order_to_project(*, order_id: str, project_id: str = "", actor: dict[str, Any] | None = None) -> dict[str, Any]:
     db = _db()
     order = _order_by_id(order_id)
     if order is None:
@@ -1502,12 +1522,22 @@ def link_order_to_project(*, order_id: str, project_id: str = "") -> dict[str, A
     if owner_email and order_email and owner_email != order_email:
         raise ValueError("Order email does not match project owner email.")
 
+    before_project_id = _normalize_object_id(order.get("project_id"))
     project_value: Any = project_id_str
     project_oid = _to_object_id(project_id_str)
     if project_oid is not None:
         project_value = project_oid
     db["orders"].update_one({"_id": order["_id"]}, {"$set": {"project_id": project_value}})
 
+    _write_admin_action_audit(
+        actor=actor,
+        action="repair.link_order_to_project",
+        target_type="order",
+        target_id=_normalize(order.get("_id")),
+        before={"project_id": before_project_id or None},
+        after={"project_id": project_id_str},
+        context={"surface": "admin_control_center.repair"},
+    )
     return {
         "order_id": _normalize(order.get("_id")),
         "project_id": project_id_str,
@@ -1515,7 +1545,7 @@ def link_order_to_project(*, order_id: str, project_id: str = "") -> dict[str, A
     }
 
 
-def generate_entitlement(*, project_id: str, order_id: str = "", force: bool = True) -> dict[str, Any]:
+def generate_entitlement(*, project_id: str, order_id: str = "", force: bool = True, actor: dict[str, Any] | None = None) -> dict[str, Any]:
     project, order = _resolve_project_order_context(project_id, preferred_order_id=order_id)
     project_id_str = _normalize(project.get("_id"))
     existing = get_project_entitlement(project_id_str)
@@ -1569,6 +1599,15 @@ def generate_entitlement(*, project_id: str, order_id: str = "", force: bool = T
             {"$set": {"package_lane": package_fields["project_lane"], "updated_at": _now()}},
         )
 
+    _write_admin_action_audit(
+        actor=actor,
+        action="repair.generate_entitlement",
+        target_type="project",
+        target_id=project_id_str,
+        before={"entitlement_exists": existing is not None, "package_code": _normalize((existing or {}).get("package_code")) or None},
+        after={"entitlement_exists": True, "package_code": package_fields["package_code"], "created": existing is None},
+        context={"surface": "admin_control_center.repair", "force": force},
+    )
     return {
         "entitlement": get_project_entitlement(project_id_str),
         "created": existing is None,
@@ -1576,7 +1615,7 @@ def generate_entitlement(*, project_id: str, order_id: str = "", force: bool = T
     }
 
 
-def repair_record(*, project_id: str, order_id: str = "") -> dict[str, Any]:
+def repair_record(*, project_id: str, order_id: str = "", actor: dict[str, Any] | None = None) -> dict[str, Any]:
     db = _db()
     project, order = _resolve_project_order_context(project_id, preferred_order_id=order_id)
     project_id_str = _normalize(project.get("_id") or project.get("id"))
@@ -1651,7 +1690,7 @@ def repair_record(*, project_id: str, order_id: str = "") -> dict[str, Any]:
     )
     mint_repair = rebuild_mint_summary_for_project(project_id_str)
 
-    return {
+    result = {
         "project": _serialize_project(refreshed_project),
         "order": _serialize_order(refreshed_order),
         "entitlement": get_project_entitlement(project_id_str),
@@ -1664,6 +1703,24 @@ def repair_record(*, project_id: str, order_id: str = "") -> dict[str, Any]:
         },
         "readiness": readiness,
     }
+    _write_admin_action_audit(
+        actor=actor,
+        action="repair.repair_record",
+        target_type="project",
+        target_id=project_id_str,
+        before={
+            "package_code": _normalize(project.get("package_code")),
+            "project_lane": _normalize(project.get("project_lane")),
+            "entitlement_exists": entitlement_before is not None,
+        },
+        after={
+            "package_code": package_fields["package_code"],
+            "project_lane": package_fields["project_lane"],
+            "entitlement_exists": get_project_entitlement(project_id_str) is not None,
+        },
+        context={"surface": "admin_control_center.repair"},
+    )
+    return result
 
 
 def _build_package_change_summary(*, before: dict[str, Any], proposed: dict[str, Any]) -> list[dict[str, Any]]:
@@ -1711,7 +1768,19 @@ def super_admin_preview_package_change(
     target_lane = _normalize(project_lane).lower() or _normalize(package_profile.get("package_lane")).lower() or _normalize(project.get("project_lane")).lower()
     if target_lane not in ALLOWED_LANES:
         raise ValueError("Invalid project lane.")
-    requested_order_status = _normalize(order_status).lower() or _normalize((order or {}).get("status")).lower() or "paid"
+
+    # Package-change operations must not alter payment state.  Preserve the
+    # existing order status and never default to a paid value; doing so would
+    # fake payment state without a real Stripe transaction.
+    existing_order_status = _normalize((order or {}).get("status")).lower()
+    requested_order_status = _normalize(order_status).lower()
+    if requested_order_status in PAID_ORDER_STATUSES and existing_order_status not in PAID_ORDER_STATUSES:
+        raise ValueError(
+            "Admin package-change cannot escalate order status to a paid state. "
+            "Payment state must reflect a real Stripe transaction."
+        )
+    if not requested_order_status:
+        requested_order_status = existing_order_status or "pending"
 
     project_after = {
         "package_code": normalized_package,
@@ -1806,6 +1875,11 @@ def super_admin_apply_package_change(
         if order_doc is not None:
             order_updates = dict((preview.get("proposed_after") or {}).get("order") or {})
             order_updates = {key: value for key, value in order_updates.items() if value is not None}
+            # Never let a package-change write update the payment status of an
+            # existing order.  Only package metadata (code/slug/name/lane) is
+            # safe to normalise here; payment state must come from real Stripe
+            # webhook processing.
+            order_updates.pop("status", None)
             db["orders"].update_one({"_id": order_doc.get("_id")}, {"$set": order_updates})
 
     repaired = repair_record(project_id=resolved_project_id, order_id=order_id)
@@ -1846,18 +1920,39 @@ def super_admin_apply_package_change(
     }
 
 
-def repair_project_mint_status(*, project_id: str) -> dict[str, Any]:
+def repair_project_mint_status(*, project_id: str, actor: dict[str, Any] | None = None) -> dict[str, Any]:
     if not _normalize(project_id):
         raise ValueError("Project id is required.")
-    return rebuild_mint_summary_for_project(project_id)
+    result = rebuild_mint_summary_for_project(project_id)
+    _write_admin_action_audit(
+        actor=actor,
+        action="mint_readiness.repair_mint_status",
+        target_type="project",
+        target_id=_normalize(project_id),
+        before={},
+        after={"mint_summary_rebuilt": True, "current_status": _normalize((result or {}).get("current_status"))},
+        context={"surface": "admin_control_center.mint_readiness"},
+    )
+    return result
 
 
-def resync_current_mint_receipt(*, project_id: str) -> dict[str, Any]:
+def resync_current_mint_receipt(*, project_id: str, actor: dict[str, Any] | None = None) -> dict[str, Any]:
     canonical = resolve_canonical_mint_status(project_id, include_history=False)
     mint_record_id = _normalize(canonical.get("current_mint_record_id"))
     if not mint_record_id:
         raise ValueError("Project has no mint record to sync.")
+    # sync_receipt_for_mint_record fetches real on-chain receipt data; it does
+    # not fabricate token_id, tx_hash, or wallet_address fields.
     sync_result = sync_receipt_for_mint_record(mint_record_id)
+    _write_admin_action_audit(
+        actor=actor,
+        action="mint_execution.resync_mint_receipt",
+        target_type="mint_record",
+        target_id=mint_record_id,
+        before={"current_status": _normalize(canonical.get("current_status"))},
+        after={"synced": True},
+        context={"surface": "admin_control_center.mint_readiness", "project_id": _normalize(project_id)},
+    )
     return {
         "project_id": _normalize(project_id),
         "sync_result": sync_result,
@@ -1968,7 +2063,7 @@ def run_readiness_check(*, project_id: str, order_id: str = "") -> dict[str, Any
     }
 
 
-def enable_mint_review(*, project_id: str, order_id: str = "") -> dict[str, Any]:
+def enable_mint_review(*, project_id: str, order_id: str = "", actor: dict[str, Any] | None = None) -> dict[str, Any]:
     db = _db()
     readiness = run_readiness_check(project_id=project_id, order_id=order_id)
     if readiness.get("mint_already_completed"):
@@ -1999,6 +2094,15 @@ def enable_mint_review(*, project_id: str, order_id: str = "") -> dict[str, Any]
     )
 
     auto_mint_allowed = bool(settings.nft_auto_mint_on_review_enabled)
+    _write_admin_action_audit(
+        actor=actor,
+        action="mint_readiness.enable_mint_review",
+        target_type="project",
+        target_id=_normalize(project_id),
+        before={"mint_review_state": "not_ready"},
+        after={"mint_review_state": "ready", "mint_review_ready": True},
+        context={"surface": "admin_control_center.mint_readiness"},
+    )
     return {
         "project_id": _normalize(project_id),
         "mint_review_ready": True,
@@ -3894,7 +3998,20 @@ def super_admin_update_user(
             raise ValueError("Invalid account status.")
         updates["status"] = status_value
     if "role" in payload:
-        updates["role"] = _validated_role_value(_normalize(payload.get("role")))
+        new_role = _validated_role_value(_normalize(payload.get("role")))
+        # Granting super_admin role is high-impact.  Require that the target
+        # user is already an internal admin account (not a customer account).
+        # This prevents accidental or malicious escalation of customer accounts
+        # to the highest privilege level.
+        if new_role in SUPER_ADMIN_ROLE_CODES:
+            existing_role = normalize_role_code(_normalize(user.get("role"))) or "user"
+            is_internal = existing_role in INTERNAL_ROLE_KEYS or _normalize(user.get("account_type")).lower() == "business_admin"
+            if not is_internal:
+                raise ValueError(
+                    "super_admin role can only be granted to existing internal admin accounts. "
+                    "The target user's current role must already be an internal admin role."
+                )
+        updates["role"] = new_role
     if "access_tier" in payload:
         updates["access_tier"] = normalize_role_code(_normalize(payload.get("access_tier"))) or None
     if "department_role" in payload:
