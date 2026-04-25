@@ -344,21 +344,22 @@ class LegacySnapshotUploadBoundariesTests(unittest.TestCase):
         }
         db = _FakeUploadDB([upload_foreign, upload_valid])
 
-        blocked = viewer_manifest_service._resolve_member_photo_upload(
+        fallback_scoped = viewer_manifest_service._resolve_member_photo_upload(
             db=db,
             member={"_id": "member-1", "photo_upload_id": str(upload_foreign["_id"])},
             project_id="project-1",
             family_id="family-1",
         )
-        self.assertIsNone(blocked)
+        self.assertEqual(fallback_scoped, upload_valid)
+        self.assertNotEqual(fallback_scoped, upload_foreign)
 
-        allowed = viewer_manifest_service._resolve_member_photo_upload(
+        blocked = viewer_manifest_service._resolve_member_photo_upload(
             db=db,
-            member={"_id": "member-1", "photo_upload_id": str(upload_valid["_id"])},
+            member={"_id": "member-2", "photo_upload_id": str(upload_foreign["_id"])},
             project_id="project-1",
             family_id="family-1",
         )
-        self.assertEqual(allowed, upload_valid)
+        self.assertIsNone(blocked)
 
 
 if __name__ == "__main__":
