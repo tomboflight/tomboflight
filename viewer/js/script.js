@@ -40,145 +40,6 @@
   const EMBED_MODE =
     PREVIEW_MODE || params.get("embed") === "1" || window.self !== window.top;
 
-  const DEMO_MANIFEST = {
-    mode: "demo",
-    navigation_mode: "branch",
-    hero_kicker: "Genesis Prototype",
-    hero_title: "Interactive Family Lineage",
-    hero_body:
-      "Navigate through generations of the Moreland lineage and explore family branches through the Tomb of Light viewer.",
-    instructions:
-      "Hold C to reveal the Iris Gate. Hover the left or right side of the gaze field to arm Origins or Future Line, then scroll in to enter. Scroll out to return. Use the zoom buttons below only when you want a closer look at the portrait. (Full viewer only)",
-    path_title: "Lineage Flow",
-    path_items: [
-      "Malik → Parents",
-      "Malik → Descendants",
-      "Imani → Descendants",
-      "Selah → Descendants",
-      "Julian → Parents",
-    ],
-    nav_labels: {
-      left: "Origins",
-      right: "Future Line",
-    },
-    initial_state_id: "malik",
-    branch_options_by_state: {
-      parents: [
-        { label: "Julian", target_state_id: "julian" },
-        { label: "Malik", target_state_id: "malik" },
-        { label: "Selah", target_state_id: "selah" },
-      ],
-    },
-    states: [
-      {
-        id: "malik",
-        image: "images/malik.jpg",
-        title: "Malik Moreland",
-        status: "Anchor Portrait",
-        node: "Malik Moreland",
-        description:
-          "Starting at the anchor portrait for the Genesis family line.",
-        narration:
-          "This is Malik Moreland, the anchor portrait of the Genesis family line. From here, the Moreland lineage unfolds across generations.",
-        left_state_id: "parents",
-        right_state_id: "malik_descendants",
-        eye_targets: { left: { x: 44, y: 31 }, right: { x: 56, y: 31 } },
-      },
-      {
-        id: "parents",
-        image: "images/parents.jpg",
-        title: "Elias & Clara Moreland",
-        status: "Parent Structure",
-        node: "Parent Layer",
-        description:
-          "Choose a family branch from the shared parent structure.",
-        narration:
-          "Elias and Clara Moreland represent the foundational parent structure. From this layer, three distinct family branches emerge.",
-        left_state_id: "malik",
-        right_state_id: null,
-        eye_targets: { left: { x: 40, y: 31 }, right: { x: 60, y: 31 } },
-      },
-      {
-        id: "malik_descendants",
-        image: "images/malik_descendants.jpg",
-        title: "Malik Descendants",
-        status: "Descendant Layer",
-        node: "Malik Descendants",
-        description: "Malik's line expands into the next generation.",
-        narration:
-          "Malik's descendants extend his lineage forward, connecting to the next generation of the Moreland family tree.",
-        left_state_id: "malik",
-        right_state_id: "imani",
-        eye_targets: { left: { x: 42, y: 33 }, right: { x: 58, y: 33 } },
-      },
-      {
-        id: "imani",
-        image: "images/imani.jpg",
-        title: "Imani Moreland",
-        status: "Next Generation Anchor",
-        node: "Imani Moreland",
-        description: "Imani becomes the next generation anchor portrait.",
-        narration:
-          "Imani Moreland carries the anchor role for the next generation, continuing the Moreland lineage into new chapters.",
-        left_state_id: "malik_descendants",
-        right_state_id: "imani_descendants",
-        eye_targets: { left: { x: 44, y: 30 }, right: { x: 56, y: 30 } },
-      },
-      {
-        id: "imani_descendants",
-        image: "images/imani_descendants.jpg",
-        title: "Imani Descendants",
-        status: "Future Legacy Layer",
-        node: "Imani Descendants",
-        description: "Imani's descendants extend the family line forward.",
-        narration:
-          "Imani's descendants reach further into the future, extending the Moreland family legacy forward in time.",
-        left_state_id: "imani",
-        right_state_id: null,
-        eye_targets: { left: { x: 43, y: 33 }, right: { x: 57, y: 33 } },
-      },
-      {
-        id: "julian",
-        image: "images/julian.jpg",
-        title: "Julian Moreland",
-        status: "Sibling Branch",
-        node: "Julian Moreland",
-        description: "Julian is a sibling branch with no descendant layer.",
-        narration:
-          "Julian Moreland is a sibling branch. His path connects back through the shared parent structure without a descendant layer.",
-        left_state_id: "parents",
-        right_state_id: null,
-        eye_targets: { left: { x: 44, y: 31 }, right: { x: 56, y: 31 } },
-      },
-      {
-        id: "selah",
-        image: "images/selah.jpg",
-        title: "Selah Carter",
-        status: "Sibling Branch",
-        node: "Selah Carter",
-        description: "Selah is a sibling branch with her own descendants.",
-        narration:
-          "Selah Carter branches from the parent structure with her own distinct lineage and family tree.",
-        left_state_id: "parents",
-        right_state_id: "selah_descendants",
-        eye_targets: { left: { x: 44, y: 31 }, right: { x: 56, y: 31 } },
-      },
-      {
-        id: "selah_descendants",
-        image: "images/selah_descendants.jpg",
-        title: "Selah Descendants",
-        status: "Descendant Layer",
-        node: "Selah Descendants",
-        description: "Selah's line expands into her descendant branch.",
-        narration:
-          "Selah's descendants form her unique branch, expanding the family line outward from the Moreland parent structure.",
-        left_state_id: "selah",
-        right_state_id: null,
-        eye_targets: { left: { x: 43, y: 33 }, right: { x: 57, y: 33 } },
-      },
-    ],
-  };
-
   const NARRATION_DISPLAY_DURATION_MS = 4500;
   const AUTO_ADVANCE_INTERVAL_MS = 5000;
   const DEFAULT_ZOOM_LAYERS = 2;
@@ -191,11 +52,11 @@
     navigation_mode: "sequence",
     hero_kicker: "Private Viewer",
     hero_title: "Viewer Access Required",
-    hero_body: "This viewer loads only with an authenticated project manifest.",
+    hero_body: "No approved viewer manifest is available for this project yet.",
     instructions:
       "Return to your dashboard and open the viewer from your entitled project workspace.",
     path_title: "Viewer Status",
-    path_items: ["No viewer manifest is currently available."],
+    path_items: ["No approved viewer manifest is available for this project yet."],
     nav_labels: {
       left: "Previous",
       right: "Next",
@@ -216,7 +77,7 @@
         title: "Viewer Unavailable",
         status: "Manifest required",
         node: "Private viewer",
-        description: "No production viewer data is available for this session.",
+        description: "No approved viewer manifest is available for this project yet.",
         narration: "",
         left_state_id: "",
         right_state_id: "",
@@ -1014,6 +875,9 @@
     const query = new URLSearchParams();
     const projectId = params.get("project_id");
     const familyId = params.get("family_id");
+    if (!projectId && !familyId) {
+      return null;
+    }
 
     if (projectId) query.set("project_id", projectId);
     if (familyId) query.set("family_id", familyId);

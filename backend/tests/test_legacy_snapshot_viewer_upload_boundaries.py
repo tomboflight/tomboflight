@@ -287,6 +287,12 @@ class LegacySnapshotUploadBoundariesTests(unittest.TestCase):
         )
         self.assertIn("!canBuildFamilyTree", verification_source)
 
+    def test_viewer_manifest_upload_resolution_enforces_project_family_member_scope(self):
+        source = inspect.getsource(viewer_manifest_service._resolve_member_photo_upload)
+        self.assertIn('_normalize_value(upload.get("project_id")) != project_id', source)
+        self.assertIn('_normalize_value(upload.get("family_id")) != family_id', source)
+        self.assertIn('_normalize_value(upload.get("member_id")) != member_id', source)
+
 
 if __name__ == "__main__":
     unittest.main()

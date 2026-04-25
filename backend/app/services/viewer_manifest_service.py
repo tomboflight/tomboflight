@@ -18,6 +18,7 @@ DEFAULT_EYE_TARGETS = {
     "left": {"x": 18, "y": 50},
     "right": {"x": 82, "y": 50},
 }
+NO_APPROVED_MANIFEST_MESSAGE = "No approved viewer manifest is available for this project yet."
 
 
 def _now() -> datetime:
@@ -578,22 +579,22 @@ def _build_empty_state(
     if lane == "organization":
         status = "Awaiting Command Portraits"
         description = (
-            "Upload your first leadership or organization portrait in Verification Uploads to activate this cinematic workspace."
+            f"{NO_APPROVED_MANIFEST_MESSAGE} Upload your first leadership or organization portrait in Verification Uploads to activate this cinematic workspace."
         )
     elif lane in {"household", "network"}:
         status = "Awaiting Family Portraits"
         description = (
-            "Upload portraits for yourself or your family members in Verification Uploads to populate this cinematic viewer automatically."
+            f"{NO_APPROVED_MANIFEST_MESSAGE} Upload portraits for yourself or your family members in Verification Uploads to populate this cinematic viewer automatically."
         )
     else:
         status = "Awaiting Portrait Upload"
         if secure_share_only:
             description = (
-                "Upload your portrait in Verification Uploads to activate your protected secure share page."
+                f"{NO_APPROVED_MANIFEST_MESSAGE} Upload your portrait in Verification Uploads to activate your protected secure share page."
             )
         else:
             description = (
-                "Upload your portrait in Verification Uploads to activate your private cinematic viewer automatically."
+                f"{NO_APPROVED_MANIFEST_MESSAGE} Upload your portrait in Verification Uploads to activate your private cinematic viewer automatically."
             )
 
     return {
@@ -729,6 +730,9 @@ def build_viewer_manifest(
     project_id: str = "",
     family_id: str = "",
 ) -> dict[str, Any]:
+    if not _normalize_value(project_id) and not _normalize_value(family_id):
+        raise ValueError(NO_APPROVED_MANIFEST_MESSAGE)
+
     db = get_database()
     if db is None:
         raise ValueError("Database is not connected.")
@@ -739,7 +743,7 @@ def build_viewer_manifest(
         family_id=family_id,
     )
     if project is None:
-        raise ValueError("Viewer workspace could not be resolved for this account.")
+        raise ValueError(NO_APPROVED_MANIFEST_MESSAGE)
 
     submission = _find_submission_for_project(project)
     family_doc, primary_member, project = load_project_workspace_anchor(
