@@ -34,6 +34,16 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
 
         self.assertEqual(violations, [])
 
+    def test_marketing_homepage_links_viewer_through_preview_only_route(self):
+        contents = (REPO_ROOT / "index.html").read_text(encoding="utf-8")
+
+        self.assertRegex(
+            contents,
+            r'<a[^>]*class="[^"]*\bhero-viewer-link\b[^"]*"[^>]*href="viewer/viewer-preview\.html"',
+        )
+        self.assertIn('src="viewer/viewer-preview.html"', contents)
+        self.assertNotIn('class="mini-link hero-viewer-link" href="viewer/"', contents)
+
 
 if __name__ == "__main__":
     unittest.main()
