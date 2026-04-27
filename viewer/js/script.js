@@ -85,6 +85,142 @@
       },
     ],
   };
+  const PREVIEW_MANIFEST = {
+    mode: "prototype",
+    navigation_mode: "graph",
+    hero_kicker: "Genesis Prototype Viewer",
+    hero_title: "Moreland Family Lineage Prototype",
+    hero_body:
+      "Preview a cinematic legacy flow anchored by Malik Moreland and mapped through parent structure and descendant branches.",
+    instructions:
+      "Use Origins, Future Line, or branch choices to move through the lineage prototype.",
+    path_title: "Prototype Path",
+    path_items: [
+      "Anchor Portrait — Malik Moreland",
+      "Parent Structure — Moreland Family Origins",
+      "Descendant Branches — Future Legacy Layers",
+      "Guided Legacy Build — Package-aware delivery paths",
+    ],
+    nav_labels: {
+      left: "Origins",
+      right: "Future Line",
+    },
+    initial_state_id: "malik_anchor",
+    controls: {
+      allow_lineage_navigation: true,
+      allow_zoom: true,
+      allow_reset: true,
+      allow_narration_auto_advance: true,
+      allow_gaze_navigation: true,
+      allow_branch_navigation: true,
+      max_zoom_layers: 4,
+    },
+    family: {
+      family_name: "Moreland Family",
+      anchor_name: "Malik Moreland",
+    },
+    states: [
+      {
+        id: "malik_anchor",
+        image: "images/malik.jpg",
+        title: "Malik Moreland — Legacy Anchor",
+        status: "Genesis node active",
+        node: "Malik Moreland",
+        description:
+          "Anchor portrait and entry node for the Moreland family lineage experience.",
+        narration:
+          "This prototype begins with Malik Moreland as the anchor portrait for a protected lineage build.",
+        left_state_id: "moreland_origins",
+        right_state_id: "moreland_descendants",
+        eye_targets: {
+          left: { x: 20, y: 50 },
+          right: { x: 80, y: 50 },
+        },
+      },
+      {
+        id: "moreland_origins",
+        image: "images/parents.jpg",
+        title: "Moreland Family Origins",
+        status: "Parent structure",
+        node: "Moreland Parent Structure",
+        description:
+          "Parent nodes and source records are arranged into a protected family origin layer.",
+        narration:
+          "Origins map the parent structure and evidence trail that supports continuity across generations.",
+        left_state_id: "",
+        right_state_id: "malik_anchor",
+        eye_targets: {
+          left: { x: 28, y: 50 },
+          right: { x: 72, y: 50 },
+        },
+      },
+      {
+        id: "moreland_descendants",
+        image: "images/malik_descendants.jpg",
+        title: "Future Legacy Layers",
+        status: "Descendant branches",
+        node: "Moreland Descendant Branches",
+        description:
+          "Descendant pathways extend forward with package-aware viewer flows and stewardship continuity.",
+        narration:
+          "Future layers carry memory, identity, and lineage structure forward through descendant branches.",
+        left_state_id: "malik_anchor",
+        right_state_id: "imani_branch",
+        eye_targets: {
+          left: { x: 24, y: 50 },
+          right: { x: 78, y: 50 },
+        },
+      },
+      {
+        id: "imani_branch",
+        image: "images/imani_descendants.jpg",
+        title: "Family Branch — Imani",
+        status: "Branch node",
+        node: "Imani Branch",
+        description:
+          "Branch nodes model how family sub-lines can be explored while preserving protected access boundaries.",
+        narration:
+          "Branch navigation shows how the lineage engine supports guided exploration without exposing private vault content.",
+        left_state_id: "moreland_descendants",
+        right_state_id: "selah_branch",
+        eye_targets: {
+          left: { x: 24, y: 50 },
+          right: { x: 77, y: 50 },
+        },
+      },
+      {
+        id: "selah_branch",
+        image: "images/selah_descendants.jpg",
+        title: "Future Legacy Branch — Selah",
+        status: "Continuity branch",
+        node: "Selah Branch",
+        description:
+          "Future legacy branches represent long-horizon continuity with controlled narrative and entitlement-aware access.",
+        narration:
+          "This final prototype branch demonstrates continuity planning for future generations in the Moreland family archive.",
+        left_state_id: "imani_branch",
+        right_state_id: "",
+        eye_targets: {
+          left: { x: 25, y: 50 },
+          right: { x: 75, y: 50 },
+        },
+      },
+    ],
+    branch_options_by_state: {
+      malik_anchor: [
+        { label: "Open Origins Layer", target_state_id: "moreland_origins" },
+        { label: "Open Descendant Layer", target_state_id: "moreland_descendants" },
+      ],
+      moreland_descendants: [
+        { label: "Open Imani Branch", target_state_id: "imani_branch" },
+        { label: "Return to Anchor", target_state_id: "malik_anchor" },
+      ],
+      imani_branch: [
+        { label: "Open Selah Branch", target_state_id: "selah_branch" },
+        { label: "Back to Descendants", target_state_id: "moreland_descendants" },
+      ],
+    },
+  };
 
   let currentManifest = null;
   let statesById = {};
@@ -934,8 +1070,11 @@
   }
 
   async function boot() {
-    const liveManifest = await loadDynamicManifest();
-    applyManifest(liveManifest || UNAVAILABLE_MANIFEST);
+    const liveManifest = PREVIEW_MODE ? null : await loadDynamicManifest();
+    const selectedManifest = PREVIEW_MODE
+      ? PREVIEW_MANIFEST
+      : liveManifest || UNAVAILABLE_MANIFEST;
+    applyManifest(selectedManifest);
     bindEvents();
     await applyState(currentManifest.initialStateId || stateOrder[0] || "");
     startNarrationAutoAdvance();
