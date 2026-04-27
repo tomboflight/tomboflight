@@ -416,6 +416,16 @@ select:focus-visible {
   align-items: start;
 }
 
+.hero-prototype-first .container {
+  display: grid;
+  gap: 18px;
+}
+
+.hero-shell-prototype {
+  grid-template-columns: minmax(0, 1.24fr) minmax(330px, 0.76fr);
+  align-items: stretch;
+}
+
 .eyebrow {
   display: inline-block;
   margin-bottom: 16px;
@@ -461,6 +471,17 @@ select:focus-visible {
 .hero-copy-tech {
   position: sticky;
   top: 112px;
+}
+
+.hero-copy-prototype {
+  position: static;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.hero-copy-prototype h1 {
+  max-width: 13ch;
 }
 
 .hero-copy h1,
@@ -533,6 +554,10 @@ select:focus-visible {
 
 .hero-visual-tech {
   gap: 20px;
+}
+
+.hero-visual-prototype {
+  gap: 0;
 }
 
 .hero-visual-grid {
@@ -620,9 +645,50 @@ select:focus-visible {
   position: relative;
 }
 
+.hero-viewer-card-main {
+  padding: 26px;
+  border-color: rgba(114, 188, 255, 0.22);
+  background:
+    radial-gradient(
+      circle at 12% 16%,
+      rgba(114, 188, 255, 0.18),
+      transparent 32%
+    ),
+    radial-gradient(
+      circle at 88% 12%,
+      rgba(214, 176, 102, 0.12),
+      transparent 26%
+    ),
+    linear-gradient(180deg, rgba(8, 13, 24, 0.92), rgba(4, 8, 16, 0.96));
+}
+
+.hero-demo-card-top-prototype {
+  margin-bottom: 18px;
+}
+
+.hero-viewer-card-main .hero-demo-card-top h2 {
+  max-width: 24ch;
+  font-size: clamp(1.75rem, 2.5vw, 2.85rem);
+}
+
+.hero-viewer-card-main .hero-viewer-stage {
+  aspect-ratio: 16 / 8.8;
+  min-height: clamp(320px, 52vh, 560px);
+}
+
 .hero-viewer-stage {
   position: relative;
   isolation: isolate;
+}
+
+.hero-trust-row {
+  margin-top: 4px;
+  justify-content: center;
+}
+
+.hero-trust-row .meta-pill {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.16);
 }
 
 .hero-tech-fixed {
@@ -2894,6 +2960,14 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
     position: static;
   }
 
+  .hero-shell-prototype {
+    gap: 16px;
+  }
+
+  .hero-trust-row {
+    justify-content: flex-start;
+  }
+
   .portal-core-copy h1,
   .portal-entry-panel h1 {
     max-width: none;
@@ -3222,6 +3296,21 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
     pointer-events: none;
   }
 
+  .hero-viewer-card-main .hero-viewer-stage {
+    aspect-ratio: 16 / 10;
+    min-height: clamp(250px, 58vw, 360px);
+    max-height: none;
+  }
+
+  .hero-viewer-card-main .hero-demo-card-top h2 {
+    font-size: clamp(1.45rem, 5.7vw, 2rem);
+    max-width: none;
+  }
+
+  .hero-viewer-card-main .hero-viewer-stage iframe {
+    pointer-events: auto;
+  }
+
   .hero-manifesto {
     padding: 16px 18px;
     margin-top: 18px;
@@ -3426,6 +3515,12 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
     aspect-ratio: 16 / 6.9;
     max-height: 214px;
     border-radius: 18px;
+  }
+
+  .hero-viewer-card-main .hero-viewer-stage {
+    aspect-ratio: 4 / 3;
+    min-height: 220px;
+    max-height: none;
   }
 
   .presence-badge {
