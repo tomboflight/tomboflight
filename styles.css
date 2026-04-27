@@ -422,7 +422,7 @@ select:focus-visible {
 }
 
 .hero-shell-prototype {
-  grid-template-columns: minmax(0, 1.24fr) minmax(330px, 0.76fr);
+  grid-template-columns: minmax(0, 1.3fr) minmax(340px, 0.7fr);
   align-items: stretch;
 }
 
@@ -474,14 +474,15 @@ select:focus-visible {
 }
 
 .hero-copy-prototype {
-  position: static;
+  position: sticky;
+  top: 112px;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
 }
 
 .hero-copy-prototype h1 {
-  max-width: 13ch;
+  max-width: 12.8ch;
 }
 
 .hero-copy h1,
@@ -557,7 +558,7 @@ select:focus-visible {
 }
 
 .hero-visual-prototype {
-  gap: 0;
+  gap: 16px;
 }
 
 .hero-visual-grid {
@@ -667,13 +668,84 @@ select:focus-visible {
 }
 
 .hero-viewer-card-main .hero-demo-card-top h2 {
-  max-width: 24ch;
+  max-width: 22ch;
   font-size: clamp(1.75rem, 2.5vw, 2.85rem);
 }
 
 .hero-viewer-card-main .hero-viewer-stage {
   aspect-ratio: 16 / 8.8;
-  min-height: clamp(320px, 52vh, 560px);
+  min-height: clamp(360px, 54vh, 620px);
+}
+
+.platform-model-card {
+  background:
+    radial-gradient(
+      circle at 12% 18%,
+      rgba(56, 136, 205, 0.14),
+      transparent 32%
+    ),
+    linear-gradient(180deg, rgba(8, 13, 24, 0.92), rgba(5, 9, 17, 0.96));
+}
+
+.platform-model-card .hero-demo-card-top h2 {
+  max-width: 20ch;
+}
+
+.platform-model-card .lineage-track {
+  margin-top: 14px;
+  gap: 10px;
+}
+
+.platform-model-card .lineage-node {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-color: rgba(114, 188, 255, 0.24);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.02)),
+    rgba(7, 12, 22, 0.8);
+}
+
+.platform-model-card .lineage-line {
+  margin-left: 18px;
+}
+
+.platform-model-card .stack-num {
+  width: 38px;
+  height: 38px;
+  font-size: 0.82rem;
+  letter-spacing: 0.05em;
+}
+
+.core-layers-card {
+  background:
+    radial-gradient(
+      circle at 88% 18%,
+      rgba(214, 176, 102, 0.12),
+      transparent 30%
+    ),
+    linear-gradient(180deg, rgba(9, 14, 25, 0.92), rgba(5, 9, 17, 0.96));
+}
+
+.core-layers-card .hero-demo-card-top h2 {
+  max-width: 20ch;
+}
+
+.core-layers-card .mini-stack-item {
+  border-color: rgba(255, 255, 255, 0.1);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.02)),
+    rgba(7, 12, 22, 0.72);
+}
+
+.core-layers-card .mini-stack-item h3 {
+  margin-bottom: 6px;
+  font-size: 1.05rem;
+}
+
+.core-layers-card .mini-stack-item p {
+  font-size: 0.95rem;
 }
 
 .hero-viewer-stage {
@@ -689,6 +761,35 @@ select:focus-visible {
 .hero-trust-row .meta-pill {
   background: rgba(255, 255, 255, 0.03);
   border-color: rgba(255, 255, 255, 0.16);
+}
+
+.architecture-panel-home {
+  border-color: rgba(214, 176, 102, 0.22);
+  background:
+    radial-gradient(
+      circle at 16% 14%,
+      rgba(56, 136, 205, 0.12),
+      transparent 34%
+    ),
+    radial-gradient(
+      circle at 84% 12%,
+      rgba(214, 176, 102, 0.09),
+      transparent 28%
+    ),
+    linear-gradient(135deg, rgba(9, 15, 26, 0.92), rgba(5, 9, 17, 0.97));
+}
+
+.architecture-panel-home h2 {
+  margin: 0 0 12px;
+  font-size: clamp(2rem, 2.9vw, 3rem);
+  line-height: 1.05;
+  letter-spacing: -0.045em;
+  max-width: 18ch;
+}
+
+.architecture-panel-home .section-lead {
+  margin-top: 0;
+  max-width: 68ch;
 }
 
 .hero-tech-fixed {
@@ -3302,6 +3403,17 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
     max-height: none;
   }
 
+  .platform-model-card .lineage-node {
+    gap: 10px;
+    font-size: 0.95rem;
+  }
+
+  .platform-model-card .stack-num {
+    width: 34px;
+    height: 34px;
+    font-size: 0.75rem;
+  }
+
   .hero-viewer-card-main .hero-demo-card-top h2 {
     font-size: clamp(1.45rem, 5.7vw, 2rem);
     max-width: none;
@@ -3521,6 +3633,10 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
     aspect-ratio: 4 / 3;
     min-height: 220px;
     max-height: none;
+  }
+
+  .architecture-panel-home h2 {
+    max-width: none;
   }
 
   .presence-badge {
