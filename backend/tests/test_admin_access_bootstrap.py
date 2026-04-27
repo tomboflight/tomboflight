@@ -102,10 +102,7 @@ class AdminAccessBootstrapTests(unittest.TestCase):
             mapping["l.robinson@tomboflight.com"],
             ["ceo_super_admin", "executive_tech_admin"],
         )
-        self.assertEqual(
-            mapping["l.robinson@tomboflight"],
-            ["ceo_super_admin", "executive_tech_admin"],
-        )
+        self.assertNotIn("l.robinson@tomboflight", mapping)
         self.assertEqual(mapping["jenn.wood@tomboflight.com"], ["finance_admin"])
         self.assertEqual(mapping["marquis.l.floyd@tomboflight.com"], ["marketing_admin"])
         self.assertEqual(mapping["k.goffigan@tomboflight.com"], ["operations_admin"])
@@ -160,4 +157,3 @@ class AdminAccessBootstrapTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

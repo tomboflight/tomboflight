@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Upload Hub | Tomb of Light</title>
+    <meta
+      name="description"
+      content="The Tomb of Light Upload Hub. Choose where to upload portraits, verification documents, or private vault files."
+    />
+    <link rel="stylesheet" href="styles.css?v=20260326-3" />
+  </head>
+  <body>
+    <a href="#main-content" class="skip-to-content">Skip to main content</a>
+
+    <div class="site-watermark" aria-hidden="true"></div>
+
+    <div class="page-wrap">
+      <header class="site-header">
+        <div class="container site-header-inner">
+          <a class="brand" href="index.html" aria-label="Tomb of Light home">
+            <span>Tomb of Light<span class="brand-symbol">™</span></span>
+          </a>
+
+          <button
+            class="menu-toggle"
+            type="button"
+            aria-label="Toggle navigation"
+            aria-expanded="false"
+            aria-controls="site-nav"
+          >
+            Menu
+          </button>
+
+          <nav class="site-nav" id="site-nav" aria-label="Portal navigation">
+            <a href="dashboard.html">Dashboard</a>
+            <a href="upload-hub.html" aria-current="page">Upload Hub</a>
+            <a href="portrait-upload.html">Portrait Uploads</a>
+            <a href="verification-upload.html">Verification Uploads</a>
+            <a href="vault-upload.html">Vault Files</a>
+            <a href="faq.html">Help</a>
+          </nav>
+
+          <div class="header-actions">
+            <button class="btn btn-secondary" type="button" data-logout-btn>
+              Log Out
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main id="main-content" data-upload-hub-page>
+        <section class="page-hero">
+          <div class="container">
+            <div class="page-hero-panel">
+              <span class="eyebrow">Upload Hub</span>
+              <h1>Where do you want to upload?</h1>
+              <p class="card-copy">
+                Choose the correct upload type below. Each path routes to a
+                dedicated upload workspace with the correct entitlement checks,
+                metadata, and review workflow for that file type.
+              </p>
+              <p class="card-copy" style="margin-top: 0.5rem">
+                If you are still completing intake,
+                <a href="intake-uploads.html">the Upload Plan step</a> records
+                what you intend to upload — it does not upload files. Return
+                here after intake is complete to submit your actual files.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section class="page-sections">
+          <div class="container form-shell">
+
+            <div class="form-panel">
+              <span class="eyebrow">Upload Status Key</span>
+              <div class="helper">
+                After uploading, files show one of these statuses:
+                <strong>uploaded</strong> (received),
+                <strong>pending review</strong> (awaiting admin review),
+                <strong>approved</strong> (cleared),
+                <strong>approved for cinematic use</strong> (cleared for
+                viewer production),
+                <strong>approved for verification</strong> (cleared as a
+                verified record),
+                <strong>saved to vault</strong> (stored in private vault),
+                <strong>needs correction</strong> (resubmission required), or
+                <strong>rejected</strong> (not accepted). Uploading does not
+                guarantee approval, legal validation, or production use.
+              </div>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">A — Cinematic Photos &amp; Portraits</span>
+              <h2>Portraits &amp; Family Photos</h2>
+              <p class="card-copy">
+                Use this for portraits, family photos, couple photos,
+                parent-child photos, visual memories, and images intended for
+                cinematic viewer or digital legacy production.
+              </p>
+
+              <div class="grid-3" style="margin-top: 1.25rem">
+                <div>
+                  <div class="card-number">✓</div>
+                  <h3>Founder portraits</h3>
+                  <p class="card-copy">
+                    Primary subject portraits for cinematic viewer production.
+                  </p>
+                </div>
+                <div>
+                  <div class="card-number">✓</div>
+                  <h3>Family group photos</h3>
+                  <p class="card-copy">
+                    Spouse, children, parents, and household family images.
+                  </p>
+                </div>
+                <div>
+                  <div class="card-number">✓</div>
+                  <h3>Visual memories</h3>
+                  <p class="card-copy">
+                    Supporting imagery for digital legacy production. JPG, PNG,
+                    or WEBP only.
+                  </p>
+                </div>
+              </div>
+
+              <div class="helper" style="margin-top: 1rem">
+                After upload: status will show <strong>uploaded</strong> →
+                <strong>pending review</strong> → <strong>approved for
+                cinematic use</strong> when cleared.
+              </div>
+
+              <div class="inline-actions" style="margin-top: 1.25rem">
+                <a class="btn btn-primary" href="portrait-upload.html">
+                  Upload Portraits &amp; Photos
+                </a>
+              </div>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">B — Verification Documents</span>
+              <h2>Verification Records</h2>
+              <p class="card-copy">
+                Use this for birth certificates, marriage records, adoption
+                records, death certificates, obituaries, government IDs when
+                required, and other supporting records needed to verify
+                lineage or identity.
+              </p>
+
+              <div class="grid-3" style="margin-top: 1.25rem">
+                <div>
+                  <div class="card-number">✓</div>
+                  <h3>Birth &amp; death certificates</h3>
+                  <p class="card-copy">
+                    Official vital records for lineage verification.
+                  </p>
+                </div>
+                <div>
+                  <div class="card-number">✓</div>
+                  <h3>Marriage &amp; adoption records</h3>
+                  <p class="card-copy">
+                    Legal records confirming family relationships.
+                  </p>
+                </div>
+                <div>
+                  <div class="card-number">✓</div>
+                  <h3>Obituaries &amp; supporting documents</h3>
+                  <p class="card-copy">
+                    Supporting family records. PDF, JPG, PNG, or WEBP only.
+                  </p>
+                </div>
+              </div>
+
+              <div class="notice" style="margin-top: 1rem">
+                Do not upload Social Security cards, full Social Security
+                numbers, payment card numbers, or other sensitive information
+                unless Tomb of Light specifically requests it for a defined
+                review purpose.
+              </div>
+
+              <div class="helper" style="margin-top: 0.75rem">
+                After upload: status will show <strong>uploaded</strong> →
+                <strong>pending review</strong> → <strong>approved for
+                verification</strong> when the record is cleared.
+              </div>
+
+              <div class="inline-actions" style="margin-top: 1.25rem">
+                <a class="btn btn-primary" href="verification-upload.html">
+                  Upload Verification Documents
+                </a>
+              </div>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">C — Vault Files</span>
+              <h2>Private Vault Files</h2>
+              <p class="card-copy">
+                Use this for private legacy storage — voice messages, video
+                messages, future messages, protected archives, and family media
+                that should remain private to you or your co-owner.
+              </p>
+
+              <div class="grid-3" style="margin-top: 1.25rem">
+                <div>
+                  <div class="card-number">✓</div>
+                  <h3>Private voice messages</h3>
+                  <p class="card-copy">
+                    Audio messages stored privately in your vault. MP3, M4A,
+                    WAV, WebM, OGG.
+                  </p>
+                </div>
+                <div>
+                  <div class="card-number">✓</div>
+                  <h3>Private video messages</h3>
+                  <p class="card-copy">
+                    Video messages stored privately in your vault. MP4, WebM,
+                    MOV.
+                  </p>
+                </div>
+                <div>
+                  <div class="card-number">✓</div>
+                  <h3>Protected legacy media</h3>
+                  <p class="card-copy">
+                    Vault files are not used in cinematic production by default.
+                    Privacy scope is set at upload.
+                  </p>
+                </div>
+              </div>
+
+              <div class="helper" style="margin-top: 1rem">
+                After upload: status will show <strong>saved to vault</strong>
+                once the file passes security review. Vault files remain private
+                unless you explicitly change the privacy scope.
+              </div>
+
+              <div class="inline-actions" style="margin-top: 1.25rem">
+                <a class="btn btn-primary" href="vault-upload.html">
+                  Upload Vault Files
+                </a>
+              </div>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Not sure which to use?</span>
+              <div class="grid-3">
+                <div>
+                  <div class="card-number">?</div>
+                  <h3>Photos of people</h3>
+                  <p class="card-copy">
+                    If it is a photo of a person or family, use
+                    <a href="portrait-upload.html">Portrait Uploads</a>.
+                  </p>
+                </div>
+                <div>
+                  <div class="card-number">?</div>
+                  <h3>Official documents</h3>
+                  <p class="card-copy">
+                    If it is a certificate, record, or government document, use
+                    <a href="verification-upload.html">Verification Documents</a>.
+                  </p>
+                </div>
+                <div>
+                  <div class="card-number">?</div>
+                  <h3>Audio or video recordings</h3>
+                  <p class="card-copy">
+                    If it is a voice or video message for private storage, use
+                    <a href="vault-upload.html">Vault Files</a>.
+                  </p>
+                </div>
+              </div>
+
+              <div class="small-link-row" style="margin-top: 1.25rem">
+                <a href="privacy.html">Privacy Policy</a>
+                <a href="terms.html">Terms of Service</a>
+                <a href="security.html">Security</a>
+                <a href="faq.html">Help</a>
+              </div>
+
+              <div class="inline-actions" style="margin-top: 1.25rem">
+                <a class="btn btn-secondary" href="dashboard.html">
+                  Return to Dashboard
+                </a>
+              </div>
+            </div>
+
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <div class="container">
+          <div class="footer-card">
+            <div class="footer-top">
+              <div>
+                <div class="footer-brand">
+                  Tomb of Light<span class="brand-symbol">™</span>
+                </div>
+                <p class="footer-copy">
+                  A private, guided, premium digital lineage platform for
+                  protecting memory, lineage, and identity across generations.
+                </p>
+                <div class="cookie-status" data-cookie-status>
+                  Your cookie preference has not been set yet.
+                </div>
+              </div>
+
+              <div class="footer-links">
+                <a href="privacy.html">Privacy Policy</a>
+                <a href="terms.html">Terms</a>
+                <a href="cookie-policy.html">Cookie Policy</a>
+                <a href="data-request.html">Data Requests</a>
+                <a href="security.html">Security</a>
+              </div>
+            </div>
+
+            <div class="footer-bottom">
+              <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
+              <span
+                >Tomb of Light technology and platform design are
+                proprietary.</span
+              >
+            </div>
+          </div>
+        </div>
+      </footer>
+    </div>
+
+    <div
+      class="cookie-banner"
+      data-cookie-banner
+      role="contentinfo"
+      aria-label="Cookie preferences"
+    >
+      <div class="cookie-inner">
+        <div class="cookie-copy">
+          We use essential site technologies and may use optional analytics
+          tools only where permitted. You can accept or decline optional
+          analytics cookies and review your choices at any time.
+        </div>
+        <div class="cookie-actions">
+          <button class="btn btn-primary" type="button" data-cookie-accept>
+            Accept
+          </button>
+          <button class="btn btn-secondary" type="button" data-cookie-decline>
+            Decline
+          </button>
+          <a class="btn btn-ghost" href="privacy-choices.html"
+            >Privacy Choices</a
+          >
+        </div>
+      </div>
+    </div>
+
+    <script src="config.js?v=20260326-3"></script>
+    <script src="app.js?v=20260410-1"></script>
+    <script src="auth.js?v=20260413-4"></script>
+  </body>
+</html>

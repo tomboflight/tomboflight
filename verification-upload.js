@@ -69,6 +69,21 @@
     node.textContent = "";
   }
 
+  function uploadStatusLabel(upload) {
+    if (upload.quarantined) return "quarantined — under security review";
+    const vs = String(upload.verification_status || "").toLowerCase();
+    const cat = String(upload.category || upload.asset_type || "").toLowerCase();
+    if (vs === "rejected") return "rejected";
+    if (vs === "needs_correction") return "needs correction";
+    if (vs === "approved") {
+      if (cat === "verification_evidence") return "approved for verification";
+      return "approved";
+    }
+    if (vs === "pending") return "pending review";
+    if (upload.id || upload._id) return "uploaded";
+    return "pending review";
+  }
+
   function getFamilyIdFromUrl() {
     const params = new URLSearchParams(window.location.search);
     return params.get("family_id") || "";
@@ -801,6 +816,7 @@
             <div class="card-number">${index + 1}</div>
             ${preview}
             <h3>${escapeHtml(upload.original_filename || "Uploaded File")}</h3>
+            <p class="card-copy"><strong>Status:</strong> ${escapeHtml(uploadStatusLabel(upload))}</p>
             <p class="card-copy"><strong>Category:</strong> ${escapeHtml(upload.category || "—")}</p>
             <p class="card-copy"><strong>Verification Type:</strong> ${escapeHtml(upload.verification_type || "—")}</p>
             <p class="card-copy"><strong>Evidence Kind:</strong> ${escapeHtml(upload.evidence_kind || "—")}</p>

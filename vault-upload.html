@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vault Files | Tomb of Light</title>
+    <meta
+      name="description"
+      content="Upload private vault files — voice messages, video messages, and protected legacy media — to your Tomb of Light vault."
+    />
+    <link rel="stylesheet" href="styles.css?v=20260326-3" />
+  </head>
+  <body>
+    <a href="#main-content" class="skip-to-content">Skip to main content</a>
+
+    <div class="site-watermark" aria-hidden="true"></div>
+
+    <div class="page-wrap">
+      <header class="site-header">
+        <div class="container site-header-inner">
+          <a class="brand" href="index.html" aria-label="Tomb of Light home">
+            <span>Tomb of Light<span class="brand-symbol">™</span></span>
+          </a>
+
+          <button
+            class="menu-toggle"
+            type="button"
+            aria-label="Toggle navigation"
+            aria-expanded="false"
+            aria-controls="site-nav"
+          >
+            Menu
+          </button>
+
+          <nav class="site-nav" id="site-nav" aria-label="Portal navigation">
+            <a href="dashboard.html">Dashboard</a>
+            <a href="upload-hub.html">Upload Hub</a>
+            <a href="portrait-upload.html">Portrait Uploads</a>
+            <a href="verification-upload.html">Verification Uploads</a>
+            <a href="vault-upload.html" aria-current="page">Vault Files</a>
+            <a href="faq.html">Help</a>
+          </nav>
+
+          <div class="header-actions">
+            <button class="btn btn-secondary" type="button" data-logout-btn>
+              Log Out
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main id="main-content" data-vault-upload-page>
+        <section class="page-hero">
+          <div class="container">
+            <div class="page-hero-panel">
+              <span class="eyebrow">Vault Files</span>
+              <h1>Upload Private Vault Files</h1>
+              <p data-vault-page-status>
+                Loading your vault workspace...
+              </p>
+
+              <div class="inline-actions" style="margin-top: 1.5rem">
+                <a
+                  class="btn btn-primary"
+                  href="upload-hub.html"
+                  data-vault-hub-link
+                >
+                  Upload Hub
+                </a>
+                <a
+                  class="btn btn-secondary"
+                  href="dashboard.html"
+                  data-vault-dashboard-link
+                >
+                  Return to Dashboard
+                </a>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="page-sections">
+          <div class="container form-shell">
+            <div class="form-panel">
+              <span class="eyebrow">About Vault Files</span>
+              <div class="notice">
+                Vault files are private legacy media — voice messages, video
+                messages, and protected archives — stored securely under your
+                account. Only upload files you have the lawful right to submit.
+                Do not upload Social Security cards, full Social Security
+                numbers, payment card information, or other sensitive
+                information not required for this workflow.
+              </div>
+              <div class="helper" style="margin-top: 1rem">
+                Vault files are not used in cinematic production by default.
+                They remain private to you or your co-owner unless you
+                explicitly change the privacy scope. Uploads may be reviewed
+                for security, fraud prevention, compliance, and service
+                fulfillment. Uploading a file does not guarantee delivery or
+                legal validation.
+              </div>
+              <div class="helper" style="margin-top: 0.75rem">
+                For portraits and family photos, use
+                <a href="portrait-upload.html">Portrait Uploads</a>. For birth
+                certificates, marriage records, or other verification documents,
+                use
+                <a href="verification-upload.html">Verification Uploads</a>.
+              </div>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Step 1 — Select Family</span>
+
+              <div class="form-grid two-col">
+                <label>
+                  Family Record
+                  <select data-vault-family-select>
+                    <option value="">Loading family records...</option>
+                  </select>
+                </label>
+
+                <label>
+                  Load Record
+                  <button
+                    class="btn btn-primary"
+                    type="button"
+                    data-vault-load-family
+                    style="margin-top: 0.45rem"
+                  >
+                    Load Family Record
+                  </button>
+                </label>
+              </div>
+
+              <div
+                class="helper"
+                data-vault-family-status
+                aria-live="polite"
+                style="display: none"
+              ></div>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Step 2 — Upload Vault File</span>
+
+              <form class="form-grid" data-vault-upload-form novalidate>
+                <div class="form-grid two-col">
+                  <label>
+                    Family Member
+                    <select name="member_id" data-vault-member-select required>
+                      <option value="">Select member</option>
+                    </select>
+                  </label>
+
+                  <label>
+                    File Type
+                    <select name="asset_type" required>
+                      <option value="">Select type</option>
+                      <option value="private_voice_message">
+                        Private Voice Message
+                      </option>
+                      <option value="private_video_message">
+                        Private Video Message
+                      </option>
+                    </select>
+                  </label>
+                </div>
+
+                <div class="form-grid two-col">
+                  <label>
+                    Privacy Scope
+                    <select name="privacy_scope" required>
+                      <option value="private_to_owner">
+                        Private to me only
+                      </option>
+                      <option value="private_to_owner_and_co_owner">
+                        Private to me and co-owner
+                      </option>
+                    </select>
+                  </label>
+
+                  <label>
+                    Vault File
+                    <input
+                      type="file"
+                      name="vault_file"
+                      accept=".mp3,.m4a,.wav,.webm,.ogg,.mp4,.mov,.ogv,audio/mpeg,audio/mp4,audio/wav,audio/webm,audio/ogg,audio/x-wav,video/mp4,video/webm,video/quicktime,video/ogg"
+                      required
+                    />
+                  </label>
+                </div>
+
+                <div class="helper">
+                  Voice messages: MP3, M4A, WAV, WebM, OGG. Video messages:
+                  MP4, WebM, MOV. Maximum file size applies based on your
+                  active package.
+                </div>
+
+                <div style="display: grid; gap: 0.85rem; margin-top: 0.85rem">
+                  <label
+                    style="display: flex; gap: 0.65rem; align-items: flex-start"
+                  >
+                    <input
+                      type="checkbox"
+                      required
+                      style="margin-top: 0.2rem"
+                    />
+                    <span>
+                      I confirm that I have the lawful right and authority to
+                      upload this file and, where required, permission from the
+                      living individual involved or from the parent or legal
+                      guardian of a minor.
+                    </span>
+                  </label>
+
+                  <label
+                    style="display: flex; gap: 0.65rem; align-items: flex-start"
+                  >
+                    <input
+                      type="checkbox"
+                      required
+                      style="margin-top: 0.2rem"
+                    />
+                    <span>
+                      I understand that Tomb of Light may review uploaded vault
+                      files for security, fraud prevention, compliance, and
+                      service fulfillment.
+                    </span>
+                  </label>
+                </div>
+
+                <div
+                  class="helper"
+                  data-vault-upload-status
+                  aria-live="polite"
+                  style="display: none"
+                ></div>
+
+                <div class="inline-actions" style="margin-top: 1rem">
+                  <button
+                    class="btn btn-primary"
+                    type="submit"
+                    data-vault-upload-submit
+                  >
+                    Upload Vault File
+                  </button>
+                  <a
+                    class="btn btn-secondary"
+                    href="upload-hub.html"
+                    data-vault-hub-link
+                  >
+                    Upload Hub
+                  </a>
+                </div>
+              </form>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Step 3 — Vault Files</span>
+
+              <div class="form-grid two-col">
+                <label>
+                  Family Member
+                  <select data-vault-list-member>
+                    <option value="">Select member</option>
+                  </select>
+                </label>
+
+                <label>
+                  Uploaded Vault Files
+                  <button
+                    class="btn btn-secondary"
+                    type="button"
+                    data-vault-load-uploads
+                    style="margin-top: 0.45rem"
+                  >
+                    Load Vault Files
+                  </button>
+                </label>
+              </div>
+
+              <div
+                class="grid-3"
+                data-vault-uploads-list
+                style="margin-top: 1.25rem"
+              ></div>
+
+              <div
+                class="helper"
+                data-vault-uploads-empty
+                style="display: none; margin-top: 1rem"
+              >
+                No vault files found for this member.
+              </div>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Next Step</span>
+              <p class="card-copy">
+                Return to the Upload Hub to review all upload options, or
+                return to the dashboard when you are done.
+              </p>
+
+              <div class="inline-actions" style="margin-top: 1rem">
+                <a
+                  class="btn btn-primary"
+                  href="upload-hub.html"
+                  data-vault-hub-link
+                >
+                  Upload Hub
+                </a>
+                <a
+                  class="btn btn-secondary"
+                  href="dashboard.html"
+                  data-vault-dashboard-link
+                >
+                  Return to Dashboard
+                </a>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <div class="container">
+          <div class="footer-card">
+            <div class="footer-top">
+              <div>
+                <div class="footer-brand">
+                  Tomb of Light<span class="brand-symbol">™</span>
+                </div>
+                <p class="footer-copy">
+                  A private, guided, premium digital lineage platform for
+                  protecting memory, lineage, and identity across generations.
+                </p>
+                <div class="cookie-status" data-cookie-status>
+                  Your cookie preference has not been set yet.
+                </div>
+              </div>
+
+              <div class="footer-links">
+                <a href="privacy.html">Privacy Policy</a>
+                <a href="terms.html">Terms</a>
+                <a href="data-request.html">Data Requests</a>
+                <a href="security.html">Security</a>
+                <a href="faq.html">Help</a>
+              </div>
+            </div>
+
+            <div class="footer-bottom">
+              <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
+              <span>
+                Tomb of Light technology and platform design are proprietary.
+              </span>
+            </div>
+          </div>
+        </div>
+      </footer>
+    </div>
+
+    <div
+      class="cookie-banner"
+      data-cookie-banner
+      role="contentinfo"
+      aria-label="Cookie preferences"
+    >
+      <div class="cookie-inner">
+        <div class="cookie-copy">
+          We use essential site technologies and may use optional analytics
+          tools only where permitted. You can accept or decline optional
+          analytics cookies and review your choices at any time.
+        </div>
+        <div class="cookie-actions">
+          <button class="btn btn-primary" type="button" data-cookie-accept>
+            Accept
+          </button>
+          <button class="btn btn-secondary" type="button" data-cookie-decline>
+            Decline
+          </button>
+          <a class="btn btn-ghost" href="privacy-choices.html">
+            Privacy Choices
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <script src="config.js?v=20260326-3"></script>
+    <script src="app.js?v=20260410-1"></script>
+    <script src="auth.js?v=20260413-4"></script>
+    <script src="vault-upload.js?v=20260425-1"></script>
+  </body>
+</html>
