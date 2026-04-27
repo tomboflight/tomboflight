@@ -39,6 +39,14 @@
   const PREVIEW_MODE = params.get("preview") === "1";
   const EMBED_MODE =
     PREVIEW_MODE || params.get("embed") === "1" || window.self !== window.top;
+  const SEED_MODE = String(params.get("seed") || "").trim().toLowerCase();
+  const FORCE_PUBLIC_PREVIEW =
+    PREVIEW_MODE ||
+    SEED_MODE === "malik_moreland" ||
+    (EMBED_MODE &&
+      !params.get("project_id") &&
+      !params.get("family_id") &&
+      params.get("preview") !== "0");
 
   const NARRATION_DISPLAY_DURATION_MS = 4500;
   const AUTO_ADVANCE_INTERVAL_MS = 5000;
@@ -99,6 +107,7 @@
       "Anchor Portrait — Malik Moreland",
       "Parent Structure — Moreland Family Origins",
       "Descendant Branches — Future Legacy Layers",
+      "Family Profiles — Imani, Julian, Selah",
       "Guided Legacy Build — Package-aware delivery paths",
     ],
     nav_labels: {
@@ -165,10 +174,61 @@
         narration:
           "Future layers carry memory, identity, and lineage structure forward through descendant branches.",
         left_state_id: "malik_anchor",
-        right_state_id: "imani_branch",
+        right_state_id: "imani_portrait",
         eye_targets: {
           left: { x: 24, y: 50 },
           right: { x: 78, y: 50 },
+        },
+      },
+      {
+        id: "imani_portrait",
+        image: "images/imani.jpg",
+        title: "Imani Moreland — Profile Node",
+        status: "Family profile",
+        node: "Imani Moreland",
+        description:
+          "Imani profile node for identity, relationship, and future branch continuity.",
+        narration:
+          "Imani Moreland appears as a profile layer connected to the main descendant flow.",
+        left_state_id: "moreland_descendants",
+        right_state_id: "julian_portrait",
+        eye_targets: {
+          left: { x: 24, y: 50 },
+          right: { x: 77, y: 50 },
+        },
+      },
+      {
+        id: "julian_portrait",
+        image: "images/julian.jpg",
+        title: "Julian Moreland — Profile Node",
+        status: "Family profile",
+        node: "Julian Moreland",
+        description:
+          "Julian profile node extends the family record and supports future continuity paths.",
+        narration:
+          "Julian Moreland extends the lineage map and demonstrates profile-level branch continuity.",
+        left_state_id: "imani_portrait",
+        right_state_id: "selah_portrait",
+        eye_targets: {
+          left: { x: 24, y: 50 },
+          right: { x: 77, y: 50 },
+        },
+      },
+      {
+        id: "selah_portrait",
+        image: "images/selah.jpg",
+        title: "Selah Moreland — Profile Node",
+        status: "Family profile",
+        node: "Selah Moreland",
+        description:
+          "Selah profile node adds future-facing continuity and contextual branch expansion.",
+        narration:
+          "Selah Moreland completes the profile path before branching into future legacy layers.",
+        left_state_id: "julian_portrait",
+        right_state_id: "imani_branch",
+        eye_targets: {
+          left: { x: 24, y: 50 },
+          right: { x: 77, y: 50 },
         },
       },
       {
@@ -181,7 +241,7 @@
           "Branch nodes model how family sub-lines can be explored while preserving protected access boundaries.",
         narration:
           "Branch navigation shows how the lineage engine supports guided exploration without exposing private vault content.",
-        left_state_id: "moreland_descendants",
+        left_state_id: "selah_portrait",
         right_state_id: "selah_branch",
         eye_targets: {
           left: { x: 24, y: 50 },
@@ -212,8 +272,21 @@
         { label: "Open Descendant Layer", target_state_id: "moreland_descendants" },
       ],
       moreland_descendants: [
+        { label: "Open Imani Profile", target_state_id: "imani_portrait" },
         { label: "Open Imani Branch", target_state_id: "imani_branch" },
         { label: "Return to Anchor", target_state_id: "malik_anchor" },
+      ],
+      imani_portrait: [
+        { label: "Open Julian Profile", target_state_id: "julian_portrait" },
+        { label: "Back to Descendants", target_state_id: "moreland_descendants" },
+      ],
+      julian_portrait: [
+        { label: "Open Selah Profile", target_state_id: "selah_portrait" },
+        { label: "Back to Imani Profile", target_state_id: "imani_portrait" },
+      ],
+      selah_portrait: [
+        { label: "Open Imani Branch", target_state_id: "imani_branch" },
+        { label: "Back to Julian Profile", target_state_id: "julian_portrait" },
       ],
       imani_branch: [
         { label: "Open Selah Branch", target_state_id: "selah_branch" },
@@ -1070,8 +1143,8 @@
   }
 
   async function boot() {
-    const liveManifest = PREVIEW_MODE ? null : await loadDynamicManifest();
-    const selectedManifest = PREVIEW_MODE
+    const liveManifest = FORCE_PUBLIC_PREVIEW ? null : await loadDynamicManifest();
+    const selectedManifest = FORCE_PUBLIC_PREVIEW
       ? PREVIEW_MANIFEST
       : liveManifest || UNAVAILABLE_MANIFEST;
     applyManifest(selectedManifest);
