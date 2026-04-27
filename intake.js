@@ -381,7 +381,7 @@
       ],
     );
 
-    renderSummaryCard(uploadsNode, "Uploads", "3", [
+    renderSummaryCard(uploadsNode, "Upload Plan", "3", [
       `Approx. Uploads: ${uploads.approx_upload_count || "—"}`,
       `Primary Asset Type: ${uploads.primary_asset_type || "—"}`,
       `Key Portraits: ${uploads.key_portraits || "—"}`,
@@ -552,8 +552,8 @@
             </div>
             <div>
               <div class="card-number">C</div>
-              <h3>Uploads</h3>
-              <p class="card-copy">Plan photos, records, and supporting files for this build.</p>
+              <h3>Upload Plan</h3>
+              <p class="card-copy">Plan photos, records, and supporting files for this build. Actual file uploads happen in the Upload Hub.</p>
             </div>
             <div>
               <div class="card-number">D</div>
