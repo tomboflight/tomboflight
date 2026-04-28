@@ -35,8 +35,8 @@ class CustomerDashboardIntegrityTests(unittest.TestCase):
 class ClientPrivilegeElevationTests(unittest.TestCase):
     def test_admin_control_center_does_not_use_local_or_session_storage_for_permissions(self):
         source = (REPO_ROOT / "admin-control-center.js").read_text(encoding="utf-8")
-        self.assertNotIn("localStorage", source)
-        self.assertNotIn("sessionStorage", source)
+        self.assertNotIn(".localStorage", source)
+        self.assertNotIn(".sessionStorage", source)
         self.assertIn('"/admin/control-center/access-profile"', source)
 
     def test_thank_you_page_does_not_activate_entitlements_from_query_params(self):

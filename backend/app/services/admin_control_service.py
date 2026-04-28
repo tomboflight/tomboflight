@@ -2557,28 +2557,33 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
     users_total = int(db["users"].count_documents({}))
     users_total_admin = int(db["users"].count_documents({"account_type": "business_admin"}))
     users_total_customer = max(users_total - users_total_admin, 0)
+    archived_status_values = sorted(
+        {
+            variant
+            for status_value in {"archived"}
+            for variant in {status_value, status_value.upper(), status_value.title()}
+        }
+    )
     active_projects = int(
-        sum(
-            1
-            for project in db["projects"].find({})
-            if _normalize(project.get("status")).lower() != "archived"
-        )
+        db["projects"].count_documents({})
+        - db["projects"].count_documents({"status": {"$in": archived_status_values}})
     )
-    paid_orders = int(
-        sum(
-            1
-            for order in db["orders"].find({})
-            if _is_paid_package_order(order)
-        )
+    paid_status_values = sorted(
+        {
+            variant
+            for status_value in PAID_ORDER_STATUSES
+            for variant in {status_value, status_value.upper(), status_value.title()}
+        }
     )
-    pending_orders = int(
-        sum(
-            1
-            for order in db["orders"].find({})
-            if _normalize(order.get("status")).lower()
-            in {"pending", "open", "unpaid", "past_due", "incomplete"}
-        )
+    pending_status_values = sorted(
+        {
+            variant
+            for status_value in {"pending", "open", "unpaid", "past_due", "incomplete"}
+            for variant in {status_value, status_value.upper(), status_value.title()}
+        }
     )
+    paid_orders = int(db["orders"].count_documents({"status": {"$in": paid_status_values}}))
+    pending_orders = int(db["orders"].count_documents({"status": {"$in": pending_status_values}}))
     now = _now()
     month_start = datetime(now.year, now.month, 1, tzinfo=UTC)
 

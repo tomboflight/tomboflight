@@ -418,8 +418,16 @@ def me(response: Response, current_user: dict = Depends(get_current_user)):
         effective_access = {}
     payload["active_project_id"] = context.get("active_project_id")
     payload["active_family_id"] = context.get("active_family_id")
-    role_codes = [str(code or "").strip().lower() for code in (effective_access.get("role_codes") or []) if str(code or "").strip()]
-    permissions = [str(code or "").strip().lower() for code in (effective_access.get("permissions") or []) if str(code or "").strip()]
+    def _normalized_codes(values: list[str] | tuple[str, ...]) -> list[str]:
+        normalized_values: list[str] = []
+        for value in values:
+            normalized = str(value or "").strip().lower()
+            if normalized:
+                normalized_values.append(normalized)
+        return normalized_values
+
+    role_codes = _normalized_codes(list(effective_access.get("role_codes") or []))
+    permissions = _normalized_codes(list(effective_access.get("permissions") or []))
     officer_role_keys = set(OFFICER_ROLE_CODES)
     admin_roles = sorted({code for code in role_codes if code in officer_role_keys})
     officer_roles = sorted({code for code in admin_roles if code != "super_admin"})
