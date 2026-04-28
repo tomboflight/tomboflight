@@ -73,9 +73,9 @@
             <div class="page-hero-panel dashboard-hero-panel portal-core-panel">
               <div class="portal-core-copy">
                 <span class="eyebrow" data-dashboard-hero-eyebrow>
-                  Portal Access
+                  Lineage Chamber
                 </span>
-                <h1 data-dashboard-hero-title>Your Workspace</h1>
+                <h1 data-dashboard-hero-title>Your Lineage Chamber</h1>
                 <p data-dashboard-status>Loading your account...</p>
 
                 <div class="inline-actions portal-core-actions" data-workspace-action-bar>
@@ -86,7 +86,7 @@
                     data-dashboard-hero-action
                     style="display: none"
                   >
-                    Open Workspace
+                    Continue Family Build
                   </a>
                   <a
                     class="btn btn-secondary"
@@ -307,8 +307,55 @@
               data-dashboard-section-anchor
             ></div>
 
+            <div class="form-panel portal-next-step-panel" data-dashboard-customer-only>
+              <span class="eyebrow">What To Do Next</span>
+              <h3 data-dashboard-next-focus>Preparing workspace actions</h3>
+              <p class="card-copy">
+                Follow your next guided step and upload family records from one place.
+              </p>
+              <div class="inline-actions" style="margin-top: 1rem">
+                <a class="btn btn-primary" href="upload-hub.html">
+                  Upload Photos &amp; Family Records
+                </a>
+                <a class="btn btn-secondary" href="verification-upload.html">
+                  Upload Verification Docs
+                </a>
+                <a class="btn btn-secondary" href="intake-welcome.html">
+                  Continue Intake
+                </a>
+              </div>
+            </div>
+
+            <div class="form-panel portal-upload-center-panel" data-dashboard-customer-only>
+              <span class="eyebrow">Upload Center</span>
+              <h3>Upload Categories &amp; Review</h3>
+              <p class="card-copy">
+                Upload portraits, family records, verification files, and optional story materials with status visibility.
+              </p>
+              <div class="inline-actions" style="margin-top: 1rem">
+                <a class="btn btn-primary" href="portrait-upload.html">
+                  Portrait / Family Photos
+                </a>
+                <a class="btn btn-secondary" href="vault-upload.html">
+                  Family Records / Documents
+                </a>
+                <a class="btn btn-secondary" href="verification-upload.html">
+                  Verification Documents
+                </a>
+                <a class="btn btn-secondary" href="intake-uploads.html">
+                  Optional Narration / Story Materials
+                </a>
+              </div>
+              <ul class="card-copy" style="margin-top: 1rem; padding-left: 1.2rem">
+                <li>Upload status</li>
+                <li>Review status</li>
+                <li>Who uploaded each item</li>
+                <li>Visibility / privacy markers</li>
+              </ul>
+            </div>
+
             <div class="form-panel portal-package-panel" data-dashboard-customer-only data-package-access-panel>
-              <span class="eyebrow">Package Access</span>
+              <span class="eyebrow">Package &amp; Entitlement</span>
               <p class="card-copy" data-access-status>
                 Checking your purchase access...
               </p>
@@ -352,37 +399,45 @@
               </div>
             </div>
 
-            <div class="form-panel portal-outputs-panel" data-dashboard-customer-only>
-              <span class="eyebrow">Lineage Outputs</span>
+            <div class="form-panel portal-orders-panel" data-dashboard-customer-only>
+              <span class="eyebrow">Orders &amp; Billing</span>
               <p class="card-copy">
-                Open your delivered lineage outputs from one place.
+                View purchases, maintenance, and billing records.
               </p>
               <div class="inline-actions" style="margin-top: 1rem">
-                <a
-                  class="btn btn-primary"
-                  href="tree-view.html"
-                  data-dashboard-workspace-tree-action
-                  style="display: none"
-                >
-                  Open Family Tree
-                </a>
-                <a
-                  class="btn btn-secondary"
-                  href="lineage-certificate.html"
-                  data-dashboard-package-certificate-action
-                  style="display: none"
-                >
-                  View Lineage Certificate
-                </a>
-                <a
-                  class="btn btn-secondary"
-                  href="digital-collectible.html"
-                  data-dashboard-digital-collectible-action
-                  style="display: none"
-                >
-                  Open Digital Collectible
+                <a class="btn btn-secondary" href="billing.html">
+                  Open Billing
                 </a>
               </div>
+            </div>
+
+            <div class="form-panel portal-intake-status-panel" data-dashboard-customer-only>
+              <span class="eyebrow">Intake Status</span>
+              <h3 data-intake-card-status>Intake status loading</h3>
+              <p class="card-copy" data-intake-next-step>
+                Loading your most recent intake status.
+              </p>
+              <p class="card-copy">
+                <strong>Status:</strong> <span data-intake-status-badge>—</span>
+              </p>
+              <p class="card-copy">
+                <strong>Submission:</strong> <span data-intake-submission-id>—</span>
+              </p>
+              <p class="card-copy">
+                <strong>Submitted:</strong> <span data-intake-submitted-at>—</span>
+              </p>
+              <p class="card-copy" data-intake-lock-note>
+                Checking submission lock state.
+              </p>
+              <div class="inline-actions" style="margin-top: 1rem">
+                <a class="btn btn-secondary" href="intake-review.html" data-intake-open-action>
+                  View Intake
+                </a>
+              </div>
+              <p class="card-copy" style="margin-top: 1rem" data-intake-history-status>
+                Loading intake history.
+              </p>
+              <div class="admin-record-list" data-intake-history-list></div>
             </div>
 
             <div class="form-panel portal-anchor-panel" data-dashboard-customer-only data-legacy-anchor-proof>

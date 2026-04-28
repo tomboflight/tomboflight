@@ -25,6 +25,13 @@ class PackageMappingTests(unittest.TestCase):
         self.assertEqual(code, "household_foundation")
         self.assertEqual(slug, "household-foundation")
 
+    def test_starter_family_tree_alias_normalizes_to_household_foundation(self):
+        identity = resolve_package_identity("starter-family-tree")
+        self.assertTrue(identity["known"])
+        self.assertEqual(identity["package_code"], "household_foundation")
+        self.assertEqual(identity["package_slug"], "household-foundation")
+        self.assertEqual(identity["display_name"], "Household Foundation")
+
     def test_catalog_exposes_package_map(self):
         payload = get_package_catalog_route()
         self.assertIn("package_map", payload)

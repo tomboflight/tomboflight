@@ -106,6 +106,12 @@ class UserResponse(BaseModel):
     role_codes: list[str] = Field(default_factory=list)
     capabilities: list[str] = Field(default_factory=list)
     permissions: list[str] = Field(default_factory=list)
+    is_admin: bool = False
+    admin_roles: list[str] = Field(default_factory=list)
+    officer_roles: list[str] = Field(default_factory=list)
+    admin_permissions: list[str] = Field(default_factory=list)
+    dashboard_type: str = "customer"
+    allowed_rails: list[str] = Field(default_factory=lambda: ["customer"])
 
     policy_version: Optional[str] = None
     terms_accepted_at: Optional[str] = None

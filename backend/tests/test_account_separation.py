@@ -3,8 +3,10 @@ from typing import Any, cast
 from unittest.mock import patch
 
 from fastapi import HTTPException
+from starlette.responses import Response
 
 from app.dependencies import auth as auth_dependencies
+from app.routes import auth as auth_routes
 from app.services.auth_service import build_user_response
 
 
@@ -273,6 +275,99 @@ class AccountSeparationTests(unittest.TestCase):
                 dependency(request=cast(Any, object()), current_user=current_user)
 
         self.assertEqual(error.exception.status_code, 403)
+
+    def test_auth_me_customer_payload_never_includes_admin_control_scope(self):
+        current_user = {
+            "_id": "customer-1",
+            "id": "customer-1",
+            "email": "customer@example.com",
+            "full_name": "Customer User",
+            "role": "user",
+            "status": "active",
+            "created_at": "2026-01-01T00:00:00+00:00",
+        }
+        with (
+            patch.object(auth_routes, "build_user_response", return_value=build_user_response(current_user)),
+            patch.object(auth_routes, "build_access_context", return_value={"active_project_id": "project-1", "active_family_id": "family-1"}),
+            patch.object(
+                auth_routes,
+                "resolve_access_context",
+                return_value={
+                    "role_codes": ["user"],
+                    "capabilities": [],
+                    "permissions": ["uploads.write"],
+                },
+            ),
+        ):
+            payload = auth_routes.me(response=Response(), current_user=current_user)
+        self.assertFalse(payload["is_admin"])
+        self.assertEqual(payload["admin_roles"], [])
+        self.assertEqual(payload["officer_roles"], [])
+        self.assertEqual(payload["admin_permissions"], [])
+        self.assertEqual(payload["dashboard_type"], "customer")
+        self.assertEqual(payload["allowed_rails"], ["customer"])
+
+    def test_auth_me_officer_payload_is_scoped_to_admin_metadata(self):
+        current_user = {
+            "_id": "admin-1",
+            "id": "admin-1",
+            "email": "jenn.wood@tomboflight.com",
+            "full_name": "Jennifer Wood",
+            "role": "admin",
+            "access_tier": "finance_admin",
+            "department_role": "finance_admin",
+            "status": "active",
+            "created_at": "2026-01-01T00:00:00+00:00",
+        }
+        with (
+            patch.object(auth_routes, "build_user_response", return_value=build_user_response(current_user)),
+            patch.object(auth_routes, "build_access_context", return_value={"active_project_id": None, "active_family_id": None}),
+            patch.object(
+                auth_routes,
+                "resolve_access_context",
+                return_value={
+                    "role_codes": ["finance_admin"],
+                    "capabilities": ["manage_billing"],
+                    "permissions": ["admin.control.billing", "admin.orders.read"],
+                },
+            ),
+        ):
+            payload = auth_routes.me(response=Response(), current_user=current_user)
+        self.assertTrue(payload["is_admin"])
+        self.assertEqual(payload["admin_roles"], ["finance_admin"])
+        self.assertEqual(payload["officer_roles"], ["finance_admin"])
+        self.assertEqual(payload["dashboard_type"], "admin")
+        self.assertEqual(payload["allowed_rails"], ["finance"])
+        self.assertIn("admin.control.billing", payload["admin_permissions"])
+
+    def test_jwt_claim_role_does_not_override_persisted_user_role(self):
+        request = cast(Any, object())
+        with (
+            patch.object(auth_dependencies, "_get_token_from_request", return_value=("signed-token", "bearer")),
+            patch.object(
+                auth_dependencies,
+                "decode_access_token",
+                return_value={
+                    "sub": "customer@example.com",
+                    "role": "super_admin",
+                    "user_id": "customer-1",
+                },
+            ),
+            patch.object(
+                auth_dependencies,
+                "get_user_by_email",
+                return_value={
+                    "_id": "customer-1",
+                    "email": "customer@example.com",
+                    "role": "user",
+                    "status": "active",
+                    "session_token_version": 0,
+                },
+            ),
+        ):
+            resolved = auth_dependencies.get_current_user(request=request, credentials=None)
+        self.assertEqual(resolved.get("role"), "user")
+        self.assertFalse(auth_dependencies.has_internal_admin_access(resolved))
 
 
 if __name__ == "__main__":
