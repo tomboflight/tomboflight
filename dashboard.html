@@ -78,18 +78,9 @@
                 <h1 data-dashboard-hero-title>Your Workspace</h1>
                 <p data-dashboard-status>Loading your account...</p>
 
-                <div class="inline-actions portal-core-actions">
+                <div class="inline-actions portal-core-actions" data-workspace-action-bar>
                   <a
                     class="btn btn-primary"
-                    href="upload-hub.html"
-                    data-dashboard-hero-upload-hub-action
-                    data-dashboard-hero-action
-                    style="display: none"
-                  >
-                    Upload Hub
-                  </a>
-                  <a
-                    class="btn btn-secondary"
                     href="portrait-upload.html"
                     data-dashboard-hero-primary-action
                     data-dashboard-hero-action
@@ -316,101 +307,11 @@
               data-dashboard-section-anchor
             ></div>
 
-            <div
-              class="form-panel portal-workspace-panel"
-              data-dashboard-customer-only
-            >
-              <span class="eyebrow">Customer Workspace</span>
-              <p class="card-copy" data-dashboard-workspace-copy>
-                Your Tomb of Light customer workspace loads the exact package access, onboarding, uploads, lineage tools, and verification features attached to your account.
-              </p>
-
-              <div class="grid-3 portal-workspace-signal-grid">
-                <div>
-                  <div class="card-number">A</div>
-                  <h3>Live Workspace</h3>
-                  <p class="card-copy">
-                    Your core action path is surfaced in the portal header so
-                    the next move is always immediately available.
-                  </p>
-                </div>
-                <div>
-                  <div class="card-number">B</div>
-                  <h3>Package Truth</h3>
-                  <p class="card-copy">
-                    Tools appear only when your active package, lane, and
-                    entitlement flags allow them.
-                  </p>
-                </div>
-                <div>
-                  <div class="card-number">C</div>
-                  <h3>Cross-Device Access</h3>
-                  <p class="card-copy">
-                    The private workspace is tuned for desktop, touch, keyboard,
-                    and mobile navigation without changing your underlying
-                    workflow.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div class="form-panel portal-package-panel" data-dashboard-customer-only>
+            <div class="form-panel portal-package-panel" data-dashboard-customer-only data-package-access-panel>
               <span class="eyebrow">Package Access</span>
               <p class="card-copy" data-access-status>
                 Checking your purchase access...
               </p>
-
-              <div class="inline-actions" style="margin-top: 1.5rem">
-                <a
-                  class="btn btn-primary"
-                  href="upload-hub.html"
-                  data-dashboard-package-upload-hub-action
-                  style="display: none"
-                >
-                  Upload Hub
-                </a>
-                <a
-                  class="btn btn-secondary"
-                  href="portrait-upload.html"
-                  data-dashboard-package-primary-action
-                  style="display: none"
-                >
-                  Open Workspace
-                </a>
-                <a
-                  class="btn btn-secondary"
-                  href="verification-upload.html"
-                  data-dashboard-package-secondary-action
-                  style="display: none"
-                >
-                  Upload Verification Docs
-                </a>
-                <a
-                  class="btn btn-secondary"
-                  href="tree-view.html"
-                  data-dashboard-package-tree-action
-                  style="display: none"
-                >
-                  Open Family Tree
-                </a>
-                <a
-                  class="btn btn-secondary"
-                  href="link-keys.html"
-                  data-dashboard-package-link-action
-                  style="display: none"
-                >
-                  Open Link Keys
-                </a>
-                <a
-                  class="btn btn-secondary"
-                  href="lineage-certificate.html"
-                  data-dashboard-package-certificate-action
-                  style="display: none"
-                >
-                  Open Lineage Certificate
-                </a>
-              </div>
-
               <div
                 class="inline-actions"
                 style="margin-top: 1rem"
@@ -451,31 +352,40 @@
               </div>
             </div>
 
-            <div class="form-panel portal-delivery-panel" data-dashboard-customer-only>
-              <div class="anchor-status-row">
-                <span class="eyebrow">Digital Collectible Delivery</span>
-                <span class="presence-badge" data-dashboard-delivery-badge>
-                  Your Account
-                </span>
-              </div>
+            <div class="form-panel portal-outputs-panel" data-dashboard-customer-only>
+              <span class="eyebrow">Lineage Outputs</span>
               <p class="card-copy">
-                Your TOMB OF LIGHT digital collectible is associated with your
-                paid order and account. Download your NFT-authenticated digital
-                files, view on-chain proof, and access your delivered asset
-                package from your dedicated delivery page.
+                Open your delivered lineage outputs from one place.
               </p>
-              <div class="inline-actions" style="margin-top: 0.75rem">
+              <div class="inline-actions" style="margin-top: 1rem">
                 <a
                   class="btn btn-primary"
+                  href="tree-view.html"
+                  data-dashboard-workspace-tree-action
+                  style="display: none"
+                >
+                  Open Family Tree
+                </a>
+                <a
+                  class="btn btn-secondary"
+                  href="lineage-certificate.html"
+                  data-dashboard-package-certificate-action
+                  style="display: none"
+                >
+                  View Lineage Certificate
+                </a>
+                <a
+                  class="btn btn-secondary"
                   href="digital-collectible.html"
                   data-dashboard-digital-collectible-action
+                  style="display: none"
                 >
                   Open Digital Collectible
                 </a>
               </div>
             </div>
 
-            <div class="form-panel portal-anchor-panel" data-dashboard-customer-only>
+            <div class="form-panel portal-anchor-panel" data-dashboard-customer-only data-legacy-anchor-proof>
               <div class="anchor-status-row">
                 <span class="eyebrow">Legacy Anchor</span>
                 <span class="presence-badge anchor-status-badge" data-anchor-status-badge>
@@ -599,142 +509,6 @@
               <p class="card-copy anchor-verify-status" data-anchor-verify-status>
                 Wallet proof will appear here when you verify the recipient wallet.
               </p>
-            </div>
-
-            <div class="form-panel portal-orders-panel" data-dashboard-customer-only>
-              <span class="eyebrow">Your Orders</span>
-              <p class="card-copy" data-orders-status>
-                Loading your purchases...
-              </p>
-              <div class="grid-3" data-orders-list></div>
-            </div>
-
-            <div class="form-panel portal-intake-panel" data-dashboard-customer-only>
-              <span class="eyebrow">Intake Status</span>
-              <p class="card-copy" data-intake-card-status>
-                Checking your onboarding submission...
-              </p>
-
-              <div class="grid-3">
-                <div>
-                  <div class="card-number">A</div>
-                  <h3>Current Package</h3>
-                  <p class="card-copy" data-intake-current-package>Loading...</p>
-                </div>
-
-                <div>
-                  <div class="card-number">B</div>
-                  <h3>Submission Status</h3>
-                  <p class="card-copy" data-intake-status-badge>Checking...</p>
-                </div>
-
-                <div>
-                  <div class="card-number">C</div>
-                  <h3>Submission ID</h3>
-                  <p class="card-copy" data-intake-submission-id>—</p>
-                </div>
-              </div>
-
-              <div class="grid-3" style="margin-top: 1.5rem">
-                <div>
-                  <div class="card-number">D</div>
-                  <h3>Submitted At</h3>
-                  <p class="card-copy" data-intake-submitted-at>—</p>
-                </div>
-
-                <div>
-                  <div class="card-number">E</div>
-                  <h3>Next Step</h3>
-                  <p class="card-copy" data-intake-next-step>—</p>
-                </div>
-
-                <div>
-                  <div class="card-number">F</div>
-                  <h3>Submission Lock</h3>
-                  <p class="card-copy" data-intake-lock-note>—</p>
-                </div>
-              </div>
-
-              <div class="inline-actions" style="margin-top: 1.5rem">
-                <a
-                  class="btn btn-primary"
-                  href="intake-review.html"
-                  data-intake-open-action
-                  style="display: none"
-                >
-                  View Intake Record
-                </a>
-                <a
-                  class="btn btn-secondary"
-                  href="verification-upload.html"
-                  data-dashboard-intake-verification-action
-                  style="display: none"
-                >
-                  Upload Verification Records
-                </a>
-              </div>
-            </div>
-
-            <div class="form-panel portal-history-panel" data-dashboard-customer-only>
-              <span class="eyebrow">Intake History</span>
-              <p class="card-copy" data-intake-history-status>
-                Loading your intake history...
-              </p>
-              <div class="grid-3" data-intake-history-list></div>
-            </div>
-
-            <div class="form-panel portal-build-panel" data-dashboard-customer-only>
-              <span class="eyebrow">Your Build Path</span>
-              <div class="grid-3">
-                <div>
-                  <div class="card-number">1</div>
-                  <h3>Package Scope</h3>
-                  <p class="card-copy">
-                    Tomb of Light resolves the exact tools, limits, and workflows attached to your active package.
-                  </p>
-                </div>
-                <div>
-                  <div class="card-number">2</div>
-                  <h3>Records and Structure</h3>
-                  <p class="card-copy">
-                    Upload, verification, lineage, structure, and link features appear only when they are included in your package.
-                  </p>
-                </div>
-                <div>
-                  <div class="card-number">3</div>
-                  <h3>Delivery and Growth</h3>
-                  <p class="card-copy">
-                    Your workspace can expand over time through package upgrades and approved add-ons.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div class="form-panel portal-status-panel" data-dashboard-customer-only>
-              <span class="eyebrow">Platform Status</span>
-              <div class="grid-3">
-                <div>
-                  <div class="card-number">A</div>
-                  <h3>Authentication</h3>
-                  <p class="card-copy">
-                    Your account is verified through JWT authentication.
-                  </p>
-                </div>
-                <div>
-                  <div class="card-number">B</div>
-                  <h3>Database</h3>
-                  <p class="card-copy">
-                    Your platform is connected to the Tomb of Light MongoDB infrastructure.
-                  </p>
-                </div>
-                <div>
-                  <div class="card-number">C</div>
-                  <h3>Package Access</h3>
-                  <p class="card-copy">
-                    Package access, uploads, intake, lineage tools, and link capabilities are controlled by your active entitlement.
-                  </p>
-                </div>
-              </div>
             </div>
           </div>
         </section>

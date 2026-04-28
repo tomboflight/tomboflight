@@ -36,14 +36,22 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
 
         self.assertEqual(violations, [])
 
-    def test_marketing_homepage_links_viewer_through_preview_only_route(self):
+    def test_marketing_homepage_uses_non_broken_viewer_preview_block(self):
         contents = (REPO_ROOT / "index.html").read_text(encoding="utf-8")
 
         self.assertRegex(
             contents,
-            r'<a[^>]*class="[^"]*\bhero-viewer-link\b[^"]*"[^>]*href="viewer/index\.html\?preview=1"',
+            r'<a[^>]*class="[^"]*\bhero-viewer-link\b[^"]*"[^>]*href="platform\.html"',
         )
-        self.assertIn('src="viewer/index.html?preview=1&embed=1"', contents)
+        self.assertIn('class="hero-viewer-static"', contents)
+        self.assertNotIn("Manifest Required", contents)
+        embed_match = re.search(
+            r'<div class="hero-demo-embed hero-viewer-embed">(.*?)</div>\s*</div>',
+            contents,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(embed_match)
+        self.assertNotIn("<iframe", embed_match.group(1))
         self.assertIn('class="btn btn-primary" href="viewer/index.html?preview=1"', contents)
         self.assertNotIn('class="mini-link hero-viewer-link" href="viewer/"', contents)
 
