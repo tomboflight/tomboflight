@@ -4,6 +4,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from app.config import settings
+from app.core.role_catalog import OFFICER_ROLE_CODES
 from app.core.security import create_csrf_token, decode_access_token
 from app.dependencies.auth import (
     COOKIE_NAME,
@@ -417,9 +418,50 @@ def me(response: Response, current_user: dict = Depends(get_current_user)):
         effective_access = {}
     payload["active_project_id"] = context.get("active_project_id")
     payload["active_family_id"] = context.get("active_family_id")
-    payload["role_codes"] = list(effective_access.get("role_codes") or [])
+    def _normalized_codes(values: list[str] | tuple[str, ...]) -> list[str]:
+        normalized_values: list[str] = []
+        for value in values:
+            normalized = str(value or "").strip().lower()
+            if normalized:
+                normalized_values.append(normalized)
+        return normalized_values
+
+    role_codes = _normalized_codes(list(effective_access.get("role_codes") or []))
+    permissions = _normalized_codes(list(effective_access.get("permissions") or []))
+    officer_role_keys = set(OFFICER_ROLE_CODES)
+    admin_roles = sorted({code for code in role_codes if code in officer_role_keys})
+    officer_roles = sorted({code for code in admin_roles if code != "super_admin"})
+    is_admin = bool(admin_roles)
+    admin_permissions = sorted(
+        {
+            permission
+            for permission in permissions
+            if permission.startswith("admin.")
+            or permission in {"uploads.admin.review", "verification.review", "project.workflow.transition"}
+        }
+    )
+    if not is_admin:
+        allowed_rails = ["customer"]
+    elif "super_admin" in admin_roles or "executive_tech_admin" in admin_roles:
+        allowed_rails = ["overview", "operations", "finance", "marketing", "users", "audit", "mint"]
+    elif "finance_admin" in admin_roles:
+        allowed_rails = ["finance"]
+    elif "operations_admin" in admin_roles:
+        allowed_rails = ["operations"]
+    elif "marketing_admin" in admin_roles:
+        allowed_rails = ["marketing"]
+    else:
+        allowed_rails = ["admin"]
+
+    payload["role_codes"] = role_codes
     payload["capabilities"] = list(effective_access.get("capabilities") or [])
-    payload["permissions"] = list(effective_access.get("permissions") or [])
+    payload["permissions"] = permissions
+    payload["is_admin"] = is_admin
+    payload["admin_roles"] = admin_roles
+    payload["officer_roles"] = officer_roles
+    payload["admin_permissions"] = admin_permissions
+    payload["dashboard_type"] = "admin" if is_admin else "customer"
+    payload["allowed_rails"] = allowed_rails
     return payload
 
 

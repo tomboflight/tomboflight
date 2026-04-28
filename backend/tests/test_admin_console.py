@@ -945,6 +945,77 @@ class AdminConsoleOverviewTests(unittest.TestCase):
         self.assertEqual(summary["paid_customer_users"], 1)
         self.assertEqual(summary["signed_up_no_purchase_users"], 1)
 
+    def test_overview_counts_mixed_case_seed_statuses_and_matches_case_visibility(self):
+        project_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "users": [
+                    {"_id": ObjectId(), "email": "customer@example.com", "account_type": "customer"},
+                ],
+                "projects": [
+                    {
+                        "_id": project_id,
+                        "owner_email": "customer@example.com",
+                        "owner_user_id": str(ObjectId()),
+                        "name": "Visible Project",
+                        "package_code": "legacy_plus",
+                        "package_slug": "legacy_plus",
+                        "project_lane": "household",
+                        "status": "BUILD_READY",
+                        "phase": "INTAKE_APPROVED",
+                    }
+                ],
+                "orders": [
+                    {
+                        "_id": ObjectId(),
+                        "email": "customer@example.com",
+                        "project_id": project_id,
+                        "status": "PAID",
+                        "item_type": "package",
+                        "package_code": "legacy_plus",
+                        "package_slug": "legacy_plus",
+                    }
+                ],
+                "project_entitlements": [],
+                "audit_logs": [],
+                "payroll_runs": [],
+                "finance_events": [],
+                "uploaded_files": [],
+                "verification_records": [],
+                "household_invites": [],
+                "project_members": [],
+                "users_role_assignments": [],
+            }
+        )
+        with (
+            patch.object(admin_control_service, "get_database", return_value=db),
+            patch.object(
+                admin_control_service,
+                "run_readiness_check",
+                return_value={
+                    "mint_review_ready": True,
+                    "mint_eligible": True,
+                    "mint_already_completed": False,
+                    "package_synced": False,
+                    "lane_assigned": True,
+                    "order_linked": True,
+                    "entitlement_exists": False,
+                    "summary": "repair needed",
+                    "blocking_reasons": [],
+                },
+            ),
+            patch.object(admin_control_service, "get_project_entitlement", return_value=None),
+            patch.object(admin_control_service, "count_workspace_uploads", return_value=1),
+        ):
+            overview = admin_control_service.admin_console_overview(limit=10)
+            cases = admin_control_service.list_customer_cases(limit=10)
+        summary = overview["summary"]
+        self.assertGreaterEqual(summary["total_active_projects"], 1)
+        self.assertGreaterEqual(summary["paid_orders"], 1)
+        self.assertGreaterEqual(summary["missing_entitlements"], 1)
+        self.assertGreaterEqual(summary["projects_with_data_mismatch"], 1)
+        self.assertTrue(cases["items"])
+
     def test_admin_overview_includes_postmark_runtime_configuration_flags(self):
         db = FakeDatabase(
             {
