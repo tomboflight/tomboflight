@@ -37,8 +37,7 @@
 
   const params = new URLSearchParams(window.location.search);
   const PREVIEW_MODE = params.get("preview") === "1";
-  const EMBED_MODE =
-    PREVIEW_MODE || params.get("embed") === "1" || window.self !== window.top;
+  const EMBED_MODE = params.get("embed") === "1" || window.self !== window.top;
 
   const NARRATION_DISPLAY_DURATION_MS = 4500;
   const AUTO_ADVANCE_INTERVAL_MS = 5000;
@@ -85,6 +84,14 @@
       },
     ],
   };
+  function getPreviewManifest() {
+    const manifest = window.GENESIS_PROTOTYPE_MANIFEST;
+    if (manifest && Array.isArray(manifest.states) && manifest.states.length) {
+      return manifest;
+    }
+    return UNAVAILABLE_MANIFEST;
+  }
+
   let currentManifest = null;
   let statesById = {};
   let stateOrder = [];
@@ -162,6 +169,9 @@
     const source = String(image || "").trim();
     if (!source) return "";
     if (/^https?:\/\//i.test(source)) return source;
+    if (source.startsWith("../images/")) {
+      return `images/${source.slice("../images/".length)}`;
+    }
     if (source.startsWith("/")) {
       const base = getApiBaseUrl();
       return base ? `${base}${source}` : source;
@@ -313,6 +323,8 @@
 
     if (manifest.mode === "dynamic") {
       document.title = `Tomb of Light | ${manifest.heroTitle}`;
+    } else if (manifest.mode === "preview") {
+      document.title = `Tomb of Light | ${manifest.heroTitle}`;
     } else {
       document.title = "Tomb of Light | Private Viewer";
     }
@@ -325,7 +337,9 @@
     const canZoom =
       !isSecureShareMode(manifest) &&
       isControlEnabled("allow_zoom", true);
-    const canReset = !isSecureShareMode(manifest);
+    const canReset =
+      !isSecureShareMode(manifest) &&
+      isControlEnabled("allow_reset", true);
     const canNarration =
       !isSecureShareMode(manifest) &&
       isControlEnabled("allow_narration_auto_advance", true);
@@ -932,8 +946,13 @@
   }
 
   async function boot() {
-    const liveManifest = await loadDynamicManifest();
-    const selectedManifest = liveManifest || UNAVAILABLE_MANIFEST;
+    let selectedManifest = UNAVAILABLE_MANIFEST;
+    if (PREVIEW_MODE) {
+      selectedManifest = getPreviewManifest();
+    } else {
+      const liveManifest = await loadDynamicManifest();
+      selectedManifest = liveManifest || UNAVAILABLE_MANIFEST;
+    }
     applyManifest(selectedManifest);
     bindEvents();
     await applyState(currentManifest.initialStateId || stateOrder[0] || "");

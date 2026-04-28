@@ -41,9 +41,10 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
 
         self.assertRegex(
             contents,
-            r'<a[^>]*class="[^"]*\bhero-viewer-link\b[^"]*"[^>]*href="viewer/viewer-preview\.html"',
+            r'<a[^>]*class="[^"]*\bhero-viewer-link\b[^"]*"[^>]*href="viewer/index\.html\?preview=1"',
         )
-        self.assertIn('src="viewer/viewer-preview.html"', contents)
+        self.assertIn('src="viewer/index.html?preview=1&embed=1"', contents)
+        self.assertIn('class="btn btn-primary" href="viewer/index.html?preview=1"', contents)
         self.assertNotIn('class="mini-link hero-viewer-link" href="viewer/"', contents)
 
 
