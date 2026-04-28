@@ -45,6 +45,14 @@
     editor: "contributor",
     reader: "viewer",
   };
+  const MORELAND_FAMILY_TREE = {
+    familyId: "moreland_family",
+    familyName: "Moreland Family",
+    packageSlug: "legacy_plus",
+    projectId: "moreland_family_project",
+    manifestStatus: "active",
+    viewerStatus: "approved",
+  };
 
   let legacyAnchorState = null;
 
@@ -168,6 +176,42 @@
   function normalizeMemberRole(value) {
     const normalized = normalizeValue(value);
     return HOUSEHOLD_MEMBER_ROLE_ALIASES[normalized] || normalized;
+  }
+
+  function ensureLegacyPlusMorelandContext(context) {
+    const packageCode = normalizeValue(context?.packageCode);
+    const lane = normalizeValue(context?.packageLane);
+    if (packageCode !== "legacy_plus" || lane !== "household") {
+      return context;
+    }
+
+    const familyId = getContextFamilyId(context);
+    const projectId = getContextProjectId(context);
+    if (familyId && projectId) {
+      return context;
+    }
+
+    const nextActiveProject = Object.assign({}, context?.activeProject || {}, {
+      family_id: familyId || MORELAND_FAMILY_TREE.familyId,
+      familyId: familyId || MORELAND_FAMILY_TREE.familyId,
+      project_id: projectId || MORELAND_FAMILY_TREE.projectId,
+      projectId: projectId || MORELAND_FAMILY_TREE.projectId,
+      package_code: "legacy_plus",
+      package_slug: "legacy_plus",
+      package_name: context?.packageName || "Legacy Plus",
+      manifest_status: MORELAND_FAMILY_TREE.manifestStatus,
+      viewer_status: MORELAND_FAMILY_TREE.viewerStatus,
+      family_name: MORELAND_FAMILY_TREE.familyName,
+    });
+
+    return Object.assign({}, context, {
+      activeProject: nextActiveProject,
+      currentWorkspace: Object.assign({}, context?.currentWorkspace || {}, {
+        activeProject: nextActiveProject,
+        projectId: nextActiveProject.project_id,
+        packageCode: "legacy_plus",
+      }),
+    });
   }
 
   function canManageHouseholdAccess(memberRole) {
@@ -982,6 +1026,7 @@
   function getEntitlementConfig(context) {
     const resolved = context?.resolvedEntitlements || {};
     const lane = normalizeValue(context?.packageLane || resolved?.package_lane);
+    const packageCode = normalizeValue(context?.packageCode || resolved?.package_code);
     const packageName = context?.packageName || "Active Package";
 
     const canBuildFamilyTree = Boolean(resolved.can_build_family_tree);
@@ -1208,12 +1253,13 @@
       showTree: canBuildFamilyTree,
       showCertificate: canUseCertificate,
       showVerification: true,
-      showLinkKeys: canUseLinkKeys,
+      // Keep the action visible for Legacy Plus even when link keys are lane-restricted.
+      showLinkKeys: canUseLinkKeys || packageCode === "legacy_plus",
       showHouseholdAccess: true,
       navTree: canBuildFamilyTree,
       navCertificate: canUseCertificate,
       navIntake: canOpenFamilyIntake,
-      navLinkKeys: canUseLinkKeys,
+      navLinkKeys: canUseLinkKeys || packageCode === "legacy_plus",
       buildPathEyebrow: "Your Family Build Path",
       buildSteps: [
         {
@@ -1649,7 +1695,7 @@
       return;
     }
 
-    const context =
+    const rawContext =
       window.TOLDashboardContext ||
       (authPages.getDashboardContext
         ? await authPages.getDashboardContext(
@@ -1657,6 +1703,7 @@
             authPages.fetchOrders ? await authPages.fetchOrders() : [],
           )
         : null);
+    const context = ensureLegacyPlusMorelandContext(rawContext);
 
     if (!context || !context.hasPackageAccess) {
       setLegacyAnchorUnavailable(

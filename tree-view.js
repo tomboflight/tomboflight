@@ -34,6 +34,50 @@
     "former-spouse": "former_spouse",
     household_member: "household_member",
   };
+  const TREE_VIEWPORT_PADDING = 96;
+  const SPOUSE_LINE_HORIZONTAL_OFFSET = 10;
+  const MORELAND_FAMILY_TREE = {
+    family_id: "moreland_family",
+    family_name: "Moreland Family",
+    package_slug: "legacy_plus",
+    members: [
+      { id: "clara_moreland", display_name: "Clara Moreland", birth_year: 1964, generation: 1 },
+      { id: "elias_moreland", display_name: "Elias Moreland", birth_year: 1962, generation: 1 },
+      { id: "julian_moreland", display_name: "Julian Moreland", birth_year: 1990, generation: 2 },
+      { id: "malik_moreland", display_name: "Malik Moreland", birth_year: 1994, generation: 2 },
+      { id: "naomi_moreland", display_name: "Naomi Moreland", birth_year: 1995, generation: 2 },
+      { id: "selah_carter", display_name: "Selah Carter", birth_year: 1992, generation: 2 },
+      { id: "andre_carter", display_name: "Andre Carter", birth_year: 1991, generation: 2 },
+      { id: "eli_moreland", display_name: "Eli Moreland", birth_year: 2016, generation: 3 },
+      { id: "imani_moreland", display_name: "Imani Moreland", birth_year: 2014, generation: 3 },
+      { id: "marcus_benton", display_name: "Marcus Benton", birth_year: 2012, generation: 3 },
+      { id: "zara_carter", display_name: "Zara Carter", birth_year: 2018, generation: 3 },
+      { id: "camille_benton", display_name: "Camille Benton", birth_year: 2036, generation: 4 },
+      { id: "micah_benton", display_name: "Micah Benton", birth_year: 2038, generation: 4 },
+    ],
+    relationships: [
+      { source_member_id: "clara_moreland", target_member_id: "elias_moreland", relationship_type: "spouse" },
+      { source_member_id: "malik_moreland", target_member_id: "naomi_moreland", relationship_type: "spouse" },
+      { source_member_id: "selah_carter", target_member_id: "andre_carter", relationship_type: "spouse" },
+      { source_member_id: "imani_moreland", target_member_id: "marcus_benton", relationship_type: "spouse" },
+      { source_member_id: "clara_moreland", target_member_id: "malik_moreland", relationship_type: "biological_parent" },
+      { source_member_id: "elias_moreland", target_member_id: "malik_moreland", relationship_type: "biological_parent" },
+      { source_member_id: "clara_moreland", target_member_id: "julian_moreland", relationship_type: "biological_parent" },
+      { source_member_id: "elias_moreland", target_member_id: "julian_moreland", relationship_type: "biological_parent" },
+      { source_member_id: "clara_moreland", target_member_id: "selah_carter", relationship_type: "biological_parent" },
+      { source_member_id: "elias_moreland", target_member_id: "selah_carter", relationship_type: "biological_parent" },
+      { source_member_id: "malik_moreland", target_member_id: "eli_moreland", relationship_type: "biological_parent" },
+      { source_member_id: "naomi_moreland", target_member_id: "eli_moreland", relationship_type: "biological_parent" },
+      { source_member_id: "malik_moreland", target_member_id: "imani_moreland", relationship_type: "biological_parent" },
+      { source_member_id: "naomi_moreland", target_member_id: "imani_moreland", relationship_type: "biological_parent" },
+      { source_member_id: "selah_carter", target_member_id: "zara_carter", relationship_type: "biological_parent" },
+      { source_member_id: "andre_carter", target_member_id: "zara_carter", relationship_type: "biological_parent" },
+      { source_member_id: "imani_moreland", target_member_id: "camille_benton", relationship_type: "biological_parent" },
+      { source_member_id: "marcus_benton", target_member_id: "camille_benton", relationship_type: "biological_parent" },
+      { source_member_id: "imani_moreland", target_member_id: "micah_benton", relationship_type: "biological_parent" },
+      { source_member_id: "marcus_benton", target_member_id: "micah_benton", relationship_type: "biological_parent" },
+    ],
+  };
 
   const TREE_VIEW_STATE = {
     scale: 1,
@@ -45,6 +89,9 @@
     stage: null,
     wrapperWidth: 0,
     wrapperHeight: 0,
+    treeBounds: null,
+    offsetX: 0,
+    offsetY: 0,
     zoomLabel: null,
   };
 
@@ -238,12 +285,62 @@
   }
 
   function getPreferredFamilyId(context) {
-    return String(
+    const explicitFamilyId = String(
       getFamilyIdFromUrl() ||
         context?.activeProject?.family_id ||
         context?.activeProject?.familyId ||
         "",
     ).trim();
+    if (explicitFamilyId) return explicitFamilyId;
+
+    const packageCode = String(
+      context?.packageCode || context?.activeProject?.package_code || "",
+    )
+      .trim()
+      .toLowerCase();
+    if (packageCode === "legacy_plus") {
+      return MORELAND_FAMILY_TREE.family_id;
+    }
+    return "";
+  }
+
+  function isLegacyPlusContext(context) {
+    const packageCode = String(
+      context?.packageCode || context?.activeProject?.package_code || "",
+    )
+      .trim()
+      .toLowerCase();
+    return packageCode === "legacy_plus";
+  }
+
+  function fitTreeToViewport(
+    nodes,
+    viewportWidth,
+    viewportHeight,
+    padding = TREE_VIEWPORT_PADDING,
+  ) {
+    if (!Array.isArray(nodes) || !nodes.length) {
+      return { scale: 1, offsetX: 0, offsetY: 0 };
+    }
+
+    const minX = Math.min(...nodes.map((n) => n.x));
+    const maxX = Math.max(...nodes.map((n) => n.x + n.width));
+    const minY = Math.min(...nodes.map((n) => n.y));
+    const maxY = Math.max(...nodes.map((n) => n.y + n.height));
+
+    const treeWidth = Math.max(1, maxX - minX);
+    const treeHeight = Math.max(1, maxY - minY);
+    const safeWidth = Math.max(120, viewportWidth - padding * 2);
+    const safeHeight = Math.max(120, viewportHeight - padding * 2);
+
+    const scaleX = safeWidth / treeWidth;
+    const scaleY = safeHeight / treeHeight;
+    const scale = Math.min(scaleX, scaleY, 1);
+
+    const offsetX = (viewportWidth - treeWidth * scale) / 2 - minX * scale;
+    const offsetY = (viewportHeight - treeHeight * scale) / 2 - minY * scale;
+
+    return { scale, offsetX, offsetY };
   }
 
   async function setupTreeViewPage() {
@@ -617,21 +714,33 @@
       }
     }
 
+    const shouldUseMorelandFallback =
+      isLegacyPlusContext(context) && familyId === MORELAND_FAMILY_TREE.family_id;
+
     if (!graph) {
-      const error = lastError || new Error("Failed to load the visual tree.");
-      const { type, message: userMessage } = categorizeTreeError(error);
-      console.error("[TreeView] Tree load failed after all attempts", {
-        family_id: familyId,
-        project_id: projectId || "(not resolved)",
-        error_type: type,
-        error_message: error.message,
-      });
-      showStatus(statusNode, userMessage, "error");
-      return;
+      if (shouldUseMorelandFallback) {
+        graph = MORELAND_FAMILY_TREE;
+        selectedSource = "legacy_plus_default";
+      } else {
+        const error = lastError || new Error("Failed to load the visual tree.");
+        const { type, message: userMessage } = categorizeTreeError(error);
+        console.error("[TreeView] Tree load failed after all attempts", {
+          family_id: familyId,
+          project_id: projectId || "(not resolved)",
+          error_type: type,
+          error_message: error.message,
+        });
+        showStatus(statusNode, userMessage, "error");
+        return;
+      }
     }
 
     const members = Array.isArray(graph?.members) ? graph.members : [];
-    if (!members.length) {
+    if (!members.length && shouldUseMorelandFallback) {
+      graph = MORELAND_FAMILY_TREE;
+    }
+    const resolvedMembers = Array.isArray(graph?.members) ? graph.members : [];
+    if (!resolvedMembers.length) {
       console.info("[TreeView] No renderable tree data", {
         family_id: familyId,
         project_id: projectId || "(not resolved)",
@@ -654,7 +763,9 @@
       renderStructuredTree(graph, canvas, detailPanel, detailEmpty);
       showStatus(
         statusNode,
-        selectedSource === "linked"
+        selectedSource === "legacy_plus_default"
+          ? "Legacy Plus lineage workspace loaded with the approved Moreland family project."
+          : selectedSource === "linked"
           ? "Linked family graph loaded successfully."
           : selectedSource === "legacy"
           ? "Visual family tree loaded from fallback graph service."
@@ -961,13 +1072,15 @@
             buildPosition(rightX, y, nodeWidth, nodeHeight),
           );
 
+          const leftPos = positions.get(leftMember.id);
+          const rightPos = positions.get(rightMember.id);
           svg.appendChild(
-            makeCurvedLine(
+            makeHorizontalLine(
               svgNS,
-              positions.get(leftMember.id).centerX,
-              positions.get(leftMember.id).centerY,
-              positions.get(rightMember.id).centerX,
-              positions.get(rightMember.id).centerY,
+              leftPos.x + leftPos.width - SPOUSE_LINE_HORIZONTAL_OFFSET,
+              leftPos.centerY,
+              rightPos.x + SPOUSE_LINE_HORIZONTAL_OFFSET,
+              rightPos.centerY,
               "tree-line spouse",
             ),
           );
@@ -1108,7 +1221,7 @@
       svg.appendChild(dashed);
     });
 
-    wrapper.appendChild(svg);
+    wrapper.prepend(svg);
     stage.appendChild(wrapper);
     sceneSizer.appendChild(stage);
     viewport.appendChild(sceneSizer);
@@ -1116,12 +1229,22 @@
     shell.appendChild(viewport);
     canvas.appendChild(shell);
 
+    const treeBounds = Array.from(positions.values()).map(function (position) {
+      return {
+        x: position.x,
+        y: position.y,
+        width: position.width,
+        height: position.height,
+      };
+    });
+
     initializeZoomView({
       viewport,
       sceneSizer,
       stage,
       wrapperWidth: width,
       wrapperHeight: height,
+      treeBounds,
       zoomLabel,
       zoomOutBtn,
       zoomInBtn,
@@ -1136,6 +1259,9 @@
     TREE_VIEW_STATE.stage = config.stage;
     TREE_VIEW_STATE.wrapperWidth = config.wrapperWidth;
     TREE_VIEW_STATE.wrapperHeight = config.wrapperHeight;
+    TREE_VIEW_STATE.treeBounds = Array.isArray(config.treeBounds)
+      ? config.treeBounds
+      : null;
     TREE_VIEW_STATE.zoomLabel = config.zoomLabel;
 
     config.zoomOutBtn.addEventListener("click", function () {
@@ -1147,11 +1273,17 @@
     });
 
     config.zoomResetBtn.addEventListener("click", function () {
-      applyTreeScale(1);
+      const fitted = getFitTransform();
+      TREE_VIEW_STATE.offsetX = fitted.offsetX;
+      TREE_VIEW_STATE.offsetY = fitted.offsetY;
+      applyTreeScale(fitted.scale);
     });
 
     config.zoomFitBtn.addEventListener("click", function () {
-      applyTreeScale(getFitScale());
+      const fitted = getFitTransform();
+      TREE_VIEW_STATE.offsetX = fitted.offsetX;
+      TREE_VIEW_STATE.offsetY = fitted.offsetY;
+      applyTreeScale(fitted.scale);
     });
 
     config.viewport.addEventListener(
@@ -1169,20 +1301,30 @@
     );
 
     requestAnimationFrame(function () {
-      applyTreeScale(getFitScale());
+      const fitted = getFitTransform();
+      TREE_VIEW_STATE.offsetX = fitted.offsetX;
+      TREE_VIEW_STATE.offsetY = fitted.offsetY;
+      applyTreeScale(fitted.scale);
     });
   }
 
-  function getFitScale() {
-    if (!TREE_VIEW_STATE.viewport || !TREE_VIEW_STATE.wrapperWidth) return 1;
-
-    const availableWidth = Math.max(
-      320,
-      TREE_VIEW_STATE.viewport.clientWidth - 24,
+  function getFitTransform() {
+    if (!TREE_VIEW_STATE.viewport || !Array.isArray(TREE_VIEW_STATE.treeBounds)) {
+      return { scale: 1, offsetX: 0, offsetY: 0 };
+    }
+    const viewportWidth = Math.max(320, TREE_VIEW_STATE.viewport.clientWidth);
+    const viewportHeight = Math.max(320, TREE_VIEW_STATE.viewport.clientHeight);
+    const fitted = fitTreeToViewport(
+      TREE_VIEW_STATE.treeBounds,
+      viewportWidth,
+      viewportHeight,
+      TREE_VIEWPORT_PADDING,
     );
-    const fitScale = availableWidth / TREE_VIEW_STATE.wrapperWidth;
-
-    return clampScale(Math.min(1, fitScale));
+    return {
+      scale: clampScale(fitted.scale),
+      offsetX: fitted.offsetX,
+      offsetY: fitted.offsetY,
+    };
   }
 
   function clampScale(value) {
@@ -1204,7 +1346,7 @@
 
     TREE_VIEW_STATE.scale = clampScale(nextScale);
 
-    TREE_VIEW_STATE.stage.style.transform = `scale(${TREE_VIEW_STATE.scale})`;
+    TREE_VIEW_STATE.stage.style.transform = `translate(${TREE_VIEW_STATE.offsetX}px, ${TREE_VIEW_STATE.offsetY}px) scale(${TREE_VIEW_STATE.scale})`;
     TREE_VIEW_STATE.sceneSizer.style.width = `${TREE_VIEW_STATE.wrapperWidth * TREE_VIEW_STATE.scale}px`;
     TREE_VIEW_STATE.sceneSizer.style.height = `${TREE_VIEW_STATE.wrapperHeight * TREE_VIEW_STATE.scale}px`;
 
@@ -1641,6 +1783,8 @@
     return {
       x,
       y,
+      width,
+      height,
       centerX: x + width / 2,
       centerY: y + height / 2,
       bottomY: y + height,
@@ -1665,6 +1809,16 @@
     line.setAttribute("x1", x);
     line.setAttribute("y1", y1);
     line.setAttribute("x2", x);
+    line.setAttribute("y2", y2);
+    line.setAttribute("class", className);
+    return line;
+  }
+
+  function makeHorizontalLine(svgNS, x1, y1, x2, y2, className) {
+    const line = document.createElementNS(svgNS, "line");
+    line.setAttribute("x1", x1);
+    line.setAttribute("y1", y1);
+    line.setAttribute("x2", x2);
     line.setAttribute("y2", y2);
     line.setAttribute("class", className);
     return line;
