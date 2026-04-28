@@ -741,7 +741,7 @@ class SuperAdminControlsTests(unittest.TestCase):
                     "mailing_address": "123 Main St",
                     "birthday": "1980-01-02",
                     "status": "suspended",
-                    "role": "super_admin",
+                    # role intentionally omitted here; testing non-role updates
                 },
                 actor={"_id": ObjectId(), "email": "ceo@example.com"},
             )
@@ -750,7 +750,52 @@ class SuperAdminControlsTests(unittest.TestCase):
         self.assertEqual(result["after"]["email"], "after@example.com")
         self.assertEqual(result["after"]["full_name"], "After Name")
         self.assertEqual(result["after"]["status"], "suspended")
+
+    def test_super_admin_can_promote_existing_admin_to_super_admin(self):
+        user_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "users": [
+                    {
+                        "_id": user_id,
+                        "email": "ops@tomboflight.com",
+                        "full_name": "Ops Admin",
+                        "role": "operations_admin",
+                        "status": "active",
+                    }
+                ]
+            }
+        )
+        with patch.object(admin_control_service, "get_database", return_value=db):
+            result = admin_control_service.super_admin_update_user(
+                user_id=str(user_id),
+                payload={"role": "super_admin"},
+                actor={"_id": ObjectId(), "email": "ceo@tomboflight.com"},
+            )
         self.assertEqual(result["after"]["role"], "super_admin")
+
+    def test_super_admin_cannot_promote_customer_to_super_admin(self):
+        user_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "users": [
+                    {
+                        "_id": user_id,
+                        "email": "customer@example.com",
+                        "full_name": "Customer",
+                        "role": "user",
+                        "status": "active",
+                    }
+                ]
+            }
+        )
+        with patch.object(admin_control_service, "get_database", return_value=db):
+            with self.assertRaisesRegex(ValueError, "super_admin role can only be granted to existing internal admin accounts"):
+                admin_control_service.super_admin_update_user(
+                    user_id=str(user_id),
+                    payload={"role": "super_admin"},
+                    actor={"_id": ObjectId(), "email": "ceo@tomboflight.com"},
+                )
 
     def test_super_admin_package_change_preview_and_apply(self):
         project_id = ObjectId()
