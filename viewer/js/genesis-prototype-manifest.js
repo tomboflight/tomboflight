@@ -8,36 +8,46 @@
     hero_kicker: "Genesis Prototype Viewer",
     hero_title: "Malik Moreland Genesis Prototype",
     hero_body:
-      "Public preview of the cinematic lineage experience for the Moreland prototype family.",
+      "Confirmed cinematic lineage preview for the approved Genesis Prototype family.",
     instructions:
-      "Use Origins and Future Line navigation, then branch options, to move through each lineage layer.",
+      "Use gesture zoom navigation only. Zoom out returns to ancestors/parents, zoom in moves to descendants, and select siblings only from the parents photo regions.",
     path_title: "Prototype Path",
     path_items: [
-      "Malik Moreland anchor",
-      "Elias and Clara Moreland origins",
-      "Malik descendant layer",
-      "Imani Moreland adult profile",
-      "Imani descendant branch",
-      "Selah Carter branch",
-      "Julian Moreland branch",
+      "Malik Moreland",
+      "Elias Moreland + Clara Moreland",
+      "Malik descendants",
+      "Imani Moreland",
+      "Imani descendants",
+      "Selah Carter",
+      "Selah descendants",
+      "Julian Moreland",
     ],
     nav_labels: {
-      left: "Origins",
-      right: "Future Line",
+      left: "Parents",
+      right: "Descendants",
     },
     initial_state_id: "malik_anchor",
     controls: {
-      allow_lineage_navigation: true,
-      allow_zoom: true,
-      allow_reset: true,
-      allow_narration_auto_advance: true,
+      allow_lineage_navigation: false,
+      allow_zoom: false,
+      allow_reset: false,
+      allow_narration_auto_advance: false,
       allow_gaze_navigation: true,
-      allow_branch_navigation: true,
+      allow_branch_navigation: false,
       max_zoom_layers: 4,
     },
     family: {
       family_name: "Moreland Family",
       anchor_name: "Malik Moreland",
+    },
+    parent_overlay: {
+      enabled_on_state_id: "moreland_parents",
+      hide_delay_ms: 5000,
+      regions: [
+        { region: "left", label: "Selah Carter", target_state_id: "selah_anchor" },
+        { region: "center", label: "Malik Moreland", target_state_id: "malik_anchor" },
+        { region: "right", label: "Julian Moreland", target_state_id: "julian_anchor" },
+      ],
     },
     states: [
       {
@@ -47,9 +57,9 @@
         status: "Genesis anchor",
         node: "Malik Moreland",
         description:
-          "Main prototype buyer and anchor. Spouse: Naomi Moreland. Children: Eli Moreland and Imani Moreland.",
+          "Primary Genesis anchor.",
         narration:
-          "Malik Moreland is the cinematic anchor for this Genesis prototype lineage experience.",
+          "Malik Moreland is the anchor state for this confirmed Genesis Prototype.",
         left_state_id: "moreland_parents",
         right_state_id: "malik_descendants",
         eye_targets: {
@@ -62,11 +72,11 @@
         image: "../images/parents.jpg",
         title: "Elias Moreland + Clara Moreland",
         status: "Origin node",
-        node: "Moreland parents",
+        node: "Elias Moreland + Clara Moreland",
         description:
-          "Origin of this family line. Children: Malik Moreland, Julian Moreland, and Selah Carter.",
+          "Top generation origin with sibling selection regions.",
         narration:
-          "Elias and Clara Moreland are the root origin for the branch pathways in this preview.",
+          "Elias Moreland and Clara Moreland are the top generation origin.",
         left_state_id: "",
         right_state_id: "malik_anchor",
         eye_targets: {
@@ -79,11 +89,11 @@
         image: "../images/malik_descendants.jpg",
         title: "Malik Descendants",
         status: "Future line",
-        node: "Malik descendant branch",
+        node: "Malik descendants",
         description:
-          "Descendant view of Malik and Naomi's line, including daughter Imani Moreland.",
+          "Descendant layer following Malik Moreland.",
         narration:
-          "From Malik, the future line expands to descendants and then into Imani's adult branch.",
+          "Zooming in from Malik enters the Malik descendants layer.",
         left_state_id: "malik_anchor",
         right_state_id: "imani_anchor",
         eye_targets: {
@@ -94,13 +104,13 @@
       {
         id: "imani_anchor",
         image: "../images/imani.jpg",
-        title: "Imani Moreland / Imani Benton",
+        title: "Imani Moreland",
         status: "Adult profile",
         node: "Imani Moreland",
         description:
-          "Adult daughter of Malik Moreland and Naomi Moreland. Spouse: Marcus Benton.",
+          "Imani Moreland adult anchor state.",
         narration:
-          "Imani Moreland appears as the adult anchor for her branch before moving to descendants.",
+          "Imani Moreland anchors this branch before descendants.",
         left_state_id: "malik_descendants",
         right_state_id: "imani_descendants",
         eye_targets: {
@@ -113,11 +123,11 @@
         image: "../images/imani_descendants.jpg",
         title: "Imani Descendants",
         status: "Future line",
-        node: "Imani descendant branch",
+        node: "Imani descendants",
         description:
-          "Children of Imani Benton and Marcus Benton: Micah Benton and Zara Benton.",
+          "Descendant layer following Imani Moreland.",
         narration:
-          "Imani's descendants represent the next generation continuity in this public preview.",
+          "Imani descendants are the final zoom-in node for this branch.",
         left_state_id: "imani_anchor",
         right_state_id: "",
         eye_targets: {
@@ -132,9 +142,9 @@
         status: "Sibling branch",
         node: "Julian Moreland",
         description:
-          "Malik's brother. This branch has no descendants in the Genesis prototype.",
+          "Julian Moreland sibling branch with no descendants available.",
         narration:
-          "Julian Moreland is a sibling branch with no descendant layer in this prototype.",
+          "Julian Moreland has no descendants available in this prototype.",
         left_state_id: "moreland_parents",
         right_state_id: "",
         eye_targets: {
@@ -149,9 +159,9 @@
         status: "Sibling branch",
         node: "Selah Carter",
         description:
-          "Malik's sister. Spouse: Andre Carter. Child: Camille Carter.",
+          "Selah Carter sibling branch.",
         narration:
-          "Selah Carter is a sibling branch that leads into her own descendant layer.",
+          "Selah Carter leads to one descendant layer.",
         left_state_id: "moreland_parents",
         right_state_id: "selah_descendants",
         eye_targets: {
@@ -164,11 +174,11 @@
         image: "../images/selah_descendants.jpg",
         title: "Selah Descendants",
         status: "Future line",
-        node: "Selah descendant branch",
+        node: "Selah descendants",
         description:
-          "Descendant layer for Selah Carter and her household line.",
+          "Descendant layer following Selah Carter.",
         narration:
-          "Selah's branch extends to descendants, then returns back to Selah and to the parents node.",
+          "Selah descendants return to Selah, then to the parents state.",
         left_state_id: "selah_anchor",
         right_state_id: "",
         eye_targets: {
@@ -177,37 +187,6 @@
         },
       },
     ],
-    branch_options_by_state: {
-      moreland_parents: [
-        { label: "Enter Malik Moreland", target_state_id: "malik_anchor" },
-        { label: "Enter Selah Carter", target_state_id: "selah_anchor" },
-        { label: "Enter Julian Moreland", target_state_id: "julian_anchor" },
-      ],
-      malik_anchor: [
-        { label: "Zoom Out to Origins", target_state_id: "moreland_parents" },
-        { label: "Zoom In to Descendants", target_state_id: "malik_descendants" },
-      ],
-      malik_descendants: [
-        { label: "Enter Imani Moreland", target_state_id: "imani_anchor" },
-        { label: "Return to Malik Moreland", target_state_id: "malik_anchor" },
-      ],
-      imani_anchor: [
-        { label: "Zoom In to Imani Descendants", target_state_id: "imani_descendants" },
-        { label: "Return to Malik Descendants", target_state_id: "malik_descendants" },
-      ],
-      imani_descendants: [
-        { label: "Return to Imani Moreland", target_state_id: "imani_anchor" },
-      ],
-      julian_anchor: [
-        { label: "Return to Elias and Clara", target_state_id: "moreland_parents" },
-      ],
-      selah_anchor: [
-        { label: "Zoom In to Selah Descendants", target_state_id: "selah_descendants" },
-        { label: "Return to Elias and Clara", target_state_id: "moreland_parents" },
-      ],
-      selah_descendants: [
-        { label: "Return to Selah Carter", target_state_id: "selah_anchor" },
-      ],
-    },
+    branch_options_by_state: {},
   };
 })();
