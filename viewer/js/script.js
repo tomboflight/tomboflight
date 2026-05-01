@@ -25,7 +25,10 @@
   const zoomOutBtn = document.getElementById("zoomOutBtn");
   const zoomInBtn = document.getElementById("zoomInBtn");
   const resetViewerBtn = document.getElementById("resetViewerBtn");
+  const controlsContainer = document.getElementById("controls");
+  const viewerLine = document.querySelector(".viewer-line");
   const backLink = document.getElementById("backLink");
+  const parentsOverlay = document.getElementById("parentsOverlay");
 
   const stage = document.getElementById("viewerStage");
   const slideshow = document.getElementById("slideshow");
@@ -41,6 +44,9 @@
 
   const NARRATION_DISPLAY_DURATION_MS = 4500;
   const AUTO_ADVANCE_INTERVAL_MS = 5000;
+  const PARENT_OVERLAY_HIDE_DELAY_MS = 5000;
+  const MISSING_ASSET_COPY =
+    "Approved image unavailable for this Genesis Prototype node.";
   const DEFAULT_ZOOM_LAYERS = 2;
   const DEFAULT_DYNAMIC_EYE_TARGETS = {
     left: { x: 18, y: 50 },
@@ -117,6 +123,7 @@
   let isUserInteracting = false;
   let interactionTimeout = null;
   let cHeld = false;
+  let parentOverlayHideTimeout = null;
 
   function clamp(v, min, max) {
     return Math.min(max, Math.max(min, v));
@@ -243,6 +250,10 @@
         manifest && typeof manifest.branch_options_by_state === "object"
           ? manifest.branch_options_by_state
           : {},
+      parentOverlay:
+        manifest && typeof manifest.parent_overlay === "object"
+          ? manifest.parent_overlay
+          : {},
       states: normalizedStates,
       project: manifest?.project || null,
       family: manifest?.family || null,
@@ -350,6 +361,15 @@
     if (zoomInBtn) zoomInBtn.style.display = canZoom ? "" : "none";
     if (resetViewerBtn) resetViewerBtn.style.display = canReset ? "" : "none";
     if (narrationToggleBtn) narrationToggleBtn.style.display = canNarration ? "" : "none";
+    const hasVisibleControls = Boolean(
+      canLineageNavigate || canZoom || canReset || canNarration,
+    );
+    if (controlsContainer) {
+      controlsContainer.classList.toggle("is-hidden", !hasVisibleControls);
+    }
+    if (viewerLine) {
+      viewerLine.classList.toggle("is-hidden", !hasVisibleControls);
+    }
     if (!canNarration) {
       isPlaying = false;
       stopNarrationAutoAdvance();
@@ -389,6 +409,56 @@
     } else {
       viewerEmptyState.hidden = true;
       viewerEmptyState.textContent = "";
+    }
+  }
+
+  function clearParentOverlayHideTimer() {
+    if (parentOverlayHideTimeout) {
+      clearTimeout(parentOverlayHideTimeout);
+      parentOverlayHideTimeout = null;
+    }
+  }
+
+  function hideParentOverlayLabels() {
+    clearParentOverlayHideTimer();
+    if (!parentsOverlay) return;
+    parentsOverlay.classList.remove("show-labels");
+  }
+
+  function isParentsOverlayState() {
+    const expectedStateId = String(
+      currentManifest?.parentOverlay?.enabled_on_state_id || "",
+    ).trim();
+    return Boolean(expectedStateId && state === expectedStateId);
+  }
+
+  function scheduleParentOverlayHide() {
+    clearParentOverlayHideTimer();
+    if (!parentsOverlay || !isParentsOverlayState()) return;
+    const hideDelay = Number(currentManifest?.parentOverlay?.hide_delay_ms);
+    const duration =
+      Number.isFinite(hideDelay) && hideDelay > 0
+        ? hideDelay
+        : PARENT_OVERLAY_HIDE_DELAY_MS;
+    parentOverlayHideTimeout = setTimeout(function () {
+      if (isParentsOverlayState()) {
+        parentsOverlay.classList.remove("show-labels");
+      }
+    }, duration);
+  }
+
+  function showParentOverlayLabels() {
+    if (!parentsOverlay || !isParentsOverlayState()) return;
+    parentsOverlay.classList.add("show-labels");
+    scheduleParentOverlayHide();
+  }
+
+  function applyParentOverlayState() {
+    if (!parentsOverlay) return;
+    const active = isParentsOverlayState();
+    parentsOverlay.hidden = !active;
+    if (!active) {
+      hideParentOverlayLabels();
     }
   }
 
@@ -719,7 +789,7 @@
   }
 
   async function swapViewerImage(imageUrl, altText) {
-    if (!viewerImage) return;
+    if (!viewerImage) return false;
 
     const resolved = String(imageUrl || "").trim();
     viewerImage.style.opacity = "0.25";
@@ -729,10 +799,10 @@
       viewerImage.removeAttribute("src");
       viewerImage.alt = altText || "";
       viewerImage.style.opacity = "0";
-      return;
+      return false;
     }
 
-    await new Promise(function (resolve) {
+    return await new Promise(function (resolve) {
       const preloaded = new Image();
 
       preloaded.onload = function () {
@@ -740,15 +810,15 @@
         viewerImage.alt = altText || "";
         viewerImage.classList.remove("is-empty");
         viewerImage.style.opacity = "1";
-        resolve();
+        resolve(true);
       };
 
       preloaded.onerror = function () {
-        viewerImage.src = resolved;
+        viewerImage.removeAttribute("src");
         viewerImage.alt = altText || "";
-        viewerImage.classList.remove("is-empty");
-        viewerImage.style.opacity = "1";
-        resolve();
+        viewerImage.classList.add("is-empty");
+        viewerImage.style.opacity = "0";
+        resolve(false);
       };
 
       preloaded.src = resolved;
@@ -764,16 +834,23 @@
     state = nextState;
     setZoom(1, false);
 
-    await swapViewerImage(config.image, config.node);
+    const imageLoaded = await swapViewerImage(config.image, config.node);
 
     setText(viewerTitle, config.title);
     setText(viewerStatus, config.status);
     setText(currentNode, config.node);
     setText(currentDescription, config.description);
-    setEmptyState(config.image ? "" : config.description);
+    setEmptyState(
+      !imageLoaded
+        ? MISSING_ASSET_COPY
+        : config.image
+          ? ""
+          : config.description,
+    );
     showNarration(config.narration);
     placeEyeHints();
     renderBranchOptions();
+    applyParentOverlayState();
 
     setTimeout(function () {
       transitionLock = false;
@@ -847,13 +924,10 @@
         wheelNavigationCooldownUntil = now + WHEEL_NAVIGATION_COOLDOWN_MS;
 
         if (delta < 0) {
-          const side =
-            hoveredPortalSide ||
-            (resolveRightTarget() ? "right" : resolveLeftTarget() ? "left" : "");
-          const next =
-            side === "left" ? resolveLeftTarget() : resolveRightTarget();
+          const side = "right";
+          const next = resolveRightTarget();
           if (next) {
-            animatePortalTransition(side || "right", next);
+            animatePortalTransition(side, next);
           }
           return;
         }
@@ -941,6 +1015,30 @@
         const button = event.target.closest("[data-target-state]");
         if (!button) return;
         selectBranch(button.getAttribute("data-target-state"));
+      });
+    }
+
+    if (parentsOverlay) {
+      parentsOverlay.addEventListener("mousemove", function () {
+        showParentOverlayLabels();
+      });
+      parentsOverlay.addEventListener("pointermove", function () {
+        showParentOverlayLabels();
+      });
+      parentsOverlay.addEventListener("mouseleave", function () {
+        scheduleParentOverlayHide();
+      });
+      parentsOverlay.addEventListener("touchstart", function () {
+        showParentOverlayLabels();
+      });
+      parentsOverlay.addEventListener("click", function (event) {
+        const button = event.target.closest("[data-target-state]");
+        if (!button || !isParentsOverlayState()) return;
+        const targetState = String(button.getAttribute("data-target-state") || "").trim();
+        if (!targetState) return;
+        markInteraction();
+        pauseNarrationForManualControl();
+        applyState(targetState);
       });
     }
   }
