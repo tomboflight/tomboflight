@@ -46,7 +46,7 @@
   const AUTO_ADVANCE_INTERVAL_MS = 5000;
   const PARENT_OVERLAY_HIDE_DELAY_MS = 5000;
   const MISSING_ASSET_COPY =
-    "Approved image unavailable for this Genesis Prototype node.";
+    "Approved image unavailable for this viewer node.";
   const DEFAULT_ZOOM_LAYERS = 2;
   const DEFAULT_DYNAMIC_EYE_TARGETS = {
     left: { x: 18, y: 50 },
