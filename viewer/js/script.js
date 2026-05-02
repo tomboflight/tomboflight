@@ -39,14 +39,13 @@
   const eyeRight = document.getElementById("eyeRight");
 
   const params = new URLSearchParams(window.location.search);
-  const PREVIEW_MODE = params.get("preview") === "1";
+  const DEMO_MODE = params.get("demo") === "malik-moreland" || params.get("preview") === "1";
   const EMBED_MODE = params.get("embed") === "1" || window.self !== window.top;
 
   const NARRATION_DISPLAY_DURATION_MS = 4500;
   const AUTO_ADVANCE_INTERVAL_MS = 5000;
   const PARENT_OVERLAY_HIDE_DELAY_MS = 5000;
-  const MISSING_ASSET_COPY =
-    "Approved image unavailable for this viewer node.";
+  const MISSING_ASSET_COPY = "Demo image placeholder";
   const DEFAULT_ZOOM_LAYERS = 2;
   const DEFAULT_DYNAMIC_EYE_TARGETS = {
     left: { x: 18, y: 50 },
@@ -56,41 +55,41 @@
     mode: "unavailable",
     navigation_mode: "sequence",
     hero_kicker: "Private Viewer",
-    hero_title: "Viewer Access Required",
-    hero_body: "No approved viewer manifest is available for this project yet.",
+    hero_title: "Private viewer locked",
+    hero_body: "This family viewer is protected. Open it from your Tomb of Light workspace after your project has been approved and provisioned.",
     instructions:
-      "Return to your dashboard and open the viewer from your entitled project workspace.",
-    path_title: "Viewer Status",
-    path_items: ["No approved viewer manifest is available for this project yet."],
-    nav_labels: {
-      left: "Previous",
-      right: "Next",
-    },
+      "Private project content is not loaded on public routes.",
+    path_title: "Private Viewer",
+    path_items: ["Private project content is not loaded on public routes."],
+    nav_labels: { left: "Origins", right: "Future Line" },
     initial_state_id: "unavailable",
-    controls: {
-      allow_lineage_navigation: false,
-      allow_zoom: false,
-      allow_reset: false,
-      allow_narration_auto_advance: false,
-      allow_gaze_navigation: false,
-      allow_branch_navigation: false,
-    },
-    states: [
-      {
-        id: "unavailable",
-        image: "",
-        title: "Viewer Unavailable",
-        status: "Manifest required",
-        node: "Private viewer",
-        description: "No approved viewer manifest is available for this project yet.",
-        narration: "",
-        left_state_id: "",
-        right_state_id: "",
-        eye_targets: DEFAULT_DYNAMIC_EYE_TARGETS,
-      },
-    ],
+    controls: { allow_lineage_navigation: false, allow_zoom: false, allow_reset: true, allow_narration_auto_advance: false, allow_gaze_navigation: false, allow_branch_navigation: false },
+    states: [{ id: "unavailable", image: "", title: "Private viewer locked", status: "Private Viewer", node: "Private viewer", description: "This family viewer is protected. Open it from your Tomb of Light workspace after your project has been approved and provisioned.", narration: "", left_state_id: "", right_state_id: "", eye_targets: DEFAULT_DYNAMIC_EYE_TARGETS }],
   };
+  
+  const MORELAND_DEMO_MANIFEST = {
+    mode: "dynamic",
+    navigation_mode: "explicit",
+    hero_kicker: "Sample demo tree",
+    hero_title: "See a family lineage come alive.",
+    hero_body: "Start at Malik. Zoom out to origin. Zoom in to descendants.",
+    instructions: "Demo-safe family data for public preview. Current view: Malik Moreland",
+    path_title: "Moreland demo flow",
+    path_items: ["Root: Elias + Clara Moreland", "Start node: Malik Moreland", "Malik’s descendants", "Imani Moreland adult", "Imani’s descendants"],
+    nav_labels: { left: "Origins", right: "Future Line" },
+    initial_state_id: "malik",
+    controls: { allow_lineage_navigation: true, allow_zoom: true, allow_reset: true, allow_narration_auto_advance: false, allow_gaze_navigation: false, allow_branch_navigation: false },
+    states: [
+      {id:"root", image:"images/parents.jpg", title:"Elias + Clara Moreland", status:"Generation 1 · Family origin view", node:"Elias + Clara Moreland", description:"Visible nodes: Elias + Clara Moreland, Malik Moreland, Selah Carter, Julian Moreland", left_state_id:"root", right_state_id:"malik", eye_targets: DEFAULT_DYNAMIC_EYE_TARGETS},
+      {id:"malik", image:"images/malik.jpg", title:"Malik Moreland", status:"Start node · Focused branch", node:"Malik Moreland", description:"Current view: Malik Moreland", left_state_id:"root", right_state_id:"malik_descendants", eye_targets: DEFAULT_DYNAMIC_EYE_TARGETS},
+      {id:"malik_descendants", image:"images/malik_descendants.jpg", title:"Malik’s descendants", status:"Descendant branch", node:"Malik’s descendants", description:"Visible nodes include Imani Moreland adult and protected future branches.", left_state_id:"malik", right_state_id:"imani_adult", eye_targets: DEFAULT_DYNAMIC_EYE_TARGETS},
+      {id:"imani_adult", image:"images/malik_descendants.jpg", title:"Imani Moreland adult", status:"Next generation focus", node:"Imani Moreland adult", description:"Visible nodes: Malik Moreland, Imani Moreland adult, Imani’s descendants.", left_state_id:"malik_descendants", right_state_id:"imani_descendants", eye_targets: DEFAULT_DYNAMIC_EYE_TARGETS},
+      {id:"imani_descendants", image:"images/imani_descendants.jpg", title:"Imani’s descendants", status:"Protected future branch", node:"Imani’s descendants", description:"Protected descendant branch preview.", left_state_id:"imani_adult", right_state_id:"imani_descendants", eye_targets: DEFAULT_DYNAMIC_EYE_TARGETS}
+    ]
+  };
+
   function getPreviewManifest() {
+    if (DEMO_MODE) return MORELAND_DEMO_MANIFEST;
     const manifest = window.GENESIS_PROTOTYPE_MANIFEST;
     if (manifest && Array.isArray(manifest.states) && manifest.states.length) {
       return manifest;
@@ -1045,7 +1044,7 @@
 
   async function boot() {
     let selectedManifest = UNAVAILABLE_MANIFEST;
-    if (PREVIEW_MODE) {
+    if (DEMO_MODE) {
       selectedManifest = getPreviewManifest();
     } else {
       const liveManifest = await loadDynamicManifest();
