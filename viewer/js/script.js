@@ -39,8 +39,9 @@
   const eyeRight = document.getElementById("eyeRight");
 
   const params = new URLSearchParams(window.location.search);
+  const DEFAULT_PUBLIC_DEMO_KEY = "malik-moreland";
   const DEMO_KEY = String(params.get("demo") || "").trim().toLowerCase();
-  const DEMO_MODE = DEMO_KEY === "malik-moreland";
+  const DEMO_MODE = DEMO_KEY === DEFAULT_PUBLIC_DEMO_KEY;
   const PREVIEW_MODE = params.get("preview") === "1";
   const EMBED_MODE = params.get("embed") === "1" || window.self !== window.top;
 
@@ -58,7 +59,7 @@
     navigation_mode: "sequence",
     hero_kicker: "Private Viewer",
     hero_title: "Private viewer locked",
-    hero_body: "No approved viewer manifest is available for this project yet.",
+    hero_body: "No approved viewer manifest is available for this project yet. Open it from your Tomb of Light workspace after your project has been approved and provisioned.",
     instructions:
       "Private project content is not loaded on public routes.",
     path_title: "Private Viewer",
@@ -81,7 +82,7 @@
   }
 
   function getPreviewManifest() {
-    const defaultDemoManifest = resolvePublicDemoManifest("malik-moreland");
+    const defaultDemoManifest = resolvePublicDemoManifest(DEFAULT_PUBLIC_DEMO_KEY);
     if (defaultDemoManifest) return defaultDemoManifest;
     const manifest = window.GENESIS_PROTOTYPE_MANIFEST;
     if (manifest && Array.isArray(manifest.states) && manifest.states.length) {

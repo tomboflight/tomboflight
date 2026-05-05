@@ -103,6 +103,12 @@ class GenesisPrototypeManifestSafetyTests(unittest.TestCase):
         self.assertIn('window.PUBLIC_DEMO_MANIFESTS = Object.freeze({', self.source)
         self.assertIn('"malik-moreland": MALIK_MORELAND_DEMO_MANIFEST', self.source)
         self.assertIn('initial_state_id: "malik_anchor"', self.source)
+        self.assertIn('title: "Imani Benton / Imani Moreland"', self.source)
+        self.assertIn('node: "Imani Benton / Imani Moreland"', self.source)
+        self.assertIn(
+            "Imani adult household: Imani Benton / Imani Moreland, Marcus Benton, Micah Benton, and Zara Benton.",
+            self.source,
+        )
 
 
 if __name__ == "__main__":
