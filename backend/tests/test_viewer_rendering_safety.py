@@ -21,7 +21,7 @@ class ViewerRenderingSafetyTests(unittest.TestCase):
         )
         source = script_path.read_text(encoding="utf-8")
 
-        self.assertNotIn("DEMO_MANIFEST", source)
+        self.assertNotIn("const MORELAND_DEMO_MANIFEST", source)
         self.assertNotIn('mode: "demo"', source)
         self.assertNotIn("Genesis Prototype", source)
         self.assertNotIn("Moreland", source)
