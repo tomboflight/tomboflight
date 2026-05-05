@@ -26,6 +26,12 @@ class ViewerRenderingSafetyTests(unittest.TestCase):
         self.assertNotIn("Genesis Prototype", source)
         self.assertNotIn("Moreland", source)
         self.assertNotIn("Selah Carter", source)
+        self.assertIn(
+            'selectedManifest = resolvePublicDemoManifest(DEMO_KEY) || UNAVAILABLE_MANIFEST;',
+            source,
+        )
+        self.assertIn('const DEMO_MODE = DEMO_KEY === "malik-moreland";', source)
+        self.assertIn('selectedManifest = liveManifest || UNAVAILABLE_MANIFEST;', source)
 
     def test_viewer_script_uses_production_safe_unavailable_copy(self):
         script_path = (

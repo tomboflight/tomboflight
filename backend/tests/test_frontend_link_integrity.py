@@ -41,7 +41,7 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
 
         self.assertRegex(
             contents,
-            r'<a[^>]*class="[^"]*\bhero-viewer-link\b[^"]*"[^>]*href="platform\.html"',
+            r'<a[^>]*class="[^"]*\bhero-viewer-link\b[^"]*"[^>]*href="viewer/\?demo=malik-moreland"',
         )
         self.assertIn('class="hero-viewer-static"', contents)
         self.assertNotIn("Manifest Required", contents)
@@ -52,8 +52,25 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
         )
         self.assertIsNotNone(embed_match)
         self.assertNotIn("<iframe", embed_match.group(1))
-        self.assertIn('class="btn btn-primary" href="viewer/index.html?preview=1"', contents)
+        self.assertIn('class="btn btn-primary" href="viewer/?demo=malik-moreland"', contents)
+        self.assertNotIn('viewer/index.html?preview=1', contents)
         self.assertNotIn('class="mini-link hero-viewer-link" href="viewer/"', contents)
+
+    def test_public_demo_ctas_use_demo_tree_language_and_route(self):
+        homepage = (REPO_ROOT / "index.html").read_text(encoding="utf-8")
+        platform = (REPO_ROOT / "platform.html").read_text(encoding="utf-8")
+        how_it_works = (REPO_ROOT / "how-it-works.html").read_text(encoding="utf-8")
+
+        self.assertIn("View Demo Tree", homepage)
+        self.assertIn('href="viewer/?demo=malik-moreland"', homepage)
+
+        self.assertIn('href="viewer/?demo=malik-moreland">View Demo Tree</a>', platform)
+        self.assertIn('href="viewer/?demo=malik-moreland">Open Demo Viewer</a>', platform)
+
+        self.assertIn('href="viewer/?demo=malik-moreland">View Demo Tree</a>', how_it_works)
+        self.assertNotIn("View Prototype", homepage)
+        self.assertNotIn("View Prototype", platform)
+        self.assertNotIn("View Prototype", how_it_works)
 
 
 if __name__ == "__main__":

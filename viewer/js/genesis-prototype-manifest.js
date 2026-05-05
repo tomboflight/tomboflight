@@ -1,22 +1,22 @@
 // viewer/js/genesis-prototype-manifest.js
-// Public Genesis prototype manifest used only when preview=1.
+// Public demo-safe manifest data for viewer demo routes.
 
 (() => {
-  window.GENESIS_PROTOTYPE_MANIFEST = {
-    mode: "preview",
+  const MALIK_MORELAND_DEMO_MANIFEST = {
+    mode: "demo",
     navigation_mode: "graph",
-    hero_kicker: "Genesis Prototype Viewer",
-    hero_title: "Malik Moreland Genesis Prototype",
+    hero_kicker: "Sample demo tree",
+    hero_title: "See a family lineage come alive.",
     hero_body:
-      "Confirmed cinematic lineage preview for the approved Genesis Prototype family.",
+      "Start at Malik. Zoom out to origin. Zoom in to descendants.",
     instructions:
-      "Use gesture zoom navigation only. Zoom out returns to ancestors/parents, zoom in moves to descendants, and select siblings only from the parents photo regions.",
-    path_title: "Prototype Path",
+      "Demo-safe family data for public preview. Current view: Malik Moreland",
+    path_title: "Moreland demo flow",
     path_items: [
       "Malik Moreland",
       "Elias Moreland + Clara Moreland",
       "Malik descendants",
-      "Imani Moreland",
+      "Imani Benton / Imani Moreland",
       "Imani descendants",
       "Selah Carter",
       "Selah descendants",
@@ -28,11 +28,11 @@
     },
     initial_state_id: "malik_anchor",
     controls: {
-      allow_lineage_navigation: false,
-      allow_zoom: false,
+      allow_lineage_navigation: true,
+      allow_zoom: true,
       allow_reset: false,
-      allow_narration_auto_advance: false,
-      allow_gaze_navigation: true,
+      allow_narration_auto_advance: true,
+      allow_gaze_navigation: false,
       allow_branch_navigation: false,
       max_zoom_layers: 4,
     },
@@ -54,12 +54,12 @@
         id: "malik_anchor",
         image: "../images/malik.jpg",
         title: "Malik Moreland",
-        status: "Genesis anchor",
+        status: "Start node",
         node: "Malik Moreland",
         description:
-          "Primary Genesis anchor.",
+          "Start at Malik Moreland. Zoom out to Elias + Clara Moreland or zoom in to Malik descendants.",
         narration:
-          "Malik Moreland is the anchor state for this confirmed Genesis Prototype.",
+          "Malik Moreland is the demo start node.",
         left_state_id: "moreland_parents",
         right_state_id: "malik_descendants",
         eye_targets: {
@@ -74,9 +74,9 @@
         status: "Origin node",
         node: "Elias Moreland + Clara Moreland",
         description:
-          "Top generation origin with sibling selection regions.",
+          "Top generation origin. Select Malik Moreland, Julian Moreland, or Selah Carter.",
         narration:
-          "Elias Moreland and Clara Moreland are the top generation origin.",
+          "Elias Moreland and Clara Moreland are the origin generation.",
         left_state_id: "",
         right_state_id: "malik_anchor",
         eye_targets: {
@@ -88,10 +88,10 @@
         id: "malik_descendants",
         image: "../images/malik_descendants.jpg",
         title: "Malik Descendants",
-        status: "Future line",
+        status: "Malik household",
         node: "Malik descendants",
         description:
-          "Descendant layer following Malik Moreland.",
+          "Malik household: Malik Moreland, Naomi Moreland, Eli Moreland, and Imani Moreland.",
         narration:
           "Zooming in from Malik enters the Malik descendants layer.",
         left_state_id: "malik_anchor",
@@ -104,13 +104,13 @@
       {
         id: "imani_anchor",
         image: "../images/imani.jpg",
-        title: "Imani Moreland",
-        status: "Adult profile",
-        node: "Imani Moreland",
+        title: "Imani Benton / Imani Moreland",
+        status: "Imani adult household",
+        node: "Imani Benton / Imani Moreland",
         description:
-          "Imani Moreland adult anchor state.",
+          "Imani adult household: Imani Benton / Imani Moreland, Marcus Benton, Micah Benton, and Zara Benton.",
         narration:
-          "Imani Moreland anchors this branch before descendants.",
+          "Imani Benton, also Imani Moreland, anchors this branch before descendants.",
         left_state_id: "malik_descendants",
         right_state_id: "imani_descendants",
         eye_targets: {
@@ -125,7 +125,7 @@
         status: "Future line",
         node: "Imani descendants",
         description:
-          "Descendant layer following Imani Moreland.",
+          "Descendant layer following Imani Benton / Imani Moreland.",
         narration:
           "Imani descendants are the final zoom-in node for this branch.",
         left_state_id: "imani_anchor",
@@ -142,9 +142,9 @@
         status: "Sibling branch",
         node: "Julian Moreland",
         description:
-          "Julian Moreland sibling branch with no descendants available.",
+          "Julian Moreland has no descendants in this demo tree.",
         narration:
-          "Julian Moreland has no descendants available in this prototype.",
+          "Julian Moreland has no descendants in this demo tree.",
         left_state_id: "moreland_parents",
         right_state_id: "",
         eye_targets: {
@@ -159,7 +159,7 @@
         status: "Sibling branch",
         node: "Selah Carter",
         description:
-          "Selah Carter sibling branch.",
+          "Selah Carter branch with descendants Andre Carter and Camille Carter.",
         narration:
           "Selah Carter leads to one descendant layer.",
         left_state_id: "moreland_parents",
@@ -176,7 +176,7 @@
         status: "Future line",
         node: "Selah descendants",
         description:
-          "Descendant layer following Selah Carter.",
+          "Selah descendants include Andre Carter and Camille Carter.",
         narration:
           "Selah descendants return to Selah, then to the parents state.",
         left_state_id: "selah_anchor",
@@ -189,4 +189,9 @@
     ],
     branch_options_by_state: {},
   };
+
+  window.PUBLIC_DEMO_MANIFESTS = Object.freeze({
+    "malik-moreland": MALIK_MORELAND_DEMO_MANIFEST,
+  });
+  window.GENESIS_PROTOTYPE_MANIFEST = MALIK_MORELAND_DEMO_MANIFEST;
 })();

@@ -13,7 +13,7 @@ class GenesisPrototypeManifestSafetyTests(unittest.TestCase):
         )
         self.source = self.manifest_path.read_text(encoding="utf-8")
 
-    def test_uses_only_approved_genesis_images(self):
+    def test_uses_only_approved_demo_images(self):
         approved = {
             "../images/malik.jpg",
             "../images/malik_descendants.jpg",
@@ -27,7 +27,7 @@ class GenesisPrototypeManifestSafetyTests(unittest.TestCase):
         referenced = set(re.findall(r'image:\s*"([^"]+)"', self.source))
         self.assertEqual(referenced, approved)
 
-    def test_contains_only_confirmed_people_and_states(self):
+    def test_contains_required_people_and_states(self):
         expected_state_ids = {
             "malik_anchor",
             "moreland_parents",
@@ -41,15 +41,25 @@ class GenesisPrototypeManifestSafetyTests(unittest.TestCase):
         state_ids = set(re.findall(r'id:\s*"([^"]+)"', self.source))
         self.assertTrue(expected_state_ids.issubset(state_ids))
 
-        disallowed_terms = [
-            "Naomi",
-            "Marcus",
-            "Benton",
+        required_people_terms = [
+            "Malik Moreland",
+            "Elias Moreland",
+            "Clara Moreland",
+            "Naomi Moreland",
             "Eli Moreland",
-            "Micah",
-            "Zara",
-            "Andre",
-            "Camille",
+            "Imani Benton / Imani Moreland",
+            "Marcus Benton",
+            "Micah Benton",
+            "Zara Benton",
+            "Julian Moreland",
+            "Selah Carter",
+            "Andre Carter",
+            "Camille Carter",
+        ]
+        for term in required_people_terms:
+            self.assertIn(term, self.source)
+
+        disallowed_terms = [
             "stock",
             "placeholder",
             "random",
@@ -88,6 +98,11 @@ class GenesisPrototypeManifestSafetyTests(unittest.TestCase):
 
         for state_id, link_pair in expected_links.items():
             self.assertEqual(transitions.get(state_id), link_pair)
+
+    def test_manifest_resolves_public_demo_key_and_starts_on_malik(self):
+        self.assertIn('window.PUBLIC_DEMO_MANIFESTS = Object.freeze({', self.source)
+        self.assertIn('"malik-moreland": MALIK_MORELAND_DEMO_MANIFEST', self.source)
+        self.assertIn('initial_state_id: "malik_anchor"', self.source)
 
 
 if __name__ == "__main__":
