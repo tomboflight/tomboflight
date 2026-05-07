@@ -103,12 +103,64 @@ class GenesisPrototypeManifestSafetyTests(unittest.TestCase):
         self.assertIn('window.PUBLIC_DEMO_MANIFESTS = Object.freeze({', self.source)
         self.assertIn('"malik-moreland": MALIK_MORELAND_DEMO_MANIFEST', self.source)
         self.assertIn('initial_state_id: "malik_anchor"', self.source)
+        self.assertNotIn('initial_state_id: "selah_anchor"', self.source)
         self.assertIn('title: "Imani Benton / Imani Moreland"', self.source)
         self.assertIn('node: "Imani Benton / Imani Moreland"', self.source)
         self.assertIn(
             "Imani adult household: Imani Benton / Imani Moreland, Marcus Benton, Micah Benton, and Zara Benton.",
             self.source,
         )
+        self.assertIn(
+            'description:\n          "Julian Moreland has no descendant layer in this demo."',
+            self.source,
+        )
+        self.assertIn('right_state_id: ""', self.source)
+
+    def test_path_items_follow_canonical_moreland_demo_flow(self):
+        expected_path_items = [
+            "Malik Moreland",
+            "Elias Moreland + Clara Moreland",
+            "Return to Malik",
+            "Malik descendants",
+            "Imani Benton / Imani Moreland",
+            "Imani descendants",
+            "Return to Elias + Clara",
+            "Selah Carter",
+            "Selah descendants",
+            "Return to Elias + Clara",
+            "Julian Moreland",
+        ]
+        path_match = re.search(
+            r"path_items:\s*\[(.*?)\],\n\s*auto_advance_state_ids:",
+            self.source,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(path_match)
+        parsed_path_items = re.findall(r'"([^"]+)"', path_match.group(1))
+        self.assertEqual(parsed_path_items, expected_path_items)
+
+    def test_auto_advance_sequence_matches_canonical_narration_order(self):
+        expected_auto_advance_ids = [
+            "malik_anchor",
+            "moreland_parents",
+            "malik_anchor",
+            "malik_descendants",
+            "imani_anchor",
+            "imani_descendants",
+            "moreland_parents",
+            "selah_anchor",
+            "selah_descendants",
+            "moreland_parents",
+            "julian_anchor",
+        ]
+        sequence_match = re.search(
+            r"auto_advance_state_ids:\s*\[(.*?)\],\n\s*nav_labels:",
+            self.source,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(sequence_match)
+        parsed_sequence = re.findall(r'"([^"]+)"', sequence_match.group(1))
+        self.assertEqual(parsed_sequence, expected_auto_advance_ids)
 
 
 if __name__ == "__main__":

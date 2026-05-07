@@ -232,6 +232,13 @@
             return String(item || "").trim();
           }).filter(Boolean)
         : [],
+      autoAdvanceStateIds: Array.isArray(manifest?.auto_advance_state_ids)
+        ? manifest.auto_advance_state_ids
+            .map(function (item) {
+              return String(item || "").trim();
+            })
+            .filter(Boolean)
+        : [],
       navLabels: {
         left: String(manifest?.nav_labels?.left || "Parents").trim(),
         right: String(manifest?.nav_labels?.right || "Descendants").trim(),
@@ -481,6 +488,17 @@
   }
 
   function getNextAutoAdvanceStateId() {
+    const orderedStates = Array.isArray(currentManifest?.autoAdvanceStateIds)
+      ? currentManifest.autoAdvanceStateIds
+      : [];
+    if (orderedStates.length > 1) {
+      const currentIndex = orderedStates.indexOf(state);
+      if (currentIndex !== -1) {
+        return orderedStates[(currentIndex + 1) % orderedStates.length] || "";
+      }
+      return orderedStates[0] || "";
+    }
+
     const currentState = statesById[state];
     if (!currentState) return "";
     if (currentState.rightStateId) return currentState.rightStateId;
@@ -871,6 +889,18 @@
     if (!isControlEnabled("allow_zoom", true)) return;
     markInteraction();
     pauseNarrationForManualControl();
+    if (currentManifest?.mode === "demo" && currentManifest?.navigationMode === "graph") {
+      const next = resolveRightTarget();
+      if (next) {
+        animatePortalTransition("right", next);
+      } else {
+        showNarration(
+          statesById[state]?.description ||
+            "This node has no descendant layer in this demo.",
+        );
+      }
+      return;
+    }
     setZoom(scale + ZOOM_STEP, true);
   }
 
@@ -879,6 +909,13 @@
     if (!isControlEnabled("allow_zoom", true)) return;
     markInteraction();
     pauseNarrationForManualControl();
+    if (currentManifest?.mode === "demo" && currentManifest?.navigationMode === "graph") {
+      const next = resolveLeftTarget();
+      if (next) {
+        animatePortalTransition("left", next);
+      }
+      return;
+    }
     setZoom(scale - ZOOM_STEP, true);
   }
 

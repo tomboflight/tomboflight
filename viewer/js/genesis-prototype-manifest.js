@@ -8,19 +8,35 @@
     hero_kicker: "Sample demo tree",
     hero_title: "See a family lineage come alive.",
     hero_body:
-      "Start at Malik. Zoom out to origin. Zoom in to descendants.",
+      "Start at Malik, travel to origin, return to Malik, then follow descendants and sibling branches.",
     instructions:
       "Demo-safe family data for public preview. Current view: Malik Moreland",
     path_title: "Moreland demo flow",
     path_items: [
       "Malik Moreland",
       "Elias Moreland + Clara Moreland",
+      "Return to Malik",
       "Malik descendants",
       "Imani Benton / Imani Moreland",
       "Imani descendants",
+      "Return to Elias + Clara",
       "Selah Carter",
       "Selah descendants",
+      "Return to Elias + Clara",
       "Julian Moreland",
+    ],
+    auto_advance_state_ids: [
+      "malik_anchor",
+      "moreland_parents",
+      "malik_anchor",
+      "malik_descendants",
+      "imani_anchor",
+      "imani_descendants",
+      "moreland_parents",
+      "selah_anchor",
+      "selah_descendants",
+      "moreland_parents",
+      "julian_anchor",
     ],
     nav_labels: {
       left: "Parents",
@@ -142,9 +158,9 @@
         status: "Sibling branch",
         node: "Julian Moreland",
         description:
-          "Julian Moreland has no descendants in this demo tree.",
+          "Julian Moreland has no descendant layer in this demo.",
         narration:
-          "Julian Moreland has no descendants in this demo tree.",
+          "Julian Moreland has no descendant layer in this demo.",
         left_state_id: "moreland_parents",
         right_state_id: "",
         eye_targets: {
