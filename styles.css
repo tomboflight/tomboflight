@@ -3123,6 +3123,34 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
   margin-bottom: 12px;
 }
 
+.footer-contact {
+  margin-top: 14px;
+  display: grid;
+  gap: 6px;
+  font-size: 0.92rem;
+  color: var(--tol-muted);
+}
+
+.footer-contact p {
+  margin: 0;
+}
+
+.footer-contact a {
+  color: var(--tol-muted);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.footer-contact a:hover {
+  color: var(--text);
+}
+
+.footer-contact a:focus {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 .footer-links {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
