@@ -52,6 +52,8 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
         self.assertNotIn("<iframe", embed_match.group(1))
         self.assertNotIn('viewer/index.html?preview=1', contents)
         self.assertNotIn('href="viewer/?demo=malik-moreland"', contents)
+        self.assertNotIn('href="viewer?demo=malik-moreland"', contents)
+        self.assertNotIn('href="/viewer?demo=malik-moreland"', contents)
 
     def test_public_demo_ctas_use_demo_tree_language_and_route(self):
         homepage = (REPO_ROOT / "index.html").read_text(encoding="utf-8")
