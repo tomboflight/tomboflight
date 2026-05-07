@@ -748,13 +748,14 @@ select:focus-visible {
   height: 100%;
   max-width: 100%;
   overflow-x: auto;
-  overflow-y: hidden;
+  overflow-y: auto;
   padding: 18px;
   scrollbar-width: thin;
   scrollbar-color: rgba(214, 176, 102, 0.75) rgba(255, 255, 255, 0.08);
 }
 
 .moreland-tree-scroll::-webkit-scrollbar {
+  width: 10px;
   height: 10px;
 }
 
@@ -774,54 +775,104 @@ select:focus-visible {
 }
 
 .moreland-tree-canvas {
-  min-width: 980px;
-  display: grid;
-  gap: 14px;
-}
-
-.moreland-tree-mobile {
-  display: none;
-}
-
-.moreland-generation {
-  display: grid;
-  gap: 10px;
-}
-
-.moreland-generation-label {
-  color: var(--tol-gold-soft);
-  font-size: 0.76rem;
-  font-weight: 800;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-}
-
-.moreland-generation-row {
-  display: flex;
-  flex-wrap: nowrap;
-  justify-content: center;
-  align-items: stretch;
-  gap: 16px;
-}
-
-.moreland-couple {
-  display: flex;
-  align-items: stretch;
-  gap: 12px;
   position: relative;
+  width: 1260px;
+  height: 760px;
+  min-width: 1260px;
+  min-height: 760px;
 }
 
-.moreland-couple::before {
-  content: "";
+.moreland-tree-connectors {
   position: absolute;
-  top: 50%;
-  left: calc(50% - 16px);
-  width: 32px;
-  border-top: 2px dotted rgba(214, 176, 102, 0.72);
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.moreland-parent-links line {
+  stroke: rgba(214, 176, 102, 0.92);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.moreland-spouse-links line {
+  stroke: rgba(114, 188, 255, 0.82);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-dasharray: 8 7;
+}
+
+.moreland-node {
+  position: absolute;
+  width: 192px;
+}
+
+.moreland-node-clara {
+  top: 40px;
+  left: 410px;
+}
+
+.moreland-node-elias {
+  top: 40px;
+  left: 620px;
+}
+
+.moreland-node-andre {
+  top: 220px;
+  left: 100px;
+}
+
+.moreland-node-selah {
+  top: 220px;
+  left: 260px;
+}
+
+.moreland-node-julian {
+  top: 220px;
+  left: 500px;
+}
+
+.moreland-node-malik {
+  top: 220px;
+  left: 700px;
+}
+
+.moreland-node-naomi {
+  top: 220px;
+  left: 860px;
+}
+
+.moreland-node-zara {
+  top: 400px;
+  left: 180px;
+}
+
+.moreland-node-eli {
+  top: 400px;
+  left: 700px;
+}
+
+.moreland-node-imani {
+  top: 400px;
+  left: 860px;
+}
+
+.moreland-node-marcus {
+  top: 400px;
+  left: 1020px;
+}
+
+.moreland-node-camille {
+  top: 580px;
+  left: 860px;
+}
+
+.moreland-node-micah {
+  top: 580px;
+  left: 1020px;
 }
 
 .moreland-person-card {
-  width: 192px;
   min-height: 88px;
   margin: 0;
   padding: 14px 14px 12px;
@@ -849,19 +900,6 @@ select:focus-visible {
   color: var(--tol-dark-muted);
   font-size: 0.84rem;
   font-weight: 500;
-}
-
-.moreland-connector {
-  display: block;
-  width: 2px;
-  height: 22px;
-  margin: 0 auto;
-  border-radius: 999px;
-  background: linear-gradient(
-    180deg,
-    rgba(198, 166, 106, 0.95),
-    rgba(114, 188, 255, 0.75)
-  );
 }
 
 .platform-model-card {
@@ -4037,24 +4075,13 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
   }
 
   .moreland-tree-canvas {
-    min-width: 840px;
-  }
-
-  .moreland-generation-row {
-    gap: 12px;
-  }
-
-  .moreland-couple {
-    gap: 8px;
-  }
-
-  .moreland-couple::before {
-    left: calc(50% - 12px);
-    width: 24px;
+    width: 1080px;
+    height: 720px;
+    min-width: 1080px;
+    min-height: 720px;
   }
 
   .moreland-person-card {
-    width: 160px;
     min-height: 78px;
     padding: 11px 10px;
   }
@@ -4078,58 +4105,29 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
 }
 
 @media (max-width: 768px) {
-  .hero-moreland-tree-embed,
-  .hero-moreland-tree-stage {
-    overflow: visible;
-  }
-
   .hero-moreland-tree-stage {
     aspect-ratio: auto;
-    min-height: 0;
-    height: auto;
+    min-height: 480px;
+    height: 480px;
   }
 
   .moreland-tree-scroll {
-    height: auto;
-    overflow: visible;
+    height: 100%;
   }
 
   .moreland-tree-canvas {
-    display: none;
+    width: 1000px;
+    height: 700px;
+    min-width: 1000px;
+    min-height: 700px;
   }
 
-  .moreland-tree-mobile {
-    display: grid;
-    gap: 14px;
+  .moreland-person-card h3 {
+    font-size: 0.84rem;
   }
 
-  .moreland-tree-mobile-generation {
-    display: grid;
-    gap: 10px;
-    padding: 12px;
-    border-radius: 16px;
-    border: 1px solid rgba(214, 176, 102, 0.26);
-    background: rgba(3, 8, 16, 0.62);
-  }
-
-  .moreland-tree-mobile-row {
-    display: grid;
-    gap: 10px;
-  }
-
-  .moreland-tree-mobile .moreland-couple {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-  }
-
-  .moreland-tree-mobile .moreland-couple::before {
-    display: none;
-  }
-
-  .moreland-tree-mobile .moreland-person-card {
-    width: 100%;
-    min-height: 0;
+  .moreland-person-card p {
+    font-size: 0.72rem;
   }
 }
 
