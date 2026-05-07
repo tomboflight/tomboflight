@@ -31,9 +31,7 @@ class _FakeCollection:
         if sort and candidates:
             key, direction = sort[0]
             candidates.sort(key=lambda item: str(item.get(key) or ""), reverse=int(direction) < 0)
-        for item in candidates:
-            return item
-        return None
+        return candidates[0] if candidates else None
 
     def find(self, query=None):
         query = query or {}
