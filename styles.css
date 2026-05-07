@@ -426,6 +426,11 @@ select:focus-visible {
   align-items: stretch;
 }
 
+.hero-shell-moreland {
+  grid-template-columns: minmax(300px, 0.85fr) minmax(0, 1.15fr);
+  align-items: stretch;
+}
+
 .eyebrow {
   display: inline-block;
   margin-bottom: 16px;
@@ -671,6 +676,180 @@ select:focus-visible {
 .hero-viewer-card-main .hero-viewer-stage {
   aspect-ratio: 16 / 8.8;
   min-height: clamp(360px, 54vh, 620px);
+}
+
+.hero-copy-moreland {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
+.hero-copy-moreland .hero-lead {
+  margin-bottom: 0;
+}
+
+.hero-visual-moreland {
+  gap: 0;
+}
+
+.hero-moreland-tree-card {
+  padding: 24px;
+  border-color: rgba(114, 188, 255, 0.24);
+  background:
+    radial-gradient(
+      circle at 10% 12%,
+      rgba(114, 188, 255, 0.2),
+      transparent 34%
+    ),
+    radial-gradient(
+      circle at 84% 10%,
+      rgba(214, 176, 102, 0.16),
+      transparent 26%
+    ),
+    linear-gradient(180deg, rgba(8, 13, 24, 0.94), rgba(4, 8, 16, 0.98));
+}
+
+.hero-demo-card-top-moreland {
+  margin-bottom: 14px;
+}
+
+.hero-demo-card-top-moreland h2 {
+  max-width: 22ch;
+  margin: 0;
+  font-size: clamp(1.35rem, 2.1vw, 1.9rem);
+}
+
+.hero-moreland-tree-embed {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(3, 8, 16, 0.84);
+  border-radius: 24px;
+}
+
+.hero-moreland-tree-stage {
+  min-height: clamp(500px, 60vh, 720px);
+  aspect-ratio: auto;
+  background:
+    radial-gradient(circle at 14% 8%, rgba(198, 166, 106, 0.18), transparent 30%),
+    radial-gradient(circle at 86% 86%, rgba(114, 188, 255, 0.24), transparent 30%),
+    linear-gradient(180deg, rgba(3, 7, 15, 0.98), rgba(4, 8, 16, 0.98));
+  border: 0;
+}
+
+.moreland-tree-scroll {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 18px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(214, 176, 102, 0.75) rgba(255, 255, 255, 0.08);
+}
+
+.moreland-tree-scroll::-webkit-scrollbar {
+  height: 10px;
+}
+
+.moreland-tree-scroll::-webkit-scrollbar-thumb {
+  background: rgba(214, 176, 102, 0.75);
+  border-radius: 999px;
+}
+
+.moreland-tree-scroll::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+}
+
+.moreland-tree-scroll:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.moreland-tree-canvas {
+  min-width: 980px;
+  display: grid;
+  gap: 14px;
+}
+
+.moreland-generation {
+  display: grid;
+  gap: 10px;
+}
+
+.moreland-generation-label {
+  color: var(--tol-gold-soft);
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.moreland-generation-row {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: center;
+  align-items: stretch;
+  gap: 16px;
+}
+
+.moreland-couple {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  position: relative;
+}
+
+.moreland-couple::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: calc(50% - 16px);
+  width: 32px;
+  border-top: 2px dotted rgba(214, 176, 102, 0.72);
+}
+
+.moreland-person-card {
+  width: 192px;
+  min-height: 88px;
+  margin: 0;
+  padding: 14px 14px 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(114, 188, 255, 0.34);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02)),
+    rgba(6, 12, 23, 0.86);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.03),
+    0 16px 26px rgba(1, 4, 10, 0.34);
+}
+
+.moreland-person-card h3 {
+  margin: 0 0 4px;
+  color: #ffffff;
+  font-size: 1rem;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.moreland-person-card p {
+  margin: 0;
+  color: var(--tol-dark-muted);
+  font-size: 0.84rem;
+  font-weight: 500;
+}
+
+.moreland-connector {
+  display: block;
+  width: 2px;
+  height: 22px;
+  margin: 0 auto;
+  border-radius: 999px;
+  background: linear-gradient(
+    180deg,
+    rgba(198, 166, 106, 0.95),
+    rgba(114, 188, 255, 0.75)
+  );
 }
 
 .platform-model-card {
@@ -3207,6 +3386,11 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
     gap: 16px;
   }
 
+  .hero-shell-moreland {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
   .hero-trust-row {
     justify-content: flex-start;
   }
@@ -3546,6 +3730,22 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
     max-height: none;
   }
 
+  .hero-moreland-tree-stage {
+    min-height: 500px;
+  }
+
+  .moreland-tree-scroll {
+    padding: 14px 12px;
+  }
+
+  .moreland-tree-canvas {
+    min-width: 900px;
+  }
+
+  .moreland-person-card {
+    width: 174px;
+  }
+
   .hero-viewer-static {
     min-height: 280px;
     padding: 14px;
@@ -3785,6 +3985,46 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
     aspect-ratio: 4 / 3;
     min-height: 220px;
     max-height: none;
+  }
+
+  .hero-demo-card-top-moreland h2 {
+    font-size: clamp(1.2rem, 6.2vw, 1.45rem);
+    line-height: 1.2;
+  }
+
+  .hero-moreland-tree-stage {
+    min-height: 460px;
+  }
+
+  .moreland-tree-canvas {
+    min-width: 840px;
+  }
+
+  .moreland-generation-row {
+    gap: 12px;
+  }
+
+  .moreland-couple {
+    gap: 8px;
+  }
+
+  .moreland-couple::before {
+    left: calc(50% - 12px);
+    width: 24px;
+  }
+
+  .moreland-person-card {
+    width: 160px;
+    min-height: 78px;
+    padding: 11px 10px;
+  }
+
+  .moreland-person-card h3 {
+    font-size: 0.87rem;
+  }
+
+  .moreland-person-card p {
+    font-size: 0.74rem;
   }
 
   .architecture-panel-home h2 {
