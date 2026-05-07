@@ -36,7 +36,7 @@ def build_linked_network(
     if not normalized_project_id:
         raise ValueError("Project id is required.")
     if not _str_id(current_user_id):
-        raise PermissionError("Authenticated user id is required.")
+        raise PermissionError("User must be authenticated with a valid user id.")
 
     if workspace_context is not None:
         context_project_id = _str_id(

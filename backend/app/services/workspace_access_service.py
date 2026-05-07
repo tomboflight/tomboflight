@@ -302,7 +302,7 @@ def _audit_entitlement_drift(
         )
 
 
-def _normalize_package_lane(value: Any) -> str:
+def _normalize_package_lane_or_type(value: Any) -> str:
     return normalize_package_type(_normalize_value(value), default="")
 
 
@@ -357,10 +357,10 @@ def resolve_strict_paid_active_project_entitlement(project_id: str) -> dict[str,
         )
         raise PermissionError("Workspace entitlement does not match paid package order.")
 
-    entitlement_lane = _normalize_package_lane(
+    entitlement_lane = _normalize_package_lane_or_type(
         entitlement_doc.get("package_lane") or entitlement_identity.get("package_lane")
     )
-    paid_order_lane = _normalize_package_lane(
+    paid_order_lane = _normalize_package_lane_or_type(
         paid_order.get("package_lane")
         or paid_order.get("project_lane")
         or paid_order_identity.get("package_lane")
