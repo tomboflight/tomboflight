@@ -13,7 +13,7 @@ class _FakeCursor:
         self._docs = list(docs)
 
     def sort(self, key, direction):
-        reverse = int(direction) < 0
+        reverse = direction < 0
         self._docs.sort(key=lambda item: str(item.get(key) or ""), reverse=reverse)
         return self
 
@@ -30,7 +30,7 @@ class _FakeCollection:
         candidates = [item for item in self._docs if self._matches(item, query)]
         if sort and candidates:
             key, direction = sort[0]
-            candidates.sort(key=lambda item: str(item.get(key) or ""), reverse=int(direction) < 0)
+            candidates.sort(key=lambda item: str(item.get(key) or ""), reverse=direction < 0)
         return candidates[0] if candidates else None
 
     def find(self, query=None):

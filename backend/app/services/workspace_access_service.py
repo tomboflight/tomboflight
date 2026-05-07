@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any, Iterable
 
 from bson import ObjectId
@@ -29,6 +30,7 @@ WORKSPACE_ADMIN_ROLE_KEYS = {
     "executive_technology",
     "operations",
 }
+_logger = logging.getLogger(__name__)
 
 
 def _normalize_value(value: Any) -> str:
@@ -254,6 +256,8 @@ def _get_paid_package_order_for_project(project_id: str) -> dict[str, Any] | Non
 def _get_active_project_entitlement(project_id: str) -> dict[str, Any] | None:
     db = _require_database()
     entitlements = db["project_entitlements"]
+    # Strict source-of-truth mode: protected capabilities require an active
+    # entitlement record and must not fall back to inactive/stale rows.
     return entitlements.find_one({"project_id": str(project_id), "status": "active"})
 
 
@@ -290,11 +294,15 @@ def _audit_entitlement_drift(
                 "paid_order_id": _normalize_value((paid_order or {}).get("_id")),
             },
         )
-    except Exception:
-        pass
+    except Exception as exc:
+        _logger.warning(
+            "strict_entitlement_audit_log_failed",
+            extra={"project_id": str(project_id), "reason": reason},
+            exc_info=exc,
+        )
 
 
-def _normalize_lane_value(value: Any) -> str:
+def _normalize_package_lane(value: Any) -> str:
     return normalize_package_type(_normalize_value(value), default="")
 
 
@@ -349,10 +357,10 @@ def resolve_strict_paid_active_project_entitlement(project_id: str) -> dict[str,
         )
         raise PermissionError("Workspace entitlement does not match paid package order.")
 
-    entitlement_lane = _normalize_lane_value(
+    entitlement_lane = _normalize_package_lane(
         entitlement_doc.get("package_lane") or entitlement_identity.get("package_lane")
     )
-    paid_order_lane = _normalize_lane_value(
+    paid_order_lane = _normalize_package_lane(
         paid_order.get("package_lane")
         or paid_order.get("project_lane")
         or paid_order_identity.get("package_lane")

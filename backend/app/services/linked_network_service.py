@@ -43,7 +43,9 @@ def build_linked_network(
             (workspace_context.get("project") or {}).get("_id")
             or (workspace_context.get("project") or {}).get("id")
         )
-        if context_project_id and context_project_id != normalized_project_id:
+        if not context_project_id:
+            raise PermissionError("Verified workspace project context is required.")
+        if context_project_id != normalized_project_id:
             raise PermissionError("Workspace context does not match requested project.")
         resolved = workspace_context.get("resolved_entitlements") or {}
     else:
