@@ -5,9 +5,11 @@ from typing import Any, Iterable
 from bson import ObjectId
 from fastapi import HTTPException, status
 
-from app.core.package_catalog import get_package, normalize_package_code
+from app.core.package_mapping import resolve_package_identity
+from app.core.package_type_catalog import normalize_package_type
 from app.core.role_catalog import normalize_project_member_role
 from app.database import get_database
+from app.services.audit_log_service import create_audit_log
 from app.services.entitlement_service import resolve_project_entitlements
 from app.services.project_member_service import is_project_member
 from app.services.project_membership_service import get_project_access_snapshot
@@ -252,44 +254,154 @@ def _get_paid_package_order_for_project(project_id: str) -> dict[str, Any] | Non
 def _get_active_project_entitlement(project_id: str) -> dict[str, Any] | None:
     db = _require_database()
     entitlements = db["project_entitlements"]
-    return entitlements.find_one(
-        {"project_id": str(project_id), "status": "active"}
-    ) or entitlements.find_one({"project_id": str(project_id)})
+    return entitlements.find_one({"project_id": str(project_id), "status": "active"})
 
 
-def _resolve_project_entitlement_map(project: dict[str, Any]) -> dict[str, Any]:
-    project_id = _normalize_value(project.get("_id") or project.get("id"))
-    entitlement_doc = _get_active_project_entitlement(project_id)
-    paid_order = _get_paid_package_order_for_project(project_id)
+def _audit_entitlement_drift(
+    project_id: str,
+    reason: str,
+    *,
+    entitlement: dict[str, Any] | None = None,
+    paid_order: dict[str, Any] | None = None,
+) -> None:
+    try:
+        create_audit_log(
+            "strict_entitlement_access_drift",
+            None,
+            "project",
+            str(project_id),
+            {
+                "reason": reason,
+                "entitlement_package_code": _normalize_value(
+                    (entitlement or {}).get("package_code")
+                ),
+                "entitlement_package_lane": _normalize_value(
+                    (entitlement or {}).get("package_lane")
+                ),
+                "paid_order_package_code": _normalize_value(
+                    (paid_order or {}).get("package_code")
+                ),
+                "paid_order_package_slug": _normalize_value(
+                    (paid_order or {}).get("package_slug")
+                ),
+                "paid_order_package_lane": _normalize_value(
+                    (paid_order or {}).get("package_lane")
+                ),
+                "paid_order_id": _normalize_value((paid_order or {}).get("_id")),
+            },
+        )
+    except Exception:
+        pass
 
-    package_code = _normalize_value(
-        (entitlement_doc or {}).get("package_code")
-        or (paid_order or {}).get("package_code")
-        or (paid_order or {}).get("package_slug")
-        or project.get("package_code")
-        or project.get("package_slug")
-        or project.get("package_type")
+
+def _normalize_package_lane(value: Any) -> str:
+    return normalize_package_type(_normalize_value(value), default="")
+
+
+def resolve_strict_paid_active_project_entitlement(project_id: str) -> dict[str, Any]:
+    normalized_project_id = _normalize_value(project_id)
+    if not normalized_project_id:
+        raise PermissionError("Workspace project id is required.")
+
+    entitlement_doc = _get_active_project_entitlement(normalized_project_id)
+    if entitlement_doc is None:
+        _audit_entitlement_drift(normalized_project_id, "missing_active_entitlement")
+        raise PermissionError("Active workspace entitlement is required.")
+
+    paid_order = _get_paid_package_order_for_project(normalized_project_id)
+    if paid_order is None:
+        _audit_entitlement_drift(
+            normalized_project_id,
+            "missing_paid_order",
+            entitlement=entitlement_doc,
+        )
+        raise PermissionError("A paid package order is required for this workspace.")
+
+    entitlement_identity = resolve_package_identity(entitlement_doc.get("package_code"))
+    paid_order_identity = resolve_package_identity(
+        paid_order.get("package_code") or paid_order.get("package_slug")
     )
-    package_code = normalize_package_code(package_code)
-    active_addons = list((entitlement_doc or {}).get("active_addons") or [])
 
-    resolved_entitlements: dict[str, Any] = {}
-    if package_code:
-        try:
-            resolved_entitlements = resolve_project_entitlements(
-                package_code,
-                active_addons,
-            )
-        except Exception:
-            resolved_entitlements = dict(get_package(package_code) or {})
+    entitlement_package_code = _normalize_value(
+        entitlement_identity.get("package_code") or entitlement_doc.get("package_code")
+    )
+    paid_order_package_code = _normalize_value(
+        paid_order_identity.get("package_code")
+        or paid_order.get("package_code")
+        or paid_order.get("package_slug")
+    )
+
+    if not entitlement_package_code or not paid_order_package_code:
+        _audit_entitlement_drift(
+            normalized_project_id,
+            "unresolved_package_identity",
+            entitlement=entitlement_doc,
+            paid_order=paid_order,
+        )
+        raise PermissionError("Workspace package identity could not be verified.")
+
+    if entitlement_package_code != paid_order_package_code:
+        _audit_entitlement_drift(
+            normalized_project_id,
+            "package_code_mismatch",
+            entitlement=entitlement_doc,
+            paid_order=paid_order,
+        )
+        raise PermissionError("Workspace entitlement does not match paid package order.")
+
+    entitlement_lane = _normalize_package_lane(
+        entitlement_doc.get("package_lane") or entitlement_identity.get("package_lane")
+    )
+    paid_order_lane = _normalize_package_lane(
+        paid_order.get("package_lane")
+        or paid_order.get("project_lane")
+        or paid_order_identity.get("package_lane")
+    )
+    if entitlement_lane and paid_order_lane and entitlement_lane != paid_order_lane:
+        _audit_entitlement_drift(
+            normalized_project_id,
+            "package_lane_mismatch",
+            entitlement=entitlement_doc,
+            paid_order=paid_order,
+        )
+        raise PermissionError("Workspace package lane does not match paid package order.")
+
+    active_addons = list(entitlement_doc.get("active_addons") or [])
+    try:
+        resolved_entitlements = resolve_project_entitlements(
+            entitlement_package_code,
+            active_addons,
+        )
+    except Exception:
+        _audit_entitlement_drift(
+            normalized_project_id,
+            "entitlement_resolution_failed",
+            entitlement=entitlement_doc,
+            paid_order=paid_order,
+        )
+        raise PermissionError("Workspace entitlement could not be resolved.")
 
     return {
-        "package_code": package_code,
+        "package_code": entitlement_package_code,
         "active_addons": active_addons,
         "resolved_entitlements": resolved_entitlements,
         "entitlement": entitlement_doc,
         "paid_order": paid_order,
     }
+
+
+def _resolve_project_entitlement_map(project: dict[str, Any]) -> dict[str, Any]:
+    project_id = _normalize_value(project.get("_id") or project.get("id"))
+    try:
+        return resolve_strict_paid_active_project_entitlement(project_id)
+    except PermissionError:
+        return {
+            "package_code": "",
+            "active_addons": [],
+            "resolved_entitlements": {},
+            "entitlement": _get_active_project_entitlement(project_id),
+            "paid_order": _get_paid_package_order_for_project(project_id),
+        }
 
 
 def _project_is_visible_to_user(

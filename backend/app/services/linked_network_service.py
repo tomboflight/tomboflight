@@ -7,7 +7,9 @@ from bson import ObjectId
 from pymongo.collection import Collection
 
 from app.database import get_database
-from app.services.entitlement_service import resolve_project_entitlements
+from app.services.workspace_access_service import (
+    resolve_strict_paid_active_project_entitlement,
+)
 
 
 MAX_DEPTH = 5
@@ -24,29 +26,29 @@ def _str_id(value: Any) -> str:
     return str(value or "").strip()
 
 
-def _get_project_entitlement(project_id: str) -> dict[str, Any] | None:
-    col = _col("project_entitlements")
-    candidates: list[Any] = [project_id]
-    if ObjectId.is_valid(project_id):
-        candidates.append(ObjectId(project_id))
-    return col.find_one({"project_id": {"$in": candidates}})
-
-
 def build_linked_network(
     project_id: str,
     current_user_id: str,
+    *,
+    workspace_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    entitlement = _get_project_entitlement(project_id)
-    if not entitlement:
-        raise ValueError("Project entitlement not found.")
+    normalized_project_id = _str_id(project_id)
+    if not normalized_project_id:
+        raise ValueError("Project id is required.")
+    if not _str_id(current_user_id):
+        raise PermissionError("Authenticated user id is required.")
 
-    package_code = str(entitlement.get("package_code") or "").strip()
-    active_addons = list(entitlement.get("active_addons") or [])
-
-    try:
-        resolved = resolve_project_entitlements(package_code, active_addons)
-    except Exception as exc:
-        raise ValueError(f"Could not resolve entitlements: {exc}") from exc
+    if workspace_context is not None:
+        context_project_id = _str_id(
+            (workspace_context.get("project") or {}).get("_id")
+            or (workspace_context.get("project") or {}).get("id")
+        )
+        if context_project_id and context_project_id != normalized_project_id:
+            raise PermissionError("Workspace context does not match requested project.")
+        resolved = workspace_context.get("resolved_entitlements") or {}
+    else:
+        strict = resolve_strict_paid_active_project_entitlement(normalized_project_id)
+        resolved = strict.get("resolved_entitlements") or {}
 
     if not resolved.get("can_link_households", False):
         raise PermissionError(
@@ -60,9 +62,9 @@ def build_linked_network(
     relationships_col = _col("relationships")
 
     # Find all households for the starting project
-    pid_candidates: list[Any] = [project_id]
-    if ObjectId.is_valid(project_id):
-        pid_candidates.append(ObjectId(project_id))
+    pid_candidates: list[Any] = [normalized_project_id]
+    if ObjectId.is_valid(normalized_project_id):
+        pid_candidates.append(ObjectId(normalized_project_id))
     seed_households = list(
         households_col.find({"project_id": {"$in": pid_candidates}})
     )
@@ -237,7 +239,7 @@ def build_linked_network(
             "total_households": len(all_households),
             "total_members": len(all_nodes),
             "total_relationships": len(all_edges),
-            "root_project_id": project_id,
+            "root_project_id": normalized_project_id,
         },
         "households": household_summaries,
         "nodes": all_nodes,

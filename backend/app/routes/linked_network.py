@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.dependencies.auth import get_current_user
 from app.services.linked_network_service import build_linked_network
+from app.services.workspace_access_service import require_workspace_capability
 
 router = APIRouter(tags=["Linked Network"])
 
@@ -27,7 +28,19 @@ def get_linked_network(
 ):
     user_id = _current_user_id(current_user)
     try:
-        return build_linked_network(project_id, user_id)
+        context = require_workspace_capability(
+            current_user,
+            project_id=project_id,
+            capabilities=("can_link_households",),
+            detail="Your package does not include linked household network access.",
+        )
+        return build_linked_network(
+            project_id,
+            user_id,
+            workspace_context=context,
+        )
+    except HTTPException:
+        raise
     except PermissionError as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
