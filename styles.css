@@ -4216,6 +4216,43 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
   }
 }
 
+@media (max-width: 700px) {
+  .hero-moreland-tree-stage {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .moreland-tree-scroll {
+    height: auto;
+    overflow: visible;
+    padding: 12px;
+  }
+
+  .moreland-tree-canvas {
+    width: 100%;
+    height: auto;
+    min-width: 0;
+    min-height: 0;
+    display: grid;
+    gap: 10px;
+  }
+
+  .moreland-tree-connectors {
+    display: none;
+  }
+
+  .moreland-node {
+    position: static;
+    width: 100%;
+  }
+
+  .moreland-person-card {
+    width: 100%;
+    min-height: 0;
+  }
+}
+
 @media print {
   @page {
     size: letter portrait;
