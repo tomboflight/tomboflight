@@ -927,10 +927,6 @@ select:focus-visible {
   font-weight: 500;
 }
 
-.moreland-relationship-map {
-  display: none;
-}
-
 .platform-model-card {
   background:
     radial-gradient(
@@ -4214,99 +4210,6 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
 
   .hero-copy-brand-mark {
     display: none;
-  }
-
-  .hero-moreland-tree-stage {
-    height: auto;
-    min-height: 0;
-    overflow: visible;
-  }
-
-  .moreland-tree-scroll {
-    display: none;
-  }
-
-  .moreland-relationship-map {
-    display: grid;
-    gap: 12px;
-    padding: 12px;
-  }
-
-  .moreland-branch {
-    position: relative;
-    border-radius: 16px;
-    border: 1px solid rgba(114, 188, 255, 0.22);
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.01)),
-      rgba(6, 11, 20, 0.74);
-    padding: 12px;
-  }
-
-  .moreland-branch + .moreland-branch::before {
-    content: "";
-    position: absolute;
-    top: -12px;
-    left: 24px;
-    width: 2px;
-    height: 12px;
-    background: rgba(214, 176, 102, 0.85);
-  }
-
-  .moreland-branch::after {
-    content: "";
-    position: absolute;
-    top: 18px;
-    left: 24px;
-    width: 26px;
-    height: 2px;
-    background: rgba(214, 176, 102, 0.85);
-    opacity: 0.95;
-  }
-
-  .moreland-couple,
-  .moreland-children {
-    display: grid;
-    gap: 8px;
-    padding-left: 34px;
-  }
-
-  .moreland-couple {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .moreland-children {
-    margin-top: 8px;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .moreland-branch-selah .moreland-children {
-    grid-template-columns: 1fr;
-  }
-
-  .moreland-branch-julian {
-    padding-left: 34px;
-    padding-bottom: 10px;
-  }
-
-  .moreland-branch-julian .moreland-person-card {
-    width: 100%;
-  }
-
-  .moreland-branch-imani {
-    margin-left: 18px;
-    border-color: rgba(214, 176, 102, 0.24);
-  }
-
-  .moreland-relationship-map .moreland-person-card {
-    width: 100%;
-    min-height: 0;
-    border-color: rgba(114, 188, 255, 0.3);
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.02)),
-      rgba(5, 10, 19, 0.88);
-    box-shadow:
-      inset 0 0 0 1px rgba(255, 255, 255, 0.02),
-      0 12px 20px rgba(1, 4, 10, 0.28);
   }
 }
 
