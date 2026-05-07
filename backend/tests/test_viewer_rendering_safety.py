@@ -30,6 +30,7 @@ class ViewerRenderingSafetyTests(unittest.TestCase):
             'selectedManifest = resolvePublicDemoManifest(DEMO_KEY) || UNAVAILABLE_MANIFEST;',
             source,
         )
+        self.assertIn("autoAdvanceStateIds", source)
         self.assertIn('const DEFAULT_PUBLIC_DEMO_KEY = "malik-moreland";', source)
         self.assertIn("const DEMO_MODE = DEMO_KEY === DEFAULT_PUBLIC_DEMO_KEY;", source)
         self.assertIn('selectedManifest = liveManifest || UNAVAILABLE_MANIFEST;', source)

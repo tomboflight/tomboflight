@@ -232,6 +232,13 @@
             return String(item || "").trim();
           }).filter(Boolean)
         : [],
+      autoAdvanceStateIds: Array.isArray(manifest?.auto_advance_state_ids)
+        ? manifest.auto_advance_state_ids
+            .map(function (item) {
+              return String(item || "").trim();
+            })
+            .filter(Boolean)
+        : [],
       navLabels: {
         left: String(manifest?.nav_labels?.left || "Parents").trim(),
         right: String(manifest?.nav_labels?.right || "Descendants").trim(),
@@ -279,6 +286,16 @@
 
   function isSecureShareMode(manifest = currentManifest) {
     return String(manifest?.mode || "").trim() === "secure_share";
+  }
+
+  function isGraphDemoMode() {
+    return currentManifest?.mode === "demo" && currentManifest?.navigationMode === "graph";
+  }
+
+  function getAutoAdvanceStateIds() {
+    return Array.isArray(currentManifest?.autoAdvanceStateIds)
+      ? currentManifest.autoAdvanceStateIds
+      : [];
   }
 
   function renderPathList(manifest) {
@@ -481,6 +498,15 @@
   }
 
   function getNextAutoAdvanceStateId() {
+    const orderedStates = getAutoAdvanceStateIds();
+    if (orderedStates.length > 0) {
+      const currentIndex = orderedStates.indexOf(state);
+      if (currentIndex !== -1) {
+        return orderedStates[(currentIndex + 1) % orderedStates.length] || "";
+      }
+      return orderedStates[0] || "";
+    }
+
     const currentState = statesById[state];
     if (!currentState) return "";
     if (currentState.rightStateId) return currentState.rightStateId;
@@ -871,6 +897,15 @@
     if (!isControlEnabled("allow_zoom", true)) return;
     markInteraction();
     pauseNarrationForManualControl();
+    if (isGraphDemoMode()) {
+      const next = resolveRightTarget();
+      if (next) {
+        animatePortalTransition("right", next);
+      } else {
+        showNarration(statesById[state]?.description || "");
+      }
+      return;
+    }
     setZoom(scale + ZOOM_STEP, true);
   }
 
@@ -879,6 +914,13 @@
     if (!isControlEnabled("allow_zoom", true)) return;
     markInteraction();
     pauseNarrationForManualControl();
+    if (isGraphDemoMode()) {
+      const next = resolveLeftTarget();
+      if (next) {
+        animatePortalTransition("left", next);
+      }
+      return;
+    }
     setZoom(scale - ZOOM_STEP, true);
   }
 
