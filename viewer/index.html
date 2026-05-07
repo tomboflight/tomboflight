@@ -12,7 +12,8 @@
         try {
           const params = new URLSearchParams(window.location.search);
           const isEmbedParam = params.get("embed") === "1";
-          const isPreviewParam = params.get("preview") === "1" || params.get("demo") === "malik-moreland";
+          const demoParam = String(params.get("demo") || "").trim().toLowerCase();
+          const isPreviewParam = params.get("preview") === "1" || demoParam === "malik-moreland";
           const isInIframe = window.self !== window.top;
 
           if (isEmbedParam || isInIframe) {
@@ -299,7 +300,7 @@
 
     <script src="../config.js"></script>
     <script src="../app.js"></script>
-    <script src="js/genesis-prototype-manifest.js?v=20260428-1"></script>
-    <script src="js/script.js?v=20260427-1"></script>
+    <script src="js/genesis-prototype-manifest.js?v=20260507-432"></script>
+    <script src="js/script.js?v=20260507-432"></script>
   </body>
 </html>
