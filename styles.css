@@ -691,9 +691,10 @@ select:focus-visible {
 }
 
 .hero-copy-moreland .eyebrow {
-  white-space: nowrap;
+  white-space: normal;
   overflow-wrap: normal;
   word-break: normal;
+  hyphens: none;
 }
 
 .hero-copy-moreland .hero-lead {
