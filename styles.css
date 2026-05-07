@@ -717,6 +717,7 @@ select:focus-visible {
   max-width: 22ch;
   margin: 0;
   font-size: clamp(1.35rem, 2.1vw, 1.9rem);
+  color: var(--tol-dark-heading);
 }
 
 .moreland-mobile-instruction {

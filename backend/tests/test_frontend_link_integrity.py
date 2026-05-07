@@ -41,7 +41,7 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
 
         self.assertRegex(contents, r'class="[^"]*\bhero-moreland-tree-card\b[^"]*"')
         self.assertIn('class="btn btn-primary" href="/viewer/?demo=malik-moreland"', contents)
-        self.assertIn("Swipe to explore the Moreland demo tree.", contents)
+        self.assertIn("Scroll through the Moreland demo tree.", contents)
         self.assertNotIn("Manifest Required", contents)
         embed_match = re.search(
             r'<div class="hero-demo-embed hero-moreland-tree-embed">(.*?)</div>\s*</div>',
