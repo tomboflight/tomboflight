@@ -292,6 +292,12 @@
     return currentManifest?.mode === "demo" && currentManifest?.navigationMode === "graph";
   }
 
+  function getAutoAdvanceStateIds() {
+    return Array.isArray(currentManifest?.autoAdvanceStateIds)
+      ? currentManifest.autoAdvanceStateIds
+      : [];
+  }
+
   function renderPathList(manifest) {
     if (!pathList) return;
 
@@ -492,9 +498,7 @@
   }
 
   function getNextAutoAdvanceStateId() {
-    const orderedStates = Array.isArray(currentManifest?.autoAdvanceStateIds)
-      ? currentManifest.autoAdvanceStateIds
-      : [];
+    const orderedStates = getAutoAdvanceStateIds();
     if (orderedStates.length > 1) {
       const currentIndex = orderedStates.indexOf(state);
       if (currentIndex !== -1) {
