@@ -288,6 +288,10 @@
     return String(manifest?.mode || "").trim() === "secure_share";
   }
 
+  function isGraphDemoMode() {
+    return currentManifest?.mode === "demo" && currentManifest?.navigationMode === "graph";
+  }
+
   function renderPathList(manifest) {
     if (!pathList) return;
 
@@ -889,15 +893,12 @@
     if (!isControlEnabled("allow_zoom", true)) return;
     markInteraction();
     pauseNarrationForManualControl();
-    if (currentManifest?.mode === "demo" && currentManifest?.navigationMode === "graph") {
+    if (isGraphDemoMode()) {
       const next = resolveRightTarget();
       if (next) {
         animatePortalTransition("right", next);
       } else {
-        showNarration(
-          statesById[state]?.description ||
-            "This node has no descendant layer in this demo.",
-        );
+        showNarration(statesById[state]?.description || "");
       }
       return;
     }
@@ -909,7 +910,7 @@
     if (!isControlEnabled("allow_zoom", true)) return;
     markInteraction();
     pauseNarrationForManualControl();
-    if (currentManifest?.mode === "demo" && currentManifest?.navigationMode === "graph") {
+    if (isGraphDemoMode()) {
       const next = resolveLeftTarget();
       if (next) {
         animatePortalTransition("left", next);
