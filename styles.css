@@ -719,6 +719,13 @@ select:focus-visible {
   font-size: clamp(1.35rem, 2.1vw, 1.9rem);
 }
 
+.moreland-mobile-instruction {
+  margin: 8px 0 0;
+  color: rgba(232, 241, 255, 0.86);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
 .hero-moreland-tree-embed {
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(3, 8, 16, 0.84);
@@ -769,6 +776,10 @@ select:focus-visible {
   min-width: 980px;
   display: grid;
   gap: 14px;
+}
+
+.moreland-tree-mobile {
+  display: none;
 }
 
 .moreland-generation {
@@ -4034,6 +4045,62 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
   .presence-badge {
     width: 100%;
     justify-content: center;
+  }
+}
+
+@media (max-width: 768px) {
+  .hero-moreland-tree-embed,
+  .hero-moreland-tree-stage {
+    overflow: visible;
+  }
+
+  .hero-moreland-tree-stage {
+    aspect-ratio: auto;
+    min-height: 0;
+    height: auto;
+  }
+
+  .moreland-tree-scroll {
+    height: auto;
+    overflow: visible;
+  }
+
+  .moreland-tree-canvas {
+    display: none;
+  }
+
+  .moreland-tree-mobile {
+    display: grid;
+    gap: 14px;
+  }
+
+  .moreland-tree-mobile-generation {
+    display: grid;
+    gap: 10px;
+    padding: 12px;
+    border-radius: 16px;
+    border: 1px solid rgba(214, 176, 102, 0.26);
+    background: rgba(3, 8, 16, 0.62);
+  }
+
+  .moreland-tree-mobile-row {
+    display: grid;
+    gap: 10px;
+  }
+
+  .moreland-tree-mobile .moreland-couple {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .moreland-tree-mobile .moreland-couple::before {
+    display: none;
+  }
+
+  .moreland-tree-mobile .moreland-person-card {
+    width: 100%;
+    min-height: 0;
   }
 }
 
