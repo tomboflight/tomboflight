@@ -682,8 +682,6 @@ select:focus-visible {
   display: grid;
   gap: 16px;
   justify-content: flex-start;
-  position: relative;
-  overflow: hidden;
   padding-right: clamp(20px, 3vw, 36px);
 }
 
@@ -692,24 +690,10 @@ select:focus-visible {
   gap: 0;
 }
 
-.hero-copy-moreland > :not(.hero-copy-brand-mark) {
-  position: relative;
-  z-index: 1;
-}
-
-.hero-copy-brand-mark {
-  position: relative;
-  width: clamp(130px, 34vw, 230px);
-  max-width: 62%;
-  max-height: 220px;
-  object-fit: contain;
-  opacity: 0.22;
-  margin: 2px auto 0;
-  filter:
-    drop-shadow(0 10px 22px rgba(2, 6, 14, 0.45))
-    drop-shadow(0 0 18px rgba(114, 188, 255, 0.14));
-  pointer-events: none;
-  z-index: 0;
+.hero-copy-moreland .eyebrow {
+  white-space: normal;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
 .hero-copy-moreland .hero-lead {
@@ -759,6 +743,7 @@ select:focus-visible {
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(3, 8, 16, 0.84);
   border-radius: 24px;
+  overflow: hidden;
 }
 
 .hero-moreland-tree-stage {
@@ -800,6 +785,47 @@ select:focus-visible {
 .moreland-tree-scroll:focus-visible {
   outline: 2px solid var(--gold);
   outline-offset: 2px;
+}
+
+.moreland-list-preview {
+  display: none;
+  width: 100%;
+  padding: 14px;
+}
+
+.moreland-list-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.moreland-list-card {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(114, 188, 255, 0.3);
+  background: rgba(6, 12, 23, 0.84);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.moreland-list-card span:first-child {
+  color: #ffffff;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.moreland-list-card span:last-child {
+  color: var(--tol-dark-muted);
+  font-size: 0.86rem;
+  font-weight: 500;
+}
+
+.moreland-graph-preview {
+  display: block;
 }
 
 .moreland-tree-canvas {
@@ -3546,23 +3572,13 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
   }
 
   .hero-copy-moreland {
-    grid-template-columns: minmax(0, 1fr) minmax(170px, 230px);
-    align-items: center;
-    column-gap: 14px;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
     padding-right: clamp(16px, 2.6vw, 30px);
   }
 
   .hero-copy-content {
     align-self: start;
-  }
-
-  .hero-copy-brand-mark {
-    justify-self: center;
-    align-self: center;
-    width: clamp(150px, 18vw, 240px);
-    max-width: 100%;
-    margin: 0;
-    opacity: 0.24;
   }
 
   .hero-visual-moreland {
@@ -3595,6 +3611,14 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
   }
 
   .moreland-tree-connectors {
+    display: block;
+  }
+
+  .moreland-list-preview {
+    display: none;
+  }
+
+  .moreland-graph-preview {
     display: block;
   }
 }
@@ -4225,27 +4249,24 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
     gap: 12px;
     padding-right: 0;
   }
-
-  .hero-copy-brand-mark {
-    width: clamp(118px, 46vw, 190px);
-    max-height: 160px;
-    opacity: 0.2;
-  }
 }
 
-@media (orientation: portrait) and (max-width: 900px) {
+@media (orientation: portrait) and (max-width: 1024px) {
   .hero-copy-moreland {
     grid-template-columns: minmax(0, 1fr);
     align-items: start;
   }
 
-  .hero-copy-brand-mark {
-    margin-left: 0;
+  .moreland-list-preview {
+    display: block;
+  }
+
+  .moreland-graph-preview {
+    display: none;
   }
 
   .hero-moreland-tree-stage {
-    min-height: auto;
-    height: auto;
+    min-height: clamp(400px, 56vh, 560px);
   }
 
   .moreland-tree-scroll {
