@@ -13,6 +13,11 @@ class GenesisPrototypeManifestSafetyTests(unittest.TestCase):
         )
         self.source = self.manifest_path.read_text(encoding="utf-8")
 
+    def _extract_manifest_array_items(self, key: str) -> list[str]:
+        match = re.search(rf"{re.escape(key)}:\s*\[(.*?)\]", self.source, re.DOTALL)
+        self.assertIsNotNone(match, f"{key} array not found in manifest source")
+        return re.findall(r'"([^"]+)"', match.group(1))
+
     def test_uses_only_approved_demo_images(self):
         approved = {
             "../images/malik.jpg",
@@ -130,13 +135,7 @@ class GenesisPrototypeManifestSafetyTests(unittest.TestCase):
             "Return to Elias + Clara",
             "Julian Moreland",
         ]
-        path_match = re.search(
-            r"path_items:\s*\[(.*?)\],\n\s*auto_advance_state_ids:",
-            self.source,
-            re.DOTALL,
-        )
-        self.assertIsNotNone(path_match)
-        parsed_path_items = re.findall(r'"([^"]+)"', path_match.group(1))
+        parsed_path_items = self._extract_manifest_array_items("path_items")
         self.assertEqual(parsed_path_items, expected_path_items)
 
     def test_auto_advance_sequence_matches_canonical_narration_order(self):
@@ -153,13 +152,7 @@ class GenesisPrototypeManifestSafetyTests(unittest.TestCase):
             "moreland_parents",
             "julian_anchor",
         ]
-        sequence_match = re.search(
-            r"auto_advance_state_ids:\s*\[(.*?)\],\n\s*nav_labels:",
-            self.source,
-            re.DOTALL,
-        )
-        self.assertIsNotNone(sequence_match)
-        parsed_sequence = re.findall(r'"([^"]+)"', sequence_match.group(1))
+        parsed_sequence = self._extract_manifest_array_items("auto_advance_state_ids")
         self.assertEqual(parsed_sequence, expected_auto_advance_ids)
 
 

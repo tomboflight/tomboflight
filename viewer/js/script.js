@@ -499,7 +499,7 @@
 
   function getNextAutoAdvanceStateId() {
     const orderedStates = getAutoAdvanceStateIds();
-    if (orderedStates.length > 1) {
+    if (orderedStates.length > 0) {
       const currentIndex = orderedStates.indexOf(state);
       if (currentIndex !== -1) {
         return orderedStates[(currentIndex + 1) % orderedStates.length] || "";
