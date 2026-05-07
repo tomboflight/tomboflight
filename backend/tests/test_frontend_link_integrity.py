@@ -41,7 +41,12 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
 
         self.assertRegex(contents, r'class="[^"]*\bhero-moreland-tree-card\b[^"]*"')
         self.assertIn('class="btn btn-primary" href="/viewer/?demo=malik-moreland"', contents)
-        self.assertIn("Scroll through the Moreland demo tree.", contents)
+        self.assertIn("Moreland Family Tree Preview", contents)
+        self.assertIn(
+            "Explore linked Moreland branches from Clara and Elias through Selah, Julian, Malik, Imani, Camille, and Micah.",
+            contents,
+        )
+        self.assertNotIn("Scroll through the Moreland demo tree.", contents)
         self.assertNotIn("Manifest Required", contents)
         embed_match = re.search(
             r'<div class="hero-demo-embed hero-moreland-tree-embed">(.*?)</div>\s*</div>',
