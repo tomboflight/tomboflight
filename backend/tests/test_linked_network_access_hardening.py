@@ -40,14 +40,15 @@ class _FakeCollection:
         return _FakeCursor([item for item in self._docs if self._matches(item, query)])
 
     def _matches(self, item, query):
+        if "$or" in query:
+            return any(self._matches(item, candidate) for candidate in query["$or"])
         for key, expected in query.items():
+            if key == "$or":
+                continue
             value = item.get(key)
             if isinstance(expected, dict):
                 if "$in" in expected:
                     if value not in expected["$in"]:
-                        return False
-                elif "$or" in expected:
-                    if not any(self._matches(item, candidate) for candidate in expected["$or"]):
                         return False
                 else:
                     return False
