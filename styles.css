@@ -4296,21 +4296,45 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
 }
 
 @media (orientation: landscape) and (max-width: 1366px) {
+  .hero-shell-moreland {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .hero-copy-moreland,
+  .hero-visual-moreland,
+  .hero-moreland-tree-card {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .hero-visual-moreland {
+    grid-row: 2;
+  }
+
+  .moreland-list-preview {
+    display: none;
+  }
+
+  .moreland-graph-preview {
+    display: block;
+  }
+
   .hero-moreland-tree-stage {
-    min-height: clamp(260px, 70vh, 520px);
-    height: clamp(260px, 70vh, 520px);
+    min-height: min(72vh, 620px);
+    height: auto;
   }
 
   .moreland-tree-scroll {
     align-items: flex-start;
     justify-content: center;
-    overflow-x: auto;
-    overflow-y: auto;
+    overflow: auto;
   }
 
   .moreland-tree-canvas {
-    width: 100%;
-    min-height: 100%;
+    width: 1260px;
+    min-width: 1260px;
+    min-height: 760px;
     margin: 0 auto;
   }
 }
