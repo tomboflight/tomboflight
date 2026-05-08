@@ -4279,16 +4279,39 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
   .hero-moreland-tree-stage {
     min-height: 0;
     height: auto;
+    overflow: visible;
   }
 
   .moreland-tree-scroll {
-    overflow-x: auto;
-    overflow-y: auto;
+    display: block;
+    height: auto;
+    max-height: none;
+    overflow: visible;
     padding: 14px 12px 16px;
   }
 
   .hero-moreland-tree-embed {
     overflow: visible;
+  }
+}
+
+@media (orientation: landscape) and (max-width: 1366px) {
+  .hero-moreland-tree-stage {
+    min-height: clamp(260px, 70vh, 520px);
+    height: clamp(260px, 70vh, 520px);
+  }
+
+  .moreland-tree-scroll {
+    align-items: flex-start;
+    justify-content: center;
+    overflow-x: auto;
+    overflow-y: auto;
+  }
+
+  .moreland-tree-canvas {
+    width: 100%;
+    min-height: 100%;
+    margin: 0 auto;
   }
 }
 
