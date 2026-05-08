@@ -212,6 +212,50 @@
     });
   }
 
+  function getIntakeAttentionItems(latestSubmission) {
+    const uploads = latestSubmission?.uploads || {};
+    const review = latestSubmission?.review || {};
+    const consent = latestSubmission?.consent || {};
+    return {
+      rights:
+        Object.prototype.hasOwnProperty.call(uploads, "uploads_rights_confirmed") &&
+        uploads.uploads_rights_confirmed === false,
+      minimization:
+        Object.prototype.hasOwnProperty.call(uploads, "uploads_minimization_confirmed") &&
+        uploads.uploads_minimization_confirmed === false,
+      authority:
+        Object.prototype.hasOwnProperty.call(consent, "consent_authority") &&
+        consent.consent_authority === false,
+      review:
+        (Object.prototype.hasOwnProperty.call(review, "confirm_accuracy") &&
+          review.confirm_accuracy === false) ||
+        (Object.prototype.hasOwnProperty.call(consent, "consent_process") &&
+          consent.consent_process === false),
+    };
+  }
+
+  function updateIntakeAttentionPanel(latestSubmission) {
+    const panel = document.querySelector("[data-intake-attention-panel]");
+    if (!panel) return;
+
+    const needsAttention = hasIntakeConfirmationIssues(latestSubmission);
+    panel.style.display = needsAttention ? "" : "none";
+    if (!needsAttention) return;
+
+    const items = getIntakeAttentionItems(latestSubmission);
+    const visibilityMap = {
+      "[data-intake-attention-rights]": items.rights,
+      "[data-intake-attention-minimization]": items.minimization,
+      "[data-intake-attention-authority]": items.authority,
+      "[data-intake-attention-review]": items.review,
+    };
+
+    Object.entries(visibilityMap).forEach(function ([selector, visible]) {
+      const node = document.querySelector(selector);
+      if (node) node.style.display = visible ? "" : "none";
+    });
+  }
+
   function getProjectWorkspaceName(context, latestSubmission) {
     const project = context?.activeProject || context?.currentWorkspace?.activeProject || {};
     const candidates = [
@@ -446,7 +490,7 @@
     text(
       document.querySelector("[data-health-verification]"),
       needsAttention || status === "rejected"
-        ? "Needs correction"
+        ? "Needs attention"
         : PRODUCTION_OR_BEYOND_STATUSES.has(status)
           ? "Approved"
           : "Pending",
@@ -576,11 +620,11 @@
   }
 
   function getReceivedReviewStatusLabel(status) {
-    if (status === "rejected") return "Needs correction";
-    if (REVIEW_PHASE_STATUSES.has(status)) return "Pending";
+    if (status === "rejected") return "Needs attention";
+    if (REVIEW_PHASE_STATUSES.has(status)) return "Pending review";
     if (status === "delivered" || status === "archived") return "Approved";
     if (PRODUCTION_OR_BEYOND_STATUSES.has(status)) return "In production";
-    return "Pending";
+    return "Pending review";
   }
 
   function text(node, value) {
@@ -2175,6 +2219,7 @@
     updateProjectProgressTracker(contextWithMembership, null, false);
     updateWorkspaceHealthPanel(contextWithMembership, null);
     updateReceivedMaterialsPanel(null);
+    updateIntakeAttentionPanel(null);
 
     const intakeCardStatus = document.querySelector(
       "[data-intake-card-status]",
@@ -2222,6 +2267,7 @@
       );
       updateWorkspaceHealthPanel(contextWithLatest, latest);
       updateReceivedMaterialsPanel(latest);
+      updateIntakeAttentionPanel(latest);
 
       text(currentPackage, contextWithMembership.packageName || "Active Package");
 
@@ -2290,6 +2336,7 @@
       updateProjectProgressTracker(contextWithMembership, null, false);
       updateWorkspaceHealthPanel(contextWithMembership, null);
       updateReceivedMaterialsPanel(null);
+      updateIntakeAttentionPanel(null);
       setLegacyAnchorUnavailable(
         "Legacy Anchor status is temporarily unavailable.",
         "Please refresh shortly. Tomb of Light could not finish loading the customer workspace state.",
