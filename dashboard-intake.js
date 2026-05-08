@@ -53,6 +53,7 @@
     manifestStatus: "active",
     viewerStatus: "approved",
   };
+  // Intake approval checkpoint and all downstream production states.
   const APPROVED_OR_BEYOND_STATUSES = new Set([
     "approved",
     "build_ready",
@@ -62,6 +63,7 @@
     "delivered",
     "archived",
   ]);
+  // Production pipeline stages after intake has been provisioned.
   const PRODUCTION_OR_BEYOND_STATUSES = new Set([
     "build_ready",
     "in_production",
@@ -70,11 +72,18 @@
     "delivered",
     "archived",
   ]);
+  // Review-facing labels for customer-visible status messaging.
   const REVIEW_PHASE_STATUSES = new Set([
     "in_review",
     "approved",
     "qa_review",
     "client_review",
+  ]);
+  // Early intake states where uploads/material checks are still pending review.
+  const UPLOAD_PENDING_REVIEW_STATUSES = new Set([
+    "submitted",
+    "in_review",
+    "approved",
   ]);
 
   let legacyAnchorState = null;
@@ -430,7 +439,7 @@
         ? "Not started"
         : PRODUCTION_OR_BEYOND_STATUSES.has(status)
           ? "Uploads received"
-          : uploadsPlanned || status === "submitted" || status === "in_review" || status === "approved"
+          : uploadsPlanned || UPLOAD_PENDING_REVIEW_STATUSES.has(status)
             ? "Pending review"
             : "Not started",
     );
@@ -562,16 +571,16 @@
     );
     text(
       document.querySelector("[data-received-review]"),
-      status === "rejected"
-        ? "Needs correction"
-        : status === "in_review" || status === "approved" || status === "qa_review" || status === "client_review"
-          ? "Pending"
-          : status === "build_ready" || status === "in_production"
-            ? "In production"
-            : status === "delivered" || status === "archived"
-              ? "Approved"
-              : "Pending",
+      getReceivedReviewStatusLabel(status),
     );
+  }
+
+  function getReceivedReviewStatusLabel(status) {
+    if (status === "rejected") return "Needs correction";
+    if (REVIEW_PHASE_STATUSES.has(status)) return "Pending";
+    if (status === "delivered" || status === "archived") return "Approved";
+    if (PRODUCTION_OR_BEYOND_STATUSES.has(status)) return "In production";
+    return "Pending";
   }
 
   function text(node, value) {
@@ -853,8 +862,8 @@
     if (latestStatus === "approved") {
       return {
         badge: "Approved",
-        copy: "Your Legacy Anchor is approved and ready to enter the mint queue.",
-        note: "The remaining step is queue execution through Tomb of Light’s mint worker.",
+        copy: "Your Legacy Anchor is approved and ready for final mint processing.",
+        note: "The remaining step is controlled minting flow through Tomb of Light.",
       };
     }
 
