@@ -4272,7 +4272,11 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
     display: block;
   }
 
-  .moreland-graph-preview {
+  .moreland-graph-preview,
+  .moreland-tree-scroll,
+  .moreland-tree-canvas,
+  .moreland-tree-connectors,
+  .moreland-node {
     display: none;
   }
 
@@ -4280,14 +4284,6 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
     min-height: 0;
     height: auto;
     overflow: visible;
-  }
-
-  .moreland-tree-scroll {
-    display: block;
-    height: auto;
-    max-height: none;
-    overflow: visible;
-    padding: 14px 12px 16px;
   }
 
   .hero-moreland-tree-embed {
@@ -4310,6 +4306,7 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
 
   .hero-visual-moreland {
     grid-row: 2;
+    align-self: stretch;
   }
 
   .moreland-list-preview {
@@ -4332,9 +4329,10 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
   }
 
   .moreland-tree-canvas {
-    width: 1260px;
-    min-width: 1260px;
-    min-height: 760px;
+    width: 100%;
+    max-width: 1260px;
+    min-width: 0;
+    min-height: 0;
     margin: 0 auto;
   }
 }
