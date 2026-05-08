@@ -4272,11 +4272,13 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
     display: block;
   }
 
-  .moreland-graph-preview,
-  .moreland-tree-scroll,
-  .moreland-tree-canvas,
-  .moreland-tree-connectors,
-  .moreland-node {
+  .moreland-graph-preview {
+    display: none;
+  }
+
+  .moreland-graph-preview .moreland-tree-canvas,
+  .moreland-graph-preview .moreland-tree-connectors,
+  .moreland-graph-preview .moreland-node {
     display: none;
   }
 
