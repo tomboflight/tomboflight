@@ -2613,7 +2613,6 @@
       }
 
       if (linkKeyPages.has(page) && !resolved.can_use_link_keys) {
-        window.location.href = "dashboard.html?upgrade_required=1";
         return;
       }
 
@@ -2622,12 +2621,22 @@
         return;
       }
 
-      if (familyTreePages.has(page) && !resolved.can_build_family_tree) {
-        window.location.href = "dashboard.html?upgrade_required=1";
+      if (page === "tree-view.html" && !resolved.can_build_family_tree) {
         return;
       }
 
-      if (certificatePages.has(page) && !resolved.can_use_lineage_certificate) {
+      if (
+        certificatePages.has(page) &&
+        !resolved.can_use_lineage_certificate
+      ) {
+        return;
+      }
+
+      if (
+        familyTreePages.has(page) &&
+        page !== "tree-view.html" &&
+        !resolved.can_build_family_tree
+      ) {
         window.location.href = "dashboard.html?upgrade_required=1";
       }
     } catch (error) {

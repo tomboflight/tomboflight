@@ -10,7 +10,11 @@
     />
     <link rel="stylesheet" href="styles.css?v=20260507-434" />
   </head>
-  <body>
+  <body class="portal-dashboard-body portal-intake-body">
+    <a href="#main-content" class="skip-to-content">Skip to main content</a>
+
+    <div class="site-watermark" aria-hidden="true"></div>
+
     <div class="page-wrap">
       <header class="site-header">
         <div class="container site-header-inner">
@@ -18,13 +22,23 @@
             <span>Tomb of Light<span class="brand-symbol">™</span></span>
           </a>
 
-          <nav class="site-nav" id="site-nav" aria-label="Portal navigation">
-            <a href="dashboard.html">Dashboard</a>
-            <a href="intake-welcome.html">Intake</a>
-            <a href="tree-view.html">Family Tree</a>
-            <a href="lineage-certificate.html">Lineage Certificate</a>
-            <a href="faq.html">Help</a>
-          </nav>
+            <button
+              class="menu-toggle"
+              type="button"
+              aria-label="Toggle navigation"
+              aria-expanded="false"
+              aria-controls="site-nav"
+            >
+              Menu
+            </button>
+
+            <nav class="site-nav" id="site-nav" aria-label="Portal navigation">
+              <a href="dashboard.html">Dashboard</a>
+              <a href="intake-welcome.html">Intake</a>
+              <a href="tree-view.html">Family Tree</a>
+              <a href="lineage-certificate.html">Lineage Certificate</a>
+              <a href="faq.html">Help Center</a>
+            </nav>
 
           <div class="header-actions">
             <a class="btn btn-secondary" href="dashboard.html"
@@ -34,7 +48,7 @@
         </div>
       </header>
 
-      <main data-intake-review>
+      <main id="main-content" data-intake-review>
         <section class="page-hero">
           <div class="container">
             <div class="page-hero-panel">
@@ -100,6 +114,12 @@
                   </p>
                 </div>
               </div>
+              <div
+                class="helper"
+                data-intake-review-attention
+                style="display: none; margin-top: 1rem"
+                aria-live="polite"
+              ></div>
             </div>
 
             <div

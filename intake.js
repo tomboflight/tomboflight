@@ -337,6 +337,26 @@
     `;
   }
 
+  function collectReviewAttentionItems(uploads, consent) {
+    const items = [];
+    if (!uploads.uploads_rights_confirmed) {
+      items.push("Rights Confirmed is No");
+    }
+    if (!uploads.uploads_minimization_confirmed) {
+      items.push("Data Minimization Confirmed is No");
+    }
+    if (!consent.consent_authority) {
+      items.push("Authority Confirmed is No");
+    }
+    if (!consent.consent_review_disclaimer) {
+      items.push("Review Disclaimer Acknowledged is No");
+    }
+    if (!consent.visibility_preference) {
+      items.push("Visibility is not set");
+    }
+    return items;
+  }
+
   function renderReviewSummaryBlocks(source) {
     const page = document.querySelector("[data-intake-review]");
     if (!page) return;
@@ -357,6 +377,7 @@
     );
     const uploadsNode = document.querySelector("[data-review-uploads-summary]");
     const consentNode = document.querySelector("[data-review-consent-summary]");
+    const attentionNode = document.querySelector("[data-intake-review-attention]");
 
     renderSummaryCard(
       householdNode,
@@ -396,6 +417,28 @@
       `Review Disclaimer Acknowledged: ${consent.consent_review_disclaimer ? "Yes" : "No"}`,
       `Visibility: ${consent.visibility_preference || "—"}`,
     ]);
+
+    if (attentionNode) {
+      const attentionItems = collectReviewAttentionItems(uploads, consent);
+      if (attentionItems.length) {
+        const normalizedStatus = normalizeStatus(
+          data?.status || data?.latest_status || "",
+        );
+        const isApprovedState =
+          normalizedStatus === "approved" ||
+          normalizedStatus === "build_ready";
+        attentionNode.style.display = "block";
+        attentionNode.style.color = isApprovedState ? "#d6e6ff" : "#ffcf9f";
+        attentionNode.textContent = `${
+          isApprovedState
+            ? "Intake approval is active, but these submitted values remain:"
+            : "Needs attention before production:"
+        } ${attentionItems.join("; ")}.`;
+      } else {
+        attentionNode.style.display = "none";
+        attentionNode.textContent = "";
+      }
+    }
   }
 
   function lockFormForReview(form, statusNode, latestSubmission) {

@@ -678,7 +678,7 @@
       const resolved = getResolvedEntitlements(currentContext);
       if (!resolved.can_use_link_keys) {
         throw new Error(
-          "Link capabilities are not included in your active package.",
+          "Link Keys are not included in your active package.",
         );
       }
 
