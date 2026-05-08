@@ -3017,6 +3017,208 @@ textarea {
   gap: 24px;
 }
 
+.portal-command-center-grid {
+  margin-top: 1rem;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.portal-command-center-item {
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(138, 169, 213, 0.2);
+  background: rgba(7, 16, 30, 0.72);
+}
+
+.portal-command-center-item strong {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: #eff7ff;
+}
+
+.portal-command-center-item .card-copy {
+  margin: 0;
+  color: #c8d7e9;
+}
+
+.portal-progress-list {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0 0;
+  display: grid;
+  gap: 10px;
+}
+
+.portal-progress-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(138, 169, 213, 0.2);
+  background: rgba(7, 16, 30, 0.72);
+  color: #e8f2ff;
+}
+
+.portal-progress-chip {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.portal-progress-chip.is-complete {
+  color: #e7fbef;
+  border-color: rgba(126, 219, 167, 0.44);
+  background: rgba(33, 108, 72, 0.48);
+}
+
+.portal-progress-chip.is-live {
+  color: #f7fbff;
+  border-color: rgba(120, 217, 255, 0.52);
+  background: rgba(34, 84, 112, 0.52);
+}
+
+.portal-progress-chip.is-attention {
+  color: #fff7ea;
+  border-color: rgba(255, 185, 115, 0.52);
+  background: rgba(110, 72, 30, 0.52);
+}
+
+.portal-status-list {
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.portal-status-list p {
+  margin: 0;
+}
+
+.portal-unlock-list {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0 0;
+  display: grid;
+  gap: 10px;
+}
+
+.portal-unlock-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(138, 169, 213, 0.2);
+  background: rgba(7, 16, 30, 0.72);
+  color: #deebfa;
+}
+
+.portal-unlock-list [data-unlock-state="included"] {
+  color: #e7fbef;
+  font-weight: 700;
+}
+
+.portal-unlock-list [data-unlock-state="locked"] {
+  color: #c8d7e9;
+}
+
+.portal-support-concierge-panel a,
+.portal-command-center-item a {
+  color: #dae9fb;
+}
+
+.portal-support-concierge-panel a:hover,
+.portal-command-center-item a:hover {
+  color: #ffffff;
+}
+
+.portal-dashboard-body .form-panel .portal-unlock-list li span:last-child,
+.portal-dashboard-body .form-panel .portal-progress-item span:last-child {
+  max-width: 100%;
+}
+
+.portal-dashboard-body .form-panel .portal-status-list span {
+  color: #f3f9ff;
+  font-weight: 700;
+}
+
+.portal-dashboard-body .portal-support-concierge-panel .card-copy {
+  color: #d2e1f3;
+}
+
+.portal-dashboard-body .portal-progress-tracker-panel [data-progress-fallback-note] {
+  margin-bottom: 0.2rem;
+}
+
+.portal-dashboard-body .portal-command-center-panel .dashboard-presence-copy {
+  margin-bottom: 0.45rem;
+}
+
+.portal-dashboard-body .portal-command-center-panel .portal-next-step-actions .btn {
+  min-width: 210px;
+}
+
+.portal-dashboard-body .portal-workspace-health-panel .card-copy strong,
+.portal-dashboard-body .portal-materials-panel .card-copy strong {
+  color: #f5fbff;
+}
+
+.portal-dashboard-body .portal-package-unlocks-panel li > span:first-child,
+.portal-dashboard-body .portal-progress-item > span:first-child {
+  font-weight: 700;
+  color: #f3f9ff;
+}
+
+@media (max-width: 980px) {
+  .portal-command-center-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .portal-progress-item,
+  .portal-unlock-list li {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 720px) {
+  .portal-command-center-item,
+  .portal-progress-item,
+  .portal-unlock-list li {
+    padding: 12px;
+  }
+
+  .portal-progress-chip {
+    align-self: flex-start;
+  }
+}
+
+@media (max-width: 640px) {
+  .portal-dashboard-body .portal-command-center-panel .portal-next-step-actions .btn {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+@media (max-width: 560px) {
+  .portal-dashboard-shell {
+    gap: 16px;
+  }
+
+  .portal-progress-item,
+  .portal-unlock-list li {
+    word-break: break-word;
+  }
+}
+
+@media (max-width: 420px) {
+  .portal-dashboard-body .portal-support-concierge-panel .card-copy {
+    overflow-wrap: anywhere;
+  }
+}
+
 .stripe-card-mount {
   min-height: 56px;
   padding: 16px 18px;
