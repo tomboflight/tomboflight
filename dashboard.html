@@ -207,15 +207,192 @@
         </section>
 
         <section class="page-sections">
-          <div
-            class="container form-shell portal-dashboard-shell"
-            data-auth-required
-            style="display: none"
-          >
             <div
-              class="form-panel dashboard-presence-panel portal-priority-panel"
-              data-dashboard-customer-only
+              class="container form-shell portal-dashboard-shell"
+              data-auth-required
+              style="display: none"
             >
+              <div class="form-panel portal-command-center-panel" data-dashboard-customer-only>
+                <div class="dashboard-presence-top">
+                  <span class="eyebrow">Legacy Command Center</span>
+                  <span class="presence-badge">Customer Workspace</span>
+                </div>
+                <h2 class="dashboard-presence-title">Operational project overview</h2>
+                <p class="dashboard-presence-copy">
+                  Your package, workspace status, and next required action are tracked below.
+                </p>
+                <div class="portal-command-center-grid">
+                  <div class="portal-command-center-item">
+                    <strong>Active Package:</strong>
+                    <p class="card-copy" data-command-center-package>Your active package</p>
+                  </div>
+                  <div class="portal-command-center-item">
+                    <strong>Project:</strong>
+                    <p class="card-copy" data-command-center-project>Your current workspace</p>
+                  </div>
+                  <div class="portal-command-center-item">
+                    <strong>Build Stage:</strong>
+                    <p class="card-copy" data-command-center-stage>
+                      Workspace active — next action required.
+                    </p>
+                  </div>
+                  <div class="portal-command-center-item">
+                    <strong>Next Required Action:</strong>
+                    <p class="card-copy" data-command-center-next-action>
+                      Upload Photos &amp; Family Records.
+                    </p>
+                  </div>
+                  <div class="portal-command-center-item">
+                    <strong>Security:</strong>
+                    <p class="card-copy" data-command-center-security>
+                      Private workspace active. Public sharing remains off unless approved.
+                    </p>
+                  </div>
+                  <div class="portal-command-center-item">
+                    <strong>Support:</strong>
+                    <p class="card-copy">
+                      <a href="mailto:support@tomboflight.com">support@tomboflight.com</a><br />
+                      <a href="tel:+13468054305">(346) 805-4305</a>
+                    </p>
+                  </div>
+                </div>
+                <div class="inline-actions portal-next-step-actions" style="margin-top: 1rem">
+                  <a class="btn btn-primary" href="upload-hub.html">
+                    Upload Photos &amp; Family Records
+                  </a>
+                  <a class="btn btn-secondary" href="intake-welcome.html">
+                    Continue Intake
+                  </a>
+                </div>
+              </div>
+
+              <div class="form-panel portal-progress-tracker-panel" data-dashboard-customer-only>
+                <span class="eyebrow">Project Progress Tracker</span>
+                <h3>Production timeline</h3>
+                <p class="card-copy" data-progress-fallback-note>
+                  Status updates appear here as your project moves through production.
+                </p>
+                <ol class="portal-progress-list" data-project-progress-list>
+                  <li class="portal-progress-item" data-progress-stage="account_created">
+                    <span>Account Created</span>
+                    <span class="presence-badge portal-progress-chip" data-progress-chip="account_created">Pending</span>
+                  </li>
+                  <li class="portal-progress-item" data-progress-stage="package_activated">
+                    <span>Package Activated</span>
+                    <span class="presence-badge portal-progress-chip" data-progress-chip="package_activated">Pending</span>
+                  </li>
+                  <li class="portal-progress-item" data-progress-stage="intake_started">
+                    <span>Intake Started</span>
+                    <span class="presence-badge portal-progress-chip" data-progress-chip="intake_started">Pending</span>
+                  </li>
+                  <li class="portal-progress-item" data-progress-stage="intake_submitted">
+                    <span>Intake Submitted</span>
+                    <span class="presence-badge portal-progress-chip" data-progress-chip="intake_submitted">Pending</span>
+                  </li>
+                  <li class="portal-progress-item" data-progress-stage="intake_approved">
+                    <span>Intake Approved</span>
+                    <span class="presence-badge portal-progress-chip" data-progress-chip="intake_approved">Pending</span>
+                  </li>
+                  <li class="portal-progress-item" data-progress-stage="uploads_needed">
+                    <span>Uploads Needed</span>
+                    <span class="presence-badge portal-progress-chip" data-progress-chip="uploads_needed">Pending</span>
+                  </li>
+                  <li class="portal-progress-item" data-progress-stage="uploads_under_review">
+                    <span>Uploads Under Review</span>
+                    <span class="presence-badge portal-progress-chip" data-progress-chip="uploads_under_review">Pending</span>
+                  </li>
+                  <li class="portal-progress-item" data-progress-stage="verification_review">
+                    <span>Verification Review</span>
+                    <span class="presence-badge portal-progress-chip" data-progress-chip="verification_review">Pending</span>
+                  </li>
+                  <li class="portal-progress-item" data-progress-stage="production_build">
+                    <span>Production Build</span>
+                    <span class="presence-badge portal-progress-chip" data-progress-chip="production_build">Pending</span>
+                  </li>
+                  <li class="portal-progress-item" data-progress-stage="customer_review">
+                    <span>Customer Review</span>
+                    <span class="presence-badge portal-progress-chip" data-progress-chip="customer_review">Pending</span>
+                  </li>
+                  <li class="portal-progress-item" data-progress-stage="delivered">
+                    <span>Delivered</span>
+                    <span class="presence-badge portal-progress-chip" data-progress-chip="delivered">Pending</span>
+                  </li>
+                  <li class="portal-progress-item" data-progress-stage="maintenance_continuity">
+                    <span>Maintenance / Continuity</span>
+                    <span class="presence-badge portal-progress-chip" data-progress-chip="maintenance_continuity">Pending</span>
+                  </li>
+                </ol>
+              </div>
+
+              <div class="form-panel portal-workspace-health-panel" data-dashboard-customer-only>
+                <span class="eyebrow">Workspace Health</span>
+                <h3>Current operational status</h3>
+                <div class="portal-status-list">
+                  <p class="card-copy"><strong>Package:</strong> <span data-health-package>Pending</span></p>
+                  <p class="card-copy"><strong>Intake:</strong> <span data-health-intake>Not started</span></p>
+                  <p class="card-copy"><strong>Uploads:</strong> <span data-health-uploads>Not started</span></p>
+                  <p class="card-copy"><strong>Verification:</strong> <span data-health-verification>Pending</span></p>
+                  <p class="card-copy"><strong>Viewer:</strong> <span data-health-viewer>Not ready</span></p>
+                  <p class="card-copy"><strong>Certificate:</strong> <span data-health-certificate>Not ready</span></p>
+                  <p class="card-copy"><strong>Vault:</strong> <span data-health-vault>Active</span></p>
+                  <p class="card-copy"><strong>Privacy:</strong> <span data-health-privacy>Private by default</span></p>
+                </div>
+              </div>
+
+              <div class="form-panel portal-package-unlocks-panel" data-dashboard-customer-only>
+                <span class="eyebrow">Your Package Unlocks</span>
+                <h3>Entitlement-based tool access</h3>
+                <ul class="portal-unlock-list">
+                  <li><span>Portrait Uploads</span><span data-unlock-portraits>Locked — not included in your active package.</span></li>
+                  <li><span>Verification Uploads</span><span data-unlock-verification>Locked — not included in your active package.</span></li>
+                  <li><span>Vault Files</span><span data-unlock-vault>Locked — not included in your active package.</span></li>
+                  <li><span>Family Intake</span><span data-unlock-intake>Locked — not included in your active package.</span></li>
+                  <li><span>Family Tree</span><span data-unlock-tree>Locked — not included in your active package.</span></li>
+                  <li><span>Lineage Certificate</span><span data-unlock-certificate>Locked — not included in your active package.</span></li>
+                  <li><span>Narration</span><span data-unlock-narration>Locked — not included in your active package.</span></li>
+                  <li><span>Link Keys</span><span data-unlock-link-keys>Locked — not included in your active package.</span></li>
+                  <li><span>Household Access</span><span data-unlock-household>Locked — not included in your active package.</span></li>
+                  <li><span>Organization Tools</span><span data-unlock-organization>Locked — not included in your active package.</span></li>
+                  <li><span>Viewer Access</span><span data-unlock-viewer>Locked — not included in your active package.</span></li>
+                </ul>
+              </div>
+
+              <div class="form-panel portal-materials-panel" data-dashboard-customer-only>
+                <span class="eyebrow">What Tomb of Light Has Received</span>
+                <h3>Materials summary</h3>
+                <div class="portal-status-list">
+                  <p class="card-copy">
+                    <strong>Portraits / Family Photos:</strong>
+                    <span data-received-portraits>Awaiting upload</span>
+                  </p>
+                  <p class="card-copy">
+                    <strong>Verification Documents:</strong>
+                    <span data-received-verification>Awaiting upload</span>
+                  </p>
+                  <p class="card-copy">
+                    <strong>Vault Files:</strong>
+                    <span data-received-vault>Optional / Awaiting upload</span>
+                  </p>
+                  <p class="card-copy">
+                    <strong>Review Status:</strong>
+                    <span data-received-review>Status pending</span>
+                  </p>
+                </div>
+              </div>
+
+              <div class="form-panel portal-support-concierge-panel" data-dashboard-customer-only>
+                <span class="eyebrow">Support Concierge</span>
+                <h3>Need help with your build?</h3>
+                <p class="card-copy"><strong>Support:</strong> <a href="mailto:support@tomboflight.com">support@tomboflight.com</a> · <a href="tel:+13468054305">(346) 805-4305</a></p>
+                <p class="card-copy"><strong>Billing:</strong> <a href="mailto:billing@tomboflight.com">billing@tomboflight.com</a></p>
+                <p class="card-copy"><strong>Privacy:</strong> <a href="mailto:privacy@tomboflight.com">privacy@tomboflight.com</a></p>
+                <p class="card-copy"><strong>Typical response:</strong> 1–2 business days</p>
+              </div>
+
+              <div
+                class="form-panel dashboard-presence-panel portal-priority-panel"
+                data-dashboard-customer-only
+              >
               <div class="dashboard-presence-top">
                 <span class="eyebrow">Workspace Status</span>
                 <span class="presence-badge">Preparing Workspace</span>
