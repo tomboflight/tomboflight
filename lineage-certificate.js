@@ -156,6 +156,17 @@
       });
     }
 
+    function getResolvedEntitlements(context) {
+      if (context?.resolvedEntitlements) return context.resolvedEntitlements;
+      if (typeof authPages.buildFallbackEntitlements === "function") {
+        return authPages.buildFallbackEntitlements(
+          context?.packageCode,
+          context?.packageLane,
+        );
+      }
+      return {};
+    }
+
     async function getCurrentContext() {
       if (
         !authPages ||
@@ -648,6 +659,23 @@
 
     const preferredFamilyId = getPreferredFamilyId(currentContext);
     updateWorkspaceLinks(currentContext, preferredFamilyId);
+
+    const resolved = getResolvedEntitlements(currentContext);
+    if (
+      currentContext &&
+      currentContext.hasPackageAccess &&
+      !resolved.can_use_lineage_certificate
+    ) {
+      if (familySelect) familySelect.disabled = true;
+      if (loadBtn) loadBtn.disabled = true;
+      showEmptyState(true);
+      showOutput(false);
+      setStatus(
+        "Lineage Certificate is not included in your active package.",
+        "error",
+      );
+      return;
+    }
 
     await loadFamilyOptions(preferredFamilyId);
 

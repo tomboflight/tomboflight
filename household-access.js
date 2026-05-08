@@ -1,5 +1,6 @@
 (function () {
   const app = window.TOLApp || window.TOLAuth;
+  const authPages = window.TOLAuthPages || {};
   if (!app || typeof app.apiRequest !== "function") return;
 
   const statusNode = document.querySelector("[data-household-status]");
@@ -113,8 +114,33 @@
 
   let currentProjectId = "";
   let currentUser = null;
+  let currentContext = null;
   let currentMemberRole = "viewer";
   let hasResolvedMemberRole = false;
+
+  function getResolvedEntitlements(context) {
+    if (context?.resolvedEntitlements) return context.resolvedEntitlements;
+    if (typeof authPages.buildFallbackEntitlements === "function") {
+      return authPages.buildFallbackEntitlements(
+        context?.packageCode,
+        context?.packageLane,
+      );
+    }
+    return {};
+  }
+
+  function setLockedWorkspaceState(message) {
+    if (statusNode) statusNode.textContent = message;
+    setText(inviteStatus, message, "warning");
+    setText(acceptStatus, message, "warning");
+
+    [inviteForm, acceptForm].forEach(function (form) {
+      if (!form) return;
+      form.querySelectorAll("input, select, textarea, button").forEach(function (field) {
+        field.disabled = true;
+      });
+    });
+  }
 
   function inviteApiFallbackBaseUrls() {
     const configuredFallbacks = Array.isArray(window.TOL_CONFIG?.INVITE_API_BASE_URL_FALLBACKS)
@@ -1439,6 +1465,26 @@
       });
       if (typeof app.saveUser === "function") {
         app.saveUser(currentUser);
+      }
+
+      try {
+        const orders = typeof authPages.fetchOrders === "function" ? await authPages.fetchOrders() : [];
+        currentContext =
+          typeof authPages.getDashboardContextForCurrentPage === "function"
+            ? await authPages.getDashboardContextForCurrentPage(currentUser, orders)
+            : typeof authPages.getDashboardContext === "function"
+              ? await authPages.getDashboardContext(currentUser, orders)
+              : null;
+      } catch (_contextError) {
+        currentContext = null;
+      }
+
+      const resolved = getResolvedEntitlements(currentContext);
+      if (currentContext && currentContext.hasPackageAccess && !resolved.can_build_household) {
+        setLockedWorkspaceState(
+          "Members & Access is not included in your active package.",
+        );
+        return;
       }
 
       const inviteKey = inviteKeyFromQuery();

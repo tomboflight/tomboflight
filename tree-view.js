@@ -254,6 +254,17 @@
     );
   }
 
+  function getResolvedEntitlements(context) {
+    if (context?.resolvedEntitlements) return context.resolvedEntitlements;
+    if (typeof authPages.buildFallbackEntitlements === "function") {
+      return authPages.buildFallbackEntitlements(
+        context?.packageCode,
+        context?.packageLane,
+      );
+    }
+    return {};
+  }
+
   async function getCurrentContext() {
     if (
       !authPages ||
@@ -376,6 +387,22 @@
       currentContext = await getCurrentContext();
     } catch (error) {
       currentContext = null;
+    }
+
+    const resolved = getResolvedEntitlements(currentContext);
+    if (currentContext && currentContext.hasPackageAccess && !resolved.can_build_family_tree) {
+      if (familySelect) familySelect.disabled = true;
+      if (loadBtn) loadBtn.disabled = true;
+      if (canvas) {
+        canvas.innerHTML =
+          '<div class="tree-empty">Family Tree is not included in your active package.</div>';
+      }
+      showStatus(
+        statusNode,
+        "Family Tree is not included in your active package.",
+        "error",
+      );
+      return;
     }
 
     const preferredFamilyId = getPreferredFamilyId(currentContext);
