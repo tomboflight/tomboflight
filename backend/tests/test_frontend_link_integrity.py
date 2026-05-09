@@ -92,6 +92,8 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
         self.assertIn("localStorage.setItem(COOKIE_CHOICE_KEY, choice)", app_source)
         self.assertGreaterEqual(privacy_choices.count("data-cookie-accept"), 2)
         self.assertGreaterEqual(privacy_choices.count("data-cookie-decline"), 2)
+        self.assertNotIn('data-cookie-accept"', homepage)
+        self.assertNotIn('data-cookie-accept"', platform)
         self.assertNotIn('data-cookie-decline"', homepage)
         self.assertNotIn('data-cookie-decline"', platform)
 
