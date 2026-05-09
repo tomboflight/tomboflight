@@ -39,22 +39,24 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
     def test_marketing_homepage_uses_non_broken_viewer_preview_block(self):
         contents = (REPO_ROOT / "index.html").read_text(encoding="utf-8")
 
-        self.assertRegex(contents, r'class="[^"]*\bhero-moreland-tree-card\b[^"]*"')
-        self.assertIn('class="btn btn-primary" href="/viewer/?demo=malik-moreland"', contents)
-        self.assertIn("Moreland Family Tree Preview", contents)
+        self.assertRegex(contents, r'class="[^"]*\bhero-moreland-preview-card\b[^"]*"')
         self.assertIn(
-            "Explore linked Moreland branches from Clara and Elias through Selah, Julian, Malik, Imani, Camille, and Micah.",
+            'class="btn btn-primary moreland-preview-cta" href="/viewer/?demo=malik-moreland"',
             contents,
         )
+        self.assertIn("MORELAND FAMILY TREE PREVIEW", contents)
+        self.assertIn(
+            "Preview the Moreland family structure, then open the full demo to explore parent, sibling, spouse, and descendant branches.",
+            contents,
+        )
+        self.assertIn("View Full Demo Tree", contents)
         self.assertNotIn("Scroll through the Moreland demo tree.", contents)
+        self.assertNotIn("Explore linked Moreland branches from Clara and Elias", contents)
         self.assertNotIn("Manifest Required", contents)
-        embed_match = re.search(
-            r'<div class="hero-demo-embed hero-moreland-tree-embed">(.*?)</div>\s*</div>',
-            contents,
-            re.DOTALL,
-        )
-        self.assertIsNotNone(embed_match)
-        self.assertNotIn("<iframe", embed_match.group(1))
+        self.assertNotIn("moreland-list-preview", contents)
+        self.assertNotIn("moreland-graph-preview", contents)
+        self.assertNotIn("moreland-tree-canvas", contents)
+        self.assertNotIn("<iframe", contents)
         self.assertNotIn('viewer/index.html?preview=1', contents)
         self.assertNotIn('href="viewer/?demo=malik-moreland"', contents)
         self.assertNotIn('href="viewer?demo=malik-moreland"', contents)
