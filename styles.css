@@ -269,6 +269,65 @@ a {
   flex-wrap: wrap;
 }
 
+@media (min-width: 861px) {
+  .homepage-body .site-header {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(246, 250, 253, 0.9));
+    border-bottom-color: rgba(216, 227, 236, 0.72);
+    box-shadow: 0 18px 42px rgba(11, 18, 32, 0.06);
+  }
+
+  .homepage-body .site-header-inner {
+    min-height: 92px;
+    gap: 24px;
+  }
+
+  .homepage-body .brand {
+    font-size: 1.52rem;
+    letter-spacing: 0;
+  }
+
+  .homepage-body .site-nav {
+    gap: 22px;
+    justify-content: center;
+    margin-left: 0;
+  }
+
+  .homepage-body .site-nav a {
+    font-size: 0.94rem;
+    letter-spacing: 0;
+  }
+
+  .homepage-body .header-actions {
+    flex-wrap: nowrap;
+  }
+
+  .homepage-body .header-trust-badge {
+    display: none;
+  }
+
+  .homepage-body .header-actions .btn {
+    min-height: 48px;
+    padding-inline: 22px;
+    white-space: nowrap;
+  }
+}
+
+@media (min-width: 1181px) {
+  .homepage-body .site-header-inner {
+    min-height: 98px;
+    gap: 34px;
+  }
+
+  .homepage-body .brand {
+    font-size: 1.62rem;
+  }
+
+  .homepage-body .site-nav {
+    gap: 30px;
+  }
+}
+
 .menu-toggle {
   display: none;
   appearance: none;
@@ -750,8 +809,10 @@ select:focus-visible {
   gap: 0;
 }
 
-.hero-moreland-tree-card {
-  padding: 24px;
+.hero-moreland-preview-card {
+  display: grid;
+  gap: 22px;
+  padding: 26px;
   border-color: rgba(114, 188, 255, 0.24);
   background:
     radial-gradient(
@@ -765,221 +826,131 @@ select:focus-visible {
       transparent 26%
     ),
     linear-gradient(180deg, rgba(8, 13, 24, 0.94), rgba(4, 8, 16, 0.98));
+  overflow: hidden;
 }
 
-.hero-demo-card-top-moreland {
-  margin-bottom: 14px;
+.moreland-preview-copy {
+  display: grid;
+  gap: 12px;
+  max-width: 640px;
 }
 
-.hero-demo-card-top-moreland h2 {
-  max-width: 22ch;
+.moreland-preview-copy .eyebrow {
   margin: 0;
-  font-size: clamp(1.35rem, 2.1vw, 1.9rem);
+  color: rgba(232, 241, 255, 0.68);
+}
+
+.moreland-preview-copy h2 {
+  margin: 0;
   color: var(--tol-dark-heading);
+  font-size: 1.48rem;
+  line-height: 1.12;
+  letter-spacing: 0;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
-.moreland-mobile-instruction {
-  margin: 8px 0 0;
+.moreland-preview-copy p {
+  margin: 0;
   color: rgba(232, 241, 255, 0.86);
-  font-size: 0.9rem;
-  line-height: 1.5;
+  font-size: 0.98rem;
+  line-height: 1.62;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
-.hero-moreland-tree-embed {
+.moreland-preview-cta {
+  width: fit-content;
+  margin-top: 4px;
+}
+
+.hero-moreland-preview-embed {
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(3, 8, 16, 0.84);
   border-radius: 24px;
   overflow: hidden;
 }
 
-.hero-moreland-tree-stage {
-  min-height: clamp(500px, 60vh, 720px);
-  aspect-ratio: auto;
+.hero-moreland-preview-stage {
+  min-height: 382px;
+  aspect-ratio: 16 / 10;
+  padding: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background:
     radial-gradient(circle at 14% 8%, rgba(198, 166, 106, 0.18), transparent 30%),
     radial-gradient(circle at 86% 86%, rgba(114, 188, 255, 0.24), transparent 30%),
     linear-gradient(180deg, rgba(3, 7, 15, 0.98), rgba(4, 8, 16, 0.98));
   border: 0;
+  overflow: hidden;
 }
 
-.moreland-tree-scroll {
+.moreland-teaser-tree {
   width: 100%;
-  height: 100%;
-  max-width: 100%;
-  overflow-x: auto;
-  overflow-y: auto;
-  padding: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(214, 176, 102, 0.75) rgba(255, 255, 255, 0.08);
-}
-
-.moreland-tree-scroll::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-
-.moreland-tree-scroll::-webkit-scrollbar-thumb {
-  background: rgba(214, 176, 102, 0.75);
-  border-radius: 999px;
-}
-
-.moreland-tree-scroll::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 999px;
-}
-
-.moreland-tree-scroll:focus-visible {
-  outline: 2px solid var(--gold);
-  outline-offset: 2px;
-}
-
-.moreland-list-preview {
-  display: none;
-  width: 100%;
-  padding: 14px;
-}
-
-.moreland-list-cards {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+  max-width: 720px;
+  margin: auto;
   display: grid;
-  gap: 10px;
+  gap: 18px;
 }
 
-.moreland-list-card {
-  margin: 0;
-  padding: 12px 14px;
-  border-radius: 14px;
-  border: 1px solid rgba(114, 188, 255, 0.3);
-  background: rgba(6, 12, 23, 0.84);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.moreland-teaser-generation {
+  display: grid;
+  gap: 14px;
+  align-items: stretch;
+  justify-content: center;
 }
 
-.moreland-list-card span:first-child {
-  color: #ffffff;
-  font-weight: 700;
-  line-height: 1.25;
+.moreland-teaser-generation-founders {
+  grid-template-columns: minmax(220px, 320px);
 }
 
-.moreland-list-card span:last-child {
-  color: var(--tol-dark-muted);
-  font-size: 0.86rem;
-  font-weight: 500;
+.moreland-teaser-generation-children {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.moreland-graph-preview {
-  display: block;
+.moreland-teaser-generation-descendants {
+  width: min(100%, 480px);
+  margin-inline: auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.moreland-tree-canvas {
+.moreland-teaser-branch {
   position: relative;
-  width: min(100%, 1260px);
-  max-width: 1260px;
-  aspect-ratio: 1260 / 760;
-  min-width: 0;
-  min-height: 0;
+  width: min(72%, 520px);
+  height: 34px;
+  margin: -2px auto;
 }
 
-.moreland-tree-connectors {
+.moreland-teaser-branch::before,
+.moreland-teaser-branch::after {
+  content: "";
   position: absolute;
-  inset: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(214, 176, 102, 0.78);
+}
+
+.moreland-teaser-branch::before {
+  top: 0;
+  bottom: 0;
+  width: 2px;
+}
+
+.moreland-teaser-branch::after {
+  top: 50%;
   width: 100%;
-  height: 100%;
+  height: 2px;
 }
 
-.moreland-parent-links line {
-  stroke: rgba(214, 176, 102, 0.92);
-  stroke-width: 3;
-  stroke-linecap: round;
+.moreland-teaser-branch-short {
+  width: min(48%, 340px);
 }
 
-.moreland-spouse-links line {
-  stroke: rgba(114, 188, 255, 0.82);
-  stroke-width: 2.5;
-  stroke-linecap: round;
-  stroke-dasharray: 8 7;
-}
-
-.moreland-node {
-  position: absolute;
-  width: 15.24%;
-}
-
-.moreland-node-clara {
-  top: 5.263%;
-  left: 32.54%;
-}
-
-.moreland-node-elias {
-  top: 5.263%;
-  left: 49.206%;
-}
-
-.moreland-node-andre {
-  top: 28.947%;
-  left: 7.937%;
-}
-
-.moreland-node-selah {
-  top: 28.947%;
-  left: 20.635%;
-}
-
-.moreland-node-julian {
-  top: 28.947%;
-  left: 39.683%;
-}
-
-.moreland-node-malik {
-  top: 28.947%;
-  left: 55.556%;
-}
-
-.moreland-node-naomi {
-  top: 28.947%;
-  left: 68.254%;
-}
-
-.moreland-node-zara {
-  top: 52.632%;
-  left: 14.286%;
-}
-
-.moreland-node-eli {
-  top: 52.632%;
-  left: 55.556%;
-}
-
-.moreland-node-imani {
-  top: 52.632%;
-  left: 68.254%;
-}
-
-.moreland-node-marcus {
-  top: 52.632%;
-  left: 80.952%;
-}
-
-.moreland-node-camille {
-  top: 76.316%;
-  left: 68.254%;
-}
-
-.moreland-node-micah {
-  top: 76.316%;
-  left: 80.952%;
-}
-
-.moreland-person-card {
+.moreland-teaser-node {
   min-height: 88px;
   margin: 0;
-  padding: 14px 14px 12px;
+  padding: 16px 14px;
   border-radius: 16px;
   border: 1px solid rgba(114, 188, 255, 0.34);
   background:
@@ -988,22 +959,36 @@ select:focus-visible {
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.03),
     0 16px 26px rgba(1, 4, 10, 0.34);
+  display: grid;
+  gap: 5px;
+  align-content: center;
+  text-align: center;
 }
 
-.moreland-person-card h3 {
-  margin: 0 0 4px;
+.moreland-teaser-node-primary {
+  border-color: rgba(214, 176, 102, 0.54);
+  background:
+    linear-gradient(180deg, rgba(214, 176, 102, 0.14), rgba(255, 255, 255, 0.03)),
+    rgba(6, 12, 23, 0.9);
+}
+
+.moreland-teaser-node span {
   color: #ffffff;
-  font-size: 1rem;
-  line-height: 1.2;
+  font-size: 0.98rem;
+  line-height: 1.22;
   font-weight: 700;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
-.moreland-person-card p {
-  margin: 0;
+.moreland-teaser-node small {
   color: var(--tol-dark-muted);
-  font-size: 0.84rem;
+  font-size: 0.82rem;
   font-weight: 500;
+  line-height: 1.35;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
 .platform-model-card {
@@ -4272,42 +4257,12 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
     grid-area: auto;
   }
 
-  .hero-moreland-tree-card {
-    padding: 24px 24px 20px;
+  .hero-moreland-preview-card {
+    padding: 24px;
   }
 
-  .hero-moreland-tree-stage {
-    min-height: clamp(420px, 45vw, 620px);
-  }
-
-  .moreland-tree-scroll {
-    padding: 16px;
-  }
-
-  .moreland-tree-canvas {
-    width: min(100%, 1260px);
-    max-width: 1260px;
-    aspect-ratio: 1260 / 760;
-    min-width: 0;
-    min-height: 0;
-    margin: 0;
-  }
-
-  .moreland-node {
-    position: absolute;
-    width: 15.24%;
-  }
-
-  .moreland-tree-connectors {
-    display: block;
-  }
-
-  .moreland-list-preview {
-    display: none;
-  }
-
-  .moreland-graph-preview {
-    display: block;
+  .hero-moreland-preview-stage {
+    min-height: 360px;
   }
 }
 
@@ -4632,23 +4587,48 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
     max-height: none;
   }
 
-  .hero-moreland-tree-stage {
-    min-height: 500px;
+  .hero-moreland-preview-card {
+    padding: 20px;
   }
 
-  .moreland-tree-scroll {
-    padding: 14px 12px;
+  .moreland-preview-copy h2 {
+    font-size: 1.28rem;
   }
 
-  .moreland-tree-canvas {
-    width: min(100%, 1260px);
-    max-width: 1260px;
-    aspect-ratio: 1260 / 760;
-    min-width: 0;
+  .moreland-preview-cta {
+    width: 100%;
+    justify-content: center;
   }
 
-  .moreland-person-card {
-    width: 15.24%;
+  .hero-moreland-preview-stage {
+    aspect-ratio: auto;
+    min-height: 0;
+    padding: 16px;
+    align-items: stretch;
+  }
+
+  .moreland-teaser-tree {
+    gap: 12px;
+    margin: 0;
+    max-width: none;
+  }
+
+  .moreland-teaser-generation,
+  .moreland-teaser-generation-founders,
+  .moreland-teaser-generation-children,
+  .moreland-teaser-generation-descendants {
+    width: 100%;
+    grid-template-columns: 1fr;
+  }
+
+  .moreland-teaser-branch {
+    display: none;
+  }
+
+  .moreland-teaser-node {
+    min-height: 0;
+    padding: 14px;
+    text-align: left;
   }
 
   .hero-viewer-static {
@@ -4903,34 +4883,17 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
     max-height: none;
   }
 
-  .hero-demo-card-top-moreland h2 {
-    font-size: clamp(1.2rem, 6.2vw, 1.45rem);
+  .moreland-preview-copy h2 {
+    font-size: 1.16rem;
     line-height: 1.2;
   }
 
-  .hero-moreland-tree-stage {
-    min-height: 460px;
+  .moreland-teaser-node span {
+    font-size: 0.92rem;
   }
 
-  .moreland-tree-canvas {
-    width: min(100%, 1260px);
-    max-width: 1260px;
-    aspect-ratio: 1260 / 760;
-    min-width: 0;
-    min-height: 0;
-  }
-
-  .moreland-person-card {
-    min-height: 78px;
-    padding: 11px 10px;
-  }
-
-  .moreland-person-card h3 {
-    font-size: 0.87rem;
-  }
-
-  .moreland-person-card p {
-    font-size: 0.74rem;
+  .moreland-teaser-node small {
+    font-size: 0.78rem;
   }
 
   .architecture-panel-home h2 {
@@ -4944,30 +4907,8 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
 }
 
 @media (max-width: 768px) {
-  .hero-moreland-tree-stage {
-    aspect-ratio: auto;
-    min-height: 480px;
-    height: auto;
-  }
-
-  .moreland-tree-scroll {
-    height: 100%;
-  }
-
-  .moreland-tree-canvas {
-    width: min(100%, 1260px);
-    max-width: 1260px;
-    aspect-ratio: 1260 / 760;
-    min-width: 0;
-    min-height: 0;
-  }
-
-  .moreland-person-card h3 {
-    font-size: 0.84rem;
-  }
-
-  .moreland-person-card p {
-    font-size: 0.72rem;
+  .hero-moreland-preview-embed {
+    border-radius: 20px;
   }
 }
 
@@ -4984,28 +4925,32 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
     align-items: start;
   }
 
-  .moreland-list-preview {
-    display: block;
-  }
-
-  .moreland-graph-preview {
-    display: none;
-  }
-
-  .moreland-graph-preview .moreland-tree-canvas,
-  .moreland-graph-preview .moreland-tree-connectors,
-  .moreland-graph-preview .moreland-node {
-    display: none;
-  }
-
-  .hero-moreland-tree-stage {
+  .hero-moreland-preview-stage {
+    aspect-ratio: auto;
     min-height: 0;
     height: auto;
     overflow: visible;
   }
 
-  .hero-moreland-tree-embed {
+  .hero-moreland-preview-embed {
     overflow: visible;
+  }
+
+  .moreland-teaser-generation,
+  .moreland-teaser-generation-founders,
+  .moreland-teaser-generation-children,
+  .moreland-teaser-generation-descendants {
+    width: 100%;
+    grid-template-columns: 1fr;
+  }
+
+  .moreland-teaser-branch {
+    display: none;
+  }
+
+  .moreland-teaser-node {
+    min-height: 0;
+    text-align: left;
   }
 }
 
@@ -5017,7 +4962,7 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
 
   .hero-copy-moreland,
   .hero-visual-moreland,
-  .hero-moreland-tree-card {
+  .hero-moreland-preview-card {
     grid-column: 1 / -1;
     width: 100%;
   }
@@ -5027,31 +4972,13 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
     align-self: stretch;
   }
 
-  .moreland-list-preview {
-    display: none;
-  }
-
-  .moreland-graph-preview {
-    display: block;
-  }
-
-  .hero-moreland-tree-stage {
-    min-height: min(72vh, 620px);
+  .hero-moreland-preview-stage {
+    min-height: 360px;
     height: auto;
   }
 
-  .moreland-tree-scroll {
-    align-items: flex-start;
-    justify-content: center;
-    overflow: auto;
-  }
-
-  .moreland-tree-canvas {
-    width: 100%;
-    max-width: 1260px;
-    min-width: 0;
-    min-height: 0;
-    margin: 0 auto;
+  .moreland-teaser-tree {
+    max-width: 780px;
   }
 }
 
