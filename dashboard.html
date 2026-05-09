@@ -8,7 +8,7 @@
       name="description"
       content="Your private Tomb of Light customer or internal operations workspace."
     />
-    <link rel="stylesheet" href="styles.css?v=20260509-portal" />
+    <link rel="stylesheet" href="styles.css?v=20260509-luminous" />
   </head>
   <body class="portal-dashboard-body">
     <div class="site-watermark" aria-hidden="true"></div>
@@ -302,19 +302,27 @@
               <div class="portal-action-card-grid portal-action-card-grid-primary">
                 <a class="portal-action-card is-primary" href="upload-hub.html">
                   <strong>Upload Photos &amp; Family Records</strong>
-                  <span>Open</span>
+                  <p>Send portraits, family images, and source records into the protected upload lanes.</p>
+                  <span class="portal-action-status">Open</span>
+                  <span class="portal-action-cta">Open Upload Hub</span>
                 </a>
                 <a class="portal-action-card" href="verification-upload.html">
                   <strong>Upload Verification Documents</strong>
-                  <span>Open</span>
+                  <p>Add certificates, identity evidence, and supporting records for review.</p>
+                  <span class="portal-action-status">Open</span>
+                  <span class="portal-action-cta">Upload Evidence</span>
                 </a>
                 <a class="portal-action-card" href="tree-view.html">
                   <strong>Open Family Tree</strong>
-                  <span>Open</span>
+                  <p>Review the lineage graph as production data becomes available.</p>
+                  <span class="portal-action-status">Check access</span>
+                  <span class="portal-action-cta">Open Tree</span>
                 </a>
                 <a class="portal-action-card" href="intake-review.html" data-intake-open-action>
                   <strong>View Intake</strong>
-                  <span>Open</span>
+                  <p>Confirm household, family map, upload plan, and consent details.</p>
+                  <span class="portal-action-status">Ready</span>
+                  <span class="portal-action-cta">View Intake</span>
                 </a>
               </div>
             </div>
@@ -396,17 +404,72 @@
               <span class="eyebrow">Command Grid</span>
               <h3>Customer tools</h3>
               <div class="portal-action-card-grid">
-                <a class="portal-action-card" href="upload-hub.html"><strong>Upload Hub</strong><span>Open</span></a>
-                <a class="portal-action-card" href="portrait-upload.html"><strong>Portrait / Family Photos</strong><span>Check access</span></a>
-                <a class="portal-action-card" href="verification-upload.html"><strong>Verification Documents</strong><span>Check access</span></a>
-                <a class="portal-action-card" href="vault-upload.html"><strong>Private Vault Files</strong><span>Check access</span></a>
-                <a class="portal-action-card" href="tree-view.html"><strong>Family Tree</strong><span>Check access</span></a>
-                <a class="portal-action-card" href="lineage-certificate.html"><strong>Lineage Certificate</strong><span>Check access</span></a>
-                <a class="portal-action-card" href="household-access.html" data-dashboard-household-invite-co-owner><strong>Members &amp; Access</strong><span>Check access</span></a>
-                <a class="portal-action-card" href="link-keys.html"><strong>Link Keys</strong><span>Check access</span></a>
-                <a class="portal-action-card" href="billing.html"><strong>Billing &amp; Cards</strong><span>Open</span></a>
-                <a class="portal-action-card" href="account-security.html"><strong>Account Security</strong><span>Open</span></a>
-                <a class="portal-action-card" href="faq.html"><strong>Help Center</strong><span>Open</span></a>
+                <a class="portal-action-card" href="upload-hub.html">
+                  <strong>Upload Hub</strong>
+                  <p>Choose the correct lane for photos, Family Records / Documents, and vault media.</p>
+                  <span class="portal-action-status">Open</span>
+                  <span class="portal-action-cta">Open Hub</span>
+                </a>
+                <a class="portal-action-card" href="portrait-upload.html">
+                  <strong>Portrait / Family Photos</strong>
+                  <p>Submit cinematic portraits and family images for production review.</p>
+                  <span class="portal-action-status">Check access</span>
+                  <span class="portal-action-cta">Upload Photos</span>
+                </a>
+                <a class="portal-action-card" href="verification-upload.html">
+                  <strong>Verification Documents</strong>
+                  <p>Provide records that support lineage, identity, and source verification.</p>
+                  <span class="portal-action-status">Check access</span>
+                  <span class="portal-action-cta">Upload Records</span>
+                </a>
+                <a class="portal-action-card" href="vault-upload.html">
+                  <strong>Private Vault Files</strong>
+                  <p>Store voice, video, and protected legacy files with private scope controls.</p>
+                  <span class="portal-action-status">Check access</span>
+                  <span class="portal-action-cta">Open Vault</span>
+                </a>
+                <a class="portal-action-card" href="tree-view.html">
+                  <strong>Family Tree</strong>
+                  <p>Open the working lineage graph when your package and project state allow it.</p>
+                  <span class="portal-action-status">Check access</span>
+                  <span class="portal-action-cta">Open Tree</span>
+                </a>
+                <a class="portal-action-card" href="lineage-certificate.html">
+                  <strong>Lineage Certificate</strong>
+                  <p>Generate the certificate view from verified family structure data.</p>
+                  <span class="portal-action-status">Check access</span>
+                  <span class="portal-action-cta">View Certificate</span>
+                </a>
+                <a class="portal-action-card" href="household-access.html" data-dashboard-household-invite-co-owner>
+                  <strong>Members &amp; Access</strong>
+                  <p>Invite trusted roles and review private collaboration permissions.</p>
+                  <span class="portal-action-status">Check access</span>
+                  <span class="portal-action-cta">Manage Members</span>
+                </a>
+                <a class="portal-action-card" href="link-keys.html">
+                  <strong>Link Keys</strong>
+                  <p>Create protected keys for controlled family or workspace handshakes.</p>
+                  <span class="portal-action-status">Check access</span>
+                  <span class="portal-action-cta">Manage Keys</span>
+                </a>
+                <a class="portal-action-card" href="billing.html">
+                  <strong>Billing &amp; Cards</strong>
+                  <p>Manage saved cards, subscriptions, and maintenance billing continuity.</p>
+                  <span class="portal-action-status">Open</span>
+                  <span class="portal-action-cta">Open Billing</span>
+                </a>
+                <a class="portal-action-card" href="account-security.html">
+                  <strong>Account Security</strong>
+                  <p>Reset passwords, update credentials, and manage authenticator protection.</p>
+                  <span class="portal-action-status">Open</span>
+                  <span class="portal-action-cta">Secure Account</span>
+                </a>
+                <a class="portal-action-card" href="faq.html">
+                  <strong>Help Center</strong>
+                  <p>Review support guidance and continuity questions without leaving the portal.</p>
+                  <span class="portal-action-status">Open</span>
+                  <span class="portal-action-cta">Get Help</span>
+                </a>
               </div>
               <p class="card-copy" style="margin-top: 0.9rem">
                 Family Records / Documents should be uploaded through the Upload Hub with Verification Documents where source review is needed. Optional Narration / Story Materials remain package-gated until access is confirmed.
@@ -693,7 +756,7 @@
     <script src="config.js?v=20260329-1"></script>
     <script src="app.js?v=20260508-451"></script>
     <script src="auth.js?v=20260508-451"></script>
-    <script src="dashboard-intake.js?v=20260509-portal"></script>
+    <script src="dashboard-intake.js?v=20260509-luminous"></script>
     <script src="dashboard-admin.js?v=20260508-451"></script>
   </body>
 </html>
