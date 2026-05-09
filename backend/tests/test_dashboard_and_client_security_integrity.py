@@ -21,15 +21,22 @@ class CustomerDashboardIntegrityTests(unittest.TestCase):
 
     def test_customer_dashboard_upload_center_and_next_step_are_present(self):
         source = (REPO_ROOT / "dashboard.html").read_text(encoding="utf-8")
+        self.assertIn("Tomb of Light Continuity OS", source)
         self.assertIn("What To Do Next", source)
-        self.assertIn("Upload Center", source)
+        self.assertIn("Upload Hub", source)
         self.assertIn("Upload Photos &amp; Family Records", source)
-        self.assertIn("Upload Verification Docs", source)
-        self.assertIn("Continue Intake", source)
+        self.assertIn("Upload Verification Documents", source)
+        self.assertIn("View Intake", source)
         self.assertIn("Portrait / Family Photos", source)
         self.assertIn("Family Records / Documents", source)
         self.assertIn("Verification Documents", source)
         self.assertIn("Optional Narration / Story Materials", source)
+        self.assertIn("Private Vault Files", source)
+        self.assertIn("Lineage Certificate", source)
+        self.assertIn("Members &amp; Access", source)
+        self.assertIn("Billing &amp; Cards", source)
+        self.assertIn("Account Security", source)
+        self.assertIn("Help Center", source)
 
 
 class ClientPrivilegeElevationTests(unittest.TestCase):

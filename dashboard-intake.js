@@ -319,13 +319,13 @@
     if (state === "complete") {
       item.classList.add("is-complete");
       chip.classList.add("is-complete");
-      chip.textContent = "Complete";
+      chip.textContent = "Open";
       return;
     }
     if (state === "live") {
       item.classList.add("is-live");
       chip.classList.add("is-live");
-      chip.textContent = "In progress";
+      chip.textContent = "Open";
       return;
     }
     if (state === "attention") {
@@ -334,7 +334,7 @@
       chip.textContent = "Needs attention";
       return;
     }
-    chip.textContent = "Pending";
+    chip.textContent = "Awaiting setup";
   }
 
   function updateProjectProgressTracker(context, latestSubmission, needsAttention) {
@@ -465,35 +465,33 @@
 
     text(
       document.querySelector("[data-health-package]"),
-      context?.hasPackageAccess ? "Active" : "Pending",
+      context?.hasPackageAccess ? "Open" : "Awaiting setup",
     );
     text(
       document.querySelector("[data-health-intake]"),
       !latestSubmission
-        ? "Not started"
+        ? "Awaiting setup"
         : needsAttention || status === "rejected"
           ? "Needs attention"
-          : APPROVED_OR_BEYOND_STATUSES.has(status)
-            ? "Approved"
-            : "Submitted",
+          : "Open",
     );
     text(
       document.querySelector("[data-health-uploads]"),
       !latestSubmission
-        ? "Not started"
+        ? "Awaiting setup"
         : PRODUCTION_OR_BEYOND_STATUSES.has(status)
-          ? "Uploads received"
+          ? "Open"
           : uploadsPlanned || UPLOAD_PENDING_REVIEW_STATUSES.has(status)
-            ? "Pending review"
-            : "Not started",
+            ? "Check access"
+            : "Awaiting setup",
     );
     text(
       document.querySelector("[data-health-verification]"),
       needsAttention || status === "rejected"
         ? "Needs attention"
         : PRODUCTION_OR_BEYOND_STATUSES.has(status)
-          ? "Approved"
-          : "Pending",
+          ? "Open"
+          : "Check access",
     );
 
     const viewerReady = Boolean(
@@ -507,19 +505,19 @@
     text(
       document.querySelector("[data-health-viewer]"),
       viewerReady
-        ? "Ready"
+        ? "Open"
         : PRODUCTION_OR_BEYOND_STATUSES.has(status)
-          ? "In production"
-          : "Not ready",
+          ? "Awaiting setup"
+          : "Awaiting setup",
     );
     text(
       document.querySelector("[data-health-certificate]"),
       Boolean(resolved.can_use_lineage_certificate) &&
         (viewerReady || status === "client_review")
-        ? "Ready"
-        : "Not ready",
+        ? "Open"
+        : "Package-gated",
     );
-    text(document.querySelector("[data-health-vault]"), "Active");
+    text(document.querySelector("[data-health-vault]"), "Open");
     text(document.querySelector("[data-health-privacy]"), "Private by default");
   }
 
@@ -527,9 +525,7 @@
     const node = document.querySelector(selector);
     if (!node) return;
     node.dataset.unlockState = isIncluded ? "included" : "locked";
-    node.textContent = isIncluded
-      ? "Included"
-      : "Locked — not included in your active package.";
+    node.textContent = isIncluded ? "Open" : "Package-gated";
   }
 
   function updatePackageUnlocksPanel(context) {
@@ -594,24 +590,24 @@
     text(
       document.querySelector("[data-received-portraits]"),
       PRODUCTION_OR_BEYOND_STATUSES.has(status)
-        ? "Uploads received"
+        ? "Open"
         : hasPortraitPlan
-          ? "Upload plan received — awaiting upload"
-          : "Awaiting upload",
+          ? "Check access"
+          : "Awaiting setup",
     );
     text(
       document.querySelector("[data-received-verification]"),
       PRODUCTION_OR_BEYOND_STATUSES.has(status)
-        ? "Uploads received"
+        ? "Open"
         : hasVerificationPlan
-          ? "Upload plan received — awaiting upload"
-          : "Awaiting upload",
+          ? "Check access"
+          : "Awaiting setup",
     );
     text(
       document.querySelector("[data-received-vault]"),
       hasVerificationPlan || PRODUCTION_OR_BEYOND_STATUSES.has(status)
-        ? "Optional / Pending review"
-        : "Optional / Awaiting upload",
+        ? "Check access"
+        : "Awaiting setup",
     );
     text(
       document.querySelector("[data-received-review]"),
@@ -621,10 +617,10 @@
 
   function getReceivedReviewStatusLabel(status) {
     if (status === "rejected") return "Needs attention";
-    if (REVIEW_PHASE_STATUSES.has(status)) return "Pending review";
-    if (status === "delivered" || status === "archived") return "Approved";
-    if (PRODUCTION_OR_BEYOND_STATUSES.has(status)) return "In production";
-    return "Pending review";
+    if (REVIEW_PHASE_STATUSES.has(status)) return "Check access";
+    if (status === "delivered" || status === "archived") return "Open";
+    if (PRODUCTION_OR_BEYOND_STATUSES.has(status)) return "Open";
+    return "Awaiting setup";
   }
 
   function text(node, value) {
@@ -865,7 +861,7 @@
 
     if (!hasProject) {
       return {
-        badge: "Awaiting Workspace",
+        badge: "Awaiting setup",
         copy: "A provisioned workspace is required before Tomb of Light can prepare your Legacy Anchor.",
         note: "Once your project is provisioned, this panel will show live mint status, public proof links, and wallet verification.",
       };
@@ -873,7 +869,7 @@
 
     if (!policy.product_includes_onchain_anchor) {
       return {
-        badge: "Not Included",
+        badge: "Package-gated",
         copy: "This package does not include an on-chain Legacy Anchor.",
         note: "Upgrade into an eligible package to unlock Base Mainnet anchor minting and public-safe proof records.",
       };
@@ -1505,7 +1501,7 @@
     }
 
     return {
-      text: "Continue Intake",
+      text: "View Intake",
       href: "intake-welcome.html",
       show: canOpenIntake,
     };
@@ -1551,7 +1547,7 @@
         workspaceCopy: canUseLinkKeys
           ? "Your portrait workspace connects package access, portrait uploads, verification records, guided delivery, and link capabilities in one place."
           : "Your portrait workspace connects package access, portrait uploads, verification records, and guided delivery in one place.",
-        primaryActionText: "Upload Portrait",
+        primaryActionText: "Upload Photos & Family Records",
         primaryActionHref: "portrait-upload.html",
         secondaryActionText: "Verification Uploads",
         secondaryActionHref: "verification-upload.html",
@@ -1613,7 +1609,7 @@
         workspaceCopy: hasLinkedOrganizationSupport
           ? "Your organization workspace connects package access, command structure planning, uploads, and linked organization support in one place."
           : "Your organization workspace connects package access, command structure planning, uploads, and guided record handling in one place.",
-        primaryActionText: "Upload Structure Records",
+        primaryActionText: "Upload Verification Documents",
         primaryActionHref: "verification-upload.html",
         secondaryActionText: "Upload Structure Records",
         secondaryActionHref: "verification-upload.html",
@@ -1674,9 +1670,9 @@
         workspaceCopy: canUseLinkKeys
           ? "Your network workspace connects package access, linked branches, lineage structure, verification records, and link capabilities in one place."
           : "Your network workspace connects package access, linked branches, lineage structure, and verification records in one place.",
-        primaryActionText: "Continue Network Build",
+        primaryActionText: "Open Family Tree",
         primaryActionHref: "tree-view.html",
-        secondaryActionText: "Upload Verification Docs",
+        secondaryActionText: "Upload Verification Documents",
         secondaryActionHref: "verification-upload.html",
         showTree: canBuildFamilyTree,
         showCertificate: canUseCertificate,
@@ -1734,9 +1730,9 @@
       workspaceCopy: canUseLinkKeys
         ? "Your Tomb of Light customer workspace connects package access, onboarding, family structure, lineage tools, verification, and link capabilities in one place."
         : "Your Tomb of Light customer workspace connects package access, onboarding, family structure, lineage tools, and document-backed verification in one place.",
-      primaryActionText: "Continue Family Build",
+      primaryActionText: "Open Family Tree",
       primaryActionHref: "tree-view.html",
-      secondaryActionText: "Upload Verification Docs",
+      secondaryActionText: "Upload Verification Documents",
       secondaryActionHref: "verification-upload.html",
       showTree: canBuildFamilyTree,
       showCertificate: canUseCertificate,

@@ -8,7 +8,7 @@
       name="description"
       content="Your private Tomb of Light customer or internal operations workspace."
     />
-    <link rel="stylesheet" href="styles.css?v=20260508-454" />
+    <link rel="stylesheet" href="styles.css?v=20260509-portal" />
   </head>
   <body class="portal-dashboard-body">
     <div class="site-watermark" aria-hidden="true"></div>
@@ -56,7 +56,7 @@
         <section class="page-hero dashboard-hero portal-dashboard-hero">
           <div class="container">
             <div class="portal-command-bar">
-              <span class="portal-command-label">Private Workspace</span>
+              <span class="portal-command-label">Tomb of Light Continuity OS</span>
               <div class="portal-chip-row portal-chip-row-compact">
                 <span class="portal-chip" data-dashboard-lane-chip>
                   Access Sync
@@ -73,12 +73,12 @@
             <div class="page-hero-panel dashboard-hero-panel portal-core-panel">
               <div class="portal-core-copy">
                 <span class="eyebrow" data-dashboard-hero-eyebrow>
-                  Private Legacy Command Center
+                  Private Continuity OS
                 </span>
                 <h1 class="portal-core-title" data-dashboard-hero-title>Private Legacy Command Center</h1>
-                <p class="portal-core-status" data-dashboard-status>Loading your account...</p>
+                <p class="portal-core-status" data-dashboard-status>Resolving your project, package, and next action...</p>
                 <p class="portal-core-guidance">
-                  Your active package, stage, and next required action are surfaced first in your private workspace.
+                  A private command center for lineage production, protected uploads, verification, vault handling, family tree build, certificate generation, delivery readiness, and support continuity.
                 </p>
 
                 <div class="inline-actions portal-core-actions" data-workspace-action-bar>
@@ -89,7 +89,7 @@
                     data-dashboard-hero-action
                     style="display: none"
                   >
-                    Continue Family Build
+                    Upload Photos &amp; Family Records
                   </a>
                   <a
                     class="btn btn-secondary"
@@ -98,7 +98,7 @@
                     data-dashboard-hero-action
                     style="display: none"
                   >
-                    Verification Uploads
+                    Upload Verification Documents
                   </a>
                   <a
                     class="btn btn-secondary"
@@ -130,7 +130,7 @@
                 </div>
               </div>
 
-              <div class="portal-core-visual" aria-hidden="true">
+              <div class="portal-core-visual portal-os-visual" aria-hidden="true">
                 <div class="portal-orbit portal-orbit-outer"></div>
                 <div class="portal-orbit portal-orbit-mid"></div>
                 <div class="portal-orbit portal-orbit-inner"></div>
@@ -165,6 +165,18 @@
 
             <div class="portal-metric-grid">
               <article
+                class="portal-metric-card portal-metric-card-project"
+                id="dashboard-project-workspace"
+                data-dashboard-section-anchor
+              >
+                <span class="portal-metric-label">Project / Workspace</span>
+                <strong data-command-center-project>Your current workspace</strong>
+                <p>
+                  Private project context stays inside the customer portal while production status is resolved.
+                </p>
+              </article>
+
+              <article
                 class="portal-metric-card"
                 id="dashboard-access-lane"
                 data-dashboard-section-anchor
@@ -184,9 +196,23 @@
               >
                 <span class="portal-metric-label">Active Package</span>
                 <strong data-dashboard-package-display>Checking package scope</strong>
-                <p>
+                <p data-command-center-package>
                   Your workspace will load the exact tools, limits, and
                   workflows attached to your current entitlement.
+                </p>
+              </article>
+
+              <article
+                class="portal-metric-card"
+                id="dashboard-build-stage"
+                data-dashboard-section-anchor
+              >
+                <span class="portal-metric-label">Build Stage</span>
+                <strong data-command-center-stage>
+                  Workspace active — next action required.
+                </strong>
+                <p>
+                  Production stage updates as intake, uploads, verification, and delivery readiness move forward.
                 </p>
               </article>
 
@@ -197,9 +223,22 @@
               >
                 <span class="portal-metric-label">Next Focus</span>
                 <strong data-dashboard-next-focus>Preparing workspace actions</strong>
+                <p data-command-center-next-action>
+                  Upload Photos &amp; Family Records.
+                </p>
+              </article>
+
+              <article
+                class="portal-metric-card portal-metric-card-privacy"
+                id="dashboard-privacy-support"
+                data-dashboard-section-anchor
+              >
+                <span class="portal-metric-label">Privacy &amp; Support</span>
+                <strong data-command-center-security>
+                  Private workspace active. Public sharing remains off unless approved.
+                </strong>
                 <p>
-                  Core actions update in real time once package and role access
-                  have been resolved.
+                  Support continuity: <a href="mailto:support@tomboflight.com">support@tomboflight.com</a>
                 </p>
               </article>
             </div>
@@ -214,42 +253,28 @@
           >
             <div class="form-panel portal-command-center-panel" data-dashboard-customer-only>
               <div class="dashboard-presence-top">
-                <span class="eyebrow">Private Legacy Command Center</span>
+                <span class="eyebrow">Continuity OS Overview</span>
                 <span class="presence-badge">Customer Workspace</span>
               </div>
-              <h2 class="dashboard-presence-title">Your private legacy production workspace is active.</h2>
+              <h2 class="dashboard-presence-title">Your private operating system is organized around the next required move.</h2>
               <p class="dashboard-presence-copy">
-                Your package, project stage, next required action, privacy state, and support channel are shown below.
+                Lineage production, protected uploads, verification, vault handling, family tree build, certificate generation, delivery readiness, and support continuity stay organized in one command view.
               </p>
               <div class="portal-command-center-grid">
                 <div class="portal-command-center-item">
-                  <strong>Active Package</strong>
-                  <p class="card-copy" data-command-center-package>Your active package</p>
+                  <strong>Lineage Production</strong>
+                  <p class="card-copy">Build stage, intake state, and customer review readiness stay visible as production advances.</p>
                 </div>
                 <div class="portal-command-center-item">
-                  <strong>Project / Workspace</strong>
-                  <p class="card-copy" data-command-center-project>Your current workspace</p>
+                  <strong>Protected Materials</strong>
+                  <p class="card-copy">Photos, family records, verification documents, and vault files stay separated by purpose.</p>
                 </div>
                 <div class="portal-command-center-item">
-                  <strong>Current Build Stage</strong>
-                  <p class="card-copy" data-command-center-stage>
-                    Workspace active — next action required.
-                  </p>
+                  <strong>Delivery Readiness</strong>
+                  <p class="card-copy">Family tree, certificate, viewer, and anchor readiness remain package-aware.</p>
                 </div>
                 <div class="portal-command-center-item">
-                  <strong>Next Required Action</strong>
-                  <p class="card-copy" data-command-center-next-action>
-                    Upload Photos &amp; Family Records.
-                  </p>
-                </div>
-                <div class="portal-command-center-item">
-                  <strong>Privacy / Security</strong>
-                  <p class="card-copy" data-command-center-security>
-                    Private workspace active. Public sharing remains off unless approved.
-                  </p>
-                </div>
-                <div class="portal-command-center-item">
-                  <strong>Support Contact</strong>
+                  <strong>Support Continuity</strong>
                   <p class="card-copy">
                     <a href="mailto:support@tomboflight.com">support@tomboflight.com</a><br />
                     <a href="tel:+13468054305">(346) 805-4305</a>
@@ -272,7 +297,7 @@
             </div>
 
             <div class="form-panel portal-primary-actions-panel" data-dashboard-customer-only>
-              <span class="eyebrow">Primary Action Cards</span>
+              <span class="eyebrow">Primary Actions</span>
               <h3>What To Do Next</h3>
               <div class="portal-action-card-grid portal-action-card-grid-primary">
                 <a class="portal-action-card is-primary" href="upload-hub.html">
@@ -280,7 +305,7 @@
                   <span>Open</span>
                 </a>
                 <a class="portal-action-card" href="verification-upload.html">
-                  <strong>Upload Verification Docs</strong>
+                  <strong>Upload Verification Documents</strong>
                   <span>Open</span>
                 </a>
                 <a class="portal-action-card" href="tree-view.html">
@@ -289,36 +314,6 @@
                 </a>
                 <a class="portal-action-card" href="intake-review.html" data-intake-open-action>
                   <strong>View Intake</strong>
-                  <span>Open</span>
-                </a>
-              </div>
-              <div class="portal-action-card-grid">
-                <a class="portal-action-card" href="intake-welcome.html">
-                  <strong>Continue Intake</strong>
-                  <span>Open</span>
-                </a>
-                <a class="portal-action-card" href="vault-upload.html">
-                  <strong>Private Vault Files</strong>
-                  <span>Open</span>
-                </a>
-                <a class="portal-action-card" href="household-access.html" data-dashboard-household-view-members>
-                  <strong>Members &amp; Access</strong>
-                  <span>Open</span>
-                </a>
-                <a class="portal-action-card" href="lineage-certificate.html">
-                  <strong>Lineage Certificate</strong>
-                  <span>Check access</span>
-                </a>
-                <a class="portal-action-card" href="billing.html" data-dashboard-billing-link data-dashboard-customer-only>
-                  <strong>Billing &amp; Cards</strong>
-                  <span>Open</span>
-                </a>
-                <a class="portal-action-card" href="account-security.html">
-                  <strong>Account Security</strong>
-                  <span>Open</span>
-                </a>
-                <a class="portal-action-card" href="faq.html">
-                  <strong>Help Center</strong>
                   <span>Open</span>
                 </a>
               </div>
@@ -333,51 +328,51 @@
               <ol class="portal-progress-list" data-project-progress-list>
                 <li class="portal-progress-item" data-progress-stage="account_created">
                   <span>Account Created</span>
-                  <span class="presence-badge portal-progress-chip" data-progress-chip="account_created">Pending</span>
+                  <span class="presence-badge portal-progress-chip" data-progress-chip="account_created">Awaiting setup</span>
                 </li>
                 <li class="portal-progress-item" data-progress-stage="package_activated">
                   <span>Package Activated</span>
-                  <span class="presence-badge portal-progress-chip" data-progress-chip="package_activated">Pending</span>
+                  <span class="presence-badge portal-progress-chip" data-progress-chip="package_activated">Awaiting setup</span>
                 </li>
                 <li class="portal-progress-item" data-progress-stage="intake_started">
                   <span>Intake Started</span>
-                  <span class="presence-badge portal-progress-chip" data-progress-chip="intake_started">Pending</span>
+                  <span class="presence-badge portal-progress-chip" data-progress-chip="intake_started">Awaiting setup</span>
                 </li>
                 <li class="portal-progress-item" data-progress-stage="intake_submitted">
                   <span>Intake Submitted</span>
-                  <span class="presence-badge portal-progress-chip" data-progress-chip="intake_submitted">Pending</span>
+                  <span class="presence-badge portal-progress-chip" data-progress-chip="intake_submitted">Awaiting setup</span>
                 </li>
                 <li class="portal-progress-item" data-progress-stage="intake_approved">
                   <span>Intake Approved</span>
-                  <span class="presence-badge portal-progress-chip" data-progress-chip="intake_approved">Pending</span>
+                  <span class="presence-badge portal-progress-chip" data-progress-chip="intake_approved">Awaiting setup</span>
                 </li>
                 <li class="portal-progress-item" data-progress-stage="uploads_needed">
                   <span>Uploads Needed</span>
-                  <span class="presence-badge portal-progress-chip" data-progress-chip="uploads_needed">Pending</span>
+                  <span class="presence-badge portal-progress-chip" data-progress-chip="uploads_needed">Awaiting setup</span>
                 </li>
                 <li class="portal-progress-item" data-progress-stage="uploads_under_review">
                   <span>Uploads Under Review</span>
-                  <span class="presence-badge portal-progress-chip" data-progress-chip="uploads_under_review">Pending</span>
+                  <span class="presence-badge portal-progress-chip" data-progress-chip="uploads_under_review">Awaiting setup</span>
                 </li>
                 <li class="portal-progress-item" data-progress-stage="verification_review">
                   <span>Verification Review</span>
-                  <span class="presence-badge portal-progress-chip" data-progress-chip="verification_review">Pending</span>
+                  <span class="presence-badge portal-progress-chip" data-progress-chip="verification_review">Awaiting setup</span>
                 </li>
                 <li class="portal-progress-item" data-progress-stage="production_build">
                   <span>Production Build</span>
-                  <span class="presence-badge portal-progress-chip" data-progress-chip="production_build">Pending</span>
+                  <span class="presence-badge portal-progress-chip" data-progress-chip="production_build">Awaiting setup</span>
                 </li>
                 <li class="portal-progress-item" data-progress-stage="customer_review">
                   <span>Customer Review</span>
-                  <span class="presence-badge portal-progress-chip" data-progress-chip="customer_review">Pending</span>
+                  <span class="presence-badge portal-progress-chip" data-progress-chip="customer_review">Awaiting setup</span>
                 </li>
                 <li class="portal-progress-item" data-progress-stage="delivered">
                   <span>Delivered</span>
-                  <span class="presence-badge portal-progress-chip" data-progress-chip="delivered">Pending</span>
+                  <span class="presence-badge portal-progress-chip" data-progress-chip="delivered">Awaiting setup</span>
                 </li>
                 <li class="portal-progress-item" data-progress-stage="maintenance_continuity">
                   <span>Maintenance / Continuity</span>
-                  <span class="presence-badge portal-progress-chip" data-progress-chip="maintenance_continuity">Pending</span>
+                  <span class="presence-badge portal-progress-chip" data-progress-chip="maintenance_continuity">Awaiting setup</span>
                 </li>
               </ol>
             </div>
@@ -386,38 +381,35 @@
               <span class="eyebrow">Workspace Health Snapshot</span>
               <h3>Operations status</h3>
               <div class="portal-status-list portal-status-list-compact">
-                <p class="card-copy"><strong>Package:</strong> <span data-health-package>Pending</span></p>
-                <p class="card-copy"><strong>Intake:</strong> <span data-health-intake>Not started</span></p>
-                <p class="card-copy"><strong>Uploads:</strong> <span data-health-uploads>Not started</span></p>
-                <p class="card-copy"><strong>Verification:</strong> <span data-health-verification>Pending</span></p>
-                <p class="card-copy"><strong>Viewer:</strong> <span data-health-viewer>Not ready</span></p>
-                <p class="card-copy"><strong>Certificate:</strong> <span data-health-certificate>Not ready</span></p>
-                <p class="card-copy"><strong>Vault:</strong> <span data-health-vault>Active</span></p>
+                <p class="card-copy"><strong>Package:</strong> <span data-health-package>Awaiting setup</span></p>
+                <p class="card-copy"><strong>Intake:</strong> <span data-health-intake>Awaiting setup</span></p>
+                <p class="card-copy"><strong>Uploads:</strong> <span data-health-uploads>Awaiting setup</span></p>
+                <p class="card-copy"><strong>Verification:</strong> <span data-health-verification>Awaiting setup</span></p>
+                <p class="card-copy"><strong>Viewer:</strong> <span data-health-viewer>Awaiting setup</span></p>
+                <p class="card-copy"><strong>Certificate:</strong> <span data-health-certificate>Awaiting setup</span></p>
+                <p class="card-copy"><strong>Vault:</strong> <span data-health-vault>Open</span></p>
                 <p class="card-copy"><strong>Privacy:</strong> <span data-health-privacy>Private by default</span></p>
               </div>
             </div>
 
             <div class="form-panel portal-tools-access-panel" data-dashboard-customer-only>
-              <span class="eyebrow">Tools &amp; Access</span>
-              <h3>Customer controls</h3>
+              <span class="eyebrow">Command Grid</span>
+              <h3>Customer tools</h3>
               <div class="portal-action-card-grid">
-                <a class="portal-action-card" href="upload-hub.html"><strong>Upload Center</strong><span>Open</span></a>
+                <a class="portal-action-card" href="upload-hub.html"><strong>Upload Hub</strong><span>Open</span></a>
                 <a class="portal-action-card" href="portrait-upload.html"><strong>Portrait / Family Photos</strong><span>Check access</span></a>
                 <a class="portal-action-card" href="verification-upload.html"><strong>Verification Documents</strong><span>Check access</span></a>
                 <a class="portal-action-card" href="vault-upload.html"><strong>Private Vault Files</strong><span>Check access</span></a>
-                <a class="portal-action-card" href="intake-uploads.html"><strong>Optional Narration / Story Materials</strong><span>Check access</span></a>
                 <a class="portal-action-card" href="tree-view.html"><strong>Family Tree</strong><span>Check access</span></a>
                 <a class="portal-action-card" href="lineage-certificate.html"><strong>Lineage Certificate</strong><span>Check access</span></a>
                 <a class="portal-action-card" href="household-access.html" data-dashboard-household-invite-co-owner><strong>Members &amp; Access</strong><span>Check access</span></a>
-                <a class="portal-action-card" href="household-access.html" data-dashboard-household-invite-family><strong>Household Invites</strong><span>Open</span></a>
-                <a class="portal-action-card" href="household-access.html" data-dashboard-household-pending-invites><strong>Pending Invites</strong><span>Open</span></a>
                 <a class="portal-action-card" href="link-keys.html"><strong>Link Keys</strong><span>Check access</span></a>
                 <a class="portal-action-card" href="billing.html"><strong>Billing &amp; Cards</strong><span>Open</span></a>
                 <a class="portal-action-card" href="account-security.html"><strong>Account Security</strong><span>Open</span></a>
                 <a class="portal-action-card" href="faq.html"><strong>Help Center</strong><span>Open</span></a>
               </div>
               <p class="card-copy" style="margin-top: 0.9rem">
-                Family Records / Documents should be uploaded with Verification Documents.
+                Family Records / Documents should be uploaded through the Upload Hub with Verification Documents where source review is needed. Optional Narration / Story Materials remain package-gated until access is confirmed.
               </p>
               <div class="portal-tools-access-footnote" data-package-access-panel>
                 <p class="card-copy" data-access-status>Checking your purchase access...</p>
@@ -431,22 +423,22 @@
             <div class="form-panel portal-package-unlocks-panel" data-dashboard-customer-only>
               <span class="eyebrow">Package Unlocks</span>
               <h3>Compact entitlement snapshot</h3>
-              <p class="card-copy">Included in your package</p>
+              <p class="card-copy">Package-controlled access</p>
               <ul class="portal-unlock-list portal-unlock-list-compact">
-                <li><span>Portrait Uploads</span><span data-unlock-portraits>Locked — not included in your active package.</span></li>
-                <li><span>Verification Uploads</span><span data-unlock-verification>Locked — not included in your active package.</span></li>
-                <li><span>Vault Files</span><span data-unlock-vault>Locked — not included in your active package.</span></li>
-                <li><span>Family Intake</span><span data-unlock-intake>Locked — not included in your active package.</span></li>
-                <li><span>Family Tree</span><span data-unlock-tree>Locked — not included in your active package.</span></li>
-                <li><span>Lineage Certificate</span><span data-unlock-certificate>Locked — not included in your active package.</span></li>
-                <li><span>Viewer Access</span><span data-unlock-viewer>Locked — not included in your active package.</span></li>
+                <li><span>Portrait Uploads</span><span data-unlock-portraits>Package-gated</span></li>
+                <li><span>Verification Uploads</span><span data-unlock-verification>Package-gated</span></li>
+                <li><span>Vault Files</span><span data-unlock-vault>Package-gated</span></li>
+                <li><span>Family Intake</span><span data-unlock-intake>Package-gated</span></li>
+                <li><span>Family Tree</span><span data-unlock-tree>Package-gated</span></li>
+                <li><span>Lineage Certificate</span><span data-unlock-certificate>Package-gated</span></li>
+                <li><span>Viewer Access</span><span data-unlock-viewer>Package-gated</span></li>
               </ul>
               <p class="card-copy">Available in higher packages</p>
               <ul class="portal-unlock-list portal-unlock-list-compact">
-                <li><span>Optional Narration / Story Materials</span><span data-unlock-narration>Locked — not included in your active package.</span></li>
-                <li><span>Link Keys</span><span data-unlock-link-keys>Locked — not included in your active package.</span></li>
-                <li><span>Household Access</span><span data-unlock-household>Locked — not included in your active package.</span></li>
-                <li><span>Organization Tools</span><span data-unlock-organization>Locked — not included in your active package.</span></li>
+                <li><span>Optional Narration / Story Materials</span><span data-unlock-narration>Package-gated</span></li>
+                <li><span>Link Keys</span><span data-unlock-link-keys>Package-gated</span></li>
+                <li><span>Household Access</span><span data-unlock-household>Package-gated</span></li>
+                <li><span>Organization Tools</span><span data-unlock-organization>Package-gated</span></li>
               </ul>
             </div>
 
@@ -456,19 +448,19 @@
               <div class="portal-status-list portal-status-list-compact">
                 <p class="card-copy">
                   <strong>Portraits / Family Photos:</strong>
-                  <span data-received-portraits>Awaiting upload</span>
+                  <span data-received-portraits>Awaiting setup</span>
                 </p>
                 <p class="card-copy">
                   <strong>Verification Documents:</strong>
-                  <span data-received-verification>Awaiting upload</span>
+                  <span data-received-verification>Awaiting setup</span>
                 </p>
                 <p class="card-copy">
                   <strong>Vault Files:</strong>
-                  <span data-received-vault>Optional / Awaiting upload</span>
+                  <span data-received-vault>Awaiting setup</span>
                 </p>
                 <p class="card-copy">
                   <strong>Review Status:</strong>
-                  <span data-received-review>Status pending</span>
+                  <span data-received-review>Awaiting setup</span>
                 </p>
               </div>
             </div>
@@ -501,7 +493,7 @@
               <div class="anchor-status-row">
                 <span class="eyebrow">Legacy Anchor</span>
                 <span class="presence-badge anchor-status-badge" data-anchor-status-badge>
-                  Checking Status
+                  Check access
                 </span>
               </div>
 
@@ -670,11 +662,10 @@
                 </a>
                 <a
                   class="btn btn-secondary"
-                  href="admin-control-center.html"
                   data-dashboard-admin-only
                   style="display: none"
                 >
-                  Open Admin Control Center
+                  Internal workspace tools
                 </a>
               </div>
             </div>
@@ -702,7 +693,7 @@
     <script src="config.js?v=20260329-1"></script>
     <script src="app.js?v=20260508-451"></script>
     <script src="auth.js?v=20260508-451"></script>
-    <script src="dashboard-intake.js?v=20260508-454"></script>
+    <script src="dashboard-intake.js?v=20260509-portal"></script>
     <script src="dashboard-admin.js?v=20260508-451"></script>
   </body>
 </html>
