@@ -298,6 +298,7 @@
 
   function enableAdminWorkspaceLinks(me) {
     const roleTitle = getRoleTitle(me);
+    const adminToolsButton = document.querySelector("[data-dashboard-admin-tools]");
 
     makeWorkspaceLink(
       "[data-dashboard-lane-chip]",
@@ -329,6 +330,13 @@
       "admin-intake-queue.html",
       "Open records workspace area",
     );
+
+    if (adminToolsButton && adminToolsButton.dataset.workspaceLinkBound !== "true") {
+      adminToolsButton.dataset.workspaceLinkBound = "true";
+      adminToolsButton.addEventListener("click", function () {
+        navigateToWorkspaceArea("#dashboard-admin-tools");
+      });
+    }
   }
 
   function injectAdminPanel(me) {

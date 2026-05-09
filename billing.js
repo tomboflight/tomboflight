@@ -106,11 +106,19 @@
 
     if (monthlyLink) {
       monthlyLink.style.display = monthlyHref ? "" : "none";
-      if (monthlyHref) monthlyLink.href = monthlyHref;
+      if (monthlyHref) {
+        monthlyLink.href = monthlyHref;
+        monthlyLink.target = "_blank";
+        monthlyLink.rel = "noopener noreferrer";
+      }
     }
     if (yearlyLink) {
       yearlyLink.style.display = yearlyHref ? "" : "none";
-      if (yearlyHref) yearlyLink.href = yearlyHref;
+      if (yearlyHref) {
+        yearlyLink.href = yearlyHref;
+        yearlyLink.target = "_blank";
+        yearlyLink.rel = "noopener noreferrer";
+      }
     }
   }
 
@@ -347,6 +355,20 @@
     if (portalButton) {
       portalButton.addEventListener("click", openBillingPortal);
     }
+
+    document
+      .querySelectorAll("[data-maintenance-monthly-link], [data-maintenance-yearly-link]")
+      .forEach(function (link) {
+        const defaultLabel = link.textContent.trim() || "Start Maintenance";
+        link.addEventListener("click", function () {
+          link.setAttribute("aria-busy", "true");
+          link.textContent = "Opening secure checkout...";
+          window.setTimeout(function () {
+            link.removeAttribute("aria-busy");
+            link.textContent = defaultLabel;
+          }, 4500);
+        });
+      });
 
     document.addEventListener("click", async function (event) {
       const setDefaultButton = event.target.closest("[data-billing-set-default]");

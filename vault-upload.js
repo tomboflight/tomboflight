@@ -25,6 +25,7 @@
     "private_voice_message",
     "private_video_message",
   ]);
+  const MAX_VAULT_FILE_BYTES = 25 * 1024 * 1024;
 
   let currentFamilyId = "";
   let currentContext = null;
@@ -188,8 +189,12 @@
     const pageStatus = document.querySelector("[data-vault-page-status]");
 
     try {
-      const payload = await app.apiRequest("/families/list", { method: "GET" });
-      families = Array.isArray(payload?.families) ? payload.families : [];
+      const payload = await app.apiRequest("/families/", { method: "GET" });
+      families = Array.isArray(payload)
+        ? payload
+        : Array.isArray(payload?.families)
+          ? payload.families
+          : [];
 
       if (familySelect) {
         familySelect.innerHTML = '<option value="">Select a family record</option>';
@@ -304,6 +309,9 @@
     if (!ALLOWED_VAULT_TYPES.has(contentType)) {
       return "Unsupported file type. Allowed: MP3, M4A, WAV, WebM, OGG, MP4, MOV.";
     }
+    if (Number(file.size || 0) > MAX_VAULT_FILE_BYTES) {
+      return "Vault files must be 25MB or smaller.";
+    }
     return null;
   }
 
@@ -403,15 +411,38 @@
           typeof app.getApiBaseUrl === "function" ? app.getApiBaseUrl() : "";
         const url =
           base + "/uploads/" + encodeURIComponent(uploadId) + "/download";
-        const response = await app.apiRequest(url, {
+        const headers = {};
+        const token = app.getToken ? app.getToken() : "";
+        if (token) headers.Authorization = `Bearer ${token}`;
+        const response = await fetch(url, {
           method: "GET",
-          raw: true,
+          headers,
+          credentials: "include",
         });
-        if (response && response.url) {
-          window.open(response.url, "_blank", "noopener,noreferrer");
+        if (!response.ok) {
+          throw new Error("Unable to download this vault file.");
         }
+        const blob = await response.blob();
+        const objectUrl = window.URL.createObjectURL(blob);
+        const downloadLink = document.createElement("a");
+        downloadLink.href = objectUrl;
+        downloadLink.download = filename;
+        downloadLink.rel = "noopener noreferrer";
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        downloadLink.remove();
+        window.setTimeout(function () {
+          window.URL.revokeObjectURL(objectUrl);
+        }, 1000);
       } catch (error) {
-        console.error("Vault file download failed:", error);
+        const statusNode = document.querySelector("[data-vault-family-status]");
+        if (statusNode) {
+          setStatus(
+            statusNode,
+            error.message || "Vault file download failed.",
+            "error",
+          );
+        }
       }
     });
   }

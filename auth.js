@@ -1849,22 +1849,91 @@
     if (intakeHistoryList) intakeHistoryList.innerHTML = "";
   }
 
+  function isLikelyEmail(value) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+  }
+
+  function markFieldError(field, message) {
+    if (!field) return;
+    field.setCustomValidity(message || "");
+  }
+
+  function clearFormFieldErrors(form) {
+    if (!form) return;
+    form.querySelectorAll("input, select, textarea").forEach(function (field) {
+      if (typeof field.setCustomValidity === "function") {
+        field.setCustomValidity("");
+      }
+    });
+  }
+
+  function focusFirstInvalidField(field) {
+    if (field && typeof field.focus === "function") {
+      field.focus();
+    }
+    if (field && typeof field.reportValidity === "function") {
+      field.reportValidity();
+    }
+  }
+
+  function getUnavailableAccountSetupMessage(error) {
+    const statusCode = Number(error?.status || 0);
+    const message = getErrorMessage(error).toLowerCase();
+    if (
+      statusCode === 0 ||
+      message.includes("service temporarily unavailable") ||
+      message.includes("network error") ||
+      message.includes("could not be reached") ||
+      message.includes("request timed out")
+    ) {
+      return "Account setup is not active right now. Please try again shortly or contact support@tomboflight.com for help opening your workspace.";
+    }
+    return "";
+  }
+
+  function getUnavailableSigninMessage(error) {
+    const statusCode = Number(error?.status || 0);
+    const message = getErrorMessage(error).toLowerCase();
+    if (
+      statusCode === 0 ||
+      message.includes("service temporarily unavailable") ||
+      message.includes("network error") ||
+      message.includes("could not be reached") ||
+      message.includes("request timed out")
+    ) {
+      return "Private portal sign-in is not available right now. No session was created. Please try again shortly or contact support@tomboflight.com.";
+    }
+    return "";
+  }
+
   function setupSignupForm() {
     const form = document.querySelector("[data-signup-form]");
     if (!form) return;
 
     const statusNode = document.querySelector("[data-signup-status]");
     const submitBtn = form.querySelector("[data-submit-btn]");
+    const defaultSubmitLabel =
+      (submitBtn && submitBtn.textContent
+        ? submitBtn.textContent.trim()
+        : "") || "Create Private Account";
 
     form.addEventListener("submit", async function (event) {
       event.preventDefault();
       app.clearStatus(statusNode);
-
-      if (typeof form.reportValidity === "function" && !form.reportValidity()) {
-        return;
-      }
+      clearFormFieldErrors(form);
 
       const formData = new FormData(form);
+      const fullNameInput = form.querySelector("input[name=full_name]");
+      const emailInput = form.querySelector("input[name=email]");
+      const passwordInput = form.querySelector("input[name=password]");
+      const confirmPasswordInput = form.querySelector(
+        "input[name=confirm_password]",
+      );
+      const termsInput = form.querySelector("input[name=terms_accepted]");
+      const privacyInput = form.querySelector("input[name=privacy_accepted]");
+      const eligibilityInput = form.querySelector(
+        "input[name=eligibility_attested]",
+      );
       const fullName = String(formData.get("full_name") || "").trim();
       const email = String(formData.get("email") || "")
         .trim()
@@ -1877,36 +1946,51 @@
       const termsAccepted = Boolean(formData.get("terms_accepted"));
       const privacyAccepted = Boolean(formData.get("privacy_accepted"));
       const eligibilityAttested = Boolean(formData.get("eligibility_attested"));
+      const errors = [];
+      let firstInvalidField = null;
 
-      if (!fullName || !email || !password || !confirmPassword) {
-        app.setStatus(
-          statusNode,
-          "Please complete all required fields.",
-          "error",
+      function addError(field, message) {
+        errors.push(message);
+        if (!firstInvalidField) firstInvalidField = field;
+        markFieldError(field, message);
+      }
+
+      if (!fullName) addError(fullNameInput, "Full name is required.");
+      if (!email) {
+        addError(emailInput, "Email address is required.");
+      } else if (!isLikelyEmail(email)) {
+        addError(emailInput, "Enter a valid email address.");
+      }
+      if (!password) addError(passwordInput, "Password is required.");
+      if (!confirmPassword) {
+        addError(confirmPasswordInput, "Confirm password is required.");
+      }
+      if (password && password.length < 12) {
+        addError(passwordInput, "Password must be at least 12 characters long.");
+      }
+      if (password && confirmPassword && password !== confirmPassword) {
+        addError(confirmPasswordInput, "Passwords must match.");
+      }
+      if (!termsAccepted) {
+        addError(termsInput, "You must accept the Terms of Service.");
+      }
+      if (!privacyAccepted) {
+        addError(privacyInput, "You must accept the Privacy Policy.");
+      }
+      if (!eligibilityAttested) {
+        addError(
+          eligibilityInput,
+          "You must confirm age, guardian status, or lawful authority.",
         );
+      }
+
+      if (errors.length) {
+        app.setStatus(statusNode, errors.join(" "), "error");
+        focusFirstInvalidField(firstInvalidField);
         return;
       }
 
-      if (password.length < 12) {
-        app.setStatus(
-          statusNode,
-          "Password must be at least 12 characters long.",
-          "error",
-        );
-        return;
-      }
-
-      if (password !== confirmPassword) {
-        app.setStatus(statusNode, "Passwords do not match.", "error");
-        return;
-      }
-
-      if (!termsAccepted || !privacyAccepted || !eligibilityAttested) {
-        app.setStatus(
-          statusNode,
-          "You must accept the Terms, Privacy Policy, and eligibility confirmation before creating an account.",
-          "error",
-        );
+      if (typeof form.reportValidity === "function" && !form.reportValidity()) {
         return;
       }
 
@@ -1945,13 +2029,15 @@
       } catch (error) {
         app.setStatus(
           statusNode,
-          getErrorMessage(error) || "Signup failed.",
+          getUnavailableAccountSetupMessage(error) ||
+            getErrorMessage(error) ||
+            "Signup failed.",
           "error",
         );
       } finally {
         if (submitBtn) {
           submitBtn.disabled = false;
-          submitBtn.textContent = "Create Account";
+          submitBtn.textContent = defaultSubmitLabel;
         }
       }
     });
@@ -2191,23 +2277,42 @@
     form.addEventListener("submit", async function (event) {
       event.preventDefault();
       app.clearStatus(statusNode);
-
-      if (typeof form.reportValidity === "function" && !form.reportValidity()) {
-        return;
-      }
+      clearFormFieldErrors(form);
 
       const formData = new FormData(form);
+      const emailInput = form.querySelector("input[name=email]");
+      const passwordInput = form.querySelector("input[name=password]");
       const email = String(formData.get("email") || "")
         .trim()
         .toLowerCase();
       const password = String(formData.get("password") || "").trim();
 
-      if (!email || !password) {
-        app.setStatus(
-          statusNode,
-          "Please enter your email and password.",
-          "error",
-        );
+      const errors = [];
+      let firstInvalidField = null;
+
+      function addError(field, message) {
+        errors.push(message);
+        markFieldError(field, message);
+        if (!firstInvalidField && field) firstInvalidField = field;
+      }
+
+      if (!email) {
+        addError(emailInput, "Email address is required.");
+      } else if (!isLikelyEmail(email)) {
+        addError(emailInput, "Enter a valid email address.");
+      }
+
+      if (!password) {
+        addError(passwordInput, "Password is required.");
+      }
+
+      if (errors.length) {
+        app.setStatus(statusNode, errors.join(" "), "error");
+        focusFirstInvalidField(firstInvalidField);
+        return;
+      }
+
+      if (typeof form.reportValidity === "function" && !form.reportValidity()) {
         return;
       }
 
@@ -2238,7 +2343,9 @@
       } catch (error) {
         app.setStatus(
           statusNode,
-          getErrorMessage(error) || "Login failed.",
+          getUnavailableSigninMessage(error) ||
+            getErrorMessage(error) ||
+            "Login failed.",
           "error",
         );
       } finally {

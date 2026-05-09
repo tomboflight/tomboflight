@@ -44,6 +44,9 @@
   const DEMO_MODE = DEMO_KEY === DEFAULT_PUBLIC_DEMO_KEY;
   const PREVIEW_MODE = params.get("preview") === "1";
   const EMBED_MODE = params.get("embed") === "1" || window.self !== window.top;
+  const REQUESTED_STATE_ID = String(
+    params.get("state") || params.get("node") || "",
+  ).trim();
 
   const NARRATION_DISPLAY_DURATION_MS = 4500;
   const AUTO_ADVANCE_INTERVAL_MS = 5000;
@@ -217,6 +220,8 @@
       };
     });
 
+    const requestedStateId = String(REQUESTED_STATE_ID || "").trim();
+
     const normalized = {
       mode: String(manifest?.mode || "dynamic").trim() || "dynamic",
       navigationMode,
@@ -244,8 +249,10 @@
         right: String(manifest?.nav_labels?.right || "Descendants").trim(),
       },
       initialStateId: String(
-        manifest?.initial_state_id || normalizedStates[0]?.id || "",
+        requestedStateId || manifest?.initial_state_id || normalizedStates[0]?.id || "",
       ).trim(),
+      requestedStateId,
+      requestedStateMissing: false,
       branchOptionsByState:
         manifest && typeof manifest.branch_options_by_state === "object"
           ? manifest.branch_options_by_state
@@ -268,6 +275,20 @@
     normalized.stateOrder = normalized.states.map(function (item) {
       return item.id;
     });
+    normalized.requestedStateMissing = Boolean(
+      normalized.requestedStateId && !normalized.stateMap[normalized.requestedStateId],
+    );
+    normalized.states.forEach(function (item) {
+      if (item.leftStateId && !normalized.stateMap[item.leftStateId]) {
+        item.leftStateId = "";
+      }
+      if (item.rightStateId && !normalized.stateMap[item.rightStateId]) {
+        item.rightStateId = "";
+      }
+    });
+    if (!normalized.stateMap[normalized.initialStateId]) {
+      normalized.initialStateId = normalized.stateOrder[0] || "";
+    }
 
     return normalized;
   }
@@ -307,14 +328,26 @@
         : manifest.states.map(function (item) {
             return `${item.title} — ${item.status || "Viewer Node"}`;
           });
+    const pathTargets = manifest.autoAdvanceStateIds.length
+      ? manifest.autoAdvanceStateIds
+      : manifest.stateOrder;
 
     clearElement(pathList);
-    items.forEach(function (item) {
-      const row = document.createElement("div");
+    items.forEach(function (item, index) {
+      const targetStateId = String(pathTargets[index] || "").trim();
+      const canNavigate = Boolean(targetStateId && manifest.stateMap[targetStateId]);
+      const row = canNavigate
+        ? document.createElement("button")
+        : document.createElement("div");
       row.className = "path-item";
       row.textContent = String(item || "");
+      if (canNavigate) {
+        row.type = "button";
+        row.setAttribute("data-path-state", targetStateId);
+      }
       pathList.appendChild(row);
     });
+    syncPathListState();
   }
 
   function updateNavLabels() {
@@ -337,7 +370,7 @@
         backLink.href = "../dashboard.html";
         backLink.textContent = "← Back to Dashboard";
       } else {
-        backLink.href = "../index.html";
+        backLink.href = "/index.html";
         backLink.textContent = "← Back to Tomb of Light";
       }
     }
@@ -576,6 +609,9 @@
     scale = clamp(nextScale, SCALE_MIN, scaleMax);
     viewerImage.style.transition = smooth ? "transform 120ms ease" : "none";
     viewerImage.style.transform = `translateZ(0) scale(${scale})`;
+    if (currentManifest && state) {
+      syncControlStates();
+    }
   }
 
   function markInteraction() {
@@ -765,7 +801,7 @@
     branchOptionsForState.forEach(function (option) {
       const label = String(option?.label || "").trim();
       const targetStateId = String(option?.target_state_id || "").trim();
-      if (!label || !targetStateId) return;
+      if (!label || !targetStateId || !statesById[targetStateId]) return;
 
       const button = document.createElement("button");
       button.type = "button";
@@ -845,9 +881,15 @@
   }
 
   async function applyState(nextState) {
-    if (transitionLock) return;
+    if (transitionLock) return false;
     const config = statesById[nextState];
-    if (!config) return;
+    if (!config) {
+      setEmptyState(
+        "That viewer node is unavailable. Use the visible viewer controls to continue.",
+      );
+      syncControlStates();
+      return false;
+    }
 
     transitionLock = true;
     state = nextState;
@@ -870,10 +912,13 @@
     placeEyeHints();
     renderBranchOptions();
     applyParentOverlayState();
+    syncPathListState();
+    syncControlStates();
 
     setTimeout(function () {
       transitionLock = false;
     }, 140);
+    return true;
   }
 
   function navigateParents() {
@@ -881,7 +926,11 @@
     if (!isControlEnabled("allow_lineage_navigation", true)) return;
     markInteraction();
     const next = resolveLeftTarget();
-    if (next) animatePortalTransition("left", next);
+    if (next) {
+      animatePortalTransition("left", next);
+    } else {
+      showNarration("No parent layer is available from this node.");
+    }
   }
 
   function navigateDescendants() {
@@ -889,7 +938,11 @@
     if (!isControlEnabled("allow_lineage_navigation", true)) return;
     markInteraction();
     const next = resolveRightTarget();
-    if (next) animatePortalTransition("right", next);
+    if (next) {
+      animatePortalTransition("right", next);
+    } else {
+      showNarration("No descendant layer is available from this node.");
+    }
   }
 
   function zoomIn() {
@@ -930,6 +983,53 @@
     setZoom(1, false);
     applyState(currentManifest?.initialStateId || stateOrder[0] || "");
     if (isPlaying) startNarrationAutoAdvance();
+  }
+
+  function setButtonDisabled(button, disabled) {
+    if (!button) return;
+    button.disabled = Boolean(disabled);
+    button.setAttribute("aria-disabled", disabled ? "true" : "false");
+  }
+
+  function syncControlStates() {
+    const leftTarget = resolveLeftTarget();
+    const rightTarget = resolveRightTarget();
+    if (isGraphDemoMode()) {
+      setButtonDisabled(zoomOutBtn, !leftTarget);
+      setButtonDisabled(zoomInBtn, !rightTarget);
+    } else {
+      setButtonDisabled(zoomOutBtn, scale <= SCALE_MIN);
+      setButtonDisabled(zoomInBtn, scale >= scaleMax);
+    }
+    setButtonDisabled(navLeftBtn, !leftTarget);
+    setButtonDisabled(navRightBtn, !rightTarget);
+  }
+
+  function syncPathListState() {
+    if (!pathList) return;
+    pathList.querySelectorAll("[data-path-state]").forEach(function (item) {
+      const isCurrent = item.getAttribute("data-path-state") === state;
+      item.classList.toggle("is-current", isCurrent);
+      if (isCurrent) {
+        item.setAttribute("aria-current", "true");
+      } else {
+        item.removeAttribute("aria-current");
+      }
+    });
+  }
+
+  function navigatePathState(targetStateId) {
+    if (EMBED_MODE) return;
+    const resolved = String(targetStateId || "").trim();
+    if (!resolved || !statesById[resolved]) {
+      setEmptyState(
+        "That demo step is unavailable. Use Parents, Descendants, Zoom In, or Zoom Out to continue.",
+      );
+      return;
+    }
+    markInteraction();
+    pauseNarrationForManualControl();
+    applyState(resolved);
   }
 
   function onWheel(e) {
@@ -1053,6 +1153,14 @@
       });
     }
 
+    if (pathList) {
+      pathList.addEventListener("click", function (event) {
+        const button = event.target.closest("[data-path-state]");
+        if (!button) return;
+        navigatePathState(button.getAttribute("data-path-state"));
+      });
+    }
+
     if (parentsOverlay) {
       parentsOverlay.addEventListener("mousemove", function () {
         showParentOverlayLabels();
@@ -1090,7 +1198,13 @@
     }
     applyManifest(selectedManifest);
     bindEvents();
+    const requestedStateMissing = Boolean(currentManifest.requestedStateMissing);
     await applyState(currentManifest.initialStateId || stateOrder[0] || "");
+    if (requestedStateMissing) {
+      showNarration(
+        "That viewer step is unavailable. Showing the first available demo node.",
+      );
+    }
     startNarrationAutoAdvance();
   }
 

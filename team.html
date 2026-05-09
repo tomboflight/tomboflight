@@ -11,6 +11,8 @@
   <link rel="stylesheet" href="styles.css?v=20260507-434" />
 </head>
 <body>
+  <a href="#main-content" class="skip-to-content">Skip to main content</a>
+
   <div class="page-wrap">
     <header class="site-header">
       <div class="container site-header-inner">
@@ -18,11 +20,18 @@
           <span>Tomb of Light<span class="brand-symbol">™</span></span>
         </a>
 
-        <button class="menu-toggle" type="button" aria-label="Toggle navigation">
+        <button
+          class="menu-toggle"
+          type="button"
+          aria-label="Toggle navigation"
+          aria-expanded="false"
+          aria-controls="site-nav"
+        >
           Menu
         </button>
 
-        <nav class="site-nav" aria-label="Primary navigation">
+        <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
+          <a href="platform.html">Platform</a>
           <a href="how-it-works.html">How It Works</a>
           <a href="security.html">Security</a>
           <a href="compliance.html">Compliance</a>
@@ -35,7 +44,7 @@
       </div>
     </header>
 
-    <main>
+    <main id="main-content" role="main">
       <section class="page-hero">
         <div class="container">
           <div class="page-hero-panel">
@@ -94,9 +103,10 @@
               <a href="cookie-policy.html">Cookie Policy</a>
               <a href="accessibility.html">Accessibility</a>
               <a href="data-request.html">Data Requests</a>
-              <a href="privacy-state-notices.html">State Privacy Notices</a>
-              <a href="privacy-choices.html">Privacy Choices</a>
-              <a href="compliance.html">Compliance &amp; Legal</a>
+                <a href="privacy-state-notices.html">State Privacy Notices</a>
+                <a href="privacy-choices.html">Privacy Choices</a>
+                <a href="refunds-delivery.html">Refunds, Delivery &amp; Support</a>
+                <a href="compliance.html">Compliance &amp; Legal</a>
             </div>
           </div>
 

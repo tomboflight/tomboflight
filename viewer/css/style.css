@@ -585,6 +585,26 @@ a {
   color: var(--text);
   font-weight: 700;
   letter-spacing: -0.02em;
+  text-align: left;
+  width: 100%;
+}
+
+button.path-item {
+  cursor: pointer;
+  font: inherit;
+}
+
+button.path-item:hover,
+button.path-item:focus-visible,
+.path-item.is-current {
+  border-color: rgba(246, 197, 107, 0.65);
+  color: var(--gold);
+  outline: none;
+}
+
+.controls button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
 }
 
 /* -----------------------

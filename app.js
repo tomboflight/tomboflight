@@ -959,12 +959,20 @@
   }
 
   function getCookieChoice() {
-    const value = localStorage.getItem(COOKIE_CHOICE_KEY);
-    return value === "accepted" || value === "declined" ? value : null;
+    try {
+      const value = localStorage.getItem(COOKIE_CHOICE_KEY);
+      return value === "accepted" || value === "declined" ? value : null;
+    } catch (_error) {
+      return null;
+    }
   }
 
   function saveCookieChoice(choice) {
-    localStorage.setItem(COOKIE_CHOICE_KEY, choice);
+    try {
+      localStorage.setItem(COOKIE_CHOICE_KEY, choice);
+    } catch (_error) {
+      // Preference persistence can fail in locked-down browser modes.
+    }
     document.documentElement.dataset.cookieChoice = choice;
   }
 
@@ -989,44 +997,52 @@
 
   function setupCookieBanner() {
     const banner = document.querySelector("[data-cookie-banner]");
-    if (!banner) return;
-
-    const acceptBtn = banner.querySelector("[data-cookie-accept]");
-    const declineBtn = banner.querySelector("[data-cookie-decline]");
+    const acceptButtons = document.querySelectorAll("[data-cookie-accept]");
+    const declineButtons = document.querySelectorAll("[data-cookie-decline]");
 
     function applyChoice(choice) {
       saveCookieChoice(choice);
       updateCookieStatus();
-      banner.classList.remove("visible");
+      if (banner) banner.classList.remove("visible");
     }
 
     const existingChoice = getCookieChoice();
-    if (!existingChoice) {
-      banner.classList.add("visible");
-    } else {
-      banner.classList.remove("visible");
-      updateCookieStatus();
+    if (banner) {
+      if (!existingChoice) {
+        banner.classList.add("visible");
+      } else {
+        banner.classList.remove("visible");
+      }
     }
+    updateCookieStatus();
 
-    if (acceptBtn) {
-      acceptBtn.addEventListener("click", function () {
+    acceptButtons.forEach(function (button) {
+      button.addEventListener("click", function () {
         applyChoice("accepted");
       });
-    }
+    });
 
-    if (declineBtn) {
-      declineBtn.addEventListener("click", function () {
+    declineButtons.forEach(function (button) {
+      button.addEventListener("click", function () {
         applyChoice("declined");
       });
-    }
+    });
   }
 
   function setupMobileMenu() {
     const header = document.querySelector(".site-header");
     const toggle = document.querySelector(".menu-toggle");
+    const nav = header ? header.querySelector(".site-nav") : null;
     let lastFocusedElement = null;
 
     if (!header || !toggle) return;
+    if (nav && !nav.id) nav.id = "site-nav";
+    if (nav) {
+      toggle.setAttribute("aria-controls", nav.id);
+    }
+    if (!toggle.hasAttribute("aria-expanded")) {
+      toggle.setAttribute("aria-expanded", "false");
+    }
 
     function closeMenu() {
       header.classList.remove("open");
@@ -1127,17 +1143,38 @@
     document.querySelectorAll("[data-payment-link]").forEach(function (link) {
       const slug = link.dataset.paymentLink;
       const resolved = paymentLinks[slug];
+      const originalLabel = link.textContent.trim() || "Start Checkout";
+      const purchaseType =
+        link.dataset.paymentType || inferPurchaseTypeFromSlug(slug);
 
       if (resolved) {
         link.href = resolved;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
         link.addEventListener("click", function () {
           savePendingCheckout({
             packageCode: slug,
-            purchaseType: link.dataset.paymentType || inferPurchaseTypeFromSlug(slug),
+            purchaseType,
             paymentLink: resolved,
             selectedAt: new Date().toISOString(),
           });
+          link.dataset.originalLabel = link.dataset.originalLabel || originalLabel;
+          link.setAttribute("aria-busy", "true");
+          link.textContent = "Opening secure checkout...";
+          window.setTimeout(function () {
+            link.removeAttribute("aria-busy");
+            link.textContent = link.dataset.originalLabel || originalLabel;
+          }, 4500);
         });
+      } else {
+        link.removeAttribute("target");
+        link.removeAttribute("rel");
+        link.href =
+          "mailto:billing@tomboflight.com?subject=Tomb%20of%20Light%20checkout%20help";
+        link.setAttribute(
+          "aria-label",
+          `${originalLabel}. Checkout is temporarily unavailable; email billing support.`,
+        );
       }
     });
   }
