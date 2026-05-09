@@ -1,0 +1,160 @@
+import re
+import unittest
+from pathlib import Path
+
+
+class GenesisPrototypeManifestSafetyTests(unittest.TestCase):
+    def setUp(self):
+        self.manifest_path = (
+            Path(__file__).resolve().parents[2]
+            / "viewer"
+            / "js"
+            / "genesis-prototype-manifest.js"
+        )
+        self.source = self.manifest_path.read_text(encoding="utf-8")
+
+    def _extract_manifest_array_items(self, key: str) -> list[str]:
+        match = re.search(rf"{re.escape(key)}:\s*\[(.*?)\]", self.source, re.DOTALL)
+        self.assertIsNotNone(match, f"{key} array not found in manifest source")
+        return re.findall(r'"([^"]+)"', match.group(1))
+
+    def test_uses_only_approved_demo_images(self):
+        approved = {
+            "../images/malik.jpg",
+            "../images/malik_descendants.jpg",
+            "../images/imani.jpg",
+            "../images/imani_descendants.jpg",
+            "../images/julian.jpg",
+            "../images/selah.jpg",
+            "../images/selah_descendants.jpg",
+            "../images/parents.jpg",
+        }
+        referenced = set(re.findall(r'image:\s*"([^"]+)"', self.source))
+        self.assertEqual(referenced, approved)
+
+    def test_contains_required_people_and_states(self):
+        expected_state_ids = {
+            "malik_anchor",
+            "moreland_parents",
+            "malik_descendants",
+            "imani_anchor",
+            "imani_descendants",
+            "julian_anchor",
+            "selah_anchor",
+            "selah_descendants",
+        }
+        state_ids = set(re.findall(r'id:\s*"([^"]+)"', self.source))
+        self.assertTrue(expected_state_ids.issubset(state_ids))
+
+        required_people_terms = [
+            "Malik Moreland",
+            "Elias Moreland",
+            "Clara Moreland",
+            "Naomi Moreland",
+            "Eli Moreland",
+            "Imani Benton / Imani Moreland",
+            "Marcus Benton",
+            "Micah Benton",
+            "Zara Benton",
+            "Julian Moreland",
+            "Selah Carter",
+            "Andre Carter",
+            "Camille Carter",
+        ]
+        for term in required_people_terms:
+            self.assertIn(term, self.source)
+
+        disallowed_terms = [
+            "stock",
+            "placeholder",
+            "random",
+            "generated people",
+        ]
+        for term in disallowed_terms:
+            self.assertNotIn(term, self.source)
+
+    def test_parent_overlay_regions_are_defined_only_for_parents_state(self):
+        self.assertIn('enabled_on_state_id: "moreland_parents"', self.source)
+        self.assertIn("hide_delay_ms: 5000", self.source)
+        self.assertIn('{ region: "left", label: "Selah Carter", target_state_id: "selah_anchor" }', self.source)
+        self.assertIn('{ region: "center", label: "Malik Moreland", target_state_id: "malik_anchor" }', self.source)
+        self.assertIn('{ region: "right", label: "Julian Moreland", target_state_id: "julian_anchor" }', self.source)
+        self.assertIn("branch_options_by_state: {}", self.source)
+
+    def test_required_zoom_transition_map_is_exact(self):
+        expected_links = {
+            "malik_anchor": ("moreland_parents", "malik_descendants"),
+            "moreland_parents": ("", "malik_anchor"),
+            "malik_descendants": ("malik_anchor", "imani_anchor"),
+            "imani_anchor": ("malik_descendants", "imani_descendants"),
+            "imani_descendants": ("imani_anchor", ""),
+            "selah_anchor": ("moreland_parents", "selah_descendants"),
+            "selah_descendants": ("selah_anchor", ""),
+            "julian_anchor": ("moreland_parents", ""),
+        }
+
+        transitions: dict[str, tuple[str, str]] = {}
+        for state_id, left, right in re.findall(
+            r'id:\s*"([^"]+?)".*?left_state_id:\s*"([^"]*?)".*?right_state_id:\s*"([^"]*?)"',
+            self.source,
+            re.DOTALL,
+        ):
+            transitions[state_id] = (left, right)
+
+        for state_id, link_pair in expected_links.items():
+            self.assertEqual(transitions.get(state_id), link_pair)
+
+    def test_manifest_resolves_public_demo_key_and_starts_on_malik(self):
+        self.assertIn('window.PUBLIC_DEMO_MANIFESTS = Object.freeze({', self.source)
+        self.assertIn('"malik-moreland": MALIK_MORELAND_DEMO_MANIFEST', self.source)
+        self.assertIn('initial_state_id: "malik_anchor"', self.source)
+        self.assertNotIn('initial_state_id: "selah_anchor"', self.source)
+        self.assertIn('title: "Imani Benton / Imani Moreland"', self.source)
+        self.assertIn('node: "Imani Benton / Imani Moreland"', self.source)
+        self.assertIn(
+            "Imani adult household: Imani Benton / Imani Moreland, Marcus Benton, Micah Benton, and Zara Benton.",
+            self.source,
+        )
+        self.assertIn(
+            'description:\n          "Julian Moreland has no descendant layer in this demo."',
+            self.source,
+        )
+        self.assertIn('right_state_id: ""', self.source)
+
+    def test_path_items_follow_canonical_moreland_demo_flow(self):
+        expected_path_items = [
+            "Malik Moreland",
+            "Elias Moreland + Clara Moreland",
+            "Return to Malik",
+            "Malik descendants",
+            "Imani Benton / Imani Moreland",
+            "Imani descendants",
+            "Return to Elias + Clara",
+            "Selah Carter",
+            "Selah descendants",
+            "Return to Elias + Clara",
+            "Julian Moreland",
+        ]
+        parsed_path_items = self._extract_manifest_array_items("path_items")
+        self.assertEqual(parsed_path_items, expected_path_items)
+
+    def test_auto_advance_sequence_matches_canonical_narration_order(self):
+        expected_auto_advance_ids = [
+            "malik_anchor",
+            "moreland_parents",
+            "malik_anchor",
+            "malik_descendants",
+            "imani_anchor",
+            "imani_descendants",
+            "moreland_parents",
+            "selah_anchor",
+            "selah_descendants",
+            "moreland_parents",
+            "julian_anchor",
+        ]
+        parsed_sequence = self._extract_manifest_array_items("auto_advance_state_ids")
+        self.assertEqual(parsed_sequence, expected_auto_advance_ids)
+
+
+if __name__ == "__main__":
+    unittest.main()

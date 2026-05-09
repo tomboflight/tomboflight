@@ -8,9 +8,13 @@
       name="description"
       content="Generate and view executive lineage certificates for Tomb of Light family records."
     />
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=20260508-451" />
   </head>
-  <body>
+  <body class="portal-dashboard-body portal-certificate-body">
+    <a href="#main-content" class="skip-to-content">Skip to main content</a>
+
+    <div class="site-watermark" aria-hidden="true"></div>
+
     <div class="page-wrap">
       <header class="site-header">
         <div class="container site-header-inner">
@@ -18,15 +22,25 @@
             <span>Tomb of Light<span class="brand-symbol">™</span></span>
           </a>
 
-          <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
-            <a href="platform.html">Platform</a>
-            <a href="how-it-works.html">How It Works</a>
-            <a href="security.html">Security</a>
-            <a href="faq.html">FAQ</a>
+          <button
+            class="menu-toggle"
+            type="button"
+            aria-label="Toggle navigation"
+            aria-expanded="false"
+            aria-controls="site-nav"
+          >
+            Menu
+          </button>
+
+          <nav class="site-nav" id="site-nav" aria-label="Portal navigation">
+            <a href="dashboard.html">Dashboard</a>
+            <a href="intake-review.html">My Intake</a>
+            <a href="tree-view.html">Family Tree</a>
+            <a href="lineage-certificate.html" aria-current="page">Lineage Certificate</a>
+            <a href="faq.html">Help Center</a>
           </nav>
 
           <div class="header-actions">
-            <a class="btn btn-secondary" href="dashboard.html">Dashboard</a>
             <button class="btn btn-secondary" type="button" data-logout-btn>
               Log Out
             </button>
@@ -34,7 +48,7 @@
         </div>
       </header>
 
-      <main data-dashboard data-lineage-certificate-page>
+      <main id="main-content" data-dashboard data-lineage-certificate-page>
         <section class="page-hero">
           <div class="container">
             <div class="page-hero-panel">
@@ -116,8 +130,8 @@
     </div>
 
     <script src="config.js?v=20260322-7"></script>
-    <script src="app.js?v=20260410-1"></script>
-    <script src="auth.js?v=20260410-2"></script>
-    <script src="lineage-certificate.js?v=20260322-7"></script>
+    <script src="app.js?v=20260508-451"></script>
+    <script src="auth.js?v=20260508-451"></script>
+    <script src="lineage-certificate.js?v=20260508-451"></script>
   </body>
 </html>

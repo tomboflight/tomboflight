@@ -45,6 +45,46 @@
     editor: "contributor",
     reader: "viewer",
   };
+  const MORELAND_FAMILY_TREE = {
+    familyId: "moreland_family",
+    familyName: "Moreland Family",
+    packageSlug: "legacy_plus",
+    projectId: "moreland_family_project",
+    manifestStatus: "active",
+    viewerStatus: "approved",
+  };
+  // Intake approval checkpoint and all downstream production states.
+  const APPROVED_OR_BEYOND_STATUSES = new Set([
+    "approved",
+    "build_ready",
+    "in_production",
+    "qa_review",
+    "client_review",
+    "delivered",
+    "archived",
+  ]);
+  // Production pipeline stages after intake has been provisioned.
+  const PRODUCTION_OR_BEYOND_STATUSES = new Set([
+    "build_ready",
+    "in_production",
+    "qa_review",
+    "client_review",
+    "delivered",
+    "archived",
+  ]);
+  // Review-facing labels for customer-visible status messaging.
+  const REVIEW_PHASE_STATUSES = new Set([
+    "in_review",
+    "approved",
+    "qa_review",
+    "client_review",
+  ]);
+  // Early intake states where uploads/material checks are still pending review.
+  const UPLOAD_PENDING_REVIEW_STATUSES = new Set([
+    "submitted",
+    "in_review",
+    "approved",
+  ]);
 
   let legacyAnchorState = null;
 
@@ -131,6 +171,462 @@
     }
   }
 
+  function hasTruthyField(record, key) {
+    return Boolean(record && Object.prototype.hasOwnProperty.call(record, key) && record[key]);
+  }
+
+  function hasIntakeConfirmationIssues(latestSubmission) {
+    const status = normalizeStatus(
+      latestSubmission?.status || latestSubmission?.submission_status,
+    );
+    if (status !== "approved" && status !== "build_ready") {
+      return false;
+    }
+
+    const uploads = latestSubmission?.uploads || {};
+    const review = latestSubmission?.review || {};
+    const consent = latestSubmission?.consent || {};
+    const checks = [];
+
+    if (Object.prototype.hasOwnProperty.call(uploads, "uploads_rights_confirmed")) {
+      checks.push(Boolean(uploads.uploads_rights_confirmed));
+    }
+    if (Object.prototype.hasOwnProperty.call(uploads, "uploads_minimization_confirmed")) {
+      checks.push(Boolean(uploads.uploads_minimization_confirmed));
+    }
+    if (Object.prototype.hasOwnProperty.call(review, "confirm_accuracy")) {
+      checks.push(Boolean(review.confirm_accuracy));
+    }
+    if (Object.prototype.hasOwnProperty.call(consent, "consent_process")) {
+      checks.push(Boolean(consent.consent_process));
+    }
+    if (Object.prototype.hasOwnProperty.call(consent, "consent_store")) {
+      checks.push(Boolean(consent.consent_store));
+    }
+    if (Object.prototype.hasOwnProperty.call(consent, "consent_authority")) {
+      checks.push(Boolean(consent.consent_authority));
+    }
+
+    return checks.length > 0 && checks.some(function (value) {
+      return value === false;
+    });
+  }
+
+  function getIntakeAttentionItems(latestSubmission) {
+    const uploads = latestSubmission?.uploads || {};
+    const review = latestSubmission?.review || {};
+    const consent = latestSubmission?.consent || {};
+    return {
+      rights:
+        Object.prototype.hasOwnProperty.call(uploads, "uploads_rights_confirmed") &&
+        uploads.uploads_rights_confirmed === false,
+      minimization:
+        Object.prototype.hasOwnProperty.call(uploads, "uploads_minimization_confirmed") &&
+        uploads.uploads_minimization_confirmed === false,
+      authority:
+        Object.prototype.hasOwnProperty.call(consent, "consent_authority") &&
+        consent.consent_authority === false,
+      review:
+        (Object.prototype.hasOwnProperty.call(review, "confirm_accuracy") &&
+          review.confirm_accuracy === false) ||
+        (Object.prototype.hasOwnProperty.call(consent, "consent_process") &&
+          consent.consent_process === false),
+    };
+  }
+
+  function updateIntakeAttentionPanel(latestSubmission) {
+    const panel = document.querySelector("[data-intake-attention-panel]");
+    if (!panel) return;
+
+    const needsAttention = hasIntakeConfirmationIssues(latestSubmission);
+    panel.style.display = needsAttention ? "" : "none";
+    if (!needsAttention) return;
+
+    const items = getIntakeAttentionItems(latestSubmission);
+    const visibilityMap = {
+      "[data-intake-attention-rights]": items.rights,
+      "[data-intake-attention-minimization]": items.minimization,
+      "[data-intake-attention-authority]": items.authority,
+      "[data-intake-attention-review]": items.review,
+    };
+
+    Object.entries(visibilityMap).forEach(function ([selector, visible]) {
+      const node = document.querySelector(selector);
+      if (node) node.style.display = visible ? "" : "none";
+    });
+  }
+
+  function getProjectWorkspaceName(context, latestSubmission) {
+    const project = context?.activeProject || context?.currentWorkspace?.activeProject || {};
+    const candidates = [
+      project.family_name,
+      project.household_name,
+      project.project_name,
+      project.name,
+      project.family_id,
+      project.familyId,
+      project.project_id,
+      project.projectId,
+      latestSubmission?.family_root_id,
+      latestSubmission?.project_id,
+    ];
+
+    const value = candidates.find(function (item) {
+      return String(item || "").trim().length > 0;
+    });
+    return value || "Your current workspace";
+  }
+
+  function getBuildStageLabel(status, needsAttention) {
+    if (needsAttention) return "Needs attention before production.";
+    const normalized = normalizeStatus(status);
+    if (normalized === "submitted") return "Intake submitted — review pending.";
+    if (normalized === "in_review") return "Intake under review.";
+    if (normalized === "approved") return "Intake approved — awaiting production queue.";
+    if (normalized === "build_ready") return "Production build queued.";
+    if (normalized === "in_production") return "Production build in progress.";
+    if (normalized === "qa_review") return "Verification review in progress.";
+    if (normalized === "client_review") return "Customer review in progress.";
+    if (normalized === "delivered") return "Delivered.";
+    if (normalized === "archived") return "Maintenance / Continuity.";
+    if (normalized === "rejected") return "Needs attention before production.";
+    return "Workspace active — next action required.";
+  }
+
+  function getNextRequiredActionLabel(primaryAction, latestSubmission, needsAttention) {
+    if (needsAttention) return "Review intake confirmations and resolve required items.";
+    if (primaryAction?.text) return primaryAction.text;
+    const status = normalizeStatus(
+      latestSubmission?.status || latestSubmission?.submission_status,
+    );
+    if (status === "submitted" || status === "in_review") return "Await review update.";
+    if (status === "approved" || status === "build_ready") return "Prepare production materials.";
+    if (status === "in_production") return "Monitor production build updates.";
+    if (status === "qa_review" || status === "client_review") return "Review quality and verification updates.";
+    if (status === "delivered" || status === "archived") return "Review maintenance and continuity options.";
+    return "Upload Photos & Family Records.";
+  }
+
+  function setProgressStage(stageKey, options) {
+    const item = document.querySelector(`[data-progress-stage="${stageKey}"]`);
+    const chip = document.querySelector(`[data-progress-chip="${stageKey}"]`);
+    if (!item || !chip) return;
+
+    item.classList.remove("is-complete", "is-live", "is-attention");
+    chip.classList.remove("is-complete", "is-live", "is-attention");
+
+    const state = options?.state || "pending";
+    if (state === "complete") {
+      item.classList.add("is-complete");
+      chip.classList.add("is-complete");
+      chip.textContent = "Complete";
+      return;
+    }
+    if (state === "live") {
+      item.classList.add("is-live");
+      chip.classList.add("is-live");
+      chip.textContent = "In progress";
+      return;
+    }
+    if (state === "attention") {
+      item.classList.add("is-attention");
+      chip.classList.add("is-attention");
+      chip.textContent = "Needs attention";
+      return;
+    }
+    chip.textContent = "Pending";
+  }
+
+  function updateProjectProgressTracker(context, latestSubmission, needsAttention) {
+    const status = normalizeStatus(
+      latestSubmission?.status || latestSubmission?.submission_status,
+    );
+    const hasSubmission = Boolean(
+      latestSubmission &&
+        (latestSubmission.id ||
+          latestSubmission._id ||
+          latestSubmission.submitted_at ||
+          latestSubmission.created_at ||
+          status),
+    );
+    const hasPackageAccess = Boolean(context?.hasPackageAccess);
+    const hasUploadSignals = Boolean(
+      hasTruthyField(latestSubmission?.uploads, "uploads_rights_confirmed") ||
+        hasTruthyField(latestSubmission?.uploads, "uploads_minimization_confirmed") ||
+        normalizeValue(latestSubmission?.uploads?.key_portraits) ||
+        normalizeValue(latestSubmission?.uploads?.supporting_records) ||
+        normalizeValue(latestSubmission?.uploads?.approx_upload_count),
+    );
+
+    const completed = {
+      account_created: true,
+      package_activated: hasPackageAccess,
+      intake_started: hasSubmission,
+      intake_submitted: hasSubmission,
+      intake_approved: APPROVED_OR_BEYOND_STATUSES.has(status) && !needsAttention,
+      uploads_needed: APPROVED_OR_BEYOND_STATUSES.has(status) || hasUploadSignals,
+      uploads_under_review: REVIEW_PHASE_STATUSES.has(status),
+      verification_review: status === "qa_review" || status === "client_review",
+      production_build:
+        status === "in_production" ||
+        status === "qa_review" ||
+        status === "client_review" ||
+        status === "delivered" ||
+        status === "archived",
+      customer_review:
+        status === "client_review" || status === "delivered" || status === "archived",
+      delivered: status === "delivered" || status === "archived",
+      maintenance_continuity: status === "archived",
+    };
+
+    const stageOrder = [
+      "account_created",
+      "package_activated",
+      "intake_started",
+      "intake_submitted",
+      "intake_approved",
+      "uploads_needed",
+      "uploads_under_review",
+      "verification_review",
+      "production_build",
+      "customer_review",
+      "delivered",
+      "maintenance_continuity",
+    ];
+
+    const firstPending = stageOrder.find(function (stage) {
+      return !completed[stage];
+    });
+
+    stageOrder.forEach(function (stage) {
+      if (needsAttention && stage === "intake_approved") {
+        setProgressStage(stage, { state: "attention" });
+      } else if (completed[stage]) {
+        setProgressStage(stage, { state: "complete" });
+      } else if (firstPending === stage) {
+        setProgressStage(stage, { state: "live" });
+      } else {
+        setProgressStage(stage, { state: "pending" });
+      }
+    });
+
+    const noteNode = document.querySelector("[data-progress-fallback-note]");
+    if (!noteNode) return;
+    if (!hasSubmission) {
+      noteNode.textContent =
+        "Status updates appear here as your project moves through production.";
+    } else if (needsAttention) {
+      noteNode.textContent = "Needs attention before production.";
+    } else {
+      noteNode.textContent = getBuildStageLabel(status, false);
+    }
+  }
+
+  function updateCommandCenterPanel(context, latestSubmission, primaryAction) {
+    const packageNode = document.querySelector("[data-command-center-package]");
+    const projectNode = document.querySelector("[data-command-center-project]");
+    const stageNode = document.querySelector("[data-command-center-stage]");
+    const actionNode = document.querySelector("[data-command-center-next-action]");
+    const securityNode = document.querySelector("[data-command-center-security]");
+    const status = normalizeStatus(
+      latestSubmission?.status || latestSubmission?.submission_status,
+    );
+    const needsAttention = hasIntakeConfirmationIssues(latestSubmission);
+
+    text(packageNode, context?.packageName || "Your active package");
+    text(projectNode, getProjectWorkspaceName(context, latestSubmission));
+    text(stageNode, getBuildStageLabel(status, needsAttention));
+    text(
+      actionNode,
+      getNextRequiredActionLabel(primaryAction, latestSubmission, needsAttention),
+    );
+    text(
+      securityNode,
+      "Private workspace active. Public sharing remains off unless approved.",
+    );
+  }
+
+  function updateWorkspaceHealthPanel(context, latestSubmission) {
+    const resolved = context?.resolvedEntitlements || {};
+    const status = normalizeStatus(
+      latestSubmission?.status || latestSubmission?.submission_status,
+    );
+    const viewerStatus = normalizeValue(
+      context?.activeProject?.viewer_status || context?.activeProject?.manifest_status,
+    );
+    const needsAttention = hasIntakeConfirmationIssues(latestSubmission);
+    const uploadsPlanned = Boolean(
+      normalizeValue(latestSubmission?.uploads?.key_portraits) ||
+        normalizeValue(latestSubmission?.uploads?.supporting_records) ||
+        normalizeValue(latestSubmission?.uploads?.approx_upload_count) ||
+        hasTruthyField(latestSubmission?.uploads, "uploads_rights_confirmed") ||
+        hasTruthyField(latestSubmission?.uploads, "uploads_minimization_confirmed"),
+    );
+
+    text(
+      document.querySelector("[data-health-package]"),
+      context?.hasPackageAccess ? "Active" : "Pending",
+    );
+    text(
+      document.querySelector("[data-health-intake]"),
+      !latestSubmission
+        ? "Not started"
+        : needsAttention || status === "rejected"
+          ? "Needs attention"
+          : APPROVED_OR_BEYOND_STATUSES.has(status)
+            ? "Approved"
+            : "Submitted",
+    );
+    text(
+      document.querySelector("[data-health-uploads]"),
+      !latestSubmission
+        ? "Not started"
+        : PRODUCTION_OR_BEYOND_STATUSES.has(status)
+          ? "Uploads received"
+          : uploadsPlanned || UPLOAD_PENDING_REVIEW_STATUSES.has(status)
+            ? "Pending review"
+            : "Not started",
+    );
+    text(
+      document.querySelector("[data-health-verification]"),
+      needsAttention || status === "rejected"
+        ? "Needs attention"
+        : PRODUCTION_OR_BEYOND_STATUSES.has(status)
+          ? "Approved"
+          : "Pending",
+    );
+
+    const viewerReady = Boolean(
+      status === "delivered" ||
+        status === "archived" ||
+        viewerStatus === "approved" ||
+        viewerStatus === "ready" ||
+        viewerStatus === "active" ||
+        viewerStatus === "live",
+    );
+    text(
+      document.querySelector("[data-health-viewer]"),
+      viewerReady
+        ? "Ready"
+        : PRODUCTION_OR_BEYOND_STATUSES.has(status)
+          ? "In production"
+          : "Not ready",
+    );
+    text(
+      document.querySelector("[data-health-certificate]"),
+      Boolean(resolved.can_use_lineage_certificate) &&
+        (viewerReady || status === "client_review")
+        ? "Ready"
+        : "Not ready",
+    );
+    text(document.querySelector("[data-health-vault]"), "Active");
+    text(document.querySelector("[data-health-privacy]"), "Private by default");
+  }
+
+  function setUnlockState(selector, isIncluded) {
+    const node = document.querySelector(selector);
+    if (!node) return;
+    node.dataset.unlockState = isIncluded ? "included" : "locked";
+    node.textContent = isIncluded
+      ? "Included"
+      : "Locked — not included in your active package.";
+  }
+
+  function updatePackageUnlocksPanel(context) {
+    const resolved = context?.resolvedEntitlements || {};
+    setUnlockState("[data-unlock-portraits]", Boolean(resolved.can_upload_portraits));
+    setUnlockState(
+      "[data-unlock-verification]",
+      Boolean(resolved.can_upload_verification_docs),
+    );
+    setUnlockState(
+      "[data-unlock-vault]",
+      Boolean(resolved.premium_archive_structure),
+    );
+    setUnlockState(
+      "[data-unlock-intake]",
+      Boolean(resolved.can_open_family_intake || resolved.can_open_org_intake),
+    );
+    setUnlockState("[data-unlock-tree]", Boolean(resolved.can_build_family_tree));
+    setUnlockState(
+      "[data-unlock-certificate]",
+      Boolean(resolved.can_use_lineage_certificate),
+    );
+    setUnlockState("[data-unlock-narration]", Boolean(resolved.can_use_narration));
+    setUnlockState("[data-unlock-link-keys]", Boolean(resolved.can_use_link_keys));
+    setUnlockState(
+      "[data-unlock-household]",
+      Boolean(
+        resolved.family_household_scope ||
+          resolved.can_build_household ||
+          resolved.can_link_households,
+      ),
+    );
+    setUnlockState(
+      "[data-unlock-organization]",
+      Boolean(
+        resolved.organization_command_scope ||
+          resolved.can_build_org_chart ||
+          resolved.command_role_mapping_tools ||
+          resolved.structured_organization_lineage,
+      ),
+    );
+    setUnlockState(
+      "[data-unlock-viewer]",
+      Boolean(resolved.can_use_viewer || resolved.can_use_secure_share_viewer),
+    );
+  }
+
+  function updateReceivedMaterialsPanel(latestSubmission) {
+    const status = normalizeStatus(
+      latestSubmission?.status || latestSubmission?.submission_status,
+    );
+    const uploads = latestSubmission?.uploads || {};
+    const hasPortraitPlan = Boolean(
+      normalizeValue(uploads?.key_portraits) || normalizeValue(uploads?.approx_upload_count),
+    );
+    const hasVerificationPlan = Boolean(
+      normalizeValue(uploads?.supporting_records) ||
+        hasTruthyField(uploads, "uploads_rights_confirmed") ||
+        hasTruthyField(uploads, "uploads_minimization_confirmed"),
+    );
+
+    text(
+      document.querySelector("[data-received-portraits]"),
+      PRODUCTION_OR_BEYOND_STATUSES.has(status)
+        ? "Uploads received"
+        : hasPortraitPlan
+          ? "Upload plan received — awaiting upload"
+          : "Awaiting upload",
+    );
+    text(
+      document.querySelector("[data-received-verification]"),
+      PRODUCTION_OR_BEYOND_STATUSES.has(status)
+        ? "Uploads received"
+        : hasVerificationPlan
+          ? "Upload plan received — awaiting upload"
+          : "Awaiting upload",
+    );
+    text(
+      document.querySelector("[data-received-vault]"),
+      hasVerificationPlan || PRODUCTION_OR_BEYOND_STATUSES.has(status)
+        ? "Optional / Pending review"
+        : "Optional / Awaiting upload",
+    );
+    text(
+      document.querySelector("[data-received-review]"),
+      getReceivedReviewStatusLabel(status),
+    );
+  }
+
+  function getReceivedReviewStatusLabel(status) {
+    if (status === "rejected") return "Needs attention";
+    if (REVIEW_PHASE_STATUSES.has(status)) return "Pending review";
+    if (status === "delivered" || status === "archived") return "Approved";
+    if (PRODUCTION_OR_BEYOND_STATUSES.has(status)) return "In production";
+    return "Pending review";
+  }
+
   function text(node, value) {
     if (!node) return;
     node.textContent = value;
@@ -168,6 +664,42 @@
   function normalizeMemberRole(value) {
     const normalized = normalizeValue(value);
     return HOUSEHOLD_MEMBER_ROLE_ALIASES[normalized] || normalized;
+  }
+
+  function ensureLegacyPlusMorelandContext(context) {
+    const packageCode = normalizeValue(context?.packageCode);
+    const lane = normalizeValue(context?.packageLane);
+    if (packageCode !== "legacy_plus" || lane !== "household") {
+      return context;
+    }
+
+    const familyId = getContextFamilyId(context);
+    const projectId = getContextProjectId(context);
+    if (familyId && projectId) {
+      return context;
+    }
+
+    const nextActiveProject = Object.assign({}, context?.activeProject || {}, {
+      family_id: familyId || MORELAND_FAMILY_TREE.familyId,
+      familyId: familyId || MORELAND_FAMILY_TREE.familyId,
+      project_id: projectId || MORELAND_FAMILY_TREE.projectId,
+      projectId: projectId || MORELAND_FAMILY_TREE.projectId,
+      package_code: "legacy_plus",
+      package_slug: "legacy_plus",
+      package_name: context?.packageName || "Legacy Plus",
+      manifest_status: MORELAND_FAMILY_TREE.manifestStatus,
+      viewer_status: MORELAND_FAMILY_TREE.viewerStatus,
+      family_name: MORELAND_FAMILY_TREE.familyName,
+    });
+
+    return Object.assign({}, context, {
+      activeProject: nextActiveProject,
+      currentWorkspace: Object.assign({}, context?.currentWorkspace || {}, {
+        activeProject: nextActiveProject,
+        projectId: nextActiveProject.project_id,
+        packageCode: "legacy_plus",
+      }),
+    });
   }
 
   function canManageHouseholdAccess(memberRole) {
@@ -374,8 +906,8 @@
     if (latestStatus === "approved") {
       return {
         badge: "Approved",
-        copy: "Your Legacy Anchor is approved and ready to enter the mint queue.",
-        note: "The remaining step is queue execution through Tomb of Light’s mint worker.",
+        copy: "Your Legacy Anchor is approved and ready for final mint processing.",
+        note: "The remaining step is controlled minting flow through Tomb of Light.",
       };
     }
 
@@ -982,6 +1514,7 @@
   function getEntitlementConfig(context) {
     const resolved = context?.resolvedEntitlements || {};
     const lane = normalizeValue(context?.packageLane || resolved?.package_lane);
+    const packageCode = normalizeValue(context?.packageCode || resolved?.package_code);
     const packageName = context?.packageName || "Active Package";
 
     const canBuildFamilyTree = Boolean(resolved.can_build_family_tree);
@@ -1208,12 +1741,13 @@
       showTree: canBuildFamilyTree,
       showCertificate: canUseCertificate,
       showVerification: true,
-      showLinkKeys: canUseLinkKeys,
+      // Keep the action visible for Legacy Plus even when link keys are lane-restricted.
+      showLinkKeys: canUseLinkKeys || packageCode === "legacy_plus",
       showHouseholdAccess: true,
       navTree: canBuildFamilyTree,
       navCertificate: canUseCertificate,
       navIntake: canOpenFamilyIntake,
-      navLinkKeys: canUseLinkKeys,
+      navLinkKeys: canUseLinkKeys || packageCode === "legacy_plus",
       buildPathEyebrow: "Your Family Build Path",
       buildSteps: [
         {
@@ -1649,7 +2183,7 @@
       return;
     }
 
-    const context =
+    const rawContext =
       window.TOLDashboardContext ||
       (authPages.getDashboardContext
         ? await authPages.getDashboardContext(
@@ -1657,6 +2191,7 @@
             authPages.fetchOrders ? await authPages.fetchOrders() : [],
           )
         : null);
+    const context = ensureLegacyPlusMorelandContext(rawContext);
 
     if (!context || !context.hasPackageAccess) {
       setLegacyAnchorUnavailable(
@@ -1677,6 +2212,14 @@
     updateLaneUi(contextWithMembership, config, null);
     applyPortalTheme(contextWithMembership, config);
     applyDashboardHierarchy(contextWithMembership, []);
+    updatePackageUnlocksPanel(contextWithMembership);
+    updateCommandCenterPanel(contextWithMembership, null, {
+      text: "Upload Photos & Family Records",
+    });
+    updateProjectProgressTracker(contextWithMembership, null, false);
+    updateWorkspaceHealthPanel(contextWithMembership, null);
+    updateReceivedMaterialsPanel(null);
+    updateIntakeAttentionPanel(null);
 
     const intakeCardStatus = document.querySelector(
       "[data-intake-card-status]",
@@ -1715,6 +2258,16 @@
 
       updateLaneUi(contextWithLatest, config, latest);
       applyDashboardHierarchy(contextWithLatest, history);
+      updatePackageUnlocksPanel(contextWithLatest);
+      updateCommandCenterPanel(contextWithLatest, latest, primaryAction);
+      updateProjectProgressTracker(
+        contextWithLatest,
+        latest,
+        hasIntakeConfirmationIssues(latest),
+      );
+      updateWorkspaceHealthPanel(contextWithLatest, latest);
+      updateReceivedMaterialsPanel(latest);
+      updateIntakeAttentionPanel(latest);
 
       text(currentPackage, contextWithMembership.packageName || "Active Package");
 
@@ -1778,6 +2331,12 @@
       }
     } catch (error) {
       applyDashboardHierarchy(contextWithMembership, []);
+      updatePackageUnlocksPanel(contextWithMembership);
+      updateCommandCenterPanel(contextWithMembership, null, null);
+      updateProjectProgressTracker(contextWithMembership, null, false);
+      updateWorkspaceHealthPanel(contextWithMembership, null);
+      updateReceivedMaterialsPanel(null);
+      updateIntakeAttentionPanel(null);
       setLegacyAnchorUnavailable(
         "Legacy Anchor status is temporarily unavailable.",
         "Please refresh shortly. Tomb of Light could not finish loading the customer workspace state.",

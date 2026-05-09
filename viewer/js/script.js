@@ -25,7 +25,10 @@
   const zoomOutBtn = document.getElementById("zoomOutBtn");
   const zoomInBtn = document.getElementById("zoomInBtn");
   const resetViewerBtn = document.getElementById("resetViewerBtn");
+  const controlsContainer = document.getElementById("controls");
+  const viewerLine = document.querySelector(".viewer-line");
   const backLink = document.getElementById("backLink");
+  const parentsOverlay = document.getElementById("parentsOverlay");
 
   const stage = document.getElementById("viewerStage");
   const slideshow = document.getElementById("slideshow");
@@ -36,11 +39,16 @@
   const eyeRight = document.getElementById("eyeRight");
 
   const params = new URLSearchParams(window.location.search);
+  const DEFAULT_PUBLIC_DEMO_KEY = "malik-moreland";
+  const DEMO_KEY = String(params.get("demo") || "").trim().toLowerCase();
+  const DEMO_MODE = DEMO_KEY === DEFAULT_PUBLIC_DEMO_KEY;
   const PREVIEW_MODE = params.get("preview") === "1";
   const EMBED_MODE = params.get("embed") === "1" || window.self !== window.top;
 
   const NARRATION_DISPLAY_DURATION_MS = 4500;
   const AUTO_ADVANCE_INTERVAL_MS = 5000;
+  const PARENT_OVERLAY_HIDE_DELAY_MS = 5000;
+  const MISSING_ASSET_COPY = "Demo image placeholder";
   const DEFAULT_ZOOM_LAYERS = 2;
   const DEFAULT_DYNAMIC_EYE_TARGETS = {
     left: { x: 18, y: 50 },
@@ -50,41 +58,32 @@
     mode: "unavailable",
     navigation_mode: "sequence",
     hero_kicker: "Private Viewer",
-    hero_title: "Viewer Access Required",
-    hero_body: "No approved viewer manifest is available for this project yet.",
+    hero_title: "Private viewer locked",
+    hero_body: "No approved viewer manifest is available for this project yet. Open it from your Tomb of Light workspace after your project has been approved and provisioned.",
     instructions:
-      "Return to your dashboard and open the viewer from your entitled project workspace.",
-    path_title: "Viewer Status",
-    path_items: ["No approved viewer manifest is available for this project yet."],
-    nav_labels: {
-      left: "Previous",
-      right: "Next",
-    },
+      "Private project content is not loaded on public routes.",
+    path_title: "Private Viewer",
+    path_items: ["Private project content is not loaded on public routes."],
+    nav_labels: { left: "Origins", right: "Future Line" },
     initial_state_id: "unavailable",
-    controls: {
-      allow_lineage_navigation: false,
-      allow_zoom: false,
-      allow_reset: false,
-      allow_narration_auto_advance: false,
-      allow_gaze_navigation: false,
-      allow_branch_navigation: false,
-    },
-    states: [
-      {
-        id: "unavailable",
-        image: "",
-        title: "Viewer Unavailable",
-        status: "Manifest required",
-        node: "Private viewer",
-        description: "No approved viewer manifest is available for this project yet.",
-        narration: "",
-        left_state_id: "",
-        right_state_id: "",
-        eye_targets: DEFAULT_DYNAMIC_EYE_TARGETS,
-      },
-    ],
+    controls: { allow_lineage_navigation: false, allow_zoom: false, allow_reset: true, allow_narration_auto_advance: false, allow_gaze_navigation: false, allow_branch_navigation: false },
+    states: [{ id: "unavailable", image: "", title: "Private viewer locked", status: "Private Viewer", node: "Private viewer", description: "This family viewer is protected. Open it from your Tomb of Light workspace after your project has been approved and provisioned.", narration: "", left_state_id: "", right_state_id: "", eye_targets: DEFAULT_DYNAMIC_EYE_TARGETS }],
   };
+
+  function resolvePublicDemoManifest(demoKey) {
+    const manifests = window.PUBLIC_DEMO_MANIFESTS;
+    if (!manifests || typeof manifests !== "object") return null;
+    const key = String(demoKey || "").trim().toLowerCase();
+    const manifest = manifests[key];
+    if (manifest && Array.isArray(manifest.states) && manifest.states.length) {
+      return manifest;
+    }
+    return null;
+  }
+
   function getPreviewManifest() {
+    const defaultDemoManifest = resolvePublicDemoManifest(DEFAULT_PUBLIC_DEMO_KEY);
+    if (defaultDemoManifest) return defaultDemoManifest;
     const manifest = window.GENESIS_PROTOTYPE_MANIFEST;
     if (manifest && Array.isArray(manifest.states) && manifest.states.length) {
       return manifest;
@@ -117,6 +116,7 @@
   let isUserInteracting = false;
   let interactionTimeout = null;
   let cHeld = false;
+  let parentOverlayHideTimeout = null;
 
   function clamp(v, min, max) {
     return Math.min(max, Math.max(min, v));
@@ -232,6 +232,13 @@
             return String(item || "").trim();
           }).filter(Boolean)
         : [],
+      autoAdvanceStateIds: Array.isArray(manifest?.auto_advance_state_ids)
+        ? manifest.auto_advance_state_ids
+            .map(function (item) {
+              return String(item || "").trim();
+            })
+            .filter(Boolean)
+        : [],
       navLabels: {
         left: String(manifest?.nav_labels?.left || "Parents").trim(),
         right: String(manifest?.nav_labels?.right || "Descendants").trim(),
@@ -242,6 +249,10 @@
       branchOptionsByState:
         manifest && typeof manifest.branch_options_by_state === "object"
           ? manifest.branch_options_by_state
+          : {},
+      parentOverlay:
+        manifest && typeof manifest.parent_overlay === "object"
+          ? manifest.parent_overlay
           : {},
       states: normalizedStates,
       project: manifest?.project || null,
@@ -275,6 +286,16 @@
 
   function isSecureShareMode(manifest = currentManifest) {
     return String(manifest?.mode || "").trim() === "secure_share";
+  }
+
+  function isGraphDemoMode() {
+    return currentManifest?.mode === "demo" && currentManifest?.navigationMode === "graph";
+  }
+
+  function getAutoAdvanceStateIds() {
+    return Array.isArray(currentManifest?.autoAdvanceStateIds)
+      ? currentManifest.autoAdvanceStateIds
+      : [];
   }
 
   function renderPathList(manifest) {
@@ -350,6 +371,15 @@
     if (zoomInBtn) zoomInBtn.style.display = canZoom ? "" : "none";
     if (resetViewerBtn) resetViewerBtn.style.display = canReset ? "" : "none";
     if (narrationToggleBtn) narrationToggleBtn.style.display = canNarration ? "" : "none";
+    const hasVisibleControls = Boolean(
+      canLineageNavigate || canZoom || canReset || canNarration,
+    );
+    if (controlsContainer) {
+      controlsContainer.classList.toggle("is-hidden", !hasVisibleControls);
+    }
+    if (viewerLine) {
+      viewerLine.classList.toggle("is-hidden", !hasVisibleControls);
+    }
     if (!canNarration) {
       isPlaying = false;
       stopNarrationAutoAdvance();
@@ -392,6 +422,56 @@
     }
   }
 
+  function clearParentOverlayHideTimer() {
+    if (parentOverlayHideTimeout) {
+      clearTimeout(parentOverlayHideTimeout);
+      parentOverlayHideTimeout = null;
+    }
+  }
+
+  function hideParentOverlayLabels() {
+    clearParentOverlayHideTimer();
+    if (!parentsOverlay) return;
+    parentsOverlay.classList.remove("show-labels");
+  }
+
+  function isParentsOverlayState() {
+    const expectedStateId = String(
+      currentManifest?.parentOverlay?.enabled_on_state_id || "",
+    ).trim();
+    return Boolean(expectedStateId && state === expectedStateId);
+  }
+
+  function scheduleParentOverlayHide() {
+    clearParentOverlayHideTimer();
+    if (!parentsOverlay || !isParentsOverlayState()) return;
+    const hideDelay = Number(currentManifest?.parentOverlay?.hide_delay_ms);
+    const duration =
+      Number.isFinite(hideDelay) && hideDelay > 0
+        ? hideDelay
+        : PARENT_OVERLAY_HIDE_DELAY_MS;
+    parentOverlayHideTimeout = setTimeout(function () {
+      if (isParentsOverlayState()) {
+        parentsOverlay.classList.remove("show-labels");
+      }
+    }, duration);
+  }
+
+  function showParentOverlayLabels() {
+    if (!parentsOverlay || !isParentsOverlayState()) return;
+    parentsOverlay.classList.add("show-labels");
+    scheduleParentOverlayHide();
+  }
+
+  function applyParentOverlayState() {
+    if (!parentsOverlay) return;
+    const active = isParentsOverlayState();
+    parentsOverlay.hidden = !active;
+    if (!active) {
+      hideParentOverlayLabels();
+    }
+  }
+
   function showNarration(text) {
     if (!narrationDisplay) return;
     if (!isControlEnabled("allow_narration_auto_advance", true)) {
@@ -418,6 +498,15 @@
   }
 
   function getNextAutoAdvanceStateId() {
+    const orderedStates = getAutoAdvanceStateIds();
+    if (orderedStates.length > 0) {
+      const currentIndex = orderedStates.indexOf(state);
+      if (currentIndex !== -1) {
+        return orderedStates[(currentIndex + 1) % orderedStates.length] || "";
+      }
+      return orderedStates[0] || "";
+    }
+
     const currentState = statesById[state];
     if (!currentState) return "";
     if (currentState.rightStateId) return currentState.rightStateId;
@@ -719,7 +808,7 @@
   }
 
   async function swapViewerImage(imageUrl, altText) {
-    if (!viewerImage) return;
+    if (!viewerImage) return false;
 
     const resolved = String(imageUrl || "").trim();
     viewerImage.style.opacity = "0.25";
@@ -729,10 +818,10 @@
       viewerImage.removeAttribute("src");
       viewerImage.alt = altText || "";
       viewerImage.style.opacity = "0";
-      return;
+      return false;
     }
 
-    await new Promise(function (resolve) {
+    return await new Promise(function (resolve) {
       const preloaded = new Image();
 
       preloaded.onload = function () {
@@ -740,15 +829,15 @@
         viewerImage.alt = altText || "";
         viewerImage.classList.remove("is-empty");
         viewerImage.style.opacity = "1";
-        resolve();
+        resolve(true);
       };
 
       preloaded.onerror = function () {
-        viewerImage.src = resolved;
+        viewerImage.removeAttribute("src");
         viewerImage.alt = altText || "";
-        viewerImage.classList.remove("is-empty");
-        viewerImage.style.opacity = "1";
-        resolve();
+        viewerImage.classList.add("is-empty");
+        viewerImage.style.opacity = "0";
+        resolve(false);
       };
 
       preloaded.src = resolved;
@@ -764,16 +853,23 @@
     state = nextState;
     setZoom(1, false);
 
-    await swapViewerImage(config.image, config.node);
+    const imageLoaded = await swapViewerImage(config.image, config.node);
 
     setText(viewerTitle, config.title);
     setText(viewerStatus, config.status);
     setText(currentNode, config.node);
     setText(currentDescription, config.description);
-    setEmptyState(config.image ? "" : config.description);
+    setEmptyState(
+      !imageLoaded
+        ? MISSING_ASSET_COPY
+        : config.image
+          ? ""
+          : config.description,
+    );
     showNarration(config.narration);
     placeEyeHints();
     renderBranchOptions();
+    applyParentOverlayState();
 
     setTimeout(function () {
       transitionLock = false;
@@ -801,6 +897,15 @@
     if (!isControlEnabled("allow_zoom", true)) return;
     markInteraction();
     pauseNarrationForManualControl();
+    if (isGraphDemoMode()) {
+      const next = resolveRightTarget();
+      if (next) {
+        animatePortalTransition("right", next);
+      } else {
+        showNarration(statesById[state]?.description || "");
+      }
+      return;
+    }
     setZoom(scale + ZOOM_STEP, true);
   }
 
@@ -809,6 +914,13 @@
     if (!isControlEnabled("allow_zoom", true)) return;
     markInteraction();
     pauseNarrationForManualControl();
+    if (isGraphDemoMode()) {
+      const next = resolveLeftTarget();
+      if (next) {
+        animatePortalTransition("left", next);
+      }
+      return;
+    }
     setZoom(scale - ZOOM_STEP, true);
   }
 
@@ -847,13 +959,10 @@
         wheelNavigationCooldownUntil = now + WHEEL_NAVIGATION_COOLDOWN_MS;
 
         if (delta < 0) {
-          const side =
-            hoveredPortalSide ||
-            (resolveRightTarget() ? "right" : resolveLeftTarget() ? "left" : "");
-          const next =
-            side === "left" ? resolveLeftTarget() : resolveRightTarget();
+          const side = "right";
+          const next = resolveRightTarget();
           if (next) {
-            animatePortalTransition(side || "right", next);
+            animatePortalTransition(side, next);
           }
           return;
         }
@@ -943,11 +1052,37 @@
         selectBranch(button.getAttribute("data-target-state"));
       });
     }
+
+    if (parentsOverlay) {
+      parentsOverlay.addEventListener("mousemove", function () {
+        showParentOverlayLabels();
+      });
+      parentsOverlay.addEventListener("pointermove", function () {
+        showParentOverlayLabels();
+      });
+      parentsOverlay.addEventListener("mouseleave", function () {
+        scheduleParentOverlayHide();
+      });
+      parentsOverlay.addEventListener("touchstart", function () {
+        showParentOverlayLabels();
+      });
+      parentsOverlay.addEventListener("click", function (event) {
+        const button = event.target.closest("[data-target-state]");
+        if (!button || !isParentsOverlayState()) return;
+        const targetState = String(button.getAttribute("data-target-state") || "").trim();
+        if (!targetState) return;
+        markInteraction();
+        pauseNarrationForManualControl();
+        applyState(targetState);
+      });
+    }
   }
 
   async function boot() {
     let selectedManifest = UNAVAILABLE_MANIFEST;
-    if (PREVIEW_MODE) {
+    if (DEMO_MODE) {
+      selectedManifest = resolvePublicDemoManifest(DEMO_KEY) || UNAVAILABLE_MANIFEST;
+    } else if (PREVIEW_MODE) {
       selectedManifest = getPreviewManifest();
     } else {
       const liveManifest = await loadDynamicManifest();

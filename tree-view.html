@@ -8,7 +8,7 @@
       name="description"
       content="Visual family tree renderer for Tomb of Light lineage data."
     />
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=20260508-451" />
     <style>
       .tree-shell {
         overflow: visible;
@@ -337,7 +337,11 @@
       }
     </style>
   </head>
-  <body>
+  <body class="portal-dashboard-body portal-tree-body">
+    <a href="#main-content" class="skip-to-content">Skip to main content</a>
+
+    <div class="site-watermark" aria-hidden="true"></div>
+
     <div class="page-wrap">
       <header class="site-header">
         <div class="container site-header-inner">
@@ -345,12 +349,22 @@
             <span>Tomb of Light<span class="brand-symbol">™</span></span>
           </a>
 
+          <button
+            class="menu-toggle"
+            type="button"
+            aria-label="Toggle navigation"
+            aria-expanded="false"
+            aria-controls="site-nav"
+          >
+            Menu
+          </button>
+
           <nav class="site-nav" id="site-nav" aria-label="Portal navigation">
             <a href="dashboard.html">Dashboard</a>
             <a href="intake-review.html">My Intake</a>
             <a href="tree-view.html">Family Tree</a>
             <a href="lineage-certificate.html">Lineage Certificate</a>
-            <a href="faq.html">Help</a>
+            <a href="faq.html">Help Center</a>
           </nav>
 
           <div class="header-actions">
@@ -362,7 +376,7 @@
         </div>
       </header>
 
-      <main data-dashboard data-tree-view-page>
+      <main id="main-content" data-dashboard data-tree-view-page>
         <section class="page-hero">
           <div class="container">
             <div class="page-hero-panel">
@@ -479,8 +493,8 @@
     </div>
 
     <script src="config.js?v=20260415-1"></script>
-    <script src="app.js?v=20260415-1"></script>
-    <script src="auth.js?v=20260410-2"></script>
-    <script src="tree-view.js?v=20260415-1"></script>
+    <script src="app.js?v=20260508-451"></script>
+    <script src="auth.js?v=20260508-451"></script>
+    <script src="tree-view.js?v=20260508-451"></script>
   </body>
 </html>

@@ -12,7 +12,8 @@
         try {
           const params = new URLSearchParams(window.location.search);
           const isEmbedParam = params.get("embed") === "1";
-          const isPreviewParam = params.get("preview") === "1";
+          const demoParam = String(params.get("demo") || "").trim().toLowerCase();
+          const isPreviewParam = params.get("preview") === "1" || demoParam === "malik-moreland";
           const isInIframe = window.self !== window.top;
 
           if (isEmbedParam || isInIframe) {
@@ -179,10 +180,9 @@
 
           <div class="viewer-header-copy">
             <span class="viewer-kicker" id="viewerHeaderKicker">Private Viewer</span>
-            <h1 id="viewerHeroTitle">Viewer Access Required</h1>
+            <h1 id="viewerHeroTitle">Private viewer locked</h1>
             <p id="viewerHeroBody">
-              Your private Tomb of Light viewer loads only after authenticated
-              manifest validation.
+              This family viewer is protected. Open it from your Tomb of Light workspace after your project has been approved and provisioned.
             </p>
 
             <p class="viewer-instructions" id="viewerInstructions">
@@ -200,7 +200,7 @@
                 <h2 id="viewerTitle">Private Viewer</h2>
               </div>
 
-              <div class="viewer-status" id="viewerStatus">Manifest Required</div>
+              <div class="viewer-status" id="viewerStatus">Private Viewer</div>
             </div>
 
           <div class="viewer-stage-shell" id="viewerStage">
@@ -213,7 +213,36 @@
                 alt="Private viewer"
               />
               <div class="viewer-empty-note" id="viewerEmptyState" hidden>
-                No approved viewer manifest is available for this project yet.
+                Private project content is not loaded on public routes.
+              </div>
+              <div class="parents-overlay" id="parentsOverlay" hidden>
+                <button
+                  type="button"
+                  class="parents-overlay-region"
+                  data-parent-region="left"
+                  data-target-state="selah_anchor"
+                  aria-label="Selah Carter"
+                >
+                  <span class="parents-overlay-name">Selah Carter</span>
+                </button>
+                <button
+                  type="button"
+                  class="parents-overlay-region"
+                  data-parent-region="center"
+                  data-target-state="malik_anchor"
+                  aria-label="Malik Moreland"
+                >
+                  <span class="parents-overlay-name">Malik Moreland</span>
+                </button>
+                <button
+                  type="button"
+                  class="parents-overlay-region"
+                  data-parent-region="right"
+                  data-target-state="julian_anchor"
+                  aria-label="Julian Moreland"
+                >
+                  <span class="parents-overlay-name">Julian Moreland</span>
+                </button>
               </div>
 
               <div class="gaze-shell" id="gazeShell" aria-hidden="true"></div>
@@ -239,6 +268,7 @@
             <button type="button" id="zoomOutBtn" onclick="zoomOut()">Zoom Out</button>
             <button type="button" id="zoomInBtn" onclick="zoomIn()">Zoom In</button>
             <button type="button" id="resetViewerBtn" onclick="resetViewer()">Reset</button>
+            <a class="btn" href="../signup.html" style="min-height:42px;">Start Your Legacy Build</a>
             <button
               type="button"
               id="narrationToggleBtn"
@@ -254,14 +284,14 @@
               <span class="panel-kicker">Current Node</span>
               <h3 id="currentNode">Private Viewer</h3>
               <p id="currentDescription">
-                No approved viewer manifest is available for this project yet.
+                Private project content is not loaded on public routes.
               </p>
             </div>
 
             <div class="side-card">
               <span class="panel-kicker" id="pathListTitle">Viewer Status</span>
               <div class="path-list" id="pathList">
-                <div class="path-item">No approved viewer manifest is available for this project yet.</div>
+                <div class="path-item">Private project content is not loaded on public routes.</div>
               </div>
             </div>
         </aside>
@@ -269,8 +299,8 @@
     </div>
 
     <script src="../config.js"></script>
-    <script src="../app.js"></script>
-    <script src="js/genesis-prototype-manifest.js?v=20260428-1"></script>
-    <script src="js/script.js?v=20260427-1"></script>
+    <script src="../app.js?v=20260507-434"></script>
+    <script src="js/genesis-prototype-manifest.js?v=20260507-434"></script>
+    <script src="js/script.js?v=20260507-434"></script>
   </body>
 </html>

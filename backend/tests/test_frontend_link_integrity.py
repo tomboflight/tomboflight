@@ -36,16 +36,45 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
 
         self.assertEqual(violations, [])
 
-    def test_marketing_homepage_links_viewer_through_preview_only_route(self):
+    def test_marketing_homepage_uses_non_broken_viewer_preview_block(self):
         contents = (REPO_ROOT / "index.html").read_text(encoding="utf-8")
 
-        self.assertRegex(
+        self.assertRegex(contents, r'class="[^"]*\bhero-moreland-tree-card\b[^"]*"')
+        self.assertIn('class="btn btn-primary" href="/viewer/?demo=malik-moreland"', contents)
+        self.assertIn("Moreland Family Tree Preview", contents)
+        self.assertIn(
+            "Explore linked Moreland branches from Clara and Elias through Selah, Julian, Malik, Imani, Camille, and Micah.",
             contents,
-            r'<a[^>]*class="[^"]*\bhero-viewer-link\b[^"]*"[^>]*href="viewer/index\.html\?preview=1"',
         )
-        self.assertIn('src="viewer/index.html?preview=1&embed=1"', contents)
-        self.assertIn('class="btn btn-primary" href="viewer/index.html?preview=1"', contents)
-        self.assertNotIn('class="mini-link hero-viewer-link" href="viewer/"', contents)
+        self.assertNotIn("Scroll through the Moreland demo tree.", contents)
+        self.assertNotIn("Manifest Required", contents)
+        embed_match = re.search(
+            r'<div class="hero-demo-embed hero-moreland-tree-embed">(.*?)</div>\s*</div>',
+            contents,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(embed_match)
+        self.assertNotIn("<iframe", embed_match.group(1))
+        self.assertNotIn('viewer/index.html?preview=1', contents)
+        self.assertNotIn('href="viewer/?demo=malik-moreland"', contents)
+        self.assertNotIn('href="viewer?demo=malik-moreland"', contents)
+        self.assertNotIn('href="/viewer?demo=malik-moreland"', contents)
+
+    def test_public_demo_ctas_use_demo_tree_language_and_route(self):
+        homepage = (REPO_ROOT / "index.html").read_text(encoding="utf-8")
+        platform = (REPO_ROOT / "platform.html").read_text(encoding="utf-8")
+        how_it_works = (REPO_ROOT / "how-it-works.html").read_text(encoding="utf-8")
+
+        self.assertIn("View Demo Tree", homepage)
+        self.assertIn('href="/viewer/?demo=malik-moreland"', homepage)
+
+        self.assertIn('href="viewer/?demo=malik-moreland">View Demo Tree</a>', platform)
+        self.assertIn('href="viewer/?demo=malik-moreland">Open Demo Viewer</a>', platform)
+
+        self.assertIn('href="viewer/?demo=malik-moreland">View Demo Tree</a>', how_it_works)
+        self.assertNotIn("View Prototype", homepage)
+        self.assertNotIn("View Prototype", platform)
+        self.assertNotIn("View Prototype", how_it_works)
 
 
 if __name__ == "__main__":

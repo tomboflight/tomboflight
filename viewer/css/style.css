@@ -284,6 +284,59 @@ a {
   backdrop-filter: blur(10px);
 }
 
+.parents-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+}
+
+.parents-overlay[hidden] {
+  display: none !important;
+}
+
+.parents-overlay-region {
+  appearance: none;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  position: relative;
+}
+
+.parents-overlay-name {
+  position: absolute;
+  left: 50%;
+  bottom: 12%;
+  transform: translateX(-50%);
+  min-width: max-content;
+  padding: 0.28rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid rgba(214, 176, 102, 0.25);
+  background: rgba(5, 9, 17, 0.9);
+  color: rgba(255, 244, 221, 0.95);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0;
+  transition: opacity var(--transition), border-color var(--transition), color var(--transition);
+  pointer-events: none;
+}
+
+.parents-overlay.show-labels .parents-overlay-name {
+  opacity: 1;
+}
+
+.parents-overlay-region:hover .parents-overlay-name,
+.parents-overlay-region:focus-visible .parents-overlay-name {
+  opacity: 1;
+  border-color: rgba(214, 176, 102, 0.95);
+  color: var(--gold);
+}
+
 .gaze-shell {
   position: absolute;
   z-index: 3;
@@ -458,6 +511,11 @@ a {
   flex-wrap: wrap;
   gap: 12px;
   justify-content: center;
+}
+
+.controls.is-hidden,
+.viewer-line.is-hidden {
+  display: none !important;
 }
 
 .controls button,

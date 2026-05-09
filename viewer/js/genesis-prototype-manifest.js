@@ -1,55 +1,81 @@
 // viewer/js/genesis-prototype-manifest.js
-// Public Genesis prototype manifest used only when preview=1.
+// Public demo-safe manifest data for viewer demo routes.
 
 (() => {
-  window.GENESIS_PROTOTYPE_MANIFEST = {
-    mode: "preview",
+  const MALIK_MORELAND_DEMO_MANIFEST = {
+    mode: "demo",
     navigation_mode: "graph",
-    hero_kicker: "Genesis Prototype Viewer",
-    hero_title: "Malik Moreland Genesis Prototype",
+    hero_kicker: "Sample demo tree",
+    hero_title: "See a family lineage come alive.",
     hero_body:
-      "Public preview of the cinematic lineage experience for the Moreland prototype family.",
+      "Start at Malik, travel to parents, return to Malik, then follow descendants and sibling branches.",
     instructions:
-      "Use Origins and Future Line navigation, then branch options, to move through each lineage layer.",
-    path_title: "Prototype Path",
+      "Demo-safe family data for public preview. Current view: Malik Moreland",
+    path_title: "Moreland demo flow",
     path_items: [
-      "Malik Moreland anchor",
-      "Elias and Clara Moreland origins",
-      "Malik descendant layer",
-      "Imani Moreland adult profile",
-      "Imani descendant branch",
-      "Selah Carter branch",
-      "Julian Moreland branch",
+      "Malik Moreland",
+      "Elias Moreland + Clara Moreland",
+      "Return to Malik",
+      "Malik descendants",
+      "Imani Benton / Imani Moreland",
+      "Imani descendants",
+      "Return to Elias + Clara",
+      "Selah Carter",
+      "Selah descendants",
+      "Return to Elias + Clara",
+      "Julian Moreland",
+    ],
+    auto_advance_state_ids: [
+      "malik_anchor",
+      "moreland_parents",
+      "malik_anchor",
+      "malik_descendants",
+      "imani_anchor",
+      "imani_descendants",
+      "moreland_parents",
+      "selah_anchor",
+      "selah_descendants",
+      "moreland_parents",
+      "julian_anchor",
     ],
     nav_labels: {
-      left: "Origins",
-      right: "Future Line",
+      left: "Parents",
+      right: "Descendants",
     },
     initial_state_id: "malik_anchor",
     controls: {
       allow_lineage_navigation: true,
       allow_zoom: true,
-      allow_reset: true,
+      allow_reset: false,
       allow_narration_auto_advance: true,
-      allow_gaze_navigation: true,
-      allow_branch_navigation: true,
+      allow_gaze_navigation: false,
+      allow_branch_navigation: false,
       max_zoom_layers: 4,
     },
     family: {
       family_name: "Moreland Family",
       anchor_name: "Malik Moreland",
     },
+    parent_overlay: {
+      enabled_on_state_id: "moreland_parents",
+      hide_delay_ms: 5000,
+      regions: [
+        { region: "left", label: "Selah Carter", target_state_id: "selah_anchor" },
+        { region: "center", label: "Malik Moreland", target_state_id: "malik_anchor" },
+        { region: "right", label: "Julian Moreland", target_state_id: "julian_anchor" },
+      ],
+    },
     states: [
       {
         id: "malik_anchor",
         image: "../images/malik.jpg",
         title: "Malik Moreland",
-        status: "Genesis anchor",
+        status: "Start node",
         node: "Malik Moreland",
         description:
-          "Main prototype buyer and anchor. Spouse: Naomi Moreland. Children: Eli Moreland and Imani Moreland.",
+          "Start at Malik Moreland. Zoom out to Elias + Clara Moreland or zoom in to Malik descendants.",
         narration:
-          "Malik Moreland is the cinematic anchor for this Genesis prototype lineage experience.",
+          "Malik Moreland is the demo start node.",
         left_state_id: "moreland_parents",
         right_state_id: "malik_descendants",
         eye_targets: {
@@ -62,11 +88,11 @@
         image: "../images/parents.jpg",
         title: "Elias Moreland + Clara Moreland",
         status: "Origin node",
-        node: "Moreland parents",
+        node: "Elias Moreland + Clara Moreland",
         description:
-          "Origin of this family line. Children: Malik Moreland, Julian Moreland, and Selah Carter.",
+          "Top generation origin. Select Malik Moreland, Julian Moreland, or Selah Carter.",
         narration:
-          "Elias and Clara Moreland are the root origin for the branch pathways in this preview.",
+          "Elias Moreland and Clara Moreland are the origin generation.",
         left_state_id: "",
         right_state_id: "malik_anchor",
         eye_targets: {
@@ -78,12 +104,12 @@
         id: "malik_descendants",
         image: "../images/malik_descendants.jpg",
         title: "Malik Descendants",
-        status: "Future line",
-        node: "Malik descendant branch",
+        status: "Malik household",
+        node: "Malik descendants",
         description:
-          "Descendant view of Malik and Naomi's line, including daughter Imani Moreland.",
+          "Malik household: Malik Moreland, Naomi Moreland, Eli Moreland, and Imani Moreland.",
         narration:
-          "From Malik, the future line expands to descendants and then into Imani's adult branch.",
+          "Zooming in from Malik enters the Malik descendants layer.",
         left_state_id: "malik_anchor",
         right_state_id: "imani_anchor",
         eye_targets: {
@@ -94,13 +120,13 @@
       {
         id: "imani_anchor",
         image: "../images/imani.jpg",
-        title: "Imani Moreland / Imani Benton",
-        status: "Adult profile",
-        node: "Imani Moreland",
+        title: "Imani Benton / Imani Moreland",
+        status: "Imani adult household",
+        node: "Imani Benton / Imani Moreland",
         description:
-          "Adult daughter of Malik Moreland and Naomi Moreland. Spouse: Marcus Benton.",
+          "Imani adult household: Imani Benton / Imani Moreland, Marcus Benton, Micah Benton, and Zara Benton.",
         narration:
-          "Imani Moreland appears as the adult anchor for her branch before moving to descendants.",
+          "Imani Benton, also Imani Moreland, anchors this branch before descendants.",
         left_state_id: "malik_descendants",
         right_state_id: "imani_descendants",
         eye_targets: {
@@ -113,11 +139,11 @@
         image: "../images/imani_descendants.jpg",
         title: "Imani Descendants",
         status: "Future line",
-        node: "Imani descendant branch",
+        node: "Imani descendants",
         description:
-          "Children of Imani Benton and Marcus Benton: Micah Benton and Zara Benton.",
+          "Descendant layer following Imani Benton / Imani Moreland.",
         narration:
-          "Imani's descendants represent the next generation continuity in this public preview.",
+          "Imani descendants are the final zoom-in node for this branch.",
         left_state_id: "imani_anchor",
         right_state_id: "",
         eye_targets: {
@@ -132,9 +158,9 @@
         status: "Sibling branch",
         node: "Julian Moreland",
         description:
-          "Malik's brother. This branch has no descendants in the Genesis prototype.",
+          "Julian Moreland has no descendant layer in this demo.",
         narration:
-          "Julian Moreland is a sibling branch with no descendant layer in this prototype.",
+          "Julian Moreland has no descendant layer in this demo.",
         left_state_id: "moreland_parents",
         right_state_id: "",
         eye_targets: {
@@ -149,9 +175,9 @@
         status: "Sibling branch",
         node: "Selah Carter",
         description:
-          "Malik's sister. Spouse: Andre Carter. Child: Camille Carter.",
+          "Selah Carter branch with descendants Andre Carter and Camille Carter.",
         narration:
-          "Selah Carter is a sibling branch that leads into her own descendant layer.",
+          "Selah Carter leads to one descendant layer.",
         left_state_id: "moreland_parents",
         right_state_id: "selah_descendants",
         eye_targets: {
@@ -164,11 +190,11 @@
         image: "../images/selah_descendants.jpg",
         title: "Selah Descendants",
         status: "Future line",
-        node: "Selah descendant branch",
+        node: "Selah descendants",
         description:
-          "Descendant layer for Selah Carter and her household line.",
+          "Selah descendants include Andre Carter and Camille Carter.",
         narration:
-          "Selah's branch extends to descendants, then returns back to Selah and to the parents node.",
+          "Selah descendants return to Selah, then to the parents state.",
         left_state_id: "selah_anchor",
         right_state_id: "",
         eye_targets: {
@@ -177,37 +203,11 @@
         },
       },
     ],
-    branch_options_by_state: {
-      moreland_parents: [
-        { label: "Enter Malik Moreland", target_state_id: "malik_anchor" },
-        { label: "Enter Selah Carter", target_state_id: "selah_anchor" },
-        { label: "Enter Julian Moreland", target_state_id: "julian_anchor" },
-      ],
-      malik_anchor: [
-        { label: "Zoom Out to Origins", target_state_id: "moreland_parents" },
-        { label: "Zoom In to Descendants", target_state_id: "malik_descendants" },
-      ],
-      malik_descendants: [
-        { label: "Enter Imani Moreland", target_state_id: "imani_anchor" },
-        { label: "Return to Malik Moreland", target_state_id: "malik_anchor" },
-      ],
-      imani_anchor: [
-        { label: "Zoom In to Imani Descendants", target_state_id: "imani_descendants" },
-        { label: "Return to Malik Descendants", target_state_id: "malik_descendants" },
-      ],
-      imani_descendants: [
-        { label: "Return to Imani Moreland", target_state_id: "imani_anchor" },
-      ],
-      julian_anchor: [
-        { label: "Return to Elias and Clara", target_state_id: "moreland_parents" },
-      ],
-      selah_anchor: [
-        { label: "Zoom In to Selah Descendants", target_state_id: "selah_descendants" },
-        { label: "Return to Elias and Clara", target_state_id: "moreland_parents" },
-      ],
-      selah_descendants: [
-        { label: "Return to Selah Carter", target_state_id: "selah_anchor" },
-      ],
-    },
+    branch_options_by_state: {},
   };
+
+  window.PUBLIC_DEMO_MANIFESTS = Object.freeze({
+    "malik-moreland": MALIK_MORELAND_DEMO_MANIFEST,
+  });
+  window.GENESIS_PROTOTYPE_MANIFEST = MALIK_MORELAND_DEMO_MANIFEST;
 })();
