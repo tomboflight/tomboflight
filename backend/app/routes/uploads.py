@@ -1105,8 +1105,8 @@ async def upload_private_media(
         current_user,
         family_id=family_id,
         member_id=member_id,
-        capabilities=("can_upload_verification_docs", "can_upload_portraits"),
-        detail="Your active package does not include upload access.",
+        capabilities=("premium_archive_structure",),
+        detail="Your active package does not include private vault access.",
     )
     require_workspace_member_role(
         context,
@@ -1267,7 +1267,7 @@ def list_family_vault_items(
     context = require_workspace_capability(
         current_user,
         family_id=family_id,
-        capabilities=("can_upload_verification_docs", "can_upload_portraits"),
+        capabilities=("premium_archive_structure",),
         detail="Your active package does not include vault access.",
     )
 

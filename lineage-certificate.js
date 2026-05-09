@@ -34,17 +34,13 @@
 
     function setStatus(message, type) {
       if (!statusNode) return;
+      if (window.TOLAuth && typeof window.TOLAuth.setStatus === "function") {
+        window.TOLAuth.setStatus(statusNode, message, type || "info");
+        return;
+      }
       statusNode.style.display = "block";
       statusNode.textContent = message;
       statusNode.dataset.state = type || "info";
-
-      if (type === "error") {
-        statusNode.style.color = "#ffb3b3";
-      } else if (type === "success") {
-        statusNode.style.color = "#cfe8cf";
-      } else {
-        statusNode.style.color = "#d6e6ff";
-      }
     }
 
     function clearStatus() {

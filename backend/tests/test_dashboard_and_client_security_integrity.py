@@ -1,5 +1,11 @@
 import unittest
 from pathlib import Path
+from unittest.mock import patch
+
+from fastapi import HTTPException
+
+from app.routes import workspace_access
+from app.services import household_access_service
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -20,6 +26,22 @@ AUDITED_PORTAL_PAGES = [
     "account-security.html",
     "digital-collectible.html",
 ]
+
+
+class _FakeCursor(list):
+    def sort(self, *_args, **_kwargs):
+        return self
+
+
+class _FakeMembersCollection:
+    def __init__(self, documents):
+        self.documents = list(documents)
+
+    def find(self, query):
+        project_id = query.get("project_id")
+        return _FakeCursor(
+            [document for document in self.documents if document.get("project_id") == project_id]
+        )
 
 
 class CustomerDashboardIntegrityTests(unittest.TestCase):
@@ -68,7 +90,9 @@ class CustomerDashboardIntegrityTests(unittest.TestCase):
         self.assertIn("No active workspace found. Return to Dashboard or contact support.", source)
         self.assertIn("Members & Access is unavailable for this workspace.", source)
         self.assertIn("isSessionInvalidError", source)
+        self.assertIn('requestUrl.includes("/auth/me")', source)
         self.assertNotIn("statusCode === 401 || (statusCode === 403", source)
+        self.assertRegex(source, r"if \(statusCode === 403\) \{[\s\S]{0,300}setLockedWorkspaceState")
 
     def test_shared_auth_does_not_classify_every_403_as_auth_failure(self):
         source = (REPO_ROOT / "auth.js").read_text(encoding="utf-8")
@@ -91,11 +115,45 @@ class CustomerDashboardIntegrityTests(unittest.TestCase):
             "dashboard.html": "dashboard-intake.js",
             "household-access.html": "household-access.js",
             "link-keys.html": "link-keys.js",
+            "portrait-upload.html": "portrait-upload.js",
+            "verification-upload.html": "verification-upload.js",
+            "vault-upload.html": "vault-upload.js",
+            "tree-view.html": "tree-view.js",
+            "lineage-certificate.html": "lineage-certificate.js",
         }
         for page, script in expected_scripts.items():
             with self.subTest(page=page):
                 source = (REPO_ROOT / page).read_text(encoding="utf-8")
                 self.assertIn(f"{script}?v={AUDIT_CACHE_VERSION}", source)
+
+    def test_dashboard_members_access_link_points_to_household_access(self):
+        source = (REPO_ROOT / "dashboard.html").read_text(encoding="utf-8")
+        self.assertIn('href="household-access.html" data-dashboard-tool="household"', source)
+        self.assertNotIn('href="#"', source)
+        self.assertNotIn('javascript:void(0)', source)
+
+    def test_customer_portal_has_no_false_included_or_admin_exposure(self):
+        customer_sources = "\n".join(
+            (REPO_ROOT / page).read_text(encoding="utf-8")
+            for page in (
+                "dashboard.html",
+                "household-access.html",
+                "link-keys.html",
+                "portrait-upload.html",
+                "verification-upload.html",
+                "vault-upload.html",
+                "tree-view.html",
+                "lineage-certificate.html",
+            )
+        )
+        self.assertNotIn(">Included<", customer_sources)
+        self.assertNotIn("admin@tomboflight.com", customer_sources)
+        self.assertNotIn("SUPERADMIN", customer_sources)
+        self.assertNotIn("bulk repair", customer_sources)
+        self.assertNotIn("entitlement repair", customer_sources)
+        self.assertNotIn("admin-control", customer_sources)
+        self.assertNotIn("mint queue", customer_sources)
+        self.assertNotIn("repair record", customer_sources)
 
     def test_household_access_has_customer_nav_and_no_admin_controls(self):
         source = (REPO_ROOT / "household-access.html").read_text(encoding="utf-8")
@@ -104,6 +162,132 @@ class CustomerDashboardIntegrityTests(unittest.TestCase):
         self.assertIn('data-logout-btn', source)
         self.assertNotIn("admin-control", source)
         self.assertNotIn("SUPERADMIN", source)
+
+    def test_household_member_service_returns_only_active_members(self):
+        documents = [
+            {
+                "_id": "member-owner",
+                "project_id": "project-robinson",
+                "email": "owner@example.com",
+                "member_role": "billing_owner",
+                "status": "active",
+            },
+            {
+                "_id": "member-spouse",
+                "project_id": "project-robinson",
+                "email": "spouse@example.com",
+                "member_role": "co_owner",
+                "relationship_scope": "spouse",
+                "status": "active",
+            },
+            {
+                "_id": "member-revoked",
+                "project_id": "project-robinson",
+                "email": "former@example.com",
+                "member_role": "viewer",
+                "status": "revoked",
+            },
+        ]
+        with (
+            patch.object(household_access_service, "ensure_owner_membership"),
+            patch.object(
+                household_access_service,
+                "_members",
+                return_value=_FakeMembersCollection(documents),
+            ),
+        ):
+            members = household_access_service.list_project_members("project-robinson")
+
+        self.assertEqual([member["email"] for member in members], ["owner@example.com", "spouse@example.com"])
+        self.assertEqual(members[1]["member_role"], "co_owner")
+
+    def test_workspace_members_route_preserves_active_co_owner_without_user_id(self):
+        member = {
+            "_id": "member-spouse",
+            "project_id": "project-robinson",
+            "email": "spouse@example.com",
+            "member_role": "co_owner",
+            "relationship_scope": "spouse",
+            "status": "active",
+        }
+        with (
+            patch.object(workspace_access, "_assert_project_access"),
+            patch.object(workspace_access, "_assert_household_management_enabled"),
+            patch.object(workspace_access, "list_project_members", return_value=[member]),
+            patch.object(workspace_access, "_with_member_identity_fields", side_effect=lambda items: items),
+        ):
+            payload = workspace_access.get_project_members(
+                "project-robinson",
+                current_user={"id": "owner-1", "email": "larrycr27@gmail.com"},
+            )
+
+        self.assertEqual(len(payload["items"]), 1)
+        self.assertEqual(payload["items"][0]["member_role"], "co_owner")
+        self.assertEqual(payload["items"][0]["status"], "active")
+        self.assertEqual(payload["items"][0]["email"], "spouse@example.com")
+        self.assertIsNone(payload["items"][0]["user_id"])
+
+    def test_workspace_invites_route_keeps_pending_and_historical_invites_separate(self):
+        invites = [
+            {
+                "_id": "invite-pending",
+                "project_id": "project-robinson",
+                "email": "pending@example.com",
+                "member_role": "co_owner",
+                "status": "pending",
+            },
+            {
+                "_id": "invite-accepted",
+                "project_id": "project-robinson",
+                "email": "accepted@example.com",
+                "member_role": "viewer",
+                "status": "accepted",
+            },
+            {
+                "_id": "invite-expired",
+                "project_id": "project-robinson",
+                "email": "expired@example.com",
+                "member_role": "viewer",
+                "status": "expired",
+            },
+            {
+                "_id": "invite-revoked",
+                "project_id": "project-robinson",
+                "email": "revoked@example.com",
+                "member_role": "viewer",
+                "status": "revoked",
+            },
+        ]
+        with (
+            patch.object(workspace_access, "_assert_project_access"),
+            patch.object(workspace_access, "_assert_household_management_enabled"),
+            patch.object(workspace_access, "list_project_invites", return_value=invites),
+        ):
+            payload = workspace_access.get_project_invites(
+                "project-robinson",
+                current_user={"id": "owner-1", "email": "owner@example.com"},
+            )
+
+        statuses = {item["email"]: item["status"] for item in payload["items"]}
+        self.assertEqual(statuses["pending@example.com"], "pending")
+        self.assertEqual(statuses["accepted@example.com"], "accepted")
+        self.assertEqual(statuses["expired@example.com"], "expired")
+        self.assertEqual(statuses["revoked@example.com"], "revoked")
+
+    def test_package_gated_household_access_is_forbidden_not_auth_failure(self):
+        with patch.object(
+            workspace_access,
+            "resolve_workspace_context",
+            return_value={"resolved_entitlements": {"can_build_household": False}},
+        ):
+            with self.assertRaises(HTTPException) as exc:
+                workspace_access._assert_household_management_enabled(
+                    "project-robinson",
+                    {"id": "owner-1", "email": "owner@example.com"},
+                )
+
+        self.assertEqual(exc.exception.status_code, 403)
+        self.assertIn("does not include household", exc.exception.detail)
 
 
 class ClientPrivilegeElevationTests(unittest.TestCase):

@@ -1,6 +1,9 @@
+import inspect
 import re
 import unittest
 from pathlib import Path
+
+from app.routes import uploads as upload_routes
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -142,15 +145,29 @@ class UploadHubIntegrityTests(unittest.TestCase):
         """vault-upload.js must check entitlements and disable the form when not entitled."""
         contents = self._read("vault-upload.js")
         self.assertIn(
-            "can_upload",
+            "premium_archive_structure",
             contents,
-            "vault-upload.js must check can_upload entitlements",
+            "vault-upload.js must check private vault entitlements",
+        )
+        self.assertIn(
+            "private vault access",
+            contents,
+            "vault-upload.js must show the customer a private vault locked state",
         )
         self.assertIn(
             "disabled",
             contents,
             "vault-upload.js must disable the form when the user lacks entitlement",
         )
+
+    def test_private_media_backend_uses_private_vault_entitlement(self):
+        """Private media upload routes must not unlock vault access via generic upload flags."""
+        upload_source = inspect.getsource(upload_routes.upload_private_media)
+        vault_list_source = inspect.getsource(upload_routes.list_family_vault_items)
+        self.assertIn("premium_archive_structure", upload_source)
+        self.assertIn("premium_archive_structure", vault_list_source)
+        self.assertNotIn("can_upload_verification_docs", upload_source)
+        self.assertNotIn("can_upload_portraits", upload_source)
 
     def test_vault_upload_uses_correct_asset_types(self):
         """vault-upload.js must only submit the two backend-allowed asset types."""
