@@ -129,10 +129,59 @@
     return {};
   }
 
+  function canUseHouseholdAccess(resolved) {
+    return Boolean(
+      resolved?.can_build_household ||
+        resolved?.family_household_scope ||
+        resolved?.can_link_households,
+    );
+  }
+
+  function errorDetail(error) {
+    return readableMessage(
+      error?.detail || error?.message || error?.data || error?.responseBody,
+      "",
+    ).toLowerCase();
+  }
+
+  function isSessionInvalidError(error) {
+    const statusCode = Number(error?.status || 0);
+    const detail = errorDetail(error);
+    const requestUrl = String(error?.requestUrl || error?.endpoint || "").toLowerCase();
+
+    if (statusCode === 401) return true;
+    if (
+      detail.includes("invalid or expired token") ||
+      detail.includes("invalid token") ||
+      detail.includes("invalid token payload") ||
+      detail.includes("not authenticated") ||
+      detail.includes("user not found") ||
+      detail.includes("inactive")
+    ) {
+      return true;
+    }
+
+    return Boolean(statusCode === 403 && requestUrl.includes("/auth/me"));
+  }
+
+  function isPackageAccessError(error) {
+    const detail = errorDetail(error);
+    return (
+      detail.includes("package") ||
+      detail.includes("entitlement") ||
+      detail.includes("not included") ||
+      detail.includes("plan does not include")
+    );
+  }
+
   function setLockedWorkspaceState(message) {
     if (statusNode) statusNode.textContent = message;
     setText(inviteStatus, message, "warning");
     setText(acceptStatus, message, "warning");
+    setLoadErrorState(message);
+    renderMembers([]);
+    renderInvites([]);
+    setLoadingState(false);
 
     [inviteForm, acceptForm].forEach(function (form) {
       if (!form) return;
@@ -140,6 +189,27 @@
         field.disabled = true;
       });
     });
+  }
+
+  function setNoWorkspaceState(inviteKey) {
+    const message = inviteKey
+      ? "No active workspace found. Accept the invite below to activate workspace access."
+      : "No active workspace found. Return to Dashboard or contact support.";
+    if (statusNode) statusNode.textContent = message;
+    setLoadErrorState(message);
+    renderMembers([]);
+    renderInvites([]);
+    setLoadingState(false);
+    hasResolvedMemberRole = false;
+    applyInviteFormRoleAccess();
+    setText(inviteStatus, message, inviteKey ? "info" : "warning");
+    setText(
+      acceptStatus,
+      inviteKey
+        ? "Confirm the invite below to activate this workspace."
+        : "If you received an invite, enter the invite code below. Otherwise return to Dashboard or contact support.",
+      "info",
+    );
   }
 
   function inviteApiFallbackBaseUrls() {
@@ -1480,7 +1550,11 @@
       }
 
       const resolved = getResolvedEntitlements(currentContext);
-      if (currentContext && currentContext.hasPackageAccess && !resolved.can_build_household) {
+      if (
+        currentContext &&
+        currentContext.hasPackageAccess &&
+        !canUseHouseholdAccess(resolved)
+      ) {
         setLockedWorkspaceState(
           "Members & Access is not included in your active package.",
         );
@@ -1535,11 +1609,7 @@
       }
 
       if (!currentProjectId) {
-        if (statusNode) {
-          statusNode.textContent = inviteKey
-            ? "No active workspace project was detected yet. Accept the invite key below to activate workspace access."
-            : "No active workspace project was detected. Open this page from your dashboard workspace.";
-        }
+        setNoWorkspaceState(inviteKey);
         return;
       }
 
@@ -1579,9 +1649,17 @@
       }
     } catch (error) {
       const statusCode = Number(error?.status || 0);
-      if (statusCode === 401 || (statusCode === 403 && !inviteKeyFromQuery())) {
+      if (isSessionInvalidError(error)) {
         if (typeof app.clearSession === "function") app.clearSession();
         window.location.href = signinRedirectUrlWithInviteContext();
+        return;
+      }
+      if (statusCode === 403) {
+        setLockedWorkspaceState(
+          isPackageAccessError(error)
+            ? "Members & Access is not included in your active package."
+            : "Members & Access is unavailable for this workspace. Return to Dashboard or contact support.",
+        );
         return;
       }
       const detail = householdLoadFailureMessage(error);

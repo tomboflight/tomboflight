@@ -3,6 +3,23 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+AUDIT_CACHE_VERSION = "20260509-audit"
+AUDITED_PORTAL_PAGES = [
+    "dashboard.html",
+    "upload-hub.html",
+    "portrait-upload.html",
+    "verification-upload.html",
+    "vault-upload.html",
+    "household-access.html",
+    "link-keys.html",
+    "tree-view.html",
+    "lineage-certificate.html",
+    "intake-review.html",
+    "intake-uploads.html",
+    "billing.html",
+    "account-security.html",
+    "digital-collectible.html",
+]
 
 
 class CustomerDashboardIntegrityTests(unittest.TestCase):
@@ -37,6 +54,56 @@ class CustomerDashboardIntegrityTests(unittest.TestCase):
         self.assertIn("Billing &amp; Cards", source)
         self.assertIn("Account Security", source)
         self.assertIn("Help Center", source)
+
+    def test_customer_dashboard_link_keys_follow_resolved_entitlements(self):
+        source = (REPO_ROOT / "dashboard-intake.js").read_text(encoding="utf-8")
+        self.assertIn("canUseLinkKeyTools", source)
+        self.assertIn("can_manage_link_keys", source)
+        self.assertNotIn('showLinkKeys: canUseLinkKeys || packageCode === "legacy_plus"', source)
+        self.assertNotIn('navLinkKeys: canUseLinkKeys || packageCode === "legacy_plus"', source)
+
+    def test_household_access_keeps_forbidden_workspace_errors_in_portal(self):
+        source = (REPO_ROOT / "household-access.js").read_text(encoding="utf-8")
+        self.assertIn("Members & Access is not included in your active package.", source)
+        self.assertIn("No active workspace found. Return to Dashboard or contact support.", source)
+        self.assertIn("Members & Access is unavailable for this workspace.", source)
+        self.assertIn("isSessionInvalidError", source)
+        self.assertNotIn("statusCode === 401 || (statusCode === 403", source)
+
+    def test_shared_auth_does_not_classify_every_403_as_auth_failure(self):
+        source = (REPO_ROOT / "auth.js").read_text(encoding="utf-8")
+        is_auth_failure_body = source.split("function isAuthFailure(error)", 1)[1].split(
+            "function sleep", 1
+        )[0]
+        self.assertIn("statusCode === 403 && isAuthEndpoint", is_auth_failure_body)
+        self.assertNotIn('message.includes("forbidden")', is_auth_failure_body)
+        self.assertNotIn('message.includes("403") ||', is_auth_failure_body)
+
+    def test_audited_portal_pages_use_audit_css_and_auth_cache_versions(self):
+        for page in AUDITED_PORTAL_PAGES:
+            with self.subTest(page=page):
+                source = (REPO_ROOT / page).read_text(encoding="utf-8")
+                self.assertIn(f"styles.css?v={AUDIT_CACHE_VERSION}", source)
+                self.assertIn(f"auth.js?v={AUDIT_CACHE_VERSION}", source)
+
+    def test_changed_page_scripts_use_audit_cache_versions(self):
+        expected_scripts = {
+            "dashboard.html": "dashboard-intake.js",
+            "household-access.html": "household-access.js",
+            "link-keys.html": "link-keys.js",
+        }
+        for page, script in expected_scripts.items():
+            with self.subTest(page=page):
+                source = (REPO_ROOT / page).read_text(encoding="utf-8")
+                self.assertIn(f"{script}?v={AUDIT_CACHE_VERSION}", source)
+
+    def test_household_access_has_customer_nav_and_no_admin_controls(self):
+        source = (REPO_ROOT / "household-access.html").read_text(encoding="utf-8")
+        self.assertIn('href="dashboard.html">Dashboard</a>', source)
+        self.assertIn('href="link-keys.html">Link Keys</a>', source)
+        self.assertIn('data-logout-btn', source)
+        self.assertNotIn("admin-control", source)
+        self.assertNotIn("SUPERADMIN", source)
 
 
 class ClientPrivilegeElevationTests(unittest.TestCase):

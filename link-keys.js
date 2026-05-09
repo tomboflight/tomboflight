@@ -126,6 +126,10 @@
     return {};
   }
 
+  function canUseLinkKeyTools(resolved) {
+    return Boolean(resolved?.can_use_link_keys || resolved?.can_manage_link_keys);
+  }
+
   function updateNav(context) {
     const resolved = getResolvedEntitlements(context);
 
@@ -676,7 +680,7 @@
       }
 
       const resolved = getResolvedEntitlements(currentContext);
-      if (!resolved.can_use_link_keys) {
+      if (!canUseLinkKeyTools(resolved)) {
         throw new Error(
           "Link Keys are not included in your active package.",
         );

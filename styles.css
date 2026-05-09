@@ -5473,10 +5473,10 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
 .portal-dashboard-body .site-watermark,
 .portal-upload-hub-body .site-watermark {
   background-image: url("images/tol-watermark-clean.png");
-  background-size: min(54vw, 680px);
-  background-position: 50% 46%;
-  opacity: 0.045;
-  filter: saturate(0.7) brightness(1.08) contrast(0.96);
+  background-size: min(58vw, 720px);
+  background-position: 50% 42%;
+  opacity: 0.11;
+  filter: saturate(0.82) brightness(1.02) contrast(1.04);
   pointer-events: none;
 }
 
@@ -5495,6 +5495,25 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
 .portal-dashboard-body .site-header-inner,
 .portal-upload-hub-body .site-header-inner {
   min-height: 76px;
+}
+
+.portal-dashboard-body .site-nav,
+.portal-upload-hub-body .site-nav {
+  justify-content: flex-end;
+  align-content: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.portal-dashboard-body .site-nav a,
+.portal-upload-hub-body .site-nav a {
+  line-height: 1.2;
+  padding-block: 6px;
+}
+
+.portal-dashboard-body .header-actions,
+.portal-upload-hub-body .header-actions {
+  margin-left: 4px;
 }
 
 .portal-dashboard-body .brand,
@@ -5612,6 +5631,57 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
 .portal-upload-hub-body .cookie-status {
   color: var(--tol-portal-muted);
   opacity: 1;
+}
+
+.portal-dashboard-body [data-state],
+.portal-upload-hub-body [data-state] {
+  font-weight: 800;
+}
+
+.portal-dashboard-body [data-state="success"],
+.portal-upload-hub-body [data-state="success"] {
+  color: #14583b !important;
+}
+
+.portal-dashboard-body [data-state="error"],
+.portal-upload-hub-body [data-state="error"] {
+  color: #8f2e28 !important;
+}
+
+.portal-dashboard-body [data-state="warning"],
+.portal-upload-hub-body [data-state="warning"] {
+  color: #70460d !important;
+}
+
+.portal-dashboard-body [data-state="info"],
+.portal-upload-hub-body [data-state="info"] {
+  color: var(--tol-portal-blue-deep) !important;
+}
+
+.portal-dashboard-body .helper[data-state],
+.portal-upload-hub-body .helper[data-state] {
+  padding: 10px 12px;
+  border: 1px solid rgba(169, 197, 218, 0.68);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.portal-dashboard-body .helper[data-state="error"],
+.portal-upload-hub-body .helper[data-state="error"] {
+  border-color: rgba(166, 61, 55, 0.32);
+  background: #fff1ef;
+}
+
+.portal-dashboard-body .helper[data-state="warning"],
+.portal-upload-hub-body .helper[data-state="warning"] {
+  border-color: rgba(138, 92, 22, 0.34);
+  background: #fff6e4;
+}
+
+.portal-dashboard-body .helper[data-state="success"],
+.portal-upload-hub-body .helper[data-state="success"] {
+  border-color: rgba(31, 122, 84, 0.32);
+  background: #edf8f2;
 }
 
 .portal-dashboard-body a:not(.btn):not(.portal-action-card),

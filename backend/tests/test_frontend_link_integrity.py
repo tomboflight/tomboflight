@@ -21,8 +21,11 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
             "portrait-upload.html",
             "verification-upload.html",
             "vault-upload.html",
+            "household-access.html",
+            "link-keys.html",
             "tree-view.html",
             "lineage-certificate.html",
+            "account-security.html",
             "admin-control-center.html",
             "digital-collectible.html",
         ]

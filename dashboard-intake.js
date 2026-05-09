@@ -528,6 +528,18 @@
     node.textContent = isIncluded ? "Open" : "Package-gated";
   }
 
+  function canUseLinkKeyTools(resolved) {
+    return Boolean(resolved?.can_use_link_keys || resolved?.can_manage_link_keys);
+  }
+
+  function canUseHouseholdAccess(resolved) {
+    return Boolean(
+      resolved?.can_build_household ||
+        resolved?.family_household_scope ||
+        resolved?.can_link_households,
+    );
+  }
+
   function updatePackageUnlocksPanel(context) {
     const resolved = context?.resolvedEntitlements || {};
     setUnlockState("[data-unlock-portraits]", Boolean(resolved.can_upload_portraits));
@@ -549,14 +561,10 @@
       Boolean(resolved.can_use_lineage_certificate),
     );
     setUnlockState("[data-unlock-narration]", Boolean(resolved.can_use_narration));
-    setUnlockState("[data-unlock-link-keys]", Boolean(resolved.can_use_link_keys));
+    setUnlockState("[data-unlock-link-keys]", canUseLinkKeyTools(resolved));
     setUnlockState(
       "[data-unlock-household]",
-      Boolean(
-        resolved.family_household_scope ||
-          resolved.can_build_household ||
-          resolved.can_link_households,
-      ),
+      canUseHouseholdAccess(resolved),
     );
     setUnlockState(
       "[data-unlock-organization]",
@@ -1510,7 +1518,6 @@
   function getEntitlementConfig(context) {
     const resolved = context?.resolvedEntitlements || {};
     const lane = normalizeValue(context?.packageLane || resolved?.package_lane);
-    const packageCode = normalizeValue(context?.packageCode || resolved?.package_code);
     const packageName = context?.packageName || "Active Package";
 
     const canBuildFamilyTree = Boolean(resolved.can_build_family_tree);
@@ -1518,7 +1525,8 @@
     const canUploadRecords = Boolean(
       resolved.can_upload_verification_docs || resolved.can_upload_portraits,
     );
-    const canUseLinkKeys = Boolean(resolved.can_use_link_keys);
+    const canUseLinkKeys = canUseLinkKeyTools(resolved);
+    const canUseHousehold = canUseHouseholdAccess(resolved);
     const hasLinkedOrganizationSupport = Boolean(
       resolved.linked_organization_support || resolved.can_link_org_units,
     );
@@ -1678,7 +1686,7 @@
         showCertificate: canUseCertificate,
         showVerification: true,
         showLinkKeys: canUseLinkKeys,
-        showHouseholdAccess: true,
+        showHouseholdAccess: canUseHousehold,
         navTree: canBuildFamilyTree,
         navCertificate: canUseCertificate,
         navIntake: canOpenFamilyIntake,
@@ -1737,13 +1745,12 @@
       showTree: canBuildFamilyTree,
       showCertificate: canUseCertificate,
       showVerification: true,
-      // Keep the action visible for Legacy Plus even when link keys are lane-restricted.
-      showLinkKeys: canUseLinkKeys || packageCode === "legacy_plus",
-      showHouseholdAccess: true,
+      showLinkKeys: canUseLinkKeys,
+      showHouseholdAccess: canUseHousehold,
       navTree: canBuildFamilyTree,
       navCertificate: canUseCertificate,
       navIntake: canOpenFamilyIntake,
-      navLinkKeys: canUseLinkKeys || packageCode === "legacy_plus",
+      navLinkKeys: canUseLinkKeys,
       buildPathEyebrow: "Your Family Build Path",
       buildSteps: [
         {
@@ -1776,7 +1783,7 @@
       context?.packageLane || resolved.package_lane,
     );
     const normalizedStatus = normalizeStatus(status);
-    const canUseLinkKeys = Boolean(resolved.can_use_link_keys);
+    const canUseLinkKeys = canUseLinkKeyTools(resolved);
 
     if (normalizedLane === "portrait") {
       if (normalizedStatus === "build_ready") {
