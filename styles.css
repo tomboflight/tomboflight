@@ -104,6 +104,18 @@ body.menu-open {
   text-decoration: none;
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .site-watermark {
   position: fixed;
   inset: 0;
@@ -253,7 +265,7 @@ a {
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   flex: 0 0 auto;
   flex-wrap: wrap;
 }
@@ -538,6 +550,40 @@ select:focus-visible {
   font-weight: 600;
 }
 
+.trust-badge {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 13px;
+  border-radius: 999px;
+  border: 1px solid rgba(214, 176, 102, 0.28);
+  color: var(--text);
+  background:
+    linear-gradient(180deg, rgba(214, 176, 102, 0.11), rgba(214, 176, 102, 0.035)),
+    rgba(255, 255, 255, 0.025);
+  font-size: 0.9rem;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.header-trust-badge {
+  min-height: 44px;
+  padding-inline: 14px;
+  color: var(--muted);
+  background: rgba(214, 176, 102, 0.07);
+}
+
+.footer-trust-stack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+
 .signal-row {
   display: flex;
   flex-wrap: wrap;
@@ -761,6 +807,82 @@ select:focus-visible {
 .hero-trust-row .meta-pill {
   background: rgba(255, 255, 255, 0.03);
   border-color: rgba(255, 255, 255, 0.16);
+}
+
+.google-trust-section {
+  padding-top: 0;
+}
+
+.google-trust-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 0.34fr);
+  gap: 22px;
+  align-items: center;
+  padding: 26px;
+  border: 1px solid rgba(214, 176, 102, 0.2);
+  border-radius: 28px;
+  background:
+    linear-gradient(135deg, rgba(10, 16, 28, 0.9), rgba(4, 8, 16, 0.94)),
+    rgba(255, 255, 255, 0.025);
+  box-shadow:
+    0 22px 62px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.google-trust-copy h2,
+.reviews-copy h2 {
+  margin: 0 0 12px;
+  font-size: clamp(1.65rem, 2.5vw, 2.5rem);
+  line-height: 1.08;
+  letter-spacing: -0.045em;
+}
+
+.google-trust-copy .section-lead,
+.reviews-copy .section-lead {
+  margin: 0;
+}
+
+.google-rating-lockup {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  padding: 18px 20px;
+  border-radius: 22px;
+  border: 1px solid rgba(214, 176, 102, 0.2);
+  background: rgba(255, 255, 255, 0.03);
+  text-align: center;
+}
+
+.rating-stars {
+  color: var(--gold);
+  font-size: 1.08rem;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.rating-label {
+  color: var(--text);
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.google-trust-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 2px;
+}
+
+.pricing-trust-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: center;
+  margin-top: 18px;
+  color: var(--muted);
+  font-weight: 650;
 }
 
 .architecture-panel-home {
@@ -1452,6 +1574,72 @@ select:focus-visible {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 20px;
+}
+
+.google-reviews-section {
+  margin-top: 28px;
+  padding: 58px 0;
+  border-top: 1px solid rgba(214, 176, 102, 0.16);
+  border-bottom: 1px solid rgba(214, 176, 102, 0.14);
+  background:
+    linear-gradient(180deg, rgba(4, 7, 13, 0.52), rgba(9, 14, 25, 0.86)),
+    rgba(255, 255, 255, 0.015);
+}
+
+.reviews-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+  gap: 28px;
+  align-items: start;
+}
+
+.reviews-copy {
+  padding-top: 4px;
+}
+
+.reviews-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.review-card {
+  min-height: 220px;
+  padding: 24px;
+  border-radius: 26px;
+  border: 1px solid rgba(214, 176, 102, 0.18);
+  background:
+    linear-gradient(180deg, rgba(10, 15, 25, 0.82), rgba(4, 8, 16, 0.94)),
+    rgba(255, 255, 255, 0.025);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+}
+
+.review-source-card {
+  grid-column: 1 / -1;
+}
+
+.review-card-top {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 18px;
+}
+
+.review-source {
+  color: var(--muted-2);
+  font-size: 0.88rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.review-quote {
+  margin: 18px 0 0;
+  color: var(--muted);
+  font-size: 1.06rem;
+  line-height: 1.7;
 }
 
 .cta-panel {
@@ -3050,6 +3238,8 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
   .footer-top,
   .form-grid.two-col,
   .hero-visual-grid,
+  .google-trust-panel,
+  .reviews-layout,
   .portal-entry-shell,
   .portal-entry-grid,
   .portal-metric-grid,
@@ -3103,6 +3293,10 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
 
   .workspace-stage-strip {
     grid-template-columns: 1fr;
+  }
+
+  .google-trust-actions {
+    grid-column: auto;
   }
 }
 
@@ -3243,6 +3437,8 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
   .section-card,
   .trust-card,
   .policy-card,
+  .google-trust-panel,
+  .review-card,
   .page-hero-panel,
   .footer-card,
   .cta-panel,
@@ -3310,6 +3506,23 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
   .hero-meta {
     margin-top: 18px;
     gap: 10px;
+  }
+
+  .google-trust-panel {
+    gap: 18px;
+  }
+
+  .google-rating-lockup {
+    justify-items: start;
+    text-align: left;
+  }
+
+  .google-reviews-section {
+    padding: 42px 0;
+  }
+
+  .reviews-grid {
+    grid-template-columns: 1fr;
   }
 
   .signal-row {
@@ -3473,16 +3686,22 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
   }
 
   .cookie-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     width: 100%;
     order: 2;
     justify-content: stretch;
   }
 
   .cookie-actions .btn {
-    flex: 1 1 0;
+    flex: none;
     min-width: 0;
-    width: auto !important;
+    width: 100% !important;
     white-space: normal;
+  }
+
+  .cookie-actions .btn-ghost {
+    grid-column: 1 / -1;
   }
 
   .thank-you-actions {
@@ -3566,6 +3785,11 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
   .header-actions {
     width: 100%;
     justify-content: stretch;
+  }
+
+  .header-actions .trust-badge {
+    width: 100%;
+    white-space: normal;
   }
 
   .header-actions .btn {

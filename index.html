@@ -15,7 +15,56 @@
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
     <link rel="apple-touch-icon" href="apple-touch-icon.png" />
 
-    <link rel="stylesheet" href="styles.css?v=20260329-3" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "https://tomboflight.com/#organization",
+            "name": "Tomb of Light",
+            "legalName": "Tomb of Light LLC",
+            "url": "https://tomboflight.com/",
+            "logo": {
+              "@type": "ImageObject",
+              "url": "https://tomboflight.com/favicon.svg"
+            },
+            "sameAs": [
+              "https://www.google.com/maps/place/?q=place_id:ChIJQzt4tso6iyYRnIfMV0bfSc0"
+            ],
+            "aggregateRating": {
+              "@type": "AggregateRating",
+              "ratingValue": "5.0",
+              "bestRating": "5",
+              "worstRating": "1"
+            },
+            "review": {
+              "@id": "https://tomboflight.com/#google-rating-review"
+            }
+          },
+          {
+            "@type": "Review",
+            "@id": "https://tomboflight.com/#google-rating-review",
+            "name": "Verified Google client rating",
+            "itemReviewed": {
+              "@id": "https://tomboflight.com/#organization"
+            },
+            "publisher": {
+              "@type": "Organization",
+              "name": "Google"
+            },
+            "reviewRating": {
+              "@type": "Rating",
+              "ratingValue": "5.0",
+              "bestRating": "5",
+              "worstRating": "1"
+            }
+          }
+        ]
+      }
+    </script>
+
+    <link rel="stylesheet" href="styles.css?v=20260509-1" />
   </head>
   <body>
     <a href="#main-content" class="skip-to-content">Skip to main content</a>
@@ -48,6 +97,9 @@
           </nav>
 
           <div class="header-actions">
+            <span class="trust-badge header-trust-badge" aria-label="5.0 Google Rating">
+              ⭐ 5.0 Google Rating
+            </span>
             <a
               class="btn btn-primary"
               href="signup.html"
@@ -212,6 +264,52 @@
             </div>
           </div>
           <!-- Prototype-first customer hero -->
+        </section>
+
+        <section
+          class="section section-tight google-trust-section"
+          id="google-reviews"
+          aria-labelledby="google-trust-title"
+        >
+          <div class="container">
+            <div class="google-trust-panel">
+              <div class="google-trust-copy">
+                <span class="eyebrow">Google Reviews</span>
+                <h2 id="google-trust-title">
+                  Trusted by real families. Rated 5.0 on Google.
+                </h2>
+                <p class="section-lead">
+                  Verified reviews from real Tomb of Light clients.
+                </p>
+              </div>
+
+              <div class="google-rating-lockup" aria-label="5.0 Google Rating">
+                <div class="rating-stars" aria-hidden="true">⭐⭐⭐⭐⭐</div>
+                <div class="rating-label">5.0 Google Rating</div>
+              </div>
+
+              <div class="google-trust-actions">
+                <a
+                  class="btn btn-secondary"
+                  href="https://www.google.com/maps/place/?q=place_id:ChIJQzt4tso6iyYRnIfMV0bfSc0"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Read Tomb of Light Google reviews in a new tab"
+                >
+                  Read Google Reviews
+                </a>
+                <a
+                  class="btn btn-primary"
+                  href="https://g.page/r/CZyHzFdG30nNEAE/review"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Leave a Tomb of Light Google review in a new tab"
+                >
+                  Leave a Google Review
+                </a>
+              </div>
+            </div>
+          </div>
         </section>
 
         <section
@@ -472,6 +570,10 @@
                 and the exact tools unlocked by that package lane: portrait,
                 household, network, or organization.
               </p>
+              <div class="pricing-trust-bar">
+                <span class="trust-badge">⭐ 5.0 Google Rating</span>
+                <span>Verified reviews from real Tomb of Light clients.</span>
+              </div>
             </div>
 
             <div class="feature-strip">
@@ -957,6 +1059,61 @@
           </div>
         </section>
 
+        <section
+          class="section google-reviews-section"
+          aria-labelledby="reviews-section-title"
+        >
+          <div class="container reviews-layout">
+            <div class="reviews-copy">
+              <span class="eyebrow">Verified Client Trust</span>
+              <h2 id="reviews-section-title">
+                Google review credibility, presented with restraint.
+              </h2>
+              <p class="section-lead">
+                Tomb of Light keeps public review trust anchored to Google, with
+                excerpts reserved for approved real client text only.
+              </p>
+              <div class="cta-actions">
+                <a
+                  class="btn btn-secondary"
+                  href="https://www.google.com/maps/place/?q=place_id:ChIJQzt4tso6iyYRnIfMV0bfSc0"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Read Google Reviews
+                </a>
+                <a
+                  class="btn btn-primary"
+                  href="https://g.page/r/CZyHzFdG30nNEAE/review"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Leave a Google Review
+                </a>
+              </div>
+            </div>
+
+            <div
+              class="reviews-grid"
+              data-approved-google-reviews
+              aria-label="Approved Google review excerpts"
+            >
+              <article class="review-card review-source-card">
+                <div class="review-card-top">
+                  <span class="trust-badge">⭐ 5.0 Google Rating</span>
+                  <span class="review-source">Google</span>
+                </div>
+                <div class="rating-stars" aria-hidden="true">⭐⭐⭐⭐⭐</div>
+                <p class="review-quote">
+                  Verified Google reviews remain the source of truth. Public
+                  excerpts are shown here only after client-approved
+                  publication.
+                </p>
+              </article>
+            </div>
+          </div>
+        </section>
+
         <section class="section" aria-labelledby="founder-story-title">
           <div class="container">
             <div class="cta-panel cta-panel-premium founder-panel">
@@ -1030,10 +1187,16 @@
                 <div class="cookie-status" data-cookie-status>
                   Your cookie preference has not been set yet.
                 </div>
+                <div class="footer-trust-stack">
+                  <span class="trust-badge footer-trust-badge">
+                    ⭐ 5.0 Google Rating
+                  </span>
+                </div>
               </div>
 
               <div class="footer-links">
                 <a href="platform.html">Platform</a>
+                <a href="reviews/">Reviews</a>
                 <a href="privacy.html">Privacy Policy</a>
                 <a href="terms.html">Terms</a>
                 <a href="cookie-policy.html">Cookie Policy</a>
