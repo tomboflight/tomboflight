@@ -2105,19 +2105,30 @@
   function updatePrimaryIntakeAction(context, status, actionNode) {
     if (!actionNode) return;
 
+    function setActionText(label) {
+      const ctaNode = actionNode.querySelector(".portal-action-cta");
+      if (ctaNode) {
+        ctaNode.textContent = label;
+        actionNode.setAttribute("aria-label", label);
+        return;
+      }
+
+      actionNode.textContent = label;
+    }
+
     const resolved = context?.resolvedEntitlements || {};
     const lane = normalizeValue(context?.packageLane || resolved.package_lane);
     const canOpenFamilyIntake = Boolean(resolved.can_open_family_intake);
     const canOpenOrgIntake = Boolean(resolved.can_open_org_intake);
 
     if (lane === "portrait") {
-      actionNode.textContent = "Upload Portrait";
+      setActionText("Upload Portrait");
       actionNode.setAttribute("href", "portrait-upload.html");
       return;
     }
 
     if (lane === "organization") {
-      actionNode.textContent = "Upload Structure Records";
+      setActionText("Upload Structure Records");
       actionNode.setAttribute("href", "verification-upload.html");
       return;
     }
@@ -2130,7 +2141,7 @@
     const normalized = normalizeStatus(status);
 
     if (normalized === "rejected") {
-      actionNode.textContent = "Resume Intake";
+      setActionText("Resume Intake");
       actionNode.setAttribute("href", "intake-household.html");
       return;
     }
@@ -2143,18 +2154,18 @@
       normalized === "delivered" ||
       normalized === "archived"
     ) {
-      actionNode.textContent = "View Intake Record";
+      setActionText("View Intake Record");
       actionNode.setAttribute("href", "intake-review.html");
       return;
     }
 
     if (isLockedStatus(normalized)) {
-      actionNode.textContent = "View Intake";
+      setActionText("View Intake");
       actionNode.setAttribute("href", "intake-review.html");
       return;
     }
 
-    actionNode.textContent = "Open Intake";
+    setActionText("Open Intake");
     actionNode.setAttribute("href", "intake-welcome.html");
   }
 
