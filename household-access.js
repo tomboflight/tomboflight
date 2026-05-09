@@ -111,6 +111,7 @@
   };
 
   const ROLE_CAN_MANAGE_ACCESS = new Set(["billing_owner", "co_owner", "family_manager"]);
+  const ACTIVE_MEMBER_STATUSES = new Set(["active"]);
 
   let currentProjectId = "";
   let currentUser = null;
@@ -565,6 +566,15 @@
       });
   }
 
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
   function formatDateTime(value) {
     const normalized = normalizeValue(value);
     if (!normalized) return "—";
@@ -679,6 +689,33 @@
 
   function roleCanManageAccess(role) {
     return ROLE_CAN_MANAGE_ACCESS.has(normalizeRole(role));
+  }
+
+  function isActiveMember(member) {
+    return ACTIVE_MEMBER_STATUSES.has(normalizeLower(member?.status || "active"));
+  }
+
+  function memberIdentityKey(member) {
+    const membershipId = normalizeValue(member?.id || member?._id || member?.membership_id);
+    if (membershipId) return `membership:${membershipId}`;
+    const userId = normalizeValue(member?.user_id);
+    if (userId) return `user:${userId}`;
+    const email = normalizeLower(member?.email);
+    if (email) return `email:${email}`;
+    return "";
+  }
+
+  function dedupeActiveMembers(items) {
+    const seen = new Set();
+    const activeItems = [];
+    (Array.isArray(items) ? items : []).forEach(function (member) {
+      if (!isActiveMember(member)) return;
+      const identityKey = memberIdentityKey(member);
+      if (identityKey && seen.has(identityKey)) return;
+      if (identityKey) seen.add(identityKey);
+      activeItems.push(member);
+    });
+    return activeItems;
   }
 
   function currentUserIdentity() {
@@ -1017,14 +1054,15 @@
   function renderMembers(items) {
     if (!membersList) return;
     membersList.innerHTML = "";
-    if (!Array.isArray(items) || !items.length) {
+    const activeMembers = dedupeActiveMembers(items);
+    if (!activeMembers.length) {
       if (membersEmpty) membersEmpty.style.display = "block";
       return;
     }
     if (membersEmpty) membersEmpty.style.display = "none";
     const canManage = roleCanManageAccess(currentMemberRole);
     const actorRank = roleRank(currentMemberRole);
-    items.forEach((member) => {
+    activeMembers.forEach((member) => {
       const card = document.createElement("article");
       card.className = "form-panel";
 
@@ -1048,7 +1086,7 @@
       const options = ROLE_OPTIONS.map(
         (roleCode) => {
           const disabled = !canManage || !roleCanAssign(currentMemberRole, roleCode);
-          return `<option value="${roleCode}" ${roleCode === role ? "selected" : ""} ${disabled ? "disabled" : ""}>${roleLabel(roleCode)}</option>`;
+          return `<option value="${escapeHtml(roleCode)}" ${roleCode === role ? "selected" : ""} ${disabled ? "disabled" : ""}>${escapeHtml(roleLabel(roleCode))}</option>`;
         },
       ).join("");
       const memberActionMarkup = canTouchTarget
@@ -1067,13 +1105,13 @@
           ? `<p class="card-copy">Billing Owner is the highest household role. To pass ownership, set another active member's role to Billing Owner.</p>`
           : `<p class="card-copy">You can only change or remove members with lower active roles.</p>`;
       card.innerHTML = `
-        <strong>${fullName}</strong>
-        <p class="card-copy">Email: ${emailLabel}</p>
-        <p class="card-copy">Role: ${roleLabel(role)}</p>
-        ${parityNote ? `<p class="card-copy">${parityNote}</p>` : ""}
-        <p class="card-copy">Relationship: ${relationshipLabel(member.relationship_scope || "household_member")}</p>
-        <p class="card-copy">Privacy: ${privacyLabel(member.privacy_scope || "household_private")}</p>
-        <p class="card-copy">Status: ${member.status || "active"}</p>
+        <strong>${escapeHtml(fullName)}</strong>
+        <p class="card-copy">Email: ${escapeHtml(emailLabel)}</p>
+        <p class="card-copy">Role: ${escapeHtml(roleLabel(role))}</p>
+        ${parityNote ? `<p class="card-copy">${escapeHtml(parityNote)}</p>` : ""}
+        <p class="card-copy">Relationship: ${escapeHtml(relationshipLabel(member.relationship_scope || "household_member"))}</p>
+        <p class="card-copy">Privacy: ${escapeHtml(privacyLabel(member.privacy_scope || "household_private"))}</p>
+        <p class="card-copy">Status: ${escapeHtml(member.status || "active")}</p>
         ${memberActionMarkup}
       `;
 
@@ -1154,15 +1192,15 @@
         ? ""
         : `<p class="card-copy">Invite actions are unavailable because this invite record is missing an id on this API host.</p>`;
       card.innerHTML = `
-        <strong>${invite.email || "Invite"}</strong>
-        <p class="card-copy">Role: ${roleLabel(invite.member_role || "viewer")}</p>
-        <p class="card-copy">Relationship: ${relationshipLabel(invite.relationship_scope || "household_member")}</p>
-        <p class="card-copy">Privacy: ${privacyLabel(invite.privacy_scope || "household_private")}</p>
-        <p class="card-copy">Status: ${normalizeInviteStatus(invite.status || "pending")}</p>
-        <p class="card-copy">${deliveryText}</p>
-        <p class="card-copy">Created: ${formatDateTime(invite.created_at)}</p>
-        <p class="card-copy">Accepted: ${formatDateTime(invite.accepted_at)}</p>
-        <p class="card-copy">Expires: ${formatDateTime(invite.expires_at)}</p>
+        <strong>${escapeHtml(invite.email || "Invite")}</strong>
+        <p class="card-copy">Role: ${escapeHtml(roleLabel(invite.member_role || "viewer"))}</p>
+        <p class="card-copy">Relationship: ${escapeHtml(relationshipLabel(invite.relationship_scope || "household_member"))}</p>
+        <p class="card-copy">Privacy: ${escapeHtml(privacyLabel(invite.privacy_scope || "household_private"))}</p>
+        <p class="card-copy">Status: ${escapeHtml(normalizeInviteStatus(invite.status || "pending"))}</p>
+        <p class="card-copy">${escapeHtml(deliveryText)}</p>
+        <p class="card-copy">Created: ${escapeHtml(formatDateTime(invite.created_at))}</p>
+        <p class="card-copy">Accepted: ${escapeHtml(formatDateTime(invite.accepted_at))}</p>
+        <p class="card-copy">Expires: ${escapeHtml(formatDateTime(invite.expires_at))}</p>
         ${missingInviteIdNote}
         <div class="inline-actions" style="margin-top:0.75rem;">
           <button class="btn btn-secondary" type="button" data-invite-resend ${canResend ? "" : "disabled"}>Resend Invite</button>

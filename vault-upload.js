@@ -55,15 +55,13 @@
 
   function setStatus(node, message, type) {
     if (!node) return;
+    if (typeof app.setStatus === "function") {
+      app.setStatus(node, message, type || "info");
+      return;
+    }
     node.style.display = "block";
     node.textContent = message;
-    if (type === "error") {
-      node.style.color = "#ffb3b3";
-    } else if (type === "success") {
-      node.style.color = "#cfe8cf";
-    } else {
-      node.style.color = "#d6e6ff";
-    }
+    node.dataset.state = type || "info";
   }
 
   function clearStatus(node) {
@@ -74,7 +72,8 @@
 
   function isEntitlementError(msg) {
     return (
-      msg.includes("can_upload") ||
+      msg.includes("premium_archive_structure") ||
+      msg.includes("vault") ||
       msg.includes("entitlement") ||
       msg.includes("package") ||
       msg.includes("permission")
@@ -175,7 +174,7 @@
       if (isEntitlementError(msg)) {
         setStatus(
           familyStatus,
-          "Your active package does not include vault file access. Contact support if you believe this is an error.",
+          "Your active package does not include private vault access. Contact support if you believe this is an error.",
           "error",
         );
       } else {
@@ -221,25 +220,54 @@
     }
   }
 
+  async function getCurrentContext() {
+    if (
+      !authPages ||
+      typeof authPages.fetchOrders !== "function" ||
+      (typeof authPages.getDashboardContextForCurrentPage !== "function" &&
+        typeof authPages.getDashboardContext !== "function")
+    ) {
+      return null;
+    }
+
+    const me = await app.apiRequest("/auth/me", { method: "GET" });
+    const orders = await authPages.fetchOrders();
+
+    if (typeof authPages.getDashboardContextForCurrentPage === "function") {
+      return await authPages.getDashboardContextForCurrentPage(me, orders);
+    }
+
+    const hints =
+      typeof authPages.getWorkspaceSelectionHints === "function"
+        ? authPages.getWorkspaceSelectionHints()
+        : undefined;
+
+    return await authPages.getDashboardContext(me, orders, hints);
+  }
+
   async function initPage() {
     const pageStatus = document.querySelector("[data-vault-page-status]");
 
     try {
-      const context = await app.apiRequest("/auth/context", { method: "GET" });
+      const context = await getCurrentContext();
       currentContext = context;
 
-      const entitlements = context?.resolved_entitlements || {};
-      // The backend /uploads/private-media endpoint requires can_upload_portraits
-      // OR can_upload_verification_docs — vault access is gated by the same
-      // entitlements, so we mirror that check here.
-      const canUpload =
-        entitlements.can_upload_portraits ||
-        entitlements.can_upload_verification_docs;
+      const entitlements = context?.resolvedEntitlements || {};
+      const hasResolvedVaultAccess = Object.prototype.hasOwnProperty.call(
+        entitlements,
+        "premium_archive_structure",
+      );
+      const canUpload = Boolean(entitlements.premium_archive_structure);
 
       if (!canUpload) {
         if (pageStatus) {
-          pageStatus.textContent =
-            "Your active package does not include vault file access. Upgrade your package to enable vault uploads.";
+          setStatus(
+            pageStatus,
+            hasResolvedVaultAccess
+              ? "Your active package does not include private vault access."
+              : "Unable to verify private vault access. Please return to Dashboard or try again shortly.",
+            hasResolvedVaultAccess ? "warning" : "info",
+          );
         }
         const form = document.querySelector("[data-vault-upload-form]");
         if (form) {
@@ -261,8 +289,11 @@
       }
     } catch (error) {
       if (pageStatus) {
-        pageStatus.textContent =
-          "Unable to load your workspace. Please sign in and try again.";
+        setStatus(
+          pageStatus,
+          "Unable to load your workspace. Please return to Dashboard or try again shortly.",
+          "error",
+        );
       }
     }
   }

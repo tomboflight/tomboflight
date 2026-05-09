@@ -517,7 +517,10 @@
         ? "Open"
         : "Package-gated",
     );
-    text(document.querySelector("[data-health-vault]"), "Open");
+    text(
+      document.querySelector("[data-health-vault]"),
+      Boolean(resolved.premium_archive_structure) ? "Open" : "Package-gated",
+    );
     text(document.querySelector("[data-health-privacy]"), "Private by default");
   }
 
@@ -526,6 +529,150 @@
     if (!node) return;
     node.dataset.unlockState = isIncluded ? "included" : "locked";
     node.textContent = isIncluded ? "Open" : "Package-gated";
+  }
+
+  function hasResolvedFlag(resolved, key) {
+    return Object.prototype.hasOwnProperty.call(resolved || {}, key);
+  }
+
+  function accessStateFromFlag(flag, known, options = {}) {
+    if (!known) return "check";
+    if (!flag) return "locked";
+    if (options.awaitingSetup) return "awaiting";
+    return "open";
+  }
+
+  function dashboardToolState(context, tool) {
+    const resolved = context?.resolvedEntitlements || {};
+    const hasWorkspaceFamily = Boolean(getContextFamilyId(context));
+    const hasAnyResolvedEntitlements = Object.keys(resolved).length > 0;
+    const hasPackageAccess = Boolean(context?.hasPackageAccess);
+
+    if (tool === "billing" || tool === "account_security" || tool === "help_center") {
+      return "open";
+    }
+    if (tool === "upload_hub") {
+      if (!hasPackageAccess && !hasAnyResolvedEntitlements) return "check";
+      return hasPackageAccess ? "open" : "locked";
+    }
+    if (tool === "portrait") {
+      return accessStateFromFlag(
+        Boolean(resolved.can_upload_portraits),
+        hasResolvedFlag(resolved, "can_upload_portraits"),
+      );
+    }
+    if (tool === "verification") {
+      return accessStateFromFlag(
+        Boolean(resolved.can_upload_verification_docs),
+        hasResolvedFlag(resolved, "can_upload_verification_docs"),
+      );
+    }
+    if (tool === "vault") {
+      return accessStateFromFlag(
+        Boolean(resolved.premium_archive_structure),
+        hasResolvedFlag(resolved, "premium_archive_structure"),
+      );
+    }
+    if (tool === "tree") {
+      return accessStateFromFlag(
+        Boolean(resolved.can_build_family_tree),
+        hasResolvedFlag(resolved, "can_build_family_tree"),
+        { awaitingSetup: !hasWorkspaceFamily },
+      );
+    }
+    if (tool === "certificate") {
+      return accessStateFromFlag(
+        Boolean(resolved.can_use_lineage_certificate),
+        hasResolvedFlag(resolved, "can_use_lineage_certificate"),
+        { awaitingSetup: !hasWorkspaceFamily },
+      );
+    }
+    if (tool === "household") {
+      return accessStateFromFlag(
+        canUseHouseholdAccess(resolved),
+        hasResolvedFlag(resolved, "can_build_household") ||
+          hasResolvedFlag(resolved, "family_household_scope") ||
+          hasResolvedFlag(resolved, "can_link_households"),
+      );
+    }
+    if (tool === "link_keys") {
+      return accessStateFromFlag(
+        canUseLinkKeyTools(resolved),
+        hasResolvedFlag(resolved, "can_use_link_keys") ||
+          hasResolvedFlag(resolved, "can_manage_link_keys"),
+      );
+    }
+    if (tool === "intake") {
+      return accessStateFromFlag(
+        Boolean(
+          resolved.can_open_family_intake ||
+            resolved.can_open_org_intake ||
+            context?.latestSubmission,
+        ),
+        hasResolvedFlag(resolved, "can_open_family_intake") ||
+          hasResolvedFlag(resolved, "can_open_org_intake") ||
+          Boolean(context?.latestSubmission),
+      );
+    }
+    return "check";
+  }
+
+  function dashboardToolHref(context, tool) {
+    const hrefs = {
+      account_security: "account-security.html",
+      billing: "billing.html",
+      certificate: "lineage-certificate.html",
+      help_center: "faq.html",
+      household: "household-access.html",
+      intake: "intake-review.html",
+      link_keys: "link-keys.html",
+      portrait: "portrait-upload.html",
+      tree: "tree-view.html",
+      upload_hub: "upload-hub.html",
+      vault: "vault-upload.html",
+      verification: "verification-upload.html",
+    };
+    const href = hrefs[tool] || "";
+    if (!href) return "";
+    if (tool === "certificate" || tool === "link_keys" || tool === "tree") {
+      return withFamilyId(href, context);
+    }
+    if (tool === "household") {
+      return withFamilyId(href, context);
+    }
+    return href;
+  }
+
+  function updateDashboardToolCardStates(context) {
+    const stateLabels = {
+      awaiting: "Awaiting setup",
+      check: "Check access",
+      locked: "Package-gated",
+      open: "Open",
+    };
+    const stateKinds = {
+      awaiting: "warning",
+      check: "info",
+      locked: "warning",
+      open: "success",
+    };
+
+    document.querySelectorAll("[data-dashboard-tool]").forEach(function (node) {
+      const tool = normalizeValue(node.dataset.dashboardTool);
+      const state = dashboardToolState(context, tool);
+      const href = dashboardToolHref(context, tool);
+      node.dataset.toolState = state;
+      node.style.display = "";
+      if (href && node.tagName === "A") {
+        node.setAttribute("href", href);
+      }
+
+      const status = node.querySelector(".portal-action-status");
+      if (status) {
+        status.textContent = stateLabels[state] || "Check access";
+        status.dataset.state = stateKinds[state] || "info";
+      }
+    });
   }
 
   function canUseLinkKeyTools(resolved) {
@@ -2227,6 +2374,7 @@
     applyPortalTheme(contextWithMembership, config);
     applyDashboardHierarchy(contextWithMembership, []);
     updatePackageUnlocksPanel(contextWithMembership);
+    updateDashboardToolCardStates(contextWithMembership);
     updateCommandCenterPanel(contextWithMembership, null, {
       text: "Upload Photos & Family Records",
     });
@@ -2273,6 +2421,7 @@
       updateLaneUi(contextWithLatest, config, latest);
       applyDashboardHierarchy(contextWithLatest, history);
       updatePackageUnlocksPanel(contextWithLatest);
+      updateDashboardToolCardStates(contextWithLatest);
       updateCommandCenterPanel(contextWithLatest, latest, primaryAction);
       updateProjectProgressTracker(
         contextWithLatest,
@@ -2346,6 +2495,7 @@
     } catch (error) {
       applyDashboardHierarchy(contextWithMembership, []);
       updatePackageUnlocksPanel(contextWithMembership);
+      updateDashboardToolCardStates(contextWithMembership);
       updateCommandCenterPanel(contextWithMembership, null, null);
       updateProjectProgressTracker(contextWithMembership, null, false);
       updateWorkspaceHealthPanel(contextWithMembership, null);

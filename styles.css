@@ -5473,10 +5473,10 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
 .portal-dashboard-body .site-watermark,
 .portal-upload-hub-body .site-watermark {
   background-image: url("images/tol-watermark-clean.png");
-  background-size: min(58vw, 720px);
+  background-size: min(60vw, 760px);
   background-position: 50% 42%;
-  opacity: 0.11;
-  filter: saturate(0.82) brightness(1.02) contrast(1.04);
+  opacity: 0.16;
+  filter: saturate(0.9) brightness(1.04) contrast(1.06);
   pointer-events: none;
 }
 
@@ -5970,6 +5970,25 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
   font-size: 0.82rem;
   font-weight: 800;
   line-height: 1.2;
+}
+
+.portal-action-card[data-tool-state="open"] .portal-action-status {
+  color: #14583b;
+  border-color: rgba(31, 122, 84, 0.32);
+  background: #eaf8f1;
+}
+
+.portal-action-card[data-tool-state="locked"] .portal-action-status,
+.portal-action-card[data-tool-state="awaiting"] .portal-action-status {
+  color: #70460d;
+  border-color: rgba(138, 92, 22, 0.34);
+  background: #fff3dc;
+}
+
+.portal-action-card[data-tool-state="check"] .portal-action-status {
+  color: var(--tol-portal-blue-deep);
+  border-color: rgba(35, 109, 168, 0.34);
+  background: #eaf6ff;
 }
 
 .portal-action-card .portal-action-cta {

@@ -106,11 +106,14 @@
 
   function showStatus(node, message, type) {
     if (!node) return;
+    if (window.TOLAuth && typeof window.TOLAuth.setStatus === "function") {
+      window.TOLAuth.setStatus(node, message, type || "info");
+      return;
+    }
 
     node.style.display = "block";
     node.textContent = message;
-    node.style.color =
-      type === "error" ? "#ffb3b3" : type === "success" ? "#cfe8cf" : "#d6e6ff";
+    node.dataset.state = type || "info";
   }
 
   function hideStatus(node) {

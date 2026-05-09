@@ -50,17 +50,14 @@
 
   function setStatus(node, message, type) {
     if (!node) return;
+    if (typeof app.setStatus === "function") {
+      app.setStatus(node, message, type || "info");
+      return;
+    }
 
     node.style.display = "block";
     node.textContent = message;
-
-    if (type === "error") {
-      node.style.color = "#ffb3b3";
-    } else if (type === "success") {
-      node.style.color = "#cfe8cf";
-    } else {
-      node.style.color = "#d6e6ff";
-    }
+    node.dataset.state = type || "info";
   }
 
   function clearStatus(node) {

@@ -345,7 +345,11 @@ def ensure_owner_membership(project_id: str) -> None:
 def list_project_members(project_id: str) -> list[dict[str, Any]]:
     ensure_owner_membership(project_id)
     cursor = _members().find({"project_id": _normalize(project_id)}).sort("created_at", 1)
-    return list(cursor)
+    return [
+        membership
+        for membership in cursor
+        if _normalize(membership.get("status") or "active").lower() in ACTIVE_MEMBER_STATUSES
+    ]
 
 
 def list_project_invites(project_id: str) -> list[dict[str, Any]]:
