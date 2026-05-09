@@ -17,10 +17,56 @@
     <link rel="apple-touch-icon" href="apple-touch-icon.png?v=20260508-1" />
     <link rel="manifest" href="site.webmanifest?v=20260508-1" />
 
-    <meta property="og:image" content="https://tomboflight.com/logo.png?v=20260508-1" />
-    <meta name="twitter:image" content="https://tomboflight.com/logo.png?v=20260508-1" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "https://tomboflight.com/#organization",
+            "name": "Tomb of Light",
+            "legalName": "Tomb of Light LLC",
+            "url": "https://tomboflight.com/",
+            "logo": {
+              "@type": "ImageObject",
+              "url": "https://tomboflight.com/favicon.svg"
+            },
+            "sameAs": [
+              "https://www.google.com/maps/place/?q=place_id:ChIJQzt4tso6iyYRnIfMV0bfSc0"
+            ],
+            "aggregateRating": {
+              "@type": "AggregateRating",
+              "ratingValue": "5.0",
+              "bestRating": "5",
+              "worstRating": "1"
+            },
+            "review": {
+              "@id": "https://tomboflight.com/#google-rating-review"
+            }
+          },
+          {
+            "@type": "Review",
+            "@id": "https://tomboflight.com/#google-rating-review",
+            "name": "Verified Google client rating",
+            "itemReviewed": {
+              "@id": "https://tomboflight.com/#organization"
+            },
+            "publisher": {
+              "@type": "Organization",
+              "name": "Google"
+            },
+            "reviewRating": {
+              "@type": "Rating",
+              "ratingValue": "5.0",
+              "bestRating": "5",
+              "worstRating": "1"
+            }
+          }
+        ]
+      }
+    </script>
 
-    <link rel="stylesheet" href="styles.css?v=20260507-434" />
+    <link rel="stylesheet" href="styles.css?v=20260509-1" />
   </head>
   <body>
     <a href="#main-content" class="skip-to-content">Skip to main content</a>
@@ -53,6 +99,9 @@
           </nav>
 
           <div class="header-actions">
+            <span class="trust-badge header-trust-badge" aria-label="5.0 Google Rating">
+              ⭐ 5.0 Google Rating
+            </span>
             <a
               class="btn btn-primary"
               href="signup.html"
@@ -232,6 +281,52 @@
                     </div>
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section
+          class="section section-tight google-trust-section"
+          id="google-reviews"
+          aria-labelledby="google-trust-title"
+        >
+          <div class="container">
+            <div class="google-trust-panel">
+              <div class="google-trust-copy">
+                <span class="eyebrow">Google Reviews</span>
+                <h2 id="google-trust-title">
+                  Trusted by real families. Rated 5.0 on Google.
+                </h2>
+                <p class="section-lead">
+                  Verified reviews from real Tomb of Light clients.
+                </p>
+              </div>
+
+              <div class="google-rating-lockup" aria-label="5.0 Google Rating">
+                <div class="rating-stars" aria-hidden="true">⭐⭐⭐⭐⭐</div>
+                <div class="rating-label">5.0 Google Rating</div>
+              </div>
+
+              <div class="google-trust-actions">
+                <a
+                  class="btn btn-secondary"
+                  href="https://www.google.com/maps/place/?q=place_id:ChIJQzt4tso6iyYRnIfMV0bfSc0"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Read Tomb of Light Google reviews in a new tab"
+                >
+                  Read Google Reviews
+                </a>
+                <a
+                  class="btn btn-primary"
+                  href="https://g.page/r/CZyHzFdG30nNEAE/review"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Leave a Tomb of Light Google review in a new tab"
+                >
+                  Leave a Google Review
+                </a>
               </div>
             </div>
           </div>
@@ -495,13 +590,10 @@
                 and the exact tools unlocked by that package lane: portrait,
                 household, network, or organization.
               </p>
-              <p class="section-lead">
-                See the
-                <a href="refunds-delivery.html"
-                  >Refunds, Delivery &amp; Support Policy</a
-                >
-                for complete details.
-              </p>
+              <div class="pricing-trust-bar">
+                <span class="trust-badge">⭐ 5.0 Google Rating</span>
+                <span>Verified reviews from real Tomb of Light clients.</span>
+              </div>
             </div>
 
             <div class="feature-strip">
@@ -987,175 +1079,55 @@
           </div>
         </section>
 
-        <section class="section section-tight" aria-labelledby="customer-trust-support-title">
-          <div class="container">
-            <div class="section-head section-head-wide">
-              <span class="eyebrow">CUSTOMER TRUST &amp; SUPPORT</span>
-              <h2 id="customer-trust-support-title">
-                Clear support, delivery, and privacy commitments.
+        <section
+          class="section google-reviews-section"
+          aria-labelledby="reviews-section-title"
+        >
+          <div class="container reviews-layout">
+            <div class="reviews-copy">
+              <span class="eyebrow">Verified Client Trust</span>
+              <h2 id="reviews-section-title">
+                Google review credibility, presented with restraint.
               </h2>
               <p class="section-lead">
-                Tomb of Light is a guided production platform. Every build moves through intake,
-                secure submission, review, and delivery based on the package selected. Private
-                records, vault uploads, and family materials are protected by default and are not
-                published, minted, or publicly shared without approval.
+                Tomb of Light keeps public review trust anchored to Google, with
+                excerpts reserved for approved real client text only.
               </p>
+              <div class="cta-actions">
+                <a
+                  class="btn btn-secondary"
+                  href="https://www.google.com/maps/place/?q=place_id:ChIJQzt4tso6iyYRnIfMV0bfSc0"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Read Google Reviews
+                </a>
+                <a
+                  class="btn btn-primary"
+                  href="https://g.page/r/CZyHzFdG30nNEAE/review"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Leave a Google Review
+                </a>
+              </div>
             </div>
 
-            <div class="trust-grid trust-grid-clean">
-              <article class="trust-card">
-                <h3>Support</h3>
-                <p class="card-copy">
-                  For general customer support, contact
-                  <a href="mailto:support@tomboflight.com">support@tomboflight.com</a>
-                  or call <a href="tel:+13468054305">(346) 805-4305</a>.
-                  Typical response time: 1–2 business days.
-                </p>
-              </article>
-
-              <article class="trust-card">
-                <h3>Billing</h3>
-                <p class="card-copy">
-                  For payment, receipt, package, or billing questions, contact
-                  <a href="mailto:billing@tomboflight.com">billing@tomboflight.com</a>.
-                </p>
-              </article>
-
-              <article class="trust-card">
-                <h3>Privacy</h3>
-                <p class="card-copy">
-                  For privacy questions or data requests, contact
-                  <a href="mailto:privacy@tomboflight.com">privacy@tomboflight.com</a>
-                  or use the <a href="data-request.html">Data Requests</a> page.
-                </p>
-              </article>
-
-              <article class="trust-card">
-                <h3>Legal &amp; Compliance</h3>
-                <p class="card-copy">
-                  For legal or compliance questions, contact
-                  <a href="mailto:legal@tomboflight.com">legal@tomboflight.com</a>
-                  or
-                  <a href="mailto:compliance@tomboflight.com">compliance@tomboflight.com</a>.
-                </p>
-              </article>
-
-              <article class="trust-card">
-                <h3>Security</h3>
-                <p class="card-copy">
-                  To report a security concern, contact
-                  <a href="mailto:security@tomboflight.com">security@tomboflight.com</a>.
-                </p>
-              </article>
-
-              <article class="trust-card">
-                <h3>Customer Promise</h3>
-                <p class="card-copy">
-                  Tomb of Light will not publish, mint, or publicly share private family
-                  materials without customer approval.
-                </p>
-              </article>
-            </div>
-          </div>
-        </section>
-
-        <section class="section section-tight" aria-labelledby="refunds-delivery-title">
-          <div class="container">
-            <div class="section-head section-head-wide">
-              <span class="eyebrow">Service Clarity</span>
-              <h2 id="refunds-delivery-title">Refunds, delivery, and support terms.</h2>
-              <p class="section-lead">
-                Tomb of Light projects are guided digital production services. Delivery timelines
-                begin after the customer completes intake and provides the required materials for
-                the selected package. Some delays may occur when records, portraits, verification
-                materials, or customer approvals are incomplete. See
-                <a href="terms.html">Terms</a> and the
-                <a href="refunds-delivery.html">Refunds, Delivery &amp; Support Policy</a>
-                for complete details.
-              </p>
-            </div>
-
-            <div class="feature-strip">
-              <article class="policy-card">
-                <h3>Delivery</h3>
-                <ul class="policy-list">
-                  <li>Estimated timelines begin after completed intake and required materials are received.</li>
-                  <li>Customers may be contacted for corrections, missing records, or approval before final delivery.</li>
-                  <li>Larger household, network, estate, or organization projects may require additional review time.</li>
-                </ul>
-              </article>
-
-              <article class="policy-card">
-                <h3>Refunds</h3>
-                <ul class="policy-list">
-                  <li>Refund and cancellation requests are reviewed by project stage.</li>
-                  <li>Before production begins, cancellation review may be possible if intake, workspace setup, review, verification, design, and production work have not started.</li>
-                  <li>After workspace setup or intake begins, refunds may be limited because custom production work has started.</li>
-                  <li>After custom production or delivery work begins, payments are generally non-refundable except where required by law.</li>
-                  <li>Approved refunds are returned to the original payment method when possible.</li>
-                </ul>
-              </article>
-
-              <article class="policy-card">
-                <h3>Cancellations</h3>
-                <ul class="policy-list">
-                  <li>Customers may contact <a href="mailto:support@tomboflight.com">support@tomboflight.com</a> or call <a href="tel:+13468054305">(346) 805-4305</a> to request cancellation review.</li>
-                  <li>Cancellation requests are reviewed based on project stage, payment status, intake status, and production history.</li>
-                </ul>
-              </article>
-
-              <article class="policy-card">
-                <h3>Maintenance</h3>
-                <ul class="policy-list">
-                  <li>Maintenance is separate from a new build or package upgrade.</li>
-                  <li>Maintenance supports access continuity, storage continuity, retrieval support, and package-compatible platform updates.</li>
-                  <li>Maintenance does not include new genealogy research, new branch creation outside purchased scope, major redesigns, or unpurchased add-ons.</li>
-                </ul>
-              </article>
-            </div>
-          </div>
-        </section>
-
-        <section class="section section-tight" aria-labelledby="privacy-sharing-minting-title">
-          <div class="container">
-            <div class="section-head section-head-wide">
-              <span class="eyebrow">Boundaries</span>
-              <h2 id="privacy-sharing-minting-title">
-                What stays private, what can be shared, and what can be minted.
-              </h2>
-            </div>
-
-            <div class="feature-strip">
-              <article class="policy-card">
-                <h3>What stays private</h3>
-                <p class="card-copy">
-                  Private vault uploads, family records, verification materials, workspace data,
-                  and protected family materials are not public by default.
-                </p>
-              </article>
-
-              <article class="policy-card">
-                <h3>What can be shared</h3>
-                <p class="card-copy">
-                  Only approved delivery-safe materials, viewer links, certificates, or
-                  customer-approved presentation assets may be shared.
-                </p>
-              </article>
-
-              <article class="policy-card">
-                <h3>What can be minted</h3>
-                <p class="card-copy">
-                  Collectible minting is controlled by package eligibility, customer approval, and
-                  production readiness. Private vault materials are not minted by default.
-                </p>
-              </article>
-
-              <article class="policy-card">
-                <h3>What is not automatic</h3>
-                <p class="card-copy">
-                  Minting is not automatically triggered by checkout, upload, or intake. Scheduled
-                  reveal automation is not publicly live unless a dedicated production executor and
-                  approval controls are active.
+            <div
+              class="reviews-grid"
+              data-approved-google-reviews
+              aria-label="Approved Google review excerpts"
+            >
+              <article class="review-card review-source-card">
+                <div class="review-card-top">
+                  <span class="trust-badge">⭐ 5.0 Google Rating</span>
+                  <span class="review-source">Google</span>
+                </div>
+                <div class="rating-stars" aria-hidden="true">⭐⭐⭐⭐⭐</div>
+                <p class="review-quote">
+                  Verified Google reviews remain the source of truth. Public
+                  excerpts are shown here only after client-approved
+                  publication.
                 </p>
               </article>
             </div>
@@ -1235,19 +1207,16 @@
                 <div class="cookie-status" data-cookie-status>
                   Your cookie preference has not been set yet.
                 </div>
-                <div class="footer-contact" aria-label="Support contacts">
-                  <p><strong>Support:</strong> <a href="mailto:support@tomboflight.com">support@tomboflight.com</a></p>
-                  <p><strong>Support Phone:</strong> <a href="tel:+13468054305">(346) 805-4305</a></p>
-                  <p><strong>Billing:</strong> <a href="mailto:billing@tomboflight.com">billing@tomboflight.com</a></p>
-                  <p><strong>Privacy:</strong> <a href="mailto:privacy@tomboflight.com">privacy@tomboflight.com</a></p>
-                  <p><strong>Legal:</strong> <a href="mailto:legal@tomboflight.com">legal@tomboflight.com</a></p>
-                  <p><strong>Compliance:</strong> <a href="mailto:compliance@tomboflight.com">compliance@tomboflight.com</a></p>
-                  <p><strong>Security:</strong> <a href="mailto:security@tomboflight.com">security@tomboflight.com</a></p>
+                <div class="footer-trust-stack">
+                  <span class="trust-badge footer-trust-badge">
+                    ⭐ 5.0 Google Rating
+                  </span>
                 </div>
               </div>
 
               <div class="footer-links">
                 <a href="platform.html">Platform</a>
+                <a href="reviews/">Reviews</a>
                 <a href="privacy.html">Privacy Policy</a>
                 <a href="terms.html">Terms</a>
                 <a href="cookie-policy.html">Cookie Policy</a>
