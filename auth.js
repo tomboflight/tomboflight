@@ -243,19 +243,31 @@
 
   function isAuthFailure(error) {
     const message = getErrorMessage(error).toLowerCase();
+    const statusCode = Number(error?.status || 0);
+    const requestUrl = String(error?.requestUrl || error?.endpoint || "").toLowerCase();
+    const isAuthEndpoint =
+      requestUrl.includes("/auth/me") ||
+      requestUrl.includes("/auth/login") ||
+      requestUrl.includes("/auth/mfa") ||
+      requestUrl.includes("/auth/refresh");
 
-    return (
+    if (statusCode === 401) return true;
+    if (statusCode === 403 && isAuthEndpoint) return true;
+
+    if (
       message.includes("invalid or expired token") ||
       message.includes("invalid token") ||
       message.includes("invalid token payload") ||
       message.includes("user not found") ||
       message.includes("inactive") ||
       message.includes("unauthorized") ||
-      message.includes("forbidden") ||
       message.includes("401") ||
-      message.includes("403") ||
       message.includes("not authenticated")
-    );
+    ) {
+      return true;
+    }
+
+    return Boolean(isAuthEndpoint && message.includes("403"));
   }
 
   function sleep(ms) {
@@ -1697,7 +1709,9 @@
     const canUploadRecords = Boolean(
       resolved.can_upload_verification_docs || resolved.can_upload_portraits,
     );
-    const canUseLinkKeys = Boolean(resolved.can_use_link_keys);
+    const canUseLinkKeys = Boolean(
+      resolved.can_use_link_keys || resolved.can_manage_link_keys,
+    );
     const canOpenFamilyIntake = Boolean(resolved.can_open_family_intake);
     const upgradeTargets = Array.isArray(resolved.upgrade_targets)
       ? resolved.upgrade_targets
@@ -2612,7 +2626,10 @@
         return;
       }
 
-      if (linkKeyPages.has(page) && !resolved.can_use_link_keys) {
+      if (
+        linkKeyPages.has(page) &&
+        !(resolved.can_use_link_keys || resolved.can_manage_link_keys)
+      ) {
         return;
       }
 
