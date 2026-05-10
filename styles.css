@@ -5767,6 +5767,645 @@ body[data-portal-mode="customer"] [data-dashboard-admin-only] {
   color: #2b638f;
 }
 
+/* 2026-05-09 visual QA: light signin gateway + contained homepage demo preview */
+
+main > section,
+main [id] {
+  scroll-margin-top: 112px;
+}
+
+.portal-login-body {
+  --tol-portal-ink: #071a2f;
+  --tol-portal-text: #13283f;
+  --tol-portal-muted: #506579;
+  --tol-portal-line: #cfe0ed;
+  --tol-portal-blue: #236da8;
+  --tol-portal-blue-deep: #174c7d;
+  --tol-portal-gold: #a97d26;
+  --tol-portal-shadow: 0 22px 64px rgba(24, 72, 118, 0.14);
+  --portal-accent: var(--tol-portal-blue);
+  --portal-accent-soft: rgba(35, 109, 168, 0.16);
+  --portal-secondary: var(--tol-portal-gold);
+  --portal-grid: rgba(35, 109, 168, 0.07);
+  --text: var(--tol-portal-text);
+  --muted: var(--tol-portal-muted);
+  --muted-2: #5c7286;
+  --border: var(--tol-portal-line);
+  --border-soft: rgba(169, 197, 218, 0.62);
+  --panel: rgba(255, 255, 255, 0.9);
+  --shadow: var(--tol-portal-shadow);
+  color: var(--tol-portal-text);
+  background:
+    radial-gradient(circle at 14% 8%, rgba(184, 223, 255, 0.28), transparent 28%),
+    radial-gradient(circle at 86% 12%, rgba(198, 166, 106, 0.14), transparent 26%),
+    linear-gradient(180deg, #ffffff 0%, #f3f9ff 52%, #fffaf0 100%);
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
+.portal-login-body::before {
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.68), rgba(232, 246, 255, 0.7), rgba(255, 250, 240, 0.52)),
+    linear-gradient(180deg, rgba(237, 247, 255, 0.72), rgba(255, 255, 255, 0.08) 48%, rgba(255, 248, 232, 0.52));
+  opacity: 1;
+}
+
+.portal-login-body::after {
+  background-image:
+    linear-gradient(rgba(35, 109, 168, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(35, 109, 168, 0.045) 1px, transparent 1px);
+  background-size: 56px 56px;
+  opacity: 0.38;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.1) 72%, transparent);
+}
+
+.portal-login-body .site-watermark {
+  background-size: min(60vw, 760px);
+  background-position: 50% 42%;
+  opacity: 0.14;
+  filter: saturate(0.9) brightness(1.06) contrast(1.04);
+}
+
+.portal-login-body .container {
+  width: min(var(--container), calc(100% - 40px));
+}
+
+.portal-login-body .site-header {
+  background: rgba(250, 253, 255, 0.92);
+  border-bottom-color: rgba(169, 197, 218, 0.76);
+  box-shadow: 0 12px 34px rgba(24, 72, 118, 0.09);
+}
+
+.portal-login-body .site-header-inner {
+  min-height: 88px;
+}
+
+.portal-login-body .brand,
+.portal-login-body h1,
+.portal-login-body h2,
+.portal-login-body h3,
+.portal-login-body h4 {
+  color: var(--tol-portal-ink);
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
+.portal-login-body .site-nav a {
+  color: #3f5870;
+}
+
+.portal-login-body .site-nav a:hover,
+.portal-login-body .site-nav a.active,
+.portal-login-body .site-nav a[aria-current="page"] {
+  color: var(--tol-portal-blue-deep);
+}
+
+.portal-login-body p,
+.portal-login-body li,
+.portal-login-body label,
+.portal-login-body .helper,
+.portal-login-body .portal-entry-lead,
+.portal-login-body .portal-access-top p,
+.portal-login-body .portal-access-note,
+.portal-login-body .portal-signal-card p,
+.portal-login-body .portal-mfa-top p {
+  color: var(--tol-portal-muted);
+  opacity: 1;
+}
+
+.portal-login-body .eyebrow,
+.portal-login-body .portal-signal-label,
+.portal-login-body .portal-core-label {
+  color: var(--tol-portal-gold);
+  letter-spacing: 0.13em;
+  opacity: 1;
+}
+
+.portal-login-body .btn-primary {
+  color: #ffffff;
+  background: linear-gradient(135deg, #1e68a3, #2d83c4);
+  border-color: rgba(23, 76, 125, 0.24);
+  box-shadow: 0 14px 28px rgba(35, 109, 168, 0.22);
+}
+
+.portal-login-body .btn-primary:hover {
+  color: #ffffff;
+  background: linear-gradient(135deg, #174c7d, #2678b7);
+}
+
+.portal-login-body .btn-secondary,
+.portal-login-body .menu-toggle {
+  color: var(--tol-portal-ink);
+  background: rgba(255, 255, 255, 0.86);
+  border-color: rgba(35, 109, 168, 0.26);
+  box-shadow: 0 10px 22px rgba(24, 72, 118, 0.08);
+}
+
+.portal-login-body .btn-secondary:hover,
+.portal-login-body .menu-toggle:hover {
+  color: var(--tol-portal-blue-deep);
+  background: #f3faff;
+  border-color: rgba(35, 109, 168, 0.38);
+}
+
+.portal-login-body .portal-entry-section {
+  padding: clamp(28px, 4vw, 48px) 0 56px;
+}
+
+.portal-login-body .portal-entry-shell {
+  grid-template-columns: minmax(0, 1.02fr) minmax(360px, 0.98fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.portal-login-body .portal-entry-story {
+  gap: 16px;
+}
+
+.portal-login-body .portal-entry-panel,
+.portal-login-body .portal-access-card,
+.portal-login-body .portal-signal-card,
+.portal-login-body .portal-visual,
+.portal-login-body .portal-mfa-panel {
+  color: var(--tol-portal-text);
+  border: 1px solid rgba(169, 197, 218, 0.74);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(249, 253, 255, 0.9)),
+    rgba(255, 255, 255, 0.86);
+  box-shadow:
+    var(--tol-portal-shadow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.92);
+}
+
+.portal-login-body .portal-entry-panel,
+.portal-login-body .portal-access-card,
+.portal-login-body .portal-signal-card,
+.portal-login-body .portal-visual {
+  border-radius: 18px;
+}
+
+.portal-login-body .portal-entry-panel::before,
+.portal-login-body .portal-access-card::before,
+.portal-login-body .portal-signal-card::before {
+  background: linear-gradient(90deg, transparent 0%, rgba(35, 109, 168, 0.34) 26%, rgba(169, 125, 38, 0.36) 72%, transparent 100%);
+  opacity: 0.9;
+}
+
+.portal-login-body .portal-entry-panel {
+  padding: clamp(26px, 3vw, 36px);
+}
+
+.portal-login-body .portal-entry-panel h1 {
+  max-width: 12.5ch;
+  margin-bottom: 16px;
+  font-size: clamp(2.35rem, 4.6vw, 4.35rem);
+  line-height: 1.02;
+  letter-spacing: -0.05em;
+}
+
+.portal-login-body .portal-entry-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.portal-login-body .portal-signal-card {
+  min-height: auto;
+  padding: 20px;
+}
+
+.portal-login-body .portal-signal-card strong {
+  color: var(--tol-portal-ink);
+  letter-spacing: -0.02em;
+}
+
+.portal-login-body .portal-chip-row {
+  margin-top: 22px;
+  gap: 8px;
+}
+
+.portal-login-body .portal-chip {
+  min-height: 32px;
+  padding: 6px 11px;
+  cursor: default;
+  pointer-events: none;
+  user-select: text;
+  color: #2b638f;
+  background: #eef7ff;
+  border-color: rgba(35, 109, 168, 0.24);
+  box-shadow: none;
+  font-size: 0.76rem;
+  line-height: 1.2;
+  letter-spacing: 0.08em;
+}
+
+.portal-login-body .portal-visual {
+  min-height: 260px;
+  background:
+    radial-gradient(circle at center, rgba(35, 109, 168, 0.08), transparent 48%),
+    radial-gradient(circle at center, rgba(169, 125, 38, 0.08), transparent 68%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(239, 248, 255, 0.9));
+}
+
+.portal-login-body .portal-orbit {
+  border-color: rgba(35, 109, 168, 0.18);
+}
+
+.portal-login-body .portal-gridline {
+  background: linear-gradient(180deg, transparent 0%, rgba(35, 109, 168, 0.18) 50%, transparent 100%);
+}
+
+.portal-login-body .portal-core {
+  background:
+    radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.72), transparent 34%),
+    linear-gradient(180deg, #ffffff, #edf7ff);
+  border-color: rgba(35, 109, 168, 0.24);
+  box-shadow:
+    0 0 0 1px rgba(35, 109, 168, 0.08),
+    0 18px 44px rgba(24, 72, 118, 0.14);
+}
+
+.portal-login-body .portal-core strong {
+  color: var(--tol-portal-ink);
+}
+
+.portal-login-body .portal-node {
+  color: var(--tol-portal-blue-deep);
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(35, 109, 168, 0.22);
+  box-shadow: 0 12px 26px rgba(24, 72, 118, 0.1);
+}
+
+.portal-login-body .portal-access-card {
+  gap: 22px;
+  padding: clamp(24px, 2.6vw, 34px);
+}
+
+.portal-login-body .portal-access-top h2 {
+  color: var(--tol-portal-ink);
+  font-size: clamp(1.85rem, 3vw, 2.7rem);
+  line-height: 1.06;
+  letter-spacing: -0.04em;
+}
+
+.portal-login-body .portal-access-form {
+  gap: 16px;
+}
+
+.portal-login-body .portal-access-form input,
+.portal-login-body .portal-mfa-form input,
+.portal-login-body .portal-mfa-url-field textarea {
+  color: var(--tol-portal-text);
+  background: #ffffff;
+  border-color: rgba(169, 197, 218, 0.86);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.portal-login-body .portal-access-form input::placeholder,
+.portal-login-body .portal-mfa-form input::placeholder,
+.portal-login-body .portal-mfa-url-field textarea::placeholder {
+  color: #7d8fa0;
+}
+
+.portal-login-body .portal-access-form input:focus,
+.portal-login-body .portal-mfa-form input:focus,
+.portal-login-body .portal-mfa-url-field textarea:focus {
+  border-color: var(--tol-portal-blue);
+  box-shadow: 0 0 0 4px rgba(35, 109, 168, 0.13);
+}
+
+.portal-login-body .portal-access-links {
+  margin-top: 0;
+}
+
+.portal-login-body .portal-mfa-panel {
+  border-radius: 14px;
+  padding: 18px;
+}
+
+.portal-login-body .portal-mfa-secret-card,
+.portal-login-body .portal-mfa-code-list li,
+.portal-login-body .portal-access-note,
+.portal-login-body .helper[data-state] {
+  color: var(--tol-portal-text);
+  border-color: rgba(169, 197, 218, 0.7);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.portal-login-body .portal-mfa-secret-card code,
+.portal-login-body .portal-mfa-code-list li {
+  color: var(--tol-portal-ink);
+}
+
+.portal-login-body .footer-card {
+  color: var(--tol-portal-text);
+  border-color: rgba(169, 197, 218, 0.74);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(249, 253, 255, 0.88)),
+    rgba(255, 255, 255, 0.84);
+}
+
+.portal-login-body .footer-brand {
+  color: var(--tol-portal-ink);
+}
+
+.portal-login-body .footer-copy,
+.portal-login-body .footer-bottom,
+.portal-login-body .cookie-status {
+  color: var(--tol-portal-muted);
+}
+
+.portal-login-body .footer-links a {
+  color: var(--tol-portal-blue-deep);
+}
+
+.homepage-body .hero-moreland {
+  padding-top: clamp(26px, 3vw, 42px);
+  scroll-margin-top: 112px;
+}
+
+.homepage-body .hero-shell-moreland {
+  grid-template-columns: minmax(0, 0.86fr) minmax(440px, 1.04fr);
+  gap: clamp(18px, 2.5vw, 30px);
+  align-items: start;
+}
+
+.homepage-body .hero-copy-moreland,
+.homepage-body .hero-visual-moreland,
+.homepage-body .hero-moreland-preview-card {
+  grid-column: auto;
+  width: auto;
+}
+
+.homepage-body .hero-copy-moreland {
+  position: static;
+  padding-right: 0;
+}
+
+.homepage-body .hero-visual-moreland {
+  grid-row: auto;
+  align-self: start;
+}
+
+.homepage-body .hero-moreland-preview-card {
+  max-width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 0.82fr) minmax(330px, 1.18fr);
+  align-items: center;
+  gap: clamp(18px, 2vw, 26px);
+  padding: clamp(22px, 2.5vw, 30px);
+  color: var(--tol-text);
+  border: 1px solid rgba(216, 227, 236, 0.95);
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 10% 14%, rgba(184, 223, 255, 0.32), transparent 32%),
+    radial-gradient(circle at 92% 6%, rgba(198, 166, 106, 0.16), transparent 25%),
+    linear-gradient(180deg, #ffffff, #f8fbff);
+  box-shadow: var(--tol-shadow);
+  overflow: hidden;
+}
+
+.homepage-body .moreland-preview-copy {
+  max-width: none;
+}
+
+.homepage-body .moreland-preview-copy .eyebrow {
+  color: var(--tol-gold);
+}
+
+.homepage-body .moreland-preview-copy h2 {
+  color: var(--tol-ink);
+  font-size: clamp(1.35rem, 2vw, 1.95rem);
+  line-height: 1.08;
+}
+
+.homepage-body .moreland-preview-copy p {
+  color: var(--tol-muted);
+}
+
+.homepage-body .hero-moreland-preview-embed {
+  max-width: 100%;
+  border: 1px solid rgba(216, 227, 236, 0.95);
+  border-radius: 22px;
+  background: #f7fbff;
+  overflow: hidden;
+}
+
+.homepage-body .hero-moreland-preview-stage {
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  aspect-ratio: auto;
+  padding: clamp(16px, 2.2vw, 24px);
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 14% 8%, rgba(198, 166, 106, 0.12), transparent 30%),
+    radial-gradient(circle at 86% 86%, rgba(42, 111, 168, 0.12), transparent 30%),
+    linear-gradient(180deg, #ffffff, #eef7ff);
+}
+
+.homepage-body .moreland-teaser-tree {
+  width: 100%;
+  max-width: 620px;
+  margin: 0 auto;
+  gap: 14px;
+  transform: none;
+}
+
+.homepage-body .moreland-teaser-generation {
+  gap: 12px;
+}
+
+.homepage-body .moreland-teaser-generation-founders {
+  grid-template-columns: minmax(180px, 280px);
+}
+
+.homepage-body .moreland-teaser-generation-children {
+  grid-template-columns: repeat(3, minmax(96px, 1fr));
+}
+
+.homepage-body .moreland-teaser-generation-descendants {
+  width: min(100%, 410px);
+  grid-template-columns: repeat(2, minmax(118px, 1fr));
+}
+
+.homepage-body .moreland-teaser-branch {
+  width: min(68%, 460px);
+  height: 26px;
+  margin: -1px auto;
+}
+
+.homepage-body .moreland-teaser-branch-short {
+  width: min(42%, 280px);
+}
+
+.homepage-body .moreland-teaser-branch::before,
+.homepage-body .moreland-teaser-branch::after {
+  background: rgba(169, 125, 38, 0.5);
+}
+
+.homepage-body .moreland-teaser-node {
+  min-height: 74px;
+  padding: 13px 11px;
+  border-radius: 14px;
+  border-color: rgba(42, 111, 168, 0.2);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 251, 255, 0.94)),
+    #ffffff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 12px 24px rgba(24, 72, 118, 0.1);
+}
+
+.homepage-body .moreland-teaser-node-primary {
+  border-color: rgba(169, 125, 38, 0.42);
+  background:
+    linear-gradient(180deg, rgba(255, 250, 239, 0.98), rgba(247, 251, 255, 0.94)),
+    #ffffff;
+}
+
+.homepage-body .moreland-teaser-node span {
+  color: var(--tol-ink);
+  font-size: 0.92rem;
+  line-height: 1.2;
+}
+
+.homepage-body .moreland-teaser-node small {
+  color: var(--tol-muted);
+  font-size: 0.76rem;
+}
+
+@media (max-width: 1180px) {
+  .portal-login-body .portal-entry-shell,
+  .portal-login-body .portal-entry-grid,
+  .homepage-body .hero-shell-moreland {
+    grid-template-columns: 1fr;
+  }
+
+  .homepage-body .hero-copy-moreland,
+  .homepage-body .hero-visual-moreland,
+  .homepage-body .hero-moreland-preview-card {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .portal-login-body .portal-access-card {
+    order: 1;
+  }
+
+  .portal-login-body .portal-entry-story {
+    order: 2;
+  }
+}
+
+@media (max-width: 940px) {
+  .homepage-body .hero-moreland-preview-card {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  .homepage-body .moreland-preview-cta {
+    width: fit-content;
+  }
+}
+
+@media (max-width: 860px) {
+  .portal-login-body .container {
+    width: min(var(--container), calc(100% - 24px));
+  }
+
+  .portal-login-body .site-header-inner {
+    min-height: 74px;
+  }
+
+  .homepage-body .site-header,
+  .portal-login-body .site-header {
+    position: static;
+  }
+
+  .portal-login-body .portal-entry-section {
+    padding-top: 22px;
+  }
+
+  .portal-login-body .portal-entry-panel,
+  .portal-login-body .portal-access-card,
+  .portal-login-body .portal-signal-card {
+    padding: 22px;
+    border-radius: 16px;
+  }
+
+  .portal-login-body .portal-entry-panel h1 {
+    max-width: none;
+    font-size: clamp(2rem, 8vw, 2.8rem);
+  }
+
+  .portal-login-body .portal-visual {
+    min-height: 240px;
+  }
+
+  .homepage-body .hero-moreland-preview-card {
+    padding: 20px;
+    border-radius: 24px;
+  }
+
+  .homepage-body .moreland-preview-cta {
+    width: 100%;
+  }
+}
+
+@media (max-width: 620px) {
+  .portal-login-body .portal-chip-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .portal-login-body .portal-chip {
+    width: fit-content;
+  }
+
+  .portal-login-body .portal-visual {
+    display: none;
+  }
+
+  .homepage-body .hero-moreland-preview-stage {
+    padding: 14px;
+  }
+
+  .homepage-body .moreland-teaser-tree {
+    gap: 10px;
+  }
+
+  .homepage-body .moreland-teaser-generation,
+  .homepage-body .moreland-teaser-generation-founders,
+  .homepage-body .moreland-teaser-generation-children,
+  .homepage-body .moreland-teaser-generation-descendants {
+    width: 100%;
+    grid-template-columns: 1fr;
+  }
+
+  .homepage-body .moreland-teaser-branch {
+    display: none;
+  }
+
+  .homepage-body .moreland-teaser-node {
+    min-height: 0;
+    padding: 13px;
+    text-align: left;
+  }
+}
+
 .portal-core-panel {
   grid-template-columns: minmax(0, 1.12fr) minmax(280px, 0.88fr);
   gap: 18px;
