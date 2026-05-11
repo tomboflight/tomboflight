@@ -427,10 +427,10 @@ class PR465BackendPortalAuditTests(unittest.TestCase):
             "Selah Carter",
             "Andre Carter",
             "Eli Moreland",
-            "Imani Moreland",
+            "Imani Moreland / Imani Benton",
             "Marcus Benton",
-            "Zara Carter",
-            "Camille Benton",
+            "Zara Benton",
+            "Camille Carter",
             "Micah Benton",
         ]
         for name in required_names:
