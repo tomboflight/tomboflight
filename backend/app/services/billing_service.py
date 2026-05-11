@@ -114,6 +114,11 @@ def _save_customer_id_to_user(user_id: str, customer_id: str) -> None:
     )
 
 
+def _existing_customer_id_for_user(user: dict[str, Any]) -> str:
+    document = _get_user_document(user)
+    return _normalize_text(document.get("stripe_customer_id"))
+
+
 def store_stripe_customer_reference(
     *,
     user_id: str | None = None,
@@ -225,8 +230,36 @@ def _serialize_card_created(value: Any) -> str | None:
 
 
 def get_billing_overview(user: dict[str, Any]) -> dict[str, Any]:
-    customer = _ensure_stripe_customer_for_user(user)
-    customer_id = _normalize_text(customer.get("id"))
+    _require_stripe_secret_key()
+    customer_id = _existing_customer_id_for_user(user)
+    if not customer_id:
+        return {
+            "customer_id": None,
+            "error_code": "billing_profile_missing",
+            "message": "Your billing profile is not connected yet. Contact support@tomboflight.com for help.",
+            "max_cards": max(1, int(settings.stripe_payment_method_max_cards or 3)),
+            "cards_on_file": 0,
+            "can_add_card": False,
+            "default_payment_method_id": None,
+            "payment_methods": [],
+            "subscriptions": [],
+        }
+
+    customer = stripe.Customer.retrieve(customer_id)
+    customer_dict = _stripe_to_dict(customer)
+    if bool(customer_dict.get("deleted")):
+        return {
+            "customer_id": None,
+            "error_code": "billing_profile_missing",
+            "message": "Your billing profile is not connected yet. Contact support@tomboflight.com for help.",
+            "max_cards": max(1, int(settings.stripe_payment_method_max_cards or 3)),
+            "cards_on_file": 0,
+            "can_add_card": False,
+            "default_payment_method_id": None,
+            "payment_methods": [],
+            "subscriptions": [],
+        }
+
     default_payment_method_id = _default_payment_method_id(customer)
     payment_methods = _list_payment_methods(customer_id)
 
@@ -246,6 +279,8 @@ def get_billing_overview(user: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "customer_id": customer_id or None,
+        "error_code": None,
+        "message": None,
         "max_cards": max_cards,
         "cards_on_file": len(payment_methods),
         "can_add_card": len(payment_methods) < max_cards,
@@ -414,8 +449,19 @@ def create_billing_portal_session_for_user(
     *,
     return_url: str | None = None,
 ) -> dict[str, Any]:
+    configuration_id = _normalize_text(settings.stripe_billing_portal_configuration_id)
+    if not configuration_id:
+        raise ValueError(
+            "stripe_portal_not_configured: Billing portal is not configured yet. Please contact support@tomboflight.com."
+        )
     _require_stripe_secret_key()
-    customer_id = _customer_id_for_user(user)
+
+    customer_id = _existing_customer_id_for_user(user)
+    if not customer_id:
+        raise ValueError(
+            "billing_profile_missing: Your billing profile is not connected yet. Contact support@tomboflight.com for help."
+        )
+
     resolved_return_url = _validate_portal_return_url(return_url)
 
     kwargs: dict[str, Any] = {
@@ -423,9 +469,7 @@ def create_billing_portal_session_for_user(
         "return_url": resolved_return_url,
     }
 
-    configuration_id = _normalize_text(settings.stripe_billing_portal_configuration_id)
-    if configuration_id:
-        kwargs["configuration"] = configuration_id
+    kwargs["configuration"] = configuration_id
 
     session = stripe.billing_portal.Session.create(**kwargs)
     payload = _stripe_to_dict(session)

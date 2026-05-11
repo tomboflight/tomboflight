@@ -622,7 +622,7 @@
       account_security: "account-security.html",
       billing: "billing.html",
       certificate: "lineage-certificate.html",
-      help_center: "account-security.html",
+      help_center: "/portal/help",
       household: "household-access.html",
       intake: "intake-review.html",
       link_keys: "link-keys.html",
@@ -634,7 +634,12 @@
     };
     const href = hrefs[tool] || "";
     if (!href) return "";
-    if (tool === "certificate" || tool === "link_keys" || tool === "tree") {
+    if (
+      tool === "certificate" ||
+      tool === "link_keys" ||
+      tool === "tree" ||
+      tool === "help_center"
+    ) {
       return withFamilyId(href, context);
     }
     if (tool === "household") {
@@ -1406,6 +1411,9 @@
       if (projectId) {
         url.searchParams.set("project_id", projectId);
       }
+      if (url.pathname.startsWith("/portal/")) {
+        return `${url.pathname}${url.search}`;
+      }
       return `${url.pathname.split("/").pop() || href}${url.search}`;
     } catch (error) {
       return href;
@@ -2148,6 +2156,16 @@
       },
     );
 
+    applyAction('a[href^="/portal/help"], [data-dashboard-tool="help_center"]', {
+      href: withFamilyId("/portal/help", context),
+      show: Boolean(context?.hasPackageAccess),
+    });
+
+    applyAction("[data-portal-review-link]", {
+      href: withFamilyId("/portal/review", context),
+      show: Boolean(context?.hasPackageAccess),
+    });
+
     const workspaceCopy = document.querySelector(
       "[data-dashboard-workspace-copy]",
     );
@@ -2163,36 +2181,15 @@
       if (!canManageBilling) {
         upgradeAction.style.display = "none";
       } else {
-        const re = context.resolvedEntitlements || {};
-        const upgradeTargets = Array.isArray(re.upgrade_targets)
-          ? re.upgrade_targets
-          : [];
-        const allowedAddons = Array.isArray(re.allowed_addons)
-          ? re.allowed_addons
-          : [];
-        const resolveDisplayName =
-          window.TOLAuthPages &&
-          typeof window.TOLAuthPages.resolvePackageDisplayName === "function"
-            ? window.TOLAuthPages.resolvePackageDisplayName
-            : function (code) {
-                return code || "Package";
-              };
-
-        if (upgradeTargets.length > 0) {
-          const firstName = resolveDisplayName(upgradeTargets[0]);
-          upgradeAction.textContent =
-            upgradeTargets.length === 1
-              ? "Upgrade to " + firstName
-              : "Upgrade to " + firstName + " or higher";
-          upgradeAction.setAttribute("href", "billing.html");
-          upgradeAction.style.display = "";
-        } else if (allowedAddons.length > 0) {
-          upgradeAction.textContent = "View Available Add-Ons";
-          upgradeAction.setAttribute("href", "billing.html");
-          upgradeAction.style.display = "";
-        } else {
-          upgradeAction.style.display = "none";
-        }
+        upgradeAction.textContent = "Upgrade to Family Estate Concierge";
+        upgradeAction.setAttribute(
+          "href",
+          withFamilyId(
+            "/portal/upgrade?target_package=family_estate_concierge",
+            context,
+          ),
+        );
+        upgradeAction.style.display = "";
       }
     }
 

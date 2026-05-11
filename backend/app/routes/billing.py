@@ -48,6 +48,8 @@ def billing_overview_route(current_user: dict[str, Any] = Depends(get_current_us
 
     return BillingOverviewResponse(
         customer_id=payload.get("customer_id"),
+        error_code=payload.get("error_code"),
+        message=payload.get("message"),
         max_cards=int(payload.get("max_cards") or 3),
         cards_on_file=int(payload.get("cards_on_file") or 0),
         can_add_card=bool(payload.get("can_add_card")),

@@ -41,7 +41,7 @@
             <a href="household-access.html" style="display: none">Members &amp; Access</a>
             <a href="tree-view.html" style="display: none">Family Tree</a>
             <a href="lineage-certificate.html" style="display: none">Lineage Certificate</a>
-            <a href="faq.html">Help Center</a>
+            <a href="/portal/help" data-dashboard-tool="help_center">Help Center</a>
           </nav>
 
           <div class="header-actions">
@@ -464,7 +464,7 @@
                   <span class="portal-action-status">Open</span>
                   <span class="portal-action-cta">Secure Account</span>
                 </a>
-                <a class="portal-action-card" href="account-security.html" data-dashboard-tool="help_center">
+                <a class="portal-action-card" href="/portal/help" data-dashboard-tool="help_center">
                   <strong>Help Center</strong>
                   <p>Review support guidance and continuity questions without leaving the portal.</p>
                   <span class="portal-action-status">Open</span>
@@ -477,8 +477,16 @@
               <div class="portal-tools-access-footnote" data-package-access-panel>
                 <p class="card-copy" data-access-status>Checking your purchase access...</p>
                 <div class="inline-actions" data-dashboard-purchase-actions>
-                  <a class="btn btn-secondary" href="billing.html" data-upgrade-action>View Packages</a>
-                  <a class="btn btn-secondary" href="intake-review.html">Review Process</a>
+                  <a
+                    class="btn btn-secondary"
+                    href="/portal/upgrade?target_package=family_estate_concierge"
+                    data-upgrade-action
+                  >
+                    Upgrade to Family Estate Concierge
+                  </a>
+                  <a class="btn btn-secondary" href="/portal/review" data-portal-review-link>
+                    Review Process
+                  </a>
                 </div>
               </div>
             </div>

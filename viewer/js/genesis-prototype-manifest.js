@@ -5,12 +5,12 @@
   const MALIK_MORELAND_DEMO_MANIFEST = {
     mode: "demo",
     navigation_mode: "graph",
-    hero_kicker: "Sample demo tree",
-    hero_title: "See a family lineage come alive.",
+    hero_kicker: "Demo Data · Sample demo tree",
+    hero_title: "Demo Data: See a family lineage come alive.",
     hero_body:
       "Start at Malik, travel to parents, return to Malik, then follow descendants and sibling branches.",
     instructions:
-      "Demo-safe family data for public preview. Current view: Malik Moreland",
+      "Demo Data: public-safe family data for preview only. Current view: Malik Moreland",
     path_title: "Moreland demo flow",
     path_items: [
       "Malik Moreland",

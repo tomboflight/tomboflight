@@ -51,6 +51,13 @@
   }
 
   function getUserFacingErrorMessage(error) {
+    const normalized = String((error && error.message) || error || "").toLowerCase();
+    if (normalized.includes("billing_profile_missing")) {
+      return "Your billing profile is not connected yet. Contact support@tomboflight.com for help.";
+    }
+    if (normalized.includes("stripe_portal_not_configured")) {
+      return "Billing portal is not configured yet. Please contact support@tomboflight.com.";
+    }
     if (typeof console !== "undefined" && typeof console.error === "function") {
       console.error("[Billing] Error details:", error);
     }
@@ -161,6 +168,51 @@
       const maxCards = Number(payload && payload.max_cards ? payload.max_cards : 3);
       const cardsOnFile = Number(payload && payload.cards_on_file ? payload.cards_on_file : paymentMethods.length);
       const canAddCard = Boolean(payload && payload.can_add_card);
+      const payloadErrorCode = String((payload && payload.error_code) || "").trim();
+      const payloadMessage = String((payload && payload.message) || "").trim();
+      if (payloadErrorCode) {
+        if (pageStatus) {
+          pageStatus.textContent =
+            payloadMessage ||
+            getUserFacingErrorMessage(payloadErrorCode) ||
+            "Billing profile data is currently unavailable.";
+        }
+        if (cardsStatus) {
+          cardsStatus.textContent = "No saved cards are on file yet.";
+        }
+        if (subscriptionsStatus) {
+          subscriptionsStatus.textContent =
+            "No active or historical subscriptions found.";
+        }
+        if (cardsList) {
+          cardsList.innerHTML = `
+              <div class="family-record-card">
+                <div class="card-number">•</div>
+                <h3>No cards saved</h3>
+                <p class="card-copy">No saved cards are on file yet.</p>
+              </div>
+            `;
+        }
+        if (subscriptionsList) {
+          subscriptionsList.innerHTML = `
+              <div class="family-record-card">
+                <div class="card-number">•</div>
+                <h3>No subscriptions found</h3>
+                <p class="card-copy">No active or historical subscriptions found.</p>
+              </div>
+            `;
+        }
+        if (addCardCopy) {
+          addCardCopy.textContent =
+            payloadMessage ||
+            "Your billing profile is not connected yet. Contact support@tomboflight.com for help.";
+        }
+        if (saveCardButton) {
+          saveCardButton.disabled = true;
+          saveCardButton.style.opacity = "0.45";
+        }
+        return;
+      }
 
       if (pageStatus) {
         pageStatus.textContent = `Billing profile connected. ${cardsOnFile} of ${maxCards} saved cards currently on file.`;
@@ -187,7 +239,7 @@
       if (subscriptionsStatus) {
         subscriptionsStatus.textContent = subscriptions.length
           ? "Your Stripe subscriptions and billing records are shown below."
-          : "No active or historical Stripe subscriptions were found for this customer profile yet.";
+          : "No active or historical subscriptions found.";
       }
 
       if (subscriptionsList) {
@@ -219,10 +271,10 @@
           "This section is temporarily unavailable.";
       }
       if (cardsStatus) {
-        cardsStatus.textContent = "Unable to load data right now.";
+        cardsStatus.textContent = "No saved cards are on file yet.";
       }
       if (subscriptionsStatus) {
-        subscriptionsStatus.textContent = "Unable to load data right now.";
+        subscriptionsStatus.textContent = "No active or historical subscriptions found.";
       }
     }
   }

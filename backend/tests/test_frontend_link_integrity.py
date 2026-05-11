@@ -49,7 +49,7 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
         )
         self.assertIn("MORELAND FAMILY TREE PREVIEW", contents)
         self.assertIn(
-            "Preview the Moreland family structure, then open the full demo to explore parent, sibling, spouse, and descendant branches.",
+            "Demo package: Family Estate Concierge. This Network Lane demonstration shows how Family Keys connect households without merging private records.",
             contents,
         )
         self.assertIn("View Full Demo Tree", contents)
