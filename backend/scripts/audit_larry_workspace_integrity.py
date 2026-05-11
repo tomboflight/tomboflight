@@ -98,6 +98,12 @@ def _str_id(value: Any) -> str:
     return str(value)
 
 
+def _normalize_package_code(doc: dict[str, Any]) -> str:
+    """Extract and normalize package code from a document, handling slug variants."""
+    raw = doc.get("package_code") or doc.get("package_slug") or ""
+    return str(raw).replace("-", "_")
+
+
 def _ids_match(a: Any, b: Any) -> bool:
     return _str_id(a) == _str_id(b) and _str_id(a) != ""
 
@@ -179,7 +185,7 @@ def audit_orders(db: Any, user: dict[str, Any]) -> dict[str, Any] | None:
         return None
 
     if len(paid_orders) > 1:
-        legacy_plus_orders = [o for o in paid_orders if (o.get("package_code") or o.get("package_slug") or "").replace("-", "_") == EXPECTED_PACKAGE_CODE]
+        legacy_plus_orders = [o for o in paid_orders if _normalize_package_code(o) == EXPECTED_PACKAGE_CODE]
         if len(legacy_plus_orders) > 1:
             _warn("No duplicate paid orders for same package",
                   f"Found {len(legacy_plus_orders)} paid orders with package_code=legacy_plus",
@@ -191,7 +197,7 @@ def audit_orders(db: Any, user: dict[str, Any]) -> dict[str, Any] | None:
 
     order = paid_orders[0]
     order_id = _str_id(order.get("_id"))
-    package_code = (order.get("package_code") or order.get("package_slug") or "").replace("-", "_")
+    package_code = _normalize_package_code(order)
 
     if package_code == EXPECTED_PACKAGE_CODE:
         _pass("Order package code is legacy_plus", f"package_code={package_code!r}", "orders")
@@ -328,7 +334,7 @@ def audit_entitlements(db: Any, project: dict[str, Any] | None) -> None:
     ent_id = _str_id(ent.get("_id"))
     _pass("Active project_entitlements record exists", f"entitlement._id={ent_id}", "project_entitlements")
 
-    package_code = (ent.get("package_code") or ent.get("package_slug") or "").replace("-", "_")
+    package_code = _normalize_package_code(ent)
     if package_code == EXPECTED_PACKAGE_CODE:
         _pass("Entitlement package_code is legacy_plus", f"package_code={package_code!r}",
               "project_entitlements")
@@ -425,7 +431,13 @@ def audit_members(db: Any, project: dict[str, Any] | None, user: dict[str, Any])
               "project_members",
               "Add Larry as billing_owner member; verify owner access uses fallback path")
 
-    active_members = [m for m in members if (m.get("status") or "active").lower() in ("active", "co_owner", "member", "billing_owner", "owner")]
+    active_statuses = {"active", "pending", "invited", "accepted"}
+    active_roles = {"billing_owner", "owner", "co_owner", "member", "invited_member"}
+    active_members = [
+        m for m in members
+        if (m.get("status") or "active").lower() in active_statuses
+        or (m.get("role") or m.get("member_role") or "").lower() in active_roles
+    ]
     _pass(f"Active member count ({len(active_members)})",
           f"{len(active_members)} active member(s)", "project_members")
 
