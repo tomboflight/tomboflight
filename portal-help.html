@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Portal Help | Tomb of Light</title>
+    <meta
+      name="description"
+      content="Private help guidance for authenticated Tomb of Light customer portal users."
+    />
+    <link rel="stylesheet" href="styles.css?v=20260509-audit" />
+  </head>
+  <body class="portal-dashboard-body">
+    <div class="site-watermark" aria-hidden="true"></div>
+    <div class="page-wrap">
+      <header class="site-header">
+        <div class="container site-header-inner">
+          <a class="brand" href="dashboard.html" aria-label="Tomb of Light dashboard">
+            <span>Tomb of Light<span class="brand-symbol">™</span></span>
+          </a>
+          <nav class="site-nav" aria-label="Portal navigation">
+            <a href="dashboard.html">Dashboard</a>
+            <a href="portal-review.html">Review Process</a>
+            <a href="portal-upgrade.html?target_package=family_estate_concierge">Upgrade</a>
+            <a href="portal-help.html" aria-current="page">Help Center</a>
+          </nav>
+          <div class="header-actions">
+            <button class="btn btn-secondary" type="button" data-logout-btn>Log Out</button>
+          </div>
+        </div>
+      </header>
+      <main>
+        <section class="page-hero">
+          <div class="container">
+            <div class="page-hero-panel">
+              <span class="eyebrow">Portal Help</span>
+              <h1>Private help for your active workspace.</h1>
+              <p>
+                Use this portal page for package-aware guidance, secure upload questions, and workspace troubleshooting.
+              </p>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script src="config.js?v=20260331-2"></script>
+    <script src="app.js?v=20260508-451"></script>
+    <script src="auth.js?v=20260509-audit"></script>
+    <script>
+      document.addEventListener("DOMContentLoaded", async function () {
+        if (!window.TOLApp || typeof window.TOLApp.requireSession !== "function") return;
+        await window.TOLApp.requireSession("signin.html");
+      });
+    </script>
+  </body>
+</html>

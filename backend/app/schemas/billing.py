@@ -35,6 +35,8 @@ class SubscriptionSummaryResponse(BaseModel):
 
 class BillingOverviewResponse(BaseModel):
     customer_id: str | None = None
+    error_code: str | None = None
+    message: str | None = None
     chain_label: str | None = None
     max_cards: int = Field(default=3, ge=1, le=10)
     cards_on_file: int = 0

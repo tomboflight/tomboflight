@@ -99,6 +99,25 @@ def _project_id_candidates(project_id: str) -> list[Any]:
     return values
 
 
+def _family_id_candidates(family_id: str) -> list[Any]:
+    values: list[Any] = [str(family_id)]
+    oid = _to_object_id(family_id)
+    if oid is not None:
+        values.append(oid)
+    return values
+
+
+def _workspace_id_candidates(value: str) -> list[Any]:
+    normalized = _normalize_value(value)
+    if not normalized:
+        return []
+    candidates: list[Any] = [normalized]
+    oid = _to_object_id(normalized)
+    if oid is not None:
+        candidates.append(oid)
+    return candidates
+
+
 def _current_user_project_hint(user: dict[str, Any]) -> str:
     return _normalize_value(user.get("active_project_id") or user.get("activeProjectId"))
 
@@ -263,7 +282,7 @@ def _resolve_active_family_for_workspace(
     project_id = _normalize_value((project or {}).get("_id") or (project or {}).get("id"))
     if project_id:
         family = _require_database()["families"].find_one(
-            {"project_id": project_id},
+            {"project_id": {"$in": _project_id_candidates(project_id)}},
             sort=[("updated_at", -1), ("created_at", -1)],
         )
         if family is not None:
@@ -341,17 +360,39 @@ def _require_database():
 
 
 def _find_project_by_id(project_id: str) -> dict[str, Any] | None:
-    oid = _to_object_id(project_id)
-    if oid is None:
+    normalized = _normalize_value(project_id)
+    if not normalized:
         return None
-    return _require_database()["projects"].find_one({"_id": oid})
+    candidates = _workspace_id_candidates(normalized)
+    if not candidates:
+        return None
+    return _require_database()["projects"].find_one(
+        {
+            "$or": [
+                {"_id": {"$in": candidates}},
+                {"id": {"$in": candidates}},
+                {"project_id": {"$in": candidates}},
+            ]
+        }
+    )
 
 
 def _find_family_by_id(family_id: str) -> dict[str, Any] | None:
-    oid = _to_object_id(family_id)
-    if oid is None:
+    normalized = _normalize_value(family_id)
+    if not normalized:
         return None
-    return _require_database()["families"].find_one({"_id": oid})
+    candidates = _workspace_id_candidates(normalized)
+    if not candidates:
+        return None
+    return _require_database()["families"].find_one(
+        {
+            "$or": [
+                {"_id": {"$in": candidates}},
+                {"id": {"$in": candidates}},
+                {"family_id": {"$in": candidates}},
+            ]
+        }
+    )
 
 
 def _find_member_by_id(member_id: str) -> dict[str, Any] | None:
@@ -375,7 +416,7 @@ def _find_project_for_family(family: dict[str, Any] | None) -> dict[str, Any] | 
     family_id = _normalize_value(family.get("_id") or family.get("id"))
     if family_id:
         project = db["projects"].find_one(
-            {"family_id": family_id},
+            {"family_id": {"$in": _family_id_candidates(family_id)}},
             sort=[("updated_at", -1), ("created_at", -1)],
         )
         if project is not None:
@@ -407,7 +448,7 @@ def _find_family_for_project(project: dict[str, Any] | None) -> dict[str, Any] |
     project_id = _normalize_value(project.get("_id") or project.get("id"))
     if project_id:
         family = db["families"].find_one(
-            {"project_id": project_id},
+            {"project_id": {"$in": _project_id_candidates(project_id)}},
             sort=[("updated_at", -1), ("created_at", -1)],
         )
         if family is not None:
@@ -674,6 +715,19 @@ def repair_workspace_entitlements_for_user(
         if paid_order is None:
             skipped.append({"project_id": candidate_project_id, "reason": "no_paid_order"})
             continue
+        if normalized_email:
+            owner_email = _normalize_email(
+                paid_order.get("owner_email") or paid_order.get("email")
+            )
+            project_owner_email = _normalize_email(project.get("owner_email"))
+            if normalized_email not in {owner_email, project_owner_email}:
+                skipped.append(
+                    {
+                        "project_id": candidate_project_id,
+                        "reason": "foreign_project_for_user",
+                    }
+                )
+                continue
 
         identity = resolve_package_identity(
             paid_order.get("package_code") or paid_order.get("package_slug")

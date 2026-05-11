@@ -114,6 +114,11 @@ def _save_customer_id_to_user(user_id: str, customer_id: str) -> None:
     )
 
 
+def _existing_customer_id_for_user(user: dict[str, Any]) -> str:
+    document = _get_user_document(user)
+    return _normalize_text(document.get("stripe_customer_id"))
+
+
 def store_stripe_customer_reference(
     *,
     user_id: str | None = None,
@@ -225,8 +230,36 @@ def _serialize_card_created(value: Any) -> str | None:
 
 
 def get_billing_overview(user: dict[str, Any]) -> dict[str, Any]:
-    customer = _ensure_stripe_customer_for_user(user)
-    customer_id = _normalize_text(customer.get("id"))
+    _require_stripe_secret_key()
+    customer_id = _existing_customer_id_for_user(user)
+    if not customer_id:
+        return {
+            "customer_id": None,
+            "error_code": "billing_profile_missing",
+            "message": "Billing profile has not been created yet.",
+            "max_cards": max(1, int(settings.stripe_payment_method_max_cards or 3)),
+            "cards_on_file": 0,
+            "can_add_card": False,
+            "default_payment_method_id": None,
+            "payment_methods": [],
+            "subscriptions": [],
+        }
+
+    customer = stripe.Customer.retrieve(customer_id)
+    customer_dict = _stripe_to_dict(customer)
+    if bool(customer_dict.get("deleted")):
+        return {
+            "customer_id": None,
+            "error_code": "billing_profile_missing",
+            "message": "Billing profile has not been created yet.",
+            "max_cards": max(1, int(settings.stripe_payment_method_max_cards or 3)),
+            "cards_on_file": 0,
+            "can_add_card": False,
+            "default_payment_method_id": None,
+            "payment_methods": [],
+            "subscriptions": [],
+        }
+
     default_payment_method_id = _default_payment_method_id(customer)
     payment_methods = _list_payment_methods(customer_id)
 
@@ -246,6 +279,8 @@ def get_billing_overview(user: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "customer_id": customer_id or None,
+        "error_code": None,
+        "message": None,
         "max_cards": max_cards,
         "cards_on_file": len(payment_methods),
         "can_add_card": len(payment_methods) < max_cards,
@@ -267,14 +302,15 @@ def get_billing_config() -> dict[str, Any]:
 
 def create_setup_intent_for_user(user: dict[str, Any]) -> dict[str, Any]:
     _require_stripe_secret_key()
-    overview = get_billing_overview(user)
-    max_cards = max(1, int(settings.stripe_payment_method_max_cards or 3))
-    if int(overview.get("cards_on_file") or 0) >= max_cards:
-        raise ValueError(f"You can store up to {max_cards} cards on file.")
-
-    customer_id = _normalize_text(overview.get("customer_id"))
+    customer = _ensure_stripe_customer_for_user(user)
+    customer_id = _normalize_text(customer.get("id"))
     if not customer_id:
         raise RuntimeError("Stripe customer could not be resolved.")
+
+    payment_methods = _list_payment_methods(customer_id)
+    max_cards = max(1, int(settings.stripe_payment_method_max_cards or 3))
+    if len(payment_methods) >= max_cards:
+        raise ValueError(f"You can store up to {max_cards} cards on file.")
 
     setup_intent = stripe.SetupIntent.create(
         customer=customer_id,
@@ -414,8 +450,25 @@ def create_billing_portal_session_for_user(
     *,
     return_url: str | None = None,
 ) -> dict[str, Any]:
+    configuration_id = _normalize_text(settings.stripe_billing_portal_configuration_id)
+    if not configuration_id:
+        raise ValueError(
+            "stripe_portal_not_configured: Billing portal is not configured yet."
+        )
     _require_stripe_secret_key()
-    customer_id = _customer_id_for_user(user)
+
+    customer_id = _existing_customer_id_for_user(user)
+    if not customer_id:
+        try:
+            customer = _ensure_stripe_customer_for_user(user)
+            customer_id = _normalize_text(customer.get("id"))
+        except Exception as exc:
+            raise ValueError(
+                "billing_profile_missing: Billing profile has not been created yet."
+            ) from exc
+    if not customer_id:
+        raise ValueError("billing_profile_missing: Billing profile has not been created yet.")
+
     resolved_return_url = _validate_portal_return_url(return_url)
 
     kwargs: dict[str, Any] = {
@@ -423,9 +476,7 @@ def create_billing_portal_session_for_user(
         "return_url": resolved_return_url,
     }
 
-    configuration_id = _normalize_text(settings.stripe_billing_portal_configuration_id)
-    if configuration_id:
-        kwargs["configuration"] = configuration_id
+    kwargs["configuration"] = configuration_id
 
     session = stripe.billing_portal.Session.create(**kwargs)
     payload = _stripe_to_dict(session)
