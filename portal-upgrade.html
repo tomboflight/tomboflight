@@ -51,7 +51,7 @@
         const params = new URLSearchParams(window.location.search);
         const target = String(params.get("target_package") || "family_estate_concierge").trim();
         const targetNode = document.querySelector("[data-upgrade-target]");
-        if (targetNode) targetNode.textContent = target || "family_estate_concierge";
+        if (targetNode) targetNode.textContent = target;
         if (!window.TOLApp || typeof window.TOLApp.requireSession !== "function") return;
         await window.TOLApp.requireSession("signin.html");
       });

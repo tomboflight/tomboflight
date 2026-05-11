@@ -1411,9 +1411,6 @@
       if (projectId) {
         url.searchParams.set("project_id", projectId);
       }
-      if (url.pathname.startsWith("/portal/")) {
-        return `${url.pathname}${url.search}`;
-      }
       return `${url.pathname.split("/").pop() || href}${url.search}`;
     } catch (error) {
       return href;
