@@ -629,11 +629,12 @@ def _effective_workspace_blocking_reason(reason: str) -> str:
     return ENTITLEMENT_BLOCKING_REASON_MAP.get(normalized, normalized)
 
 
-def _resolve_repair_user_id(current_user: dict[str, Any], project: dict[str, Any]) -> str:
-    project_owner_user_id = _normalize_value(project.get("owner_user_id"))
-    if project_owner_user_id:
-        return project_owner_user_id
-    return _current_user_id(current_user)
+def _billing_blocking_reason(current_user: dict[str, Any]) -> str | None:
+    if not _normalize_value(settings.stripe_billing_portal_configuration_id):
+        return "stripe_portal_not_configured"
+    if not _normalize_value(current_user.get("stripe_customer_id")):
+        return "billing_profile_missing"
+    return None
 
 
 def repair_workspace_entitlements_for_user(
@@ -652,7 +653,11 @@ def repair_workspace_entitlements_for_user(
     if normalized_project_id:
         project_ids.append(normalized_project_id)
     if normalized_email:
-        for order in orders.find({"$or": [{"owner_email": normalized_email}, {"email": normalized_email}]}).sort("created_at", -1):
+        for order in (
+            orders.find({"$or": [{"owner_email": normalized_email}, {"email": normalized_email}]})
+            .sort("created_at", -1)
+            .limit(500)
+        ):
             project_value = _normalize_value(order.get("project_id"))
             if project_value and project_value not in project_ids:
                 project_ids.append(project_value)
@@ -1119,12 +1124,7 @@ def build_workspace_context_snapshot(
         response["status"] = "blocked"
         response["blocking_reason"] = blocking_reason or "missing_active_entitlement"
 
-    if not _normalize_value(settings.stripe_billing_portal_configuration_id):
-        response["billing"] = {"blocking_reason": "stripe_portal_not_configured"}
-    elif not _normalize_value(current_user.get("stripe_customer_id")):
-        response["billing"] = {"blocking_reason": "billing_profile_missing"}
-    else:
-        response["billing"] = {"blocking_reason": None}
+    response["billing"] = {"blocking_reason": _billing_blocking_reason(current_user)}
 
     return response
 
