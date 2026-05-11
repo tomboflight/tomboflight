@@ -87,8 +87,8 @@
       can_use_lineage_certificate: false,
       can_open_family_intake: false,
       can_open_org_intake: false,
-      can_use_link_keys: false,
-      can_manage_link_keys: false,
+      can_use_link_keys: true,
+      can_manage_link_keys: true,
     },
     legacy_portrait_intro: {
       display_name: "Legacy Portrait Intro",

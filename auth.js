@@ -1238,6 +1238,110 @@
     return toArray(payload);
   }
 
+  async function fetchWorkspaceContextSnapshot(hints) {
+    const params = new URLSearchParams();
+    const projectId = String(hints?.projectId || "").trim();
+    const familyId = String(hints?.familyId || "").trim();
+    if (projectId) params.set("project_id", projectId);
+    if (familyId) params.set("family_id", familyId);
+    const queryString = params.toString();
+    const route = `/users/me/workspace-context${queryString ? `?${queryString}` : ""}`;
+    return await app.apiRequest(route, { method: "GET" });
+  }
+
+  function buildDashboardContextFromWorkspaceSnapshot(snapshot, user, orders) {
+    if (!snapshot || typeof snapshot !== "object") return null;
+    const entitlements =
+      snapshot.entitlements && typeof snapshot.entitlements === "object"
+        ? snapshot.entitlements
+        : {};
+    const workspace =
+      snapshot.workspace && typeof snapshot.workspace === "object"
+        ? snapshot.workspace
+        : {};
+    const packageInfo =
+      snapshot.package && typeof snapshot.package === "object"
+        ? snapshot.package
+        : {};
+    const packageCode = stripMaintenanceSuffix(
+      normalizePackageCode(entitlements.package_code || packageInfo.code),
+    );
+    const packageLane = normalizeValue(
+      entitlements.package_lane || packageInfo.lane || workspace.lane,
+    );
+    const activeProjectId = String(workspace.project_id || "").trim();
+    const activeFamilyId = String(workspace.family_id || "").trim();
+    const resolvedEntitlements = Object.assign(
+      {},
+      buildFallbackEntitlements(packageCode, packageLane),
+      entitlements,
+      {
+        package_code: packageCode,
+        package_lane: packageLane,
+      },
+    );
+    const activeProject = {
+      _id: activeProjectId,
+      project_id: activeProjectId,
+      family_id: activeFamilyId,
+      household_id: String(workspace.household_id || "").trim(),
+      project_name: String(workspace.project_name || "").trim(),
+      project_lane: packageLane,
+      package_code: packageCode,
+      package_name:
+        String(packageInfo.display_name || "").trim() ||
+        resolvePackageDisplayName(packageCode),
+    };
+    const activeEntitlement = {
+      project_id: activeProjectId,
+      package_code: packageCode,
+      package_lane: packageLane,
+      status: "active",
+      resolved_entitlements: resolvedEntitlements,
+    };
+    const paidOrder = {
+      project_id: activeProjectId,
+      package_code: packageCode,
+      package_slug: String(packageInfo.slug || "").trim(),
+      package_name:
+        String(packageInfo.display_name || "").trim() ||
+        resolvePackageDisplayName(packageCode),
+      status: String(packageInfo.status || "paid").trim() || "paid",
+    };
+    const isActive = normalizeValue(snapshot.status || "active") === "active";
+    return {
+      user: user || snapshot.user || null,
+      orders: Array.isArray(orders) ? orders : [],
+      paidOrder,
+      entitlements: [activeEntitlement],
+      activeEntitlement,
+      projects: [activeProject],
+      activeProject,
+      packageCode: packageCode || "",
+      packageLane: packageLane || "",
+      packageName:
+        paidOrder.package_name || resolvePackageDisplayName(packageCode || ""),
+      resolvedEntitlements,
+      currentWorkspace: {
+        source: "workspace_context",
+        sourcePriority: 0,
+        projectId: activeProjectId,
+        packageCode: packageCode || "",
+        packageLane: packageLane || "",
+        packageName: paidOrder.package_name,
+        sortKey: Date.now(),
+        resolvedEntitlements,
+        paidOrder,
+        activeEntitlement,
+        activeProject,
+      },
+      hasPackageAccess: Boolean(isActive && packageCode),
+      hasPaidPackage: Boolean(isActive && packageCode),
+      workspaceContextSnapshot: snapshot,
+      blockingReason: normalizeValue(snapshot.blocking_reason) || null,
+    };
+  }
+
   async function fetchProjectEntitlementByProjectId(projectId) {
     const normalizedProjectId = String(projectId || "").trim();
     if (!normalizedProjectId) return null;
@@ -1514,6 +1618,20 @@
     );
 
     try {
+      const workspaceSnapshot = await fetchWorkspaceContextSnapshot(hints);
+      const snapshotContext = buildDashboardContextFromWorkspaceSnapshot(
+        workspaceSnapshot,
+        user,
+        orders,
+      );
+      if (snapshotContext && snapshotContext.hasPackageAccess) {
+        return snapshotContext;
+      }
+    } catch (error) {
+      // Fall back to legacy stitched context when the workspace snapshot is unavailable.
+    }
+
+    try {
       const results = await Promise.all([
         fetchProjectEntitlements().catch(function () {
           return [];
@@ -1668,12 +1786,6 @@
       getWorkspaceSelectionHints(),
       getWorkspaceHintsFromUser(user),
     );
-    const cached = readCachedDashboardContext(user, hints);
-
-    if (cached) {
-      return cached;
-    }
-
     return getDashboardContext(user, orders, hints);
   }
 
@@ -1734,43 +1846,43 @@
       if (!hasPackageAccess) {
         setActionHrefAndText(
           upgradeAction,
-          "index.html#pricing",
+          "billing.html",
           "View Packages",
         );
       } else if (packageLane === "portrait") {
         setActionHrefAndText(
           upgradeAction,
-          "index.html#pricing",
+          "billing.html",
           "Upgrade to Household Package",
         );
       } else if (upgradeTargets.length && allowedAddons.length) {
         setActionHrefAndText(
           upgradeAction,
-          "index.html#pricing",
+          "billing.html",
           "View Add-Ons & Upgrades",
         );
       } else if (allowedAddons.length) {
         setActionHrefAndText(
           upgradeAction,
-          "index.html#pricing",
+          "billing.html",
           "View Add-Ons",
         );
       } else if (upgradeTargets.length) {
         setActionHrefAndText(
           upgradeAction,
-          "index.html#pricing",
+          "billing.html",
           "View Upgrade Options",
         );
       } else if (packageLane === "organization" || packageLane === "network") {
         setActionHrefAndText(
           upgradeAction,
-          "index.html#pricing",
+          "billing.html",
           "View Expansion Options",
         );
       } else {
         setActionHrefAndText(
           upgradeAction,
-          "index.html#pricing",
+          "billing.html",
           "View Packages",
         );
       }

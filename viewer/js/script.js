@@ -40,7 +40,10 @@
 
   const params = new URLSearchParams(window.location.search);
   const DEFAULT_PUBLIC_DEMO_KEY = "malik-moreland";
-  const DEMO_KEY = String(params.get("demo") || "").trim().toLowerCase();
+  const DEMO_KEY = String(params.get("demo") || "")
+    .trim()
+    .toLowerCase()
+    .replaceAll("_", "-");
   const DEMO_MODE = DEMO_KEY === DEFAULT_PUBLIC_DEMO_KEY;
   const PREVIEW_MODE = params.get("preview") === "1";
   const EMBED_MODE = params.get("embed") === "1" || window.self !== window.top;
@@ -76,7 +79,10 @@
   function resolvePublicDemoManifest(demoKey) {
     const manifests = window.PUBLIC_DEMO_MANIFESTS;
     if (!manifests || typeof manifests !== "object") return null;
-    const key = String(demoKey || "").trim().toLowerCase();
+    const key = String(demoKey || "")
+      .trim()
+      .toLowerCase()
+      .replaceAll("_", "-");
     const manifest = manifests[key];
     if (manifest && Array.isArray(manifest.states) && manifest.states.length) {
       return manifest;

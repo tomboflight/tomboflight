@@ -421,8 +421,8 @@ PACKAGE_CATALOG: dict[str, dict[str, Any]] = {
         "can_use_lineage_certificate": True,
         "can_open_family_intake": True,
         "can_open_org_intake": False,
-        "can_use_link_keys": False,
-        "can_manage_link_keys": False,
+        "can_use_link_keys": True,
+        "can_manage_link_keys": True,
         "allowed_addons": [
             "rush_delivery",
             "on_site_photo_scanning",

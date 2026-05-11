@@ -622,7 +622,7 @@
       account_security: "account-security.html",
       billing: "billing.html",
       certificate: "lineage-certificate.html",
-      help_center: "faq.html",
+      help_center: "account-security.html",
       household: "household-access.html",
       intake: "intake-review.html",
       link_keys: "link-keys.html",
@@ -1737,7 +1737,7 @@
           ? "This portrait lane includes portrait uploads, verification workflows, and link capabilities. Household build tools require an upgrade."
           : "This portrait lane includes portrait uploads and verification workflows. Household build tools require an upgrade.",
         upgradeText: "Upgrade to Household Package",
-        upgradeHref: "index.html#pricing",
+        upgradeHref: "billing.html",
       };
     }
 
@@ -1799,7 +1799,7 @@
           ? "This organization lane includes structure workflows, verification uploads, and linked organization support."
           : "This organization lane includes structure and verification workflows. Expansion options are available if you need more scope.",
         upgradeText: "View Expansion Options",
-        upgradeHref: "index.html#pricing",
+        upgradeHref: "billing.html",
       };
     }
 
@@ -1860,7 +1860,7 @@
           ? "This network lane includes branch, lineage, verification, certificate, and link workflows."
           : "This network lane includes branch, lineage, and verification workflows.",
         upgradeText: "View Expansion Options",
-        upgradeHref: "index.html#pricing",
+        upgradeHref: "billing.html",
       };
     }
 
@@ -1920,7 +1920,7 @@
         ? "Family build tools, verification workflows, certificate access, and link capabilities are active for this package."
         : "Family build tools and verification workflows are active for this household lane package.",
       upgradeText: "View Add-Ons & Upgrades",
-      upgradeHref: "index.html#pricing",
+      upgradeHref: "billing.html",
     };
   }
 
@@ -2184,11 +2184,11 @@
             upgradeTargets.length === 1
               ? "Upgrade to " + firstName
               : "Upgrade to " + firstName + " or higher";
-          upgradeAction.setAttribute("href", "index.html#pricing");
+          upgradeAction.setAttribute("href", "billing.html");
           upgradeAction.style.display = "";
         } else if (allowedAddons.length > 0) {
           upgradeAction.textContent = "View Available Add-Ons";
-          upgradeAction.setAttribute("href", "index.html#pricing");
+          upgradeAction.setAttribute("href", "billing.html");
           upgradeAction.style.display = "";
         } else {
           upgradeAction.style.display = "none";
