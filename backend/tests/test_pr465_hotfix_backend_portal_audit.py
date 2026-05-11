@@ -419,23 +419,24 @@ class PR465BackendPortalAuditTests(unittest.TestCase):
     def test_moreland_homepage_full_preview(self):
         homepage = (REPO_ROOT / "index.html").read_text(encoding="utf-8")
         required_names = [
-            "Clara Moreland",
             "Elias Moreland",
-            "Julian Moreland",
-            "Malik Moreland",
-            "Naomi Moreland",
             "Selah Carter",
             "Andre Carter",
             "Eli Moreland",
             "Imani Moreland / Imani Benton",
-            "Marcus Benton",
-            "Zara Benton",
             "Camille Carter",
+            "Malik Moreland",
+            "Naomi Moreland",
+            "Clara Moreland",
+            "Marcus Benton",
             "Micah Benton",
+            "Zara Benton",
+            "Julian Moreland",
         ]
         for name in required_names:
             with self.subTest(name=name):
                 self.assertIn(name, homepage)
+        self.assertIn("No descendant layer in this demo.", homepage)
         self.assertIn("Family Estate Concierge", homepage)
         self.assertIn("Network Lane demonstration", homepage)
         self.assertIn("Family Keys connect households", homepage)
