@@ -6220,40 +6220,64 @@ main [id] {
   width: 100%;
   max-width: 620px;
   margin: 0 auto;
-  gap: 14px;
+  display: grid;
+  gap: 10px;
   transform: none;
 }
 
-.homepage-body .moreland-teaser-generation {
-  gap: 12px;
+.homepage-body .moreland-teaser-root-household {
+  width: min(100%, 320px);
+  margin: 0 auto;
 }
 
-.homepage-body .moreland-teaser-generation-founders {
-  grid-template-columns: minmax(180px, 280px);
+.homepage-body .moreland-teaser-sibling-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  align-items: start;
 }
 
-.homepage-body .moreland-teaser-generation-children {
-  grid-template-columns: repeat(3, minmax(96px, 1fr));
+.homepage-body .moreland-teaser-branch-column {
+  display: grid;
+  gap: 7px;
+  align-content: start;
 }
 
-.homepage-body .moreland-teaser-generation-descendants {
-  width: min(100%, 410px);
-  grid-template-columns: repeat(2, minmax(118px, 1fr));
+.homepage-body .moreland-teaser-child-row {
+  display: grid;
+  gap: 7px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.homepage-body .moreland-teaser-branch {
-  width: min(68%, 460px);
-  height: 26px;
-  margin: -1px auto;
+.homepage-body .moreland-teaser-rail {
+  position: relative;
+  height: 16px;
+  margin: 0 auto;
 }
 
-.homepage-body .moreland-teaser-branch-short {
-  width: min(42%, 280px);
-}
-
-.homepage-body .moreland-teaser-branch::before,
-.homepage-body .moreland-teaser-branch::after {
+.homepage-body .moreland-teaser-rail::before,
+.homepage-body .moreland-teaser-rail::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
   background: rgba(169, 125, 38, 0.5);
+}
+
+.homepage-body .moreland-teaser-rail::before {
+  top: 0;
+  bottom: 0;
+  width: 2px;
+}
+
+.homepage-body .moreland-teaser-rail-root {
+  width: min(100%, 560px);
+}
+
+.homepage-body .moreland-teaser-rail-root::after {
+  top: 1px;
+  width: calc(100% - 20px);
+  height: 2px;
 }
 
 .homepage-body .moreland-teaser-node {
@@ -6267,6 +6291,10 @@ main [id] {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.9),
     0 12px 24px rgba(24, 72, 118, 0.1);
+}
+
+.homepage-body .moreland-teaser-branch-column-primary .moreland-teaser-node-primary {
+  border-color: rgba(169, 125, 38, 0.52);
 }
 
 .homepage-body .moreland-teaser-node-primary {
@@ -6387,15 +6415,12 @@ main [id] {
     gap: 10px;
   }
 
-  .homepage-body .moreland-teaser-generation,
-  .homepage-body .moreland-teaser-generation-founders,
-  .homepage-body .moreland-teaser-generation-children,
-  .homepage-body .moreland-teaser-generation-descendants {
-    width: 100%;
+  .homepage-body .moreland-teaser-sibling-row,
+  .homepage-body .moreland-teaser-child-row {
     grid-template-columns: 1fr;
   }
 
-  .homepage-body .moreland-teaser-branch {
+  .homepage-body .moreland-teaser-rail {
     display: none;
   }
 
