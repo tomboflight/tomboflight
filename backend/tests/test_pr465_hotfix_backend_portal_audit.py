@@ -347,19 +347,21 @@ class PR465BackendPortalAuditTests(unittest.TestCase):
     def test_private_portal_links(self):
         dashboard = (REPO_ROOT / "dashboard.html").read_text(encoding="utf-8")
         dashboard_js = (REPO_ROOT / "dashboard-intake.js").read_text(encoding="utf-8")
-        self.assertIn('href="/portal/help" data-dashboard-tool="help_center"', dashboard)
-        self.assertIn('href="/portal/help" data-dashboard-tool="help_center"', dashboard)
-        self.assertIn('href="/portal/review" data-portal-review-link', dashboard)
+        self.assertIn('href="portal-help.html" data-dashboard-tool="help_center"', dashboard)
+        self.assertIn('href="portal-review.html" data-portal-review-link', dashboard)
         self.assertIn(
-            'href="/portal/upgrade?target_package=family_estate_concierge"',
+            'href="portal-upgrade.html?target_package=family_estate_concierge"',
             dashboard,
         )
-        self.assertIn("withFamilyId(\"/portal/help\", context)", dashboard_js)
-        self.assertIn("withFamilyId(\"/portal/review\", context)", dashboard_js)
+        self.assertIn("withFamilyId(\"portal-help.html\", context)", dashboard_js)
+        self.assertIn("withFamilyId(\"portal-review.html\", context)", dashboard_js)
         self.assertIn(
-            '"/portal/upgrade?target_package=family_estate_concierge"',
+            '"portal-upgrade.html?target_package=family_estate_concierge"',
             dashboard_js,
         )
+        self.assertTrue((REPO_ROOT / "portal-help.html").exists())
+        self.assertTrue((REPO_ROOT / "portal-review.html").exists())
+        self.assertTrue((REPO_ROOT / "portal-upgrade.html").exists())
         self.assertNotIn('href="faq.html"', dashboard)
         self.assertNotIn("how-it-works.html", dashboard)
         self.assertNotIn("index.html#pricing", dashboard)
@@ -377,6 +379,8 @@ class PR465BackendPortalAuditTests(unittest.TestCase):
         billing_js = (REPO_ROOT / "billing.js").read_text(encoding="utf-8")
         self.assertIn("No saved cards are on file yet.", billing_js)
         self.assertIn("No active or historical subscriptions found.", billing_js)
+        self.assertIn("Billing profile has not been created yet.", billing_js)
+        self.assertIn("Billing portal is not configured yet.", billing_js)
         self.assertIn("billing_profile_missing", billing_js)
         self.assertIn("stripe_portal_not_configured", billing_js)
 
@@ -387,6 +391,30 @@ class PR465BackendPortalAuditTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(ValueError, "stripe_portal_not_configured"):
                 billing_service.create_billing_portal_session_for_user({"id": "user-1"})
+
+    def test_setup_intent_creates_customer_when_missing(self):
+        with (
+            patch.object(billing_service, "_require_stripe_secret_key", return_value="key"),
+            patch.object(
+                billing_service,
+                "_ensure_stripe_customer_for_user",
+                return_value={"id": "cus_123"},
+            ) as ensure_customer_mock,
+            patch.object(
+                billing_service,
+                "_list_payment_methods",
+                return_value=[],
+            ),
+            patch.object(
+                billing_service.stripe.SetupIntent,
+                "create",
+                return_value={"client_secret": "seti_secret"},
+            ) as create_setup_mock,
+        ):
+            payload = billing_service.create_setup_intent_for_user({"id": "user-1"})
+        self.assertEqual(payload["customer_id"], "cus_123")
+        ensure_customer_mock.assert_called_once()
+        create_setup_mock.assert_called_once()
 
     def test_moreland_homepage_full_preview(self):
         homepage = (REPO_ROOT / "index.html").read_text(encoding="utf-8")

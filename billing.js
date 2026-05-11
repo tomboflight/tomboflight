@@ -53,10 +53,10 @@
   function getUserFacingErrorMessage(error) {
     const normalized = String((error && error.message) || error || "").toLowerCase();
     if (normalized.includes("billing_profile_missing")) {
-      return "Your billing profile is not connected yet. Contact support@tomboflight.com for help.";
+      return "Billing profile has not been created yet.";
     }
     if (normalized.includes("stripe_portal_not_configured")) {
-      return "Billing portal is not configured yet. Please contact support@tomboflight.com.";
+      return "Billing portal is not configured yet.";
     }
     if (typeof console !== "undefined" && typeof console.error === "function") {
       console.error("[Billing] Error details:", error);
@@ -205,7 +205,7 @@
         if (addCardCopy) {
           addCardCopy.textContent =
             payloadMessage ||
-            "Your billing profile is not connected yet. Contact support@tomboflight.com for help.";
+            "Billing profile has not been created yet.";
         }
         if (saveCardButton) {
           saveCardButton.disabled = true;

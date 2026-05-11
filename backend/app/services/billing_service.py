@@ -236,7 +236,7 @@ def get_billing_overview(user: dict[str, Any]) -> dict[str, Any]:
         return {
             "customer_id": None,
             "error_code": "billing_profile_missing",
-            "message": "Your billing profile is not connected yet. Contact support@tomboflight.com for help.",
+            "message": "Billing profile has not been created yet.",
             "max_cards": max(1, int(settings.stripe_payment_method_max_cards or 3)),
             "cards_on_file": 0,
             "can_add_card": False,
@@ -251,7 +251,7 @@ def get_billing_overview(user: dict[str, Any]) -> dict[str, Any]:
         return {
             "customer_id": None,
             "error_code": "billing_profile_missing",
-            "message": "Your billing profile is not connected yet. Contact support@tomboflight.com for help.",
+            "message": "Billing profile has not been created yet.",
             "max_cards": max(1, int(settings.stripe_payment_method_max_cards or 3)),
             "cards_on_file": 0,
             "can_add_card": False,
@@ -302,14 +302,15 @@ def get_billing_config() -> dict[str, Any]:
 
 def create_setup_intent_for_user(user: dict[str, Any]) -> dict[str, Any]:
     _require_stripe_secret_key()
-    overview = get_billing_overview(user)
-    max_cards = max(1, int(settings.stripe_payment_method_max_cards or 3))
-    if int(overview.get("cards_on_file") or 0) >= max_cards:
-        raise ValueError(f"You can store up to {max_cards} cards on file.")
-
-    customer_id = _normalize_text(overview.get("customer_id"))
+    customer = _ensure_stripe_customer_for_user(user)
+    customer_id = _normalize_text(customer.get("id"))
     if not customer_id:
         raise RuntimeError("Stripe customer could not be resolved.")
+
+    payment_methods = _list_payment_methods(customer_id)
+    max_cards = max(1, int(settings.stripe_payment_method_max_cards or 3))
+    if len(payment_methods) >= max_cards:
+        raise ValueError(f"You can store up to {max_cards} cards on file.")
 
     setup_intent = stripe.SetupIntent.create(
         customer=customer_id,
@@ -452,15 +453,21 @@ def create_billing_portal_session_for_user(
     configuration_id = _normalize_text(settings.stripe_billing_portal_configuration_id)
     if not configuration_id:
         raise ValueError(
-            "stripe_portal_not_configured: Billing portal is not configured yet. Please contact support@tomboflight.com."
+            "stripe_portal_not_configured: Billing portal is not configured yet."
         )
     _require_stripe_secret_key()
 
     customer_id = _existing_customer_id_for_user(user)
     if not customer_id:
-        raise ValueError(
-            "billing_profile_missing: Your billing profile is not connected yet. Contact support@tomboflight.com for help."
-        )
+        try:
+            customer = _ensure_stripe_customer_for_user(user)
+            customer_id = _normalize_text(customer.get("id"))
+        except Exception as exc:
+            raise ValueError(
+                "billing_profile_missing: Billing profile has not been created yet."
+            ) from exc
+    if not customer_id:
+        raise ValueError("billing_profile_missing: Billing profile has not been created yet.")
 
     resolved_return_url = _validate_portal_return_url(return_url)
 

@@ -622,7 +622,7 @@
       account_security: "account-security.html",
       billing: "billing.html",
       certificate: "lineage-certificate.html",
-      help_center: "/portal/help",
+      help_center: "portal-help.html",
       household: "household-access.html",
       intake: "intake-review.html",
       link_keys: "link-keys.html",
@@ -2156,13 +2156,13 @@
       },
     );
 
-    applyAction('a[href^="/portal/help"], [data-dashboard-tool="help_center"]', {
-      href: withFamilyId("/portal/help", context),
+    applyAction('a[href^="portal-help.html"], [data-dashboard-tool="help_center"]', {
+      href: withFamilyId("portal-help.html", context),
       show: Boolean(context?.hasPackageAccess),
     });
 
     applyAction("[data-portal-review-link]", {
-      href: withFamilyId("/portal/review", context),
+      href: withFamilyId("portal-review.html", context),
       show: Boolean(context?.hasPackageAccess),
     });
 
@@ -2185,7 +2185,7 @@
         upgradeAction.setAttribute(
           "href",
           withFamilyId(
-            "/portal/upgrade?target_package=family_estate_concierge",
+            "portal-upgrade.html?target_package=family_estate_concierge",
             context,
           ),
         );
