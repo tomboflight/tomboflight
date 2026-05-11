@@ -440,6 +440,9 @@ class PR465BackendPortalAuditTests(unittest.TestCase):
         self.assertIn("Network Lane demonstration", homepage)
         self.assertIn("Family Keys connect households", homepage)
         self.assertIn("separate privacy, permissions, records, and consent", homepage)
+        self.assertNotIn("Zara Carter", homepage)
+        self.assertNotIn("Camille Benton", homepage)
+        self.assertNotIn("Micah Benton + Zara Benton", homepage)
         self.assertNotIn("larrycr27@gmail.com", homepage.lower())
 
     def test_moreland_viewer_demo_public(self):
