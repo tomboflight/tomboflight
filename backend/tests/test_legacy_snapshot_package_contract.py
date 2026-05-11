@@ -175,8 +175,8 @@ class LegacyPlusPackageContractTests(unittest.TestCase):
         self.assertTrue(bool(package.get("premium_archive_structure")))
         self.assertTrue(bool(package.get("can_use_lineage_certificate")))
         self.assertFalse(bool(package.get("can_link_households")))
-        self.assertFalse(bool(package.get("can_use_link_keys")))
-        self.assertFalse(bool(package.get("can_manage_link_keys")))
+        self.assertTrue(bool(package.get("can_use_link_keys")))
+        self.assertTrue(bool(package.get("can_manage_link_keys")))
         self.assertCountEqual(
             list(package.get("allowed_addons") or []),
             ["rush_delivery", "on_site_photo_scanning", "additional_narration_minute"],

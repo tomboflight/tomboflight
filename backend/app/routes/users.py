@@ -3,15 +3,11 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.dependencies.auth import get_current_user, require_capability, require_permission
-from app.schemas.experience import (
-    AccessContextResponse,
-    UserProfileResponse,
-    UserProfileUpdate,
-)
+from app.schemas.experience import UserProfileResponse, UserProfileUpdate
 from app.schemas.user import UserCreate, UserResponse, build_user_response
-from app.services.access_context_service import build_access_context
 from app.services.auth_service import get_user_by_id
 from app.services.user_service import create_user, list_users, update_user_profile
+from app.services.workspace_access_service import build_workspace_context_snapshot
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -95,6 +91,27 @@ def patch_my_profile(
     }
 
 
-@router.get("/me/access-context", response_model=AccessContextResponse)
-def get_my_access_context(current_user: dict[str, Any] = Depends(get_current_user)):
-    return build_access_context(current_user)
+@router.get("/me/workspace-context")
+def get_my_workspace_context(
+    project_id: str = "",
+    family_id: str = "",
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    return build_workspace_context_snapshot(
+        current_user,
+        project_id=project_id,
+        family_id=family_id,
+    )
+
+
+@router.get("/me/access-context")
+def get_my_access_context(
+    project_id: str = "",
+    family_id: str = "",
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    return get_my_workspace_context(
+        project_id=project_id,
+        family_id=family_id,
+        current_user=current_user,
+    )
