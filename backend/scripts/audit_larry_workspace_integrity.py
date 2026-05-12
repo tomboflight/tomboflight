@@ -13,11 +13,6 @@ from pymongo.database import Database
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-DEFAULT_EMAIL = "larrycr27@gmail.com"
-DEFAULT_USER_ID = "69be17d9c6ef5c9cb36af187"
-DEFAULT_PROJECT_ID = "69c0402387082765345cff8c"
-
-
 def _object_id_or_none(value: Any) -> ObjectId | None:
     if isinstance(value, ObjectId):
         return value
@@ -170,17 +165,19 @@ def _print_missing_project_dry_run_plan(expected_project_id: str, expected_user_
 
 
 def run_audit(*, mongo_uri: str, mongo_db_name: str, expected_email: str, expected_user_id: str, expected_project_id: str) -> int:
-    client = MongoClient(mongo_uri, serverSelectionTimeoutMS=10000, connectTimeoutMS=10000, socketTimeoutMS=10000)
+    timeout_ms = max(1000, int(str(os.getenv("MONGO_TIMEOUT_MS", "15000")).strip() or "15000"))
+    client = MongoClient(
+        mongo_uri,
+        serverSelectionTimeoutMS=timeout_ms,
+        connectTimeoutMS=timeout_ms,
+        socketTimeoutMS=timeout_ms,
+    )
     db = client[mongo_db_name]
 
     try:
         print("Running read-only workspace integrity audit (no writes).")
         print(f"Database: {mongo_db_name}")
         print(f"Expected email={expected_email}, user_id={expected_user_id}, project_id={expected_project_id}")
-
-        users = db["users"]
-        orders = db["orders"]
-        intake = db["intake_submissions"]
 
         user_queries = [{"email": expected_email.lower()}]
         user_doc, user_query = _first_matching_document(db, "users", user_queries)
@@ -269,15 +266,21 @@ def run_audit(*, mongo_uri: str, mongo_db_name: str, expected_email: str, expect
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Read-only workspace integrity audit (ObjectId-aware).")
-    parser.add_argument("--email", default=os.getenv("AUDIT_EMAIL", DEFAULT_EMAIL))
-    parser.add_argument("--user-id", default=os.getenv("AUDIT_USER_ID", DEFAULT_USER_ID))
-    parser.add_argument("--project-id", default=os.getenv("AUDIT_PROJECT_ID", DEFAULT_PROJECT_ID))
+    parser.add_argument("--email", default=os.getenv("AUDIT_EMAIL", ""))
+    parser.add_argument("--user-id", default=os.getenv("AUDIT_USER_ID", ""))
+    parser.add_argument("--project-id", default=os.getenv("AUDIT_PROJECT_ID", ""))
     args = parser.parse_args()
 
     mongo_uri = os.getenv("MONGO_URI") or os.getenv("MONGODB_URI")
     mongo_db_name = os.getenv("MONGO_DB_NAME") or os.getenv("MONGODB_DB_NAME") or "tomboflight"
     if not mongo_uri:
         print("ERROR: MONGO_URI or MONGODB_URI is required.", file=sys.stderr)
+        return 2
+    if not _string(args.email) or not _string(args.user_id) or not _string(args.project_id):
+        print(
+            "ERROR: --email, --user-id, and --project-id are required (or set AUDIT_EMAIL/AUDIT_USER_ID/AUDIT_PROJECT_ID).",
+            file=sys.stderr,
+        )
         return 2
 
     return run_audit(
