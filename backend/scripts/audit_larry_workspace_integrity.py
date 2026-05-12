@@ -4,14 +4,11 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-from pathlib import Path
 from typing import Any
 
 from bson import ObjectId
 from pymongo import MongoClient
 from pymongo.database import Database
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 def _object_id_or_none(value: Any) -> ObjectId | None:
     if isinstance(value, ObjectId):
@@ -265,16 +262,24 @@ def run_audit(*, mongo_uri: str, mongo_db_name: str, expected_email: str, expect
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Read-only workspace integrity audit (ObjectId-aware).")
+    parser = argparse.ArgumentParser(
+        description=(
+            "Read-only MongoDB workspace integrity audit that validates user/project and related "
+            "collection linkages using string/ObjectId lookup candidates. No writes are performed."
+        )
+    )
     parser.add_argument("--email", default=os.getenv("AUDIT_EMAIL", ""))
     parser.add_argument("--user-id", default=os.getenv("AUDIT_USER_ID", ""))
     parser.add_argument("--project-id", default=os.getenv("AUDIT_PROJECT_ID", ""))
     args = parser.parse_args()
 
     mongo_uri = os.getenv("MONGO_URI") or os.getenv("MONGODB_URI")
-    mongo_db_name = os.getenv("MONGO_DB_NAME") or os.getenv("MONGODB_DB_NAME") or "tomboflight"
+    mongo_db_name = os.getenv("MONGO_DB_NAME") or os.getenv("MONGODB_DB_NAME") or ""
     if not mongo_uri:
         print("ERROR: MONGO_URI or MONGODB_URI is required.", file=sys.stderr)
+        return 2
+    if not _string(mongo_db_name):
+        print("ERROR: MONGO_DB_NAME or MONGODB_DB_NAME is required.", file=sys.stderr)
         return 2
     if not _string(args.email) or not _string(args.user_id) or not _string(args.project_id):
         print(
