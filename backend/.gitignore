@@ -1,9 +1,7 @@
 venv/
+.venv/
 __pycache__/
+.pytest_cache/
 .env
 *.pyc
-.DS_Storevenv/
-__pycache__/
-*.pyc
-.env
 .DS_Store
