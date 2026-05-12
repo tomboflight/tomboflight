@@ -154,9 +154,15 @@ def _print_primary_project_fields(project: dict[str, Any]) -> None:
 def _print_missing_project_dry_run_plan(expected_project_id: str, expected_user_id: str, email: str) -> None:
     print("FAIL: Project document still not found with ObjectId-aware lookup.")
     print("Dry-run repair plan (no writes):")
-    print(f"  1) Reconfirm canonical IDs from orders/intake for project_id={expected_project_id}, user_id={expected_user_id}, email={email}.")
+    print(
+        "  1) Verify canonical IDs from orders/intake for "
+        f"project_id={expected_project_id}, user_id={expected_user_id}, email={email}."
+    )
     print("  2) Enumerate all project-like records by owner_user_id/owner_id/user_id/email across projects, orders, and intake_submissions.")
-    print("  3) If a project exists under an alternate ID type/field, map canonical project_id and dependent references (families, entitlements, members, uploads, certificates, manifests).")
+    print(
+        "  3) If a project exists under an alternate ID type/field, map canonical project_id "
+        "and dependent references (families, entitlements, members, uploads, certificates, manifests)."
+    )
     print("  4) If no project exists, draft a separate explicit repair script in dry-run mode first, then review before any apply step.")
     print("  5) Validate post-repair read-only workspace audit and portal route access checks before any production deploy.")
 
