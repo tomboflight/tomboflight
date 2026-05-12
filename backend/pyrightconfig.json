@@ -1,9 +1,15 @@
 {
   "venvPath": ".",
-  "venv": "venv",
+  "venv": ".venv",
   "typeCheckingMode": "basic",
+  "include": [
+    "app",
+    "scripts"
+  ],
   "exclude": [
     "**/__pycache__",
-    "venv"
+    ".pytest_cache",
+    "venv",
+    ".venv"
   ]
 }

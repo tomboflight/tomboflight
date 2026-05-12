@@ -1,9 +1,6 @@
 venv/
+.venv/
 __pycache__/
 .env
 *.pyc
-.DS_Storevenv/
-__pycache__/
-*.pyc
-.env
 .DS_Store
