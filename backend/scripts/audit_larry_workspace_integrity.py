@@ -161,8 +161,17 @@ def _print_missing_project_dry_run_plan(expected_project_id: str, expected_user_
     print("  5) Validate post-repair read-only workspace audit and portal route access checks before any production deploy.")
 
 
+def _mongo_timeout_ms() -> int:
+    raw = os.getenv("MONGO_TIMEOUT_MS", "15000")
+    try:
+        parsed = int(raw)
+    except ValueError:
+        parsed = 15000
+    return max(1000, parsed)
+
+
 def run_audit(*, mongo_uri: str, mongo_db_name: str, expected_email: str, expected_user_id: str, expected_project_id: str) -> int:
-    timeout_ms = max(1000, int(str(os.getenv("MONGO_TIMEOUT_MS", "15000")).strip() or "15000"))
+    timeout_ms = _mongo_timeout_ms()
     client = MongoClient(
         mongo_uri,
         serverSelectionTimeoutMS=timeout_ms,
@@ -217,7 +226,10 @@ def run_audit(*, mongo_uri: str, mongo_db_name: str, expected_email: str, expect
             ),
         )
         if billing_doc is not None:
-            print(f"Billing customer found: _id={billing_doc.get('_id')} stripe_id={billing_doc.get('stripe_customer_id')} (query={billing_query})")
+            print(
+                f"Billing customer found: _id={billing_doc.get('_id')} "
+                f"stripe_id={billing_doc.get('stripe_customer_id')} (query={billing_query})"
+            )
         else:
             print("WARN: Billing customer not found by email/user candidates.")
 
@@ -235,7 +247,13 @@ def run_audit(*, mongo_uri: str, mongo_db_name: str, expected_email: str, expect
         _print_primary_project_fields(project_doc)
 
         project_ids = _merge_id_candidates(expected_project_id, project_doc.get("_id"), project_doc.get("id"), project_doc.get("project_id"))
-        user_ids = _merge_id_candidates(expected_user_id, user_doc.get("_id") if user_doc else None, project_doc.get("owner_user_id"), project_doc.get("owner_id"), project_doc.get("user_id"))
+        user_ids = _merge_id_candidates(
+            expected_user_id,
+            user_doc.get("_id") if user_doc else None,
+            project_doc.get("owner_user_id"),
+            project_doc.get("owner_id"),
+            project_doc.get("user_id"),
+        )
         family_ids = _merge_id_candidates(project_doc.get("family_id"), project_doc.get("family_root_id"), project_doc.get("household_id"))
         emails = _email_candidates(expected_email, (user_doc or {}).get("email"), project_doc.get("owner_email"), project_doc.get("email"))
 
