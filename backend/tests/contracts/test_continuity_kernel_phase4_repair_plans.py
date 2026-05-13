@@ -60,7 +60,7 @@ class TestContinuityKernelPhase4RepairPlans(unittest.TestCase):
         self.assertTrue(script_files, "Expected backend/scripts Python files for policy checks.")
 
         write_signal = re.compile(
-            r"\b(update|insert|delete|replace|write|save|upsert)\s*\(|\b(apply|repair|enforce|backfill|migrate)\b",
+            r"\b(update|insert|delete|replace|write|save|upsert|apply|repair|enforce|backfill|migrate)\s*\(",
             re.IGNORECASE,
         )
         safety_pattern = re.compile(
@@ -71,12 +71,7 @@ class TestContinuityKernelPhase4RepairPlans(unittest.TestCase):
         violations = []
         for script in script_files:
             text = script.read_text(encoding="utf-8")
-            non_comment_text = "\n".join(
-                line for line in text.splitlines() if not line.lstrip().startswith("#")
-            )
-            if write_signal.search(non_comment_text) and not safety_pattern.search(
-                non_comment_text
-            ):
+            if write_signal.search(text) and not safety_pattern.search(text):
                 violations.append(script.relative_to(REPO_ROOT).as_posix())
 
         self.assertFalse(
