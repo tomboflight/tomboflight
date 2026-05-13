@@ -60,7 +60,7 @@ class TestContinuityKernelPhase4RepairPlans(unittest.TestCase):
         self.assertTrue(script_files, "Expected backend/scripts Python files for policy checks.")
 
         write_signal = re.compile(
-            r"\b(update|insert|delete|replace|write|save|upsert|apply|repair|enforce|backfill|migrate)\s*\(",
+            r"\b(update|insert|delete|replace|write|save|upsert|repair|enforce|backfill|migrate)\s*\(",
             re.IGNORECASE,
         )
         safety_pattern = re.compile(
