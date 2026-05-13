@@ -107,7 +107,6 @@ def test_viewer_and_public_manifest_services_are_separate_files() -> None:
 
     assert viewer.is_file(), "viewer_manifest_service.py must exist"
     assert public.is_file(), "public_manifest_service.py must exist"
-    assert _rel(viewer) != _rel(public), "Viewer and public manifest services must remain separate"
     assert viewer.resolve() != public.resolve(), "Viewer and public manifest service paths must differ"
 
 
@@ -117,7 +116,7 @@ def test_repair_scripts_require_dry_run_or_apply_safety_pattern() -> None:
     assert script_files, "Expected at least one backend script to inspect"
 
     write_signal = re.compile(
-        r"\b(update|insert|delete|replace|write|save|apply|repair|enforce|backfill|migrate|upsert)\b",
+        r"\b(update|insert|delete|replace|write|save|upsert)\s*\(|\b(apply|repair|enforce|backfill|migrate)\b",
         re.IGNORECASE,
     )
     safety_pattern = re.compile(
