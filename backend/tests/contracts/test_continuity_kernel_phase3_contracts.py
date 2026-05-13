@@ -34,7 +34,10 @@ class TestContinuityKernelPhase3Contracts(unittest.TestCase):
         self.assertRegex(users_route, r'@router\.get\("/me/access-context"\)')
         self.assertRegex(
             users_route,
-            r"def\s+get_my_access_context\(.*?return\s+get_my_workspace_context\(",
+            re.compile(
+                r"def\s+get_my_access_context\(.*?return\s+get_my_workspace_context\(",
+                re.DOTALL,
+            ),
             msg="/me/access-context should preserve compatibility via workspace-context payload behavior.",
         )
 
