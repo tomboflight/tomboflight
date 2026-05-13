@@ -280,7 +280,7 @@ def _is_transition_actor_traceable(
     context_text: str,
 ) -> bool:
     traceable_actor_ids = {approved_by, executed_by, authorization_actor_user_id}
-    if transition_actor_user_id in traceable_actor_ids and transition_actor_user_id != "":
+    if transition_actor_user_id != "" and transition_actor_user_id in traceable_actor_ids:
         return True
     lowered = context_text.lower()
     return any(signal in lowered for signal in SYSTEM_REVIEWED_ACTOR_SIGNALS)
@@ -507,7 +507,7 @@ def validate_apply_request(
     if _is_blank(idempotency_key):
         _add_error(acc, "IDEMPOTENCY_KEY_BLANK", "idempotency_key must not be blank")
 
-    if consumed_idempotency_keys is not None and idempotency_key in consumed_idempotency_keys:
+    if consumed_idempotency_keys is not None and not _is_blank(idempotency_key) and idempotency_key in consumed_idempotency_keys:
         _add_error(acc, "IDEMPOTENCY_KEY_ALREADY_CONSUMED", f"idempotency_key already consumed: {idempotency_key}")
 
     if _flatten_to_text(packet.get("evidence_packet_id")).strip() != _flatten_to_text(transition.get("evidence_packet_id")).strip():
