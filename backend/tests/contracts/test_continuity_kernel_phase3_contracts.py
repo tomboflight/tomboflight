@@ -151,7 +151,7 @@ class TestContinuityKernelPhase3Contracts(unittest.TestCase):
         contracts_doc = self._read(
             "backend/docs/contracts/continuity_kernel_phase3_contracts.md"
         ).lower()
-        self.assertRegex(contracts_doc, r"actor/action/target/context")
+        self.assertIn("actor/action/target/context", contracts_doc)
         self.assertIn("privileged repair and admin actions remain tied to audit logging", contracts_doc)
 
     def test_admin_repair_contract_safety_language(self) -> None:
