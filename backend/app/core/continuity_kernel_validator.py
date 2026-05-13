@@ -180,6 +180,24 @@ PROHIBITED_ACTION_SIGNALS = {
     ),
 }
 
+ROLE_COMPATIBILITY_OVERRIDE_SIGNALS = {
+    "role compatibility override",
+    "approval role compatibility override",
+    "approval_role_compatibility_override",
+}
+
+APPROVED_BY_JUSTIFICATION_SIGNALS = {
+    "approved_by mismatch justified",
+    "approved_by justified",
+    "delegated approver justification",
+}
+
+SYSTEM_REVIEWED_ACTOR_SIGNALS = {
+    "system-reviewed actor",
+    "system reviewed actor",
+    "system_reviewed_actor",
+}
+
 
 @dataclass(frozen=True)
 class ValidationAccumulator:
@@ -242,6 +260,35 @@ def _has_override(text: str) -> bool:
         or "ceo override" in lowered
         or "ceo_override" in lowered
     )
+
+
+def _has_role_compatibility_override(text: str) -> bool:
+    lowered = text.lower()
+    return any(signal in lowered for signal in ROLE_COMPATIBILITY_OVERRIDE_SIGNALS)
+
+
+def _has_approved_by_justification(text: str) -> bool:
+    lowered = text.lower()
+    return any(signal in lowered for signal in APPROVED_BY_JUSTIFICATION_SIGNALS)
+
+
+def _is_transition_actor_traceable(
+    transition_actor_user_id: str,
+    approved_by: str,
+    executed_by: str,
+    authorization_actor_user_id: str,
+    context_text: str,
+) -> bool:
+    traceable_actor_ids = {approved_by, executed_by, authorization_actor_user_id}
+    if transition_actor_user_id != "" and transition_actor_user_id in traceable_actor_ids:
+        return True
+    lowered = context_text.lower()
+    return any(signal in lowered for signal in SYSTEM_REVIEWED_ACTOR_SIGNALS)
+
+
+def _rollback_plan_references_before_snapshot(rollback_plan: Any) -> bool:
+    rollback_plan_text = _flatten_to_text(rollback_plan).lower()
+    return "before_snapshot" in rollback_plan_text or "before_snapshot_ref" in rollback_plan_text
 
 
 def _scan_prohibited_text_fields(fields: list[Any], acc: ValidationAccumulator) -> None:
@@ -457,7 +504,10 @@ def validate_apply_request(
             acc.warnings.extend(result.get("warnings", []))
 
     idempotency_key = _flatten_to_text(packet.get("idempotency_key")).strip()
-    if consumed_idempotency_keys is not None and idempotency_key in consumed_idempotency_keys:
+    if _is_blank(idempotency_key):
+        _add_error(acc, "IDEMPOTENCY_KEY_BLANK", "idempotency_key must not be blank")
+
+    if consumed_idempotency_keys is not None and not _is_blank(idempotency_key) and idempotency_key in consumed_idempotency_keys:
         _add_error(acc, "IDEMPOTENCY_KEY_ALREADY_CONSUMED", f"idempotency_key already consumed: {idempotency_key}")
 
     if _flatten_to_text(packet.get("evidence_packet_id")).strip() != _flatten_to_text(transition.get("evidence_packet_id")).strip():
@@ -471,5 +521,71 @@ def validate_apply_request(
 
     if _flatten_to_text(packet.get("target_id")).strip() != _flatten_to_text(authorization.get("target_id")).strip():
         _add_error(acc, "TARGET_ID_MISMATCH", "target_id mismatch between packet and authorization")
+
+    approval_role = _normalize_role(packet.get("approval_role"))
+    authorization_actor_role = _normalize_role(authorization.get("actor_role"))
+    packet_audit_context_text = _flatten_to_text(packet.get("audit_context"))
+    compatibility_context = " ".join(
+        [
+            packet_audit_context_text,
+            _flatten_to_text(authorization.get("reason_codes")),
+            _flatten_to_text(authorization.get("policy_source")),
+        ]
+    )
+    if approval_role != authorization_actor_role and not _has_role_compatibility_override(compatibility_context):
+        _add_error(
+            acc,
+            "APPROVAL_AUTHORIZATION_ROLE_MISMATCH",
+            "approval_role and authorization actor_role mismatch without explicit compatibility override",
+        )
+
+    approved_by = _flatten_to_text(packet.get("approved_by")).strip()
+    authorization_actor_user_id = _flatten_to_text(authorization.get("actor_user_id")).strip()
+    if approved_by != authorization_actor_user_id and not _has_approved_by_justification(packet_audit_context_text):
+        _add_error(
+            acc,
+            "APPROVED_BY_AUTHORIZATION_ACTOR_MISMATCH",
+            "approved_by must match authorization.actor_user_id unless explicitly justified in audit_context",
+        )
+
+    transition_actor_user_id = _flatten_to_text(transition.get("actor_user_id")).strip()
+    if not _is_transition_actor_traceable(
+        transition_actor_user_id=transition_actor_user_id,
+        approved_by=approved_by,
+        executed_by=_flatten_to_text(packet.get("executed_by")).strip(),
+        authorization_actor_user_id=authorization_actor_user_id,
+        context_text=" ".join(
+            [
+                _flatten_to_text(transition.get("audit_context")),
+                _flatten_to_text(transition.get("reason_codes")),
+            ]
+        ),
+    ):
+        _add_error(
+            acc,
+            "UNTRACEABLE_TRANSITION_ACTOR",
+            "transition actor must trace to approved actor, executor, or system-reviewed actor context",
+        )
+
+    if rollback is not None:
+        if _flatten_to_text(packet.get("evidence_packet_id")).strip() != _flatten_to_text(rollback.get("evidence_packet_id")).strip():
+            _add_error(
+                acc,
+                "ROLLBACK_EVIDENCE_PACKET_ID_MISMATCH",
+                "evidence_packet_id mismatch between packet and rollback verification",
+            )
+
+        if _flatten_to_text(packet.get("target_type")).strip() != _flatten_to_text(rollback.get("target_type")).strip():
+            _add_error(acc, "ROLLBACK_TARGET_TYPE_MISMATCH", "target_type mismatch between packet and rollback verification")
+
+        if _flatten_to_text(packet.get("target_id")).strip() != _flatten_to_text(rollback.get("target_id")).strip():
+            _add_error(acc, "ROLLBACK_TARGET_ID_MISMATCH", "target_id mismatch between packet and rollback verification")
+
+        if not _rollback_plan_references_before_snapshot(rollback.get("rollback_plan")):
+            _add_error(
+                acc,
+                "ROLLBACK_PLAN_MISSING_BEFORE_SNAPSHOT_REFERENCE",
+                "rollback_plan must reference before_snapshot or before_snapshot_ref",
+            )
 
     return _finish_result(validator_name, acc)
