@@ -78,10 +78,9 @@ def test_no_duplicate_entitlement_service_files() -> None:
         "backend/app/services/project_entitlement_service.py",
         "backend/app/services/package_provisioning_service.py",
     }
-    discovered = _glob("backend/app/services/*entitlement*service.py") | {
-        path
-        for path in _glob("backend/app/services/package_provisioning_service.py")
-    }
+    discovered = _glob("backend/app/services/*entitlement*service.py") | _glob(
+        "backend/app/services/package_provisioning_service.py"
+    )
     unexpected = sorted(path for path in discovered if path not in allowed)
     assert not unexpected, (
         "Unexpected entitlement service source-of-truth candidates found: "
