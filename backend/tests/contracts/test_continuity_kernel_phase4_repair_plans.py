@@ -64,14 +64,19 @@ class TestContinuityKernelPhase4RepairPlans(unittest.TestCase):
             re.IGNORECASE,
         )
         safety_pattern = re.compile(
-            r"(--dry-run|--dryrun|dry_run|dry-run|--apply|apply_mode|\bapply\s*=|\bAPPLY\b)",
+            r"(--dry[-_]?run|dry[-_]run|--apply|apply_mode|\bapply\s*=)",
             re.IGNORECASE,
         )
 
         violations = []
         for script in script_files:
             text = script.read_text(encoding="utf-8")
-            if write_signal.search(text) and not safety_pattern.search(text):
+            non_comment_text = "\n".join(
+                line for line in text.splitlines() if not line.lstrip().startswith("#")
+            )
+            if write_signal.search(non_comment_text) and not safety_pattern.search(
+                non_comment_text
+            ):
                 violations.append(script.relative_to(REPO_ROOT).as_posix())
 
         self.assertFalse(
