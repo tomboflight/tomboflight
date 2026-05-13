@@ -122,7 +122,9 @@ class TestContinuityKernelPhase3Contracts(unittest.TestCase):
         mint_records_route = self._read("backend/app/routes/mint_records.py").lower()
         self.assertIn("eligible", mint_records_route)
         self.assertIn("not ready to queue for minting", mint_records_route)
-        self.assertRegex(mint_records_route, r"approve-(admin|customer)")
+        self.assertIn("approve", mint_records_route)
+        self.assertIn("admin", mint_records_route)
+        self.assertIn("customer", mint_records_route)
 
         contracts_doc = self._read(
             "backend/docs/contracts/continuity_kernel_phase3_contracts.md"

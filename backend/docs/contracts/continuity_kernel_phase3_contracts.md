@@ -27,7 +27,7 @@ Status: verification only (no runtime behavior or database behavior changes).
   - `backend/app/core/package_catalog.py`
   - `backend/app/core/package_mapping.py`
   - `backend/app/core/package_type_catalog.py`
-- Contract risk to continue tracking: slug/code drift and lane drift can create entitlement mismatches if package_code/package_slug/package lane normalization diverges.
+- Contract risk to continue tracking: slug/code drift and lane drift can create entitlement mismatches if `package_code`/`package_slug`/`package_lane` normalization diverges.
 
 ## 3) Viewer/Public Manifest Contract
 - Runtime viewer payloads and public mint metadata manifests remain explicitly separated:
