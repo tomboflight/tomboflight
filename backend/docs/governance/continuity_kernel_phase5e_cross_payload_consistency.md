@@ -18,7 +18,7 @@ Fail closed if any of the following are not satisfied:
 - `evidence.target_type` must match `authorization.target_type`.
 - `evidence.target_id` must match `authorization.target_id`.
 - `evidence.approval_role` must be compatible with `authorization.actor_role`.
-- `evidence.approved_by` should match `authorization.actor_user_id`, or the mismatch must be explicitly justified in `audit_context`.
+- `evidence.approved_by` must match `authorization.actor_user_id`, or the mismatch must be explicitly justified in `audit_context`.
 
 ## 2) Evidence packet ↔ apply transition
 
