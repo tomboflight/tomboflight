@@ -137,7 +137,7 @@ def test_repair_scripts_require_dry_run_or_apply_safety_pattern() -> None:
     )
 
 
-def test_phase0_architecture_doc_contains_key_kernel_sections() -> None:
+def test_architecture_doc_contains_key_kernel_sections() -> None:
     architecture_doc = (
         REPO_ROOT / "backend/docs/architecture/tomb_of_light_continuity_kernel.md"
     )
