@@ -524,9 +524,10 @@ def validate_apply_request(
 
     approval_role = _normalize_role(packet.get("approval_role"))
     authorization_actor_role = _normalize_role(authorization.get("actor_role"))
+    packet_audit_context_text = _flatten_to_text(packet.get("audit_context"))
     compatibility_context = " ".join(
         [
-            _flatten_to_text(packet.get("audit_context")),
+            packet_audit_context_text,
             _flatten_to_text(authorization.get("reason_codes")),
             _flatten_to_text(authorization.get("policy_source")),
         ]
@@ -540,9 +541,7 @@ def validate_apply_request(
 
     approved_by = _flatten_to_text(packet.get("approved_by")).strip()
     authorization_actor_user_id = _flatten_to_text(authorization.get("actor_user_id")).strip()
-    if approved_by != authorization_actor_user_id and not _has_approved_by_justification(
-        _flatten_to_text(packet.get("audit_context"))
-    ):
+    if approved_by != authorization_actor_user_id and not _has_approved_by_justification(packet_audit_context_text):
         _add_error(
             acc,
             "APPROVED_BY_AUTHORIZATION_ACTOR_MISMATCH",

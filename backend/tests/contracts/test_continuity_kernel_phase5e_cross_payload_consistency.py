@@ -36,7 +36,7 @@ class TestContinuityKernelPhase5ECrossPayloadConsistency(unittest.TestCase):
             "diff_summary": "safe update",
             "blocked_reasons": [],
             "risk_level": "medium",
-            "rollback_plan": {"steps": ["restore before_snapshot ref"]},
+            "rollback_plan": {"steps": ["restore before_snapshot_ref"]},
             "idempotency_key": "idem-1",
             "created_at": "2026-05-13T00:00:00Z",
             "approved_at": "2026-05-13T00:01:00Z",
