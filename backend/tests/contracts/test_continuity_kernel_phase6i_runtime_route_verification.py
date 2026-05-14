@@ -95,7 +95,7 @@ class TestContinuityKernelPhase6IRuntimeRouteVerification(unittest.TestCase):
             cls.auth_module = import_module("app.dependencies.auth")
             cls.runtime_available = True
         except ModuleNotFoundError as exc:  # pragma: no cover - environment dependent
-            missing = (getattr(exc, "name", "") or "").strip()
+            missing = getattr(exc, "name", "").strip()
             if missing in {"fastapi", "httpx"}:
                 cls.runtime_unavailable_reason = f"Missing runtime dependency: {missing}"
             else:
