@@ -16,6 +16,7 @@ from app.database import (
 from app.routes.admin_intake_submissions import (
     router as admin_intake_submissions_router,
 )
+from app.routes.admin_continuity_preview import router as admin_continuity_preview_router
 from app.routes.asset_delivery import router as asset_delivery_router
 from app.routes.admin_control_center import router as admin_control_center_router
 from app.routes.admin_maintenance import router as admin_maintenance_router
@@ -228,6 +229,7 @@ app.include_router(intake_router)
 app.include_router(intake_options_router)
 app.include_router(intake_submissions_router)
 app.include_router(admin_intake_submissions_router)
+app.include_router(admin_continuity_preview_router)
 app.include_router(admin_control_center_router)
 app.include_router(projects_router)
 app.include_router(project_entitlements_router)
