@@ -87,25 +87,29 @@ def build_readonly_preview_response(
     rollback_plan: dict | None = None,
     structured_override: dict | None = None,
     structured_justification: dict | None = None,
+    approval_fixture_payload: dict | None = None,
 ) -> dict:
     """Build a read-only preview response from in-memory Continuity Kernel payload inputs."""
     safe_env = _safe_dict(env)
     if not is_readonly_admin_preview_enabled(env=safe_env):
         return deepcopy(_DEFAULT_DISABLED_RESPONSE)
 
-    payload = build_staging_dry_run_payload(
-        dry_run_source=_safe_dict(dry_run_source),
-        target_selector=_safe_dict(target_selector),
-        actor_context=_safe_dict(actor_context),
-        repair_category=_safe_text(repair_category),
-        before_snapshot=_safe_dict(before_snapshot),
-        proposed_after_snapshot=_safe_dict(proposed_after_snapshot),
-        diff_summary=deepcopy(diff_summary),
-        blocked_reasons=_safe_list(blocked_reasons),
-        rollback_plan=_safe_dict(rollback_plan),
-        structured_override=_safe_dict(structured_override) if isinstance(structured_override, dict) else None,
-        structured_justification=_safe_dict(structured_justification) if isinstance(structured_justification, dict) else None,
-    )
+    if isinstance(approval_fixture_payload, dict):
+        payload = _safe_dict(approval_fixture_payload)
+    else:
+        payload = build_staging_dry_run_payload(
+            dry_run_source=_safe_dict(dry_run_source),
+            target_selector=_safe_dict(target_selector),
+            actor_context=_safe_dict(actor_context),
+            repair_category=_safe_text(repair_category),
+            before_snapshot=_safe_dict(before_snapshot),
+            proposed_after_snapshot=_safe_dict(proposed_after_snapshot),
+            diff_summary=deepcopy(diff_summary),
+            blocked_reasons=_safe_list(blocked_reasons),
+            rollback_plan=_safe_dict(rollback_plan),
+            structured_override=_safe_dict(structured_override) if isinstance(structured_override, dict) else None,
+            structured_justification=_safe_dict(structured_justification) if isinstance(structured_justification, dict) else None,
+        )
 
     validator_result = validate_apply_request(
         packet=_safe_dict(payload.get("evidence_packet")),
