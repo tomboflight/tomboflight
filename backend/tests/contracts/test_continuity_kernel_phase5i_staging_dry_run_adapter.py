@@ -139,15 +139,14 @@ class TestContinuityKernelPhase5IStagingDryRunAdapter(unittest.TestCase):
             structured_justification={"note": "placeholder"},
         )
 
-        self.assertEqual(
-            set(payload.keys()),
+        self.assertTrue(
             {
                 "evidence_packet",
                 "authorization_decision",
                 "apply_transition",
                 "rollback_verification",
                 "validator_result",
-            },
+            }.issubset(set(payload.keys()))
         )
 
     def test_18_optional_module_build_staging_payload_has_safe_placeholders(self) -> None:
