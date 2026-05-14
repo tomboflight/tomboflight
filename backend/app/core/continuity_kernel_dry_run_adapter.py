@@ -88,6 +88,10 @@ def _build_aligned_rollback_plan(
     rollback_plan: dict[str, Any],
 ) -> dict[str, Any]:
     rollback_copy = deepcopy(rollback_plan) if isinstance(rollback_plan, dict) else {}
+    rollback_text = str(rollback_copy).lower()
+    if "before_snapshot" in rollback_text or "before_snapshot_ref" in rollback_text:
+        return rollback_copy
+
     before_snapshot_ref = _safe_text(rollback_copy.get("before_snapshot_ref"), "")
     if not before_snapshot_ref:
         before_snapshot_ref = _build_alignment_before_snapshot_ref(evidence_packet)
@@ -116,9 +120,9 @@ def build_evidence_packet_from_dry_run(
     evidence_packet_id = _safe_text(source_copy.get("evidence_packet_id"), f"evidence::{dry_run_id}")
     actor_user_id = _safe_text(actor_copy.get("actor_user_id"), "")
     requested_by = _safe_text(actor_copy.get("requested_by"), actor_user_id)
-    target_type = _safe_text(target_copy.get("target_type"), "unknown_target")
-    target_id = _safe_text(target_copy.get("target_id"), "unknown_id")
-    category = _safe_text(repair_category, "unknown_category")
+    target_type = _safe_text(target_copy.get("target_type"), "")
+    target_id = _safe_text(target_copy.get("target_id"), "")
+    category = _safe_text(repair_category, "")
 
     return {
         "dry_run_id": dry_run_id,
