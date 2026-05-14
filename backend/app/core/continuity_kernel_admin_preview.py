@@ -15,8 +15,11 @@ This module only shapes in-memory Continuity Kernel payloads into read-only prev
 
 from copy import deepcopy
 from datetime import datetime, timezone
+from importlib import import_module
 from typing import Any
 from uuid import uuid4
+
+_taxonomy = import_module("backend.app.core.continuity_kernel_taxonomy")
 
 
 ALLOWED_READ_ONLY_ACTIONS = (
@@ -60,61 +63,20 @@ _CANONICAL_PAYLOAD_KEYS = (
 )
 
 
-CANONICAL_OFFICER_ROLES = (
-    "SUPERADMIN",
-    "EXECUTIVE_TECH_ADMIN",
-    "operations_admin",
-    "finance_admin",
-    "marketing_admin",
-    "CMO",
-)
-
-CANONICAL_OFFICER_ROLE_SET = frozenset(CANONICAL_OFFICER_ROLES)
-
-CANONICAL_REPAIR_CATEGORIES = (
-    "missing_entitlement_repair",
-    "package_lane_normalization",
-    "workspace_membership_repair",
-    "upload_readiness_repair",
-    "viewer_readiness_repair",
-    "certificate_issuance_consistency_repair",
-    "mint_readiness_repair",
-    "admin_repair_safety",
-    "billing_order_payment_repair",
-    "audit_record_correction_metadata",
-)
-
-CANONICAL_REPAIR_CATEGORY_SET = frozenset(CANONICAL_REPAIR_CATEGORIES)
-
-TECHNICAL_CATEGORIES = frozenset(
-    {
-        "missing_entitlement_repair",
-        "package_lane_normalization",
-        "certificate_issuance_consistency_repair",
-        "mint_readiness_repair",
-        "audit_record_correction_metadata",
-    }
-)
-OPERATIONS_CATEGORIES = frozenset(
-    {
-        "workspace_membership_repair",
-        "upload_readiness_repair",
-        "viewer_readiness_repair",
-    }
-)
-FINANCE_CATEGORIES = frozenset({"billing_order_payment_repair"})
-MARKETING_CATEGORIES = frozenset()
-SUPERADMIN_ONLY_CATEGORIES = frozenset({"admin_repair_safety"})
-READ_ONLY_PREVIEW_CATEGORIES = frozenset(CANONICAL_REPAIR_CATEGORIES)
-
-ROLE_TO_PREVIEW_CATEGORIES = {
-    "SUPERADMIN": READ_ONLY_PREVIEW_CATEGORIES,
-    "EXECUTIVE_TECH_ADMIN": TECHNICAL_CATEGORIES,
-    "operations_admin": OPERATIONS_CATEGORIES,
-    "finance_admin": FINANCE_CATEGORIES,
-    "marketing_admin": MARKETING_CATEGORIES,
-    "CMO": MARKETING_CATEGORIES,
-}
+CANONICAL_OFFICER_ROLES = _taxonomy.CANONICAL_OFFICER_ROLES
+CANONICAL_OFFICER_ROLE_SET = _taxonomy.CANONICAL_OFFICER_ROLE_SET
+CANONICAL_REPAIR_CATEGORIES = _taxonomy.CANONICAL_REPAIR_CATEGORIES
+CANONICAL_REPAIR_CATEGORY_SET = _taxonomy.CANONICAL_REPAIR_CATEGORY_SET
+TECHNICAL_CATEGORIES = _taxonomy.TECHNICAL_CATEGORIES
+OPERATIONS_CATEGORIES = _taxonomy.OPERATIONS_CATEGORIES
+FINANCE_CATEGORIES = _taxonomy.FINANCE_CATEGORIES
+MARKETING_CATEGORIES = _taxonomy.MARKETING_CATEGORIES
+SUPERADMIN_ONLY_CATEGORIES = _taxonomy.SUPERADMIN_ONLY_CATEGORIES
+READ_ONLY_PREVIEW_CATEGORIES = _taxonomy.READ_ONLY_PREVIEW_CATEGORIES
+ROLE_TO_PREVIEW_CATEGORIES = _taxonomy.ROLE_TO_PREVIEW_CATEGORIES
+is_canonical_role = _taxonomy.is_canonical_role
+is_canonical_repair_category = _taxonomy.is_canonical_repair_category
+preview_categories_for_role = _taxonomy.preview_categories_for_role
 
 
 def _safe_text(value: Any, default: str = "") -> str:
@@ -184,8 +146,8 @@ def allowed_preview_actions_for_role(role: str, repair_category: str) -> list[st
     category_text = _safe_text(repair_category)
 
     allowed: list[str] = []
-    if role_text in CANONICAL_OFFICER_ROLE_SET and category_text in CANONICAL_REPAIR_CATEGORY_SET:
-        allowed_categories = ROLE_TO_PREVIEW_CATEGORIES.get(role_text, frozenset())
+    if is_canonical_role(role_text) and is_canonical_repair_category(category_text):
+        allowed_categories = preview_categories_for_role(role_text)
         if category_text in allowed_categories:
             allowed = list(ALLOWED_READ_ONLY_ACTIONS)
 

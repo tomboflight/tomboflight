@@ -13,6 +13,24 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
+from backend.app.core.continuity_kernel_taxonomy import (
+    CANONICAL_OFFICER_ROLES,
+    CANONICAL_OFFICER_ROLE_SET,
+    CANONICAL_REPAIR_CATEGORIES,
+    CANONICAL_REPAIR_CATEGORY_SET,
+    FINANCE_CATEGORIES,
+    MARKETING_CATEGORIES,
+    OPERATIONS_CATEGORIES,
+    READ_ONLY_PREVIEW_CATEGORIES,
+    ROLE_TO_ALLOWED_CATEGORIES,
+    SUPERADMIN_ONLY_CATEGORIES,
+    TECHNICAL_CATEGORIES,
+    allowed_categories_for_role,
+    is_canonical_repair_category,
+    is_canonical_role,
+    is_finance_category,
+)
+
 
 class RepairCategory(str, Enum):
     MISSING_ENTITLEMENT_REPAIR = "missing_entitlement_repair"
@@ -52,55 +70,7 @@ class RiskLevel(str, Enum):
     HIGH = "high"
 
 
-CANONICAL_OFFICER_ROLES = (
-    "SUPERADMIN",
-    "EXECUTIVE_TECH_ADMIN",
-    "operations_admin",
-    "finance_admin",
-    "marketing_admin",
-    "CMO",
-)
-
-CANONICAL_OFFICER_ROLE_SET = frozenset(CANONICAL_OFFICER_ROLES)
-
-CANONICAL_REPAIR_CATEGORIES = (
-    RepairCategory.MISSING_ENTITLEMENT_REPAIR.value,
-    RepairCategory.PACKAGE_LANE_NORMALIZATION.value,
-    RepairCategory.WORKSPACE_MEMBERSHIP_REPAIR.value,
-    RepairCategory.UPLOAD_READINESS_REPAIR.value,
-    RepairCategory.VIEWER_READINESS_REPAIR.value,
-    RepairCategory.CERTIFICATE_ISSUANCE_CONSISTENCY_REPAIR.value,
-    RepairCategory.MINT_READINESS_REPAIR.value,
-    RepairCategory.ADMIN_REPAIR_SAFETY.value,
-    RepairCategory.BILLING_ORDER_PAYMENT_REPAIR.value,
-    RepairCategory.AUDIT_RECORD_CORRECTION_METADATA.value,
-)
-
-CANONICAL_REPAIR_CATEGORY_SET = frozenset(CANONICAL_REPAIR_CATEGORIES)
-
-TECHNICAL_CATEGORIES = frozenset(
-    {
-        RepairCategory.MISSING_ENTITLEMENT_REPAIR.value,
-        RepairCategory.PACKAGE_LANE_NORMALIZATION.value,
-        RepairCategory.CERTIFICATE_ISSUANCE_CONSISTENCY_REPAIR.value,
-        RepairCategory.MINT_READINESS_REPAIR.value,
-        RepairCategory.AUDIT_RECORD_CORRECTION_METADATA.value,
-    }
-)
-
-OPERATIONS_CATEGORIES = frozenset(
-    {
-        RepairCategory.WORKSPACE_MEMBERSHIP_REPAIR.value,
-        RepairCategory.UPLOAD_READINESS_REPAIR.value,
-        RepairCategory.VIEWER_READINESS_REPAIR.value,
-    }
-)
-
-FINANCE_CATEGORIES = frozenset({RepairCategory.BILLING_ORDER_PAYMENT_REPAIR.value})
-MARKETING_CATEGORIES = frozenset()
-SUPERADMIN_ONLY_CATEGORIES = frozenset({RepairCategory.ADMIN_REPAIR_SAFETY.value})
 SUPERADMIN_CATEGORIES = frozenset(CANONICAL_REPAIR_CATEGORIES)
-READ_ONLY_PREVIEW_CATEGORIES = frozenset(CANONICAL_REPAIR_CATEGORIES)
 
 
 EVIDENCE_REQUIRED_FIELDS = {
@@ -177,15 +147,6 @@ ALLOWED_APPLY_TRANSITIONS = {
     (ApplyState.ROLLBACK_REQUIRED.value, ApplyState.ROLLBACK_COMPLETED.value),
     (ApplyState.APPLY_EXECUTED.value, ApplyState.AUDIT_CLOSED.value),
     (ApplyState.ROLLBACK_COMPLETED.value, ApplyState.AUDIT_CLOSED.value),
-}
-
-ROLE_TO_ALLOWED_CATEGORIES = {
-    "SUPERADMIN": SUPERADMIN_CATEGORIES,
-    "EXECUTIVE_TECH_ADMIN": TECHNICAL_CATEGORIES,
-    "operations_admin": OPERATIONS_CATEGORIES,
-    "finance_admin": FINANCE_CATEGORIES,
-    "marketing_admin": MARKETING_CATEGORIES,
-    "CMO": MARKETING_CATEGORIES,
 }
 
 FINANCE_ONLY_CATEGORIES = FINANCE_CATEGORIES
@@ -555,11 +516,11 @@ def _validate_role_for_category(
     structured_override: dict[str, Any] | None = None,
     packet: dict[str, Any] | None = None,
 ) -> None:
-    if category not in CANONICAL_REPAIR_CATEGORY_SET:
+    if not is_canonical_repair_category(category):
         _add_error(acc, "UNKNOWN_REPAIR_CATEGORY", f"Unknown repair category: {category}")
         return
 
-    if role not in CANONICAL_OFFICER_ROLE_SET:
+    if not is_canonical_role(role):
         _add_error(acc, "UNKNOWN_ACTOR_ROLE", f"Unknown actor role: {role}")
         return
 
@@ -567,7 +528,7 @@ def _validate_role_for_category(
         _add_error(acc, "MARKETING_ADMIN_CANNOT_APPROVE", "CMO/marketing_admin cannot approve repair execution")
         return
 
-    if category in FINANCE_ONLY_CATEGORIES and role == "EXECUTIVE_TECH_ADMIN":
+    if is_finance_category(category) and role == "EXECUTIVE_TECH_ADMIN":
         if not isinstance(structured_override, dict):
             _add_error(
                 acc,
@@ -593,7 +554,7 @@ def _validate_role_for_category(
             return
         return
 
-    if category not in ROLE_TO_ALLOWED_CATEGORIES[role]:
+    if category not in allowed_categories_for_role(role):
         _add_error(acc, "ROLE_CATEGORY_MISMATCH", f"Role {role} is not allowed to approve category {category}")
 
 
