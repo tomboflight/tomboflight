@@ -33,7 +33,7 @@ class TestContinuityKernelPhase6DStagingPayloadAlignment(unittest.TestCase):
             candidates.extend(path for path in REPO_ROOT.glob(pattern) if path.is_file())
         return candidates
 
-    def _assert_no_kernel_runtime_imports(self, paths: list[Path]) -> None:
+    def _assert_no_kernel_module_imports(self, paths: list[Path]) -> None:
         kernel_module_tokens = [
             "continuity_kernel_readonly_helper",
             "continuity_kernel_dry_run_adapter",
@@ -241,7 +241,7 @@ class TestContinuityKernelPhase6DStagingPayloadAlignment(unittest.TestCase):
             "backend/scripts/*.py",
         )
         runtime_paths.append(REPO_ROOT / "backend" / "app" / "main.py")
-        self._assert_no_kernel_runtime_imports(runtime_paths)
+        self._assert_no_kernel_module_imports(runtime_paths)
 
     def test_19_no_database_read_write_tokens_in_changed_isolated_modules(self) -> None:
         forbidden_tokens = [

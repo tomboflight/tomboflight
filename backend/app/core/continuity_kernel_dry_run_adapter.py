@@ -92,10 +92,8 @@ def _build_aligned_rollback_plan(
     if "before_snapshot" in rollback_text or "before_snapshot_ref" in rollback_text:
         return rollback_copy
 
-    before_snapshot_ref = _safe_text(rollback_copy.get("before_snapshot_ref"), "")
-    if not before_snapshot_ref:
-        before_snapshot_ref = _build_alignment_before_snapshot_ref(evidence_packet)
-        rollback_copy["before_snapshot_ref"] = before_snapshot_ref
+    if not _safe_text(rollback_copy.get("before_snapshot_ref"), ""):
+        rollback_copy["before_snapshot_ref"] = _build_alignment_before_snapshot_ref(evidence_packet)
     return rollback_copy
 
 
