@@ -53,7 +53,7 @@ def _placeholder_preview_inputs(current_user: dict[str, Any]) -> dict:
             "requested_by": actor_id,
             "actor_role": actor_role,
         },
-        "repair_category": "workspace_membership_repair",
+        "repair_category": "readonly_preview_category",
         "before_snapshot": {"state": "before"},
         "proposed_after_snapshot": {"state": "after"},
         "diff_summary": "read-only admin continuity kernel preview",
