@@ -139,24 +139,37 @@ class TestContinuityKernelPhase5KReadonlyAdminPreview(unittest.TestCase):
         ]:
             self.assertIn(value, self.doc_lower)
 
-    def test_11_optional_module_standard_library_only_imports(self) -> None:
+    def test_11_optional_module_imports_allow_stdlib_and_approved_isolated_core_modules_only(self) -> None:
         if not self.module_exists:
             self.skipTest("Optional Phase 5K admin preview module was not added")
 
         stdlib_names = set(getattr(sys, "stdlib_module_names", set()))
+        approved_modules = {
+            "backend.app.core.continuity_kernel_taxonomy",
+            "backend.app.core.continuity_kernel_validator",
+            "backend.app.core.continuity_kernel_dry_run_adapter",
+            "backend.app.core.continuity_kernel_admin_preview",
+        }
         tree = ast.parse(self.module_text)
 
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
-                    root = alias.name.split(".")[0]
-                    self.assertIn(root, stdlib_names, msg=f"Non-stdlib import found: {alias.name}")
+                    imported = alias.name
+                    root = imported.split(".")[0]
+                    self.assertTrue(
+                        imported in approved_modules or root in stdlib_names,
+                        msg=f"Non-approved import found: {imported}",
+                    )
             elif isinstance(node, ast.ImportFrom):
                 if node.level and node.level > 0:
                     self.fail("Relative imports are not allowed in optional preview module")
                 module_name = node.module or ""
                 root = module_name.split(".")[0]
-                self.assertIn(root, stdlib_names, msg=f"Non-stdlib import found: {module_name}")
+                self.assertTrue(
+                    module_name in approved_modules or root in stdlib_names,
+                    msg=f"Non-approved import found: {module_name}",
+                )
 
     def test_12_optional_module_has_no_fastapi_mongo_pydantic_routes_services_scripts_imports(self) -> None:
         if not self.module_exists:

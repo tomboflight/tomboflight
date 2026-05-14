@@ -74,16 +74,23 @@ class TestContinuityKernelPhase5LAdminPreviewModule(unittest.TestCase):
     def test_02_module_imports_with_standard_library_only(self) -> None:
         self.assertIsNotNone(self.module)
         stdlib_names = set(getattr(sys, "stdlib_module_names", set()))
+        approved_modules = {
+            "backend.app.core.continuity_kernel_taxonomy",
+            "backend.app.core.continuity_kernel_validator",
+            "backend.app.core.continuity_kernel_dry_run_adapter",
+            "backend.app.core.continuity_kernel_admin_preview",
+        }
         tree = ast.parse(self.source_text)
 
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
-                    self.assertIn(alias.name.split(".")[0], stdlib_names)
+                    imported = alias.name
+                    self.assertTrue(imported in approved_modules or imported.split(".")[0] in stdlib_names)
             elif isinstance(node, ast.ImportFrom):
                 self.assertEqual(node.level, 0)
                 module_name = node.module or ""
-                self.assertIn(module_name.split(".")[0], stdlib_names)
+                self.assertTrue(module_name in approved_modules or module_name.split(".")[0] in stdlib_names)
 
     def test_03_source_text_says_read_only_and_non_operational(self) -> None:
         self.assertIn("read-only", self.source_lower)

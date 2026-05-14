@@ -15,11 +15,25 @@ This module only shapes in-memory Continuity Kernel payloads into read-only prev
 
 from copy import deepcopy
 from datetime import datetime, timezone
-from importlib import import_module
 from typing import Any
 from uuid import uuid4
 
-_taxonomy = import_module("backend.app.core.continuity_kernel_taxonomy")
+from backend.app.core.continuity_kernel_taxonomy import (
+    CANONICAL_OFFICER_ROLES,
+    CANONICAL_OFFICER_ROLE_SET,
+    CANONICAL_REPAIR_CATEGORIES,
+    CANONICAL_REPAIR_CATEGORY_SET,
+    FINANCE_CATEGORIES,
+    MARKETING_CATEGORIES,
+    OPERATIONS_CATEGORIES,
+    READ_ONLY_PREVIEW_CATEGORIES,
+    ROLE_TO_PREVIEW_CATEGORIES,
+    SUPERADMIN_ONLY_CATEGORIES,
+    TECHNICAL_CATEGORIES,
+    is_canonical_repair_category,
+    is_canonical_role,
+    preview_categories_for_role,
+)
 
 
 ALLOWED_READ_ONLY_ACTIONS = (
@@ -61,22 +75,6 @@ _CANONICAL_PAYLOAD_KEYS = (
     "structured_justification",
     "validator_result",
 )
-
-
-CANONICAL_OFFICER_ROLES = _taxonomy.CANONICAL_OFFICER_ROLES
-CANONICAL_OFFICER_ROLE_SET = _taxonomy.CANONICAL_OFFICER_ROLE_SET
-CANONICAL_REPAIR_CATEGORIES = _taxonomy.CANONICAL_REPAIR_CATEGORIES
-CANONICAL_REPAIR_CATEGORY_SET = _taxonomy.CANONICAL_REPAIR_CATEGORY_SET
-TECHNICAL_CATEGORIES = _taxonomy.TECHNICAL_CATEGORIES
-OPERATIONS_CATEGORIES = _taxonomy.OPERATIONS_CATEGORIES
-FINANCE_CATEGORIES = _taxonomy.FINANCE_CATEGORIES
-MARKETING_CATEGORIES = _taxonomy.MARKETING_CATEGORIES
-SUPERADMIN_ONLY_CATEGORIES = _taxonomy.SUPERADMIN_ONLY_CATEGORIES
-READ_ONLY_PREVIEW_CATEGORIES = _taxonomy.READ_ONLY_PREVIEW_CATEGORIES
-ROLE_TO_PREVIEW_CATEGORIES = _taxonomy.ROLE_TO_PREVIEW_CATEGORIES
-is_canonical_role = _taxonomy.is_canonical_role
-is_canonical_repair_category = _taxonomy.is_canonical_repair_category
-preview_categories_for_role = _taxonomy.preview_categories_for_role
 
 
 def _safe_text(value: Any, default: str = "") -> str:
