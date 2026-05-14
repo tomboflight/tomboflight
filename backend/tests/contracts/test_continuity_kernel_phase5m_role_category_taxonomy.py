@@ -184,7 +184,11 @@ class TestContinuityKernelPhase5MRoleCategoryTaxonomy(unittest.TestCase):
         self.assertNotIn("keyword in repair_category", self.preview_lower)
 
     def test_24_validator_and_preview_modules_remain_isolated(self) -> None:
-        for module_text in [self.validator_lower, self.preview_lower]:
+        source_pairs = [
+            (self.validator_source, self.validator_lower),
+            (self.preview_source, self.preview_lower),
+        ]
+        for module_text, module_lower in source_pairs:
             tree = ast.parse(module_text)
             for node in ast.walk(tree):
                 if isinstance(node, ast.Import):
@@ -205,9 +209,9 @@ class TestContinuityKernelPhase5MRoleCategoryTaxonomy(unittest.TestCase):
                     self.assertNotIn("backend.app.services", imported_from)
                     self.assertNotIn("backend.scripts", imported_from)
 
-            self.assertNotIn("backend.app.routes", module_text)
-            self.assertNotIn("backend.app.services", module_text)
-            self.assertNotIn("backend.scripts", module_text)
+            self.assertNotIn("backend.app.routes", module_lower)
+            self.assertNotIn("backend.app.services", module_lower)
+            self.assertNotIn("backend.scripts", module_lower)
 
     def test_25_source_still_says_non_operational_guardrails(self) -> None:
         for module_lower in [self.validator_lower, self.preview_lower]:
