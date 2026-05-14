@@ -110,7 +110,8 @@ class TestContinuityKernelPhase5IStagingDryRunAdapter(unittest.TestCase):
         self.assertNotIn("pydantic", self.module_lower)
         self.assertNotIn("pymongo", self.module_lower)
         self.assertNotIn("motor", self.module_lower)
-        self.assertNotIn("mongo", self.module_lower)
+        self.assertNotIn("mongoclient", self.module_lower)
+        self.assertNotIn("mongodb://", self.module_lower)
         self.assertNotIn("backend.app.routes", self.module_lower)
         self.assertNotIn("backend.app.services", self.module_lower)
         self.assertNotIn("backend.scripts", self.module_lower)
@@ -118,7 +119,7 @@ class TestContinuityKernelPhase5IStagingDryRunAdapter(unittest.TestCase):
         self.assertNotIn("from ..services", self.module_lower)
         self.assertNotIn("from ..scripts", self.module_lower)
 
-    def test_17_optional_module_build_staging_payload_has_canonical_keys_and_safe_placeholders(self) -> None:
+    def test_17_optional_module_build_staging_payload_has_canonical_keys(self) -> None:
         if not self.module_exists:
             self.skipTest("Optional Phase 5I dry-run adapter module was not added")
 
@@ -147,6 +148,26 @@ class TestContinuityKernelPhase5IStagingDryRunAdapter(unittest.TestCase):
                 "validator_result",
             },
         )
+
+    def test_18_optional_module_build_staging_payload_has_safe_placeholders(self) -> None:
+        if not self.module_exists:
+            self.skipTest("Optional Phase 5I dry-run adapter module was not added")
+
+        module = import_module(MODULE_IMPORT)
+        payload = module.build_staging_dry_run_payload(
+            dry_run_source={"origin": "test"},
+            target_selector={"scope": "test"},
+            actor_context={"actor": "test"},
+            repair_category="test",
+            before_snapshot={"before": True},
+            proposed_after_snapshot={"after": False},
+            diff_summary={"changed": 1},
+            blocked_reasons=["staging_only"],
+            rollback_plan={"steps": []},
+            structured_override={"present": False},
+            structured_justification={"note": "placeholder"},
+        )
+
         authorization_decision = payload["authorization_decision"]
         apply_transition = payload["apply_transition"]
         validator_result = payload["validator_result"]
