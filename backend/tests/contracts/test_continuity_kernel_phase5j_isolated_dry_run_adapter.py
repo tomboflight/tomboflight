@@ -185,7 +185,7 @@ class TestContinuityKernelPhase5JIsolatedDryRunAdapter(unittest.TestCase):
         self.assertNotIn("just-audit-check", audit_context_text)
 
     def test_21_adapter_module_is_not_imported_in_routes_services_scripts_main(self) -> None:
-        needle = "continuity_kernel_dry_run_adapter"
+        adapter_module_name = "continuity_kernel_dry_run_adapter"
         candidates = []
 
         for pattern in [
@@ -204,7 +204,7 @@ class TestContinuityKernelPhase5JIsolatedDryRunAdapter(unittest.TestCase):
 
         for path in candidates:
             text = path.read_text(encoding="utf-8", errors="ignore")
-            self.assertNotIn(needle, text, msg=f"Unexpected adapter import reference in {path}")
+            self.assertNotIn(adapter_module_name, text, msg=f"Unexpected adapter import reference in {path}")
 
     def test_22_adapter_source_contains_no_database_read_write_language(self) -> None:
         for forbidden in [

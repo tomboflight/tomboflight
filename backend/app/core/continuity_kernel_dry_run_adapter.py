@@ -103,9 +103,6 @@ def build_evidence_packet_from_dry_run(
     target_id = _safe_text(target_copy.get("target_id"), "")
     category = _safe_text(repair_category, "")
 
-    _ = structured_override
-    _ = structured_justification
-
     return {
         "dry_run_id": dry_run_id,
         "evidence_packet_id": evidence_packet_id,
