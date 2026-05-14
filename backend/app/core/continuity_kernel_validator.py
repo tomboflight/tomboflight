@@ -180,6 +180,49 @@ PROHIBITED_ACTION_SIGNALS = {
     ),
 }
 
+STRUCTURED_OVERRIDE_REQUIRED_FIELDS = {
+    "override_id",
+    "override_type",
+    "requested_by",
+    "approved_by",
+    "approval_role",
+    "reason_code",
+    "reason_detail",
+    "target_type",
+    "target_id",
+    "repair_category",
+    "risk_level",
+    "expires_at",
+    "audit_context",
+}
+
+STRUCTURED_JUSTIFICATION_REQUIRED_FIELDS = {
+    "justification_id",
+    "justification_type",
+    "provided_by",
+    "reason_code",
+    "reason_detail",
+    "related_field",
+    "target_type",
+    "target_id",
+    "repair_category",
+    "audit_context",
+}
+
+ALLOWED_OVERRIDE_TYPES = {
+    "SUPERADMIN_EMERGENCY_OVERRIDE",
+    "CEO_APPROVED_FINANCE_OVERRIDE",
+    "APPROVER_IDENTITY_MISMATCH_OVERRIDE",
+    "HIGH_RISK_SAME_ACTOR_OVERRIDE",
+}
+
+ALLOWED_JUSTIFICATION_TYPES = {
+    "APPROVED_BY_ACTOR_MISMATCH",
+    "TRANSITION_ACTOR_TRACEABILITY",
+    "ROLLBACK_REFERENCE_JUSTIFICATION",
+    "FINANCE_TECH_SCOPE_JUSTIFICATION",
+}
+
 ROLE_COMPATIBILITY_OVERRIDE_SIGNALS = {
     "role compatibility override",
     "approval role compatibility override",
@@ -197,6 +240,9 @@ SYSTEM_REVIEWED_ACTOR_SIGNALS = {
     "system reviewed actor",
     "system_reviewed_actor",
 }
+
+MARKETING_RESTRICTED_ACTOR_IDS = {"marketing_admin", "cmo"}
+CEO_EQUIVALENT_APPROVAL_ROLES = {"SUPERADMIN", "CEO", "CEO_EQUIVALENT", "CHIEF_EXECUTIVE_OFFICER"}
 
 
 @dataclass(frozen=True)
@@ -304,7 +350,174 @@ def _normalize_role(role: Any) -> str:
     return str(role).strip()
 
 
-def _validate_role_for_category(role: str, category: str, context_text: str, acc: ValidationAccumulator) -> None:
+def _merge_nested_result(acc: ValidationAccumulator, result: dict[str, Any]) -> None:
+    if result.get("passed", False):
+        return
+    acc.reason_codes.extend(result.get("reason_codes", []))
+    acc.errors.extend(result.get("errors", []))
+    acc.warnings.extend(result.get("warnings", []))
+
+
+def _extract_structured_override(payload: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(payload, dict):
+        return None
+    for key in ("structured_override", "override"):
+        value = payload.get(key)
+        if isinstance(value, dict):
+            return value
+    return None
+
+
+def _extract_structured_justification(payload: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(payload, dict):
+        return None
+    for key in ("structured_justification", "justification"):
+        value = payload.get(key)
+        if isinstance(value, dict):
+            return value
+    return None
+
+
+def _parse_iso8601_utc(raw_value: Any) -> datetime | None:
+    value = _flatten_to_text(raw_value).strip()
+    if value == "":
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def validate_structured_override(override: dict[str, Any], packet: dict[str, Any] | None = None) -> dict[str, Any]:
+    acc = _new_accumulator()
+    validator_name = "validate_structured_override"
+
+    if not isinstance(override, dict):
+        _add_error(acc, "INVALID_STRUCTURED_OVERRIDE", "override must be a dictionary/object")
+        return _finish_result(validator_name, acc)
+
+    missing_fields = _find_missing_fields(override, STRUCTURED_OVERRIDE_REQUIRED_FIELDS)
+    if missing_fields:
+        _add_error(
+            acc,
+            "MISSING_REQUIRED_FIELDS",
+            f"Missing required structured override fields: {', '.join(missing_fields)}",
+        )
+        return _finish_result(validator_name, acc)
+
+    for field in STRUCTURED_OVERRIDE_REQUIRED_FIELDS:
+        if _is_blank(override.get(field)):
+            _add_error(acc, "BLANK_STRUCTURED_OVERRIDE_FIELD", f"Structured override field {field} must not be blank")
+
+    override_type = _flatten_to_text(override.get("override_type")).strip()
+    if override_type not in ALLOWED_OVERRIDE_TYPES:
+        _add_error(acc, "UNKNOWN_OVERRIDE_TYPE", f"Unknown override_type: {override_type}")
+
+    approval_role = _normalize_role(override.get("approval_role"))
+    if approval_role in {"CMO", "marketing_admin"}:
+        _add_error(acc, "MARKETING_ADMIN_CANNOT_OVERRIDE", "CMO/marketing_admin cannot create or approve overrides")
+
+    requested_by = _flatten_to_text(override.get("requested_by")).strip().lower()
+    approved_by = _flatten_to_text(override.get("approved_by")).strip().lower()
+    if requested_by in MARKETING_RESTRICTED_ACTOR_IDS or approved_by in MARKETING_RESTRICTED_ACTOR_IDS:
+        _add_error(acc, "MARKETING_ADMIN_CANNOT_OVERRIDE", "CMO/marketing_admin cannot create or approve overrides")
+
+    if override_type == "SUPERADMIN_EMERGENCY_OVERRIDE" and approval_role not in CEO_EQUIVALENT_APPROVAL_ROLES:
+        _add_error(
+            acc,
+            "INVALID_OVERRIDE_APPROVAL_ROLE",
+            "SUPERADMIN_EMERGENCY_OVERRIDE requires SUPERADMIN or CEO-equivalent approval_role",
+        )
+
+    if _flatten_to_text(override.get("risk_level")).strip().lower() not in {level.value for level in RiskLevel}:
+        _add_error(acc, "UNKNOWN_RISK_LEVEL", f"Unknown risk_level: {_flatten_to_text(override.get('risk_level')).strip()}")
+
+    expires_at = _parse_iso8601_utc(override.get("expires_at"))
+    if expires_at is None:
+        _add_error(acc, "INVALID_OVERRIDE_EXPIRY", "expires_at must be a valid ISO-8601 timestamp")
+    elif expires_at <= datetime.now(timezone.utc):
+        _add_error(acc, "EXPIRED_OVERRIDE", "Structured override is expired and fails closed")
+
+    if packet is not None and isinstance(packet, dict):
+        for field in ("target_type", "target_id", "repair_category"):
+            override_value = _flatten_to_text(override.get(field)).strip()
+            packet_value = _flatten_to_text(packet.get(field)).strip()
+            if override_value != packet_value:
+                _add_error(
+                    acc,
+                    "OVERRIDE_PACKET_SCOPE_MISMATCH",
+                    f"Structured override {field} must match packet {field}",
+                )
+
+    _scan_prohibited_text_fields([override], acc)
+    return _finish_result(validator_name, acc)
+
+
+def validate_structured_justification(
+    justification: dict[str, Any], packet: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    acc = _new_accumulator()
+    validator_name = "validate_structured_justification"
+
+    if not isinstance(justification, dict):
+        _add_error(acc, "INVALID_STRUCTURED_JUSTIFICATION", "justification must be a dictionary/object")
+        return _finish_result(validator_name, acc)
+
+    missing_fields = _find_missing_fields(justification, STRUCTURED_JUSTIFICATION_REQUIRED_FIELDS)
+    if missing_fields:
+        _add_error(
+            acc,
+            "MISSING_REQUIRED_FIELDS",
+            f"Missing required structured justification fields: {', '.join(missing_fields)}",
+        )
+        return _finish_result(validator_name, acc)
+
+    for field in STRUCTURED_JUSTIFICATION_REQUIRED_FIELDS:
+        if _is_blank(justification.get(field)):
+            _add_error(
+                acc,
+                "BLANK_STRUCTURED_JUSTIFICATION_FIELD",
+                f"Structured justification field {field} must not be blank",
+            )
+
+    justification_type = _flatten_to_text(justification.get("justification_type")).strip()
+    if justification_type not in ALLOWED_JUSTIFICATION_TYPES:
+        _add_error(acc, "UNKNOWN_JUSTIFICATION_TYPE", f"Unknown justification_type: {justification_type}")
+
+    provided_by = _flatten_to_text(justification.get("provided_by")).strip().lower()
+    if provided_by in MARKETING_RESTRICTED_ACTOR_IDS:
+        _add_error(
+            acc,
+            "MARKETING_ADMIN_CANNOT_APPROVE",
+            "CMO/marketing_admin justification cannot approve repair execution",
+        )
+
+    if packet is not None and isinstance(packet, dict):
+        for field in ("target_type", "target_id", "repair_category"):
+            justification_value = _flatten_to_text(justification.get(field)).strip()
+            packet_value = _flatten_to_text(packet.get(field)).strip()
+            if justification_value != packet_value:
+                _add_error(
+                    acc,
+                    "JUSTIFICATION_PACKET_SCOPE_MISMATCH",
+                    f"Structured justification {field} must match packet {field}",
+                )
+
+    _scan_prohibited_text_fields([justification], acc)
+    return _finish_result(validator_name, acc)
+
+
+def _validate_role_for_category(
+    role: str,
+    category: str,
+    context_text: str,
+    acc: ValidationAccumulator,
+    structured_override: dict[str, Any] | None = None,
+    packet: dict[str, Any] | None = None,
+) -> None:
     if category not in {item.value for item in RepairCategory}:
         _add_error(acc, "UNKNOWN_REPAIR_CATEGORY", f"Unknown repair category: {category}")
         return
@@ -317,13 +530,30 @@ def _validate_role_for_category(role: str, category: str, context_text: str, acc
         _add_error(acc, "MARKETING_ADMIN_CANNOT_APPROVE", "CMO/marketing_admin cannot approve repair execution")
         return
 
-    if category in FINANCE_ONLY_CATEGORIES and role == "EXECUTIVE_TECH_ADMIN" and not _has_override(context_text):
-        _add_error(
-            acc,
-            "FINANCE_CATEGORY_REQUIRES_OVERRIDE",
-            "EXECUTIVE_TECH_ADMIN cannot approve finance-only category without CEO/SUPERADMIN override",
-        )
-        return
+    if category in FINANCE_ONLY_CATEGORIES and role == "EXECUTIVE_TECH_ADMIN":
+        if not isinstance(structured_override, dict):
+            _add_error(
+                acc,
+                "STRUCTURED_OVERRIDE_REQUIRED",
+                "EXECUTIVE_TECH_ADMIN cannot approve finance-only category without structured CEO/SUPERADMIN override",
+            )
+            return
+
+        structured_override_result = validate_structured_override(structured_override, packet=packet)
+        _merge_nested_result(acc, structured_override_result)
+        if not structured_override_result.get("passed", False):
+            return
+
+        if (
+            _flatten_to_text(structured_override.get("override_type")).strip() != "CEO_APPROVED_FINANCE_OVERRIDE"
+            or _normalize_role(structured_override.get("approval_role")) not in CEO_EQUIVALENT_APPROVAL_ROLES
+        ):
+            _add_error(
+                acc,
+                "FINANCE_CATEGORY_REQUIRES_OVERRIDE",
+                "Finance-only override must be CEO_APPROVED_FINANCE_OVERRIDE with CEO/SUPERADMIN approval_role",
+            )
+            return
 
     if category not in ROLE_TO_ALLOWED_CATEGORIES[role]:
         _add_error(acc, "ROLE_CATEGORY_MISMATCH", f"Role {role} is not allowed to approve category {category}")
@@ -346,7 +576,15 @@ def validate_evidence_packet(packet: dict[str, Any]) -> dict[str, Any]:
 
     role = _normalize_role(packet.get("approval_role"))
     category = _flatten_to_text(packet.get("repair_category")).strip()
-    _validate_role_for_category(role, category, _flatten_to_text(packet.get("audit_context")), acc)
+    structured_override = _extract_structured_override(packet)
+    _validate_role_for_category(
+        role,
+        category,
+        _flatten_to_text(packet.get("audit_context")),
+        acc,
+        structured_override=structured_override,
+        packet=packet,
+    )
 
     _scan_prohibited_text_fields(
         [
@@ -368,15 +606,30 @@ def validate_evidence_packet(packet: dict[str, Any]) -> dict[str, Any]:
         and requested_by != ""
         and executed_by != ""
         and requested_by == executed_by
-        and not (
-            role == "SUPERADMIN" and _has_override(audit_context_text)
-        )
+        and role != "SUPERADMIN"
     ):
         _add_error(
             acc,
             "HIGH_RISK_REQUESTER_EXECUTOR_CONFLICT",
             "High-risk requests require separate requester/executor unless SUPERADMIN emergency override is present",
         )
+    elif risk_level == RiskLevel.HIGH.value and requested_by != "" and executed_by != "" and requested_by == executed_by:
+        if not isinstance(structured_override, dict):
+            _add_error(
+                acc,
+                "STRUCTURED_OVERRIDE_REQUIRED",
+                "High-risk same requester/executor requires a valid StructuredOverrideSchema emergency override",
+            )
+        else:
+            structured_override_result = validate_structured_override(structured_override, packet=packet)
+            _merge_nested_result(acc, structured_override_result)
+            if structured_override_result.get("passed", False):
+                if _flatten_to_text(structured_override.get("override_type")).strip() != "SUPERADMIN_EMERGENCY_OVERRIDE":
+                    _add_error(
+                        acc,
+                        "INVALID_OVERRIDE_TYPE_FOR_HIGH_RISK",
+                        "High-risk same requester/executor requires SUPERADMIN_EMERGENCY_OVERRIDE",
+                    )
 
     return _finish_result(validator_name, acc)
 
@@ -403,7 +656,14 @@ def validate_authorization_decision(decision: dict[str, Any]) -> dict[str, Any]:
             _flatten_to_text(decision.get("decision")),
         ]
     )
-    _validate_role_for_category(role, category, override_context, acc)
+    _validate_role_for_category(
+        role,
+        category,
+        override_context,
+        acc,
+        structured_override=_extract_structured_override(decision),
+        packet=decision,
+    )
 
     decision_value = _flatten_to_text(decision.get("decision")).lower().strip()
     if decision_value not in {"approve", "approved", "allow", "allowed", "approved_for_apply"}:
@@ -498,10 +758,7 @@ def validate_apply_request(
         nested_results.append(rollback_result)
 
     for result in nested_results:
-        if not result.get("passed", False):
-            acc.reason_codes.extend(result.get("reason_codes", []))
-            acc.errors.extend(result.get("errors", []))
-            acc.warnings.extend(result.get("warnings", []))
+        _merge_nested_result(acc, result)
 
     idempotency_key = _flatten_to_text(packet.get("idempotency_key")).strip()
     if _is_blank(idempotency_key):
@@ -541,12 +798,27 @@ def validate_apply_request(
 
     approved_by = _flatten_to_text(packet.get("approved_by")).strip()
     authorization_actor_user_id = _flatten_to_text(authorization.get("actor_user_id")).strip()
-    if approved_by != authorization_actor_user_id and not _has_approved_by_justification(packet_audit_context_text):
-        _add_error(
-            acc,
-            "APPROVED_BY_AUTHORIZATION_ACTOR_MISMATCH",
-            "approved_by must match authorization.actor_user_id unless explicitly justified in audit_context",
-        )
+    packet_structured_justification = _extract_structured_justification(packet)
+    if approved_by != authorization_actor_user_id:
+        if not isinstance(packet_structured_justification, dict):
+            _add_error(
+                acc,
+                "STRUCTURED_JUSTIFICATION_REQUIRED",
+                "approved_by mismatch requires a valid StructuredJustificationSchema",
+            )
+        else:
+            justification_result = validate_structured_justification(packet_structured_justification, packet=packet)
+            _merge_nested_result(acc, justification_result)
+            if (
+                justification_result.get("passed", False)
+                and _flatten_to_text(packet_structured_justification.get("justification_type")).strip()
+                != "APPROVED_BY_ACTOR_MISMATCH"
+            ):
+                _add_error(
+                    acc,
+                    "INVALID_JUSTIFICATION_TYPE",
+                    "approved_by mismatch requires APPROVED_BY_ACTOR_MISMATCH justification_type",
+                )
 
     transition_actor_user_id = _flatten_to_text(transition.get("actor_user_id")).strip()
     if not _is_transition_actor_traceable(
@@ -561,11 +833,29 @@ def validate_apply_request(
             ]
         ),
     ):
-        _add_error(
-            acc,
-            "UNTRACEABLE_TRANSITION_ACTOR",
-            "transition actor must trace to approved actor, executor, or system-reviewed actor context",
-        )
+        transition_structured_justification = _extract_structured_justification(transition)
+        if not isinstance(transition_structured_justification, dict):
+            _add_error(
+                acc,
+                "STRUCTURED_JUSTIFICATION_REQUIRED",
+                "transition actor traceability mismatch requires a valid StructuredJustificationSchema",
+            )
+        else:
+            transition_justification_result = validate_structured_justification(
+                transition_structured_justification,
+                packet=packet,
+            )
+            _merge_nested_result(acc, transition_justification_result)
+            if (
+                transition_justification_result.get("passed", False)
+                and _flatten_to_text(transition_structured_justification.get("justification_type")).strip()
+                != "TRANSITION_ACTOR_TRACEABILITY"
+            ):
+                _add_error(
+                    acc,
+                    "INVALID_JUSTIFICATION_TYPE",
+                    "transition actor traceability mismatch requires TRANSITION_ACTOR_TRACEABILITY justification_type",
+                )
 
     if rollback is not None:
         if _flatten_to_text(packet.get("evidence_packet_id")).strip() != _flatten_to_text(rollback.get("evidence_packet_id")).strip():
