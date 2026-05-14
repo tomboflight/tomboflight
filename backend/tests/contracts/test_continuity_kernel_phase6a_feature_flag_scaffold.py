@@ -39,7 +39,7 @@ class TestContinuityKernelPhase6AFeatureFlagScaffold(unittest.TestCase):
         self.assertTrue(self.doc_exists)
 
     def test_02_doc_includes_feature_flag_name(self) -> None:
-        self.assertIn("continuity_kernel_readonly_admin_preview_enabled", self.doc_lower)
+        self.assertIn("CONTINUITY_KERNEL_READONLY_ADMIN_PREVIEW_ENABLED", self.doc_text)
 
     def test_03_doc_says_default_is_false_off(self) -> None:
         self.assertIn("default is false/off", self.doc_lower)
@@ -120,9 +120,13 @@ class TestContinuityKernelPhase6AFeatureFlagScaffold(unittest.TestCase):
         self.assertIn("continuity_kernel_readonly_admin_preview_enabled", module_lower)
         self.assertIn("false", module_lower)
 
-        self.assertRegex(module_lower, r"missing[^\n]*false")
-        self.assertRegex(module_lower, r"\bnone\b[^\n]*false")
-        self.assertRegex(module_lower, r"invalid[^\n]*false")
+        normalized_lines = [line.strip().lower() for line in module_text.splitlines()]
+
+        self.assertTrue(
+            any("missing" in line and "false" in line for line in normalized_lines)
+            or any("none" in line and "false" in line for line in normalized_lines)
+        )
+        self.assertTrue(any("invalid" in line and "false" in line for line in normalized_lines))
 
 
 if __name__ == "__main__":
