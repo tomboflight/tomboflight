@@ -33,6 +33,28 @@ _DEFAULT_DISABLED_RESPONSE = {
 }
 
 
+def _fixture_context_required_response(*, enabled: bool) -> dict:
+    return {
+        "enabled": enabled,
+        "status": "blocked",
+        "preview": None,
+        "validator_result": None,
+        "allowed_actions": [],
+        "reason_codes": ["TEST_CONTEXT_REQUIRED"],
+    }
+
+
+def _invalid_fixture_payload_response(*, enabled: bool) -> dict:
+    return {
+        "enabled": enabled,
+        "status": "invalid_payload",
+        "preview": None,
+        "validator_result": {"passed": False, "reason_codes": ["FIXTURE_PAYLOAD_INVALID"]},
+        "allowed_actions": [],
+        "reason_codes": ["FIXTURE_PAYLOAD_INVALID"],
+    }
+
+
 def _safe_dict(value: Any) -> dict:
     return deepcopy(value) if isinstance(value, dict) else {}
 
@@ -88,13 +110,18 @@ def build_readonly_preview_response(
     structured_override: dict | None = None,
     structured_justification: dict | None = None,
     approval_fixture_payload: dict | None = None,
+    test_context: bool = False,
 ) -> dict:
     """Build a read-only preview response from in-memory Continuity Kernel payload inputs."""
     safe_env = _safe_dict(env)
     if not is_readonly_admin_preview_enabled(env=safe_env):
         return deepcopy(_DEFAULT_DISABLED_RESPONSE)
 
-    if isinstance(approval_fixture_payload, dict):
+    if approval_fixture_payload is not None:
+        if test_context is not True:
+            return _fixture_context_required_response(enabled=True)
+        if not isinstance(approval_fixture_payload, dict):
+            return _invalid_fixture_payload_response(enabled=True)
         payload = _safe_dict(approval_fixture_payload)
     else:
         payload = build_staging_dry_run_payload(

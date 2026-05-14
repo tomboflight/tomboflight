@@ -174,6 +174,7 @@ class TestContinuityKernelPhase6EValidApprovalFixtures(unittest.TestCase):
             response = self.helper_module.build_readonly_preview_response(
                 env={FLAG_NAME: "true"},
                 approval_fixture_payload=deepcopy(fixture),
+                test_context=True,
             )
             self.assertTrue(response.get("enabled"))
             self.assertIsInstance(response.get("preview"), dict)
@@ -185,6 +186,7 @@ class TestContinuityKernelPhase6EValidApprovalFixtures(unittest.TestCase):
             response = self.helper_module.build_readonly_preview_response(
                 env={FLAG_NAME: "true"},
                 approval_fixture_payload=deepcopy(fixture),
+                test_context=True,
             )
             actions = response.get("allowed_actions", [])
             preview_actions = response.get("preview", {}).get("allowed_actions", [])
@@ -197,6 +199,7 @@ class TestContinuityKernelPhase6EValidApprovalFixtures(unittest.TestCase):
             response = self.helper_module.build_readonly_preview_response(
                 env={FLAG_NAME: "true"},
                 approval_fixture_payload=deepcopy(fixture),
+                test_context=True,
             )
             self.assertTrue(set(response.get("allowed_actions", [])).isdisjoint(prohibited))
             self.assertTrue(set(response.get("preview", {}).get("allowed_actions", [])).isdisjoint(prohibited))
@@ -207,6 +210,7 @@ class TestContinuityKernelPhase6EValidApprovalFixtures(unittest.TestCase):
             _ = self.helper_module.build_readonly_preview_response(
                 env={FLAG_NAME: "true"},
                 approval_fixture_payload=fixture,
+                test_context=True,
             )
             self.assertEqual(fixture, baseline)
 
