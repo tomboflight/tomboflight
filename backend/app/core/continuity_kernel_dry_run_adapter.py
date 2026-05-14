@@ -2,6 +2,7 @@
 Continuity Kernel staging-only isolated dry-run adapter module.
 
 This module is staging-only.
+This module is non-operational.
 This module does not execute repairs.
 This module does not write to the database.
 This module does not queue mint work.
@@ -166,6 +167,7 @@ def build_apply_transition_placeholder(
 
     return {
         "evidence_packet_id": _safe_text(evidence_copy.get("evidence_packet_id"), ""),
+        "state": "staging_only_placeholder",
         "previous_state": "dry_run_created",
         "next_state": "review_requested",
         "actor_user_id": _safe_text(actor_copy.get("actor_user_id"), ""),
@@ -201,6 +203,8 @@ def build_validator_result_placeholder(
 ) -> dict[str, Any]:
     return {
         "validator_name": _safe_text(validator_name, "continuity_kernel_validator.placeholder"),
+        "status": "output_only_placeholder",
+        "source": "staging_dry_run_adapter",
         "passed": False,
         "reason_codes": ["VALIDATION_NOT_RUN"],
         "errors": [],
