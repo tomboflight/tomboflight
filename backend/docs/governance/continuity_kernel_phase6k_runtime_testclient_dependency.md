@@ -13,7 +13,9 @@
   - `python -m unittest backend.tests.contracts.test_continuity_kernel_phase6i_runtime_route_verification -v`
 - `httpx` in this phase is not for live DB access.
 - `httpx` in this phase is not for Stripe/Web3 calls.
+- No Stripe/Web3 calls are required.
 - `httpx` in this phase is not for customer data operations.
+- No customer data is required.
 
 ## 3. Runtime environment boundaries
 
