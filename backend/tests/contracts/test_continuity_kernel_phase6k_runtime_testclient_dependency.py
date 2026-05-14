@@ -56,6 +56,14 @@ class TestContinuityKernelPhase6KRuntimeTestClientDependency(unittest.TestCase):
                     calls.append(node)
         return calls
 
+    def _has_preview_get_path(self, calls: list[ast.Call]) -> bool:
+        return any(
+            call.args
+            and isinstance(call.args[0], ast.Constant)
+            and call.args[0].value == "/preview"
+            for call in calls
+        )
+
     def _git_changed_paths(self) -> list[str]:
         candidate_ranges = [
             ["origin/main...HEAD"],
@@ -130,7 +138,7 @@ class TestContinuityKernelPhase6KRuntimeTestClientDependency(unittest.TestCase):
 
     def test_12_route_remains_get_only(self) -> None:
         get_calls = self._route_method_calls("get")
-        self.assertTrue(any(call.args and isinstance(call.args[0], ast.Constant) and call.args[0].value == "/preview" for call in get_calls))
+        self.assertTrue(self._has_preview_get_path(get_calls))
         self.assertEqual(len(self._route_method_calls("post")), 0)
         self.assertEqual(len(self._route_method_calls("put")), 0)
         self.assertEqual(len(self._route_method_calls("patch")), 0)
