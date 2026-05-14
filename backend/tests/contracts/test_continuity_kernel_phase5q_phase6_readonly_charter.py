@@ -144,7 +144,7 @@ class TestContinuityKernelPhase5QPhase6ReadonlyCharter(unittest.TestCase):
 
     def test_26_existing_kernel_modules_remain_not_imported_in_app_main(self) -> None:
         app_main = REPO_ROOT / "backend" / "app" / "main.py"
-        self.assertTrue(app_main.exists(), msg="backend/app/main.py must exist for this assertion")
+        self.assertTrue(app_main.exists(), msg="Backend/app/main.py must exist for this assertion")
         self._assert_kernel_not_imported_under([app_main])
 
 
