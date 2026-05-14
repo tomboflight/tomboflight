@@ -25,19 +25,18 @@ def _readonly_response_builder() -> Callable[..., dict]:
 
 
 def _placeholder_preview_inputs(current_user: dict[str, Any]) -> dict:
-    actor_id = str(
-        current_user.get("id")
-        or current_user.get("_id")
-        or current_user.get("user_id")
-        or current_user.get("email")
-        or "admin-preview-user"
-    ).strip() or "admin-preview-user"
-    actor_role = str(
-        current_user.get("role")
-        or current_user.get("department_role")
-        or current_user.get("access_tier")
-        or "operations_admin"
-    ).strip() or "operations_admin"
+    def _first_present(fields: tuple[str, ...], fallback: str) -> str:
+        for field in fields:
+            value = current_user.get(field)
+            if value is None:
+                continue
+            cleaned = str(value).strip()
+            if cleaned:
+                return cleaned
+        return fallback
+
+    actor_id = _first_present(("id", "_id", "user_id", "email"), "admin-preview-user")
+    actor_role = _first_present(("role", "department_role", "access_tier"), "operations_admin")
 
     return {
         "dry_run_source": {

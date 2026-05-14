@@ -178,7 +178,8 @@ class TestContinuityKernelPhase6HReadonlyAdminRoute(unittest.TestCase):
     def test_13_no_continuity_kernel_repair_scripts_exist_under_backend_scripts(self) -> None:
         for path in SCRIPTS_PATH.glob("**/*.py"):
             lowered_name = path.name.lower()
-            self.assertFalse("continuity" in lowered_name and "repair" in lowered_name)
+            contains_continuity_and_repair = ("continuity" in lowered_name) and ("repair" in lowered_name)
+            self.assertFalse(contains_continuity_and_repair)
 
     def test_14_frontend_has_no_continuity_kernel_admin_preview_file(self) -> None:
         for path in FRONTEND_PATH.glob("**/*"):
