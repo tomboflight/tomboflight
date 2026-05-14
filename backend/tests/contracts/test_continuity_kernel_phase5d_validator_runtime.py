@@ -171,6 +171,21 @@ class TestContinuityKernelPhase5DValidatorRuntime(unittest.TestCase):
 
         packet["approval_role"] = "SUPERADMIN"
         packet["audit_context"] = "emergency override approved by SUPERADMIN"
+        packet["override"] = {
+            "override_id": "ovr-phase5d-1",
+            "override_type": "SUPERADMIN_EMERGENCY_OVERRIDE",
+            "requested_by": packet["requested_by"],
+            "approved_by": packet["approved_by"],
+            "approval_role": "SUPERADMIN",
+            "reason_code": "EMERGENCY_SAFETY_EXCEPTION",
+            "reason_detail": "Structured emergency override for high-risk same actor.",
+            "target_type": packet["target_type"],
+            "target_id": packet["target_id"],
+            "repair_category": packet["repair_category"],
+            "risk_level": packet["risk_level"],
+            "expires_at": "2099-01-01T00:00:00Z",
+            "audit_context": "phase5d structured override",
+        }
         result_with_override = self.module.validate_evidence_packet(packet)
         self.assertTrue(result_with_override["passed"])
 

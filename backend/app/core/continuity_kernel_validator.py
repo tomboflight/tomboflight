@@ -554,6 +554,7 @@ def _validate_role_for_category(
                 "Finance-only override must be CEO_APPROVED_FINANCE_OVERRIDE with CEO/SUPERADMIN approval_role",
             )
             return
+        return
 
     if category not in ROLE_TO_ALLOWED_CATEGORIES[role]:
         _add_error(acc, "ROLE_CATEGORY_MISMATCH", f"Role {role} is not allowed to approve category {category}")
