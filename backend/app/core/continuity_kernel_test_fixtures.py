@@ -2,6 +2,7 @@
 Continuity Kernel in-memory approval fixture helpers for isolated tests only.
 
 These fixtures are in-memory test helpers only and are not production approvals.
+When passed to build_readonly_preview_response, fixtures require test_context=True.
 They do not wire routes, do not access databases, and do not execute repairs.
 """
 
