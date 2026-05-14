@@ -85,21 +85,21 @@ class TestContinuityKernelPhase6HReadonlyAdminRoute(unittest.TestCase):
 
     def _with_env(self, env_updates: dict | None):
         class _EnvGuard:
-            def __enter__(self_nonlocal):
-                self_nonlocal._original = os.environ.copy()
+            def __enter__(guard_self):
+                guard_self._original = os.environ.copy()
                 os.environ.clear()
-                os.environ.update(self_nonlocal._original)
+                os.environ.update(guard_self._original)
                 if env_updates is not None:
                     for key, value in env_updates.items():
                         if value is None:
                             os.environ.pop(key, None)
                         else:
                             os.environ[key] = value
-                return self_nonlocal
+                return guard_self
 
-            def __exit__(self_nonlocal, exc_type, exc, tb):
+            def __exit__(guard_self, exc_type, exc, tb):
                 os.environ.clear()
-                os.environ.update(self_nonlocal._original)
+                os.environ.update(guard_self._original)
 
         return _EnvGuard()
 
