@@ -29,3 +29,22 @@ jobs:
 
       - name: Run contract guardrail tests
         run: python -m unittest discover -s backend/tests/contracts -p "test_*.py" -v
+
+  continuity-kernel-runtime-route-test-env:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements.txt
+
+      - name: Run focused Phase 6I runtime route test (verified by Phase 6J)
+        run: python -m unittest backend.tests.contracts.test_continuity_kernel_phase6i_runtime_route_verification -v
