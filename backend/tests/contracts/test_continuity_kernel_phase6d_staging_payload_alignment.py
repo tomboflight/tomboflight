@@ -61,7 +61,7 @@ class TestContinuityKernelPhase6DStagingPayloadAlignment(unittest.TestCase):
             "proposed_after_snapshot": {"members": ["after"]},
             "diff_summary": "member role delta",
             "blocked_reasons": [],
-            "rollback_plan": {"steps": ["restore before_snapshot_ref"]},
+            "rollback_plan": {"steps": ["restore before_snapshot_ref"], "secret_token": "DO_NOT_EXPOSE_ROLLBACK"},
             "structured_override": {
                 "override_type": "manual",
                 "approved_by": "admin-1",
