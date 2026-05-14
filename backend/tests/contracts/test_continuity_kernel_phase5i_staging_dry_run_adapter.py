@@ -147,10 +147,23 @@ class TestContinuityKernelPhase5IStagingDryRunAdapter(unittest.TestCase):
                 "validator_result",
             },
         )
-        self.assertFalse(payload["authorization_decision"].get("approved", False))
-        self.assertNotEqual(payload["apply_transition"].get("state"), "apply_executed")
-        self.assertIn("output", str(payload["validator_result"]).lower())
-        self.assertIn("placeholder", str(payload["validator_result"]).lower())
+        authorization_decision = payload["authorization_decision"]
+        apply_transition = payload["apply_transition"]
+        validator_result = payload["validator_result"]
+
+        self.assertIsInstance(authorization_decision, dict)
+        self.assertIn("approved", authorization_decision)
+        self.assertFalse(authorization_decision["approved"])
+        self.assertEqual(authorization_decision.get("decision"), "not_approved_placeholder")
+
+        self.assertIsInstance(apply_transition, dict)
+        self.assertIn("state", apply_transition)
+        self.assertEqual(apply_transition["state"], "staging_only_placeholder")
+        self.assertNotEqual(apply_transition["state"], "apply_executed")
+
+        self.assertIsInstance(validator_result, dict)
+        self.assertEqual(validator_result.get("status"), "output_only_placeholder")
+        self.assertEqual(validator_result.get("source"), "staging_dry_run_adapter")
 
 
 if __name__ == "__main__":
