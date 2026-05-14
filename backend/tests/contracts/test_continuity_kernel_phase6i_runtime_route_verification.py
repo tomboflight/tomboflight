@@ -94,8 +94,18 @@ class TestContinuityKernelPhase6IRuntimeRouteVerification(unittest.TestCase):
             cls.route_module = import_module("app.routes.admin_continuity_preview")
             cls.auth_module = import_module("app.dependencies.auth")
             cls.runtime_available = True
-        except Exception as exc:  # pragma: no cover - environment dependent
-            cls.runtime_unavailable_reason = str(exc)
+        except ModuleNotFoundError as exc:  # pragma: no cover - environment dependent
+            missing = (getattr(exc, "name", "") or "").strip()
+            if missing in {"fastapi", "httpx"}:
+                cls.runtime_unavailable_reason = f"Missing runtime dependency: {missing}"
+            else:
+                raise
+        except RuntimeError as exc:  # pragma: no cover - environment dependent
+            message = str(exc)
+            if "requires the httpx package to be installed" in message.lower():
+                cls.runtime_unavailable_reason = "Missing runtime dependency: httpx"
+            else:
+                raise
 
     def _route_method_calls(self, method_name: str) -> list[ast.Call]:
         calls: list[ast.Call] = []
