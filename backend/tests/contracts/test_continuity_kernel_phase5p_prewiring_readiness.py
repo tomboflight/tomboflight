@@ -145,9 +145,9 @@ EXECUTABLE_REPAIR_ENTRYPOINT_TOKENS = (
 )
 
 NON_OPERATIONAL_GUARDRAIL_TOKENS = (
-    "non-operational",
     "does not execute repairs",
     "does not write to the database",
+    "does not queue mint work",
 )
 
 
