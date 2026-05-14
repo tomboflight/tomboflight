@@ -39,7 +39,7 @@ class TestContinuityKernelPhase5GPayloadPlacement(unittest.TestCase):
     def test_04_doc_says_authorization_decision_is_required(self) -> None:
         self.assertIn("authorization_decision is required", self.doc_lower)
 
-    def test_05_doc_says_apply_transition_is_required(self) -> None:
+    def test_05_doc_says_apply_transition_is_required_before_apply_validation_can_pass(self) -> None:
         self.assertIn("apply_transition is required", self.doc_lower)
 
     def test_06_doc_says_rollback_verification_is_required_for_stored_state_apply_requests(self) -> None:
@@ -91,7 +91,13 @@ class TestContinuityKernelPhase5GPayloadPlacement(unittest.TestCase):
     def test_16_doc_forbids_legacy_free_text_override_phrases_as_approval(self) -> None:
         self.assertIn("no producer may use legacy free-text override phrases as approval", self.doc_lower)
 
-    def test_17_doc_includes_migration_phases_a_through_g(self) -> None:
+    def test_17_doc_forbids_dry_run_engine_creating_apply_executed_transition(self) -> None:
+        self.assertIn("dry_run_engine must not create apply_executed transition", self.doc_lower)
+
+    def test_18_doc_forbids_repair_scripts_creating_apply_mode_payloads_without_governance(self) -> None:
+        self.assertIn("repair scripts must not create apply-mode payloads without governance", self.doc_lower)
+
+    def test_19_doc_includes_migration_phases_a_through_g(self) -> None:
         for phase in [
             "phase a:",
             "phase b:",
@@ -103,7 +109,7 @@ class TestContinuityKernelPhase5GPayloadPlacement(unittest.TestCase):
         ]:
             self.assertIn(phase, self.doc_lower)
 
-    def test_18_doc_states_no_existing_routes_admin_actions_scripts_customer_portal_or_data_changes(self) -> None:
+    def test_20_doc_states_no_existing_routes_admin_actions_scripts_customer_portal_or_data_changes(self) -> None:
         for line in [
             "existing routes must not change in phase 5g",
             "existing admin actions must not change in phase 5g",
@@ -113,7 +119,7 @@ class TestContinuityKernelPhase5GPayloadPlacement(unittest.TestCase):
         ]:
             self.assertIn(line, self.doc_lower)
 
-    def test_19_doc_includes_non_operational_guardrails(self) -> None:
+    def test_21_doc_includes_non_operational_guardrails(self) -> None:
         for line in [
             "phase 5g does not wire the validator into runtime routes",
             "phase 5g does not create apply mode",
@@ -123,7 +129,7 @@ class TestContinuityKernelPhase5GPayloadPlacement(unittest.TestCase):
         ]:
             self.assertIn(line, self.doc_lower)
 
-    def test_20_if_payload_key_constants_exist_they_match_canonical_keys(self) -> None:
+    def test_22_if_payload_key_constants_exist_they_match_canonical_keys(self) -> None:
         expected = {
             "PAYLOAD_KEY_EVIDENCE_PACKET": "evidence_packet",
             "PAYLOAD_KEY_AUTHORIZATION_DECISION": "authorization_decision",
@@ -140,7 +146,7 @@ class TestContinuityKernelPhase5GPayloadPlacement(unittest.TestCase):
             self.assertTrue(hasattr(self.module, name), f"Missing constant: {name}")
             self.assertEqual(getattr(self.module, name), value)
 
-    def test_21_validator_module_remains_isolated(self) -> None:
+    def test_23_validator_module_remains_isolated(self) -> None:
         self.assertNotIn("fastapi", self.source_lower)
         self.assertNotIn("pymongo", self.source_lower)
         self.assertNotIn("motor", self.source_lower)
@@ -153,7 +159,7 @@ class TestContinuityKernelPhase5GPayloadPlacement(unittest.TestCase):
         self.assertNotIn("from ..services", self.source_lower)
         self.assertNotIn("from ..scripts", self.source_lower)
 
-    def test_22_validator_source_keeps_non_operational_guardrail_language(self) -> None:
+    def test_24_validator_source_keeps_non_operational_guardrail_language(self) -> None:
         self.assertIn("does not execute repairs", self.source_lower)
         self.assertIn("does not write to the database", self.source_lower)
         self.assertIn("does not queue mint work", self.source_lower)
