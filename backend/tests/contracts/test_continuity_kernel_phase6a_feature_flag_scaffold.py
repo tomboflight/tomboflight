@@ -120,7 +120,8 @@ class TestContinuityKernelPhase6AFeatureFlagScaffold(unittest.TestCase):
         self.assertIn("continuity_kernel_readonly_admin_preview_enabled", module_lower)
         self.assertIn("false", module_lower)
 
-        self.assertRegex(module_lower, r"missing[^\n]*false|none[^\n]*false")
+        self.assertRegex(module_lower, r"missing[^\n]*false")
+        self.assertRegex(module_lower, r"\bnone\b[^\n]*false")
         self.assertRegex(module_lower, r"invalid[^\n]*false")
 
 
