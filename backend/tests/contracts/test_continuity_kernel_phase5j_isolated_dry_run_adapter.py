@@ -113,7 +113,9 @@ class TestContinuityKernelPhase5JIsolatedDryRunAdapter(unittest.TestCase):
         payload = self._build_payload()
         authorization = payload["authorization_decision"]
         self.assertFalse(authorization.get("approved"))
-        self.assertNotIn(authorization.get("decision"), {"approve", "approved", "approved_for_apply"})
+        decision_value = authorization.get("decision", "")
+        self.assertIsInstance(decision_value, str)
+        self.assertNotIn(decision_value, {"approve", "approved", "approved_for_apply"})
 
     def test_07_authorization_decision_placeholder_actor_role_is_not_superadmin_by_default(self) -> None:
         payload = self._build_payload(actor_context={"actor_user_id": "actor-001"})
