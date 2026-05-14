@@ -204,11 +204,18 @@ class TestContinuityKernelPhase5ODirectImportCleanup(unittest.TestCase):
         )
 
     def test_15_source_still_contains_non_operational_guardrails(self) -> None:
-        for source_lower in [self.preview_lower, self.validator_lower, self.adapter_lower, self.taxonomy_lower]:
-            self.assertIn("does not execute repairs", source_lower)
-            self.assertIn("does not write to the database", source_lower)
-            self.assertIn("does not queue mint work", source_lower)
-            self.assertIn("does not mutate certificates", source_lower)
+        module_sources = {
+            str(PREVIEW_PATH): self.preview_lower,
+            str(VALIDATOR_PATH): self.validator_lower,
+            str(ADAPTER_PATH): self.adapter_lower,
+            str(TAXONOMY_PATH): self.taxonomy_lower,
+        }
+        for module_path, source_lower in module_sources.items():
+            with self.subTest(module=module_path):
+                self.assertIn("does not execute repairs", source_lower)
+                self.assertIn("does not write to the database", source_lower)
+                self.assertIn("does not queue mint work", source_lower)
+                self.assertIn("does not mutate certificates", source_lower)
 
 
 if __name__ == "__main__":
