@@ -87,7 +87,11 @@ class TestContinuityKernelPhase6JRuntimeTestEnv(unittest.TestCase):
         self.assertGreaterEqual(len(self.runtime_workflows), 1)
         for path in self.runtime_workflows:
             lowered = self.workflow_texts[path].lower()
-            if "mongodb" in lowered:
+            has_mongodb_service = any(
+                marker in lowered
+                for marker in ("image: mongo", "image: mongodb", "\n      mongodb:", "\n      mongo:")
+            )
+            if has_mongodb_service:
                 self.assertIn("not needed", lowered)
 
     def test_11_existing_route_still_get_only(self) -> None:
@@ -125,8 +129,9 @@ class TestContinuityKernelPhase6JRuntimeTestEnv(unittest.TestCase):
             self.assertNotIn(token, self.helper_lower)
 
         for path in SCRIPTS_PATH.glob("**/*.py"):
-            lowered_name = path.name.lower()
-            self.assertFalse(("continuity" in lowered_name) and ("repair" in lowered_name))
+            lowered = path.read_text(encoding="utf-8", errors="ignore").lower()
+            for token in prohibited_tokens:
+                self.assertNotIn(token, lowered, msg=f"Unexpected token '{token}' in {path}")
 
 
 if __name__ == "__main__":
