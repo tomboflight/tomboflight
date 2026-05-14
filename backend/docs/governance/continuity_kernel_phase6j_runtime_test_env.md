@@ -13,6 +13,7 @@
 - No live secrets are required.
 - No Stripe/Web3 calls are required.
 - No customer data is required.
+- Phase 6J intentionally verifies execution of the existing Phase 6I runtime route test command.
 - Focused route test must run:
   - `python -m unittest backend.tests.contracts.test_continuity_kernel_phase6i_runtime_route_verification -v`
 

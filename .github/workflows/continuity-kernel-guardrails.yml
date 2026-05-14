@@ -46,5 +46,5 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r backend/requirements.txt
 
-      - name: Run focused continuity kernel runtime route test
+      - name: Run focused Phase 6I runtime route test (verified by Phase 6J)
         run: python -m unittest backend.tests.contracts.test_continuity_kernel_phase6i_runtime_route_verification -v

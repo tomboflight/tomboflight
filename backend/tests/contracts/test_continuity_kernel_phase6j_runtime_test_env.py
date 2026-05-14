@@ -9,7 +9,8 @@ ROUTE_PATH = REPO_ROOT / "backend" / "app" / "routes" / "admin_continuity_previe
 HELPER_PATH = REPO_ROOT / "backend" / "app" / "core" / "continuity_kernel_readonly_helper.py"
 SCRIPTS_PATH = REPO_ROOT / "backend" / "scripts"
 WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
-FOCUSED_TEST_COMMAND = "python -m unittest backend.tests.contracts.test_continuity_kernel_phase6i_runtime_route_verification -v"
+# Phase 6J validates execution of the existing Phase 6I runtime route verification test.
+PHASE6I_FOCUSED_RUNTIME_TEST_COMMAND = "python -m unittest backend.tests.contracts.test_continuity_kernel_phase6i_runtime_route_verification -v"
 
 
 class TestContinuityKernelPhase6JRuntimeTestEnv(unittest.TestCase):
@@ -31,7 +32,7 @@ class TestContinuityKernelPhase6JRuntimeTestEnv(unittest.TestCase):
             for path in sorted(WORKFLOW_DIR.glob("*.yml")) + sorted(WORKFLOW_DIR.glob("*.yaml"))
         }
         cls.runtime_workflows = [
-            path for path, text in cls.workflow_texts.items() if FOCUSED_TEST_COMMAND in text
+            path for path, text in cls.workflow_texts.items() if PHASE6I_FOCUSED_RUNTIME_TEST_COMMAND in text
         ]
 
     def _route_method_calls(self, method_name: str) -> list[ast.Call]:
@@ -63,7 +64,7 @@ class TestContinuityKernelPhase6JRuntimeTestEnv(unittest.TestCase):
         self.assertIn("no customer data is required", self.doc_lower)
 
     def test_07_doc_includes_focused_route_test_command(self) -> None:
-        self.assertIn(FOCUSED_TEST_COMMAND, self.doc_text)
+        self.assertIn(PHASE6I_FOCUSED_RUNTIME_TEST_COMMAND, self.doc_text)
 
     def test_08_runtime_workflow_includes_focused_route_test_command(self) -> None:
         self.assertGreaterEqual(len(self.runtime_workflows), 1)
