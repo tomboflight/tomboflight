@@ -78,6 +78,25 @@ def _build_staging_audit_context(source: Any = None) -> dict[str, Any]:
     return context
 
 
+def _build_alignment_before_snapshot_ref(evidence_packet: dict[str, Any]) -> str:
+    evidence_packet_id = _safe_text(evidence_packet.get("evidence_packet_id"), "evidence::unknown")
+    return f"before_snapshot_ref::{evidence_packet_id}"
+
+
+def _build_aligned_rollback_plan(
+    evidence_packet: dict[str, Any],
+    rollback_plan: dict[str, Any],
+) -> dict[str, Any]:
+    rollback_copy = deepcopy(rollback_plan) if isinstance(rollback_plan, dict) else {}
+    rollback_text = str(rollback_copy).lower()
+    if "before_snapshot" in rollback_text or "before_snapshot_ref" in rollback_text:
+        return rollback_copy
+
+    if not _safe_text(rollback_copy.get("before_snapshot_ref"), ""):
+        rollback_copy["before_snapshot_ref"] = _build_alignment_before_snapshot_ref(evidence_packet)
+    return rollback_copy
+
+
 def build_evidence_packet_from_dry_run(
     dry_run_source: dict[str, Any],
     target_selector: dict[str, Any],
@@ -181,11 +200,16 @@ def build_rollback_verification_placeholder(
     rollback_plan: dict[str, Any],
 ) -> dict[str, Any]:
     evidence_copy = deepcopy(evidence_packet) if isinstance(evidence_packet, dict) else {}
+    rollback_copy = _build_aligned_rollback_plan(evidence_copy, rollback_plan)
+    before_snapshot_ref = _safe_text(
+        rollback_copy.get("before_snapshot_ref"),
+        _build_alignment_before_snapshot_ref(evidence_copy),
+    )
 
     return {
         "evidence_packet_id": _safe_text(evidence_copy.get("evidence_packet_id"), ""),
-        "rollback_plan": deepcopy(rollback_plan),
-        "before_snapshot_ref": "",
+        "rollback_plan": rollback_copy,
+        "before_snapshot_ref": before_snapshot_ref,
         "target_type": _safe_text(evidence_copy.get("target_type"), ""),
         "target_id": _safe_text(evidence_copy.get("target_id"), ""),
         "verification_status": "pending_placeholder",
