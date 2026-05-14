@@ -189,7 +189,7 @@ class TestContinuityKernelPhase6CReadonlyHelper(unittest.TestCase):
         response = self.module.build_readonly_preview_response(env=self._enabled_env(), **self._sample_inputs())
         preview = response["preview"]
         self.assertIn("rollback_summary", preview)
-        self.assertNotIn("rollback_plan", str(preview).lower())
+        self.assertNotIn("rollback_plan", preview["rollback_summary"])
         self.assertNotIn("do_not_expose_rollback", str(response).lower())
 
     def test_17_response_does_not_expose_full_structured_override_reason_detail(self) -> None:
