@@ -52,6 +52,56 @@ class RiskLevel(str, Enum):
     HIGH = "high"
 
 
+CANONICAL_OFFICER_ROLES = (
+    "SUPERADMIN",
+    "EXECUTIVE_TECH_ADMIN",
+    "operations_admin",
+    "finance_admin",
+    "marketing_admin",
+    "CMO",
+)
+
+CANONICAL_OFFICER_ROLE_SET = frozenset(CANONICAL_OFFICER_ROLES)
+
+CANONICAL_REPAIR_CATEGORIES = (
+    RepairCategory.MISSING_ENTITLEMENT_REPAIR.value,
+    RepairCategory.PACKAGE_LANE_NORMALIZATION.value,
+    RepairCategory.WORKSPACE_MEMBERSHIP_REPAIR.value,
+    RepairCategory.UPLOAD_READINESS_REPAIR.value,
+    RepairCategory.VIEWER_READINESS_REPAIR.value,
+    RepairCategory.CERTIFICATE_ISSUANCE_CONSISTENCY_REPAIR.value,
+    RepairCategory.MINT_READINESS_REPAIR.value,
+    RepairCategory.ADMIN_REPAIR_SAFETY.value,
+    RepairCategory.BILLING_ORDER_PAYMENT_REPAIR.value,
+    RepairCategory.AUDIT_RECORD_CORRECTION_METADATA.value,
+)
+
+CANONICAL_REPAIR_CATEGORY_SET = frozenset(CANONICAL_REPAIR_CATEGORIES)
+
+TECHNICAL_CATEGORIES = frozenset(
+    {
+        RepairCategory.MISSING_ENTITLEMENT_REPAIR.value,
+        RepairCategory.PACKAGE_LANE_NORMALIZATION.value,
+        RepairCategory.CERTIFICATE_ISSUANCE_CONSISTENCY_REPAIR.value,
+        RepairCategory.MINT_READINESS_REPAIR.value,
+        RepairCategory.AUDIT_RECORD_CORRECTION_METADATA.value,
+    }
+)
+
+OPERATIONS_CATEGORIES = frozenset(
+    {
+        RepairCategory.WORKSPACE_MEMBERSHIP_REPAIR.value,
+        RepairCategory.UPLOAD_READINESS_REPAIR.value,
+        RepairCategory.VIEWER_READINESS_REPAIR.value,
+    }
+)
+
+FINANCE_CATEGORIES = frozenset({RepairCategory.BILLING_ORDER_PAYMENT_REPAIR.value})
+MARKETING_CATEGORIES = frozenset()
+SUPERADMIN_ONLY_CATEGORIES = frozenset({RepairCategory.ADMIN_REPAIR_SAFETY.value})
+READ_ONLY_PREVIEW_CATEGORIES = frozenset(CANONICAL_REPAIR_CATEGORIES)
+
+
 EVIDENCE_REQUIRED_FIELDS = {
     "dry_run_id",
     "evidence_packet_id",
@@ -129,29 +179,15 @@ ALLOWED_APPLY_TRANSITIONS = {
 }
 
 ROLE_TO_ALLOWED_CATEGORIES = {
-    "SUPERADMIN": {category.value for category in RepairCategory},
-    "EXECUTIVE_TECH_ADMIN": {
-        RepairCategory.MISSING_ENTITLEMENT_REPAIR.value,
-        RepairCategory.PACKAGE_LANE_NORMALIZATION.value,
-        RepairCategory.WORKSPACE_MEMBERSHIP_REPAIR.value,
-        RepairCategory.UPLOAD_READINESS_REPAIR.value,
-        RepairCategory.VIEWER_READINESS_REPAIR.value,
-        RepairCategory.CERTIFICATE_ISSUANCE_CONSISTENCY_REPAIR.value,
-        RepairCategory.MINT_READINESS_REPAIR.value,
-        RepairCategory.AUDIT_RECORD_CORRECTION_METADATA.value,
-    },
-    "operations_admin": {
-        RepairCategory.WORKSPACE_MEMBERSHIP_REPAIR.value,
-        RepairCategory.UPLOAD_READINESS_REPAIR.value,
-        RepairCategory.MINT_READINESS_REPAIR.value,
-        RepairCategory.VIEWER_READINESS_REPAIR.value,
-    },
-    "finance_admin": {RepairCategory.BILLING_ORDER_PAYMENT_REPAIR.value},
-    "marketing_admin": set(),
-    "CMO": set(),
+    "SUPERADMIN": frozenset(CANONICAL_REPAIR_CATEGORIES),
+    "EXECUTIVE_TECH_ADMIN": TECHNICAL_CATEGORIES,
+    "operations_admin": OPERATIONS_CATEGORIES,
+    "finance_admin": FINANCE_CATEGORIES,
+    "marketing_admin": MARKETING_CATEGORIES,
+    "CMO": MARKETING_CATEGORIES,
 }
 
-FINANCE_ONLY_CATEGORIES = {RepairCategory.BILLING_ORDER_PAYMENT_REPAIR.value}
+FINANCE_ONLY_CATEGORIES = FINANCE_CATEGORIES
 
 PROHIBITED_ACTION_SIGNALS = {
     "PROHIBITED_QUEUE_MINT_WORK": (
@@ -518,11 +554,11 @@ def _validate_role_for_category(
     structured_override: dict[str, Any] | None = None,
     packet: dict[str, Any] | None = None,
 ) -> None:
-    if category not in {item.value for item in RepairCategory}:
+    if category not in CANONICAL_REPAIR_CATEGORY_SET:
         _add_error(acc, "UNKNOWN_REPAIR_CATEGORY", f"Unknown repair category: {category}")
         return
 
-    if role not in ROLE_TO_ALLOWED_CATEGORIES:
+    if role not in CANONICAL_OFFICER_ROLE_SET:
         _add_error(acc, "UNKNOWN_ACTOR_ROLE", f"Unknown actor role: {role}")
         return
 

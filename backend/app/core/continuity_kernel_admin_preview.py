@@ -60,6 +60,63 @@ _CANONICAL_PAYLOAD_KEYS = (
 )
 
 
+CANONICAL_OFFICER_ROLES = (
+    "SUPERADMIN",
+    "EXECUTIVE_TECH_ADMIN",
+    "operations_admin",
+    "finance_admin",
+    "marketing_admin",
+    "CMO",
+)
+
+CANONICAL_OFFICER_ROLE_SET = frozenset(CANONICAL_OFFICER_ROLES)
+
+CANONICAL_REPAIR_CATEGORIES = (
+    "missing_entitlement_repair",
+    "package_lane_normalization",
+    "workspace_membership_repair",
+    "upload_readiness_repair",
+    "viewer_readiness_repair",
+    "certificate_issuance_consistency_repair",
+    "mint_readiness_repair",
+    "admin_repair_safety",
+    "billing_order_payment_repair",
+    "audit_record_correction_metadata",
+)
+
+CANONICAL_REPAIR_CATEGORY_SET = frozenset(CANONICAL_REPAIR_CATEGORIES)
+
+TECHNICAL_CATEGORIES = frozenset(
+    {
+        "missing_entitlement_repair",
+        "package_lane_normalization",
+        "certificate_issuance_consistency_repair",
+        "mint_readiness_repair",
+        "audit_record_correction_metadata",
+    }
+)
+OPERATIONS_CATEGORIES = frozenset(
+    {
+        "workspace_membership_repair",
+        "upload_readiness_repair",
+        "viewer_readiness_repair",
+    }
+)
+FINANCE_CATEGORIES = frozenset({"billing_order_payment_repair"})
+MARKETING_CATEGORIES = frozenset()
+SUPERADMIN_ONLY_CATEGORIES = frozenset({"admin_repair_safety"})
+READ_ONLY_PREVIEW_CATEGORIES = frozenset(CANONICAL_REPAIR_CATEGORIES)
+
+ROLE_TO_PREVIEW_CATEGORIES = {
+    "SUPERADMIN": READ_ONLY_PREVIEW_CATEGORIES,
+    "EXECUTIVE_TECH_ADMIN": TECHNICAL_CATEGORIES,
+    "operations_admin": OPERATIONS_CATEGORIES,
+    "finance_admin": FINANCE_CATEGORIES,
+    "marketing_admin": MARKETING_CATEGORIES,
+    "CMO": MARKETING_CATEGORIES,
+}
+
+
 def _safe_text(value: Any, default: str = "") -> str:
     if value is None:
         return default
@@ -79,21 +136,6 @@ def _safe_list(value: Any) -> list[Any]:
 
 def _is_non_empty_dict(value: Any) -> bool:
     return isinstance(value, dict) and bool(value)
-
-
-def _is_technical_category(repair_category: str) -> bool:
-    return "technical" in repair_category
-
-
-def _is_operations_category(repair_category: str) -> bool:
-    return any(
-        keyword in repair_category
-        for keyword in ("workspace", "upload", "viewer", "readiness")
-    )
-
-
-def _is_finance_category(repair_category: str) -> bool:
-    return any(keyword in repair_category for keyword in ("billing", "order", "payment"))
 
 
 def summarize_rollback(rollback_verification: dict) -> dict:
@@ -138,22 +180,14 @@ def summarize_justification(structured_justification: dict | None) -> dict:
 
 
 def allowed_preview_actions_for_role(role: str, repair_category: str) -> list[str]:
-    role_text = _safe_text(role).upper()
-    category_text = _safe_text(repair_category).lower()
+    role_text = _safe_text(role)
+    category_text = _safe_text(repair_category)
 
     allowed: list[str] = []
-    if role_text == "SUPERADMIN":
-        allowed = list(ALLOWED_READ_ONLY_ACTIONS)
-    elif role_text == "EXECUTIVE_TECH_ADMIN" and _is_technical_category(category_text):
-        allowed = list(ALLOWED_READ_ONLY_ACTIONS)
-    elif role_text == "OPERATIONS_ADMIN" and _is_operations_category(category_text):
-        allowed = list(ALLOWED_READ_ONLY_ACTIONS)
-    elif role_text == "FINANCE_ADMIN" and _is_finance_category(category_text):
-        allowed = list(ALLOWED_READ_ONLY_ACTIONS)
-    elif role_text in {"MARKETING_ADMIN", "CMO"}:
-        allowed = []
-    else:
-        allowed = ["view_preview"]
+    if role_text in CANONICAL_OFFICER_ROLE_SET and category_text in CANONICAL_REPAIR_CATEGORY_SET:
+        allowed_categories = ROLE_TO_PREVIEW_CATEGORIES.get(role_text, frozenset())
+        if category_text in allowed_categories:
+            allowed = list(ALLOWED_READ_ONLY_ACTIONS)
 
     prohibited = set(PROHIBITED_ACTIONS)
     safe_allowed = [action for action in allowed if action in ALLOWED_READ_ONLY_ACTIONS and action not in prohibited]
