@@ -175,7 +175,8 @@ class TestContinuityKernelPhase5IStagingDryRunAdapter(unittest.TestCase):
 
         self.assertIsInstance(authorization_decision, dict)
         self.assertIn("approved", authorization_decision)
-        self.assertFalse(authorization_decision["approved"])
+        self.assertFalse(authorization_decision.get("approved"))
+        self.assertIn("decision", authorization_decision)
         decision = authorization_decision.get("decision")
         self.assertIsInstance(decision, str)
         self.assertIn("not_approved", decision)
