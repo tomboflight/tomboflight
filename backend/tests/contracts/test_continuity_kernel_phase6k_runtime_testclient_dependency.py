@@ -70,7 +70,7 @@ class TestContinuityKernelPhase6KRuntimeTestClientDependency(unittest.TestCase):
                     capture_output=True,
                     text=True,
                 )
-            except Exception:
+            except (subprocess.CalledProcessError, FileNotFoundError, OSError):
                 continue
             lines = [line.strip() for line in proc.stdout.splitlines() if line.strip()]
             if lines:
@@ -84,7 +84,7 @@ class TestContinuityKernelPhase6KRuntimeTestClientDependency(unittest.TestCase):
                 capture_output=True,
                 text=True,
             )
-        except Exception:
+        except (subprocess.CalledProcessError, FileNotFoundError, OSError):
             return []
 
         changed: list[str] = []
