@@ -57,7 +57,11 @@ def _invalid_fixture_payload_response(*, enabled: bool) -> dict:
 
 
 def _safe_mapping_dict(value: Any) -> dict:
-    """Fail-closed mapping copy helper used to sanitize env-like inputs."""
+    """Fail-closed mapping copy helper for os.environ and other dict-like mappings.
+
+    TypeError/ValueError are handled because dict() materialization or deepcopy can fail
+    on some Mapping implementations; in those cases the helper intentionally returns {}.
+    """
     if isinstance(value, Mapping):
         try:
             return deepcopy(dict(value))
