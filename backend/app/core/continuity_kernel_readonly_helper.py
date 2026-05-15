@@ -56,10 +56,17 @@ def _invalid_fixture_payload_response(*, enabled: bool) -> dict:
     }
 
 
-def _safe_dict(value: Any) -> dict:
+def _safe_mapping_dict(value: Any) -> dict:
     if isinstance(value, Mapping):
-        return deepcopy(dict(value))
+        try:
+            return deepcopy(dict(value))
+        except (TypeError, ValueError):
+            return {}
     return {}
+
+
+def _safe_dict(value: Any) -> dict:
+    return _safe_mapping_dict(value)
 
 
 def _safe_list(value: Any) -> list:
@@ -148,10 +155,15 @@ def build_readonly_preview_response(
         rollback=_safe_dict(payload.get("rollback_verification")),
     )
     safe_validator_result = _safe_dict(validator_result)
+    safe_validator_result.pop("evaluated_at", None)
     payload["validator_result"] = deepcopy(safe_validator_result)
 
     preview = build_admin_preview(_safe_dict(payload))
     safe_preview = _safe_dict(preview)
+    safe_preview.pop("preview_id", None)
+    rollback_summary = safe_preview.get("rollback_summary")
+    if isinstance(rollback_summary, dict):
+        rollback_summary.pop("has_rollback_plan", None)
     safe_preview["allowed_actions"] = _safe_allowed_actions(safe_preview)
 
     allowed_actions = _safe_allowed_actions(safe_preview)

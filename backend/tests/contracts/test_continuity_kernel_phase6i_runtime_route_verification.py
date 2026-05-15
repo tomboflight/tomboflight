@@ -77,6 +77,7 @@ class TestContinuityKernelPhase6IRuntimeRouteVerification(unittest.TestCase):
         cls.doc_lower = DOC_PATH.read_text(encoding="utf-8").lower() if cls.doc_exists else ""
 
         cls.preview_module = import_module("backend.app.core.continuity_kernel_admin_preview")
+        cls.helper_module = import_module("backend.app.core.continuity_kernel_readonly_helper")
 
         cls.runtime_available = False
         cls.runtime_unavailable_reason = ""
@@ -106,6 +107,22 @@ class TestContinuityKernelPhase6IRuntimeRouteVerification(unittest.TestCase):
                 cls.runtime_unavailable_reason = "Missing runtime dependency: httpx"
             else:
                 raise
+
+    def _helper_response_for_env(self, env: dict | None):
+        return self.helper_module.build_readonly_preview_response(
+            env=env,
+            dry_run_source={"dry_run_id": "admin-readonly-preview", "source": "admin-route", "mode": "read_only"},
+            target_selector={"target_type": "workspace", "target_id": "readonly-preview-target"},
+            actor_context={"actor_user_id": "a1", "requested_by": "a1", "actor_role": "operations_admin"},
+            repair_category="readonly_preview_category",
+            before_snapshot={"state": "before"},
+            proposed_after_snapshot={"state": "after"},
+            diff_summary="read-only admin continuity kernel preview",
+            blocked_reasons=[],
+            rollback_plan={},
+            structured_override=None,
+            structured_justification=None,
+        )
 
     def _route_method_calls(self, method_name: str) -> list[ast.Call]:
         calls: list[ast.Call] = []
@@ -348,6 +365,28 @@ class TestContinuityKernelPhase6IRuntimeRouteVerification(unittest.TestCase):
         ]
         for marker in required:
             self.assertIn(marker, self.doc_lower)
+
+    def test_17_helper_enabled_true_like_flag_with_plain_dict_env(self) -> None:
+        response = self._helper_response_for_env({FLAG_NAME: "yes"})
+        self.assertIs(response.get("enabled"), True)
+        self.assertTrue(set(response.get("allowed_actions", [])).isdisjoint(PROHIBITED_ACTIONS))
+        self.assertTrue(set(response.get("preview", {}).get("allowed_actions", [])).isdisjoint(PROHIBITED_ACTIONS))
+
+    def test_18_helper_enabled_true_like_flag_with_os_environ_mapping(self) -> None:
+        with _temp_env({FLAG_NAME: "yes"}):
+            response = self._helper_response_for_env(os.environ)
+        self.assertIs(response.get("enabled"), True)
+        self.assertTrue(set(response.get("allowed_actions", [])).isdisjoint(PROHIBITED_ACTIONS))
+        self.assertTrue(set(response.get("preview", {}).get("allowed_actions", [])).isdisjoint(PROHIBITED_ACTIONS))
+
+    def test_19_helper_missing_off_invalid_flag_still_fail_closed(self) -> None:
+        for env in [{}, {FLAG_NAME: "off"}, {FLAG_NAME: "invalid-value"}]:
+            with self.subTest(env=env):
+                response = self._helper_response_for_env(env)
+                self.assertIs(response.get("enabled"), False)
+                self.assertEqual(response.get("status"), "disabled")
+                self.assertIsNone(response.get("preview"))
+                self.assertTrue(set(response.get("allowed_actions", [])).isdisjoint(PROHIBITED_ACTIONS))
 
 
 if __name__ == "__main__":
