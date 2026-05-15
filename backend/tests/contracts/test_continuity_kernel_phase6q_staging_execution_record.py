@@ -9,6 +9,7 @@ ROUTE_PATH = REPO_ROOT / "backend" / "app" / "routes" / "admin_continuity_previe
 ROUTES_DIR = REPO_ROOT / "backend" / "app" / "routes"
 WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "continuity-kernel-guardrails.yml"
 SCRIPTS_DIR = REPO_ROOT / "backend" / "scripts"
+EXECUTABLE_PERMISSION_BITS = 0o111
 
 
 class TestContinuityKernelPhase6QStagingExecutionRecord(unittest.TestCase):
@@ -162,8 +163,6 @@ class TestContinuityKernelPhase6QStagingExecutionRecord(unittest.TestCase):
         self.assertIn("phase 6q does not change production settings", self.doc_lower)
 
     def test_20_doc_says_phase6q_does_not_create_apply_mode_or_repair_scripts(self) -> None:
-        self.assertIn("phase 6q does not create apply mode", self.doc_lower)
-        self.assertIn("phase 6q does not create repair scripts", self.doc_lower)
         self.assertIn("phase 6q does not create apply mode or repair scripts", self.doc_lower)
 
     def test_21_doc_says_phase6q_does_not_touch_live_data(self) -> None:
@@ -201,7 +200,10 @@ class TestContinuityKernelPhase6QStagingExecutionRecord(unittest.TestCase):
         self.assertEqual(repair_named_files, [])
 
         for path in SCRIPTS_DIR.glob("**/*.py"):
-            self.assertFalse(path.stat().st_mode & 0o111, msg=f"Unexpected executable script bit set: {path}")
+            self.assertFalse(
+                path.stat().st_mode & EXECUTABLE_PERMISSION_BITS,
+                msg=f"Unexpected executable script bit set: {path}",
+            )
 
 
 if __name__ == "__main__":
