@@ -15,6 +15,7 @@ This module does not alter customer records.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from copy import deepcopy
 from typing import Any
 
@@ -55,8 +56,24 @@ def _invalid_fixture_payload_response(*, enabled: bool) -> dict:
     }
 
 
+def _safe_mapping_dict(value: Any) -> dict:
+    """Fail-closed mapping copy helper for os.environ and other dict-like mappings.
+
+    TypeError/ValueError are handled because dict() materialization or deepcopy can fail
+    on some Mapping implementations; in those cases the helper intentionally returns {}.
+    """
+    if isinstance(value, Mapping):
+        try:
+            return deepcopy(dict(value))
+        except (TypeError, ValueError):
+            # Fail closed when a mapping cannot be materialized safely.
+            return {}
+    # Fail closed for non-mapping values to preserve disabled-by-default behavior.
+    return {}
+
+
 def _safe_dict(value: Any) -> dict:
-    return deepcopy(value) if isinstance(value, dict) else {}
+    return _safe_mapping_dict(value)
 
 
 def _safe_list(value: Any) -> list:
@@ -145,10 +162,15 @@ def build_readonly_preview_response(
         rollback=_safe_dict(payload.get("rollback_verification")),
     )
     safe_validator_result = _safe_dict(validator_result)
+    safe_validator_result.pop("evaluated_at", None)
     payload["validator_result"] = deepcopy(safe_validator_result)
 
     preview = build_admin_preview(_safe_dict(payload))
     safe_preview = _safe_dict(preview)
+    safe_preview.pop("preview_id", None)
+    rollback_summary = safe_preview.get("rollback_summary")
+    if isinstance(rollback_summary, dict):
+        rollback_summary.pop("has_rollback_plan", None)
     safe_preview["allowed_actions"] = _safe_allowed_actions(safe_preview)
 
     allowed_actions = _safe_allowed_actions(safe_preview)
