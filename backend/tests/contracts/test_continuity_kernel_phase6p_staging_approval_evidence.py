@@ -196,7 +196,7 @@ class TestContinuityKernelPhase6PStagingApprovalEvidence(unittest.TestCase):
         self.assertEqual(repair_named_files, [])
 
         for path in SCRIPTS_DIR.glob("**/*.py"):
-            self.assertFalse(path.stat().st_mode & 0o111, msg=f"Unexpected executable script bit set: {path}")
+            self.assertEqual(path.stat().st_mode & 0o111, 0, msg=f"Unexpected executable script bit set: {path}")
 
 
 if __name__ == "__main__":
