@@ -96,5 +96,4 @@
 - Phase 6Q does not change production settings.
 - Phase 6Q does not create apply mode.
 - Phase 6Q does not create repair scripts.
-- Phase 6Q does not create apply mode or repair scripts.
 - Phase 6Q does not touch live data.
