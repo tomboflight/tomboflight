@@ -15,6 +15,7 @@ This module does not alter customer records.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from copy import deepcopy
 from typing import Any
 
@@ -56,7 +57,9 @@ def _invalid_fixture_payload_response(*, enabled: bool) -> dict:
 
 
 def _safe_dict(value: Any) -> dict:
-    return deepcopy(value) if isinstance(value, dict) else {}
+    if isinstance(value, Mapping):
+        return deepcopy(dict(value))
+    return {}
 
 
 def _safe_list(value: Any) -> list:
