@@ -32,6 +32,8 @@ jobs:
 
   continuity-kernel-runtime-route-test-env:
     runs-on: ubuntu-latest
+    env:
+      CONTINUITY_KERNEL_RUNTIME_TEST_ENFORCE_NO_SKIPS: "1"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -48,3 +50,6 @@ jobs:
 
       - name: Run focused Phase 6I runtime route test (verified by Phase 6J)
         run: python -m unittest backend.tests.contracts.test_continuity_kernel_phase6i_runtime_route_verification -v
+
+      - name: Run Phase 6L runtime no-skip enforcement test
+        run: python -m unittest backend.tests.contracts.test_continuity_kernel_phase6l_runtime_no_skip_enforcement -v
