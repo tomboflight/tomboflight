@@ -57,11 +57,14 @@ def _invalid_fixture_payload_response(*, enabled: bool) -> dict:
 
 
 def _safe_mapping_dict(value: Any) -> dict:
+    """Fail-closed mapping copy helper used to sanitize env-like inputs."""
     if isinstance(value, Mapping):
         try:
             return deepcopy(dict(value))
         except (TypeError, ValueError):
+            # Fail closed when a mapping cannot be materialized safely.
             return {}
+    # Fail closed for non-mapping values to preserve disabled-by-default behavior.
     return {}
 
 

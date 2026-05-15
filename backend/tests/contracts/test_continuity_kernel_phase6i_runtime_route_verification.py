@@ -1,4 +1,5 @@
 import ast
+from collections.abc import Mapping
 from contextlib import contextmanager
 import os
 from pathlib import Path
@@ -108,7 +109,7 @@ class TestContinuityKernelPhase6IRuntimeRouteVerification(unittest.TestCase):
             else:
                 raise
 
-    def _helper_response_for_env(self, env: dict | None):
+    def _helper_response_for_env(self, env: Mapping[str, str] | dict | None):
         return self.helper_module.build_readonly_preview_response(
             env=env,
             dry_run_source={"dry_run_id": "admin-readonly-preview", "source": "admin-route", "mode": "read_only"},
