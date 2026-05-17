@@ -235,7 +235,7 @@ class TestContinuityKernelPhase6UStagingManualTestPacket(unittest.TestCase):
 
     def test_29_no_executable_repair_script_exists(self) -> None:
         repair_named_files = [path for path in SCRIPTS_DIR.glob("**/*") if path.is_file() and "repair" in path.name.lower()]
-        self.assertEqual(repair_named_files, [])
+        self.assertFalse(repair_named_files, msg="Found unexpected repair-named files")
 
         for path in SCRIPTS_DIR.glob("**/*.py"):
             self.assertFalse(

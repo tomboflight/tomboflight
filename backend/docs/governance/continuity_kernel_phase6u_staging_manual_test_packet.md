@@ -113,5 +113,4 @@
 - Phase 6U does not change production settings.
 - Phase 6U does not create apply mode.
 - Phase 6U does not create repair scripts.
-- Phase 6U does not create apply mode or repair scripts.
 - Phase 6U does not touch live data.
