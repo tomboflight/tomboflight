@@ -9,7 +9,6 @@
 - There is no apply mode.
 - There is no repair execution.
 - There is no data mutation.
-- There is no production enablement, apply mode behavior, repair execution, or data mutation.
 
 ## 2. Required approval record fields
 
@@ -84,5 +83,4 @@
 - Phase 7C does not change production settings.
 - Phase 7C does not create apply mode.
 - Phase 7C does not create repair scripts.
-- Phase 7C does not create apply mode or repair scripts.
 - Phase 7C does not touch live data.

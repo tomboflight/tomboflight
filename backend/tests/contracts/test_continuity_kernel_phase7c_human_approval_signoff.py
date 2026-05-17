@@ -156,7 +156,8 @@ class TestContinuityKernelPhase7CHumanApprovalSignoff(unittest.TestCase):
         self.assertIn("phase 7c does not change production settings", self.doc_lower)
 
     def test_22_doc_says_phase7c_does_not_create_apply_mode_or_repair_scripts(self) -> None:
-        self.assertIn("phase 7c does not create apply mode or repair scripts", self.doc_lower)
+        self.assertIn("phase 7c does not create apply mode", self.doc_lower)
+        self.assertIn("phase 7c does not create repair scripts", self.doc_lower)
 
     def test_23_doc_says_phase7c_does_not_touch_live_data(self) -> None:
         self.assertIn("phase 7c does not touch live data", self.doc_lower)
