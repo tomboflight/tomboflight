@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from urllib.parse import parse_qsl
 
 from app.database import get_database
 from app.services.project_entitlement_service import (
@@ -25,11 +26,20 @@ def _to_datetime(value: Any) -> datetime | None:
 
 def _metadata_project_id(payload: dict[str, Any]) -> str:
     metadata = payload.get("metadata") or {}
+    client_reference_id = _normalize(payload.get("client_reference_id"))
+    context_project_id = ""
+    if client_reference_id.startswith("tol:"):
+        try:
+            parsed = dict(parse_qsl(client_reference_id[4:], keep_blank_values=False))
+            context_project_id = _normalize(parsed.get("p"))
+        except Exception:
+            context_project_id = ""
     return _normalize(
         metadata.get("project_id")
         or metadata.get("upgrade_project_id")
         or metadata.get("existing_project_id")
         or metadata.get("target_project_id")
+        or context_project_id
     )
 
 

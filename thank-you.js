@@ -11,6 +11,7 @@
     return;
   }
   const PENDING_CHECKOUT_KEY = "tol_pending_checkout";
+  const LIGHT_NEVER_DIES_CAMPAIGN = "LIGHT_NEVER_DIES";
   const PORTRAIT_PACKAGE_CODES = new Set([
     "legacy_snapshot",
     "legacy_portrait_intro",
@@ -59,6 +60,12 @@
     } catch (_error) {
       return null;
     }
+  }
+
+  function normalizeCampaign(value) {
+    return String(value || "")
+      .trim()
+      .toUpperCase();
   }
 
   function clearPendingCheckout() {
@@ -273,11 +280,23 @@
 
     const sessionId = getParam("session_id");
     const packageCode = getParam("package") || (pendingCheckout && pendingCheckout.packageCode) || "";
+    const campaign = normalizeCampaign(
+      getParam("campaign") ||
+        (pendingCheckout && pendingCheckout.campaign) ||
+        (app.getActiveCampaignCode ? app.getActiveCampaignCode() : ""),
+    );
     const type =
       getParam("type") ||
       (pendingCheckout && pendingCheckout.purchaseType) ||
       inferType("", packageCode);
+    const normalizedType = inferType(type, packageCode);
     const actions = actionConfig(type, packageCode);
+    const normalizedPackageCode = normalizePackageCode(packageCode);
+    const basePackage = basePackageCode(normalizedPackageCode);
+    const isFounderCampaign = normalizeCampaign(campaign) === LIGHT_NEVER_DIES_CAMPAIGN;
+    const paymentLinks = (window.TOL_CONFIG && window.TOL_CONFIG.PAYMENT_LINKS) || {};
+    const requiredMonthlyMaintenanceSlug = `${basePackage}_maintenance_monthly`;
+    const requiredMonthlyMaintenanceUrl = paymentLinks[requiredMonthlyMaintenanceSlug] || "";
 
     if (sessionNode) {
       sessionNode.textContent = sessionId || "Not provided";
@@ -295,14 +314,64 @@
       nextStepNode.textContent = nextStepMessage(type, packageCode);
     }
 
-    if (primaryAction) {
-      primaryAction.setAttribute("href", actions.primary.href);
-      primaryAction.textContent = actions.primary.label;
+    if (isFounderCampaign && normalizedType === "package") {
+      if (
+        app &&
+        typeof app.setFounderMaintenancePending === "function" &&
+        basePackage
+      ) {
+        app.setFounderMaintenancePending({
+          campaign: LIGHT_NEVER_DIES_CAMPAIGN,
+          packageCode: basePackage,
+          requiredBillingInterval: "monthly",
+          createdAt: new Date().toISOString(),
+        });
+      }
+      if (nextStepNode) {
+        nextStepNode.textContent =
+          "Your founder package payment was received. Monthly maintenance setup is required now to keep your Tomb of Light continuity active.";
+      }
+      const checkoutUrl =
+        requiredMonthlyMaintenanceUrl &&
+        app &&
+        typeof app.buildCheckoutLinkWithContext === "function"
+          ? app.buildCheckoutLinkWithContext(requiredMonthlyMaintenanceUrl, {
+              slug: requiredMonthlyMaintenanceSlug,
+              purchaseType: "maintenance",
+              campaign: LIGHT_NEVER_DIES_CAMPAIGN,
+            })
+          : requiredMonthlyMaintenanceUrl;
+      if (primaryAction) {
+        if (checkoutUrl) {
+          primaryAction.setAttribute("href", checkoutUrl);
+          primaryAction.setAttribute("target", "_blank");
+          primaryAction.setAttribute("rel", "noopener noreferrer");
+          primaryAction.textContent = "Start Required Monthly Maintenance";
+        } else {
+          primaryAction.setAttribute("href", "billing.html");
+          primaryAction.textContent = "Open Billing";
+        }
+      }
+      if (secondaryAction) {
+        secondaryAction.setAttribute("href", "billing.html");
+        secondaryAction.textContent = "Open Billing";
+      }
+    } else {
+      if (primaryAction) {
+        primaryAction.setAttribute("href", actions.primary.href);
+        primaryAction.textContent = actions.primary.label;
+      }
+
+      if (secondaryAction) {
+        secondaryAction.setAttribute("href", actions.secondary.href);
+        secondaryAction.textContent = actions.secondary.label;
+      }
     }
 
-    if (secondaryAction) {
-      secondaryAction.setAttribute("href", actions.secondary.href);
-      secondaryAction.textContent = actions.secondary.label;
+    if (isFounderCampaign && normalizedType === "maintenance") {
+      if (app && typeof app.clearFounderMaintenancePending === "function") {
+        app.clearFounderMaintenancePending();
+      }
     }
 
     if (packageCode) {

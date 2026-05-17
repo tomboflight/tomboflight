@@ -18,6 +18,8 @@
   const USER_KEY = "tol_user";
   const COOKIE_CHOICE_KEY = "tol_cookie_choice";
   const PENDING_CHECKOUT_KEY = "tol_pending_checkout";
+  const FOUNDER_MAINTENANCE_PENDING_KEY = "tol_founder_maintenance_pending";
+  const LIGHT_NEVER_DIES_CAMPAIGN = "LIGHT_NEVER_DIES";
   const API_BASE_URL_STORAGE_KEY = "tol_api_base_url";
   const API_REQUEST_TIMEOUT_MS = 15000;
 
@@ -507,6 +509,174 @@
 
   function getPaymentLinks() {
     return (window.TOL_CONFIG && window.TOL_CONFIG.PAYMENT_LINKS) || {};
+  }
+
+  function getActiveCampaignCode() {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const campaign =
+        params.get("campaign") ||
+        params.get("utm_campaign") ||
+        params.get("source_campaign") ||
+        "";
+      return String(campaign || "").trim().toUpperCase();
+    } catch (_error) {
+      return "";
+    }
+  }
+
+  function isLightNeverDiesCampaign(value) {
+    return String(value || "").trim().toUpperCase() === LIGHT_NEVER_DIES_CAMPAIGN;
+  }
+
+  function sanitizeMaintenanceCheckoutUrl(url) {
+    const normalized = String(url || "").trim();
+    if (!normalized) return "";
+    try {
+      const parsed = new URL(normalized, window.location.origin);
+      [
+        "prefilled_promo_code",
+        "promo_code",
+        "promotion_code",
+        "coupon",
+        "discount_code",
+      ].forEach(function (key) {
+        parsed.searchParams.delete(key);
+      });
+      return parsed.toString();
+    } catch (_error) {
+      return normalized;
+    }
+  }
+
+  function getSavedUserProjectId(user) {
+    const source = user && typeof user === "object" ? user : getSavedUser() || {};
+    return String(
+      source.active_project_id ||
+        source.activeProjectId ||
+        source.project_id ||
+        source.projectId ||
+        "",
+    ).trim();
+  }
+
+  function inferBillingInterval(purchaseType, slug) {
+    const type = String(purchaseType || "").trim().toLowerCase();
+    const normalizedSlug = String(slug || "").trim().toLowerCase();
+    if (type === "maintenance") {
+      if (normalizedSlug.endsWith("_yearly")) return "yearly";
+      return "monthly";
+    }
+    return "one_time";
+  }
+
+  function buildCheckoutClientReference(payload) {
+    const input = payload && typeof payload === "object" ? payload : {};
+    const params = new URLSearchParams();
+    const packageCode = stripMaintenanceSuffix(input.packageCode || input.slug || "");
+    params.set("v", "1");
+    if (input.userId) params.set("u", String(input.userId).trim());
+    if (input.projectId) params.set("p", String(input.projectId).trim());
+    if (packageCode) params.set("k", packageCode);
+    if (input.itemType) params.set("t", String(input.itemType).trim().toLowerCase());
+    if (input.billingInterval) {
+      params.set("b", String(input.billingInterval).trim().toLowerCase());
+    }
+    if (input.campaign) params.set("c", String(input.campaign).trim().toUpperCase());
+    return `tol:${params.toString()}`;
+  }
+
+  function buildCheckoutLinkWithContext(url, options = {}) {
+    const normalizedUrl = String(url || "").trim();
+    if (!normalizedUrl) return "";
+    const user = getSavedUser() || {};
+    const slug = String(options.slug || "").trim().toLowerCase();
+    const purchaseType =
+      String(options.purchaseType || inferPurchaseTypeFromSlug(slug))
+        .trim()
+        .toLowerCase() || "package";
+    const campaign = String(options.campaign || "").trim().toUpperCase();
+    const userId = String(user.id || user._id || user.user_id || "").trim();
+    const projectId = String(options.projectId || getSavedUserProjectId(user)).trim();
+    const email = String(user.email || "").trim().toLowerCase();
+    const billingInterval = inferBillingInterval(purchaseType, slug);
+    const contextReference = buildCheckoutClientReference({
+      userId,
+      projectId,
+      packageCode: slug,
+      itemType: purchaseType,
+      billingInterval,
+      campaign,
+    });
+    try {
+      const parsed = new URL(normalizedUrl, window.location.origin);
+      parsed.searchParams.set("client_reference_id", contextReference);
+      if (email) {
+        parsed.searchParams.set("prefilled_email", email);
+      }
+      if (purchaseType === "maintenance") {
+        return sanitizeMaintenanceCheckoutUrl(parsed.toString());
+      }
+      return parsed.toString();
+    } catch (_error) {
+      return purchaseType === "maintenance"
+        ? sanitizeMaintenanceCheckoutUrl(normalizedUrl)
+        : normalizedUrl;
+    }
+  }
+
+  function getFounderMaintenancePending() {
+    try {
+      const raw = localStorage.getItem(FOUNDER_MAINTENANCE_PENDING_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" ? parsed : null;
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  function setFounderMaintenancePending(payload) {
+    try {
+      localStorage.setItem(
+        FOUNDER_MAINTENANCE_PENDING_KEY,
+        JSON.stringify(payload || {}),
+      );
+    } catch (_error) {
+      // Ignore storage errors.
+    }
+  }
+
+  function clearFounderMaintenancePending() {
+    try {
+      localStorage.removeItem(FOUNDER_MAINTENANCE_PENDING_KEY);
+    } catch (_error) {
+      // Ignore storage errors.
+    }
+  }
+
+  function enforceFounderMaintenanceGate() {
+    const pending = getFounderMaintenancePending();
+    if (!pending || !isLightNeverDiesCampaign(pending.campaign)) return;
+    const currentPage =
+      String(window.location.pathname || "").split("/").pop() || "index.html";
+    if (
+      [
+        "billing.html",
+        "thank-you.html",
+        "signin.html",
+        "signup.html",
+        "index.html",
+      ].includes(currentPage)
+    ) {
+      return;
+    }
+    const packageCode = stripMaintenanceSuffix(pending.packageCode || "");
+    const params = new URLSearchParams();
+    params.set("maintenance_required", "1");
+    if (packageCode) params.set("package", packageCode);
+    params.set("campaign", LIGHT_NEVER_DIES_CAMPAIGN);
+    window.location.replace(`billing.html?${params.toString()}`);
   }
 
   function inferPurchaseTypeFromSlug(slug) {
@@ -1146,16 +1316,46 @@
       const originalLabel = link.textContent.trim() || "Start Checkout";
       const purchaseType =
         link.dataset.paymentType || inferPurchaseTypeFromSlug(slug);
+      const campaign = getActiveCampaignCode();
 
       if (resolved) {
-        link.href = resolved;
+        link.href = buildCheckoutLinkWithContext(resolved, {
+          slug,
+          purchaseType,
+          campaign,
+        });
         link.target = "_blank";
         link.rel = "noopener noreferrer";
-        link.addEventListener("click", function () {
+        link.addEventListener("click", function (event) {
+          const founderCampaign = isLightNeverDiesCampaign(campaign);
+          if (founderCampaign && purchaseType === "package" && !getToken()) {
+            event.preventDefault();
+            const next = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+            window.location.href = `signin.html?next=${encodeURIComponent(next)}`;
+            return;
+          }
+          const checkoutHref = buildCheckoutLinkWithContext(resolved, {
+            slug,
+            purchaseType,
+            campaign,
+          });
+          if (checkoutHref) {
+            link.href = checkoutHref;
+          }
+          const normalizedSlug = stripMaintenanceSuffix(slug);
+          if (founderCampaign && purchaseType === "package" && normalizedSlug) {
+            setFounderMaintenancePending({
+              campaign: LIGHT_NEVER_DIES_CAMPAIGN,
+              packageCode: normalizedSlug,
+              requiredBillingInterval: "monthly",
+              createdAt: new Date().toISOString(),
+            });
+          }
           savePendingCheckout({
             packageCode: slug,
             purchaseType,
-            paymentLink: resolved,
+            paymentLink: checkoutHref || resolved,
+            campaign: campaign || "",
             selectedAt: new Date().toISOString(),
           });
           link.dataset.originalLabel = link.dataset.originalLabel || originalLabel;
@@ -1214,6 +1414,7 @@
   }
 
   document.addEventListener("DOMContentLoaded", function () {
+    enforceFounderMaintenanceGate();
     setupMobileMenu();
     setupHeaderScrollState();
     markActiveNavLink();
@@ -1250,6 +1451,12 @@
     packageSupportsLinkKeys,
     inferPurchaseTypeFromSlug,
     savePendingCheckout,
+    buildCheckoutLinkWithContext,
+    getActiveCampaignCode,
+    isLightNeverDiesCampaign,
+    getFounderMaintenancePending,
+    setFounderMaintenancePending,
+    clearFounderMaintenancePending,
     getReadableErrorMessage,
   };
 

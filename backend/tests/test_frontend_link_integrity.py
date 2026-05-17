@@ -121,6 +121,9 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
         self.assertIn('link.target = "_blank"', app_source)
         self.assertIn('link.rel = "noopener noreferrer"', app_source)
         self.assertIn("Opening secure checkout...", app_source)
+        self.assertIn('client_reference_id', app_source)
+        self.assertIn("sanitizeMaintenanceCheckoutUrl", app_source)
+        self.assertIn("LIGHT_NEVER_DIES", app_source)
 
     def test_public_and_legal_headers_include_platform_nav(self):
         pages = [
