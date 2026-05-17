@@ -873,6 +873,19 @@ def _infer_purchase_fields(session: dict[str, Any]) -> tuple[str, str, str, str,
         package_code = _normalize_package_code(raw_code)
         if package_name and price_label:
             return item_type, package_code, package_name, price_label, billing_plan
+        if context.get("item_type") or context.get("billing_interval"):
+            fallback_name = package_name or package_code.replace("_", " ").title()
+            fallback_price_label = price_label or _format_price_label(
+                session.get("amount_subtotal"),
+                billing_plan,
+            )
+            return (
+                item_type,
+                package_code,
+                fallback_name,
+                fallback_price_label,
+                billing_plan,
+            )
 
     product_name = _extract_product_name_from_session(session) or ""
     name_lower = product_name.lower()
