@@ -10,6 +10,8 @@ ROUTES_DIR = REPO_ROOT / "backend" / "app" / "routes"
 WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "continuity-kernel-guardrails.yml"
 SCRIPTS_DIR = REPO_ROOT / "backend" / "scripts"
 EXECUTABLE_PERMISSION_BITS = 0o111
+LATEST_MAIN_COMMIT_SHA = "e915aed0202b72541419fb86d944f3ca84d9135b"
+LATEST_GUARDRAILS_RUN_URL = "https://github.com/tomboflight/tomboflight/actions/runs/25991319616"
 
 
 class TestContinuityKernelPhase7BCurrentMainPreflightRefresh(unittest.TestCase):
@@ -57,10 +59,10 @@ class TestContinuityKernelPhase7BCurrentMainPreflightRefresh(unittest.TestCase):
         self.assertIn("no data mutation", self.doc_lower)
 
     def test_09_doc_includes_latest_main_commit_sha(self) -> None:
-        self.assertIn("e915aed0202b72541419fb86d944f3ca84d9135b", self.doc_text)
+        self.assertIn(LATEST_MAIN_COMMIT_SHA, self.doc_text)
 
     def test_10_doc_includes_latest_guardrails_run_url(self) -> None:
-        self.assertIn("https://github.com/tomboflight/tomboflight/actions/runs/25991319616", self.doc_text)
+        self.assertIn(LATEST_GUARDRAILS_RUN_URL, self.doc_text)
 
     def test_11_doc_says_both_guardrail_jobs_were_success(self) -> None:
         self.assertIn("continuity-kernel-guardrails job status: success", self.doc_lower)
