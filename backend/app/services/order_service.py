@@ -1097,7 +1097,6 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
         }
         _set_if_present(update_fields, "stripe_payment_link_id", stripe_payment_link_id)
         _set_if_present(update_fields, "campaign", campaign)
-        _set_if_present(update_fields, "campaign_code", campaign)
         orders.update_one({"_id": existing["_id"]}, {"$set": update_fields})
 
         order_doc = orders.find_one({"_id": existing["_id"]}) or {
@@ -1148,7 +1147,6 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
     }
     _set_if_present(order_doc, "stripe_payment_link_id", stripe_payment_link_id)
     _set_if_present(order_doc, "campaign", campaign)
-    _set_if_present(order_doc, "campaign_code", campaign)
 
     result = orders.insert_one(order_doc)
     order_doc["_id"] = result.inserted_id

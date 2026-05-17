@@ -1319,11 +1319,10 @@
       const campaign = getActiveCampaignCode();
 
       if (resolved) {
-        link.href = buildCheckoutLinkWithContext(resolved, {
-          slug,
-          purchaseType,
-          campaign,
-        });
+        link.href =
+          purchaseType === "maintenance"
+            ? sanitizeMaintenanceCheckoutUrl(resolved)
+            : resolved;
         link.target = "_blank";
         link.rel = "noopener noreferrer";
         link.addEventListener("click", function (event) {
