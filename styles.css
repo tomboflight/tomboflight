@@ -1802,6 +1802,46 @@ select:focus-visible {
   padding: 28px 0 10px;
 }
 
+.founder-access-banner {
+  border-bottom: 1px solid var(--tol-line);
+  background: linear-gradient(180deg, rgba(11, 18, 32, 0.94), rgba(11, 18, 32, 0.88));
+}
+
+.founder-access-banner-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 0;
+}
+
+.founder-access-banner p {
+  margin: 0;
+  color: var(--tol-dark-body);
+  font-size: 0.93rem;
+}
+
+.founder-access-strip {
+  margin-top: 22px;
+}
+
+.founder-access-code {
+  margin-top: 14px;
+  color: var(--tol-dark-body);
+  font-weight: 700;
+}
+
+@media (max-width: 860px) {
+  .founder-access-banner-inner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .founder-access-banner .btn {
+    width: 100%;
+  }
+}
+
 .section-tight {
   padding-top: 12px;
 }

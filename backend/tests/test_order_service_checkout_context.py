@@ -1,6 +1,9 @@
 import unittest
+from pathlib import Path
 
 from app.services import order_service
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 class OrderServiceCheckoutContextTests(unittest.TestCase):
@@ -33,6 +36,12 @@ class OrderServiceCheckoutContextTests(unittest.TestCase):
         self.assertEqual(item_type, "maintenance")
         self.assertEqual(package_code, "legacy_portrait_intro")
         self.assertEqual(billing_plan, "monthly")
+
+    def test_order_service_keeps_single_checkout_context_builder(self):
+        source = (REPO_ROOT / "backend" / "app" / "services" / "order_service.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertEqual(source.count("def _extract_checkout_context("), 1)
 
 
 if __name__ == "__main__":
