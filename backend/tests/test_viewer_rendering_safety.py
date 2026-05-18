@@ -50,7 +50,7 @@ class ViewerRenderingSafetyTests(unittest.TestCase):
         )
 
 
-    def test_viewer_demo_route_resolves_public_manifest(self):
+    def test_viewer_demo_route_source_prefers_public_manifest(self):
         html_path = Path(__file__).resolve().parents[2] / "viewer" / "index.html"
         script_path = Path(__file__).resolve().parents[2] / "viewer" / "js" / "script.js"
 
