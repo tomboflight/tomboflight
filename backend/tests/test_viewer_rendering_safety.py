@@ -2,6 +2,9 @@ import unittest
 from pathlib import Path
 
 
+VIEWER_ASSET_CACHE_TAG = "20260518-public-demo-refresh"
+
+
 class ViewerRenderingSafetyTests(unittest.TestCase):
     def test_viewer_script_uses_safe_dom_rendering_for_dynamic_lists(self):
         script_path = (
@@ -47,7 +50,7 @@ class ViewerRenderingSafetyTests(unittest.TestCase):
         )
 
 
-    def test_viewer_demo_route_prefers_public_manifest_not_locked_fallback(self):
+    def test_viewer_demo_route_resolves_public_manifest(self):
         html_path = Path(__file__).resolve().parents[2] / "viewer" / "index.html"
         script_path = Path(__file__).resolve().parents[2] / "viewer" / "js" / "script.js"
 
@@ -59,11 +62,11 @@ class ViewerRenderingSafetyTests(unittest.TestCase):
             'const isPreviewParam = params.get("preview") === "1" || demoParam === "malik-moreland";',
             html,
         )
-        self.assertIn('css/style.css?v=20260518-public-demo-refresh', html)
-        self.assertIn('../config.js?v=20260518-public-demo-refresh', html)
-        self.assertIn('../app.js?v=20260518-public-demo-refresh', html)
-        self.assertIn('js/genesis-prototype-manifest.js?v=20260518-public-demo-refresh', html)
-        self.assertIn('js/script.js?v=20260518-public-demo-refresh', html)
+        self.assertIn(f'css/style.css?v={VIEWER_ASSET_CACHE_TAG}', html)
+        self.assertIn(f'../config.js?v={VIEWER_ASSET_CACHE_TAG}', html)
+        self.assertIn(f'../app.js?v={VIEWER_ASSET_CACHE_TAG}', html)
+        self.assertIn(f'js/genesis-prototype-manifest.js?v={VIEWER_ASSET_CACHE_TAG}', html)
+        self.assertIn(f'js/script.js?v={VIEWER_ASSET_CACHE_TAG}', html)
 
         self.assertIn('const DEFAULT_PUBLIC_DEMO_KEY = "malik-moreland";', source)
         self.assertIn('const DEMO_MODE = DEMO_KEY === DEFAULT_PUBLIC_DEMO_KEY;', source)
