@@ -182,7 +182,7 @@ class TestContinuityKernelPhase7DApprovalCompletionChecklist(unittest.TestCase):
         for path in ROUTES_DIR.glob("**/*.py"):
             if path == ROUTE_PATH:
                 continue
-            text = path.read_text(encoding="utf-8", errors="ignore")
+            text = path.read_text(encoding="utf-8", errors="replace")
             self.assertNotIn("/admin/continuity-kernel/preview", text)
 
     def test_28_workflow_still_enforces_no_skips(self) -> None:
@@ -194,7 +194,7 @@ class TestContinuityKernelPhase7DApprovalCompletionChecklist(unittest.TestCase):
 
     def test_29_no_executable_repair_script_exists(self) -> None:
         repair_named_files = [path for path in SCRIPTS_DIR.glob("**/*") if path.is_file() and "repair" in path.name.lower()]
-        self.assertEqual(repair_named_files, [])
+        self.assertEqual(repair_named_files, [], msg=f"Found unexpected repair files: {repair_named_files}")
 
         for path in SCRIPTS_DIR.glob("**/*.py"):
             self.assertFalse(
