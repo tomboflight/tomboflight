@@ -1309,7 +1309,6 @@ select:focus-visible {
 .hero-viewer-card-main,
 .platform-model-card,
 .core-layers-card,
-.architecture-panel-home,
 .manifesto-panel {
   color: var(--tol-dark-body);
 }
@@ -1325,9 +1324,6 @@ select:focus-visible {
 .core-layers-card h1,
 .core-layers-card h2,
 .core-layers-card h3,
-.architecture-panel-home h1,
-.architecture-panel-home h2,
-.architecture-panel-home h3,
 .manifesto-panel h1,
 .manifesto-panel h2,
 .manifesto-panel h3 {
@@ -1339,8 +1335,6 @@ select:focus-visible {
 .hero-viewer-card-main p,
 .platform-model-card p,
 .core-layers-card p,
-.architecture-panel-home p,
-.architecture-panel-home li,
 .manifesto-panel p {
   color: var(--tol-dark-body);
   opacity: 1;
@@ -1348,9 +1342,7 @@ select:focus-visible {
 
 .hero-copy-cosmic .eyebrow,
 .hero-demo-card-top .eyebrow,
-.architecture-panel-home .eyebrow,
-.manifesto-panel .eyebrow,
-.architecture-panel-home .flow-label {
+.manifesto-panel .eyebrow {
   color: var(--tol-gold-soft);
   opacity: 1;
 }
@@ -2223,7 +2215,7 @@ select:focus-visible {
 }
 
 .founder-package-card .founder-access-code {
-  color: #8c6a2d;
+  color: var(--gold);
 }
 
 .founder-copy + .founder-copy {
