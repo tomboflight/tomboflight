@@ -1308,8 +1308,7 @@ select:focus-visible {
 .hero-copy-cosmic,
 .hero-viewer-card-main,
 .platform-model-card,
-.core-layers-card,
-.manifesto-panel {
+.core-layers-card {
   color: var(--tol-dark-body);
 }
 
@@ -1323,10 +1322,7 @@ select:focus-visible {
 .platform-model-card h3,
 .core-layers-card h1,
 .core-layers-card h2,
-.core-layers-card h3,
-.manifesto-panel h1,
-.manifesto-panel h2,
-.manifesto-panel h3 {
+.core-layers-card h3 {
   color: var(--tol-dark-heading);
   opacity: 1;
 }
@@ -1334,15 +1330,13 @@ select:focus-visible {
 .hero-copy-cosmic p,
 .hero-viewer-card-main p,
 .platform-model-card p,
-.core-layers-card p,
-.manifesto-panel p {
+.core-layers-card p {
   color: var(--tol-dark-body);
   opacity: 1;
 }
 
 .hero-copy-cosmic .eyebrow,
-.hero-demo-card-top .eyebrow,
-.manifesto-panel .eyebrow {
+.hero-demo-card-top .eyebrow {
   color: var(--tol-gold-soft);
   opacity: 1;
 }
@@ -1669,10 +1663,12 @@ select:focus-visible {
   background:
     radial-gradient(
       circle at 78% 50%,
-      rgba(56, 136, 205, 0.18),
+      rgba(56, 136, 205, 0.14),
       transparent 26%
     ),
-    linear-gradient(135deg, rgba(11, 18, 32, 0.94), rgba(5, 9, 17, 0.96));
+    linear-gradient(180deg, #ffffff, #f8fbff);
+  border: 1px solid rgba(169, 197, 218, 0.62);
+  box-shadow: 0 18px 44px rgba(11, 18, 32, 0.1);
 }
 
 .manifesto-panel::before {
@@ -1890,16 +1886,37 @@ select:focus-visible {
   .founder-access-banner-inner {
     flex-direction: column;
     align-items: flex-start;
-    gap: 12px;
-    padding: 16px 0;
+    gap: 8px;
+    padding: 10px 0;
   }
 
   .founder-access-banner p {
     width: 100%;
+    gap: 2px;
+  }
+
+  .founder-access-banner-title {
+    font-size: 0.98rem;
+    letter-spacing: 0.11em;
+  }
+
+  .founder-access-banner-subtitle {
+    font-size: 0.9rem;
+    line-height: 1.2;
+  }
+
+  .founder-access-banner-meta {
+    font-size: 0.84rem;
+    line-height: 1.35;
   }
 
   .founder-access-banner .btn {
     width: 100%;
+  }
+
+  .founder-access-banner .btn-secondary {
+    min-height: 42px;
+    padding: 10px 14px;
   }
 }
 
@@ -2215,7 +2232,7 @@ select:focus-visible {
 }
 
 .founder-package-card .founder-access-code {
-  color: var(--gold);
+  color: var(--tol-ink);
 }
 
 .founder-copy + .founder-copy {
