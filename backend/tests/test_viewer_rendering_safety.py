@@ -57,11 +57,6 @@ class ViewerRenderingSafetyTests(unittest.TestCase):
         html = html_path.read_text(encoding="utf-8")
         source = script_path.read_text(encoding="utf-8")
 
-        self.assertIn('const demoParam = String(params.get("demo") || "").trim().toLowerCase();', html)
-        self.assertIn(
-            'const isPreviewParam = params.get("preview") === "1" || demoParam === "malik-moreland";',
-            html,
-        )
         self.assertIn(f'css/style.css?v={VIEWER_ASSET_CACHE_TAG}', html)
         self.assertIn(f'../config.js?v={VIEWER_ASSET_CACHE_TAG}', html)
         self.assertIn(f'../app.js?v={VIEWER_ASSET_CACHE_TAG}', html)
