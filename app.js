@@ -596,6 +596,7 @@
         .trim()
         .toLowerCase() || "package";
     const campaign = String(options.campaign || "").trim().toUpperCase();
+    const promoCode = String(options.promoCode || "").trim();
     const userId = String(user.id || user._id || user.user_id || "").trim();
     const projectId = String(options.projectId || getSavedUserProjectId(user)).trim();
     const email = String(user.email || "").trim().toLowerCase();
@@ -613,6 +614,9 @@
       parsed.searchParams.set("client_reference_id", contextReference);
       if (email) {
         parsed.searchParams.set("prefilled_email", email);
+      }
+      if (purchaseType !== "maintenance" && promoCode) {
+        parsed.searchParams.set("prefilled_promo_code", promoCode);
       }
       if (purchaseType === "maintenance") {
         return sanitizeMaintenanceCheckoutUrl(parsed.toString());
@@ -1316,7 +1320,12 @@
       const originalLabel = link.textContent.trim() || "Start Checkout";
       const purchaseType =
         link.dataset.paymentType || inferPurchaseTypeFromSlug(slug);
-      const campaign = getActiveCampaignCode();
+      const campaign = String(
+        link.dataset.campaign || getActiveCampaignCode(),
+      )
+        .trim()
+        .toUpperCase();
+      const promoCode = String(link.dataset.promoCode || "").trim();
 
       if (resolved) {
         link.href =
@@ -1337,6 +1346,7 @@
             slug,
             purchaseType,
             campaign,
+            promoCode,
           });
           if (checkoutHref) {
             link.href = checkoutHref;

@@ -124,6 +124,66 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
         self.assertIn('client_reference_id', app_source)
         self.assertIn("sanitizeMaintenanceCheckoutUrl", app_source)
         self.assertIn("LIGHT_NEVER_DIES", app_source)
+        self.assertIn('id="pricing"', homepage)
+        self.assertIn("Choose your legacy scope", homepage)
+        self.assertEqual(homepage.count('id="pricing"'), 1)
+
+    def test_founder_access_marketing_layer_is_present_and_campaign_ready(self):
+        homepage = (REPO_ROOT / "index.html").read_text(encoding="utf-8")
+        founder_page = (REPO_ROOT / "founder-access.html").read_text(encoding="utf-8")
+
+        for required in [
+            "LIGHT NEVER DIES",
+            "Genesis Founder Release",
+            "Founder Access",
+            "June 28, 2026",
+            "campaign=LIGHT_NEVER_DIES",
+        ]:
+            self.assertIn(required, homepage)
+            self.assertIn(required, founder_page)
+
+        self.assertEqual(homepage.count("data-founder-access-banner"), 1)
+        self.assertEqual(homepage.count("data-founder-access-section"), 1)
+
+        expected_founder_slugs = [
+            "legacy_snapshot",
+            "legacy_portrait_intro",
+            "digital_legacy_portrait",
+            "household_foundation",
+            "heirloom_legacy_tree",
+            "legacy_plus",
+        ]
+        for slug in expected_founder_slugs:
+            self.assertIn(f'data-payment-link="{slug}"', founder_page)
+
+        self.assertIn("LIGHTNEVERDIES-PORTRAIT", founder_page)
+        self.assertNotIn("LIGHTNEVERDIES- PORTRAIT", founder_page)
+
+    def test_checkout_campaign_and_founder_engines_are_not_duplicated(self):
+        app_source = (REPO_ROOT / "app.js").read_text(encoding="utf-8")
+        thank_you_source = (REPO_ROOT / "thank-you.js").read_text(encoding="utf-8")
+        order_service = (REPO_ROOT / "backend" / "app" / "services" / "order_service.py").read_text(
+            encoding="utf-8"
+        )
+        maintenance_service = (
+            REPO_ROOT / "backend" / "app" / "services" / "maintenance_subscription_service.py"
+        ).read_text(encoding="utf-8")
+        config_source = (REPO_ROOT / "config.js").read_text(encoding="utf-8")
+
+        self.assertEqual(
+            app_source.count('const LIGHT_NEVER_DIES_CAMPAIGN = "LIGHT_NEVER_DIES";'),
+            1,
+        )
+        self.assertEqual(
+            thank_you_source.count('const LIGHT_NEVER_DIES_CAMPAIGN = "LIGHT_NEVER_DIES";'),
+            1,
+        )
+        self.assertEqual(app_source.count("function enforceFounderMaintenanceGate()"), 1)
+        self.assertEqual(app_source.count("function buildCheckoutLinkWithContext("), 1)
+        self.assertEqual(order_service.count("def _extract_checkout_context("), 1)
+        self.assertEqual(maintenance_service.count("def _metadata_project_id("), 1)
+        self.assertEqual(app_source.count("const PACKAGE_PROFILES = {"), 1)
+        self.assertEqual(config_source.count("const TOL_PRICING = {"), 1)
 
     def test_public_and_legal_headers_include_platform_nav(self):
         pages = [
