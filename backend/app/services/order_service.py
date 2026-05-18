@@ -2,6 +2,7 @@ import re
 import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any, Optional, cast
+from urllib.parse import parse_qsl
 
 import stripe
 from bson import ObjectId
@@ -768,6 +769,33 @@ def _extract_billing_plan_from_session(session: dict[str, Any]) -> str:
     return "one_time"
 
 
+def _extract_checkout_context(session: dict[str, Any]) -> dict[str, str]:
+    raw_reference = _normalize(session.get("client_reference_id"))
+    if not raw_reference:
+        return {}
+    if not raw_reference.startswith("tol:"):
+        return {}
+    try:
+        parsed = dict(parse_qsl(raw_reference[4:], keep_blank_values=False))
+    except Exception:
+        return {}
+
+    context: dict[str, str] = {}
+    if parsed.get("u"):
+        context["user_id"] = _normalize(parsed.get("u"))
+    if parsed.get("p"):
+        context["project_id"] = _normalize(parsed.get("p"))
+    if parsed.get("k"):
+        context["package_code"] = _normalize_package_code(parsed.get("k"))
+    if parsed.get("t"):
+        context["item_type"] = _normalize(parsed.get("t")).lower()
+    if parsed.get("b"):
+        context["billing_interval"] = _normalize(parsed.get("b")).lower()
+    if parsed.get("c"):
+        context["campaign"] = _normalize(parsed.get("c")).upper()
+    return {k: v for k, v in context.items() if v}
+
+
 def _format_price_label(amount_subtotal: Any, billing_plan: str) -> str:
     if not isinstance(amount_subtotal, int):
         return "paid"
@@ -808,31 +836,56 @@ def _schedule_maintenance_start(
 
 def _extract_target_project_id(session: dict[str, Any]) -> str:
     metadata = session.get("metadata") or {}
+    context = _extract_checkout_context(session)
     return _normalize(
         metadata.get("project_id")
         or metadata.get("upgrade_project_id")
         or metadata.get("existing_project_id")
         or metadata.get("target_project_id")
+        or context.get("project_id")
     )
 
 
 def _infer_purchase_fields(session: dict[str, Any]) -> tuple[str, str, str, str, str]:
     metadata = session.get("metadata") or {}
+    context = _extract_checkout_context(session)
 
     raw_code = (
         metadata.get("package_code")
         or metadata.get("package_slug")
         or metadata.get("package")
+        or context.get("package_code")
     )
     package_name = _normalize(metadata.get("package_name"))
     price_label = _normalize(metadata.get("price_label"))
-    item_type = _normalize(metadata.get("item_type") or metadata.get("type")) or "package"
-    billing_plan = _normalize(metadata.get("billing_plan")) or _extract_billing_plan_from_session(session)
+    item_type = _normalize(
+        metadata.get("item_type")
+        or metadata.get("type")
+        or context.get("item_type")
+    ) or "package"
+    billing_plan = (
+        _normalize(metadata.get("billing_plan"))
+        or _normalize(context.get("billing_interval"))
+        or _extract_billing_plan_from_session(session)
+    )
 
     if raw_code:
         package_code = _normalize_package_code(raw_code)
         if package_name and price_label:
             return item_type, package_code, package_name, price_label, billing_plan
+        if context.get("item_type") or context.get("billing_interval"):
+            fallback_name = package_name or package_code.replace("_", " ").title()
+            fallback_price_label = price_label or _format_price_label(
+                session.get("amount_subtotal"),
+                billing_plan,
+            )
+            return (
+                item_type,
+                package_code,
+                fallback_name,
+                fallback_price_label,
+                billing_plan,
+            )
 
     product_name = _extract_product_name_from_session(session) or ""
     name_lower = product_name.lower()
@@ -1020,6 +1073,8 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
             pass
 
     orders = _get_orders_collection()
+    checkout_context = _extract_checkout_context(session)
+    campaign = _normalize((session.get("metadata") or {}).get("campaign") or checkout_context.get("campaign")).upper()
 
     item_type, package_code, package_name, price_label, billing_plan = _infer_purchase_fields(session)
     stripe_payment_link_id = session.get("payment_link")
@@ -1041,6 +1096,7 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
             "stripe_session_id": session_id,
         }
         _set_if_present(update_fields, "stripe_payment_link_id", stripe_payment_link_id)
+        _set_if_present(update_fields, "campaign", campaign)
         orders.update_one({"_id": existing["_id"]}, {"$set": update_fields})
 
         order_doc = orders.find_one({"_id": existing["_id"]}) or {
@@ -1090,6 +1146,7 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
         "created_at": datetime.now(UTC),
     }
     _set_if_present(order_doc, "stripe_payment_link_id", stripe_payment_link_id)
+    _set_if_present(order_doc, "campaign", campaign)
 
     result = orders.insert_one(order_doc)
     order_doc["_id"] = result.inserted_id
