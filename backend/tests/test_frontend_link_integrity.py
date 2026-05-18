@@ -6,6 +6,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PLACEHOLDER_HREF_PATTERN = re.compile(r'href\s*=\s*"(#|javascript:void\(0\)|)"', re.IGNORECASE)
 EMPTY_DATA_ACTION_PATTERN = re.compile(r'data-action\s*=\s*""', re.IGNORECASE)
+FOUNDER_STYLESHEET_VERSION = "styles.css?v=20260518-founder-polish"
 
 
 class FrontendLinkIntegrityTests(unittest.TestCase):
@@ -142,8 +143,13 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
             self.assertIn(required, homepage)
             self.assertIn(required, founder_page)
 
+        self.assertIn(FOUNDER_STYLESHEET_VERSION, homepage)
+        self.assertIn(FOUNDER_STYLESHEET_VERSION, founder_page)
+
         self.assertEqual(homepage.count("data-founder-access-banner"), 1)
         self.assertEqual(homepage.count("data-founder-access-section"), 1)
+        self.assertEqual(founder_page.count('id="founder-access-title"'), 1)
+        self.assertEqual(founder_page.count("founder-access-strip"), 2)
 
         expected_founder_slugs = [
             "legacy_snapshot",
@@ -162,6 +168,7 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
     def test_checkout_campaign_and_founder_engines_are_not_duplicated(self):
         app_source = (REPO_ROOT / "app.js").read_text(encoding="utf-8")
         thank_you_source = (REPO_ROOT / "thank-you.js").read_text(encoding="utf-8")
+        homepage = (REPO_ROOT / "index.html").read_text(encoding="utf-8")
         order_service = (REPO_ROOT / "backend" / "app" / "services" / "order_service.py").read_text(
             encoding="utf-8"
         )
@@ -184,6 +191,8 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
         self.assertEqual(maintenance_service.count("def _metadata_project_id("), 1)
         self.assertEqual(app_source.count("const PACKAGE_PROFILES = {"), 1)
         self.assertEqual(config_source.count("const TOL_PRICING = {"), 1)
+        self.assertEqual(homepage.count("data-founder-access-banner"), 1)
+        self.assertEqual(homepage.count("data-founder-access-section"), 1)
 
     def test_public_and_legal_headers_include_platform_nav(self):
         pages = [

@@ -1803,22 +1803,58 @@ select:focus-visible {
 }
 
 .founder-access-banner {
-  border-bottom: 1px solid var(--tol-line);
-  background: linear-gradient(180deg, rgba(11, 18, 32, 0.94), rgba(11, 18, 32, 0.88));
+  border-top: 1px solid rgba(214, 176, 102, 0.24);
+  border-bottom: 1px solid rgba(214, 176, 102, 0.26);
+  background:
+    linear-gradient(180deg, rgba(4, 8, 15, 0.96), rgba(7, 12, 23, 0.9)),
+    radial-gradient(circle at 14% 12%, rgba(214, 176, 102, 0.18), transparent 32%);
 }
 
 .founder-access-banner-inner {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
-  padding: 10px 0;
+  gap: 20px;
+  padding: 14px 0;
 }
 
 .founder-access-banner p {
   margin: 0;
   color: var(--tol-dark-body);
-  font-size: 0.93rem;
+  font-size: 0.95rem;
+  display: grid;
+  gap: 4px;
+}
+
+.founder-access-banner-title {
+  color: var(--tol-dark-heading);
+  font-size: 1.08rem;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.founder-access-banner-subtitle {
+  color: var(--tol-gold-soft);
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+
+.founder-access-banner-meta {
+  color: var(--tol-dark-body);
+  font-weight: 600;
+}
+
+.founder-access-banner .btn-secondary {
+  background: rgba(10, 18, 33, 0.72);
+  border-color: rgba(214, 176, 102, 0.44);
+  color: var(--tol-dark-cta);
+}
+
+.founder-access-banner .btn-secondary:hover {
+  background: rgba(14, 24, 42, 0.88);
+  border-color: rgba(214, 176, 102, 0.56);
 }
 
 .founder-access-strip {
@@ -1835,6 +1871,12 @@ select:focus-visible {
   .founder-access-banner-inner {
     flex-direction: column;
     align-items: flex-start;
+    gap: 12px;
+    padding: 16px 0;
+  }
+
+  .founder-access-banner p {
+    width: 100%;
   }
 
   .founder-access-banner .btn {
@@ -2103,6 +2145,58 @@ select:focus-visible {
 
 .cta-panel-premium {
   text-align: left;
+}
+
+.founder-cinematic-panel {
+  background:
+    linear-gradient(180deg, rgba(8, 13, 24, 0.95), rgba(5, 10, 18, 0.92)),
+    radial-gradient(circle at 84% 10%, rgba(214, 176, 102, 0.14), transparent 28%),
+    rgba(8, 13, 24, 0.92);
+  border: 1px solid rgba(214, 176, 102, 0.24);
+  box-shadow:
+    var(--shadow),
+    inset 0 1px 0 rgba(214, 176, 102, 0.18),
+    0 24px 54px rgba(0, 0, 0, 0.34);
+}
+
+.founder-cinematic-panel h1,
+.founder-cinematic-panel h2 {
+  color: var(--tol-dark-heading);
+}
+
+.founder-cinematic-panel .section-lead {
+  color: var(--tol-dark-body);
+}
+
+.founder-cinematic-panel .eyebrow {
+  color: var(--tol-gold-soft);
+}
+
+.founder-hero-release {
+  margin: -4px 0 14px;
+  color: var(--tol-gold-soft);
+  font-size: clamp(1.15rem, 2.1vw, 1.35rem);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.founder-package-card {
+  border-color: rgba(214, 176, 102, 0.24);
+  box-shadow:
+    0 16px 40px rgba(0, 0, 0, 0.24),
+    inset 0 1px 0 rgba(214, 176, 102, 0.16);
+}
+
+.founder-package-card .meta-pill {
+  border-color: rgba(214, 176, 102, 0.3);
+  background: rgba(8, 14, 25, 0.72);
+  color: var(--tol-dark-cta);
+  font-weight: 700;
+}
+
+.founder-package-card .founder-access-code {
+  color: var(--tol-gold-soft);
 }
 
 .founder-copy + .founder-copy {
