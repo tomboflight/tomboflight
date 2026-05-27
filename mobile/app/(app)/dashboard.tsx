@@ -20,6 +20,8 @@ type AccessContextSummary = {
   role: string;
   status: string;
   packageLane: string;
+  packageCode: string;
+  packageName: string;
   experienceMode: string;
   activeProjectId: string;
   activeFamilyId: string;
@@ -39,6 +41,63 @@ type MetricRow = {
   count: number;
 };
 
+function firstString(...values: unknown[]): string {
+  for (const value of values) {
+    const normalized = asString(value);
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  return '';
+}
+
+function firstStringArray(...values: unknown[]): string[] {
+  for (const value of values) {
+    const normalized = asStringArray(value);
+    if (normalized.length > 0) {
+      return normalized;
+    }
+  }
+
+  return [];
+}
+
+function firstRecord(...values: unknown[]): Record<string, unknown> {
+  for (const value of values) {
+    const normalized = asRecord(value);
+    if (Object.keys(normalized).length > 0) {
+      return normalized;
+    }
+  }
+
+  return {};
+}
+
+function inferExperienceMode(packageLane: string, packageCode: string, rawMode: string): string {
+  if (rawMode) {
+    return rawMode;
+  }
+
+  const normalizedLane = packageLane.toLowerCase();
+  const normalizedCode = packageCode.toLowerCase();
+
+  if (normalizedLane === 'household') {
+    return 'household';
+  }
+
+  if (
+    normalizedCode === 'legacy_plus' ||
+    normalizedCode === 'household_foundation' ||
+    normalizedCode === 'heirloom_legacy_tree' ||
+    normalizedCode === 'family_estate_concierge'
+  ) {
+    return 'household';
+  }
+
+  return '';
+}
+
 function toCountRows(items: WorkspaceMembership[], key: keyof WorkspaceMembership): MetricRow[] {
   const counts = new Map<string, number>();
 
@@ -52,26 +111,230 @@ function toCountRows(items: WorkspaceMembership[], key: keyof WorkspaceMembershi
     .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label));
 }
 
-function toAccessContextSummary(payload: Record<string, unknown>): AccessContextSummary {
-  const legal = asRecord(payload.legal_acceptance);
+function toAccessContextSummary(
+  payload: Record<string, unknown>,
+  memberships: WorkspaceMembership[] = []
+): AccessContextSummary {
+  const user = firstRecord(
+    payload.user,
+    payload.account,
+    payload.profile,
+    payload.identity,
+    payload.current_user,
+    payload.authenticated_user
+  );
+
+  const accessContext = firstRecord(
+    payload.access_context,
+    payload.context,
+    payload.workspace_context,
+    payload.current_access_context
+  );
+
+  const project = firstRecord(
+    payload.project,
+    payload.active_project,
+    payload.current_project
+  );
+
+  const packageRecord = firstRecord(
+    payload.package,
+    payload.package_record,
+    payload.package_details,
+    accessContext.package,
+    project.package,
+    project.package_record,
+    project.package_details
+  );
+
+  const family = firstRecord(
+    payload.family,
+    payload.active_family,
+    payload.current_family
+  );
+
+  const legal = firstRecord(
+    payload.legal_acceptance,
+    payload.policy_acceptance,
+    user.legal_acceptance,
+    user.policy_acceptance
+  );
+
+  const primaryMembership = memberships[0] || ({} as WorkspaceMembership);
+
+  const packageLane = firstString(
+    payload.package_lane,
+    payload.packageLane,
+    accessContext.package_lane,
+    accessContext.packageLane,
+    project.package_lane,
+    project.packageLane,
+    packageRecord.package_lane,
+    packageRecord.packageLane,
+    primaryMembership.package_lane
+  );
+
+  const packageCode = firstString(
+    payload.package_code,
+    payload.packageCode,
+    payload.package_slug,
+    payload.packageSlug,
+    accessContext.package_code,
+    accessContext.packageCode,
+    accessContext.package_slug,
+    project.package_code,
+    project.packageCode,
+    project.package_slug,
+    packageRecord.code,
+    packageRecord.slug,
+    packageRecord.package_code,
+    packageRecord.package_slug
+  );
+
+  const packageName = firstString(
+    payload.package_name,
+    payload.packageName,
+    accessContext.package_name,
+    accessContext.packageName,
+    project.package_name,
+    project.packageName,
+    packageRecord.name,
+    packageRecord.label,
+    packageRecord.package_name
+  );
+
+  const rawExperienceMode = firstString(
+    payload.experience_mode,
+    payload.experienceMode,
+    payload.mode,
+    accessContext.experience_mode,
+    accessContext.experienceMode,
+    accessContext.mode,
+    project.experience_mode,
+    project.experienceMode,
+    project.mode
+  );
 
   return {
-    userId: asString(payload.user_id),
-    email: asString(payload.email),
-    role: asString(payload.role),
-    status: asString(payload.status),
-    packageLane: asString(payload.package_lane),
-    experienceMode: asString(payload.experience_mode),
-    activeProjectId: asString(payload.active_project_id),
-    activeFamilyId: asString(payload.active_family_id),
-    modules: asStringArray(payload.allowed_experience_modules),
-    entitlements: asStringArray(payload.active_entitlements),
-    projectPermissions: asStringArray(payload.project_permissions),
+    userId: firstString(
+      payload.user_id,
+      payload.userId,
+      accessContext.user_id,
+      accessContext.userId,
+      user.id,
+      user.user_id,
+      user.userId,
+      primaryMembership.user_id
+    ),
+    email: firstString(
+      payload.email,
+      accessContext.email,
+      user.email,
+      primaryMembership.email
+    ),
+    role: firstString(
+      payload.role,
+      payload.user_role,
+      payload.userRole,
+      accessContext.role,
+      accessContext.user_role,
+      accessContext.userRole,
+      user.role,
+      user.user_role,
+      user.userRole,
+      primaryMembership.member_role
+    ),
+    status: firstString(
+      payload.status,
+      accessContext.status,
+      user.status,
+      primaryMembership.status,
+      'active'
+    ),
+    packageLane,
+    packageCode,
+    packageName,
+    experienceMode: inferExperienceMode(packageLane, packageCode, rawExperienceMode),
+    activeProjectId: firstString(
+      payload.active_project_id,
+      payload.activeProjectId,
+      payload.project_id,
+      payload.projectId,
+      accessContext.active_project_id,
+      accessContext.activeProjectId,
+      accessContext.project_id,
+      project.id,
+      project.project_id,
+      project.projectId,
+      primaryMembership.project_id
+    ),
+    activeFamilyId: firstString(
+      payload.active_family_id,
+      payload.activeFamilyId,
+      payload.family_id,
+      payload.familyId,
+      accessContext.active_family_id,
+      accessContext.activeFamilyId,
+      accessContext.family_id,
+      family.id,
+      family.family_id,
+      family.familyId,
+      primaryMembership.family_id
+    ),
+    modules: firstStringArray(
+      payload.allowed_experience_modules,
+      payload.allowedExperienceModules,
+      payload.allowed_modules,
+      payload.allowedModules,
+      payload.modules,
+      payload.unlocked_modules,
+      accessContext.allowed_experience_modules,
+      accessContext.allowed_modules,
+      project.allowed_experience_modules
+    ),
+    entitlements: firstStringArray(
+      payload.active_entitlements,
+      payload.activeEntitlements,
+      payload.entitlements,
+      payload.enabled_entitlements,
+      payload.enabledEntitlements,
+      accessContext.active_entitlements,
+      accessContext.entitlements,
+      project.active_entitlements
+    ),
+    projectPermissions: firstStringArray(
+      payload.project_permissions,
+      payload.projectPermissions,
+      payload.permissions,
+      accessContext.project_permissions,
+      accessContext.permissions,
+      project.permissions
+    ),
     legalAcceptance: {
-      policyVersion: asString(legal.policy_version),
-      termsAcceptedAt: asString(legal.terms_accepted_at),
-      privacyAcceptedAt: asString(legal.privacy_accepted_at),
-      eligibilityAttestedAt: asString(legal.eligibility_attested_at)
+      policyVersion: firstString(
+        legal.policy_version,
+        legal.policyVersion,
+        payload.policy_version,
+        user.policy_version
+      ),
+      termsAcceptedAt: firstString(
+        legal.terms_accepted_at,
+        legal.termsAcceptedAt,
+        payload.terms_accepted_at,
+        user.terms_accepted_at
+      ),
+      privacyAcceptedAt: firstString(
+        legal.privacy_accepted_at,
+        legal.privacyAcceptedAt,
+        payload.privacy_accepted_at,
+        user.privacy_accepted_at
+      ),
+      eligibilityAttestedAt: firstString(
+        legal.eligibility_attested_at,
+        legal.eligibilityAttestedAt,
+        payload.eligibility_attested_at,
+        user.eligibility_attested_at
+      )
     }
   };
 }
@@ -116,13 +379,14 @@ export default function DashboardScreen() {
 
     try {
       const [contextPayload, membershipsPayload] = await Promise.all([fetchAccessContext(), fetchMyMemberships()]);
+      const membershipItems = Array.isArray(membershipsPayload.items) ? membershipsPayload.items : [];
 
       if (!mountedRef.current || requestId !== requestSequence.current) {
         return;
       }
 
-      setAccessContext(toAccessContextSummary(asRecord(contextPayload)));
-      setMemberships(Array.isArray(membershipsPayload.items) ? membershipsPayload.items : []);
+      setAccessContext(toAccessContextSummary(asRecord(contextPayload), membershipItems));
+      setMemberships(membershipItems);
     } catch (error) {
       if (!mountedRef.current || requestId !== requestSequence.current) {
         return;
@@ -173,8 +437,12 @@ export default function DashboardScreen() {
       .slice(0, 6);
   }, [memberships]);
 
+  const packageDisplay = accessContext
+    ? accessContext.packageName || accessContext.packageCode || accessContext.packageLane
+    : '';
+
   const heroContextLine = accessContext
-    ? `${toHumanLabel(accessContext.packageLane || 'unknown')} lane • ${toHumanLabel(accessContext.experienceMode || 'unknown')} mode`
+    ? `${toHumanLabel(packageDisplay || 'unknown')} • ${toHumanLabel(accessContext.packageLane || 'unknown')} lane • ${toHumanLabel(accessContext.experienceMode || 'unknown')} mode`
     : undefined;
 
   return (
@@ -227,6 +495,10 @@ export default function DashboardScreen() {
         <>
           <SectionCard title="Workspace At A Glance" subtitle="Most important context first for mobile decisions.">
             <View style={styles.metricGrid}>
+              <View style={styles.metricTile}>
+                <Text style={styles.metricLabel}>Package</Text>
+                <Text style={styles.metricValue}>{toHumanLabel(packageDisplay || 'unknown')}</Text>
+              </View>
               <View style={styles.metricTile}>
                 <Text style={styles.metricLabel}>Package Lane</Text>
                 <Text style={styles.metricValue}>{toHumanLabel(accessContext.packageLane || 'unknown')}</Text>

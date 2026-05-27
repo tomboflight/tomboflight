@@ -6,6 +6,8 @@ import { ScreenContainer } from '../../src/components/ScreenContainer';
 import { mapAuthError, signIn, signUp } from '../../src/services/auth';
 import { appTheme } from '../../src/theme';
 
+const MOBILE_POLICY_VERSION = 'tol-mobile-2026-05';
+
 function normalizeEmail(input: string): string {
   return input.trim().toLowerCase();
 }
@@ -23,32 +25,51 @@ export default function SignUpScreen() {
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
+  function clearMessages(): void {
+    if (errorMessage) {
+      setErrorMessage('');
+    }
+
+    if (successMessage) {
+      setSuccessMessage('');
+    }
+  }
+
   async function onSubmit() {
+    if (isSubmitting) {
+      return;
+    }
+
     const normalizedName = fullName.trim();
     const normalizedEmail = normalizeEmail(email);
 
-    if (!normalizedName || !normalizedEmail || !password) {
+    if (!normalizedName || !normalizedEmail || !password || !confirmPassword) {
       setErrorMessage('Complete all required fields.');
+      setSuccessMessage('');
       return;
     }
 
     if (!normalizedEmail.includes('@')) {
       setErrorMessage('Enter a valid email address.');
+      setSuccessMessage('');
       return;
     }
 
     if (password.length < 12) {
       setErrorMessage('Password must be at least 12 characters.');
+      setSuccessMessage('');
       return;
     }
 
     if (password !== confirmPassword) {
       setErrorMessage('Password confirmation does not match.');
+      setSuccessMessage('');
       return;
     }
 
     if (!termsAccepted || !privacyAccepted || !eligibilityAttested) {
       setErrorMessage('You must accept terms, privacy, and eligibility statements.');
+      setSuccessMessage('');
       return;
     }
 
@@ -63,7 +84,8 @@ export default function SignUpScreen() {
         password,
         termsAccepted,
         privacyAccepted,
-        eligibilityAttested
+        eligibilityAttested,
+        policyVersion: MOBILE_POLICY_VERSION
       });
 
       const loginResponse = await signIn({
@@ -88,6 +110,7 @@ export default function SignUpScreen() {
   return (
     <ScreenContainer>
       <View style={styles.card}>
+        <Text style={styles.badge}>Tomb of Light</Text>
         <Text style={styles.title}>Create Account</Text>
         <Text style={styles.subtitle}>
           Register your customer account to access projects, family data, and support.
@@ -96,7 +119,10 @@ export default function SignUpScreen() {
         <View style={styles.form}>
           <TextInput
             value={fullName}
-            onChangeText={setFullName}
+            onChangeText={(value) => {
+              clearMessages();
+              setFullName(value);
+            }}
             placeholder="Full Name"
             accessibilityLabel="Full Name"
             placeholderTextColor={appTheme.colors.textSecondary}
@@ -104,9 +130,13 @@ export default function SignUpScreen() {
             textContentType="name"
             style={styles.input}
           />
+
           <TextInput
             value={email}
-            onChangeText={setEmail}
+            onChangeText={(value) => {
+              clearMessages();
+              setEmail(value);
+            }}
             placeholder="Email"
             accessibilityLabel="Email"
             placeholderTextColor={appTheme.colors.textSecondary}
@@ -116,9 +146,13 @@ export default function SignUpScreen() {
             textContentType="emailAddress"
             style={styles.input}
           />
+
           <TextInput
             value={password}
-            onChangeText={setPassword}
+            onChangeText={(value) => {
+              clearMessages();
+              setPassword(value);
+            }}
             placeholder="Password (12+ characters)"
             accessibilityLabel="Password"
             placeholderTextColor={appTheme.colors.textSecondary}
@@ -128,9 +162,13 @@ export default function SignUpScreen() {
             textContentType="newPassword"
             style={styles.input}
           />
+
           <TextInput
             value={confirmPassword}
-            onChangeText={setConfirmPassword}
+            onChangeText={(value) => {
+              clearMessages();
+              setConfirmPassword(value);
+            }}
             placeholder="Confirm Password"
             accessibilityLabel="Confirm Password"
             placeholderTextColor={appTheme.colors.textSecondary}
@@ -145,20 +183,35 @@ export default function SignUpScreen() {
         <View style={styles.consentGroup}>
           <ConsentToggle
             checked={termsAccepted}
-            onPress={() => setTermsAccepted((current) => !current)}
+            onPress={() => {
+              clearMessages();
+              setTermsAccepted((current) => !current);
+            }}
             label="I accept the Terms of Service."
           />
+
           <ConsentToggle
             checked={privacyAccepted}
-            onPress={() => setPrivacyAccepted((current) => !current)}
+            onPress={() => {
+              clearMessages();
+              setPrivacyAccepted((current) => !current);
+            }}
             label="I accept the Privacy Policy."
           />
+
           <ConsentToggle
             checked={eligibilityAttested}
-            onPress={() => setEligibilityAttested((current) => !current)}
+            onPress={() => {
+              clearMessages();
+              setEligibilityAttested((current) => !current);
+            }}
             label="I attest that I am eligible to use this service."
           />
         </View>
+
+        <Text style={styles.policyNote}>
+          Policy version: {MOBILE_POLICY_VERSION}
+        </Text>
 
         {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
         {successMessage ? <Text style={styles.successText}>{successMessage}</Text> : null}
@@ -218,6 +271,13 @@ const styles = StyleSheet.create({
     padding: appTheme.spacing.lg,
     gap: appTheme.spacing.md
   },
+  badge: {
+    color: appTheme.colors.primary,
+    fontSize: appTheme.typography.caption,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6
+  },
   title: {
     color: appTheme.colors.textPrimary,
     fontSize: appTheme.typography.heading,
@@ -270,6 +330,11 @@ const styles = StyleSheet.create({
   },
   consentText: {
     flex: 1,
+    color: appTheme.colors.textSecondary,
+    fontSize: appTheme.typography.caption,
+    lineHeight: 18
+  },
+  policyNote: {
     color: appTheme.colors.textSecondary,
     fontSize: appTheme.typography.caption,
     lineHeight: 18

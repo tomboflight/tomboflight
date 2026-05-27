@@ -27,6 +27,8 @@ type AccessContextSnapshot = {
   role: string;
   status: string;
   packageLane: string;
+  packageCode: string;
+  packageName: string;
   experienceMode: string;
   activeProjectId: string;
   activeFamilyId: string;
@@ -39,25 +41,229 @@ type CountRow = {
 
 const SUPPORT_EMAIL = String(process.env.EXPO_PUBLIC_SUPPORT_EMAIL || '').trim();
 
-function summarizeAccessContext(payload: Record<string, unknown>): AccessContextSnapshot {
+function firstString(...values: unknown[]): string {
+  for (const value of values) {
+    const normalized = asString(value);
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  return '';
+}
+
+function firstRecord(...values: unknown[]): Record<string, unknown> {
+  for (const value of values) {
+    const normalized = asRecord(value);
+    if (Object.keys(normalized).length > 0) {
+      return normalized;
+    }
+  }
+
+  return {};
+}
+
+function inferExperienceMode(packageLane: string, packageCode: string, rawMode: string): string {
+  if (rawMode) {
+    return rawMode;
+  }
+
+  const normalizedLane = packageLane.toLowerCase();
+  const normalizedCode = packageCode.toLowerCase();
+
+  if (normalizedLane === 'household') {
+    return 'household';
+  }
+
+  if (
+    normalizedCode === 'legacy_plus' ||
+    normalizedCode === 'household_foundation' ||
+    normalizedCode === 'heirloom_legacy_tree' ||
+    normalizedCode === 'family_estate_concierge'
+  ) {
+    return 'household';
+  }
+
+  return '';
+}
+
+function summarizeAccessContext(
+  payload: Record<string, unknown>,
+  memberships: WorkspaceMembership[] = []
+): AccessContextSnapshot {
+  const user = firstRecord(
+    payload.user,
+    payload.account,
+    payload.profile,
+    payload.identity,
+    payload.current_user,
+    payload.authenticated_user
+  );
+
+  const accessContext = firstRecord(
+    payload.access_context,
+    payload.context,
+    payload.workspace_context,
+    payload.current_access_context
+  );
+
+  const project = firstRecord(
+    payload.project,
+    payload.active_project,
+    payload.current_project
+  );
+
+  const packageRecord = firstRecord(
+    payload.package,
+    payload.package_record,
+    payload.package_details,
+    accessContext.package,
+    project.package,
+    project.package_record,
+    project.package_details
+  );
+
+  const family = firstRecord(
+    payload.family,
+    payload.active_family,
+    payload.current_family
+  );
+
+  const primaryMembership = memberships[0] || ({} as WorkspaceMembership);
+
+  const packageLane = firstString(
+    payload.package_lane,
+    payload.packageLane,
+    accessContext.package_lane,
+    accessContext.packageLane,
+    project.package_lane,
+    project.packageLane,
+    packageRecord.package_lane,
+    packageRecord.packageLane,
+    primaryMembership.package_lane
+  );
+
+  const packageCode = firstString(
+    payload.package_code,
+    payload.packageCode,
+    payload.package_slug,
+    payload.packageSlug,
+    accessContext.package_code,
+    accessContext.packageCode,
+    accessContext.package_slug,
+    project.package_code,
+    project.packageCode,
+    project.package_slug,
+    packageRecord.code,
+    packageRecord.slug,
+    packageRecord.package_code,
+    packageRecord.package_slug
+  );
+
+  const packageName = firstString(
+    payload.package_name,
+    payload.packageName,
+    accessContext.package_name,
+    accessContext.packageName,
+    project.package_name,
+    project.packageName,
+    packageRecord.name,
+    packageRecord.label,
+    packageRecord.package_name
+  );
+
+  const rawExperienceMode = firstString(
+    payload.experience_mode,
+    payload.experienceMode,
+    payload.mode,
+    accessContext.experience_mode,
+    accessContext.experienceMode,
+    accessContext.mode,
+    project.experience_mode,
+    project.experienceMode,
+    project.mode
+  );
+
   return {
-    userId: asString(payload.user_id),
-    email: asString(payload.email),
-    role: asString(payload.role),
-    status: asString(payload.status),
-    packageLane: asString(payload.package_lane),
-    experienceMode: asString(payload.experience_mode),
-    activeProjectId: asString(payload.active_project_id),
-    activeFamilyId: asString(payload.active_family_id)
+    userId: firstString(
+      payload.user_id,
+      payload.userId,
+      accessContext.user_id,
+      accessContext.userId,
+      user.id,
+      user.user_id,
+      user.userId,
+      primaryMembership.user_id
+    ),
+    email: firstString(
+      payload.email,
+      accessContext.email,
+      user.email,
+      primaryMembership.email
+    ),
+    role: firstString(
+      payload.role,
+      payload.user_role,
+      payload.userRole,
+      accessContext.role,
+      accessContext.user_role,
+      accessContext.userRole,
+      user.role,
+      user.user_role,
+      user.userRole,
+      primaryMembership.member_role
+    ),
+    status: firstString(
+      payload.status,
+      accessContext.status,
+      user.status,
+      primaryMembership.status,
+      'active'
+    ),
+    packageLane,
+    packageCode,
+    packageName,
+    experienceMode: inferExperienceMode(packageLane, packageCode, rawExperienceMode),
+    activeProjectId: firstString(
+      payload.active_project_id,
+      payload.activeProjectId,
+      payload.project_id,
+      payload.projectId,
+      accessContext.active_project_id,
+      accessContext.activeProjectId,
+      accessContext.project_id,
+      project.id,
+      project.project_id,
+      project.projectId,
+      primaryMembership.project_id
+    ),
+    activeFamilyId: firstString(
+      payload.active_family_id,
+      payload.activeFamilyId,
+      payload.family_id,
+      payload.familyId,
+      accessContext.active_family_id,
+      accessContext.activeFamilyId,
+      accessContext.family_id,
+      family.id,
+      family.family_id,
+      family.familyId,
+      primaryMembership.family_id
+    )
   };
 }
 
-function profileDisplayName(profile: UserProfilePayload | null): string {
-  if (!profile) {
+function profileDisplayName(profile: UserProfilePayload | null, context: AccessContextSnapshot | null): string {
+  if (!profile && !context) {
     return '';
   }
 
-  return asString(profile.full_name) || asString(profile.email);
+  return (
+    asString(profile?.full_name) ||
+    asString(profile?.email) ||
+    context?.email ||
+    ''
+  );
 }
 
 function toCountRows(items: WorkspaceMembership[], key: keyof WorkspaceMembership): CountRow[] {
@@ -84,7 +290,20 @@ function supportSubject(context: AccessContextSnapshot | null): string {
 }
 
 function supportBody(context: AccessContextSnapshot | null, profile: UserProfilePayload | null): string {
-  const policyVersion = asString(asRecord(profile?.legal_acceptance).policy_version) || asString(profile?.policy_version);
+  const profileRecord = asRecord(profile);
+  const legalAcceptance = asRecord(profileRecord.legal_acceptance);
+  const policyVersion = firstString(
+    legalAcceptance.policy_version,
+    legalAcceptance.policyVersion,
+    profileRecord.policy_version,
+    profileRecord.policyVersion
+  );
+
+  const packageDisplay =
+    context?.packageName ||
+    context?.packageCode ||
+    context?.packageLane ||
+    'unavailable';
 
   return [
     'Hello Tomb of Light support,',
@@ -93,6 +312,9 @@ function supportBody(context: AccessContextSnapshot | null, profile: UserProfile
     '',
     `Account email: ${asString(profile?.email) || context?.email || 'unavailable'}`,
     `User id: ${asString(profile?.id) || context?.userId || 'unavailable'}`,
+    `Role: ${context?.role || 'unavailable'}`,
+    `Status: ${context?.status || 'unavailable'}`,
+    `Package: ${packageDisplay}`,
     `Package lane: ${context?.packageLane || 'unavailable'}`,
     `Experience mode: ${context?.experienceMode || 'unavailable'}`,
     `Active project id: ${context?.activeProjectId || 'unavailable'}`,
@@ -133,13 +355,15 @@ export default function SupportScreen() {
         fetchMyMemberships()
       ]);
 
+      const membershipItems = Array.isArray(membershipsPayload.items) ? membershipsPayload.items : [];
+
       if (!mountedRef.current || requestId !== requestSequence.current) {
         return;
       }
 
       setProfile(profilePayload);
-      setAccessContext(summarizeAccessContext(asRecord(accessPayload)));
-      setMemberships(Array.isArray(membershipsPayload.items) ? membershipsPayload.items : []);
+      setAccessContext(summarizeAccessContext(asRecord(accessPayload), membershipItems));
+      setMemberships(membershipItems);
       setLastUpdatedAt(new Date().toISOString());
     } catch (error) {
       if (!mountedRef.current || requestId !== requestSequence.current) {
@@ -206,12 +430,16 @@ export default function SupportScreen() {
 
   const legalAcceptance = asRecord(profile?.legal_acceptance);
 
+  const packageDisplay = accessContext
+    ? accessContext.packageName || accessContext.packageCode || accessContext.packageLane
+    : '';
+
   return (
     <ScreenContainer>
       <WorkspaceHero
         title="Support"
         description="Real support entry context with account identity, package scope, and household impact signals for faster issue triage."
-        contextLine={profileDisplayName(profile) || undefined}
+        contextLine={profileDisplayName(profile, accessContext) || undefined}
       />
 
       <Pressable
@@ -262,6 +490,7 @@ export default function SupportScreen() {
               <KeyValueRow label="User ID" value={asString(profile.id) || accessContext.userId || 'Unavailable'} />
               <KeyValueRow label="Role" value={toHumanLabel(accessContext.role || 'unknown')} />
               <KeyValueRow label="Status" value={toHumanLabel(accessContext.status || 'unknown')} />
+              <KeyValueRow label="Package" value={toHumanLabel(packageDisplay || 'unknown')} />
               <KeyValueRow label="Package Lane" value={toHumanLabel(accessContext.packageLane || 'unknown')} />
               <KeyValueRow label="Experience Mode" value={toHumanLabel(accessContext.experienceMode || 'unknown')} />
               <KeyValueRow label="Active Project ID" value={accessContext.activeProjectId || 'Unavailable'} />
