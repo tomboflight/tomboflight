@@ -98,7 +98,7 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
         self.assertNotIn('data-cookie-decline"', homepage)
         self.assertNotIn('data-cookie-decline"', platform)
 
-    def test_core_package_ctas_frozen_state(self):
+    def test_core_package_checkout_links_are_frozen(self):
         config_source = (REPO_ROOT / "config.js").read_text(encoding="utf-8")
         homepage = (REPO_ROOT / "index.html").read_text(encoding="utf-8")
         app_source = (REPO_ROOT / "app.js").read_text(encoding="utf-8")
