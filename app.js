@@ -1316,6 +1316,17 @@
 
     document.querySelectorAll("[data-payment-link]").forEach(function (link) {
       const slug = link.dataset.paymentLink;
+      const checkoutFrozen = link.getAttribute("aria-disabled") === "true";
+      if (checkoutFrozen) {
+        link.removeAttribute("target");
+        link.removeAttribute("rel");
+        link.href = "#stripe-catalog-refresh";
+        link.title = "Checkout links are being updated.";
+        link.addEventListener("click", function (event) {
+          event.preventDefault();
+        });
+        return;
+      }
       const resolved = paymentLinks[slug];
       const originalLabel = link.textContent.trim() || "Start Checkout";
       const purchaseType =

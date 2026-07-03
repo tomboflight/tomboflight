@@ -98,34 +98,45 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
         self.assertNotIn('data-cookie-decline"', homepage)
         self.assertNotIn('data-cookie-decline"', platform)
 
-    def test_core_package_checkout_links_are_mapped_and_safe(self):
+    def test_core_package_checkout_links_are_frozen(self):
         config_source = (REPO_ROOT / "config.js").read_text(encoding="utf-8")
         homepage = (REPO_ROOT / "index.html").read_text(encoding="utf-8")
         app_source = (REPO_ROOT / "app.js").read_text(encoding="utf-8")
 
-        expected = {
-            "legacy_snapshot": "https://buy.stripe.com/bJe7sL6ge27Z2eOcNDbEA0F",
-            "legacy_portrait_intro": "https://buy.stripe.com/7sY7sLfQO8wn3iS14VbEA0B",
-            "digital_legacy_portrait": "https://buy.stripe.com/3cIaEXdIG8wn5r08xnbEA0G",
-            "household_foundation": "https://buy.stripe.com/28E4gz1ZY8wn7z800RbEA0H",
-            "heirloom_legacy_tree": "https://buy.stripe.com/7sY6oHbAybIzf1A6pfbEA00",
-            "legacy_plus": "https://buy.stripe.com/dRmaEXeMK9Ar1aKaFvbEA0y",
-            "family_estate_concierge": "https://buy.stripe.com/eVqeVdbAyh2T9HgbJzbEA0I",
-            "command_structure_network": "https://buy.stripe.com/3cIdR96geeULg5E6pfbEA0J",
-        }
+        expected_slugs = [
+            "legacy_snapshot",
+            "legacy_portrait_intro",
+            "digital_legacy_portrait",
+            "household_foundation",
+            "heirloom_legacy_tree",
+            "legacy_plus",
+            "family_estate_concierge",
+            "command_structure_network",
+        ]
 
-        for slug, checkout_url in expected.items():
+        for slug in expected_slugs:
             self.assertIn(f'slug: "{slug}"', config_source)
-            self.assertIn(f'checkoutUrl: "{checkout_url}"', config_source)
             self.assertIn(f'data-payment-link="{slug}"', homepage)
+        self.assertEqual(homepage.count('href="#stripe-catalog-refresh"'), 8)
+        self.assertEqual(homepage.count('aria-disabled="true"'), 8)
+        self.assertEqual(
+            homepage.count('title="Checkout links are being updated."'),
+            8,
+        )
 
-        self.assertIn('link.target = "_blank"', app_source)
-        self.assertIn('link.rel = "noopener noreferrer"', app_source)
-        self.assertIn("Opening secure checkout...", app_source)
-        self.assertIn('client_reference_id', app_source)
-        self.assertIn("sanitizeMaintenanceCheckoutUrl", app_source)
-        self.assertIn("LIGHT_NEVER_DIES", app_source)
+        self.assertNotIn("https://buy.stripe.com", config_source)
+        self.assertNotIn("https://checkout.stripe.com", config_source)
+        self.assertNotIn("https://stripe.com/pay", config_source)
+        self.assertIn('const checkoutFrozen = link.getAttribute("aria-disabled") === "true";', app_source)
+        self.assertIn('link.href = "#stripe-catalog-refresh";', app_source)
+        self.assertIn('link.title = "Checkout links are being updated.";', app_source)
+        self.assertIn("event.preventDefault();", app_source)
         self.assertIn('id="pricing"', homepage)
+        self.assertIn('id="stripe-catalog-refresh"', homepage)
+        self.assertIn(
+            "Pricing and checkout links are being refreshed. Package details remain available for review.",
+            homepage,
+        )
         self.assertIn("Choose your legacy scope", homepage)
         self.assertEqual(homepage.count('id="pricing"'), 1)
 
