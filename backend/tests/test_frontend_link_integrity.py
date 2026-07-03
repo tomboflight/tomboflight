@@ -98,7 +98,7 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
         self.assertNotIn('data-cookie-decline"', homepage)
         self.assertNotIn('data-cookie-decline"', platform)
 
-    def test_core_package_ctas_are_temporarily_frozen(self):
+    def test_core_package_ctas_frozen_state(self):
         config_source = (REPO_ROOT / "config.js").read_text(encoding="utf-8")
         homepage = (REPO_ROOT / "index.html").read_text(encoding="utf-8")
         app_source = (REPO_ROOT / "app.js").read_text(encoding="utf-8")
@@ -130,6 +130,7 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
         self.assertIn('const checkoutFrozen = link.getAttribute("aria-disabled") === "true";', app_source)
         self.assertIn('link.href = "#stripe-catalog-refresh";', app_source)
         self.assertIn('link.title = "Checkout links are being updated.";', app_source)
+        self.assertIn("event.preventDefault();", app_source)
         self.assertIn('id="pricing"', homepage)
         self.assertIn('id="stripe-catalog-refresh"', homepage)
         self.assertIn(

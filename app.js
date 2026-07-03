@@ -1322,6 +1322,9 @@
         link.removeAttribute("rel");
         link.href = "#stripe-catalog-refresh";
         link.title = "Checkout links are being updated.";
+        link.addEventListener("click", function (event) {
+          event.preventDefault();
+        });
         return;
       }
       const resolved = paymentLinks[slug];
