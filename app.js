@@ -1427,14 +1427,18 @@
         }
         link.addEventListener("click", function (event) {
           const founderCampaign = isLightNeverDiesCampaign(campaign);
-          const checkoutHref = hasDirectStripeHref
-            ? existingHref
-            : buildCheckoutLinkWithContext(resolved, {
-                slug,
-                purchaseType,
-                campaign,
-                promoCode,
-              });
+          let checkoutHref = hasDirectStripeHref ? existingHref : "";
+          if (!hasDirectStripeHref) {
+            checkoutHref = buildCheckoutLinkWithContext(resolved, {
+              slug,
+              purchaseType,
+              campaign,
+              promoCode,
+            });
+            if (checkoutHref) {
+              link.href = checkoutHref;
+            }
+          }
           const normalizedSlug = stripMaintenanceSuffix(slug);
           if (founderCampaign && purchaseType === "package" && normalizedSlug) {
             setFounderMaintenancePending({
@@ -1447,7 +1451,7 @@
           savePendingCheckout({
             packageCode: slug,
             purchaseType,
-            paymentLink: checkoutHref || resolved || existingHref,
+            paymentLink: checkoutHref || resolved,
             campaign: campaign || "",
             selectedAt: new Date().toISOString(),
           });
