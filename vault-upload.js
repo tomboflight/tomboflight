@@ -73,7 +73,7 @@
 
   function isEntitlementError(msg) {
     return (
-      msg.includes("premium_archive_structure") ||
+      msg.includes("can_use_household_vault") ||
       msg.includes("vault") ||
       msg.includes("entitlement") ||
       msg.includes("package") ||
@@ -175,7 +175,7 @@
       if (isEntitlementError(msg)) {
         setStatus(
           familyStatus,
-          "Your active package does not include private vault access. Contact support if you believe this is an error.",
+          "Your active package does not include private household vault access. Contact support if you believe this is an error.",
           "error",
         );
       } else {
@@ -258,19 +258,21 @@
       currentContext = context;
 
       const entitlements = context?.resolvedEntitlements || {};
+      // Household vault access is the single gate for this existing vault
+      // upload flow; the backend routes now enforce the same capability.
       const hasResolvedVaultAccess = Object.prototype.hasOwnProperty.call(
         entitlements,
-        "premium_archive_structure",
+        "can_use_household_vault",
       );
-      const canUpload = Boolean(entitlements.premium_archive_structure);
+      const canUpload = Boolean(entitlements.can_use_household_vault);
 
       if (!canUpload) {
         if (pageStatus) {
           setStatus(
             pageStatus,
             hasResolvedVaultAccess
-              ? "Your active package does not include private vault access."
-              : "Unable to verify private vault access. Please return to Dashboard or try again shortly.",
+              ? "Your active package does not include private household vault access."
+              : "Unable to verify private household vault access. Please return to Dashboard or try again shortly.",
             hasResolvedVaultAccess ? "warning" : "info",
           );
         }
