@@ -27,9 +27,24 @@
   const PORTRAIT_FLOW_ADDONS = new Set([
     "extra_upload_pack",
     "extra_storage",
+    "extra_storage_10gb_monthly",
+    "extra_storage_10gb_yearly",
+    "vault_expansion_25gb_monthly",
+    "vault_expansion_25gb_yearly",
+    "vault_expansion_50gb_monthly",
+    "vault_expansion_50gb_yearly",
+    "private_vault_export",
     "portrait_polish",
     "tribute_narration",
     "additional_narration_minute",
+    "emergency_retrieval_support",
+    "family_correction_cycle",
+    "document_record_review_pack",
+    "nft_lineage_record",
+    "additional_nft_copy_mint",
+    "nft_metadata_revision",
+    "rush_delivery_snapshot_portrait_intro",
+    "rush_delivery_digital_legacy_portrait",
   ]);
   const FAMILY_FLOW_EXTRAS = new Set([
     "extra_mapped_person",
@@ -38,12 +53,24 @@
     "extra_linked_household",
     "extra_branch",
     "white_glove_archive_support",
+    "family_correction_cycle",
+    "emergency_retrieval_support",
+    "document_record_review_pack",
+    "rush_delivery_household_foundation",
+    "rush_delivery_heirloom_legacy_tree",
+    "rush_delivery_legacy_plus",
   ]);
   const ORGANIZATION_FLOW_EXTRAS = new Set([
     "extra_org_node",
     "extra_org_level",
     "extra_admin_seat",
+    "extra_admin_seat_monthly",
+    "extra_admin_seat_yearly",
     "command_report_addon",
+    "organization_correction_cycle",
+    "document_record_review_pack",
+    "nft_metadata_revision",
+    "rush_delivery_estate_command_minimum",
   ]);
 
   function getParam(name) {

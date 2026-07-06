@@ -98,7 +98,7 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
         self.assertNotIn('data-cookie-decline"', homepage)
         self.assertNotIn('data-cookie-decline"', platform)
 
-    def test_core_package_checkout_links_are_frozen(self):
+    def test_core_package_checkout_links_are_live(self):
         config_source = (REPO_ROOT / "config.js").read_text(encoding="utf-8")
         homepage = (REPO_ROOT / "index.html").read_text(encoding="utf-8")
         app_source = (REPO_ROOT / "app.js").read_text(encoding="utf-8")
@@ -117,69 +117,45 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
         for slug in expected_slugs:
             self.assertIn(f'slug: "{slug}"', config_source)
             self.assertIn(f'data-payment-link="{slug}"', homepage)
-        self.assertEqual(homepage.count('href="#stripe-catalog-refresh"'), 8)
-        self.assertEqual(homepage.count('aria-disabled="true"'), 8)
-        self.assertEqual(
-            homepage.count('title="Checkout links are being updated."'),
-            8,
-        )
 
-        self.assertNotIn("https://buy.stripe.com", config_source)
-        self.assertNotIn("https://checkout.stripe.com", config_source)
-        self.assertNotIn("https://stripe.com/pay", config_source)
-        self.assertIn('const checkoutFrozen = link.getAttribute("aria-disabled") === "true";', app_source)
-        self.assertIn('link.href = "#stripe-catalog-refresh";', app_source)
-        self.assertIn('link.title = "Checkout links are being updated.";', app_source)
-        self.assertIn("event.preventDefault();", app_source)
-        self.assertIn('id="pricing"', homepage)
-        self.assertIn('id="stripe-catalog-refresh"', homepage)
-        self.assertIn(
-            "Pricing and checkout links are being refreshed. Package details remain available for review.",
-            homepage,
-        )
-        self.assertIn("Choose your legacy scope", homepage)
+        self.assertIn("https://buy.stripe.com", config_source)
+        self.assertIn("Choose Your Legacy Package", homepage)
+        self.assertIn("Private Household Vault", homepage)
+        self.assertIn("Required Legacy Care &amp; Maintenance", homepage)
+        self.assertIn("Add-ons &amp; Legacy Services", homepage)
+        self.assertIn("Private Bridge Event Offer", homepage)
+        self.assertNotIn("Pricing and checkout links are being refreshed.", homepage)
         self.assertEqual(homepage.count('id="pricing"'), 1)
 
-    def test_founder_access_marketing_layer_is_present_and_campaign_ready(self):
-        homepage = (REPO_ROOT / "index.html").read_text(encoding="utf-8")
+        for package_code in [
+            "BRIDGE-TASTE-SNAPSHOT",
+            "BRIDGE-TASTE-PORTRAIT",
+            "BRIDGE-TASTE-DIGITAL",
+            "BRIDGE-TASTE-HOUSEHOLD",
+            "BRIDGE-TASTE-HEIRLOOM",
+            "BRIDGE-TASTE-PLUS",
+            "BRIDGE-TASTE-ESTATE",
+            "BRIDGE-TASTE-COMMAND",
+        ]:
+            self.assertIn(package_code, homepage)
+
+        self.assertNotIn("BRIDGE-PAINT", homepage)
+        self.assertNotIn("BRIDGE-LINEAGE", homepage)
+        self.assertNotIn("GRANDOPENING", homepage)
+        self.assertIn('const checkoutFrozen = link.getAttribute("aria-disabled") === "true";', app_source)
+        self.assertIn("prefilled_promo_code", app_source)
+
+    def test_founder_access_redirects_to_pricing(self):
         founder_page = (REPO_ROOT / "founder-access.html").read_text(encoding="utf-8")
 
-        for required in [
-            "LIGHT NEVER DIES",
-            "Genesis Founder Release",
-            "Founder Access",
-            "June 28, 2026",
-            "campaign=LIGHT_NEVER_DIES",
-        ]:
-            self.assertIn(required, homepage)
-            self.assertIn(required, founder_page)
+        self.assertIn('<meta http-equiv="refresh" content="0; url=index.html#pricing" />', founder_page)
+        self.assertIn('href="index.html#pricing">View packages</a>', founder_page)
+        self.assertIn('window.location.replace("index.html#pricing")', founder_page)
+        self.assertNotIn(FOUNDER_STYLESHEET_VERSION, founder_page)
 
-        self.assertIn(FOUNDER_STYLESHEET_VERSION, homepage)
-        self.assertIn(FOUNDER_STYLESHEET_VERSION, founder_page)
-
-        self.assertEqual(homepage.count("data-founder-access-banner"), 1)
-        self.assertEqual(homepage.count("data-founder-access-section"), 1)
-        self.assertEqual(founder_page.count('id="founder-access-title"'), 1)
-        self.assertEqual(founder_page.count("founder-access-strip"), 2)
-
-        expected_founder_slugs = [
-            "legacy_snapshot",
-            "legacy_portrait_intro",
-            "digital_legacy_portrait",
-            "household_foundation",
-            "heirloom_legacy_tree",
-            "legacy_plus",
-        ]
-        for slug in expected_founder_slugs:
-            self.assertIn(f'data-payment-link="{slug}"', founder_page)
-
-        self.assertIn("LIGHTNEVERDIES-PORTRAIT", founder_page)
-        self.assertNotIn("LIGHTNEVERDIES- PORTRAIT", founder_page)
-
-    def test_checkout_campaign_and_founder_engines_are_not_duplicated(self):
+    def test_checkout_campaign_and_pricing_catalog_engines_are_not_duplicated(self):
         app_source = (REPO_ROOT / "app.js").read_text(encoding="utf-8")
         thank_you_source = (REPO_ROOT / "thank-you.js").read_text(encoding="utf-8")
-        homepage = (REPO_ROOT / "index.html").read_text(encoding="utf-8")
         order_service = (REPO_ROOT / "backend" / "app" / "services" / "order_service.py").read_text(
             encoding="utf-8"
         )
@@ -202,8 +178,8 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
         self.assertEqual(maintenance_service.count("def _metadata_project_id("), 1)
         self.assertEqual(app_source.count("const PACKAGE_PROFILES = {"), 1)
         self.assertEqual(config_source.count("const TOL_PRICING = {"), 1)
-        self.assertEqual(homepage.count("data-founder-access-banner"), 1)
-        self.assertEqual(homepage.count("data-founder-access-section"), 1)
+        self.assertEqual(config_source.count('slug: "legacy_snapshot"'), 1)
+        self.assertEqual(config_source.count('slug: "command_structure_network"'), 1)
 
     def test_public_and_legal_headers_include_platform_nav(self):
         pages = [
