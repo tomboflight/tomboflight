@@ -329,6 +329,9 @@
       normalizeValue(packageLane) ||
       normalizeValue(profile?.package_lane) ||
       resolvePackageLane(normalizedCode);
+    const canUseHouseholdVault = Boolean(
+      profile?.can_use_household_vault ?? profile?.premium_archive_structure ?? false,
+    );
 
     return {
       package_code: normalizedCode,
@@ -365,9 +368,20 @@
       narration_ready_structure: Boolean(
         profile?.narration_ready_structure ?? false,
       ),
-      premium_archive_structure: Boolean(
-        profile?.premium_archive_structure ?? false,
+      can_use_household_vault: canUseHouseholdVault,
+      can_use_future_message_vault: Boolean(
+        profile?.can_use_future_message_vault ?? false,
       ),
+      can_use_linked_household_vault: Boolean(
+        profile?.can_use_linked_household_vault ?? false,
+      ),
+      can_use_organization_records_vault: Boolean(
+        profile?.can_use_organization_records_vault ?? false,
+      ),
+      can_use_scheduled_reveal: Boolean(
+        profile?.can_use_scheduled_reveal ?? false,
+      ),
+      premium_archive_structure: canUseHouseholdVault,
       can_use_lineage_certificate:
         typeof profile?.can_use_lineage_certificate === "boolean"
           ? profile.can_use_lineage_certificate

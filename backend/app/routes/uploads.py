@@ -107,6 +107,7 @@ PRIVATE_MEDIA_ALLOWED_EXTENSIONS = {
 }
 PRIVATE_MEDIA_ALLOWED_ASSET_TYPES = {"private_voice_message", "private_video_message"}
 PRIVATE_MEDIA_ALLOWED_PRIVACY_SCOPES = {"private_to_owner", "private_to_owner_and_co_owner"}
+HOUSEHOLD_VAULT_CAPABILITY = "can_use_household_vault"
 
 ALLOWED_VERIFICATION_TYPES = {
     "government_id",
@@ -1105,8 +1106,8 @@ async def upload_private_media(
         current_user,
         family_id=family_id,
         member_id=member_id,
-        capabilities=("premium_archive_structure",),
-        detail="Your active package does not include private vault access.",
+        capabilities=(HOUSEHOLD_VAULT_CAPABILITY,),
+        detail="Your active package does not include private household vault access.",
     )
     require_workspace_member_role(
         context,
@@ -1267,8 +1268,8 @@ def list_family_vault_items(
     context = require_workspace_capability(
         current_user,
         family_id=family_id,
-        capabilities=("premium_archive_structure",),
-        detail="Your active package does not include vault access.",
+        capabilities=(HOUSEHOLD_VAULT_CAPABILITY,),
+        detail="Your active package does not include private household vault access.",
     )
 
     db = get_database()

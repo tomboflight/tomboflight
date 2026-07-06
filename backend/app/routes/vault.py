@@ -46,13 +46,7 @@ def _current_user_id(user: dict[str, Any]) -> str:
     return str(raw_id)
 
 
-VAULT_CAPABILITIES = (
-    "can_use_personal_vault",
-    "can_use_household_vault",
-    "can_use_linked_household_vault",
-    "can_use_future_message_vault",
-    "can_use_organization_records_vault",
-)
+HOUSEHOLD_VAULT_CAPABILITIES = ("can_use_household_vault",)
 
 
 def _normalize(value: Any) -> str:
@@ -74,8 +68,8 @@ def _resolve_vault_context(
     return require_workspace_capability(
         current_user,
         project_id=project_id,
-        capabilities=VAULT_CAPABILITIES,
-        detail="Your active package does not include vault access.",
+        capabilities=HOUSEHOLD_VAULT_CAPABILITIES,
+        detail="Your active package does not include private household vault access.",
     )
 
 

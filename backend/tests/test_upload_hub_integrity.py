@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 
 from app.routes import uploads as upload_routes
+from app.routes import vault as vault_routes
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -145,12 +146,12 @@ class UploadHubIntegrityTests(unittest.TestCase):
         """vault-upload.js must check entitlements and disable the form when not entitled."""
         contents = self._read("vault-upload.js")
         self.assertIn(
-            "premium_archive_structure",
+            "can_use_household_vault",
             contents,
             "vault-upload.js must check private vault entitlements",
         )
         self.assertIn(
-            "private vault access",
+            "private household vault access",
             contents,
             "vault-upload.js must show the customer a private vault locked state",
         )
@@ -159,15 +160,39 @@ class UploadHubIntegrityTests(unittest.TestCase):
             contents,
             "vault-upload.js must disable the form when the user lacks entitlement",
         )
+        self.assertNotIn(
+            "premium_archive_structure",
+            contents,
+            "vault-upload.js should use the same household vault capability as the backend",
+        )
+
+    def test_auth_fallback_entitlements_expose_household_vault_capability(self):
+        """auth.js fallback entitlements must include the household vault capability."""
+        contents = self._read("auth.js")
+        self.assertIn(
+            "can_use_household_vault",
+            contents,
+            "auth.js must expose the resolved household vault capability",
+        )
 
     def test_private_media_backend_uses_private_vault_entitlement(self):
         """Private media upload routes must not unlock vault access via generic upload flags."""
         upload_source = inspect.getsource(upload_routes.upload_private_media)
         vault_list_source = inspect.getsource(upload_routes.list_family_vault_items)
-        self.assertIn("premium_archive_structure", upload_source)
-        self.assertIn("premium_archive_structure", vault_list_source)
+        self.assertEqual(upload_routes.HOUSEHOLD_VAULT_CAPABILITY, "can_use_household_vault")
+        self.assertIn("HOUSEHOLD_VAULT_CAPABILITY", upload_source)
+        self.assertIn("HOUSEHOLD_VAULT_CAPABILITY", vault_list_source)
+        self.assertNotIn("premium_archive_structure", upload_source)
+        self.assertNotIn("premium_archive_structure", vault_list_source)
         self.assertNotIn("can_upload_verification_docs", upload_source)
         self.assertNotIn("can_upload_portraits", upload_source)
+
+    def test_vault_routes_use_same_household_vault_entitlement(self):
+        """The generic vault routes must enforce the same household vault capability."""
+        vault_source = inspect.getsource(vault_routes._resolve_vault_context)
+        self.assertEqual(vault_routes.HOUSEHOLD_VAULT_CAPABILITIES, ("can_use_household_vault",))
+        self.assertIn("HOUSEHOLD_VAULT_CAPABILITIES", vault_source)
+        self.assertNotIn("premium_archive_structure", vault_source)
 
     def test_vault_upload_uses_correct_asset_types(self):
         """vault-upload.js must only submit the two backend-allowed asset types."""

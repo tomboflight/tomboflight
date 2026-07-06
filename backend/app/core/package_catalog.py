@@ -99,6 +99,12 @@ EXTENDED_ALLOWED_ASSET_TYPES = BASE_ALLOWED_ASSET_TYPES + [
     "memorial_media",
 ]
 
+# Private Household Vault package rules:
+# - Legacy Snapshot and Legacy Portrait Intro stay personal-only.
+# - Digital Legacy Portrait and Household Foundation unlock the household vault.
+# - Heirloom Legacy Tree, Legacy Plus, and Family Estate Concierge add future
+#   messages plus scheduled reveal support.
+# - Command Structure Network stays on organization records vault access only.
 VAULT_ENTITLEMENT_BY_PACKAGE: dict[str, dict[str, Any]] = {
     "legacy_snapshot": {
         "can_use_personal_vault": True,
@@ -120,11 +126,11 @@ VAULT_ENTITLEMENT_BY_PACKAGE: dict[str, dict[str, Any]] = {
     },
     "digital_legacy_portrait": {
         "can_use_personal_vault": True,
-        "can_use_household_vault": False,
+        "can_use_household_vault": True,
         "can_use_future_message_vault": False,
         "can_use_linked_household_vault": False,
         "can_use_organization_records_vault": False,
-        "can_use_scheduled_reveal": True,
+        "can_use_scheduled_reveal": False,
         "allowed_asset_types": EXTENDED_ALLOWED_ASSET_TYPES,
     },
     "household_foundation": {
@@ -133,7 +139,7 @@ VAULT_ENTITLEMENT_BY_PACKAGE: dict[str, dict[str, Any]] = {
         "can_use_future_message_vault": False,
         "can_use_linked_household_vault": False,
         "can_use_organization_records_vault": False,
-        "can_use_scheduled_reveal": True,
+        "can_use_scheduled_reveal": False,
         "allowed_asset_types": EXTENDED_ALLOWED_ASSET_TYPES,
     },
     "heirloom_legacy_tree": {
@@ -1019,6 +1025,10 @@ def get_addon(addon_code: str) -> dict[str, Any] | None:
 def _with_vault_entitlements(package_code: str, package: dict[str, Any]) -> dict[str, Any]:
     entitlements = deepcopy(VAULT_ENTITLEMENT_BY_PACKAGE.get(package_code) or {})
     package.update(entitlements)
+    # Keep the legacy premium_archive_structure flag as a compatibility alias
+    # for the same household-vault entitlement while route gating converges on
+    # can_use_household_vault.
+    package["premium_archive_structure"] = bool(package.get("can_use_household_vault"))
     package["allowed_visibility_scopes"] = deepcopy(ALLOWED_VISIBILITY_SCOPES)
     return package
 

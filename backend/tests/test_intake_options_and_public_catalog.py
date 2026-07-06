@@ -27,9 +27,30 @@ class IntakeOptionsTests(unittest.TestCase):
 class PublicCatalogEntitlementTests(unittest.TestCase):
     def test_public_catalog_exposes_new_vault_entitlements(self):
         packages = {item["package_code"]: item for item in get_public_package_catalog()}
-        self.assertTrue(packages["digital_legacy_portrait"]["can_use_scheduled_reveal"])
+        self.assertFalse(packages["legacy_snapshot"]["can_use_household_vault"])
+        self.assertFalse(packages["legacy_portrait_intro"]["can_use_household_vault"])
+        self.assertTrue(packages["digital_legacy_portrait"]["can_use_household_vault"])
+        self.assertTrue(packages["household_foundation"]["can_use_household_vault"])
+        self.assertTrue(packages["heirloom_legacy_tree"]["can_use_household_vault"])
+        self.assertTrue(packages["legacy_plus"]["can_use_household_vault"])
+        self.assertTrue(packages["family_estate_concierge"]["can_use_household_vault"])
+        self.assertFalse(packages["command_structure_network"]["can_use_household_vault"])
+        self.assertFalse(packages["digital_legacy_portrait"]["can_use_future_message_vault"])
+        self.assertFalse(packages["digital_legacy_portrait"]["can_use_scheduled_reveal"])
+        self.assertFalse(packages["household_foundation"]["can_use_future_message_vault"])
+        self.assertFalse(packages["household_foundation"]["can_use_scheduled_reveal"])
+        self.assertTrue(packages["heirloom_legacy_tree"]["can_use_future_message_vault"])
+        self.assertTrue(packages["heirloom_legacy_tree"]["can_use_scheduled_reveal"])
+        self.assertTrue(packages["legacy_plus"]["can_use_future_message_vault"])
+        self.assertTrue(packages["legacy_plus"]["can_use_scheduled_reveal"])
         self.assertTrue(packages["family_estate_concierge"]["can_use_linked_household_vault"])
+        self.assertTrue(packages["family_estate_concierge"]["can_use_future_message_vault"])
+        self.assertTrue(packages["family_estate_concierge"]["can_use_scheduled_reveal"])
         self.assertTrue(packages["command_structure_network"]["can_use_organization_records_vault"])
+        self.assertEqual(
+            packages["digital_legacy_portrait"]["premium_archive_structure"],
+            packages["digital_legacy_portrait"]["can_use_household_vault"],
+        )
         self.assertEqual(packages["digital_legacy_portrait"]["scheduled_reveal_status"], "planned_private_beta")
         self.assertFalse(packages["digital_legacy_portrait"]["scheduled_reveal_auto_executor_live"])
 
