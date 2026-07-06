@@ -1448,6 +1448,15 @@
           }, 4500);
         });
       } else {
+        const existingHref = String(link.getAttribute("href") || "").trim();
+        const hasDirectStripeCheckout = /^https:\/\/buy\.stripe\.com\//i.test(existingHref);
+        if (hasDirectStripeCheckout) {
+          link.href = existingHref;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          link.dataset.directStripeCheckout = "true";
+          return;
+        }
         link.removeAttribute("target");
         link.removeAttribute("rel");
         link.href =

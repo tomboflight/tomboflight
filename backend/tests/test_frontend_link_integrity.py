@@ -13,6 +13,7 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
     def test_primary_customer_and_admin_pages_do_not_ship_placeholder_links(self):
         pages = [
             "index.html",
+            "pricing.html",
             "signup.html",
             "signin.html",
             "dashboard.html",
@@ -101,9 +102,15 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
     def test_core_package_checkout_links_are_live(self):
         config_source = (REPO_ROOT / "config.js").read_text(encoding="utf-8")
         homepage = (REPO_ROOT / "index.html").read_text(encoding="utf-8")
+        pricing_page = (REPO_ROOT / "pricing.html").read_text(encoding="utf-8")
         app_source = (REPO_ROOT / "app.js").read_text(encoding="utf-8")
 
-        expected_slugs = [
+        featured_homepage_slugs = [
+            "digital_legacy_portrait",
+            "heirloom_legacy_tree",
+            "family_estate_concierge",
+        ]
+        expected_pricing_page_slugs = [
             "legacy_snapshot",
             "legacy_portrait_intro",
             "digital_legacy_portrait",
@@ -114,18 +121,28 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
             "command_structure_network",
         ]
 
-        for slug in expected_slugs:
+        for slug in featured_homepage_slugs:
             self.assertIn(f'slug: "{slug}"', config_source)
             self.assertIn(f'data-payment-link="{slug}"', homepage)
 
+        for slug in expected_pricing_page_slugs:
+            self.assertIn(f'slug: "{slug}"', config_source)
+            self.assertIn(f'data-payment-link="{slug}"', pricing_page)
+
         self.assertIn("https://buy.stripe.com", config_source)
-        self.assertIn("Choose Your Legacy Package", homepage)
+        self.assertIn("Choose Your Legacy Path", homepage)
+        self.assertIn("View Full Pricing", homepage)
         self.assertIn("Private Household Vault", homepage)
-        self.assertIn("Required Legacy Care &amp; Maintenance", homepage)
-        self.assertIn("Add-ons &amp; Legacy Services", homepage)
-        self.assertIn("Private Bridge Event Offer", homepage)
+        self.assertIn("Private Bridge Event Access", homepage)
+        self.assertIn("Full Tomb of Light Pricing", pricing_page)
+        self.assertIn("Required Maintenance", pricing_page)
+        self.assertIn("Storage &amp; Vault Upgrades", pricing_page)
+        self.assertIn("Rush Delivery", pricing_page)
+        self.assertNotIn("Required Legacy Care &amp; Maintenance", homepage)
+        self.assertNotIn("Add-ons &amp; Legacy Services", homepage)
         self.assertNotIn("Pricing and checkout links are being refreshed.", homepage)
         self.assertEqual(homepage.count('id="pricing"'), 1)
+        self.assertEqual(pricing_page.count('class="cookie-banner"'), 1)
 
         for package_code in [
             "BRIDGE-TASTE-SNAPSHOT",
@@ -144,6 +161,7 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
         self.assertNotIn("GRANDOPENING", homepage)
         self.assertIn('const checkoutFrozen = link.getAttribute("aria-disabled") === "true";', app_source)
         self.assertIn("prefilled_promo_code", app_source)
+        self.assertIn('const hasDirectStripeCheckout = /^https:\\/\\/buy\\.stripe\\.com\\//i.test(existingHref);', app_source)
 
     def test_founder_access_redirects_to_pricing(self):
         founder_page = (REPO_ROOT / "founder-access.html").read_text(encoding="utf-8")
@@ -189,6 +207,7 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
             "security.html",
             "compliance.html",
             "faq.html",
+            "pricing.html",
             "privacy.html",
             "terms.html",
             "cookie-policy.html",
