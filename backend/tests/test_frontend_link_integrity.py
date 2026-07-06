@@ -201,7 +201,7 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
         self.assertIn("prefilled_promo_code", app_source)
         self.assertIn("function configureDirectStripeCheckout(link, href) {", app_source)
         self.assertIn("const hasDirectStripeHref = configureDirectStripeCheckout(link, existingHref);", app_source)
-        self.assertIn("const checkoutHref = hasDirectStripeHref", app_source)
+        self.assertIn('let checkoutHref = hasDirectStripeHref ? existingHref : "";', app_source)
         self.assertNotIn("mailto:billing@tomboflight.com", app_source)
         self.assertNotIn("window.location.href = `signin.html?next=", app_source)
 
