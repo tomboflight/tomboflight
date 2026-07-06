@@ -1390,9 +1390,10 @@
     document.querySelectorAll("[data-payment-link]").forEach(function (link) {
       const slug = link.dataset.paymentLink;
       const existingHref = String(link.getAttribute("href") || "").trim();
+      const hasDirectStripeHref = configureDirectStripeCheckout(link, existingHref);
       const checkoutFrozen = link.getAttribute("aria-disabled") === "true";
       if (checkoutFrozen) {
-        if (configureDirectStripeCheckout(link, existingHref)) {
+        if (hasDirectStripeHref) {
           return;
         }
         link.removeAttribute("target");
@@ -1416,23 +1417,24 @@
       const promoCode = String(link.dataset.promoCode || "").trim();
 
       if (resolved) {
-        link.href =
-          purchaseType === "maintenance"
-            ? sanitizeMaintenanceCheckoutUrl(resolved)
-            : resolved;
-        link.target = "_blank";
-        link.rel = "noopener noreferrer";
+        if (!hasDirectStripeHref) {
+          link.href =
+            purchaseType === "maintenance"
+              ? sanitizeMaintenanceCheckoutUrl(resolved)
+              : resolved;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+        }
         link.addEventListener("click", function (event) {
           const founderCampaign = isLightNeverDiesCampaign(campaign);
-          const checkoutHref = buildCheckoutLinkWithContext(resolved, {
-            slug,
-            purchaseType,
-            campaign,
-            promoCode,
-          });
-          if (checkoutHref) {
-            link.href = checkoutHref;
-          }
+          const checkoutHref = hasDirectStripeHref
+            ? existingHref
+            : buildCheckoutLinkWithContext(resolved, {
+                slug,
+                purchaseType,
+                campaign,
+                promoCode,
+              });
           const normalizedSlug = stripMaintenanceSuffix(slug);
           if (founderCampaign && purchaseType === "package" && normalizedSlug) {
             setFounderMaintenancePending({
@@ -1445,7 +1447,7 @@
           savePendingCheckout({
             packageCode: slug,
             purchaseType,
-            paymentLink: checkoutHref || resolved,
+            paymentLink: checkoutHref || resolved || existingHref,
             campaign: campaign || "",
             selectedAt: new Date().toISOString(),
           });

@@ -134,6 +134,18 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
         self.assertIn("View Full Pricing", homepage)
         self.assertIn("Private Household Vault", homepage)
         self.assertIn("Private Bridge Event Access", homepage)
+        self.assertIn(
+            "Every Tomb of Light package requires an active Legacy Care &amp; Maintenance plan beginning at purchase.",
+            pricing_page,
+        )
+        self.assertIn(
+            "Digital Legacy Portrait and higher family packages include a Private Household Vault",
+            homepage,
+        )
+        self.assertIn(
+            "Organization Records Vault, not a household vault by default.",
+            homepage,
+        )
         self.assertIn("Full Tomb of Light Pricing", pricing_page)
         self.assertIn("Required Legacy Care &amp; Maintenance", pricing_page)
         self.assertIn("Add-ons &amp; Legacy Services", pricing_page)
@@ -143,9 +155,32 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
         self.assertNotIn("Required Legacy Care &amp; Maintenance", homepage)
         self.assertNotIn("Add-ons &amp; Legacy Services", homepage)
         self.assertNotIn("Pricing and checkout links are being refreshed.", homepage)
+        self.assertNotIn("Pricing being updated.", homepage)
+        self.assertNotIn("Choose your legacy scope", homepage)
+        self.assertNotIn("Maintenance starts on delivery", homepage)
+        self.assertNotIn("Maintenance starts on activation", homepage)
+        self.assertNotIn("Maintenance options are being refreshed", homepage)
         self.assertNotIn('id="section-cta"', homepage)
         self.assertEqual(homepage.count('id="pricing"'), 1)
         self.assertEqual(pricing_page.count('class="cookie-banner"'), 1)
+        self.assertIn(
+            'href="https://buy.stripe.com/28E28reMK9Ar6v48xnbEA13"',
+            homepage,
+        )
+        self.assertIn(
+            'href="https://buy.stripe.com/7sY7sL9sq4g74mW9BrbEA15"',
+            homepage,
+        )
+        self.assertIn(
+            'href="https://buy.stripe.com/cNi7sL48613V7z8dRHbEA17"',
+            homepage,
+        )
+        self.assertNotIn("mailto:billing@tomboflight.com", homepage)
+        self.assertNotIn("mailto:billing@tomboflight.com", pricing_page)
+        self.assertGreaterEqual(homepage.count('target="_blank"'), 3)
+        self.assertGreaterEqual(pricing_page.count('target="_blank"'), 20)
+        self.assertGreaterEqual(homepage.count('rel="noopener noreferrer"'), 3)
+        self.assertGreaterEqual(pricing_page.count('rel="noopener noreferrer"'), 20)
 
         for package_code in [
             "BRIDGE-TASTE-SNAPSHOT",
@@ -165,6 +200,8 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
         self.assertIn('const checkoutFrozen = link.getAttribute("aria-disabled") === "true";', app_source)
         self.assertIn("prefilled_promo_code", app_source)
         self.assertIn("function configureDirectStripeCheckout(link, href) {", app_source)
+        self.assertIn("const hasDirectStripeHref = configureDirectStripeCheckout(link, existingHref);", app_source)
+        self.assertIn("const checkoutHref = hasDirectStripeHref", app_source)
         self.assertNotIn("mailto:billing@tomboflight.com", app_source)
         self.assertNotIn("window.location.href = `signin.html?next=", app_source)
 
