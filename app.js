@@ -1377,12 +1377,20 @@
 
     document.querySelectorAll("[data-payment-link]").forEach(function (link) {
       const slug = link.dataset.paymentLink;
+      const existingHref = String(link.getAttribute("href") || "").trim();
+      const hasDirectStripeCheckout = /^https:\/\/buy\.stripe\.com\//i.test(existingHref);
       const checkoutFrozen = link.getAttribute("aria-disabled") === "true";
       if (checkoutFrozen) {
+        if (hasDirectStripeCheckout) {
+          link.href = existingHref;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          return;
+        }
         link.removeAttribute("target");
         link.removeAttribute("rel");
         link.href = "#stripe-catalog-refresh";
-        link.title = "Checkout links are being updated.";
+        link.title = "Secure checkout is unavailable.";
         link.addEventListener("click", function (event) {
           event.preventDefault();
         });
@@ -1408,12 +1416,6 @@
         link.rel = "noopener noreferrer";
         link.addEventListener("click", function (event) {
           const founderCampaign = isLightNeverDiesCampaign(campaign);
-          if (founderCampaign && purchaseType === "package" && !getToken()) {
-            event.preventDefault();
-            const next = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-            window.location.href = `signin.html?next=${encodeURIComponent(next)}`;
-            return;
-          }
           const checkoutHref = buildCheckoutLinkWithContext(resolved, {
             slug,
             purchaseType,
@@ -1448,8 +1450,6 @@
           }, 4500);
         });
       } else {
-        const existingHref = String(link.getAttribute("href") || "").trim();
-        const hasDirectStripeCheckout = /^https:\/\/buy\.stripe\.com\//i.test(existingHref);
         if (hasDirectStripeCheckout) {
           link.href = existingHref;
           link.target = "_blank";
@@ -1459,12 +1459,14 @@
         }
         link.removeAttribute("target");
         link.removeAttribute("rel");
-        link.href =
-          "mailto:billing@tomboflight.com?subject=Tomb%20of%20Light%20checkout%20help";
+        link.title = "Secure checkout is unavailable.";
         link.setAttribute(
           "aria-label",
-          `${originalLabel}. Checkout is temporarily unavailable; email billing support.`,
+          `${originalLabel}. Secure checkout is temporarily unavailable.`,
         );
+        link.addEventListener("click", function (event) {
+          event.preventDefault();
+        });
       }
     });
   }

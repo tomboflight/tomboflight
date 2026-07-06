@@ -8682,6 +8682,17 @@ main [id] {
   margin-bottom: 22px;
 }
 
+.pricing-subsection-intro {
+  display: grid;
+  gap: 10px;
+  padding: 8px 6px 2px;
+}
+
+.pricing-subsection-intro h3,
+.pricing-subsection-intro .section-lead {
+  margin: 0;
+}
+
 .pricing-accordions {
   display: grid;
   gap: 18px;

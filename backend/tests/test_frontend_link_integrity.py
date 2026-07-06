@@ -135,12 +135,15 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
         self.assertIn("Private Household Vault", homepage)
         self.assertIn("Private Bridge Event Access", homepage)
         self.assertIn("Full Tomb of Light Pricing", pricing_page)
-        self.assertIn("Required Maintenance", pricing_page)
+        self.assertIn("Required Legacy Care &amp; Maintenance", pricing_page)
+        self.assertIn("Add-ons &amp; Legacy Services", pricing_page)
+        self.assertIn("Private Bridge Event Access", pricing_page)
         self.assertIn("Storage &amp; Vault Upgrades", pricing_page)
         self.assertIn("Rush Delivery", pricing_page)
         self.assertNotIn("Required Legacy Care &amp; Maintenance", homepage)
         self.assertNotIn("Add-ons &amp; Legacy Services", homepage)
         self.assertNotIn("Pricing and checkout links are being refreshed.", homepage)
+        self.assertNotIn('id="section-cta"', homepage)
         self.assertEqual(homepage.count('id="pricing"'), 1)
         self.assertEqual(pricing_page.count('class="cookie-banner"'), 1)
 
@@ -162,6 +165,8 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
         self.assertIn('const checkoutFrozen = link.getAttribute("aria-disabled") === "true";', app_source)
         self.assertIn("prefilled_promo_code", app_source)
         self.assertIn('const hasDirectStripeCheckout = /^https:\\/\\/buy\\.stripe\\.com\\//i.test(existingHref);', app_source)
+        self.assertNotIn("mailto:billing@tomboflight.com", app_source)
+        self.assertNotIn("window.location.href = `signin.html?next=", app_source)
 
     def test_founder_access_redirects_to_pricing(self):
         founder_page = (REPO_ROOT / "founder-access.html").read_text(encoding="utf-8")
