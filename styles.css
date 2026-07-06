@@ -8645,3 +8645,109 @@ main [id] {
     scroll-margin-top: 86px;
   }
 }
+
+
+.featured-path-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 24px;
+}
+
+.featured-path-card {
+  min-height: 100%;
+}
+
+.homepage-pricing-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 28px;
+}
+
+.vault-panel-compact,
+.offer-panel-private,
+.pricing-cta-panel {
+  max-width: 980px;
+  margin: 0 auto;
+}
+
+.bridge-access-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.pricing-page-shell {
+  min-height: 0;
+}
+
+.pricing-page-intro {
+  margin-bottom: 22px;
+}
+
+.pricing-accordions {
+  display: grid;
+  gap: 18px;
+}
+
+.pricing-accordion {
+  padding: 0;
+  overflow: hidden;
+}
+
+.pricing-accordion summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 22px 24px;
+  cursor: pointer;
+  list-style: none;
+  color: var(--tol-ink);
+  font-weight: 800;
+}
+
+.pricing-accordion summary::-webkit-details-marker {
+  display: none;
+}
+
+.pricing-accordion summary::after {
+  content: "+";
+  font-size: 1.35rem;
+  line-height: 1;
+  color: var(--gold-strong);
+}
+
+.pricing-accordion[open] summary::after {
+  content: "−";
+}
+
+.pricing-accordion > :not(summary) {
+  padding: 0 24px 24px;
+}
+
+.pricing-accordion-note {
+  color: var(--tol-muted);
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.pricing-accordion-copy {
+  margin: 0 0 18px;
+}
+
+.compact-pricing-grid {
+  margin-top: 4px;
+}
+
+.compact-pricing-grid .pricing-card {
+  min-height: 100%;
+}
+
+@media (max-width: 720px) {
+  .pricing-accordion summary {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .pricing-accordion > :not(summary) {
+    padding: 0 18px 18px;
+  }
+}
