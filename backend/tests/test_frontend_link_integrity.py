@@ -164,7 +164,7 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
         self.assertNotIn("GRANDOPENING", homepage)
         self.assertIn('const checkoutFrozen = link.getAttribute("aria-disabled") === "true";', app_source)
         self.assertIn("prefilled_promo_code", app_source)
-        self.assertIn('const hasDirectStripeCheckout = /^https:\\/\\/buy\\.stripe\\.com\\//i.test(existingHref);', app_source)
+        self.assertIn("function configureDirectStripeCheckout(link, href) {", app_source)
         self.assertNotIn("mailto:billing@tomboflight.com", app_source)
         self.assertNotIn("window.location.href = `signin.html?next=", app_source)
 

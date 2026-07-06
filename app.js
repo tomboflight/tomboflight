@@ -690,6 +690,18 @@
     }
   }
 
+  function configureDirectStripeCheckout(link, href) {
+    const normalizedHref = String(href || "").trim();
+    if (!/^https:\/\/buy\.stripe\.com\//i.test(normalizedHref)) {
+      return false;
+    }
+    link.href = normalizedHref;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.dataset.directStripeCheckout = "true";
+    return true;
+  }
+
   function getFounderMaintenancePending() {
     try {
       const raw = localStorage.getItem(FOUNDER_MAINTENANCE_PENDING_KEY);
@@ -1378,13 +1390,9 @@
     document.querySelectorAll("[data-payment-link]").forEach(function (link) {
       const slug = link.dataset.paymentLink;
       const existingHref = String(link.getAttribute("href") || "").trim();
-      const hasDirectStripeCheckout = /^https:\/\/buy\.stripe\.com\//i.test(existingHref);
       const checkoutFrozen = link.getAttribute("aria-disabled") === "true";
       if (checkoutFrozen) {
-        if (hasDirectStripeCheckout) {
-          link.href = existingHref;
-          link.target = "_blank";
-          link.rel = "noopener noreferrer";
+        if (configureDirectStripeCheckout(link, existingHref)) {
           return;
         }
         link.removeAttribute("target");
@@ -1450,11 +1458,7 @@
           }, 4500);
         });
       } else {
-        if (hasDirectStripeCheckout) {
-          link.href = existingHref;
-          link.target = "_blank";
-          link.rel = "noopener noreferrer";
-          link.dataset.directStripeCheckout = "true";
+        if (configureDirectStripeCheckout(link, existingHref)) {
           return;
         }
         link.removeAttribute("target");
