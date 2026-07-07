@@ -214,7 +214,7 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
 
         self.assertIn("Private Bridge Event Access", bridge_page)
         self.assertIn("Do not look for a special checkout link.", bridge_page)
-        self.assertIn("entered by the customer during Stripe checkout.", bridge_page)
+        self.assertIn("Display the code for customers", bridge_page)
         self.assertNotIn("Private Bridge Event Access", homepage)
         self.assertNotIn("BRIDGE-TASTE", homepage)
         self.assertNotIn("BRIDGE-PAINT", homepage)
