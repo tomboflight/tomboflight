@@ -103,7 +103,12 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
         config_source = (REPO_ROOT / "config.js").read_text(encoding="utf-8")
         homepage = (REPO_ROOT / "index.html").read_text(encoding="utf-8")
         pricing_page = (REPO_ROOT / "pricing.html").read_text(encoding="utf-8")
+        bridge_page = (REPO_ROOT / "bridge-taste.html").read_text(encoding="utf-8")
         app_source = (REPO_ROOT / "app.js").read_text(encoding="utf-8")
+        deploy_workflow = (REPO_ROOT / ".github" / "workflows" / "deploy.yml").read_text(
+            encoding="utf-8"
+        )
+        sitemap = (REPO_ROOT / "sitemap.xml").read_text(encoding="utf-8")
 
         featured_homepage_slugs = [
             "digital_legacy_portrait",
@@ -133,7 +138,7 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
         self.assertIn("Choose Your Legacy Path", homepage)
         self.assertIn("View Full Pricing", homepage)
         self.assertIn("Private Household Vault", homepage)
-        self.assertIn("Private Bridge Event Access", homepage)
+        self.assertIn("Founder-led stewardship", homepage)
         self.assertIn(
             "Every Tomb of Light package requires an active Legacy Care &amp; Maintenance plan beginning at purchase.",
             pricing_page,
@@ -150,8 +155,20 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
         self.assertIn("Required Legacy Care &amp; Maintenance", pricing_page)
         self.assertIn("Add-ons &amp; Legacy Services", pricing_page)
         self.assertIn("Private Bridge Event Access", pricing_page)
+        self.assertIn("View Private Bridge Access", pricing_page)
         self.assertIn("Storage &amp; Vault Upgrades", pricing_page)
         self.assertIn("Rush Delivery", pricing_page)
+        self.assertIn('href="portal-help.html">Need help choosing?</a>', pricing_page)
+        self.assertIn('<link rel="canonical" href="https://tomboflight.com/" />', homepage)
+        self.assertIn('<meta property="og:url" content="https://tomboflight.com/" />', homepage)
+        self.assertIn(
+            '<link rel="canonical" href="https://tomboflight.com/pricing.html" />',
+            pricing_page,
+        )
+        self.assertIn(
+            '<meta property="og:url" content="https://tomboflight.com/pricing.html" />',
+            pricing_page,
+        )
         self.assertNotIn("Required Legacy Care &amp; Maintenance", homepage)
         self.assertNotIn("Add-ons &amp; Legacy Services", homepage)
         self.assertNotIn("Pricing and checkout links are being refreshed.", homepage)
@@ -177,6 +194,7 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
         )
         self.assertNotIn("mailto:billing@tomboflight.com", homepage)
         self.assertNotIn("mailto:billing@tomboflight.com", pricing_page)
+        self.assertNotIn("mailto:support@tomboflight.com", pricing_page)
         self.assertGreaterEqual(homepage.count('target="_blank"'), 3)
         self.assertGreaterEqual(pricing_page.count('target="_blank"'), 20)
         self.assertGreaterEqual(homepage.count('rel="noopener noreferrer"'), 3)
@@ -192,11 +210,22 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
             "BRIDGE-TASTE-ESTATE",
             "BRIDGE-TASTE-COMMAND",
         ]:
-            self.assertIn(package_code, homepage)
+            self.assertIn(package_code, bridge_page)
 
+        self.assertIn("Private Bridge Event Access", bridge_page)
+        self.assertIn("Do not look for a special checkout link.", bridge_page)
+        self.assertIn("entered by the customer during Stripe checkout.", bridge_page)
+        self.assertNotIn("Private Bridge Event Access", homepage)
+        self.assertNotIn("BRIDGE-TASTE", homepage)
         self.assertNotIn("BRIDGE-PAINT", homepage)
+        self.assertNotIn("BRIDGE-PAINT", pricing_page)
+        self.assertNotIn("BRIDGE-PAINT", bridge_page)
         self.assertNotIn("BRIDGE-LINEAGE", homepage)
+        self.assertNotIn("BRIDGE-LINEAGE", pricing_page)
+        self.assertNotIn("BRIDGE-LINEAGE", bridge_page)
         self.assertNotIn("GRANDOPENING", homepage)
+        self.assertNotIn("GRANDOPENING", pricing_page)
+        self.assertNotIn("GRANDOPENING", bridge_page)
         self.assertIn('const checkoutFrozen = link.getAttribute("aria-disabled") === "true";', app_source)
         self.assertIn("prefilled_promo_code", app_source)
         self.assertIn("function configureDirectStripeCheckout(link, href) {", app_source)
@@ -204,6 +233,14 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
         self.assertIn('let checkoutHref = hasDirectStripeHref ? existingHref : "";', app_source)
         self.assertNotIn("mailto:billing@tomboflight.com", app_source)
         self.assertNotIn("window.location.href = `signin.html?next=", app_source)
+        self.assertIn("workflow_dispatch:", deploy_workflow)
+        self.assertIn("path: .site", deploy_workflow)
+        self.assertIn("artifact_name: ${{ env.PAGES_ARTIFACT_NAME }}", deploy_workflow)
+        self.assertIn("name: ${{ env.PAGES_ARTIFACT_NAME }}", deploy_workflow)
+        self.assertIn("https://tomboflight.com/pricing.html", sitemap)
+        self.assertIn("https://tomboflight.com/platform.html", sitemap)
+        self.assertIn("https://tomboflight.com/refunds-delivery.html", sitemap)
+        self.assertIn("https://tomboflight.com/bridge-taste.html", sitemap)
 
     def test_founder_access_redirects_to_pricing(self):
         founder_page = (REPO_ROOT / "founder-access.html").read_text(encoding="utf-8")
