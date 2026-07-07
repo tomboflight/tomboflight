@@ -3,29 +3,29 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Portal Help | Tomb of Light</title>
+    <title>Tomb of Light | Private Support Guidance</title>
     <meta
       name="description"
-      content="Private help guidance for authenticated Tomb of Light customer portal users."
+      content="Private support guidance for package questions, secure workspace help, maintenance decisions, and Tomb of Light checkout support."
     />
-    <link rel="stylesheet" href="styles.css?v=20260509-audit" />
+    <link rel="stylesheet" href="styles.css?v=20260518-founder-polish" />
   </head>
-  <body class="portal-dashboard-body">
+  <body class="homepage-body">
     <div class="site-watermark" aria-hidden="true"></div>
     <div class="page-wrap">
-      <header class="site-header">
+      <header class="site-header" role="banner">
         <div class="container site-header-inner">
-          <a class="brand" href="dashboard.html" aria-label="Tomb of Light dashboard">
+          <a class="brand" href="index.html" aria-label="Tomb of Light home">
             <span>Tomb of Light<span class="brand-symbol">™</span></span>
           </a>
-          <nav class="site-nav" aria-label="Portal navigation">
-            <a href="dashboard.html">Dashboard</a>
-            <a href="portal-review.html">Review Process</a>
-            <a href="portal-upgrade.html?target_package=family_estate_concierge">Upgrade</a>
+          <nav class="site-nav" aria-label="Primary navigation">
+            <a href="platform.html">Platform</a>
+            <a href="pricing.html">Pricing</a>
+            <a href="faq.html">FAQ</a>
             <a href="portal-help.html" aria-current="page">Help Center</a>
           </nav>
           <div class="header-actions">
-            <button class="btn btn-secondary" type="button" data-logout-btn>Log Out</button>
+            <a class="btn btn-secondary" href="signin.html">Client Sign In</a>
           </div>
         </div>
       </header>
@@ -33,24 +33,95 @@
         <section class="page-hero">
           <div class="container">
             <div class="page-hero-panel">
-              <span class="eyebrow">Portal Help</span>
-              <h1>Private help for your active workspace.</h1>
+              <span class="eyebrow">Private Support Guidance</span>
+              <h1>Private guidance before and after checkout.</h1>
               <p>
-                Use this portal page for package-aware guidance, secure upload questions, and workspace troubleshooting.
+                Use this page for package guidance, maintenance questions, secure upload help, and next-step support
+                without sending buyers to a public mailto prompt.
               </p>
+              <div class="hero-actions">
+                <a class="btn btn-primary" href="pricing.html">Review Pricing</a>
+                <a class="btn btn-secondary" href="refunds-delivery.html">Support &amp; Delivery Terms</a>
+              </div>
+              <div class="hero-meta" aria-label="Support guidance">
+                <span class="meta-pill">Private guidance</span>
+                <span class="meta-pill">Secure portal support</span>
+                <span class="meta-pill">Family-centered continuity</span>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section class="section section-tight" aria-labelledby="help-options-title">
+          <div class="container">
+            <div class="section-head section-head-wide">
+              <span class="eyebrow">How to use this page</span>
+              <h2 id="help-options-title">Choose the support path that matches your stage.</h2>
+            </div>
+            <div class="feature-strip">
+              <article class="feature-card feature-card-clean">
+                <div class="card-number" aria-hidden="true">01</div>
+                <h3>Need help choosing?</h3>
+                <p class="card-copy">
+                  Review the full pricing catalog, compare package scope, and confirm which vault and maintenance
+                  path fits your household or organization.
+                </p>
+                <a class="btn btn-secondary" href="pricing.html">View Pricing</a>
+              </article>
+              <article class="feature-card feature-card-clean">
+                <div class="card-number" aria-hidden="true">02</div>
+                <h3>Already an account holder?</h3>
+                <p class="card-copy">
+                  Sign in for secure workspace help, upload guidance, review-process questions, and package-aware
+                  continuity support.
+                </p>
+                <a class="btn btn-secondary" href="signin.html">Sign In Securely</a>
+              </article>
+              <article class="feature-card feature-card-clean">
+                <div class="card-number" aria-hidden="true">03</div>
+                <h3>Need policy details?</h3>
+                <p class="card-copy">
+                  Review delivery timing, refunds, response expectations, and support guardrails before or after
+                  checkout.
+                </p>
+                <a class="btn btn-secondary" href="refunds-delivery.html">Open Support Terms</a>
+              </article>
             </div>
           </div>
         </section>
       </main>
+      <footer class="footer" role="contentinfo">
+        <div class="container">
+          <div class="footer-card">
+            <div class="footer-top">
+              <div>
+                <div class="footer-brand">
+                  Tomb of Light<span class="brand-symbol">™</span>
+                </div>
+                <p class="footer-copy">
+                  A private, guided, premium digital lineage platform for protecting memory, lineage, and identity
+                  across generations.
+                </p>
+              </div>
+
+              <div class="footer-links">
+                <a href="platform.html">Platform</a>
+                <a href="reviews/">Reviews</a>
+                <a href="privacy.html">Privacy Policy</a>
+                <a href="terms.html">Terms</a>
+                <a href="cookie-policy.html">Cookie Policy</a>
+                <a href="accessibility.html">Accessibility</a>
+                <a href="data-request.html">Data Requests</a>
+                <a href="privacy-state-notices.html">State Privacy Notices</a>
+                <a href="privacy-choices.html">Privacy Choices</a>
+                <a href="refunds-delivery.html">Refunds, Delivery &amp; Support</a>
+                <a href="compliance.html">Compliance &amp; Legal</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </footer>
     </div>
     <script src="config.js?v=20260331-2"></script>
     <script src="app.js?v=20260508-451"></script>
-    <script src="auth.js?v=20260509-audit"></script>
-    <script>
-      document.addEventListener("DOMContentLoaded", async function () {
-        if (!window.TOLApp || typeof window.TOLApp.requireSession !== "function") return;
-        await window.TOLApp.requireSession("signin.html");
-      });
-    </script>
   </body>
 </html>

@@ -4,14 +4,18 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 permissions:
   contents: read
   pages: write
   id-token: write
 
+env:
+  PAGES_ARTIFACT_NAME: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
+
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -20,10 +24,42 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: '.'
+      - name: Stage public site
+        run: |
+          rm -rf .site
+          mkdir -p .site
+          shopt -s dotglob nullglob
 
+          for file in *.html *.css *.js *.png *.jpg *.jpeg *.svg *.ico *.webmanifest *.txt *.xml; do
+            cp -R "$file" .site/
+          done
+
+          for file in CNAME robots.txt sitemap.xml; do
+            if [ -e "$file" ]; then
+              cp -R "$file" .site/
+            fi
+          done
+
+          for dir in assets images reviews viewer .well-known; do
+            if [ -e "$dir" ]; then
+              cp -R "$dir" .site/
+            fi
+          done
+
+      - name: Upload Pages artifact
+        # Use a per-run-attempt artifact name so reruns do not collide with earlier github-pages artifacts.
+        uses: actions/upload-pages-artifact@v4
+        with:
+          name: ${{ env.PAGES_ARTIFACT_NAME }}
+          path: .site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+    steps:
       - name: Deploy to GitHub Pages
         uses: actions/deploy-pages@v4
+        with:
+          artifact_name: ${{ env.PAGES_ARTIFACT_NAME }}

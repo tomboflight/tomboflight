@@ -8752,6 +8752,23 @@ main [id] {
   min-height: 100%;
 }
 
+.bridge-invite-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.bridge-invite-panel h3,
+.bridge-invite-panel .section-lead,
+.pricing-actions-inline {
+  margin: 0;
+}
+
+.pricing-actions-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
 @media (max-width: 720px) {
   .pricing-accordion summary {
     align-items: flex-start;
