@@ -496,8 +496,6 @@ PACKAGE_CATALOG: dict[str, dict[str, Any]] = {
         "allowed_addons": [
             "extra_mapped_person",
             "extra_zoom_layer",
-            "extra_linked_household",
-            "extra_branch",
             "extra_storage",
             "rush_delivery",
             "on_site_photo_scanning",
@@ -562,7 +560,6 @@ PACKAGE_CATALOG: dict[str, dict[str, Any]] = {
         "organization_command_scope": True,
         "maintenance_included": False,
         "allowed_addons": [
-            "extra_org_node",
             "extra_org_level",
             "extra_admin_seat",
             "extra_storage",
