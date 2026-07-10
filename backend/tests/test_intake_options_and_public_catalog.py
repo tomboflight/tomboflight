@@ -27,6 +27,14 @@ class IntakeOptionsTests(unittest.TestCase):
 class PublicCatalogEntitlementTests(unittest.TestCase):
     def test_public_catalog_exposes_new_vault_entitlements(self):
         packages = {item["package_code"]: item for item in get_public_package_catalog()}
+        self.assertTrue(packages["legacy_snapshot"]["can_build_family_tree"])
+        self.assertTrue(packages["legacy_snapshot"]["can_use_lineage_certificate"])
+        self.assertTrue(packages["legacy_portrait_intro"]["can_build_family_tree"])
+        self.assertTrue(packages["legacy_portrait_intro"]["can_use_lineage_certificate"])
+        self.assertTrue(packages["digital_legacy_portrait"]["can_build_family_tree"])
+        self.assertTrue(packages["digital_legacy_portrait"]["can_use_lineage_certificate"])
+        self.assertTrue(packages["household_foundation"]["can_use_lineage_certificate"])
+        self.assertTrue(packages["command_structure_network"]["can_use_organization_records_vault"])
         self.assertFalse(packages["legacy_snapshot"]["can_use_household_vault"])
         self.assertFalse(packages["legacy_portrait_intro"]["can_use_household_vault"])
         self.assertTrue(packages["digital_legacy_portrait"]["can_use_household_vault"])
@@ -46,13 +54,18 @@ class PublicCatalogEntitlementTests(unittest.TestCase):
         self.assertTrue(packages["family_estate_concierge"]["can_use_linked_household_vault"])
         self.assertTrue(packages["family_estate_concierge"]["can_use_future_message_vault"])
         self.assertTrue(packages["family_estate_concierge"]["can_use_scheduled_reveal"])
-        self.assertTrue(packages["command_structure_network"]["can_use_organization_records_vault"])
+        for package in packages.values():
+            self.assertFalse(packages[package["package_code"]]["maintenance_starts_on_delivery"])
+            self.assertEqual(packages[package["package_code"]]["maintenance_default"], "monthly")
         self.assertEqual(
             packages["digital_legacy_portrait"]["premium_archive_structure"],
             packages["digital_legacy_portrait"]["can_use_household_vault"],
         )
         self.assertEqual(packages["digital_legacy_portrait"]["scheduled_reveal_status"], "planned_private_beta")
         self.assertFalse(packages["digital_legacy_portrait"]["scheduled_reveal_auto_executor_live"])
+        self.assertEqual(packages["command_structure_network"]["base_price_usd"], 2999)
+        self.assertEqual(packages["legacy_snapshot"]["maintenance_monthly_usd"], 19)
+        self.assertEqual(packages["family_estate_concierge"]["maintenance_annual_usd"], 2990)
 
     def test_package_copy_includes_allowed_visibility_scopes(self):
         package = get_package("legacy_snapshot")

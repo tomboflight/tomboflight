@@ -1923,6 +1923,106 @@ select:focus-visible {
   font-weight: 650;
 }
 
+.package-detail-card {
+  gap: 16px;
+}
+
+.package-card-top {
+  display: grid;
+  gap: 10px;
+}
+
+.package-lane-badge {
+  display: inline-flex;
+  width: fit-content;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(42, 111, 168, 0.1);
+  color: var(--tol-blue);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.package-best-for,
+.package-maintenance-choice p {
+  margin: 0;
+  color: var(--tol-muted);
+}
+
+.package-receive,
+.package-maintenance-choice {
+  display: grid;
+  gap: 10px;
+  padding: 16px 18px;
+  border-radius: 20px;
+  border: 1px solid rgba(169, 197, 218, 0.52);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.package-section-label {
+  margin: 0;
+  color: var(--tol-ink);
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.package-highlight-list,
+.package-boundary-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 8px;
+  color: var(--tol-text);
+}
+
+.package-inline-details {
+  border: 1px solid rgba(169, 197, 218, 0.52);
+  border-radius: 20px;
+  background: rgba(248, 251, 255, 0.86);
+}
+
+.package-inline-details summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 16px 18px;
+  color: var(--tol-ink);
+  font-weight: 800;
+}
+
+.package-inline-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.package-inline-details[open] summary {
+  border-bottom: 1px solid rgba(169, 197, 218, 0.52);
+}
+
+.package-spec-list {
+  margin: 0;
+  padding: 0 18px 18px;
+  display: grid;
+  gap: 12px;
+}
+
+.package-spec-list div {
+  display: grid;
+  gap: 4px;
+}
+
+.package-spec-list dt {
+  color: var(--tol-ink);
+  font-weight: 800;
+}
+
+.package-spec-list dd {
+  margin: 0;
+  color: var(--tol-muted);
+}
+
 .pricing-actions {
   display: flex;
   flex-wrap: wrap;
@@ -8748,7 +8848,21 @@ main [id] {
   margin-top: 4px;
 }
 
+.package-detail-grid {
+  align-items: start;
+}
+
 .compact-pricing-grid .pricing-card {
+  min-height: 100%;
+}
+
+.package-clarity-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.package-clarity-card {
   min-height: 100%;
 }
 

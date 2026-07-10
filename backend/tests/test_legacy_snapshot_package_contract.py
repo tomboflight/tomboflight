@@ -15,23 +15,36 @@ class LegacySnapshotPackageContractTests(unittest.TestCase):
         self.assertIsNotNone(package)
         assert package is not None
         self.assertEqual(package.get("package_lane"), "portrait")
+        self.assertEqual(package.get("maintenance_monthly_usd"), 19)
+        self.assertEqual(package.get("maintenance_annual_usd"), 190)
+        self.assertEqual(package.get("maintenance_lifetime_usd"), 0)
         self.assertEqual(package.get("max_uploads"), 3)
         self.assertEqual(package.get("max_members"), 1)
         self.assertEqual(package.get("max_zoom_layers"), 0)
         self.assertFalse(bool(package.get("can_use_viewer")))
         self.assertTrue(bool(package.get("can_use_secure_share_viewer")))
         self.assertTrue(bool(package.get("can_upload_portraits")))
+        self.assertTrue(bool(package.get("can_upload_verification_docs")))
         self.assertFalse(bool(package.get("can_build_household")))
-        self.assertFalse(bool(package.get("can_build_family_tree")))
+        self.assertTrue(bool(package.get("can_build_family_tree")))
         self.assertFalse(bool(package.get("can_link_households")))
+        self.assertTrue(bool(package.get("can_open_family_intake")))
+        self.assertTrue(bool(package.get("can_use_lineage_certificate")))
         self.assertFalse(bool(package.get("can_use_link_keys")))
+        self.assertTrue(bool(package.get("can_use_personal_vault")))
+        self.assertFalse(bool(package.get("can_use_household_vault")))
+        self.assertFalse(bool(package.get("can_use_future_message_vault")))
+        self.assertFalse(bool(package.get("can_use_scheduled_reveal")))
+        self.assertTrue(bool(package.get("protected_workspace")))
+        self.assertTrue(bool(package.get("guided_intake")))
+        self.assertFalse(bool(package.get("maintenance_starts_on_delivery")))
         self.assertGreater(len(list(package.get("upgrade_targets") or [])), 0)
 
-    def test_legacy_snapshot_maintenance_default_is_not_auto_enabled(self):
+    def test_legacy_snapshot_maintenance_default_is_monthly(self):
         profile = get_package_control_profile("legacy_snapshot")
         self.assertIsNotNone(profile)
         assert profile is not None
-        self.assertEqual(str(profile.get("maintenance_default")), "none")
+        self.assertEqual(str(profile.get("maintenance_default")), "monthly")
 
     def test_legacy_snapshot_verification_upload_path_is_explicitly_enabled(self):
         package = get_package("legacy_snapshot")
@@ -47,6 +60,9 @@ class LegacyPortraitIntroPackageContractTests(unittest.TestCase):
         self.assertIsNotNone(package)
         assert package is not None
         self.assertEqual(package.get("package_lane"), "portrait")
+        self.assertEqual(package.get("maintenance_monthly_usd"), 29)
+        self.assertEqual(package.get("maintenance_annual_usd"), 290)
+        self.assertEqual(package.get("maintenance_lifetime_usd"), 0)
         self.assertEqual(package.get("max_uploads"), 5)
         self.assertEqual(package.get("max_members"), 1)
         self.assertEqual(package.get("max_zoom_layers"), 0)
@@ -55,16 +71,25 @@ class LegacyPortraitIntroPackageContractTests(unittest.TestCase):
         self.assertTrue(bool(package.get("can_upload_portraits")))
         self.assertTrue(bool(package.get("can_upload_verification_docs")))
         self.assertFalse(bool(package.get("can_build_household")))
-        self.assertFalse(bool(package.get("can_build_family_tree")))
+        self.assertTrue(bool(package.get("can_build_family_tree")))
         self.assertFalse(bool(package.get("can_link_households")))
+        self.assertTrue(bool(package.get("can_open_family_intake")))
+        self.assertTrue(bool(package.get("can_use_lineage_certificate")))
         self.assertFalse(bool(package.get("can_use_link_keys")))
+        self.assertTrue(bool(package.get("can_use_personal_vault")))
+        self.assertFalse(bool(package.get("can_use_household_vault")))
+        self.assertFalse(bool(package.get("can_use_future_message_vault")))
+        self.assertFalse(bool(package.get("can_use_scheduled_reveal")))
+        self.assertTrue(bool(package.get("protected_workspace")))
+        self.assertTrue(bool(package.get("guided_intake")))
+        self.assertFalse(bool(package.get("maintenance_starts_on_delivery")))
         self.assertGreater(len(list(package.get("upgrade_targets") or [])), 0)
 
-    def test_legacy_portrait_intro_maintenance_default_is_none(self):
+    def test_legacy_portrait_intro_maintenance_default_is_monthly(self):
         profile = get_package_control_profile("legacy_portrait_intro")
         self.assertIsNotNone(profile)
         assert profile is not None
-        self.assertEqual(str(profile.get("maintenance_default")), "none")
+        self.assertEqual(str(profile.get("maintenance_default")), "monthly")
 
 
 class DigitalLegacyPortraitPackageContractTests(unittest.TestCase):
@@ -73,6 +98,9 @@ class DigitalLegacyPortraitPackageContractTests(unittest.TestCase):
         self.assertIsNotNone(package)
         assert package is not None
         self.assertEqual(package.get("package_lane"), "portrait")
+        self.assertEqual(package.get("maintenance_monthly_usd"), 39)
+        self.assertEqual(package.get("maintenance_annual_usd"), 390)
+        self.assertEqual(package.get("maintenance_lifetime_usd"), 0)
         self.assertEqual(package.get("max_uploads"), 10)
         self.assertEqual(package.get("max_storage_gb"), 1)
         self.assertEqual(package.get("max_members"), 1)
@@ -81,20 +109,25 @@ class DigitalLegacyPortraitPackageContractTests(unittest.TestCase):
         self.assertTrue(bool(package.get("can_upload_verification_docs")))
         self.assertTrue(bool(package.get("can_use_link_keys")))
         self.assertTrue(bool(package.get("can_manage_link_keys")))
+        self.assertTrue(bool(package.get("can_open_family_intake")))
         self.assertTrue(bool(package.get("can_use_household_vault")))
+        self.assertTrue(bool(package.get("can_use_lineage_certificate")))
         self.assertFalse(bool(package.get("can_use_future_message_vault")))
         self.assertFalse(bool(package.get("can_use_scheduled_reveal")))
         self.assertTrue(bool(package.get("premium_archive_structure")))
         self.assertFalse(bool(package.get("can_build_household")))
-        self.assertFalse(bool(package.get("can_build_family_tree")))
+        self.assertTrue(bool(package.get("can_build_family_tree")))
         self.assertFalse(bool(package.get("can_link_households")))
+        self.assertTrue(bool(package.get("protected_workspace")))
+        self.assertTrue(bool(package.get("guided_intake")))
+        self.assertFalse(bool(package.get("maintenance_starts_on_delivery")))
         self.assertGreater(len(list(package.get("upgrade_targets") or [])), 0)
 
-    def test_digital_legacy_portrait_maintenance_default_is_none(self):
+    def test_digital_legacy_portrait_maintenance_default_is_monthly(self):
         profile = get_package_control_profile("digital_legacy_portrait")
         self.assertIsNotNone(profile)
         assert profile is not None
-        self.assertEqual(str(profile.get("maintenance_default")), "none")
+        self.assertEqual(str(profile.get("maintenance_default")), "monthly")
 
 
 class HouseholdFoundationPackageContractTests(unittest.TestCase):
@@ -103,6 +136,9 @@ class HouseholdFoundationPackageContractTests(unittest.TestCase):
         self.assertIsNotNone(package)
         assert package is not None
         self.assertEqual(package.get("package_lane"), "household")
+        self.assertEqual(package.get("maintenance_monthly_usd"), 59)
+        self.assertEqual(package.get("maintenance_annual_usd"), 590)
+        self.assertEqual(package.get("maintenance_lifetime_usd"), 0)
         self.assertEqual(package.get("max_members"), 6)
         self.assertEqual(package.get("max_uploads"), 20)
         self.assertEqual(package.get("max_zoom_layers"), 2)
@@ -118,17 +154,19 @@ class HouseholdFoundationPackageContractTests(unittest.TestCase):
         self.assertTrue(bool(package.get("can_use_household_vault")))
         self.assertFalse(bool(package.get("can_use_future_message_vault")))
         self.assertFalse(bool(package.get("can_use_scheduled_reveal")))
+        self.assertTrue(bool(package.get("protected_workspace")))
+        self.assertTrue(bool(package.get("guided_intake")))
         self.assertFalse(bool(package.get("maintenance_starts_on_delivery")))
         self.assertCountEqual(
             list(package.get("allowed_addons") or []),
             ["rush_delivery", "on_site_photo_scanning"],
         )
 
-    def test_household_foundation_maintenance_default_is_none(self):
+    def test_household_foundation_maintenance_default_is_monthly(self):
         profile = get_package_control_profile("household_foundation")
         self.assertIsNotNone(profile)
         assert profile is not None
-        self.assertEqual(str(profile.get("maintenance_default")), "none")
+        self.assertEqual(str(profile.get("maintenance_default")), "monthly")
 
 
 class HeirloomLegacyTreePackageContractTests(unittest.TestCase):
@@ -137,6 +175,9 @@ class HeirloomLegacyTreePackageContractTests(unittest.TestCase):
         self.assertIsNotNone(package)
         assert package is not None
         self.assertEqual(package.get("package_lane"), "household")
+        self.assertEqual(package.get("maintenance_monthly_usd"), 89)
+        self.assertEqual(package.get("maintenance_annual_usd"), 890)
+        self.assertEqual(package.get("maintenance_lifetime_usd"), 0)
         self.assertEqual(package.get("max_members"), 15)
         self.assertEqual(package.get("max_uploads"), 50)
         self.assertEqual(package.get("max_zoom_layers"), 4)
@@ -154,17 +195,19 @@ class HeirloomLegacyTreePackageContractTests(unittest.TestCase):
         self.assertFalse(bool(package.get("can_link_households")))
         self.assertFalse(bool(package.get("can_use_link_keys")))
         self.assertFalse(bool(package.get("can_manage_link_keys")))
+        self.assertTrue(bool(package.get("protected_workspace")))
+        self.assertTrue(bool(package.get("guided_intake")))
         self.assertFalse(bool(package.get("maintenance_starts_on_delivery")))
         self.assertCountEqual(
             list(package.get("allowed_addons") or []),
             ["rush_delivery", "on_site_photo_scanning"],
         )
 
-    def test_heirloom_legacy_tree_maintenance_default_is_none(self):
+    def test_heirloom_legacy_tree_maintenance_default_is_monthly(self):
         profile = get_package_control_profile("heirloom_legacy_tree")
         self.assertIsNotNone(profile)
         assert profile is not None
-        self.assertEqual(str(profile.get("maintenance_default")), "none")
+        self.assertEqual(str(profile.get("maintenance_default")), "monthly")
 
 
 class LegacyPlusPackageContractTests(unittest.TestCase):
@@ -173,6 +216,9 @@ class LegacyPlusPackageContractTests(unittest.TestCase):
         self.assertIsNotNone(package)
         assert package is not None
         self.assertEqual(package.get("package_lane"), "household")
+        self.assertEqual(package.get("maintenance_monthly_usd"), 149)
+        self.assertEqual(package.get("maintenance_annual_usd"), 1490)
+        self.assertEqual(package.get("maintenance_lifetime_usd"), 0)
         self.assertEqual(package.get("max_members"), 30)
         self.assertEqual(package.get("max_uploads"), 100)
         self.assertEqual(package.get("max_zoom_layers"), 5)
@@ -191,16 +237,19 @@ class LegacyPlusPackageContractTests(unittest.TestCase):
         self.assertFalse(bool(package.get("can_link_households")))
         self.assertTrue(bool(package.get("can_use_link_keys")))
         self.assertTrue(bool(package.get("can_manage_link_keys")))
+        self.assertTrue(bool(package.get("protected_workspace")))
+        self.assertTrue(bool(package.get("guided_intake")))
+        self.assertFalse(bool(package.get("maintenance_starts_on_delivery")))
         self.assertCountEqual(
             list(package.get("allowed_addons") or []),
             ["rush_delivery", "on_site_photo_scanning", "additional_narration_minute"],
         )
 
-    def test_legacy_plus_maintenance_default_is_none(self):
+    def test_legacy_plus_maintenance_default_is_monthly(self):
         profile = get_package_control_profile("legacy_plus")
         self.assertIsNotNone(profile)
         assert profile is not None
-        self.assertEqual(str(profile.get("maintenance_default")), "none")
+        self.assertEqual(str(profile.get("maintenance_default")), "monthly")
 
 
 class FamilyEstateConciergePackageContractTests(unittest.TestCase):
@@ -209,6 +258,9 @@ class FamilyEstateConciergePackageContractTests(unittest.TestCase):
         self.assertIsNotNone(package)
         assert package is not None
         self.assertEqual(package.get("package_lane"), "network")
+        self.assertEqual(package.get("maintenance_monthly_usd"), 299)
+        self.assertEqual(package.get("maintenance_annual_usd"), 2990)
+        self.assertEqual(package.get("maintenance_lifetime_usd"), 0)
         self.assertEqual(package.get("max_households"), 3)
         self.assertEqual(package.get("max_family_branches"), 3)
         self.assertEqual(package.get("max_uploads"), 250)
@@ -237,6 +289,7 @@ class FamilyEstateConciergePackageContractTests(unittest.TestCase):
         self.assertTrue(bool(package.get("can_use_scheduled_reveal")))
         self.assertFalse(bool(package.get("organization_command_scope")))
         self.assertFalse(bool(package.get("maintenance_included")))
+        self.assertFalse(bool(package.get("maintenance_starts_on_delivery")))
         self.assertFalse(bool(package.get("can_build_org_chart")))
         self.assertFalse(bool(package.get("can_link_org_units")))
         self.assertCountEqual(
@@ -252,11 +305,11 @@ class FamilyEstateConciergePackageContractTests(unittest.TestCase):
             ],
         )
 
-    def test_family_estate_concierge_maintenance_default_is_none(self):
+    def test_family_estate_concierge_maintenance_default_is_monthly(self):
         profile = get_package_control_profile("family_estate_concierge")
         self.assertIsNotNone(profile)
         assert profile is not None
-        self.assertEqual(str(profile.get("maintenance_default")), "none")
+        self.assertEqual(str(profile.get("maintenance_default")), "monthly")
 
 
 class CommandStructureNetworkPackageContractTests(unittest.TestCase):
@@ -265,6 +318,10 @@ class CommandStructureNetworkPackageContractTests(unittest.TestCase):
         self.assertIsNotNone(package)
         assert package is not None
         self.assertEqual(package.get("package_lane"), "organization")
+        self.assertEqual(package.get("base_price_usd"), 2999)
+        self.assertEqual(package.get("maintenance_monthly_usd"), 199)
+        self.assertEqual(package.get("maintenance_annual_usd"), 1990)
+        self.assertEqual(package.get("maintenance_lifetime_usd"), 0)
         self.assertEqual(package.get("max_org_nodes"), 15)
         self.assertEqual(package.get("organization_node_limit"), 15)
         self.assertEqual(package.get("max_uploads"), 25)
@@ -305,6 +362,7 @@ class CommandStructureNetworkPackageContractTests(unittest.TestCase):
         self.assertFalse(bool(package.get("relationship_editor")))
         self.assertFalse(bool(package.get("spouse_child_parent_relationships")))
         self.assertFalse(bool(package.get("maintenance_included")))
+        self.assertFalse(bool(package.get("maintenance_starts_on_delivery")))
         self.assertCountEqual(
             list(package.get("allowed_addons") or []),
             [
@@ -317,11 +375,11 @@ class CommandStructureNetworkPackageContractTests(unittest.TestCase):
         )
         self.assertNotIn("family_estate_concierge", list(package.get("upgrade_targets") or []))
 
-    def test_command_structure_network_maintenance_default_is_none(self):
+    def test_command_structure_network_maintenance_default_is_monthly(self):
         profile = get_package_control_profile("command_structure_network")
         self.assertIsNotNone(profile)
         assert profile is not None
-        self.assertEqual(str(profile.get("maintenance_default")), "none")
+        self.assertEqual(str(profile.get("maintenance_default")), "monthly")
 
 
 class EntitlementAddonBoundaryTests(unittest.TestCase):

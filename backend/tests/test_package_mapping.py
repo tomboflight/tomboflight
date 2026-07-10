@@ -18,6 +18,7 @@ class PackageMappingTests(unittest.TestCase):
         self.assertEqual(identity["display_name"], "Digital Legacy Portrait")
         self.assertEqual(identity["lane"], "portrait")
         self.assertEqual(identity["anchor_type"], "portrait_anchor")
+        self.assertEqual(identity["maintenance_default"], "monthly")
 
     def test_translation_helpers_round_trip(self):
         code = translate_package_slug_to_code("household-foundation")
