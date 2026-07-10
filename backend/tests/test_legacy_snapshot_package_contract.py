@@ -297,6 +297,8 @@ class FamilyEstateConciergePackageContractTests(unittest.TestCase):
             [
                 "extra_mapped_person",
                 "extra_zoom_layer",
+                "extra_linked_household",
+                "extra_branch",
                 "extra_storage",
                 "rush_delivery",
                 "on_site_photo_scanning",
@@ -366,6 +368,7 @@ class CommandStructureNetworkPackageContractTests(unittest.TestCase):
         self.assertCountEqual(
             list(package.get("allowed_addons") or []),
             [
+                "extra_org_node",
                 "extra_org_level",
                 "extra_admin_seat",
                 "extra_storage",

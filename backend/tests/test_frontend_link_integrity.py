@@ -143,12 +143,26 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
             "Every Tomb of Light package requires an active Legacy Care &amp; Maintenance plan beginning at purchase.",
             pricing_page,
         )
+        self.assertIn("Full Package Details", pricing_page)
+        self.assertIn("Package Boundaries", pricing_page)
+        self.assertGreaterEqual(pricing_page.count("Full Package Details"), 8)
+        self.assertGreaterEqual(pricing_page.count("Package Boundaries"), 8)
+        self.assertIn("Certificate, Relationship Labels &amp; Vault Access", pricing_page)
+        self.assertIn(
+            "The Tomb of Light Certificate of Lineage is a private legacy deliverable based on the customer’s submitted and reviewed lineage information.",
+            pricing_page,
+        )
+        self.assertIn("Labels may appear as Narrative, Verified, Private, or Unknown", pricing_page)
         self.assertIn(
             "Digital Legacy Portrait and higher family packages include a Private Household Vault",
             homepage,
         )
         self.assertIn(
             "Organization Records Vault, not a household vault by default.",
+            homepage,
+        )
+        self.assertIn(
+            "Every Tomb of Light purchase includes a private legacy tree or structure experience,",
             homepage,
         )
         self.assertIn("Full Tomb of Light Pricing", pricing_page)
@@ -177,6 +191,7 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
         self.assertNotIn("Maintenance starts on delivery", homepage)
         self.assertNotIn("Maintenance starts on activation", homepage)
         self.assertNotIn("Maintenance options are being refreshed", homepage)
+        self.assertNotIn("Every Tomb of Light purchase includes a private family tree build", homepage)
         self.assertNotIn('id="section-cta"', homepage)
         self.assertEqual(homepage.count('id="pricing"'), 1)
         self.assertEqual(pricing_page.count('class="cookie-banner"'), 1)
