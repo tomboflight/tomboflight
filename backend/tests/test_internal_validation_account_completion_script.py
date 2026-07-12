@@ -317,6 +317,63 @@ class InternalValidationAccountCompletionScriptTests(unittest.TestCase):
         verdict = script._audit_completion_verdict([], [])
         self.assertEqual(verdict, script.AUDIT_VERDICT_SAFE_REPAIRS)
 
+    def test_keith_verdict_is_authorized_upgrade_pending_apply(self):
+        verdict = script._final_verdict_for_account(
+            {
+                "account_key": "keith_goffigan",
+                "conflicts": ["missing_upgrade_evidence"],
+                "upgrade": {"authorization_satisfied": True},
+                "actual_content_inventory": [],
+            }
+        )
+        self.assertEqual(
+            verdict,
+            "SYSTEM READY — AUTHORIZED UPGRADE RECORD PENDING APPLY",
+        )
+
+    def test_business_authorizations_needed_empty_when_ceo_auth_applied(self):
+        audits = [
+            {
+                "account_key": "keith_goffigan",
+                "conflicts": ["missing_upgrade_evidence"],
+                "upgrade": {"event_id": None, "proposed_action_when_missing": "x"},
+                "system_completion_matrix": {},
+            }
+        ]
+        script._apply_operator_authorization(
+            audits,
+            {
+                "source": "CEO operator confirmation",
+                "authorized_by": "Larry Robinson",
+                "authorization_date": "2026-07-12",
+            },
+        )
+        self.assertEqual(script._business_authorizations_needed(audits), [])
+
+    def test_proposed_repairs_lists_larry_no_write_when_not_required(self):
+        audits = [
+            {
+                "account_key": "larry_robinson",
+                "conflicts": [],
+                "mint": {
+                    "mint_record_id": script.EXPECTED_LARRY_CANONICAL_MINT["mint_record_id"],
+                    "wallet_address": script.EXPECTED_LARRY_CANONICAL_MINT["wallet_address"],
+                    "wallet_field_sources": {"project.mint_wallet": script.EXPECTED_LARRY_CANONICAL_MINT["wallet_address"]},
+                },
+            }
+        ]
+        repairs = script._build_proposed_repairs(
+            audits,
+            script.account_specs(),
+            {
+                "source": "CEO operator confirmation",
+                "authorized_by": "Larry Robinson",
+                "authorization_date": "2026-07-12",
+            },
+        )
+        larry = [item for item in repairs if item.get("account_key") == "larry_robinson"][0]
+        self.assertEqual(larry.get("proposed_value"), "no_write_required")
+
     def test_intended_state_summary_lists_all_accounts(self):
         summary = script.build_intended_state_summary(script.account_specs())
         self.assertEqual(len(summary), 4)

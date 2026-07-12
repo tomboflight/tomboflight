@@ -638,6 +638,12 @@ def _audit_account(db: Any, spec: AccountSpec) -> dict[str, Any]:
     current_lane = str((entitlement or {}).get("package_lane") or (project or {}).get("project_lane") or (project or {}).get("lane") or "").strip()
     owner_user_id = _doc_id((project or {}).get("owner_user_id"))
     owner_email = str((project or {}).get("owner_email") or "").strip().lower()
+    membership_doc = db["project_members"].find_one(
+        {
+            "project_id": {"$in": _obj_or_str_candidates(spec.project_id)},
+            "$or": [{"user_id": spec.user_id}, {"email": spec.email}],
+        }
+    )
 
     conflicts: list[str] = []
     if user is None or _doc_id(user) != spec.user_id:
@@ -693,6 +699,9 @@ def _audit_account(db: Any, spec: AccountSpec) -> dict[str, Any]:
             "active_package_code": current_package or None,
             "active_lane": current_lane or None,
             "entitlement_id": _doc_id(entitlement) or None,
+            "membership_record_id": _doc_id(membership_doc) or None,
+            "membership_role": (membership_doc or {}).get("member_role"),
+            "membership_status": (membership_doc or {}).get("status"),
         },
         "billing": {
             "orders": orders,
@@ -1188,53 +1197,6 @@ def _apply_controlled_repairs(
         )}
     )
 
-    larry = specs["larry_robinson"]
-    repairs.append(
-        {"account_key": "larry_robinson", "repair": "mint_wallet_normalization", **_normalize_larry_mint_wallet_if_safe(
-            db,
-            larry,
-            script_execution_id=script_execution_id,
-            write_log=write_log,
-        )}
-    )
-
-    for key in ("jennifer_wood", "marquis_floyd", "keith_goffigan"):
-        spec = specs[key]
-        for order in db["orders"].find({"email": spec.email}).sort("created_at", -1).limit(3):
-            session_id = str(order.get("stripe_session_id") or "").strip()
-            if not session_id:
-                continue
-            snapshot = _stripe_session_snapshot(session_id)
-            _backfill_order_from_stripe_snapshot(
-                db,
-                spec=spec,
-                order=order,
-                snapshot=snapshot,
-                script_execution_id=script_execution_id,
-                write_log=write_log,
-            )
-            repairs.append(
-                {
-                    "account_key": spec.key,
-                    "repair": "billing_metadata_backfill",
-                    "order_id": _doc_id(order),
-                    "stripe_status": snapshot.get("status"),
-                }
-            )
-
-    for spec in specs.values():
-        project = _find_project(db, spec)
-        if project is not None:
-            ensure_project_owner_membership(project)
-            upsert_project_entitlement(
-                project_id=spec.project_id,
-                user_id=spec.user_id,
-                package_code=spec.expected_package_code,
-                active_addons=[],
-                status="active",
-            )
-            repairs.append({"account_key": spec.key, "repair": "access_context_refresh"})
-
     return repairs
 
 
@@ -1273,9 +1235,126 @@ def build_intended_state_summary(specs: dict[str, AccountSpec]) -> list[dict[str
     ]
 
 
+def _is_authorization_recorded(operator_authorization: dict[str, str]) -> bool:
+    return all(
+        bool(str(operator_authorization.get(key) or "").strip())
+        for key in ("source", "authorized_by", "authorization_date")
+    )
+
+
+def _apply_operator_authorization(audits: list[dict[str, Any]], operator_authorization: dict[str, str]) -> None:
+    if not _is_authorization_recorded(operator_authorization):
+        return
+    for audit in audits:
+        if str(audit.get("account_key") or "") != "keith_goffigan":
+            continue
+        conflicts = list(audit.get("conflicts") or [])
+        if "missing_upgrade_evidence" not in conflicts:
+            continue
+        upgrade = audit.get("upgrade") or {}
+        upgrade["authorization_satisfied"] = True
+        upgrade["proposed_action_when_missing"] = "CEO authorization present — upgrade evidence record pending apply"
+        audit["upgrade"] = upgrade
+        system_matrix = audit.get("system_completion_matrix") or {}
+        system_matrix["Correct upgrade evidence"] = "Authorized upgrade record pending apply"
+        audit["system_completion_matrix"] = system_matrix
+
+
+def _business_authorizations_needed(audits: list[dict[str, Any]]) -> list[str]:
+    needed: list[str] = []
+    for audit in audits:
+        upgrade = audit.get("upgrade") or {}
+        if upgrade.get("proposed_action_when_missing") and not upgrade.get("authorization_satisfied"):
+            needed.append(f"{audit.get('account_key')}:upgrade_authorization")
+    return sorted(set(needed))
+
+
+def _build_proposed_repairs(
+    audits: list[dict[str, Any]],
+    specs: dict[str, AccountSpec],
+    operator_authorization: dict[str, str],
+) -> list[dict[str, Any]]:
+    by_key = {str(item.get("account_key") or ""): item for item in audits}
+    repairs: list[dict[str, Any]] = []
+
+    jennifer = by_key.get("jennifer_wood") or {}
+    jennifer_state = jennifer.get("current_state") or {}
+    if (jennifer.get("system_completion_matrix") or {}).get("Correct membership") != "Complete":
+        repairs.append(
+            {
+                "account_key": "jennifer_wood",
+                "collection": "project_members",
+                "record_ref": f"project:{specs['jennifer_wood'].project_id}|owner:{specs['jennifer_wood'].user_id}",
+                "current_value": {
+                    "membership_record_id": jennifer_state.get("membership_record_id"),
+                    "member_role": jennifer_state.get("membership_role"),
+                    "status": jennifer_state.get("membership_status"),
+                },
+                "proposed_value": {"member_role": "billing_owner", "status": "active"},
+                "reason": "create_or_restore_owner_membership_for_project_owner",
+                "authorization_source": operator_authorization.get("source"),
+            }
+        )
+
+    keith = by_key.get("keith_goffigan") or {}
+    keith_upgrade = keith.get("upgrade") or {}
+    if not keith_upgrade.get("event_id"):
+        repairs.append(
+            {
+                "account_key": "keith_goffigan",
+                "collection": "finance_events",
+                "record_ref": f"event_type:package_upgrade|project_id:{specs['keith_goffigan'].project_id}|email:{specs['keith_goffigan'].email}",
+                "current_value": None,
+                "proposed_value": {
+                    "event_type": "package_upgrade",
+                    "original_package_code": specs["keith_goffigan"].original_package_code,
+                    "upgraded_package_code": specs["keith_goffigan"].expected_package_code,
+                    "upgraded_lane": specs["keith_goffigan"].expected_lane,
+                    "historical_effective_date": None,
+                },
+                "reason": "record_ceo_authorized_upgrade_evidence_without_changing_billing_history",
+                "authorization_source": operator_authorization.get("source"),
+            }
+        )
+
+    larry = by_key.get("larry_robinson") or {}
+    larry_conflicts = list(larry.get("conflicts") or [])
+    mint = larry.get("mint") or {}
+    if "unexpected_larry_mint_conflict" in larry_conflicts:
+        repairs.append(
+            {
+                "account_key": "larry_robinson",
+                "collection": "mint_records",
+                "record_ref": mint.get("mint_record_id") or specs["larry_robinson"].project_id,
+                "current_value": {"wallet_address": mint.get("wallet_address"), "wallet_field_sources": mint.get("wallet_field_sources")},
+                "proposed_value": {
+                    "wallet_address": EXPECTED_LARRY_CANONICAL_MINT["wallet_address"],
+                    "metadata_normalization_source": "project.mint_wallet",
+                },
+                "reason": "normalize_wallet_metadata_only_if_required_without_remint",
+                "authorization_source": operator_authorization.get("source"),
+            }
+        )
+    else:
+        repairs.append(
+            {
+                "account_key": "larry_robinson",
+                "collection": "mint_records",
+                "record_ref": mint.get("mint_record_id") or specs["larry_robinson"].project_id,
+                "current_value": {"wallet_address": mint.get("wallet_address"), "wallet_field_sources": mint.get("wallet_field_sources")},
+                "proposed_value": "no_write_required",
+                "reason": "existing_project_mint_wallet_already_satisfies_canonical_mint_display",
+                "authorization_source": operator_authorization.get("source"),
+            }
+        )
+    return repairs
+
+
 def _final_verdict_for_account(audit: dict[str, Any]) -> str:
     conflicts = list(audit.get("conflicts") or [])
     if conflicts:
+        if conflicts == ["missing_upgrade_evidence"] and bool((audit.get("upgrade") or {}).get("authorization_satisfied")):
+            return "SYSTEM READY — AUTHORIZED UPGRADE RECORD PENDING APPLY"
         requires_business = all(
             item in {"missing_upgrade_evidence"} for item in conflicts
         )
@@ -1303,7 +1382,7 @@ def _final_verdict_for_account(audit: dict[str, Any]) -> str:
 def _audit_completion_verdict(audits: list[dict[str, Any]], blockers: list[str]) -> str:
     if blockers:
         return AUDIT_VERDICT_APPLY_BLOCKED
-    if any((item.get("upgrade") or {}).get("proposed_action_when_missing") for item in audits):
+    if _business_authorizations_needed(audits):
         return AUDIT_VERDICT_AUTH_REQUIRED
     any_content_gap = any(
         entry.get("package_required") and entry.get("missing")
@@ -1378,12 +1457,18 @@ def main() -> int:
         return EXIT_VALIDATION_ERROR
 
     script_execution_id = _now().strftime("internal-account-repair-%Y%m%dT%H%M%S%fZ")
+    operator_authorization = {
+        "source": str(args.operator_authorization_source or "").strip(),
+        "authorized_by": str(args.operator_authorized_by or "").strip(),
+        "authorization_date": str(args.operator_authorization_date or "").strip(),
+    }
     audits: list[dict[str, Any]] = []
     write_log: list[dict[str, Any]] = []
     applied_repairs: list[dict[str, Any]] = []
     try:
         for spec in specs.values():
             audits.append(_audit_account(db, spec))
+        _apply_operator_authorization(audits, operator_authorization)
         cross_conflicts = _cross_account_conflicts(audits)
         apply_blockers = _collect_apply_blockers(audits, cross_conflicts)
 
@@ -1403,11 +1488,13 @@ def main() -> int:
             audits = []
             for spec in specs.values():
                 audits.append(_audit_account(db, spec))
+            _apply_operator_authorization(audits, operator_authorization)
 
         genesis = _audit_genesis_prototype_separation(db)
     finally:
         close_mongo_connection()
 
+    proposed_repairs = _build_proposed_repairs(audits, specs, operator_authorization)
     report = {
         "mode": "apply" if args.apply else "audit_only",
         "script_execution_id": script_execution_id,
@@ -1435,13 +1522,20 @@ def main() -> int:
             for item in audits
         ],
         "remaining_business_decisions": sorted(
-            {
-                "Missing verified source data — business authorization required"
-                for item in audits
-                if (item.get("upgrade") or {}).get("proposed_action_when_missing")
-            }
+            _business_authorizations_needed(audits)
         ),
         "remaining_customer_content_requirements": "See account_completion_matrix.actual_content_inventory",
+        "proposed_repairs": proposed_repairs,
+        "safe_repairs": [
+            item
+            for item in proposed_repairs
+            if item.get("account_key") in {"jennifer_wood", "keith_goffigan"}
+        ],
+        "business_authorizations_needed": _business_authorizations_needed(audits),
+        "apply_scope": [
+            "jennifer_wood:project_members owner membership",
+            "keith_goffigan:finance_events package_upgrade evidence",
+        ],
         "applied_repairs": applied_repairs,
         "write_log": write_log,
         "write_log_count": len(write_log),
@@ -1456,11 +1550,7 @@ def main() -> int:
         ],
         "no_stripe_mutations_performed": True,
         "no_blockchain_operations_performed": True,
-        "operator_authorization": {
-            "source": str(args.operator_authorization_source or "").strip(),
-            "authorized_by": str(args.operator_authorized_by or "").strip(),
-            "authorization_date": str(args.operator_authorization_date or "").strip(),
-        },
+        "operator_authorization": operator_authorization,
         "final_verdict": _audit_completion_verdict(
             audits,
             _collect_apply_blockers(audits, _cross_account_conflicts(audits)),
