@@ -10,6 +10,7 @@ from typing import Any
 
 from bson import ObjectId
 
+from app.config import settings
 from app.core.package_catalog import get_package
 from app.database import close_mongo_connection, connect_to_mongo
 from app.services.project_entitlement_service import upsert_project_entitlement
@@ -24,6 +25,10 @@ EXIT_IDENTITY_OR_OWNERSHIP_CONFLICT = 10
 EXIT_CONTENT_ONLY_GAPS = 20
 
 SAFE_ENVIRONMENTS = {"production", "staging", "development"}
+CEO_AUTHORIZATION_SOURCE = "CEO operator confirmation"
+CEO_AUTHORIZED_BY = "Larry Robinson"
+CEO_AUTHORIZATION_DATE = "2026-07-12"
+KEITH_UPGRADE_REASON = "Customer family situation and required household structure changed"
 EXPECTED_LARRY_CANONICAL_MINT = {
     "token_id": "1",
     "chain": "base-mainnet",
@@ -33,6 +38,11 @@ EXPECTED_LARRY_CANONICAL_MINT = {
     "mint_record_id": "69cae30f786977dfd046eaef",
     "version_number": 2,
 }
+
+AUDIT_VERDICT_SAFE_REPAIRS = "AUDIT COMPLETE — SAFE REPAIRS AVAILABLE"
+AUDIT_VERDICT_AUTH_REQUIRED = "AUDIT COMPLETE — BUSINESS AUTHORIZATION REQUIRED"
+AUDIT_VERDICT_CONTENT_REQUIRED = "AUDIT COMPLETE — CUSTOMER CONTENT REQUIRED"
+AUDIT_VERDICT_APPLY_BLOCKED = "APPLY BLOCKED — UNRESOLVED DATA CONFLICT"
 
 
 @dataclass(frozen=True)
@@ -163,9 +173,34 @@ def _doc_id(value: Any) -> str:
     return str(raw or "").strip()
 
 
+def _serialize(value: Any) -> Any:
+    if isinstance(value, ObjectId):
+        return str(value)
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {key: _serialize(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_serialize(item) for item in value]
+    return value
+
+
 def _obj_or_str_candidates(raw_id: str) -> list[Any]:
     oid = _oid(raw_id)
     return [oid, raw_id] if oid is not None else [raw_id]
+
+
+def _project_ref_values(raw_id: str) -> list[Any]:
+    values = _obj_or_str_candidates(raw_id)
+    oid = _oid(raw_id)
+    if oid is not None:
+        oid_text = str(oid)
+        values.extend([f'ObjectId("{oid_text}")', f"ObjectId('{oid_text}')"])
+    seen: list[Any] = []
+    for value in values:
+        if value not in seen:
+            seen.append(value)
+    return seen
 
 
 def _safe_count(db: Any, collection: str, query: dict[str, Any]) -> int:
@@ -173,6 +208,12 @@ def _safe_count(db: Any, collection: str, query: dict[str, Any]) -> int:
         return int(db[collection].count_documents(query))
     except Exception:
         return 0
+
+
+def _collection_handle(db: Any, collection: str) -> Any | None:
+    if isinstance(db, dict):
+        return db.get(collection)
+    return db[collection]
 
 
 def _find_by_id(db: Any, collection: str, raw_id: str) -> dict[str, Any] | None:
@@ -279,6 +320,200 @@ def _find_larry_mint(db: Any, spec: AccountSpec) -> dict[str, Any] | None:
     )
 
 
+def _extract_wallet_from_mint(mint_doc: dict[str, Any] | None, project: dict[str, Any] | None) -> tuple[str, dict[str, Any]]:
+    mint_doc = mint_doc or {}
+    project = project or {}
+    candidate_sources = {
+        "mint.wallet_address": mint_doc.get("wallet_address"),
+        "mint.mint_wallet": mint_doc.get("mint_wallet"),
+        "mint.canonical_wallet": mint_doc.get("canonical_wallet"),
+        "mint.wallet": mint_doc.get("wallet"),
+        "project.mint_wallet": project.get("mint_wallet"),
+        "project.wallet_address": project.get("wallet_address"),
+    }
+    normalized_sources = {
+        key: str(value or "").strip() or None for key, value in candidate_sources.items()
+    }
+    for value in normalized_sources.values():
+        if value:
+            return value, normalized_sources
+    return "", normalized_sources
+
+
+def _stripe_session_snapshot(session_id: str) -> dict[str, Any]:
+    session_id = str(session_id or "").strip()
+    if not session_id:
+        return {"status": "missing_session_id"}
+    stripe_secret_key = str(settings.stripe_secret_key or "").strip()
+    if not stripe_secret_key:
+        return {"status": "stripe_secret_key_not_configured"}
+    import stripe
+
+    stripe.api_key = stripe_secret_key
+    session = stripe.checkout.Session.retrieve(
+        session_id,
+        expand=[
+            "line_items.data.price.product",
+            "total_details.breakdown.discounts.discount.promotion_code",
+            "total_details.breakdown.discounts.discount.coupon",
+            "payment_link",
+            "customer_details",
+        ],
+    )
+    payload = session.to_dict_recursive() if hasattr(session, "to_dict_recursive") else dict(session)
+    discounts = (
+        (((payload.get("total_details") or {}).get("breakdown") or {}).get("discounts") or [])
+    )
+    promotion_code = None
+    coupon_id = None
+    for discount_entry in discounts:
+        discount_obj = (discount_entry or {}).get("discount") or {}
+        promo = discount_obj.get("promotion_code")
+        coupon = discount_obj.get("coupon")
+        if isinstance(promo, dict):
+            promotion_code = str(promo.get("code") or promo.get("id") or "").strip() or None
+        else:
+            promotion_code = str(promo or "").strip() or promotion_code
+        if isinstance(coupon, dict):
+            coupon_id = str(coupon.get("id") or coupon.get("name") or "").strip() or None
+        else:
+            coupon_id = str(coupon or "").strip() or coupon_id
+    line_items = []
+    for item in ((payload.get("line_items") or {}).get("data") or []):
+        price = (item or {}).get("price") or {}
+        product = price.get("product") if isinstance(price, dict) else None
+        line_items.append(
+            {
+                "description": (item or {}).get("description"),
+                "quantity": (item or {}).get("quantity"),
+                "price_id": (price or {}).get("id") if isinstance(price, dict) else None,
+                "product_id": (product or {}).get("id") if isinstance(product, dict) else None,
+                "product_name": (product or {}).get("name") if isinstance(product, dict) else None,
+            }
+        )
+    payment_link = payload.get("payment_link")
+    payment_link_id = payment_link.get("id") if isinstance(payment_link, dict) else payment_link
+    return {
+        "status": "ok",
+        "session_id": payload.get("id"),
+        "customer": payload.get("customer"),
+        "customer_email": (payload.get("customer_details") or {}).get("email"),
+        "payment_status": payload.get("payment_status"),
+        "amount_subtotal": payload.get("amount_subtotal"),
+        "amount_total": payload.get("amount_total"),
+        "discount_amount": (payload.get("total_details") or {}).get("amount_discount"),
+        "promotion_code": promotion_code,
+        "coupon_id": coupon_id,
+        "payment_link_id": payment_link_id,
+        "line_items": line_items,
+        "created": payload.get("created"),
+    }
+
+
+def _content_inventory_for_account(db: Any, spec: AccountSpec) -> list[dict[str, Any]]:
+    checks = [
+        {
+            "key": "primary_portrait",
+            "collections": ["uploaded_files"],
+            "query": {"category": {"$in": ["portrait", "primary_portrait"]}},
+            "packages": ["digital_legacy_portrait", "legacy_plus"],
+            "owner": "customer",
+        },
+        {
+            "key": "biography_story",
+            "collections": ["intake_submissions"],
+            "query": {},
+            "packages": ["digital_legacy_portrait", "household_foundation", "legacy_plus"],
+            "owner": "customer",
+        },
+        {
+            "key": "supporting_photos",
+            "collections": ["uploaded_files"],
+            "query": {"category": {"$in": ["supporting_photo", "gallery_image"]}},
+            "packages": ["digital_legacy_portrait", "household_foundation", "legacy_plus"],
+            "owner": "customer",
+        },
+        {
+            "key": "audio_video_documents",
+            "collections": ["uploaded_files", "vault_files"],
+            "query": {"category": {"$in": ["audio", "video", "document"]}},
+            "packages": ["household_foundation", "legacy_plus"],
+            "owner": "customer",
+        },
+        {
+            "key": "vault_items",
+            "collections": ["vault_files"],
+            "query": {},
+            "packages": ["digital_legacy_portrait", "household_foundation", "legacy_plus"],
+            "owner": "customer",
+        },
+        {
+            "key": "review_submissions",
+            "collections": ["project_reviews", "review_submissions"],
+            "query": {},
+            "packages": ["digital_legacy_portrait", "household_foundation", "legacy_plus"],
+            "owner": "customer",
+        },
+        {
+            "key": "certificate_record",
+            "collections": ["issued_certificates"],
+            "query": {},
+            "packages": ["digital_legacy_portrait", "household_foundation", "legacy_plus"],
+            "owner": "production_team",
+        },
+        {
+            "key": "delivery_record",
+            "collections": ["deliveries", "delivery_records"],
+            "query": {},
+            "packages": ["digital_legacy_portrait", "household_foundation", "legacy_plus"],
+            "owner": "production_team",
+        },
+        {
+            "key": "viewer_build",
+            "collections": ["viewer_builds", "viewer_snapshots"],
+            "query": {},
+            "packages": ["digital_legacy_portrait", "household_foundation", "legacy_plus"],
+            "owner": "production_team",
+        },
+    ]
+    inventory: list[dict[str, Any]] = []
+    for check in checks:
+        applicable = spec.expected_package_code in check["packages"]
+        combined_ids: list[str] = []
+        combined_count = 0
+        statuses: list[str] = []
+        for collection in check["collections"]:
+            col = _collection_handle(db, collection)
+            if col is None:
+                continue
+            query = dict(check["query"])
+            query["$or"] = [
+                {"project_id": {"$in": _project_ref_values(spec.project_id)}},
+                {"owner_project_id": {"$in": _project_ref_values(spec.project_id)}},
+                {"household_id": {"$in": _project_ref_values(spec.household_id)}},
+                {"family_id": {"$in": _project_ref_values(spec.family_id)}},
+                {"email": spec.email},
+            ]
+            docs = list(col.find(query).limit(20))
+            combined_count += len(docs)
+            combined_ids.extend(_doc_id(doc) for doc in docs)
+            statuses.extend(str(doc.get("status") or "").strip() for doc in docs if doc.get("status"))
+        missing = applicable and combined_count == 0
+        inventory.append(
+            {
+                "content_key": check["key"],
+                "collections": check["collections"],
+                "package_required": applicable,
+                "record_count": combined_count,
+                "record_ids": [value for value in combined_ids if value][:10],
+                "current_status": sorted(set(value for value in statuses if value)) or None,
+                "missing": missing,
+                "responsible_party": check["owner"] if applicable else "not_applicable",
+            }
+        )
+    return inventory
+
+
 def _package_name(package_code: str) -> str:
     package = get_package(package_code) or {}
     return str(package.get("display_name") or package_code.replace("_", " ").title())
@@ -288,6 +523,8 @@ def _maintenance_classification(entitlement: dict[str, Any], orders: list[dict[s
     status = str(entitlement.get("maintenance_status") or "").strip().lower()
     plan = str(entitlement.get("maintenance_plan") or "").strip().lower()
     has_subscription = bool(entitlement.get("maintenance_stripe_subscription_id"))
+    if plan == "monthly" and status == "scheduled":
+        return "Maintenance scheduled — billing activation or policy confirmation pending"
     if status in {"active", "started"} and has_subscription:
         return "active paid maintenance"
     if any((order.get("promotion_code") or order.get("coupon_id")) for order in orders):
@@ -366,22 +603,22 @@ def _system_completion_matrix(
     }
 
 
-def _content_completion_matrix() -> dict[str, str]:
-    return {
-        "Portrait image": "Requires customer",
-        "Biography or legacy story": "Requires customer",
-        "Supporting photographs": "Requires customer",
-        "Household member information": "Requires customer",
-        "Relationship information": "Requires customer",
-        "Voice recordings": "Requires customer",
-        "Videos": "Requires customer",
-        "Documents": "Requires customer",
-        "Scheduled messages": "Requires customer",
-        "Time-lock dates": "Requires customer",
-        "Customer review": "Requires customer",
-        "Customer approval": "Requires customer",
-        "Final production assets": "Requires production team",
-    }
+def _content_completion_matrix(actual_inventory: list[dict[str, Any]]) -> dict[str, str]:
+    matrix: dict[str, str] = {}
+    for item in actual_inventory:
+        key = str(item.get("content_key") or "")
+        if not key:
+            continue
+        if not item.get("package_required"):
+            matrix[key] = "Not required for package"
+        elif item.get("missing"):
+            if item.get("responsible_party") == "production_team":
+                matrix[key] = "Requires production team"
+            else:
+                matrix[key] = "Requires customer"
+        else:
+            matrix[key] = "Complete"
+    return matrix
 
 
 def _audit_account(db: Any, spec: AccountSpec) -> dict[str, Any]:
@@ -424,16 +661,19 @@ def _audit_account(db: Any, spec: AccountSpec) -> dict[str, Any]:
         conflicts.append("missing_upgrade_evidence")
 
     mint = {}
+    content_inventory = _content_inventory_for_account(db, spec)
     if spec.key == "larry_robinson":
         mint_doc = _find_larry_mint(db, spec)
+        resolved_wallet, wallet_sources = _extract_wallet_from_mint(mint_doc, project)
         mint = {
             "mint_record_id": _doc_id(mint_doc),
             "token_id": str((mint_doc or {}).get("token_id") or (mint_doc or {}).get("public_token_id") or ""),
             "chain": str((mint_doc or {}).get("chain") or ""),
             "contract_address": str((mint_doc or {}).get("contract_address") or ""),
             "tx_hash": str((mint_doc or {}).get("tx_hash") or ""),
-            "wallet_address": str((mint_doc or {}).get("wallet_address") or ""),
+            "wallet_address": resolved_wallet,
             "version_number": (mint_doc or {}).get("version_number"),
+            "wallet_field_sources": wallet_sources,
         }
         for key, expected in EXPECTED_LARRY_CANONICAL_MINT.items():
             if str(mint.get(key) or "") != str(expected):
@@ -462,7 +702,7 @@ def _audit_account(db: Any, spec: AccountSpec) -> dict[str, Any]:
             "event_id": _doc_id(upgrade_event) or None,
             "details": (upgrade_event or {}).get("details"),
             "proposed_action_when_missing": (
-                "Missing verified source data — no write performed"
+                "Missing verified source data — business authorization required"
                 if spec.requires_upgrade_evidence and upgrade_event is None
                 else None
             ),
@@ -495,7 +735,8 @@ def _audit_account(db: Any, spec: AccountSpec) -> dict[str, Any]:
             orders=orders,
             upgrade_event=upgrade_event,
         ),
-        "customer_content_matrix": _content_completion_matrix(),
+        "customer_content_matrix": _content_completion_matrix(content_inventory),
+        "actual_content_inventory": content_inventory,
     }
 
 
@@ -726,14 +967,291 @@ def _apply_one_account(
     }
 
 
+def _record_keith_upgrade_evidence(
+    db: Any,
+    spec: AccountSpec,
+    *,
+    script_execution_id: str,
+    write_log: list[dict[str, Any]],
+) -> dict[str, Any]:
+    existing = _find_upgrade_event(db, spec)
+    details = {
+        "authorization_source": CEO_AUTHORIZATION_SOURCE,
+        "authorized_by": CEO_AUTHORIZED_BY,
+        "authorization_date": CEO_AUTHORIZATION_DATE,
+        "historical_effective_date": None,
+        "original_package_code": spec.original_package_code,
+        "upgraded_package_code": spec.expected_package_code,
+        "upgraded_lane": spec.expected_lane,
+        "upgrade_reason": KEITH_UPGRADE_REASON,
+        "additional_payment_requirement": "unknown",
+        "coupon_information": "pending Stripe verification",
+        "audit_note": "Original transaction preserved; active entitlement upgraded",
+    }
+    now = _now()
+    if existing is None:
+        insert_doc = {
+            "event_type": "package_upgrade",
+            "project_id": _oid(spec.project_id) or spec.project_id,
+            "customer_email": spec.email,
+            "customer_user_id": _oid(spec.user_id) or spec.user_id,
+            "details": details,
+            "occurred_at": None,
+            "created_at": now,
+            "updated_at": now,
+        }
+        result = db["finance_events"].insert_one(insert_doc)
+        created = db["finance_events"].find_one({"_id": result.inserted_id}) or insert_doc
+        _record_write(
+            write_log=write_log,
+            script_execution_id=script_execution_id,
+            collection="finance_events",
+            record_id=_doc_id(created),
+            operation="insert_one",
+            previous_values={},
+            new_values={"event_type": "package_upgrade", "details": details},
+            reason="record_ceo_authorized_keith_upgrade_evidence",
+        )
+        return {"operation": "inserted_upgrade_evidence", "event_id": _doc_id(created)}
+    before = dict(existing)
+    update_fields = {
+        "details": {**(existing.get("details") or {}), **details},
+        "updated_at": now,
+    }
+    db["finance_events"].update_one({"_id": existing["_id"]}, {"$set": update_fields})
+    after = db["finance_events"].find_one({"_id": existing["_id"]}) or {}
+    previous, new = _changed_fields(before, after, ["details", "updated_at"])
+    _record_write(
+        write_log=write_log,
+        script_execution_id=script_execution_id,
+        collection="finance_events",
+        record_id=_doc_id(existing),
+        operation="update_one",
+        previous_values=previous,
+        new_values=new,
+        reason="refresh_ceo_authorized_keith_upgrade_evidence",
+    )
+    return {"operation": "updated_upgrade_evidence", "event_id": _doc_id(existing)}
+
+
+def _normalize_larry_mint_wallet_if_safe(
+    db: Any,
+    spec: AccountSpec,
+    *,
+    script_execution_id: str,
+    write_log: list[dict[str, Any]],
+) -> dict[str, Any]:
+    project = _find_project(db, spec) or {}
+    mint_doc = _find_larry_mint(db, spec)
+    if mint_doc is None:
+        return {"operation": "skipped", "reason": "mint_record_missing"}
+    resolved_wallet, wallet_sources = _extract_wallet_from_mint(mint_doc, project)
+    if not resolved_wallet:
+        return {"operation": "skipped", "reason": "wallet_source_missing", "sources": wallet_sources}
+    if resolved_wallet != EXPECTED_LARRY_CANONICAL_MINT["wallet_address"]:
+        return {
+            "operation": "skipped",
+            "reason": "wallet_source_mismatch",
+            "resolved_wallet": resolved_wallet,
+        }
+    before = dict(mint_doc)
+    update_fields = {
+        "wallet_address": resolved_wallet,
+        "mint_wallet": str(mint_doc.get("mint_wallet") or resolved_wallet),
+        "updated_at": _now(),
+        "metadata_normalization_source": "project.mint_wallet",
+    }
+    db["mint_records"].update_one({"_id": mint_doc["_id"]}, {"$set": update_fields})
+    after = db["mint_records"].find_one({"_id": mint_doc["_id"]}) or {}
+    previous, new = _changed_fields(
+        before,
+        after,
+        ["wallet_address", "mint_wallet", "metadata_normalization_source", "updated_at"],
+    )
+    _record_write(
+        write_log=write_log,
+        script_execution_id=script_execution_id,
+        collection="mint_records",
+        record_id=_doc_id(mint_doc),
+        operation="update_one",
+        previous_values=previous,
+        new_values=new,
+        reason="normalize_canonical_mint_wallet_fields_without_remint",
+    )
+    return {
+        "operation": "normalized_wallet_metadata",
+        "mint_record_id": _doc_id(mint_doc),
+        "resolved_wallet": resolved_wallet,
+    }
+
+
+def _backfill_order_from_stripe_snapshot(
+    db: Any,
+    *,
+    spec: AccountSpec,
+    order: dict[str, Any],
+    snapshot: dict[str, Any],
+    script_execution_id: str,
+    write_log: list[dict[str, Any]],
+) -> None:
+    if snapshot.get("status") != "ok":
+        return
+    before = dict(order)
+    updates = {
+        "promotion_code": snapshot.get("promotion_code"),
+        "coupon_id": snapshot.get("coupon_id"),
+        "discount_amount": snapshot.get("discount_amount"),
+        "final_amount_paid": snapshot.get("amount_total"),
+        "amount_paid": snapshot.get("amount_total"),
+        "stripe_payment_link_id": snapshot.get("payment_link_id") or order.get("stripe_payment_link_id"),
+        "updated_at": _now(),
+    }
+    db["orders"].update_one({"_id": order["_id"]}, {"$set": updates})
+    after = db["orders"].find_one({"_id": order["_id"]}) or {}
+    previous, new = _changed_fields(
+        before,
+        after,
+        [
+            "promotion_code",
+            "coupon_id",
+            "discount_amount",
+            "final_amount_paid",
+            "amount_paid",
+            "stripe_payment_link_id",
+            "updated_at",
+        ],
+    )
+    _record_write(
+        write_log=write_log,
+        script_execution_id=script_execution_id,
+        collection="orders",
+        record_id=_doc_id(order),
+        operation="update_one",
+        previous_values=previous,
+        new_values=new,
+        reason=f"stripe_read_only_billing_backfill:{spec.key}",
+    )
+
+
+def _apply_controlled_repairs(
+    db: Any,
+    specs: dict[str, AccountSpec],
+    *,
+    script_execution_id: str,
+    write_log: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    repairs: list[dict[str, Any]] = []
+
+    jennifer = specs["jennifer_wood"]
+    j_project = _find_project(db, jennifer)
+    j_membership_before = db["project_members"].find_one(
+        {
+            "project_id": {"$in": _obj_or_str_candidates(jennifer.project_id)},
+            "$or": [{"user_id": jennifer.user_id}, {"email": jennifer.email}],
+        }
+    )
+    if j_project is None:
+        raise RuntimeError("jennifer_wood: project missing for membership repair.")
+    ensure_project_owner_membership(j_project)
+    j_membership_after = db["project_members"].find_one(
+        {
+            "project_id": {"$in": _obj_or_str_candidates(jennifer.project_id)},
+            "$or": [{"user_id": jennifer.user_id}, {"email": jennifer.email}],
+        }
+    )
+    if j_membership_after is None:
+        raise RuntimeError("jennifer_wood: membership repair failed.")
+    previous, new = _changed_fields(
+        j_membership_before or {},
+        j_membership_after or {},
+        ["member_role", "status", "project_id", "user_id", "email"],
+    )
+    _record_write(
+        write_log=write_log,
+        script_execution_id=script_execution_id,
+        collection="project_members",
+        record_id=_doc_id(j_membership_after),
+        operation="service:ensure_project_owner_membership",
+        previous_values=previous,
+        new_values=new,
+        reason="repair_missing_jennifer_owner_membership",
+    )
+    repairs.append({"account_key": "jennifer_wood", "repair": "owner_membership"})
+
+    keith = specs["keith_goffigan"]
+    repairs.append(
+        {"account_key": "keith_goffigan", "repair": "upgrade_evidence", **_record_keith_upgrade_evidence(
+            db,
+            keith,
+            script_execution_id=script_execution_id,
+            write_log=write_log,
+        )}
+    )
+
+    larry = specs["larry_robinson"]
+    repairs.append(
+        {"account_key": "larry_robinson", "repair": "mint_wallet_normalization", **_normalize_larry_mint_wallet_if_safe(
+            db,
+            larry,
+            script_execution_id=script_execution_id,
+            write_log=write_log,
+        )}
+    )
+
+    for key in ("jennifer_wood", "marquis_floyd", "keith_goffigan"):
+        spec = specs[key]
+        for order in db["orders"].find({"email": spec.email}).sort("created_at", -1).limit(3):
+            session_id = str(order.get("stripe_session_id") or "").strip()
+            if not session_id:
+                continue
+            snapshot = _stripe_session_snapshot(session_id)
+            _backfill_order_from_stripe_snapshot(
+                db,
+                spec=spec,
+                order=order,
+                snapshot=snapshot,
+                script_execution_id=script_execution_id,
+                write_log=write_log,
+            )
+            repairs.append(
+                {
+                    "account_key": spec.key,
+                    "repair": "billing_metadata_backfill",
+                    "order_id": _doc_id(order),
+                    "stripe_status": snapshot.get("status"),
+                }
+            )
+
+    for spec in specs.values():
+        project = _find_project(db, spec)
+        if project is not None:
+            ensure_project_owner_membership(project)
+            upsert_project_entitlement(
+                project_id=spec.project_id,
+                user_id=spec.user_id,
+                package_code=spec.expected_package_code,
+                active_addons=[],
+                status="active",
+            )
+            repairs.append({"account_key": spec.key, "repair": "access_context_refresh"})
+
+    return repairs
+
+
 def _collect_apply_blockers(audits: list[dict[str, Any]], cross_account_conflicts: list[str]) -> list[str]:
+    repairable_conflicts = {
+        "keith_goffigan:missing_upgrade_evidence",
+        "larry_robinson:unexpected_larry_mint_conflict",
+    }
     blockers: list[str] = []
     if cross_account_conflicts:
         blockers.extend(cross_account_conflicts)
     for audit in audits:
         account = str(audit.get("account_key") or "")
         for conflict in audit.get("conflicts") or []:
-            blockers.append(f"{account}:{conflict}")
+            blocker = f"{account}:{conflict}"
+            if blocker not in repairable_conflicts:
+                blockers.append(blocker)
     return sorted(set(blockers))
 
 
@@ -758,10 +1276,43 @@ def build_intended_state_summary(specs: dict[str, AccountSpec]) -> list[dict[str
 def _final_verdict_for_account(audit: dict[str, Any]) -> str:
     conflicts = list(audit.get("conflicts") or [])
     if conflicts:
-        return "FAIL — A core package, billing, security, or delivery function is not working"
-    if any(value in {"Requires customer", "Requires production team"} for value in (audit.get("customer_content_matrix") or {}).values()):
-        return "CONDITIONAL PASS — Platform works, but named customer-supplied content remains"
-    return "PASS — Complete and production-ready"
+        requires_business = all(
+            item in {"missing_upgrade_evidence"} for item in conflicts
+        )
+        return (
+            "BLOCKED — BUSINESS DECISION REQUIRED"
+            if requires_business
+            else "BLOCKED — VERIFIED SOFTWARE DEFECT"
+        )
+    inventory = list(audit.get("actual_content_inventory") or [])
+    missing_customer = any(
+        item.get("package_required") and item.get("missing") and item.get("responsible_party") == "customer"
+        for item in inventory
+    )
+    missing_production = any(
+        item.get("package_required") and item.get("missing") and item.get("responsible_party") == "production_team"
+        for item in inventory
+    )
+    if missing_customer:
+        return "SYSTEM READY — CUSTOMER CONTENT REQUIRED"
+    if missing_production:
+        return "SYSTEM READY — PRODUCTION ASSETS REQUIRED"
+    return "COMPLETE AND READY FOR CUSTOMER VALIDATION"
+
+
+def _audit_completion_verdict(audits: list[dict[str, Any]], blockers: list[str]) -> str:
+    if blockers:
+        return AUDIT_VERDICT_APPLY_BLOCKED
+    if any((item.get("upgrade") or {}).get("proposed_action_when_missing") for item in audits):
+        return AUDIT_VERDICT_AUTH_REQUIRED
+    any_content_gap = any(
+        entry.get("package_required") and entry.get("missing")
+        for audit in audits
+        for entry in (audit.get("actual_content_inventory") or [])
+    )
+    if any_content_gap:
+        return AUDIT_VERDICT_CONTENT_REQUIRED
+    return AUDIT_VERDICT_SAFE_REPAIRS
 
 
 def _write_report_if_requested(report: dict[str, Any], path: str) -> None:
@@ -778,9 +1329,9 @@ def _determine_exit_code(report: dict[str, Any]) -> int:
     if blocking:
         return EXIT_IDENTITY_OR_OWNERSHIP_CONFLICT
     content_only_missing = any(
-        value in {"Requires customer", "Requires production team"}
+        bool(item.get("package_required")) and bool(item.get("missing"))
         for account in report.get("account_completion_matrix", [])
-        for value in (account.get("customer_content_matrix") or {}).values()
+        for item in (account.get("actual_content_inventory") or [])
     )
     if content_only_missing:
         return EXIT_CONTENT_ONLY_GAPS
@@ -794,6 +1345,9 @@ def main() -> int:
     parser.add_argument("--environment", default="development", help="Execution environment label.")
     parser.add_argument("--database-name", default="", help="Expected Mongo database name.")
     parser.add_argument("--report-path", default="", help="Optional JSON report output path.")
+    parser.add_argument("--operator-authorization-source", default=CEO_AUTHORIZATION_SOURCE)
+    parser.add_argument("--operator-authorized-by", default=CEO_AUTHORIZED_BY)
+    parser.add_argument("--operator-authorization-date", default=CEO_AUTHORIZATION_DATE)
     args = parser.parse_args()
 
     apply_safe, apply_error = validate_apply_mode(
@@ -838,15 +1392,17 @@ def main() -> int:
                 raise RuntimeError(
                     "Apply blocked. Unresolved conflicts: " + ", ".join(apply_blockers)
                 )
-            for spec in specs.values():
-                applied_repairs.append(
-                    _apply_one_account(
-                        db,
-                        spec,
-                        script_execution_id=script_execution_id,
-                        write_log=write_log,
-                    )
+            applied_repairs.extend(
+                _apply_controlled_repairs(
+                    db,
+                    specs,
+                    script_execution_id=script_execution_id,
+                    write_log=write_log,
                 )
+            )
+            audits = []
+            for spec in specs.values():
+                audits.append(_audit_account(db, spec))
 
         genesis = _audit_genesis_prototype_separation(db)
     finally:
@@ -874,17 +1430,18 @@ def main() -> int:
                 "account_key": item["account_key"],
                 "system_controlled_matrix": item.get("system_completion_matrix") or {},
                 "customer_content_matrix": item.get("customer_content_matrix") or {},
+                "actual_content_inventory": item.get("actual_content_inventory") or [],
             }
             for item in audits
         ],
         "remaining_business_decisions": sorted(
             {
-                "Missing verified source data — no write performed"
+                "Missing verified source data — business authorization required"
                 for item in audits
                 if (item.get("upgrade") or {}).get("proposed_action_when_missing")
             }
         ),
-        "remaining_customer_content_requirements": "See account_completion_matrix.customer_content_matrix",
+        "remaining_customer_content_requirements": "See account_completion_matrix.actual_content_inventory",
         "applied_repairs": applied_repairs,
         "write_log": write_log,
         "write_log_count": len(write_log),
@@ -897,10 +1454,16 @@ def main() -> int:
         "final_verdict_per_account": [
             {"account_key": item["account_key"], "verdict": _final_verdict_for_account(item)} for item in audits
         ],
-        "final_verdict": (
-            "SAFE FOR READ-ONLY PRODUCTION AUDIT"
-            if not _collect_apply_blockers(audits, _cross_account_conflicts(audits))
-            else "NOT SAFE FOR PRODUCTION AUDIT"
+        "no_stripe_mutations_performed": True,
+        "no_blockchain_operations_performed": True,
+        "operator_authorization": {
+            "source": str(args.operator_authorization_source or "").strip(),
+            "authorized_by": str(args.operator_authorized_by or "").strip(),
+            "authorization_date": str(args.operator_authorization_date or "").strip(),
+        },
+        "final_verdict": _audit_completion_verdict(
+            audits,
+            _collect_apply_blockers(audits, _cross_account_conflicts(audits)),
         ),
     }
     _write_report_if_requested(report, str(args.report_path or ""))

@@ -95,7 +95,7 @@ class _FakeCollection:
 
 
 class _FakeDB(dict):
-    def __init__(self):
+    def __init__(self, *, mint_wallet_only: bool = False):
         self.name = "tomboflight"
         specs = script.account_specs()
         users = []
@@ -125,6 +125,11 @@ class _FakeDB(dict):
                     "project_lane": spec.expected_lane,
                     "family_id": spec.family_id,
                     "household_id": spec.household_id,
+                    "mint_wallet": (
+                        script.EXPECTED_LARRY_CANONICAL_MINT["wallet_address"]
+                        if spec.key == "larry_robinson"
+                        else None
+                    ),
                 }
             )
             entitlements.append(
@@ -180,7 +185,8 @@ class _FakeDB(dict):
                 "chain": script.EXPECTED_LARRY_CANONICAL_MINT["chain"],
                 "contract_address": script.EXPECTED_LARRY_CANONICAL_MINT["contract_address"],
                 "tx_hash": script.EXPECTED_LARRY_CANONICAL_MINT["tx_hash"],
-                "wallet_address": script.EXPECTED_LARRY_CANONICAL_MINT["wallet_address"],
+                "wallet_address": "" if mint_wallet_only else script.EXPECTED_LARRY_CANONICAL_MINT["wallet_address"],
+                "mint_wallet": script.EXPECTED_LARRY_CANONICAL_MINT["wallet_address"],
                 "version_number": script.EXPECTED_LARRY_CANONICAL_MINT["version_number"],
             }
         ]
@@ -297,6 +303,19 @@ class InternalValidationAccountCompletionScriptTests(unittest.TestCase):
                 sys.modules[module_name] = prior
             else:
                 sys.modules.pop(module_name, None)
+
+    def test_larry_mint_wallet_alias_does_not_trigger_conflict(self):
+        fake_db = _FakeDB(mint_wallet_only=True)
+        audit = script._audit_account(fake_db, script.account_specs()["larry_robinson"])
+        self.assertNotIn("unexpected_larry_mint_conflict", audit.get("conflicts") or [])
+        self.assertEqual(
+            (audit.get("mint") or {}).get("wallet_address"),
+            script.EXPECTED_LARRY_CANONICAL_MINT["wallet_address"],
+        )
+
+    def test_audit_completion_verdict_uses_updated_terms(self):
+        verdict = script._audit_completion_verdict([], [])
+        self.assertEqual(verdict, script.AUDIT_VERDICT_SAFE_REPAIRS)
 
     def test_intended_state_summary_lists_all_accounts(self):
         summary = script.build_intended_state_summary(script.account_specs())
