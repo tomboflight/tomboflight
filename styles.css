@@ -9024,6 +9024,48 @@ body.admin-interface-mode [data-state="info"] {
   color: var(--admin-status-info) !important;
 }
 
+body.portal-dashboard-body.admin-interface-mode {
+  background: var(--admin-bg);
+  color: var(--admin-text);
+}
+
+body.portal-dashboard-body.admin-interface-mode .site-header,
+body.portal-dashboard-body.admin-interface-mode .portal-core-panel,
+body.portal-dashboard-body.admin-interface-mode .portal-metric-card,
+body.portal-dashboard-body.admin-interface-mode .portal-command-center-panel,
+body.portal-dashboard-body.admin-interface-mode .portal-admin-panel,
+body.portal-dashboard-body.admin-interface-mode .family-record-card,
+body.portal-dashboard-body.admin-interface-mode [data-admin-tools-panel] {
+  background: var(--admin-panel) !important;
+  color: var(--admin-text) !important;
+  border-color: var(--admin-border) !important;
+}
+
+body.portal-dashboard-body.admin-interface-mode .portal-metric-card p,
+body.portal-dashboard-body.admin-interface-mode .portal-core-guidance,
+body.portal-dashboard-body.admin-interface-mode .card-copy,
+body.portal-dashboard-body.admin-interface-mode .portal-command-label,
+body.portal-dashboard-body.admin-interface-mode .portal-metric-label {
+  color: var(--admin-muted) !important;
+  opacity: 1;
+}
+
+body.portal-dashboard-body.admin-interface-mode .portal-chip,
+body.portal-dashboard-body.admin-interface-mode .presence-badge,
+body.portal-dashboard-body.admin-interface-mode .portal-node {
+  color: var(--admin-text) !important;
+  border-color: var(--admin-border) !important;
+  background: var(--admin-helper-bg) !important;
+}
+
+body.portal-dashboard-body.admin-interface-mode a,
+body.portal-dashboard-body.admin-interface-mode .portal-metric-card strong,
+body.portal-dashboard-body.admin-interface-mode .portal-core-title,
+body.portal-dashboard-body.admin-interface-mode .portal-core-status,
+body.portal-dashboard-body.admin-interface-mode .portal-core-label {
+  color: var(--admin-text) !important;
+}
+
 .admin-appearance-controls {
   position: relative;
   display: flex;

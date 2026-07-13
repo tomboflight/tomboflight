@@ -34,6 +34,34 @@
     finance: "finance_admin",
     marketing: "marketing_admin",
   };
+  const ROLE_PERMISSION_FALLBACK = {
+    ceo_master_admin: [
+      "*",
+    ],
+    super_admin: [
+      "*",
+    ],
+    executive_tech_admin: [
+      "admin.access",
+      "admin.control.view",
+      "admin.intake.review",
+      "admin.intake.write",
+    ],
+    operations_admin: [
+      "admin.access",
+      "admin.control.view",
+      "admin.intake.review",
+      "admin.intake.write",
+    ],
+    finance_admin: [
+      "admin.access",
+      "admin.control.view",
+    ],
+    marketing_admin: [
+      "admin.access",
+      "admin.control.view",
+    ],
+  };
 
   function normalizeValue(value) {
     return String(value || "")
@@ -105,6 +133,7 @@
 
     const roleKey = getInternalRoleKey(me);
 
+    if (roleKey === "ceo_master_admin") return "CEO Master Administrator";
     if (roleKey === "super_admin") return "CEO / Super Admin";
     if (roleKey === "executive_tech_admin") return "Executive Technical Admin";
     if (roleKey === "operations_admin") {
@@ -121,8 +150,12 @@
 
   function getPermissionSet(me) {
     const values = Array.isArray(me && me.permissions) ? me.permissions : [];
+    const roleSignals = getRoleSignals(me);
+    const inferred = roleSignals.flatMap(function (roleCode) {
+      return ROLE_PERMISSION_FALLBACK[roleCode] || [];
+    });
     return new Set(
-      values.map(function (value) {
+      [...values, ...inferred].map(function (value) {
         return normalizeValue(value);
       }),
     );
@@ -179,7 +212,12 @@
     const dashboard = document.querySelector("[data-dashboard]");
     const roleTitle = getRoleTitle(me);
     const cards = getRoleCards(me);
-    const nextFocus = cards.length ? "Intake Queue" : "Awaiting published tools";
+    const canUseControlCenter = hasPermission(me, ["admin.control.view"]);
+    const nextFocus = canUseControlCenter
+      ? "Control Center"
+      : cards.length
+        ? "Intake Queue"
+        : "Awaiting published tools";
 
     if (body) {
       body.classList.add("portal-dashboard-body", "portal-admin-mode");
@@ -205,6 +243,9 @@
       ],
       ["[data-dashboard-package-display]", roleTitle],
       ["[data-dashboard-next-focus]", nextFocus],
+      ["[data-dashboard-identity-node]", "Identity Ready"],
+      ["[data-dashboard-package-node]", "Package Scope Ready"],
+      ["[data-dashboard-records-node]", "Records Ready"],
     ];
 
     updates.forEach(function (item) {
@@ -388,20 +429,88 @@
     enableAdminWorkspaceLinks(me);
   }
 
+  function renderAdminWorkspaceError(operation, message) {
+    const statusNode = document.querySelector("[data-dashboard-status]");
+    if (statusNode) {
+      statusNode.textContent = `${operation} failed. ${message}`;
+    }
+    const anchor = document.querySelector("[data-admin-portal-anchor]");
+    if (!anchor) return;
+    const existing = document.querySelector("[data-admin-tools-panel]");
+    if (existing) existing.remove();
+    const panel = document.createElement("div");
+    panel.className = "form-panel portal-admin-panel";
+    panel.setAttribute("data-admin-tools-panel", "true");
+    panel.innerHTML = `
+      <span class="eyebrow">Admin Workspace Error</span>
+      <p class="card-copy" style="margin-bottom: 0.85rem;"><strong>Operation:</strong> ${escapeHtml(operation)}</p>
+      <p class="card-copy" style="margin-bottom: 1rem;">${escapeHtml(message)}</p>
+      <div class="inline-actions"><button class="btn btn-primary" type="button" data-admin-bootstrap-retry>Retry</button></div>
+    `;
+    anchor.prepend(panel);
+    const retryButton = panel.querySelector("[data-admin-bootstrap-retry]");
+    if (retryButton instanceof HTMLButtonElement) {
+      retryButton.addEventListener("click", async function () {
+        retryButton.disabled = true;
+        retryButton.textContent = "Retrying...";
+        try {
+          const me = await app.fetchCurrentUser();
+          window.TOLResolvedUser = me;
+          applyAdminDashboardLayer(me);
+        } catch (error) {
+          const safeMessage = String((error && error.message) || "Unable to refresh workspace context.");
+          renderAdminWorkspaceError("workspace bootstrap", safeMessage);
+        }
+      });
+    }
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     // auth.js fetches /auth/me in setupDashboard() and publishes
     // tol:user-resolved with the result.  We subscribe here instead of
     // making a duplicate network request.
     if (window.TOLResolvedUser) {
       // auth.js resolved before this DOMContentLoaded handler ran.
-      applyAdminDashboardLayer(window.TOLResolvedUser);
+      try {
+        applyAdminDashboardLayer(window.TOLResolvedUser);
+      } catch (error) {
+        renderAdminWorkspaceError(
+          "workspace bootstrap",
+          String((error && error.message) || "Unable to initialize internal workspace."),
+        );
+      }
       return;
     }
+
+    const bootstrapTimeout = window.setTimeout(function () {
+      if (!window.TOLResolvedUser) {
+        renderAdminWorkspaceError(
+          "session resolution",
+          "No resolved internal session was detected. Use Retry to reload authorized tools.",
+        );
+      }
+    }, 7000);
 
     window.addEventListener(
       "tol:user-resolved",
       function (event) {
-        applyAdminDashboardLayer(event.detail.user);
+        window.clearTimeout(bootstrapTimeout);
+        try {
+          const user = event && event.detail ? event.detail.user : null;
+          if (!user) {
+            renderAdminWorkspaceError(
+              "session resolution",
+              "Resolved session payload is missing required user context.",
+            );
+            return;
+          }
+          applyAdminDashboardLayer(user);
+        } catch (error) {
+          renderAdminWorkspaceError(
+            "workspace bootstrap",
+            String((error && error.message) || "Unable to initialize internal workspace."),
+          );
+        }
       },
       { once: true },
     );
