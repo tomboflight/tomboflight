@@ -79,6 +79,8 @@ from app.routes.package_catalog_public import router as package_catalog_public_r
 from app.routes.presence import router as presence_router
 from app.routes.projects import router as projects_router
 from app.routes.project_entitlements import router as project_entitlements_router
+from app.routes.project_workflow import router as project_workflow_router
+from app.routes.client_review import router as client_review_router
 from app.routes.relationships import router as relationships_router
 from app.routes.stripe_webhooks import (
     ensure_stripe_event_indexes,
@@ -233,6 +235,8 @@ app.include_router(admin_continuity_preview_router)
 app.include_router(admin_control_center_router)
 app.include_router(projects_router)
 app.include_router(project_entitlements_router)
+app.include_router(project_workflow_router)
+app.include_router(client_review_router)
 app.include_router(experience_router)
 app.include_router(presence_router)
 app.include_router(families_router)

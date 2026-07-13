@@ -2775,6 +2775,11 @@
 
     const uploadPages = new Set(["verification-upload.html"]);
     const portraitUploadPages = new Set(["portrait-upload.html"]);
+    // vault-upload.html and upload-hub.html require authentication before
+    // any protected content renders; vault upload also requires household
+    // vault entitlement.
+    const vaultUploadPages = new Set(["vault-upload.html"]);
+    const authOnlyPages = new Set(["upload-hub.html"]);
     const linkKeyPages = new Set(["link-keys.html"]);
     const familyIntakePages = new Set([
       "intake-welcome.html",
@@ -2797,6 +2802,8 @@
     if (
       !uploadPages.has(page) &&
       !portraitUploadPages.has(page) &&
+      !vaultUploadPages.has(page) &&
+      !authOnlyPages.has(page) &&
       !linkKeyPages.has(page) &&
       !familyIntakePages.has(page) &&
       !familyTreePages.has(page) &&
@@ -2859,10 +2866,21 @@
         return;
       }
 
+      // vault-upload.html: requires household vault entitlement.
+      if (vaultUploadPages.has(page) && !resolved.can_use_household_vault) {
+        window.location.href = "dashboard.html?upgrade_required=1";
+        return;
+      }
+
+      // upload-hub.html: auth-only gate; no specific entitlement required
+      // beyond a valid authenticated session with a package.
+      // Falls through to the hasPackageAccess check already applied above.
+
       if (
         linkKeyPages.has(page) &&
         !(resolved.can_use_link_keys || resolved.can_manage_link_keys)
       ) {
+        window.location.href = "dashboard.html?upgrade_required=1";
         return;
       }
 

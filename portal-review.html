@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Portal Review Process | Tomb of Light</title>
+    <title>Review &amp; Approval | Tomb of Light</title>
     <meta
       name="description"
-      content="Private review process guidance for authenticated Tomb of Light customer portal users."
+      content="Review your Tomb of Light production and submit your approval or revision request."
     />
     <link rel="stylesheet" href="styles.css?v=20260509-audit" />
   </head>
@@ -20,8 +20,7 @@
           </a>
           <nav class="site-nav" aria-label="Portal navigation">
             <a href="dashboard.html">Dashboard</a>
-            <a href="portal-review.html" aria-current="page">Review Process</a>
-            <a href="portal-upgrade.html?target_package=family_estate_concierge">Upgrade</a>
+            <a href="portal-review.html" aria-current="page">Review &amp; Approval</a>
             <a href="portal-help.html">Help Center</a>
           </nav>
           <div class="header-actions">
@@ -29,28 +28,511 @@
           </div>
         </div>
       </header>
-      <main>
+
+      <main id="main-content" data-portal-review-page>
         <section class="page-hero">
           <div class="container">
             <div class="page-hero-panel">
-              <span class="eyebrow">Review Process</span>
-              <h1>Understand how intake and production review moves forward.</h1>
-              <p>
-                Review states, verification checkpoints, and customer-approval milestones are tracked in your authenticated workspace.
+              <span class="eyebrow">Review &amp; Approval</span>
+              <h1>Review your production and submit your decision.</h1>
+              <p class="card-copy" data-review-intro>
+                Loading your project review&hellip;
               </p>
             </div>
           </div>
         </section>
+
+        <section class="page-sections">
+          <div class="container form-shell">
+
+            <!-- Status / error panel -->
+            <div class="form-panel" data-review-status-panel style="display:none">
+              <p class="card-copy" data-review-status-message></p>
+              <div class="inline-actions" style="margin-top:1rem">
+                <a class="btn btn-secondary" href="dashboard.html">Return to Dashboard</a>
+              </div>
+            </div>
+
+            <!-- Project context panel -->
+            <div class="form-panel" data-review-context-panel style="display:none">
+              <span class="eyebrow" data-review-package-eyebrow></span>
+              <h2 data-review-project-name></h2>
+              <div class="helper">
+                <span>Workflow state: </span>
+                <strong data-review-state></strong>
+              </div>
+              <div class="helper" data-review-family-row style="display:none">
+                <span>Family / household: </span>
+                <strong data-review-family-name></strong>
+              </div>
+            </div>
+
+            <!-- Not-ready panel -->
+            <div class="form-panel" data-review-not-ready-panel style="display:none">
+              <span class="eyebrow">Not Ready for Review</span>
+              <p class="card-copy">
+                Your project is not yet in the customer review stage.
+                The production team will notify you when your review is ready.
+              </p>
+              <p class="card-copy" data-review-state-detail></p>
+              <div class="inline-actions" style="margin-top:1rem">
+                <a class="btn btn-secondary" href="dashboard.html">Return to Dashboard</a>
+              </div>
+            </div>
+
+            <!-- Approved public assets panel -->
+            <div class="form-panel" data-review-assets-panel style="display:none">
+              <span class="eyebrow">Approved Content for Review</span>
+              <p class="card-copy">
+                The following assets have been approved by the production team
+                for your review. Private vault media is not shown here.
+              </p>
+              <ul class="card-copy" data-review-assets-list style="margin-top:0.75rem;padding-left:1.25rem"></ul>
+              <p class="card-copy" data-review-assets-empty style="display:none">
+                No approved assets are available for preview yet. Contact the
+                production team if you believe this is an error.
+              </p>
+            </div>
+
+            <!-- Previous review result panel -->
+            <div class="form-panel" data-review-previous-panel style="display:none">
+              <span class="eyebrow">Your Previous Submission</span>
+              <p class="card-copy">
+                Decision: <strong data-review-previous-decision></strong>
+              </p>
+              <p class="card-copy" data-review-previous-comments-row style="display:none">
+                Comments: <span data-review-previous-comments></span>
+              </p>
+              <p class="helper" data-review-previous-timestamp></p>
+            </div>
+
+            <!-- Approval / revision form -->
+            <div class="form-panel" data-review-form-panel style="display:none">
+              <span class="eyebrow">Your Decision</span>
+              <h2>Approve or request revisions</h2>
+
+              <div class="notice" style="margin-top:1rem">
+                Approving this production confirms that the content shown above
+                is correct and may be used for your viewer and collectible
+                presentation.
+                <strong>
+                  Approval does not authorize a new mint or any financial
+                  transaction.
+                </strong>
+                Your existing package entitlements and any existing digital
+                anchor record remain unchanged.
+              </div>
+
+              <form class="form-grid" data-review-form novalidate style="margin-top:1.5rem">
+
+                <div class="form-row">
+                  <label for="review-decision">Decision</label>
+                  <select id="review-decision" data-review-decision required>
+                    <option value="">— Select —</option>
+                    <option value="approve">Approve this production version</option>
+                    <option value="revision">Request revisions</option>
+                  </select>
+                </div>
+
+                <div class="form-row" data-review-comments-row>
+                  <label for="review-comments">
+                    Comments
+                    <span data-review-comments-required-note style="display:none">
+                      (required for revision requests)
+                    </span>
+                  </label>
+                  <textarea
+                    id="review-comments"
+                    data-review-comments
+                    rows="5"
+                    maxlength="2000"
+                    placeholder="Optional notes for the production team&hellip;"
+                  ></textarea>
+                </div>
+
+                <!-- Public-safe consent — shown only when decision is approve -->
+                <div class="form-row" data-review-consent-row style="display:none">
+                  <label class="checkbox-label">
+                    <input
+                      type="checkbox"
+                      id="review-consent"
+                      data-review-consent
+                    />
+                    I confirm that the reviewed content is approved for
+                    public-facing viewer and collectible presentation.
+                    This does not authorize a new mint.
+                  </label>
+                </div>
+
+                <div data-review-form-status style="display:none"></div>
+
+                <div class="inline-actions" style="margin-top:1.25rem">
+                  <button
+                    class="btn btn-primary"
+                    type="submit"
+                    data-review-submit
+                    disabled
+                  >
+                    Submit Decision
+                  </button>
+                  <a class="btn btn-secondary" href="dashboard.html">Cancel</a>
+                </div>
+
+              </form>
+            </div>
+
+            <!-- Submitted result panel -->
+            <div class="form-panel" data-review-result-panel style="display:none">
+              <span class="eyebrow" data-review-result-eyebrow></span>
+              <h2 data-review-result-heading></h2>
+              <p class="card-copy" data-review-result-message></p>
+              <div class="inline-actions" style="margin-top:1rem">
+                <a class="btn btn-secondary" href="dashboard.html">Return to Dashboard</a>
+              </div>
+            </div>
+
+          </div>
+        </section>
       </main>
+
+      <footer class="footer">
+        <div class="container">
+          <div class="footer-card">
+            <div class="footer-top">
+              <div>
+                <div class="footer-brand">Tomb of Light<span class="brand-symbol">™</span></div>
+                <p class="footer-copy">
+                  A private, guided, premium digital lineage platform.
+                </p>
+              </div>
+              <div class="footer-links">
+                <a href="platform.html">Platform</a>
+                <a href="privacy.html">Privacy Policy</a>
+                <a href="terms.html">Terms</a>
+                <a href="cookie-policy.html">Cookie Policy</a>
+                <a href="accessibility.html">Accessibility</a>
+                <a href="data-request.html">Data Requests</a>
+                <a href="privacy-state-notices.html">State Privacy Notices</a>
+                <a href="privacy-choices.html">Privacy Choices</a>
+                <a href="refunds-delivery.html">Refunds, Delivery &amp; Support</a>
+                <a href="compliance.html">Compliance &amp; Legal</a>
+              </div>
+            </div>
+            <div class="footer-bottom">
+              <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
+            </div>
+          </div>
+        </div>
+      </footer>
     </div>
-    <script src="config.js?v=20260331-2"></script>
+
+    <script src="config.js?v=20260326-3"></script>
     <script src="app.js?v=20260508-451"></script>
     <script src="auth.js?v=20260509-audit"></script>
     <script>
+    (function () {
+      "use strict";
+
+      // ---------------------------------------------------------------------------
+      // DOM refs
+      // ---------------------------------------------------------------------------
+      function q(sel) { return document.querySelector(sel); }
+
+      const introEl           = q("[data-review-intro]");
+      const statusPanel       = q("[data-review-status-panel]");
+      const statusMsg         = q("[data-review-status-message]");
+      const contextPanel      = q("[data-review-context-panel]");
+      const notReadyPanel     = q("[data-review-not-ready-panel]");
+      const stateDetail       = q("[data-review-state-detail]");
+      const assetsPanel       = q("[data-review-assets-panel]");
+      const assetsList        = q("[data-review-assets-list]");
+      const assetsEmpty       = q("[data-review-assets-empty]");
+      const previousPanel     = q("[data-review-previous-panel]");
+      const formPanel         = q("[data-review-form-panel]");
+      const resultPanel       = q("[data-review-result-panel]");
+      const reviewForm        = q("[data-review-form]");
+      const decisionSel       = q("[data-review-decision]");
+      const commentsEl        = q("[data-review-comments]");
+      const commentsReqNote   = q("[data-review-comments-required-note]");
+      const consentRow        = q("[data-review-consent-row]");
+      const consentEl         = q("[data-review-consent]");
+      const submitBtn         = q("[data-review-submit]");
+      const formStatusEl      = q("[data-review-form-status]");
+
+      let currentProjectId = null;
+      let currentVersion   = "1";
+
+      // ---------------------------------------------------------------------------
+      // Helpers
+      // ---------------------------------------------------------------------------
+      function show(el) { if (el) el.style.display = ""; }
+      function hide(el) { if (el) el.style.display = "none"; }
+
+      function setStatus(el, msg, type) {
+        if (!el) return;
+        el.textContent = msg;
+        el.className = "card-copy " + (
+          type === "error" ? "status-error" :
+          type === "success" ? "status-success" : "status-info"
+        );
+        show(el);
+      }
+
+      function showFatal(msg) {
+        if (introEl) hide(introEl);
+        if (statusMsg) statusMsg.textContent = msg;
+        show(statusPanel);
+      }
+
+      // ---------------------------------------------------------------------------
+      // Load review context
+      // ---------------------------------------------------------------------------
+      async function loadReview(projectId) {
+        const token = window.TOLApp && typeof window.TOLApp.getToken === "function"
+          ? window.TOLApp.getToken()
+          : (app && typeof app.getToken === "function" ? app.getToken() : null);
+
+        if (!token) {
+          window.location.href = "signin.html";
+          return;
+        }
+
+        let data;
+        try {
+          data = await app.apiRequest(
+            "/projects/" + encodeURIComponent(projectId) + "/client-review",
+            { method: "GET" }
+          );
+        } catch (err) {
+          const msg = (err && err.message) || "Unable to load your review. Please try again.";
+          if (msg.toLowerCase().includes("403") || msg.toLowerCase().includes("not authorized")) {
+            showFatal("You are not authorized to access this review.");
+          } else if (msg.toLowerCase().includes("404")) {
+            showFatal("Project not found.");
+          } else {
+            showFatal(msg);
+          }
+          return;
+        }
+
+        currentProjectId = projectId;
+        currentVersion   = (data.latest_review && data.latest_review.version) || "1";
+
+        // Populate context panel.
+        const nameEl = q("[data-review-project-name]");
+        if (nameEl) nameEl.textContent = data.project_name || "Your Project";
+        const eyebrowEl = q("[data-review-package-eyebrow]");
+        if (eyebrowEl) eyebrowEl.textContent = data.package_name || data.package_code || "";
+        const stateEl = q("[data-review-state]");
+        if (stateEl) stateEl.textContent = data.current_state || "";
+        if (data.family_name || data.household_name) {
+          const fn = q("[data-review-family-name]");
+          if (fn) fn.textContent = data.family_name || data.household_name;
+          show(q("[data-review-family-row]"));
+        }
+        show(contextPanel);
+
+        if (introEl) introEl.textContent =
+          data.ready_for_review
+            ? "Your production is ready for your review. Please review the approved content below and submit your decision."
+            : "Your project is being prepared by the production team.";
+
+        // Populate approved public assets.
+        const uploads = data.approved_public_uploads || [];
+        if (uploads.length > 0) {
+          assetsList.innerHTML = "";
+          uploads.forEach(function (u) {
+            const li = document.createElement("li");
+            li.textContent = u.original_filename || ("Upload " + u.upload_id);
+            assetsList.appendChild(li);
+          });
+          show(assetsPanel);
+          hide(assetsEmpty);
+        } else if (data.ready_for_review) {
+          hide(assetsList);
+          show(assetsEmpty);
+          show(assetsPanel);
+        }
+
+        // Show previous review if one exists.
+        if (data.latest_review) {
+          const r = data.latest_review;
+          const decEl = q("[data-review-previous-decision]");
+          if (decEl) decEl.textContent = r.decision === "approved" ? "Approved" : "Revision Requested";
+          if (r.comments) {
+            const cEl = q("[data-review-previous-comments]");
+            if (cEl) cEl.textContent = r.comments;
+            show(q("[data-review-previous-comments-row]"));
+          }
+          const tsEl = q("[data-review-previous-timestamp]");
+          if (tsEl && r.created_at) {
+            tsEl.textContent = "Submitted: " + new Date(r.created_at).toLocaleString();
+          }
+          show(previousPanel);
+        }
+
+        // Show form only when ready for review.
+        if (!data.ready_for_review) {
+          if (stateDetail) {
+            stateDetail.textContent =
+              "Current state: " + (data.current_state || "pending") +
+              ". The production team will notify you when review is available.";
+          }
+          show(notReadyPanel);
+        } else {
+          show(formPanel);
+        }
+      }
+
+      // ---------------------------------------------------------------------------
+      // Resolve project from URL param or workspace context
+      // ---------------------------------------------------------------------------
+      async function resolveProjectId() {
+        const params = new URLSearchParams(window.location.search);
+        const fromUrl = (params.get("project_id") || "").trim();
+        if (fromUrl) return fromUrl;
+
+        // Fall back to the user's active workspace project.
+        try {
+          const ctx = window.TOLDashboardContext || null;
+          if (ctx && ctx.projectId) return ctx.projectId;
+
+          const projects = await app.apiRequest("/projects/", { method: "GET" });
+          if (Array.isArray(projects) && projects.length > 0) {
+            return projects[0].id || projects[0]._id || "";
+          }
+        } catch (_) { /* ignore */ }
+        return "";
+      }
+
+      // ---------------------------------------------------------------------------
+      // Form interactions
+      // ---------------------------------------------------------------------------
+      if (decisionSel) {
+        decisionSel.addEventListener("change", function () {
+          const val = decisionSel.value;
+          if (val === "approve") {
+            show(consentRow);
+            if (commentsReqNote) hide(commentsReqNote);
+          } else if (val === "revision") {
+            hide(consentRow);
+            if (consentEl) consentEl.checked = false;
+            if (commentsReqNote) show(commentsReqNote);
+          } else {
+            hide(consentRow);
+            if (commentsReqNote) hide(commentsReqNote);
+          }
+          updateSubmitState();
+        });
+      }
+
+      if (consentEl) {
+        consentEl.addEventListener("change", updateSubmitState);
+      }
+
+      if (commentsEl) {
+        commentsEl.addEventListener("input", updateSubmitState);
+      }
+
+      function updateSubmitState() {
+        if (!submitBtn) return;
+        const decision = decisionSel ? decisionSel.value : "";
+        let canSubmit = false;
+        if (decision === "approve") {
+          canSubmit = consentEl ? consentEl.checked : false;
+        } else if (decision === "revision") {
+          canSubmit = commentsEl ? commentsEl.value.trim().length > 0 : false;
+        }
+        submitBtn.disabled = !canSubmit;
+      }
+
+      // ---------------------------------------------------------------------------
+      // Submit
+      // ---------------------------------------------------------------------------
+      if (reviewForm) {
+        reviewForm.addEventListener("submit", async function (e) {
+          e.preventDefault();
+          if (!currentProjectId) return;
+
+          const decision  = decisionSel ? decisionSel.value : "";
+          const comments  = commentsEl  ? commentsEl.value.trim() : "";
+          const consent   = consentEl   ? consentEl.checked       : false;
+
+          if (!decision) return;
+
+          submitBtn.disabled = true;
+          setStatus(formStatusEl, "Submitting&hellip;", "info");
+
+          let endpoint, body;
+          if (decision === "approve") {
+            endpoint = "/projects/" + encodeURIComponent(currentProjectId) + "/client-review/approve";
+            body = { version: currentVersion, comments: comments, public_safe_consent: consent };
+          } else {
+            endpoint = "/projects/" + encodeURIComponent(currentProjectId) + "/client-review/request-revision";
+            body = { version: currentVersion, comments: comments };
+          }
+
+          try {
+            const result = await app.apiRequest(endpoint, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body),
+            });
+
+            hide(formPanel);
+            hide(assetsPanel);
+
+            const eyebrow = q("[data-review-result-eyebrow]");
+            const heading = q("[data-review-result-heading]");
+            const msg     = q("[data-review-result-message]");
+
+            if (decision === "approve") {
+              if (eyebrow) eyebrow.textContent = "Approved";
+              if (heading) heading.textContent = "Your approval has been recorded.";
+              if (msg) msg.textContent =
+                result.message ||
+                "Thank you. The production team will proceed to certificate and delivery. " +
+                "No new mint or financial transaction has been initiated.";
+            } else {
+              if (eyebrow) eyebrow.textContent = "Revision Requested";
+              if (heading) heading.textContent = "Your revision request has been recorded.";
+              if (msg) msg.textContent =
+                result.message ||
+                "Thank you. The production team will review your comments and contact you.";
+            }
+
+            show(resultPanel);
+          } catch (err) {
+            const errMsg = (err && err.message) || "Submission failed. Please try again.";
+            setStatus(formStatusEl, errMsg, "error");
+            submitBtn.disabled = false;
+          }
+        });
+      }
+
+      // ---------------------------------------------------------------------------
+      // Boot
+      // ---------------------------------------------------------------------------
       document.addEventListener("DOMContentLoaded", async function () {
-        if (!window.TOLApp || typeof window.TOLApp.requireSession !== "function") return;
-        await window.TOLApp.requireSession("signin.html");
+        const authLib = window.TOLApp;
+        if (authLib && typeof authLib.requireSession === "function") {
+          const user = await authLib.requireSession("signin.html");
+          if (!user) return;
+        } else if (app && typeof app.getToken === "function" && !app.getToken()) {
+          window.location.href = "signin.html";
+          return;
+        }
+
+        const projectId = await resolveProjectId();
+        if (!projectId) {
+          showFatal("No active project found. Please return to your dashboard.");
+          return;
+        }
+
+        await loadReview(projectId);
       });
+
+    })();
     </script>
   </body>
 </html>
