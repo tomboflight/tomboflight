@@ -389,7 +389,7 @@ async function openAppearancePanel(page) {
 
 async function setAppearance(page, { theme, large }) {
   await openAppearancePanel(page);
-  if (theme) await page.locator("[data-admin-appearance-theme]").selectOption(theme);
+  if (theme) await page.locator(`[data-admin-appearance-theme-option="${theme}"]`).click();
   await page.locator("[data-admin-appearance-large-text]").setChecked(Boolean(large));
 }
 
@@ -481,7 +481,7 @@ test("[theme] validates persistence across reload/navigation/login and impersona
   const preferenceStore = await page.evaluate(() => {
     const map = JSON.parse(localStorage.getItem("tol_admin_appearance_by_user") || "{}");
     map["email:officer.a@tomboflight.test"] = { theme: "high-contrast", textScale: "large" };
-    map["email:officer.b@tomboflight.test"] = { theme: "dark", textScale: "default" };
+    map["email:officer.b@tomboflight.test"] = { theme: "dark", textScale: "normal" };
     localStorage.setItem("tol_admin_appearance_by_user", JSON.stringify(map));
     return map;
   });

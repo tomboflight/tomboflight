@@ -1505,10 +1505,12 @@
   function normalizeAdminAppearance(raw) {
     const payload = raw && typeof raw === "object" ? raw : {};
     const theme = String(payload.theme || "light").trim().toLowerCase();
-    const textScale = String(payload.textScale || "default").trim().toLowerCase();
+    // "default" is accepted for backward compatibility with previously
+    // persisted preferences; the canonical value is "normal".
+    const textScale = String(payload.textScale || "normal").trim().toLowerCase();
     return {
       theme: ["light", "dark", "high-contrast"].includes(theme) ? theme : "light",
-      textScale: textScale === "large" ? "large" : "default",
+      textScale: textScale === "large" ? "large" : "normal",
     };
   }
 
@@ -1596,6 +1598,12 @@
     document.documentElement.dataset.adminTextScale = normalized.textScale;
   }
 
+  const ADMIN_THEME_OPTIONS = [
+    { value: "light", label: "Light" },
+    { value: "dark", label: "Dark" },
+    { value: "high-contrast", label: "High Contrast" },
+  ];
+
   function injectAdminAppearanceControls(user) {
     if (!shouldEnableAdminAppearance(user)) return;
     const container = document.querySelector(".header-actions");
@@ -1604,19 +1612,33 @@
     const appearance = getSavedAdminAppearance(user);
     const wrapper = document.createElement("div");
     wrapper.className = "admin-appearance-controls";
+
+    const themeButtonsMarkup = ADMIN_THEME_OPTIONS.map(function (option) {
+      const isSelected = appearance.theme === option.value;
+      return (
+        `<button type="button" class="admin-appearance-theme-btn" role="radio" ` +
+        `data-admin-appearance-theme-option="${option.value}" ` +
+        `aria-checked="${isSelected ? "true" : "false"}" ` +
+        `tabindex="${isSelected ? "0" : "-1"}">${option.label}</button>`
+      );
+    }).join("");
+
     wrapper.innerHTML = `
       <button class="btn btn-secondary" type="button" data-admin-appearance-toggle aria-expanded="false" aria-controls="admin-appearance-panel">Appearance</button>
       <div class="admin-appearance-panel" id="admin-appearance-panel" data-admin-appearance-panel hidden>
-        <label>
-          Theme
-          <select data-admin-appearance-theme>
-            <option value="light"${appearance.theme === "light" ? ' selected="selected"' : ""}>Light</option>
-            <option value="dark"${appearance.theme === "dark" ? ' selected="selected"' : ""}>Dark</option>
-            <option value="high-contrast"${appearance.theme === "high-contrast" ? ' selected="selected"' : ""}>High Contrast</option>
-          </select>
-        </label>
+        <div class="admin-appearance-theme-group">
+          <span class="admin-appearance-group-label" id="admin-appearance-theme-label">Theme</span>
+          <div
+            class="admin-appearance-theme-buttons"
+            data-admin-appearance-theme
+            role="radiogroup"
+            aria-labelledby="admin-appearance-theme-label"
+          >
+            ${themeButtonsMarkup}
+          </div>
+        </div>
         <label class="admin-appearance-checkbox">
-          <input type="checkbox" data-admin-appearance-large-text ${appearance.textScale === "large" ? 'checked="checked"' : ""} />
+          <input type="checkbox" role="switch" data-admin-appearance-large-text aria-checked="${appearance.textScale === "large" ? "true" : "false"}" ${appearance.textScale === "large" ? 'checked="checked"' : ""} />
           <span>Larger Text</span>
         </label>
       </div>
@@ -1624,9 +1646,10 @@
     container.prepend(wrapper);
     const toggle = wrapper.querySelector("[data-admin-appearance-toggle]");
     const panel = wrapper.querySelector("[data-admin-appearance-panel]");
-    const themeSelect = wrapper.querySelector("[data-admin-appearance-theme]");
+    const themeGroup = wrapper.querySelector("[data-admin-appearance-theme]");
+    const themeButtons = Array.from(wrapper.querySelectorAll("[data-admin-appearance-theme-option]"));
     const largeTextInput = wrapper.querySelector("[data-admin-appearance-large-text]");
-    if (!toggle || !panel || !themeSelect || !largeTextInput) return;
+    if (!toggle || !panel || !themeGroup || !themeButtons.length || !largeTextInput) return;
 
     toggle.addEventListener("click", function () {
       const isOpen = !panel.hidden;
@@ -1634,19 +1657,53 @@
       toggle.setAttribute("aria-expanded", isOpen ? "false" : "true");
     });
 
+    function currentTheme() {
+      const active = themeButtons.find(function (btn) {
+        return btn.getAttribute("aria-checked") === "true";
+      });
+      return active ? active.getAttribute("data-admin-appearance-theme-option") : "light";
+    }
+
     function saveAndApply() {
       const updated = saveAdminAppearance(
         {
-          theme: String(themeSelect.value || "light"),
-          textScale: largeTextInput.checked ? "large" : "default",
+          theme: currentTheme(),
+          textScale: largeTextInput.checked ? "large" : "normal",
         },
         user || getSavedUser() || {},
       );
       applyAdminAppearance(updated, user);
     }
 
-    themeSelect.addEventListener("change", saveAndApply);
-    largeTextInput.addEventListener("change", saveAndApply);
+    function selectTheme(value) {
+      themeButtons.forEach(function (btn) {
+        const isSelected = btn.getAttribute("data-admin-appearance-theme-option") === value;
+        btn.setAttribute("aria-checked", isSelected ? "true" : "false");
+        btn.setAttribute("tabindex", isSelected ? "0" : "-1");
+        btn.classList.toggle("is-selected", isSelected);
+      });
+      saveAndApply();
+    }
+
+    themeButtons.forEach(function (btn, index) {
+      btn.addEventListener("click", function () {
+        selectTheme(btn.getAttribute("data-admin-appearance-theme-option"));
+      });
+      btn.addEventListener("keydown", function (event) {
+        if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+        event.preventDefault();
+        const delta = event.key === "ArrowRight" ? 1 : -1;
+        const nextIndex = (index + delta + themeButtons.length) % themeButtons.length;
+        const nextBtn = themeButtons[nextIndex];
+        nextBtn.focus();
+        selectTheme(nextBtn.getAttribute("data-admin-appearance-theme-option"));
+      });
+    });
+
+    largeTextInput.addEventListener("change", function () {
+      largeTextInput.setAttribute("aria-checked", largeTextInput.checked ? "true" : "false");
+      saveAndApply();
+    });
   }
 
   function setupAdminAppearance(user) {

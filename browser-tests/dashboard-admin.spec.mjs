@@ -99,7 +99,8 @@ test("[dashboard-theme] light/dark/high-contrast + larger text change computed s
   await expect(page.locator("[data-admin-tools-panel]")).toBeVisible();
 
   await openAppearancePanel(page);
-  const themeSelect = page.locator("[data-admin-appearance-theme]");
+  const selectTheme = async (value) =>
+    page.locator(`[data-admin-appearance-theme-option="${value}"]`).click();
   const largeText = page.locator("[data-admin-appearance-large-text]");
 
   const readStyles = async () =>
@@ -121,17 +122,17 @@ test("[dashboard-theme] light/dark/high-contrast + larger text change computed s
       };
     });
 
-  await themeSelect.selectOption("light");
+  await selectTheme("light");
   await page.waitForTimeout(120);
   const light = await readStyles();
   await page.screenshot({ path: testInfo.outputPath("dashboard-light.png"), fullPage: true });
 
-  await themeSelect.selectOption("dark");
+  await selectTheme("dark");
   await page.waitForTimeout(120);
   const dark = await readStyles();
   await page.screenshot({ path: testInfo.outputPath("dashboard-dark.png"), fullPage: true });
 
-  await themeSelect.selectOption("high-contrast");
+  await selectTheme("high-contrast");
   await page.waitForTimeout(120);
   const highContrast = await readStyles();
   await page.screenshot({ path: testInfo.outputPath("dashboard-high-contrast.png"), fullPage: true });
@@ -191,9 +192,9 @@ test("[asset-versioning] dashboard and control center include cache-busting live
   const dashboardStyles = await page.locator("link[rel='stylesheet']").evaluateAll((nodes) =>
     nodes.map((node) => node.getAttribute("href") || ""),
   );
-  expect(dashboardStyles.some((href) => href.includes("styles.css?v=20260713-livefix1"))).toBeTruthy();
-  expect(dashboardScripts.some((src) => src.includes("app.js?v=20260713-livefix1"))).toBeTruthy();
-  expect(dashboardScripts.some((src) => src.includes("dashboard-admin.js?v=20260713-livefix1"))).toBeTruthy();
+  expect(dashboardStyles.some((href) => href.includes("styles.css?v=20260713-livefix2"))).toBeTruthy();
+  expect(dashboardScripts.some((src) => src.includes("app.js?v=20260713-livefix2"))).toBeTruthy();
+  expect(dashboardScripts.some((src) => src.includes("dashboard-admin.js?v=20260713-livefix2"))).toBeTruthy();
 
   await page.goto("/admin-control-center.html", { waitUntil: "domcontentloaded" });
   const controlCenterScripts = await page.locator("script[src]").evaluateAll((nodes) =>
@@ -202,7 +203,7 @@ test("[asset-versioning] dashboard and control center include cache-busting live
   const controlCenterStyles = await page.locator("link[rel='stylesheet']").evaluateAll((nodes) =>
     nodes.map((node) => node.getAttribute("href") || ""),
   );
-  expect(controlCenterStyles.some((href) => href.includes("styles.css?v=20260713-livefix1"))).toBeTruthy();
-  expect(controlCenterScripts.some((src) => src.includes("app.js?v=20260713-livefix1"))).toBeTruthy();
-  expect(controlCenterScripts.some((src) => src.includes("admin-control-center.js?v=20260713-livefix1"))).toBeTruthy();
+  expect(controlCenterStyles.some((href) => href.includes("styles.css?v=20260713-livefix2"))).toBeTruthy();
+  expect(controlCenterScripts.some((src) => src.includes("app.js?v=20260713-livefix2"))).toBeTruthy();
+  expect(controlCenterScripts.some((src) => src.includes("admin-control-center.js?v=20260713-livefix2"))).toBeTruthy();
 });

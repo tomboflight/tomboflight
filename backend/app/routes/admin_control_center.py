@@ -14,6 +14,7 @@ from app.services.admin_control_service import (
     admin_control_access_profile,
     admin_control_action_allowed,
     admin_control_bulk_action_allowed,
+    admin_control_diagnostics,
     admin_control_queue_allowed,
     active_admin_impersonation,
     admin_console_overview,
@@ -238,6 +239,13 @@ def get_admin_control_access_profile(
     current_user: dict[str, Any] = Depends(require_any_permission(["admin.control.view", "admin.analytics.read"])),
 ):
     return admin_control_access_profile(current_user)
+
+
+@router.get("/diagnostics")
+def get_admin_control_diagnostics(
+    current_user: dict[str, Any] = Depends(require_any_permission(["admin.control.view", "admin.analytics.read"])),
+):
+    return admin_control_diagnostics(current_user)
 
 
 @router.get("/overview")

@@ -1,0 +1,272 @@
+{
+  "config": {
+    "argv": [
+      "/usr/local/bin/node",
+      "/home/runner/work/tomboflight/tomboflight/node_modules/.bin/playwright",
+      "test",
+      "browser-tests/dashboard-admin.spec.mjs",
+      "--browser=webkit"
+    ],
+    "configFile": "/home/runner/work/tomboflight/tomboflight/playwright.config.mjs",
+    "rootDir": "/home/runner/work/tomboflight/tomboflight/browser-tests",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "ci": {
+        "commitHref": "https://github.com/tomboflight/tomboflight/commit/7c450005e9854020a49b409ea9ae09a3c2ae50f3",
+        "commitHash": "7c450005e9854020a49b409ea9ae09a3c2ae50f3",
+        "buildHref": "https://github.com/tomboflight/tomboflight/actions/runs/29254541011"
+      },
+      "gitCommit": {
+        "shortHash": "7c45000",
+        "hash": "7c450005e9854020a49b409ea9ae09a3c2ae50f3",
+        "subject": "Merge pull request #556 from tomboflight/copilot/fix-comments-review-thread",
+        "body": "Merge pull request #556 from tomboflight/copilot/fix-comments-review-thread\n\n[WIP] Fix code based on review comments",
+        "author": {
+          "name": "Larry Robinson",
+          "email": "thetomboflight@gmail.com",
+          "time": 1783911666000
+        },
+        "committer": {
+          "name": "GitHub",
+          "email": "noreply@github.com",
+          "time": 1783911666000
+        },
+        "branch": "copilot/restore-ceo-master-admin-control-center"
+      },
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/home/runner/work/tomboflight/tomboflight/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "ci": {
+            "commitHref": "https://github.com/tomboflight/tomboflight/commit/7c450005e9854020a49b409ea9ae09a3c2ae50f3",
+            "commitHash": "7c450005e9854020a49b409ea9ae09a3c2ae50f3",
+            "buildHref": "https://github.com/tomboflight/tomboflight/actions/runs/29254541011"
+          },
+          "gitCommit": {
+            "shortHash": "7c45000",
+            "hash": "7c450005e9854020a49b409ea9ae09a3c2ae50f3",
+            "subject": "Merge pull request #556 from tomboflight/copilot/fix-comments-review-thread",
+            "body": "Merge pull request #556 from tomboflight/copilot/fix-comments-review-thread\n\n[WIP] Fix code based on review comments",
+            "author": {
+              "name": "Larry Robinson",
+              "email": "thetomboflight@gmail.com",
+              "time": 1783911666000
+            },
+            "committer": {
+              "name": "GitHub",
+              "email": "noreply@github.com",
+              "time": 1783911666000
+            },
+            "branch": "copilot/restore-ceo-master-admin-control-center"
+          },
+          "actualWorkers": 1
+        },
+        "id": "webkit",
+        "name": "webkit",
+        "testDir": "/home/runner/work/tomboflight/tomboflight/browser-tests",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 60000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "browser-test-results.json"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.61.1",
+    "workers": 1,
+    "webServer": {
+      "command": "python3 -m http.server 4173 --bind 127.0.0.1",
+      "url": "http://127.0.0.1:4173/admin-control-center.html",
+      "timeout": 120000,
+      "reuseExistingServer": true
+    }
+  },
+  "suites": [
+    {
+      "title": "dashboard-admin.spec.mjs",
+      "file": "dashboard-admin.spec.mjs",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "[dashboard-theme] light/dark/high-contrast + larger text change computed styles and persist",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit",
+              "projectName": "webkit",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 9024,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-07-13T13:56:20.702Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "dc2740396c8412c65dde-95ec499f9cf1bc15f32f",
+          "file": "dashboard-admin.spec.mjs",
+          "line": 95,
+          "column": 1
+        },
+        {
+          "title": "[dashboard-bootstrap] ceo role resolves tools and workspace nodes",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit",
+              "projectName": "webkit",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1880,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-07-13T13:56:29.849Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "dc2740396c8412c65dde-ece9763f36d87a165524",
+          "file": "dashboard-admin.spec.mjs",
+          "line": 157,
+          "column": 1
+        },
+        {
+          "title": "[dashboard-bootstrap-error] failed bootstrap shows actionable error with retry",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit",
+              "projectName": "webkit",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 9162,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-07-13T13:56:31.746Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "dc2740396c8412c65dde-31681c8cca65c3c52808",
+          "file": "dashboard-admin.spec.mjs",
+          "line": 174,
+          "column": 1
+        },
+        {
+          "title": "[asset-versioning] dashboard and control center include cache-busting livefix revision",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "webkit",
+              "projectName": "webkit",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1972,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-07-13T13:56:40.922Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "dc2740396c8412c65dde-bf4d4f2c92d6a25468f3",
+          "file": "dashboard-admin.spec.mjs",
+          "line": 185,
+          "column": 1
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-07-13T13:56:20.098Z",
+    "duration": 39632.884999999995,
+    "expected": 4,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}
