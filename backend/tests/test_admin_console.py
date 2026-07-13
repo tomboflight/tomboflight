@@ -391,6 +391,72 @@ class AdminControlAccessProfileTests(unittest.TestCase):
         self.assertIn("audit", profile["allowed_queues"])
 
 
+class AdminControlDiagnosticsTests(unittest.TestCase):
+    def test_ceo_master_admin_diagnostics_report_wildcard_scope(self):
+        current_user = {
+            "id": "user-larry-1",
+            "role": "admin",
+            "access_tier": "ceo_master_admin",
+            "_access_context": {
+                "role_codes": ["ceo_master_admin"],
+                "permissions": ["*"],
+            },
+        }
+        db = FakeDatabase({"projects": [{"_id": "proj-1"}]})
+        with patch.object(admin_control_service, "get_database", return_value=db):
+            diagnostics = admin_control_service.admin_control_diagnostics(current_user)
+
+        self.assertEqual(diagnostics["user_id"], "user-larry-1")
+        self.assertEqual(diagnostics["role_key"], "ceo_master_admin")
+        self.assertTrue(diagnostics["is_ceo_master_admin"])
+        self.assertTrue(diagnostics["is_wildcard"])
+        self.assertEqual(diagnostics["queue_scope_mode"], "wildcard_all_queues")
+        self.assertEqual(diagnostics["bootstrap_endpoint_status"], "ok")
+        self.assertEqual(diagnostics["search_endpoint_status"], "ok")
+        self.assertTrue(diagnostics["frontend_revision"])
+        self.assertTrue(diagnostics["backend_revision"])
+        for forbidden_key in ("token", "cookie", "password", "secret", "credential"):
+            self.assertNotIn(forbidden_key, str(diagnostics).lower())
+
+    def test_ordinary_admin_diagnostics_are_allowlist_scoped(self):
+        current_user = {
+            "id": "user-officer-1",
+            "role": "admin",
+            "access_tier": "operations_admin",
+            "_access_context": {
+                "role_codes": ["operations_admin"],
+                "permissions": ["admin.control.view"],
+            },
+        }
+        db = FakeDatabase({"projects": [{"_id": "proj-1"}]})
+        with patch.object(admin_control_service, "get_database", return_value=db):
+            diagnostics = admin_control_service.admin_control_diagnostics(current_user)
+
+        self.assertFalse(diagnostics["is_ceo_master_admin"])
+        self.assertFalse(diagnostics["is_wildcard"])
+        self.assertEqual(diagnostics["queue_scope_mode"], "allowlist")
+
+    def test_diagnostics_report_unavailable_endpoints_when_database_unreachable(self):
+        current_user = {
+            "id": "user-larry-1",
+            "role": "admin",
+            "access_tier": "ceo_master_admin",
+            "_access_context": {
+                "role_codes": ["ceo_master_admin"],
+                "permissions": ["*"],
+            },
+        }
+        with patch.object(admin_control_service, "get_database", side_effect=RuntimeError("db down")):
+            diagnostics = admin_control_service.admin_control_diagnostics(current_user)
+
+        self.assertEqual(diagnostics["bootstrap_endpoint_status"], "unavailable")
+        self.assertEqual(diagnostics["search_endpoint_status"], "unavailable")
+        # Even with the database unreachable, CEO wildcard scope must still
+        # be recognized from role/permission data alone.
+        self.assertTrue(diagnostics["is_ceo_master_admin"])
+        self.assertEqual(diagnostics["queue_scope_mode"], "wildcard_all_queues")
+
+
 class AdminUserQueueTests(unittest.TestCase):
     def test_users_queue_lists_customer_and_admin_accounts(self):
         customer_id = ObjectId()

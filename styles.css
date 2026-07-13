@@ -9087,12 +9087,88 @@ body.portal-dashboard-body.admin-interface-mode .portal-core-label {
   z-index: 30;
 }
 
+.admin-diagnostics-grid {
+  display: grid;
+  gap: 8px 24px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  margin: 0;
+}
+
+.admin-diagnostics-grid > div {
+  display: grid;
+  gap: 2px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--admin-border, var(--border));
+}
+
+.admin-diagnostics-grid dt {
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--admin-muted, var(--muted));
+}
+
+.admin-diagnostics-grid dd {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--admin-text, var(--text));
+  word-break: break-word;
+}
+
 .admin-appearance-panel label {
   display: grid;
   gap: 8px;
   font-size: 0.95rem;
   font-weight: 700;
   color: var(--admin-muted, #32465c);
+}
+
+.admin-appearance-theme-group {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-appearance-group-label {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--admin-muted, #32465c);
+}
+
+.admin-appearance-theme-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-appearance-theme-btn {
+  flex: 1 1 auto;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--admin-border, rgba(154, 173, 196, 0.5));
+  background: var(--admin-panel, #ffffff);
+  color: var(--admin-text, #1c2938);
+  font-size: 0.92rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background var(--transition, 180ms ease),
+    color var(--transition, 180ms ease),
+    border-color var(--transition, 180ms ease);
+}
+
+.admin-appearance-theme-btn:hover {
+  border-color: var(--admin-focus, #0f5ea8);
+}
+
+.admin-appearance-theme-btn[aria-checked="true"],
+.admin-appearance-theme-btn.is-selected {
+  background: var(--admin-focus, #0f5ea8);
+  border-color: var(--admin-focus, #0f5ea8);
+  color: #ffffff;
+}
+
+.admin-appearance-theme-btn:focus-visible {
+  outline: 3px solid var(--admin-focus, #0f5ea8);
+  outline-offset: 2px;
 }
 
 .admin-appearance-checkbox {

@@ -568,6 +568,50 @@ def admin_control_bulk_action_allowed(
     return normalized_action in set(profile.get("allowed_bulk_actions") or [])
 
 
+# Bumped alongside the static frontend cache-busting query string
+# (see admin-control-center.html / dashboard.html `?v=` suffix) whenever a
+# hotfix ships to the admin control center or dashboard assets.
+FRONTEND_ASSET_REVISION = "20260713-livefix2"
+
+
+def admin_control_diagnostics(current_user: dict[str, Any]) -> dict[str, Any]:
+    """Read-only Master Admin self-check.
+
+    Returns only safe metadata (user id, normalized role, recognized
+    wildcard/queue-scope state, and endpoint/revision health). Never
+    includes tokens, cookies, credentials, or other secret values.
+    """
+    profile = admin_control_access_profile(current_user)
+    user_id = _normalize(current_user.get("id") or current_user.get("_id") or current_user.get("user_id"))
+    role_key = profile.get("role_key") or "user"
+    is_wildcard = bool(profile.get("is_wildcard"))
+    is_ceo_master_admin = role_key == "ceo_master_admin"
+
+    bootstrap_endpoint_status = "unavailable"
+    search_endpoint_status = "unavailable"
+    try:
+        db = get_database()
+        if db is not None:
+            bootstrap_endpoint_status = "ok"
+            db["projects"].find_one({})
+            search_endpoint_status = "ok"
+    except Exception:
+        bootstrap_endpoint_status = "unavailable"
+        search_endpoint_status = "unavailable"
+
+    return {
+        "user_id": user_id or None,
+        "role_key": role_key,
+        "is_ceo_master_admin": is_ceo_master_admin,
+        "is_wildcard": is_wildcard,
+        "queue_scope_mode": "wildcard_all_queues" if is_wildcard else "allowlist",
+        "bootstrap_endpoint_status": bootstrap_endpoint_status,
+        "search_endpoint_status": search_endpoint_status,
+        "frontend_revision": FRONTEND_ASSET_REVISION,
+        "backend_revision": settings.app_version,
+    }
+
+
 def _now() -> datetime:
     return datetime.now(UTC)
 

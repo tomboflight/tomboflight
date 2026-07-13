@@ -51,8 +51,57 @@
     operationsSections: {},
     activeImpersonation: null,
     impersonationTicker: 0,
+    bootstrapFailed: false,
+    bootstrapErrorCode: "",
   };
   const DEFAULT_ROLE_KEY = "user";
+
+  const ADMIN_ERROR_CODES = {
+    accessProfile: "ACC-AUTH-CONTEXT-FAILED",
+    bootstrap: "ACC-BOOTSTRAP-FAILED",
+    search: "ACC-SEARCH-FAILED",
+    scope: "ACC-SCOPE-FAILED",
+    parse: "ACC-RESPONSE-PARSE-FAILED",
+    network: "NET-API-UNREACHABLE",
+  };
+
+  function classifyAdminError(error, fallbackCode) {
+    const message = String((error && error.message) || "").toLowerCase();
+    if (error instanceof TypeError || message.includes("failed to fetch") || message.includes("network")) {
+      return ADMIN_ERROR_CODES.network;
+    }
+    if (message.includes("json") || message.includes("parse") || message.includes("unexpected token")) {
+      return ADMIN_ERROR_CODES.parse;
+    }
+    return fallbackCode || ADMIN_ERROR_CODES.bootstrap;
+  }
+
+  let lastFailedRetry = null;
+
+  function showBootstrapError(code, message, retryFn) {
+    state.bootstrapFailed = true;
+    state.bootstrapErrorCode = code;
+    lastFailedRetry = typeof retryFn === "function" ? retryFn : null;
+    const banner = document.querySelector("[data-admin-bootstrap-error]");
+    const messageNode = document.querySelector("[data-admin-bootstrap-error-message]");
+    if (messageNode) {
+      messageNode.textContent = `${code}: ${message || "Service temporarily unavailable."}`;
+    }
+    if (banner) banner.hidden = false;
+    updateActionAvailability();
+    updateBulkActionAvailability();
+  }
+
+  function clearBootstrapError() {
+    if (!state.bootstrapFailed) return;
+    state.bootstrapFailed = false;
+    state.bootstrapErrorCode = "";
+    lastFailedRetry = null;
+    const banner = document.querySelector("[data-admin-bootstrap-error]");
+    if (banner) banner.hidden = true;
+    updateActionAvailability();
+    updateBulkActionAvailability();
+  }
 
   const QUEUE_META = {
     overview: ["Overview", "Executive repair posture across active customer operations."],
@@ -532,6 +581,45 @@
     renderImpersonationBanner();
   }
 
+  function renderDiagnostics(payload) {
+    const panel = document.querySelector("[data-admin-diagnostics-panel]");
+    const output = document.querySelector("[data-admin-diagnostics-output]");
+    if (!panel || !output) return;
+    panel.hidden = false;
+    const data = payload || {};
+    const rows = [
+      ["Authenticated user ID", data.user_id],
+      ["Normalized role", data.role_key],
+      ["CEO Master Admin recognized", data.is_ceo_master_admin ? "yes" : "no"],
+      ["Wildcard permission status", data.is_wildcard ? "granted" : "not granted"],
+      ["Queue-scope mode", data.queue_scope_mode],
+      ["Bootstrap endpoint status", data.bootstrap_endpoint_status],
+      ["Search endpoint status", data.search_endpoint_status],
+      ["Frontend revision", data.frontend_revision],
+      ["Backend revision", data.backend_revision],
+    ];
+    output.innerHTML = rows
+      .map(function (row) {
+        return `<div><dt>${escapeHtml(row[0])}</dt><dd>${escapeHtml(String(row[1] ?? "unknown"))}</dd></div>`;
+      })
+      .join("");
+  }
+
+  async function loadDiagnostics() {
+    if (!state.isSuperAdmin) return;
+    try {
+      const payload = await fetchJson("/admin/control-center/diagnostics");
+      renderDiagnostics(payload);
+    } catch (error) {
+      console.error("Diagnostics load failed:", error);
+      renderDiagnostics({
+        role_key: state.roleKey,
+        bootstrap_endpoint_status: "unavailable",
+        search_endpoint_status: "unavailable",
+      });
+    }
+  }
+
   function formatExpirationCountdown(value) {
     if (!value) return "unknown expiry";
     const expiresAt = new Date(value).getTime();
@@ -699,6 +787,8 @@
       if (isMarketingRole()) renderMarketingQueuePanel();
     } catch (error) {
       console.error("Overview load failed:", error);
+      const code = classifyAdminError(error, ADMIN_ERROR_CODES.bootstrap);
+      showBootstrapError(code, error && error.message, loadOverview);
       state.marketingSections = {};
       state.operationsSections = {};
       renderTopSummary({}, {}, {});
@@ -1455,7 +1545,9 @@
           : requirements.every(function (key) {
               return scope[key];
             });
-      const available = Boolean(selected && allowedByRole && allowedByCase && hasRequirements);
+      const available = Boolean(
+        selected && allowedByRole && allowedByCase && hasRequirements && !state.bootstrapFailed,
+      );
       button.hidden = !allowedByRole;
       button.disabled = !available;
       button.classList.toggle("is-disabled", !available);
@@ -1464,17 +1556,30 @@
       button.classList.toggle("admin-action-tier--secondary", tier === "secondary");
       button.classList.toggle("admin-action-tier--utility", tier === "utility");
       button.setAttribute("aria-disabled", available ? "false" : "true");
+      if (!available && state.bootstrapFailed) {
+        button.title = `Disabled: admin bootstrap has not succeeded (${state.bootstrapErrorCode}).`;
+      } else if (!available && !selected) {
+        button.title = "Disabled: select a valid target account first.";
+      } else {
+        button.removeAttribute("title");
+      }
     });
   }
 
   function updateBulkActionAvailability() {
     document.querySelectorAll("[data-admin-bulk-action]").forEach(function (button) {
       const action = button.getAttribute("data-admin-bulk-action") || "";
-      const allowed = isAllowedBulkAction(action);
-      button.hidden = !allowed;
+      const allowedByRole = isAllowedBulkAction(action);
+      const allowed = allowedByRole && !state.bootstrapFailed;
+      button.hidden = !allowedByRole;
       button.disabled = !allowed;
       button.classList.toggle("is-disabled", !allowed);
       button.setAttribute("aria-disabled", allowed ? "false" : "true");
+      if (!allowed && state.bootstrapFailed) {
+        button.title = `Disabled: admin bootstrap has not succeeded (${state.bootstrapErrorCode}).`;
+      } else {
+        button.removeAttribute("title");
+      }
     });
   }
 
@@ -1559,7 +1664,9 @@
       clearPageStatus();
     } catch (error) {
       console.error("Case load failed:", error);
-      setPageStatus(error.message || "Unable to load customer cases.", "error");
+      const code = classifyAdminError(error, ADMIN_ERROR_CODES.search);
+      showBootstrapError(code, error && error.message, loadCases);
+      setPageStatus(`${code}: ${error && error.message ? error.message : "Unable to load customer cases."}`, "error");
     }
   }
 
@@ -2002,6 +2109,19 @@
       const target = event.target;
       if (!(target instanceof Element)) return;
 
+      const bootstrapRetry = target.closest("[data-admin-bootstrap-retry]");
+      if (bootstrapRetry) {
+        const retryFn = lastFailedRetry;
+        clearBootstrapError();
+        setPageStatus("Retrying...", "info");
+        if (typeof retryFn === "function") {
+          retryFn();
+        } else {
+          bootstrapAccessAndData();
+        }
+        return;
+      }
+
       const queueButton = target.closest("[data-case-queue]");
       if (queueButton) {
         const queue = queueButton.getAttribute("data-case-queue") || "overview";
@@ -2186,9 +2306,18 @@
     }
     if (statusNode) {
       const queueCount = Array.isArray(state.allowedQueues) ? state.allowedQueues.length : 0;
+      const isWildcardScope = Boolean(
+        state.isSuperAdmin || (state.accessProfile && state.accessProfile.is_wildcard),
+      );
+      // The CEO Master Admin (and any other wildcard-scoped role) must never
+      // display "0 permitted queues" -- wildcard scope always resolves to
+      // every operational queue, even if the ordinary allowlist is sparse.
+      const scopeLabel = isWildcardScope
+        ? "All permitted operational queues"
+        : `${queueCount} permitted ${isMarketingRole() ? "section" : "queue"}${queueCount === 1 ? "" : "s"}`;
       statusNode.textContent = isMarketingRole()
-        ? `Marketing command center is active for role: ${state.roleKey || DEFAULT_ROLE_KEY} across ${queueCount} permitted section${queueCount === 1 ? "" : "s"}.`
-        : `Search-first case operations are active for role: ${state.roleKey || DEFAULT_ROLE_KEY} across ${queueCount} permitted queue${queueCount === 1 ? "" : "s"}.`;
+        ? `Marketing command center is active for role: ${state.roleKey || DEFAULT_ROLE_KEY} across ${scopeLabel}.`
+        : `Search-first case operations are active for role: ${state.roleKey || DEFAULT_ROLE_KEY} across ${scopeLabel}.`;
     }
   }
 
@@ -2202,6 +2331,35 @@
     if (contextPanel) contextPanel.hidden = true;
     const railHeading = document.querySelector(".admin-case-rail h3");
     if (railHeading) railHeading.textContent = "Marketing Rail";
+  }
+
+  async function bootstrapAccessAndData() {
+    try {
+      await loadAccessProfile();
+      if (state.isSuperAdmin) {
+        await loadPackageOptions();
+      }
+      await loadActiveImpersonation();
+      startImpersonationTicker();
+      clearBootstrapError();
+    } catch (error) {
+      console.error("Admin bootstrap failed:", error);
+      const code = classifyAdminError(error, ADMIN_ERROR_CODES.accessProfile);
+      showBootstrapError(code, error && error.message, bootstrapAccessAndData);
+      setPageStatus(`${code}: ${error && error.message ? error.message : "Unable to load access profile."}`, "error");
+    }
+
+    configureMarketingLayout();
+    updateRoleSummary();
+    applyRailSelection();
+    applyTabSelection();
+    renderCaseHeader();
+    updateActionAvailability();
+    updateBulkActionAvailability();
+    await Promise.allSettled([loadOverview(), loadCases()]);
+    if (state.isSuperAdmin) {
+      await loadDiagnostics();
+    }
   }
 
   async function setupPage() {
@@ -2218,25 +2376,7 @@
     // ignored regardless of whether the async profile/data loads succeed.
     bindEvents();
 
-    try {
-      await loadAccessProfile();
-      if (state.isSuperAdmin) {
-        await loadPackageOptions();
-      }
-      await loadActiveImpersonation();
-      startImpersonationTicker();
-    } catch (error) {
-      setPageStatus(error.message || "Unable to load access profile.", "error");
-    }
-
-    configureMarketingLayout();
-    updateRoleSummary();
-    applyRailSelection();
-    applyTabSelection();
-    renderCaseHeader();
-    updateActionAvailability();
-    updateBulkActionAvailability();
-    await Promise.allSettled([loadOverview(), loadCases()]);
+    await bootstrapAccessAndData();
   }
 
   document.addEventListener("DOMContentLoaded", function () {
