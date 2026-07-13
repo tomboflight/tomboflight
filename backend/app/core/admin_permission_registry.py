@@ -4,6 +4,8 @@ from typing import Any
 
 from app.core.role_catalog import normalize_role_code
 
+CEO_MASTER_ADMIN_EMAIL = "l.robinson@tomboflight.com"
+
 PERMISSION_REGISTRY: dict[str, dict[str, str]] = {
     "admin.access": {"name": "Admin Workspace Access", "description": "Access shared admin workspace data."},
     "admin.control.view": {"name": "Admin Control View", "description": "View admin control center case data."},
@@ -55,6 +57,7 @@ ROLE_CAPABILITIES: dict[str, set[str]] = {
     # Deprecated generic admin role: no implicit capability grants.
     "admin": set(),
     "super_admin": {"*"},
+    "ceo_master_admin": {"*"},
     "ceo_super_admin": {"*"},
     "executive_tech_admin": {
         "manage_roles",
@@ -95,6 +98,7 @@ ROLE_PERMISSION_MAP: dict[str, set[str]] = {
     # Deprecated generic admin role: no implicit permission grants.
     "admin": set(),
     "super_admin": {"*"},
+    "ceo_master_admin": {"*"},
     "ceo_super_admin": {"*"},
     "executive_tech_admin": {
         "admin.access",
@@ -154,6 +158,10 @@ ROLE_METADATA: dict[str, dict[str, str]] = {
         "name": "CEO Super Admin",
         "description": "CEO-level full platform controls with required audit logging.",
     },
+    "ceo_master_admin": {
+        "name": "CEO Master Administrator",
+        "description": "Canonical CEO-level master administrator role with full platform controls and audit logging.",
+    },
     "executive_tech_admin": {
         "name": "Executive Technical Admin",
         "description": "Executive technical operations and admin control center access.",
@@ -173,7 +181,7 @@ ROLE_METADATA: dict[str, dict[str, str]] = {
 }
 
 OFFICER_ROLE_MAPPING: dict[str, list[str]] = {
-    "l.robinson@tomboflight.com": ["CEO_SUPER_ADMIN", "EXECUTIVE_TECH_ADMIN"],
+    "l.robinson@tomboflight.com": ["CEO_MASTER_ADMIN", "EXECUTIVE_TECH_ADMIN"],
     "marquis.l.floyd@tomboflight.com": ["CMO_ADMIN"],
     "jenn.wood@tomboflight.com": ["CFO_ADMIN"],
     "k.goffigan@tomboflight.com": ["COO_ADMIN"],
@@ -183,7 +191,7 @@ OFFICER_PROFILE_FIELDS: dict[str, dict[str, str]] = {
     "l.robinson@tomboflight.com": {
         "full_name": "Larry Robinson",
         "business_title": "CEO",
-        "access_tier": "super_admin",
+        "access_tier": "ceo_master_admin",
         "department_role": "executive_tech_admin",
     },
     "marquis.l.floyd@tomboflight.com": {

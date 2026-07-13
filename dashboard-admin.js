@@ -8,6 +8,7 @@
 
   const INTERNAL_ROLE_KEYS = new Set([
     "super_admin",
+    "ceo_master_admin",
     "executive_tech_admin",
     "operations_admin",
     "finance_admin",
@@ -18,6 +19,10 @@
     superadmin: "super_admin",
     root_admin: "super_admin",
     platform_admin: "super_admin",
+    ceo_super_admin: "ceo_master_admin",
+    "ceo-super-admin": "ceo_master_admin",
+    ceo_master_admin: "ceo_master_admin",
+    "ceo-master-admin": "ceo_master_admin",
     executive_technology: "executive_tech_admin",
     executive_tech_admin: "executive_tech_admin",
     "executive-tech-admin": "executive_tech_admin",

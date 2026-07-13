@@ -116,20 +116,14 @@
 
     node.style.display = "block";
     node.textContent = message;
-
-    if (type === "error") {
-      node.style.color = "#ffb3b3";
-    } else if (type === "success") {
-      node.style.color = "#cfe8cf";
-    } else {
-      node.style.color = "#d6e6ff";
-    }
+    node.dataset.state = type || "info";
   }
 
   function clearStatus(node) {
     if (!node) return;
     node.style.display = "none";
     node.textContent = "";
+    node.dataset.state = "";
   }
 
   function getUserFacingErrorMessage(error, fallback) {

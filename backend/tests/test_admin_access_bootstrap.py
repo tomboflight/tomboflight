@@ -100,7 +100,7 @@ class AdminAccessBootstrapTests(unittest.TestCase):
         mapping = normalized_officer_role_mapping()
         self.assertEqual(
             mapping["l.robinson@tomboflight.com"],
-            ["ceo_super_admin", "executive_tech_admin"],
+            ["ceo_master_admin", "executive_tech_admin"],
         )
         self.assertNotIn("l.robinson@tomboflight", mapping)
         self.assertEqual(mapping["jenn.wood@tomboflight.com"], ["finance_admin"])
@@ -133,7 +133,11 @@ class AdminAccessBootstrapTests(unittest.TestCase):
             for doc in user_role_assignments
             if doc["user_id"] == "u-larry" and doc.get("status") == "active"
         )
-        self.assertEqual(larry_roles, ["ceo_super_admin", "executive_tech_admin"])
+        self.assertEqual(larry_roles, ["ceo_master_admin", "executive_tech_admin"])
+        self.assertNotIn(
+            ("u-jenn", "ceo_master_admin"),
+            assignment_keys,
+        )
 
         jenn_roles = [
             doc["role_code"]
