@@ -4,6 +4,7 @@
       "/usr/local/bin/node",
       "/home/runner/work/tomboflight/tomboflight/node_modules/.bin/playwright",
       "test",
+      "browser-tests/master-admin.spec.mjs",
       "browser-tests/dashboard-admin.spec.mjs",
       "--browser=webkit"
     ],
@@ -25,19 +26,19 @@
         "buildHref": "https://github.com/tomboflight/tomboflight/actions/runs/29254541011"
       },
       "gitCommit": {
-        "shortHash": "7c45000",
-        "hash": "7c450005e9854020a49b409ea9ae09a3c2ae50f3",
-        "subject": "Merge pull request #556 from tomboflight/copilot/fix-comments-review-thread",
-        "body": "Merge pull request #556 from tomboflight/copilot/fix-comments-review-thread\n\n[WIP] Fix code based on review comments",
+        "shortHash": "7b39167",
+        "hash": "7b39167dc302a5785d56b70ac7cc57fce7f255a4",
+        "subject": "Fix CEO master admin theme control, queue-scope wording, coded bootstrap errors, diagnostics panel",
+        "body": "Fix CEO master admin theme control, queue-scope wording, coded bootstrap errors, diagnostics panel\n",
         "author": {
-          "name": "Larry Robinson",
-          "email": "thetomboflight@gmail.com",
-          "time": 1783911666000
+          "name": "copilot-swe-agent[bot]",
+          "email": "198982749+Copilot@users.noreply.github.com",
+          "time": 1783951044000
         },
         "committer": {
           "name": "GitHub",
           "email": "noreply@github.com",
-          "time": 1783911666000
+          "time": 1783951044000
         },
         "branch": "copilot/restore-ceo-master-admin-control-center"
       },
@@ -56,19 +57,19 @@
             "buildHref": "https://github.com/tomboflight/tomboflight/actions/runs/29254541011"
           },
           "gitCommit": {
-            "shortHash": "7c45000",
-            "hash": "7c450005e9854020a49b409ea9ae09a3c2ae50f3",
-            "subject": "Merge pull request #556 from tomboflight/copilot/fix-comments-review-thread",
-            "body": "Merge pull request #556 from tomboflight/copilot/fix-comments-review-thread\n\n[WIP] Fix code based on review comments",
+            "shortHash": "7b39167",
+            "hash": "7b39167dc302a5785d56b70ac7cc57fce7f255a4",
+            "subject": "Fix CEO master admin theme control, queue-scope wording, coded bootstrap errors, diagnostics panel",
+            "body": "Fix CEO master admin theme control, queue-scope wording, coded bootstrap errors, diagnostics panel\n",
             "author": {
-              "name": "Larry Robinson",
-              "email": "thetomboflight@gmail.com",
-              "time": 1783911666000
+              "name": "copilot-swe-agent[bot]",
+              "email": "198982749+Copilot@users.noreply.github.com",
+              "time": 1783951044000
             },
             "committer": {
               "name": "GitHub",
               "email": "noreply@github.com",
-              "time": 1783911666000
+              "time": 1783951044000
             },
             "branch": "copilot/restore-ceo-master-admin-control-center"
           },
@@ -137,12 +138,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 9024,
+                  "duration": 6910,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-07-13T13:56:20.702Z",
+                  "startTime": "2026-07-13T14:01:27.245Z",
                   "annotations": [],
                   "attachments": []
                 }
@@ -171,12 +172,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 1880,
+                  "duration": 1953,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-07-13T13:56:29.849Z",
+                  "startTime": "2026-07-13T14:01:34.288Z",
                   "annotations": [],
                   "attachments": []
                 }
@@ -205,12 +206,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 9162,
+                  "duration": 9128,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-07-13T13:56:31.746Z",
+                  "startTime": "2026-07-13T14:01:36.276Z",
                   "annotations": [],
                   "attachments": []
                 }
@@ -239,12 +240,12 @@
                   "workerIndex": 0,
                   "parallelIndex": 0,
                   "status": "passed",
-                  "duration": 1972,
+                  "duration": 1517,
                   "errors": [],
                   "stdout": [],
                   "stderr": [],
                   "retry": 0,
-                  "startTime": "2026-07-13T13:56:40.922Z",
+                  "startTime": "2026-07-13T14:01:45.430Z",
                   "annotations": [],
                   "attachments": []
                 }
@@ -258,13 +259,417 @@
           "column": 1
         }
       ]
+    },
+    {
+      "title": "master-admin.spec.mjs",
+      "file": "master-admin.spec.mjs",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "[appearance] validates readability + screenshots for all appearance modes",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "mock-env",
+                  "description": "{\"packageApplyWrites\":0,\"serviceApplyWrites\":0,\"officerApplyWrites\":0,\"previewWrites\":0,\"stripeMutations\":0,\"blockchainOps\":0,\"productionWrites\":0,\"impersonationAuditEvents\":0}"
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "webkit",
+              "projectName": "webkit",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 11105,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-07-13T14:01:46.991Z",
+                  "annotations": [
+                    {
+                      "type": "mock-env",
+                      "description": "{\"packageApplyWrites\":0,\"serviceApplyWrites\":0,\"officerApplyWrites\":0,\"previewWrites\":0,\"stripeMutations\":0,\"blockchainOps\":0,\"productionWrites\":0,\"impersonationAuditEvents\":0}"
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c3cfbdb86afeec39f5e1-c37eb2db2e68fd4745df",
+          "file": "master-admin.spec.mjs",
+          "line": 407,
+          "column": 1
+        },
+        {
+          "title": "[theme] validates persistence across reload/navigation/login and impersonation lifecycle",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "mock-env",
+                  "description": "{\"packageApplyWrites\":0,\"serviceApplyWrites\":0,\"officerApplyWrites\":0,\"previewWrites\":0,\"stripeMutations\":0,\"blockchainOps\":0,\"productionWrites\":0,\"impersonationAuditEvents\":0}"
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "webkit",
+              "projectName": "webkit",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 4121,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-07-13T14:01:58.111Z",
+                  "annotations": [
+                    {
+                      "type": "mock-env",
+                      "description": "{\"packageApplyWrites\":0,\"serviceApplyWrites\":0,\"officerApplyWrites\":0,\"previewWrites\":0,\"stripeMutations\":0,\"blockchainOps\":0,\"productionWrites\":0,\"impersonationAuditEvents\":0}"
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c3cfbdb86afeec39f5e1-b114baa17c0f1837c160",
+          "file": "master-admin.spec.mjs",
+          "line": 457,
+          "column": 1
+        },
+        {
+          "title": "[keyboard] validates keyboard-only navigation reachability and no trap",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "mock-env",
+                  "description": "{\"packageApplyWrites\":0,\"serviceApplyWrites\":0,\"officerApplyWrites\":0,\"previewWrites\":0,\"stripeMutations\":0,\"blockchainOps\":0,\"productionWrites\":0,\"impersonationAuditEvents\":0}"
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "webkit",
+              "projectName": "webkit",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1556,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-07-13T14:02:02.255Z",
+                  "annotations": [
+                    {
+                      "type": "mock-env",
+                      "description": "{\"packageApplyWrites\":0,\"serviceApplyWrites\":0,\"officerApplyWrites\":0,\"previewWrites\":0,\"stripeMutations\":0,\"blockchainOps\":0,\"productionWrites\":0,\"impersonationAuditEvents\":0}"
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c3cfbdb86afeec39f5e1-c5d3876ed6a12ef71fda",
+          "file": "master-admin.spec.mjs",
+          "line": 492,
+          "column": 1
+        },
+        {
+          "title": "[contrast] validates WCAG AA contrast thresholds for key selectors",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "mock-env",
+                  "description": "{\"packageApplyWrites\":0,\"serviceApplyWrites\":0,\"officerApplyWrites\":0,\"previewWrites\":0,\"stripeMutations\":0,\"blockchainOps\":0,\"productionWrites\":0,\"impersonationAuditEvents\":0}"
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "webkit",
+              "projectName": "webkit",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1773,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-07-13T14:02:03.828Z",
+                  "annotations": [
+                    {
+                      "type": "mock-env",
+                      "description": "{\"packageApplyWrites\":0,\"serviceApplyWrites\":0,\"officerApplyWrites\":0,\"previewWrites\":0,\"stripeMutations\":0,\"blockchainOps\":0,\"productionWrites\":0,\"impersonationAuditEvents\":0}"
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c3cfbdb86afeec39f5e1-41a4144400ec213ef2cf",
+          "file": "master-admin.spec.mjs",
+          "line": 514,
+          "column": 1
+        },
+        {
+          "title": "[account360] validates all tabs + loading/empty/denied/error states and sensitive-data guards",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "mock-env",
+                  "description": "{\"packageApplyWrites\":0,\"serviceApplyWrites\":0,\"officerApplyWrites\":0,\"previewWrites\":0,\"stripeMutations\":0,\"blockchainOps\":0,\"productionWrites\":0,\"impersonationAuditEvents\":0}"
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "webkit",
+              "projectName": "webkit",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 3653,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-07-13T14:02:05.616Z",
+                  "annotations": [
+                    {
+                      "type": "mock-env",
+                      "description": "{\"packageApplyWrites\":0,\"serviceApplyWrites\":0,\"officerApplyWrites\":0,\"previewWrites\":0,\"stripeMutations\":0,\"blockchainOps\":0,\"productionWrites\":0,\"impersonationAuditEvents\":0}"
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c3cfbdb86afeec39f5e1-056965eca5e98970acd0",
+          "file": "master-admin.spec.mjs",
+          "line": 586,
+          "column": 1
+        },
+        {
+          "title": "[search] validates multi-identifier search and badge distinctions",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "mock-env",
+                  "description": "{\"packageApplyWrites\":0,\"serviceApplyWrites\":0,\"officerApplyWrites\":0,\"previewWrites\":0,\"stripeMutations\":0,\"blockchainOps\":0,\"productionWrites\":0,\"impersonationAuditEvents\":0}"
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "webkit",
+              "projectName": "webkit",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 2264,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-07-13T14:02:09.290Z",
+                  "annotations": [
+                    {
+                      "type": "mock-env",
+                      "description": "{\"packageApplyWrites\":0,\"serviceApplyWrites\":0,\"officerApplyWrites\":0,\"previewWrites\":0,\"stripeMutations\":0,\"blockchainOps\":0,\"productionWrites\":0,\"impersonationAuditEvents\":0}"
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c3cfbdb86afeec39f5e1-90345b207f4f587471ce",
+          "file": "master-admin.spec.mjs",
+          "line": 614,
+          "column": 1
+        },
+        {
+          "title": "[package-service] validates preview/cancel/apply/idempotent and no Stripe or blockchain mutation",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "mock-env",
+                  "description": "{\"packageApplyWrites\":0,\"serviceApplyWrites\":0,\"officerApplyWrites\":0,\"previewWrites\":0,\"stripeMutations\":0,\"blockchainOps\":0,\"productionWrites\":0,\"impersonationAuditEvents\":0}"
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "webkit",
+              "projectName": "webkit",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 4939,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-07-13T14:02:11.570Z",
+                  "annotations": [
+                    {
+                      "type": "mock-env",
+                      "description": "{\"packageApplyWrites\":0,\"serviceApplyWrites\":0,\"officerApplyWrites\":0,\"previewWrites\":0,\"stripeMutations\":0,\"blockchainOps\":0,\"productionWrites\":0,\"impersonationAuditEvents\":0}"
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c3cfbdb86afeec39f5e1-bf73c6242d03ba2c7a8c",
+          "file": "master-admin.spec.mjs",
+          "line": 637,
+          "column": 1
+        },
+        {
+          "title": "[officer] validates officer permission templates/preview/apply/guardrails via browser API flow",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "mock-env",
+                  "description": "{\"packageApplyWrites\":0,\"serviceApplyWrites\":0,\"officerApplyWrites\":0,\"previewWrites\":0,\"stripeMutations\":0,\"blockchainOps\":0,\"productionWrites\":0,\"impersonationAuditEvents\":0}"
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "webkit",
+              "projectName": "webkit",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 1373,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-07-13T14:02:16.525Z",
+                  "annotations": [
+                    {
+                      "type": "mock-env",
+                      "description": "{\"packageApplyWrites\":0,\"serviceApplyWrites\":0,\"officerApplyWrites\":0,\"previewWrites\":0,\"stripeMutations\":0,\"blockchainOps\":0,\"productionWrites\":0,\"impersonationAuditEvents\":0}"
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c3cfbdb86afeec39f5e1-e3fac34c07121f09c7a2",
+          "file": "master-admin.spec.mjs",
+          "line": 660,
+          "column": 1
+        },
+        {
+          "title": "[impersonation] validates read-only start, reason requirements, banner, escalation, stop, and nested rejection",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 60000,
+              "annotations": [
+                {
+                  "type": "mock-env",
+                  "description": "{\"packageApplyWrites\":0,\"serviceApplyWrites\":0,\"officerApplyWrites\":0,\"previewWrites\":0,\"stripeMutations\":0,\"blockchainOps\":0,\"productionWrites\":0,\"impersonationAuditEvents\":0}"
+                }
+              ],
+              "expectedStatus": "passed",
+              "projectId": "webkit",
+              "projectName": "webkit",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 4137,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-07-13T14:02:17.911Z",
+                  "annotations": [
+                    {
+                      "type": "mock-env",
+                      "description": "{\"packageApplyWrites\":0,\"serviceApplyWrites\":0,\"officerApplyWrites\":0,\"previewWrites\":0,\"stripeMutations\":0,\"blockchainOps\":0,\"productionWrites\":0,\"impersonationAuditEvents\":0}"
+                    }
+                  ],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "c3cfbdb86afeec39f5e1-3b1283275a26a31d13be",
+          "file": "master-admin.spec.mjs",
+          "line": 722,
+          "column": 1
+        }
+      ]
     }
   ],
   "errors": [],
   "stats": {
-    "startTime": "2026-07-13T13:56:20.098Z",
-    "duration": 39632.884999999995,
-    "expected": 4,
+    "startTime": "2026-07-13T14:01:26.605Z",
+    "duration": 55781.348,
+    "expected": 13,
     "skipped": 0,
     "unexpected": 0,
     "flaky": 0

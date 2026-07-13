@@ -1505,8 +1505,9 @@
   function normalizeAdminAppearance(raw) {
     const payload = raw && typeof raw === "object" ? raw : {};
     const theme = String(payload.theme || "light").trim().toLowerCase();
-    // "default" is accepted for backward compatibility with previously
-    // persisted preferences; the canonical value is "normal".
+    // Canonical text-scale value is "normal"; any previously persisted
+    // value other than "large" (including the legacy "default") also
+    // normalizes to "normal" below.
     const textScale = String(payload.textScale || "normal").trim().toLowerCase();
     return {
       theme: ["light", "dark", "high-contrast"].includes(theme) ? theme : "light",
@@ -1638,7 +1639,7 @@
           </div>
         </div>
         <label class="admin-appearance-checkbox">
-          <input type="checkbox" role="switch" data-admin-appearance-large-text aria-checked="${appearance.textScale === "large" ? "true" : "false"}" ${appearance.textScale === "large" ? 'checked="checked"' : ""} />
+          <input type="checkbox" data-admin-appearance-large-text ${appearance.textScale === "large" ? 'checked="checked"' : ""} />
           <span>Larger Text</span>
         </label>
       </div>
@@ -1700,10 +1701,7 @@
       });
     });
 
-    largeTextInput.addEventListener("change", function () {
-      largeTextInput.setAttribute("aria-checked", largeTextInput.checked ? "true" : "false");
-      saveAndApply();
-    });
+    largeTextInput.addEventListener("change", saveAndApply);
   }
 
   function setupAdminAppearance(user) {

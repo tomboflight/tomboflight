@@ -1569,8 +1569,9 @@
   function updateBulkActionAvailability() {
     document.querySelectorAll("[data-admin-bulk-action]").forEach(function (button) {
       const action = button.getAttribute("data-admin-bulk-action") || "";
-      const allowed = isAllowedBulkAction(action) && !state.bootstrapFailed;
-      button.hidden = !isAllowedBulkAction(action);
+      const allowedByRole = isAllowedBulkAction(action);
+      const allowed = allowedByRole && !state.bootstrapFailed;
+      button.hidden = !allowedByRole;
       button.disabled = !allowed;
       button.classList.toggle("is-disabled", !allowed);
       button.setAttribute("aria-disabled", allowed ? "false" : "true");
