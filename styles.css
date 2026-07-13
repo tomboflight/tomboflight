@@ -7836,7 +7836,7 @@ main [id] {
 .admin-ops-page .btn:disabled,
 .admin-ops-page .btn.is-disabled {
   cursor: not-allowed;
-  opacity: 0.42;
+  opacity: 0.78;
   transform: none;
   box-shadow: none;
 }
@@ -8891,5 +8891,176 @@ main [id] {
 
   .pricing-accordion > :not(summary) {
     padding: 0 18px 18px;
+  }
+}
+
+/* ============================================================
+   Admin accessibility appearance modes
+   ============================================================ */
+
+body.admin-interface-mode {
+  --admin-bg: #f5f8fc;
+  --admin-panel: #ffffff;
+  --admin-border: #cfdbea;
+  --admin-text: #0f1723;
+  --admin-muted: #415367;
+  --admin-focus: #0f5ea8;
+  --admin-focus-glow: rgba(15, 94, 168, 0.28);
+  --admin-status-info: #0f5ea8;
+  --admin-status-success: #13603a;
+  --admin-status-error: #922922;
+  --admin-status-warning: #7a4a06;
+  --admin-helper-bg: rgba(255, 255, 255, 0.86);
+  color: var(--admin-text);
+  line-height: 1.6;
+}
+
+body.admin-interface-mode[data-admin-theme="dark"] {
+  --admin-bg: #08101d;
+  --admin-panel: #0f192a;
+  --admin-border: #2b3d53;
+  --admin-text: #e9f1ff;
+  --admin-muted: #c5d3e5;
+  --admin-focus: #73b7ff;
+  --admin-focus-glow: rgba(115, 183, 255, 0.4);
+  --admin-status-info: #9ccfff;
+  --admin-status-success: #9be8bc;
+  --admin-status-error: #ffb8b4;
+  --admin-status-warning: #ffd886;
+  --admin-helper-bg: rgba(11, 20, 33, 0.82);
+  color-scheme: dark;
+}
+
+body.admin-interface-mode[data-admin-theme="high-contrast"] {
+  --admin-bg: #000000;
+  --admin-panel: #000000;
+  --admin-border: #ffffff;
+  --admin-text: #ffffff;
+  --admin-muted: #ffffff;
+  --admin-focus: #ffd400;
+  --admin-focus-glow: rgba(255, 212, 0, 0.55);
+  --admin-status-info: #ffffff;
+  --admin-status-success: #7cffad;
+  --admin-status-error: #ff9d9d;
+  --admin-status-warning: #ffe48a;
+  --admin-helper-bg: #000000;
+  color-scheme: dark;
+}
+
+body.admin-interface-mode[data-admin-text-scale="large"] {
+  font-size: 18px;
+}
+
+body.admin-interface-mode :focus-visible {
+  outline: 3px solid var(--admin-focus) !important;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--admin-focus-glow);
+}
+
+body.admin-interface-mode .admin-ops-page,
+body.admin-interface-mode [data-admin-family-manager-page],
+body.admin-interface-mode [data-admin-queue-page],
+body.admin-interface-mode [data-admin-review-page] {
+  color: var(--admin-text);
+}
+
+body.admin-interface-mode .admin-command-bar,
+body.admin-interface-mode .admin-case-rail,
+body.admin-interface-mode .admin-case-list-panel,
+body.admin-interface-mode .admin-case-workspace-panel,
+body.admin-interface-mode .admin-case-context-panel,
+body.admin-interface-mode .portal-intake-layout section,
+body.admin-interface-mode .admin-review-layout section,
+body.admin-interface-mode .family-manager-pane,
+body.admin-interface-mode .family-manager-pane .family-record-card {
+  background: var(--admin-panel);
+  border-color: var(--admin-border);
+  color: var(--admin-text);
+  box-shadow: 0 16px 38px rgba(7, 13, 25, 0.12);
+}
+
+body.admin-interface-mode .card-copy,
+body.admin-interface-mode .helper,
+body.admin-interface-mode .notice,
+body.admin-interface-mode label,
+body.admin-interface-mode .admin-command-copy p,
+body.admin-interface-mode .admin-command-search label {
+  color: var(--admin-muted);
+  opacity: 1;
+}
+
+body.admin-interface-mode input,
+body.admin-interface-mode select,
+body.admin-interface-mode textarea,
+body.admin-interface-mode button,
+body.admin-interface-mode .btn,
+body.admin-interface-mode table,
+body.admin-interface-mode [role="tab"] {
+  color: var(--admin-text);
+  border-color: var(--admin-border);
+}
+
+body.admin-interface-mode .helper[data-state] {
+  color: var(--admin-status-info);
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--admin-border);
+  background: var(--admin-helper-bg);
+}
+
+body.admin-interface-mode [data-state="success"] {
+  color: var(--admin-status-success) !important;
+}
+
+body.admin-interface-mode [data-state="error"] {
+  color: var(--admin-status-error) !important;
+}
+
+body.admin-interface-mode [data-state="warning"] {
+  color: var(--admin-status-warning) !important;
+}
+
+body.admin-interface-mode [data-state="info"] {
+  color: var(--admin-status-info) !important;
+}
+
+.admin-appearance-controls {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.admin-appearance-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  min-width: 210px;
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--admin-border, rgba(154, 173, 196, 0.4));
+  background: var(--admin-panel, #ffffff);
+  box-shadow: 0 12px 28px rgba(8, 17, 30, 0.22);
+  z-index: 30;
+}
+
+.admin-appearance-panel label {
+  display: grid;
+  gap: 8px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--admin-muted, #32465c);
+}
+
+.admin-appearance-checkbox {
+  grid-template-columns: auto 1fr;
+  align-items: center;
+}
+
+@media (max-width: 760px) {
+  .admin-appearance-panel {
+    right: auto;
+    left: 0;
   }
 }

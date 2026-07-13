@@ -17,6 +17,8 @@
   const TOKEN_KEY = "tol_access_token";
   const USER_KEY = "tol_user";
   const COOKIE_CHOICE_KEY = "tol_cookie_choice";
+  const ADMIN_APPEARANCE_DEFAULT_KEY = "tol_admin_appearance_default";
+  const ADMIN_APPEARANCE_BY_USER_KEY = "tol_admin_appearance_by_user";
   const PENDING_CHECKOUT_KEY = "tol_pending_checkout";
   const FOUNDER_MAINTENANCE_PENDING_KEY = "tol_founder_maintenance_pending";
   const LIGHT_NEVER_DIES_CAMPAIGN = "LIGHT_NEVER_DIES";
@@ -360,6 +362,7 @@
   // than maintaining its own copy of this set.
   const INTERNAL_ROLE_KEYS = new Set([
     "super_admin",
+    "ceo_master_admin",
     "executive_tech_admin",
     "operations_admin",
     "finance_admin",
@@ -370,6 +373,12 @@
     superadmin: "super_admin",
     root_admin: "super_admin",
     platform_admin: "super_admin",
+    ceo_super_admin: "ceo_master_admin",
+    "ceo-super-admin": "ceo_master_admin",
+    ceo_master_admin: "ceo_master_admin",
+    "ceo-master-admin": "ceo_master_admin",
+    ceo_admin: "ceo_master_admin",
+    ceo: "ceo_master_admin",
     executive_technology: "executive_tech_admin",
     executive_tech_admin: "executive_tech_admin",
     "executive-tech-admin": "executive_tech_admin",
@@ -1137,6 +1146,7 @@
   async function fetchCurrentUser() {
     const user = await apiRequest("/auth/me", { method: "GET" });
     saveUser(user);
+    setupAdminAppearance(user);
     return user;
   }
 
@@ -1188,14 +1198,6 @@
     node.style.display = "block";
     node.textContent = resolvedMessage;
     node.dataset.state = type || "info";
-
-    if (type === "error") {
-      node.style.color = "#ffb3b3";
-    } else if (type === "success") {
-      node.style.color = "#cfe8cf";
-    } else {
-      node.style.color = "#d6e6ff";
-    }
   }
 
   function clearStatus(node) {
@@ -1500,6 +1502,159 @@
     }
   }
 
+  function normalizeAdminAppearance(raw) {
+    const payload = raw && typeof raw === "object" ? raw : {};
+    const theme = String(payload.theme || "light").trim().toLowerCase();
+    const textScale = String(payload.textScale || "default").trim().toLowerCase();
+    return {
+      theme: ["light", "dark", "high-contrast"].includes(theme) ? theme : "light",
+      textScale: textScale === "large" ? "large" : "default",
+    };
+  }
+
+  function resolveAdminAppearancePrincipal(user) {
+    const source = user && typeof user === "object" ? user : getSavedUser() || {};
+    const directId = String(source.id || source._id || source.user_id || "").trim();
+    if (directId) return `id:${directId}`;
+    const email = String(source.email || "").trim().toLowerCase();
+    if (email) return `email:${email}`;
+    return "";
+  }
+
+  function readAdminAppearanceStore() {
+    try {
+      const raw = localStorage.getItem(ADMIN_APPEARANCE_BY_USER_KEY);
+      const parsed = raw ? JSON.parse(raw) : {};
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch (_error) {
+      return {};
+    }
+  }
+
+  function writeAdminAppearanceStore(value) {
+    try {
+      localStorage.setItem(ADMIN_APPEARANCE_BY_USER_KEY, JSON.stringify(value || {}));
+    } catch (_error) {
+      // Ignore storage failures.
+    }
+  }
+
+  function getSavedAdminAppearance(user) {
+    const principal = resolveAdminAppearancePrincipal(user);
+    const store = readAdminAppearanceStore();
+    if (principal && store[principal]) {
+      return normalizeAdminAppearance(store[principal]);
+    }
+    try {
+      return normalizeAdminAppearance(JSON.parse(localStorage.getItem(ADMIN_APPEARANCE_DEFAULT_KEY) || "{}"));
+    } catch (_error) {
+      return normalizeAdminAppearance({});
+    }
+  }
+
+  function saveAdminAppearance(preference, user) {
+    const normalized = normalizeAdminAppearance(preference);
+    const principal = resolveAdminAppearancePrincipal(user);
+    if (principal) {
+      const store = readAdminAppearanceStore();
+      store[principal] = normalized;
+      writeAdminAppearanceStore(store);
+    }
+    try {
+      localStorage.setItem(ADMIN_APPEARANCE_DEFAULT_KEY, JSON.stringify(normalized));
+    } catch (_error) {
+      // Ignore storage failures.
+    }
+    return normalized;
+  }
+
+  function shouldEnableAdminAppearance(user) {
+    const pageHasAdminMarkers =
+      Boolean(document.querySelector("[data-admin-control-center-page]")) ||
+      Boolean(document.querySelector("[data-admin-queue-page]")) ||
+      Boolean(document.querySelector("[data-admin-family-manager-page]")) ||
+      Boolean(document.querySelector("[data-admin-review-page]"));
+    if (pageHasAdminMarkers) return true;
+    const isDashboardPage = Boolean(document.querySelector("[data-dashboard]"));
+    return isDashboardPage && isInternalRole(user || getSavedUser() || {});
+  }
+
+  function applyAdminAppearance(preference, user) {
+    if (!shouldEnableAdminAppearance(user)) {
+      document.body.classList.remove("admin-interface-mode");
+      delete document.body.dataset.adminTheme;
+      delete document.body.dataset.adminTextScale;
+      delete document.documentElement.dataset.adminTheme;
+      delete document.documentElement.dataset.adminTextScale;
+      return;
+    }
+    const normalized = normalizeAdminAppearance(preference);
+    document.body.classList.add("admin-interface-mode");
+    document.body.dataset.adminTheme = normalized.theme;
+    document.body.dataset.adminTextScale = normalized.textScale;
+    document.documentElement.dataset.adminTheme = normalized.theme;
+    document.documentElement.dataset.adminTextScale = normalized.textScale;
+  }
+
+  function injectAdminAppearanceControls(user) {
+    if (!shouldEnableAdminAppearance(user)) return;
+    const container = document.querySelector(".header-actions");
+    if (!container) return;
+    if (container.querySelector("[data-admin-appearance-toggle]")) return;
+    const appearance = getSavedAdminAppearance(user);
+    const wrapper = document.createElement("div");
+    wrapper.className = "admin-appearance-controls";
+    wrapper.innerHTML = `
+      <button class="btn btn-secondary" type="button" data-admin-appearance-toggle aria-expanded="false" aria-controls="admin-appearance-panel">Appearance</button>
+      <div class="admin-appearance-panel" id="admin-appearance-panel" data-admin-appearance-panel hidden>
+        <label>
+          Theme
+          <select data-admin-appearance-theme>
+            <option value="light"${appearance.theme === "light" ? ' selected="selected"' : ""}>Light</option>
+            <option value="dark"${appearance.theme === "dark" ? ' selected="selected"' : ""}>Dark</option>
+            <option value="high-contrast"${appearance.theme === "high-contrast" ? ' selected="selected"' : ""}>High Contrast</option>
+          </select>
+        </label>
+        <label class="admin-appearance-checkbox">
+          <input type="checkbox" data-admin-appearance-large-text ${appearance.textScale === "large" ? 'checked="checked"' : ""} />
+          <span>Larger Text</span>
+        </label>
+      </div>
+    `;
+    container.prepend(wrapper);
+    const toggle = wrapper.querySelector("[data-admin-appearance-toggle]");
+    const panel = wrapper.querySelector("[data-admin-appearance-panel]");
+    const themeSelect = wrapper.querySelector("[data-admin-appearance-theme]");
+    const largeTextInput = wrapper.querySelector("[data-admin-appearance-large-text]");
+    if (!toggle || !panel || !themeSelect || !largeTextInput) return;
+
+    toggle.addEventListener("click", function () {
+      const isOpen = !panel.hidden;
+      panel.hidden = isOpen;
+      toggle.setAttribute("aria-expanded", isOpen ? "false" : "true");
+    });
+
+    function saveAndApply() {
+      const updated = saveAdminAppearance(
+        {
+          theme: String(themeSelect.value || "light"),
+          textScale: largeTextInput.checked ? "large" : "default",
+        },
+        user || getSavedUser() || {},
+      );
+      applyAdminAppearance(updated, user);
+    }
+
+    themeSelect.addEventListener("change", saveAndApply);
+    largeTextInput.addEventListener("change", saveAndApply);
+  }
+
+  function setupAdminAppearance(user) {
+    const saved = getSavedAdminAppearance(user);
+    applyAdminAppearance(saved, user);
+    injectAdminAppearanceControls(user);
+  }
+
   function setupSelectPlaceholderState() {
     document.querySelectorAll("select").forEach(function (select) {
       function syncPlaceholderState() {
@@ -1525,6 +1680,10 @@
     applyPaymentLinks();
     syncPublicAuthCtas();
     setupSelectPlaceholderState();
+    setupAdminAppearance(getSavedUser());
+    window.addEventListener("tol:user-resolved", function (event) {
+      setupAdminAppearance(event && event.detail ? event.detail.user : null);
+    });
   });
 
   const sharedApi = {
@@ -1560,6 +1719,10 @@
     setFounderMaintenancePending,
     clearFounderMaintenancePending,
     getReadableErrorMessage,
+    getSavedAdminAppearance,
+    saveAdminAppearance,
+    applyAdminAppearance,
+    setupAdminAppearance,
   };
 
   window.TOLApp = sharedApi;

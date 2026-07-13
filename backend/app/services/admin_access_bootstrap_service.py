@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from app.core.admin_permission_registry import (
+    CEO_MASTER_ADMIN_EMAIL,
     OFFICER_PROFILE_FIELDS,
     PERMISSION_REGISTRY,
     ROLE_METADATA,
@@ -108,6 +109,7 @@ def _sync_officer_assignments(db, now_iso: str) -> dict[str, Any]:
     assignments_updated = 0
     assignments_disabled = 0
 
+    ceo_master_admin_user_id = ""
     for email, expected_roles in mapping.items():
         user = users.find_one({"email": email})
         if user is None:
@@ -136,6 +138,8 @@ def _sync_officer_assignments(db, now_iso: str) -> dict[str, Any]:
         user_id = _normalize(user.get("_id"))
         if not user_id:
             continue
+        if email == CEO_MASTER_ADMIN_EMAIL:
+            ceo_master_admin_user_id = user_id
 
         for role_code in expected_roles:
             payload = {
@@ -167,12 +171,49 @@ def _sync_officer_assignments(db, now_iso: str) -> dict[str, Any]:
             )
             assignments_disabled += int(stale_result.modified_count)
 
+    if ceo_master_admin_user_id:
+        singleton_targets: list[str] = []
+        if hasattr(assignments, "find"):
+            for record in assignments.find(
+                {
+                    "role_code": {"$in": ["ceo_master_admin", "ceo_super_admin"]},
+                    "status": {"$in": ["active", "enabled", ""]},
+                }
+            ):
+                user_id = _normalize(record.get("user_id"))
+                if user_id and user_id != ceo_master_admin_user_id:
+                    singleton_targets.append(user_id)
+        else:
+            for record in (getattr(assignments, "documents", None) or []):
+                role_code = _normalize(record.get("role_code")).lower()
+                status = _normalize(record.get("status")).lower()
+                user_id = _normalize(record.get("user_id"))
+                if (
+                    role_code in {"ceo_master_admin", "ceo_super_admin"}
+                    and status in {"active", "enabled", ""}
+                    and user_id
+                    and user_id != ceo_master_admin_user_id
+                ):
+                    singleton_targets.append(user_id)
+        singleton_targets = sorted(set(singleton_targets))
+        if singleton_targets:
+            singleton_result = assignments.update_many(
+                {
+                    "role_code": {"$in": ["ceo_master_admin", "ceo_super_admin"]},
+                    "user_id": {"$in": singleton_targets},
+                    "status": {"$in": ["active", "enabled", ""]},
+                },
+                {"$set": {"status": "inactive", "updated_at": now_iso}},
+            )
+            assignments_disabled += int(singleton_result.modified_count)
+
     return {
         "updated_users": updated_users,
         "missing_users": missing_users,
         "assignments_created": assignments_created,
         "assignments_updated": assignments_updated,
         "assignments_disabled": assignments_disabled,
+        "ceo_master_admin_user_id": ceo_master_admin_user_id or None,
     }
 
 

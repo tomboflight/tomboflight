@@ -6,6 +6,7 @@
 
   const INTERNAL_ROLE_KEYS = new Set([
     "super_admin",
+    "ceo_master_admin",
     "executive_tech_admin",
     "operations_admin",
     "finance_admin",
@@ -16,6 +17,9 @@
     superadmin: "super_admin",
     root_admin: "super_admin",
     platform_admin: "super_admin",
+    ceo_super_admin: "ceo_master_admin",
+    ceo_master_admin: "ceo_master_admin",
+    "ceo-master-admin": "ceo_master_admin",
     executive_technology: "executive_tech_admin",
     executive_tech_admin: "executive_tech_admin",
     "executive-tech-admin": "executive_tech_admin",
@@ -39,12 +43,14 @@
     isSuperAdmin: false,
     queue: "overview",
     selectedCaseId: "",
-    selectedTab: "identity",
+    selectedTab: "overview",
     cases: [],
     workspace: null,
     packageOptions: [],
     marketingSections: {},
     operationsSections: {},
+    activeImpersonation: null,
+    impersonationTicker: 0,
   };
   const DEFAULT_ROLE_KEY = "user";
 
@@ -81,14 +87,26 @@
   };
 
   const TAB_LABELS = {
-    identity: "Identity",
-    package_lane: "Package & Lane",
-    orders_billing: "Orders & Billing",
-    project: "Project",
-    entitlements: "Entitlements",
-    uploads_verification: "Uploads / Verification",
-    mint_readiness: "Mint Readiness",
-    audit_timeline: "Audit Timeline",
+    overview: "Overview",
+    package_services: "Package & Services",
+    family_household: "Family / Household",
+    production: "Production",
+    uploads: "Uploads",
+    vault_metadata: "Vault Metadata",
+    billing: "Billing",
+    mint: "Mint",
+    audit_history: "Audit History",
+  };
+  const TAB_BACKEND_KEY = {
+    overview: "identity",
+    package_services: "package_lane",
+    family_household: "project",
+    production: "project",
+    uploads: "uploads_verification",
+    vault_metadata: "entitlements",
+    billing: "orders_billing",
+    mint: "mint_readiness",
+    audit_history: "audit_timeline",
   };
 
   const ACTION_AVAILABILITY = {
@@ -190,7 +208,8 @@
 
   function isAllowedTab(tab) {
     const normalized = normalizeLower(tab);
-    return state.allowedTabs.includes(normalized);
+    const backendKey = normalizeLower(TAB_BACKEND_KEY[normalized] || normalized);
+    return state.allowedTabs.includes(backendKey);
   }
 
   function isAllowedCaseAction(action) {
@@ -226,7 +245,11 @@
       state.queue = state.allowedQueues[0] || "overview";
     }
     if (!isAllowedTab(state.selectedTab)) {
-      state.selectedTab = state.allowedTabs[0] || "identity";
+      const preferredTabs = Object.keys(TAB_BACKEND_KEY);
+      state.selectedTab =
+        preferredTabs.find(function (tab) {
+          return isAllowedTab(tab);
+        }) || "overview";
     }
   }
 
@@ -493,6 +516,66 @@
       method: "POST",
       body: JSON.stringify(body || {}),
     });
+  }
+
+  async function loadActiveImpersonation() {
+    if (!state.isSuperAdmin) {
+      state.activeImpersonation = null;
+      return;
+    }
+    try {
+      const payload = await fetchJson("/admin/control-center/super-admin/impersonation/active");
+      state.activeImpersonation = payload && payload.active ? payload : null;
+    } catch (_error) {
+      state.activeImpersonation = null;
+    }
+    renderImpersonationBanner();
+  }
+
+  function formatExpirationCountdown(value) {
+    if (!value) return "unknown expiry";
+    const expiresAt = new Date(value).getTime();
+    if (!Number.isFinite(expiresAt)) return "unknown expiry";
+    const diffMs = expiresAt - Date.now();
+    if (diffMs <= 0) return "expired";
+    const totalMinutes = Math.ceil(diffMs / 60000);
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return hours > 0 ? `${hours}h ${minutes}m remaining` : `${minutes}m remaining`;
+  }
+
+  function renderImpersonationBanner() {
+    const node = document.querySelector("[data-admin-impersonation-banner]");
+    if (!node) return;
+    const session = state.activeImpersonation;
+    if (!session || !session.active) {
+      node.innerHTML = "";
+      node.hidden = true;
+      return;
+    }
+    node.hidden = false;
+    const statusLabel = session.editing_enabled ? "editing enabled" : "read-only";
+    const project = session.project_id ? shortId(session.project_id) : "no linked project";
+    const expires = formatExpirationCountdown(session.expires_at);
+    node.innerHTML = `
+      <div class="admin-warning-strip" style="margin-top:0.75rem;">
+        <span>Impersonation Active</span>
+        <div>
+          <strong>${escapeHtml(session.banner || "Viewing Tomb of Light as Customer")}</strong>
+          <span class="admin-id-ref" style="margin-left:0.5rem;">project ${escapeHtml(project)}</span>
+          <span style="margin-left:0.5rem;">${escapeHtml(statusLabel)}</span>
+          <span style="margin-left:0.5rem;">${escapeHtml(expires)}</span>
+        </div>
+      </div>
+    `;
+  }
+
+  function startImpersonationTicker() {
+    window.clearInterval(state.impersonationTicker);
+    state.impersonationTicker = window.setInterval(function () {
+      if (!state.activeImpersonation || !state.activeImpersonation.active) return;
+      renderImpersonationBanner();
+    }, 30000);
   }
 
   function renderTopSummary(summary, financeSections, marketingSections) {
@@ -837,10 +920,11 @@
     }
 
     const tab = state.selectedTab;
-    const tabData = workspace.tabs[tab];
+    const backendTab = TAB_BACKEND_KEY[tab] || tab;
+    const tabData = workspace.tabs[backendTab];
     const warningMarkup = renderWarningStrip((tabData && tabData.warnings) || workspace.warnings || []);
 
-    if (tab === "audit_timeline") {
+    if (backendTab === "audit_timeline") {
       const timeline = Array.isArray(tabData) ? tabData : Array.isArray(workspace.audit_timeline) ? workspace.audit_timeline : [];
       node.innerHTML = timeline.length
         ? timeline
@@ -865,7 +949,7 @@
       return;
     }
 
-    if (tab === "orders_billing") {
+    if (backendTab === "orders_billing") {
       const primaryOrder = tabData && tabData.primary_order ? tabData.primary_order : {};
       const related = Array.isArray(tabData && tabData.related_orders) ? tabData.related_orders : [];
       node.innerHTML = `
@@ -896,7 +980,7 @@
       return;
     }
 
-    if (tab === "uploads_verification") {
+    if (backendTab === "uploads_verification") {
       const uploads = tabData && Array.isArray(tabData.items) ? tabData.items : [];
       node.innerHTML = `
         ${warningMarkup}
@@ -916,7 +1000,7 @@
       return;
     }
 
-    if (tab === "identity") {
+    if (backendTab === "identity") {
       const userId =
         (tabData && tabData.user_id) ||
         (workspace.tabs && workspace.tabs.identity && workspace.tabs.identity.user_id) ||
@@ -973,7 +1057,7 @@
       return;
     }
 
-    if (tab === "mint_readiness") {
+    if (backendTab === "mint_readiness") {
       const guidance = getGuidanceItems(tabData && tabData.guidance);
       const history = Array.isArray(tabData && tabData.historical_attempts) ? tabData.historical_attempts : [];
       const currentState = tabData.current_state || tabData.eligibility || "blocked";
@@ -1039,7 +1123,7 @@
       return;
     }
 
-    if (tab === "package_lane") {
+    if (backendTab === "package_lane") {
       const projectId =
         (workspace.tabs && workspace.tabs.project && workspace.tabs.project.project_id) ||
         (workspace.project && workspace.project.id) ||
@@ -1082,10 +1166,38 @@
                 </label>
                 <label class="admin-field"><span>Target Lane</span><input type="text" data-super-admin-package-field="project_lane" value="${escapeHtml(tabData.project_lane || tabData.lane || "")}" /></label>
                 <label class="admin-field"><span>Order Status</span><input type="text" data-super-admin-package-field="order_status" value="${escapeHtml((workspace.tabs.orders_billing || {}).order_status || "")}" /></label>
+                <label class="admin-field"><span>Reason</span><input type="text" data-super-admin-package-field="reason" placeholder="Required for apply operations" /></label>
+                <label class="admin-field">
+                  <span>Service Operation</span>
+                  <select data-super-admin-service-field="operation">
+                    <option value="">None</option>
+                    <option value="assign">assign</option>
+                    <option value="upgrade">upgrade</option>
+                    <option value="downgrade">downgrade</option>
+                    <option value="complimentary_package">complimentary package</option>
+                    <option value="promotional_package">promotional package</option>
+                    <option value="internal_validation_account">internal validation account</option>
+                  </select>
+                </label>
+                <label class="admin-field"><span>Add Add-ons (comma separated)</span><input type="text" data-super-admin-service-field="add_addons" placeholder="extra_storage, tribute_narration" /></label>
+                <label class="admin-field"><span>Remove Add-ons (comma separated)</span><input type="text" data-super-admin-service-field="remove_addons" placeholder="extra_upload_pack" /></label>
+                <label class="admin-field"><span>Storage Adjustment (GB)</span><input type="number" step="0.1" data-super-admin-service-field="storage_adjustment_gb" value="0" /></label>
+                <label class="admin-field"><span>Upload Adjustment</span><input type="number" step="1" data-super-admin-service-field="upload_adjustment" value="0" /></label>
+                <label class="admin-field"><span>Member Allowance Adjustment</span><input type="number" step="1" data-super-admin-service-field="member_allowance_adjustment" value="0" /></label>
+                <label class="admin-field"><span>Maintenance State</span><input type="text" data-super-admin-service-field="maintenance_state" value="" placeholder="active, paused, not_started" /></label>
+                <label class="admin-field" style="display: inline-flex; align-items: center; gap: 0.45rem;"><input type="checkbox" data-super-admin-service-field="narration_enabled" /><span>Narration</span></label>
+                <label class="admin-field" style="display: inline-flex; align-items: center; gap: 0.45rem;"><input type="checkbox" data-super-admin-service-field="vault_enabled" /><span>Vault</span></label>
+                <label class="admin-field" style="display: inline-flex; align-items: center; gap: 0.45rem;"><input type="checkbox" data-super-admin-service-field="scheduled_reveal_enabled" /><span>Scheduled Reveal</span></label>
+                <label class="admin-field" style="display: inline-flex; align-items: center; gap: 0.45rem;"><input type="checkbox" data-super-admin-service-field="link_keys_enabled" /><span>Link Keys</span></label>
+                <label class="admin-field" style="display: inline-flex; align-items: center; gap: 0.45rem;"><input type="checkbox" data-super-admin-service-field="certificate_access_enabled" /><span>Certificate Access</span></label>
+                <label class="admin-field" style="display: inline-flex; align-items: center; gap: 0.45rem;"><input type="checkbox" data-super-admin-service-field="viewer_access_enabled" /><span>Viewer Access</span></label>
               </div>
               <div class="inline-actions" style="margin-top: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
                 <button class="btn btn-secondary" type="button" data-super-admin-package-preview="${escapeHtml(projectId)}">Preview Change</button>
                 <button class="btn btn-primary" type="button" data-super-admin-package-apply="${escapeHtml(projectId)}">Apply Package Change</button>
+                <button class="btn btn-secondary" type="button" data-super-admin-service-preview="${escapeHtml(projectId)}">Preview Service Controls</button>
+                <button class="btn btn-primary" type="button" data-super-admin-service-apply="${escapeHtml(projectId)}">Apply Service Controls</button>
+                <button class="btn btn-secondary" type="button" data-super-admin-preview-cancel>Cancel Preview</button>
               </div>
               <div data-super-admin-package-preview-output class="helper" style="margin-top: 0.75rem;"></div>
             </article>
@@ -1096,7 +1208,7 @@
       return;
     }
 
-    if (tab === "project") {
+    if (backendTab === "project") {
       const caseId = workspace.case_id || state.selectedCaseId || "";
       const linked = (tabData && tabData.linked_family) || {};
       const showSuperAdminControls = Boolean(state.isSuperAdmin && caseId);
@@ -1240,8 +1352,17 @@
     }
 
     const context = getWorkspaceContext(selected);
+    const impersonation = state.activeImpersonation;
+    const isImpersonating = Boolean(impersonation && impersonation.active);
+    const canStartImpersonation = Boolean(state.isSuperAdmin && context.caseId && !isImpersonating);
+    const canStopImpersonation = Boolean(state.isSuperAdmin && isImpersonating);
     node.innerHTML = `
       <div class="admin-context-card">
+        ${
+          isImpersonating
+            ? `<div class="admin-warning-strip"><span>Impersonation Active</span><div><strong>${escapeHtml(impersonation.banner || "Viewing Tomb of Light as Customer")}</strong></div></div>`
+            : ""
+        }
         <h3>${escapeHtml(context.name || "Selected Case")}</h3>
         <p class="card-copy"><strong>Case:</strong> <span class="admin-id-ref">${escapeHtml(shortId(context.caseId))}</span></p>
         <p class="card-copy"><strong>Package:</strong> ${escapeHtml(context.packageName || "—")} ${context.packageCode ? `<span class="admin-id-ref">${escapeHtml(context.packageCode)}</span>` : ""}</p>
@@ -1255,6 +1376,17 @@
           <span>Mint Blocking Reasons</span>
           <div>${renderStatusStack(context.blocking, "none")}</div>
         </div>
+        ${
+          state.isSuperAdmin
+            ? `<div class="inline-actions" style="margin-top: 0.85rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                <label class="admin-field" style="min-width: 18rem;"><span>View reason</span><input type="text" data-admin-impersonation-start-reason placeholder="Required reason to start customer view" /></label>
+                <button class="btn btn-secondary" type="button" data-admin-impersonation-start="${escapeHtml(context.caseId)}" ${canStartImpersonation ? "" : "disabled"}>View as Customer</button>
+                <label class="admin-field" style="min-width: 18rem;"><span>Edit reason</span><input type="text" data-admin-impersonation-edit-reason placeholder="Required reason to enable editing" /></label>
+                <button class="btn btn-secondary" type="button" data-admin-impersonation-enable-editing ${isImpersonating ? "" : "disabled"}>Enable Admin Editing</button>
+                <button class="btn btn-primary" type="button" data-admin-impersonation-stop ${canStopImpersonation ? "" : "disabled"}>Exit Customer View</button>
+              </div>`
+            : ""
+        }
       </div>
     `;
   }
@@ -1483,6 +1615,73 @@
     }
   }
 
+  async function startImpersonation(caseId, reasonValue) {
+    if (!state.isSuperAdmin) {
+      setPageStatus("Super Admin access is required.", "error");
+      return;
+    }
+    const reason = normalizeValue(reasonValue);
+    if (!reason) {
+      setPageStatus("A reason is required to start customer view.", "error");
+      return;
+    }
+    setPageStatus("Starting View as Customer session...", "info");
+    try {
+      await postJson("/admin/control-center/super-admin/impersonation/start", {
+        case_id: caseId,
+        reason,
+      });
+      await loadActiveImpersonation();
+      renderCaseContext();
+      setPageStatus("Customer view started in read-only mode.", "success");
+    } catch (error) {
+      setPageStatus(error.message || "Unable to start customer view.", "error");
+    }
+  }
+
+  async function enableImpersonationEditing(reasonValue) {
+    if (!state.isSuperAdmin || !state.activeImpersonation || !state.activeImpersonation.session_id) {
+      setPageStatus("No active customer-view session.", "error");
+      return;
+    }
+    const reason = normalizeValue(reasonValue);
+    if (!reason) {
+      setPageStatus("A reason is required to enable admin editing.", "error");
+      return;
+    }
+    setPageStatus("Enabling admin editing...", "info");
+    try {
+      await postJson(
+        `/admin/control-center/super-admin/impersonation/${encodeURIComponent(state.activeImpersonation.session_id)}/enable-editing`,
+        { reason },
+      );
+      await loadActiveImpersonation();
+      renderCaseContext();
+      setPageStatus("Admin editing enabled for the current customer-view session.", "success");
+    } catch (error) {
+      setPageStatus(error.message || "Unable to enable admin editing.", "error");
+    }
+  }
+
+  async function stopImpersonation() {
+    if (!state.isSuperAdmin || !state.activeImpersonation || !state.activeImpersonation.session_id) {
+      setPageStatus("No active customer-view session.", "error");
+      return;
+    }
+    setPageStatus("Exiting customer view...", "info");
+    try {
+      await postJson(
+        `/admin/control-center/super-admin/impersonation/${encodeURIComponent(state.activeImpersonation.session_id)}/stop`,
+        {},
+      );
+      await loadActiveImpersonation();
+      renderCaseContext();
+      setPageStatus("Exited customer view.", "success");
+    } catch (error) {
+      setPageStatus(error.message || "Unable to exit customer view.", "error");
+    }
+  }
+
   async function runCaseAction(action) {
     if (!isAllowedCaseAction(action)) {
       setPageStatus("Your role cannot run that case action.", "error");
@@ -1611,6 +1810,40 @@
     return payload;
   }
 
+  function collectSuperAdminServicePayload() {
+    const payload = {};
+    document.querySelectorAll("[data-super-admin-service-field]").forEach(function (node) {
+      const key = node.getAttribute("data-super-admin-service-field");
+      if (!key) return;
+      if (node instanceof HTMLInputElement && node.type === "checkbox") {
+        payload[key] = Boolean(node.checked);
+        return;
+      }
+      const value = normalizeValue(node.value);
+      if (key === "add_addons" || key === "remove_addons") {
+        payload[key] = value
+          ? value
+              .split(",")
+              .map(function (part) {
+                return normalizeValue(part);
+              })
+              .filter(Boolean)
+          : [];
+        return;
+      }
+      if (["storage_adjustment_gb", "upload_adjustment", "member_allowance_adjustment"].includes(key)) {
+        payload[key] = value === "" ? 0 : Number(value);
+        return;
+      }
+      payload[key] = value;
+    });
+    const packagePayload = collectSuperAdminPackagePayload();
+    payload.package_code = packagePayload.package_code || "";
+    payload.project_lane = packagePayload.project_lane || "";
+    payload.reason = packagePayload.reason || "";
+    return payload;
+  }
+
   function renderSuperAdminPackagePreview(payload) {
     const node = document.querySelector("[data-super-admin-package-preview-output]");
     if (!node) return;
@@ -1644,11 +1877,58 @@
     }
   }
 
+  function clearSuperAdminPreviewOutput() {
+    const node = document.querySelector("[data-super-admin-package-preview-output]");
+    if (!node) return;
+    node.textContent = "";
+  }
+
+  async function runSuperAdminServicePreview(projectId) {
+    if (!state.isSuperAdmin) {
+      setPageStatus("Super Admin access is required.", "error");
+      return;
+    }
+    setPageStatus("Generating service-control preview...", "info");
+    try {
+      const payload = await postJson(
+        `/admin/control-center/super-admin/projects/${encodeURIComponent(projectId)}/service-controls/preview`,
+        collectSuperAdminServicePayload(),
+      );
+      renderSuperAdminPackagePreview(payload || {});
+      setPageStatus("Service-control preview ready.", "success");
+    } catch (error) {
+      setPageStatus(error.message || "Unable to preview service controls.", "error");
+    }
+  }
+
+  async function runSuperAdminServiceApply(projectId) {
+    if (!state.isSuperAdmin) {
+      setPageStatus("Super Admin access is required.", "error");
+      return;
+    }
+    if (!window.confirm("Apply service controls while preserving Stripe purchase history?")) return;
+    setPageStatus("Applying service controls...", "info");
+    try {
+      const payload = await postJson(
+        `/admin/control-center/super-admin/projects/${encodeURIComponent(projectId)}/service-controls/apply`,
+        collectSuperAdminServicePayload(),
+      );
+      renderSuperAdminPackagePreview(payload || {});
+      await loadOverview();
+      await loadCases();
+      if (state.selectedCaseId) await loadCaseWorkspace(state.selectedCaseId);
+      setPageStatus("Service controls applied.", "success");
+    } catch (error) {
+      setPageStatus(error.message || "Unable to apply service controls.", "error");
+    }
+  }
+
   async function runSuperAdminPackageApply(projectId) {
     if (!state.isSuperAdmin) {
       setPageStatus("Super Admin access is required.", "error");
       return;
     }
+
     if (!window.confirm("Apply package change and repair consistency across project/order/entitlements?")) return;
     setPageStatus("Applying package change...", "info");
     try {
@@ -1804,6 +2084,27 @@
         return;
       }
 
+      const superAdminServicePreview = target.closest("[data-super-admin-service-preview]");
+      if (superAdminServicePreview) {
+        const projectId = superAdminServicePreview.getAttribute("data-super-admin-service-preview");
+        if (projectId) runSuperAdminServicePreview(projectId);
+        return;
+      }
+
+      const superAdminServiceApply = target.closest("[data-super-admin-service-apply]");
+      if (superAdminServiceApply) {
+        const projectId = superAdminServiceApply.getAttribute("data-super-admin-service-apply");
+        if (projectId) runSuperAdminServiceApply(projectId);
+        return;
+      }
+
+      const superAdminPreviewCancel = target.closest("[data-super-admin-preview-cancel]");
+      if (superAdminPreviewCancel) {
+        clearSuperAdminPreviewOutput();
+        setPageStatus("Preview canceled with no write.", "info");
+        return;
+      }
+
       const superAdminRepair = target.closest("[data-super-admin-repair-run]");
       if (superAdminRepair) {
         const caseId = superAdminRepair.getAttribute("data-super-admin-repair-run");
@@ -1818,6 +2119,29 @@
         state.selectedTab = tab;
         applyTabSelection();
         renderWorkspaceTab();
+        return;
+      }
+
+      const impersonationStart = target.closest("[data-admin-impersonation-start]");
+      if (impersonationStart) {
+        const caseId = impersonationStart.getAttribute("data-admin-impersonation-start");
+        const reasonInput = document.querySelector("[data-admin-impersonation-start-reason]");
+        const reason = reasonInput instanceof HTMLInputElement ? reasonInput.value : "";
+        if (caseId) startImpersonation(caseId, reason);
+        return;
+      }
+
+      const impersonationEnableEditing = target.closest("[data-admin-impersonation-enable-editing]");
+      if (impersonationEnableEditing) {
+        const reasonInput = document.querySelector("[data-admin-impersonation-edit-reason]");
+        const reason = reasonInput instanceof HTMLInputElement ? reasonInput.value : "";
+        enableImpersonationEditing(reason);
+        return;
+      }
+
+      const impersonationStop = target.closest("[data-admin-impersonation-stop]");
+      if (impersonationStop) {
+        stopImpersonation();
       }
     });
 
@@ -1899,6 +2223,8 @@
       if (state.isSuperAdmin) {
         await loadPackageOptions();
       }
+      await loadActiveImpersonation();
+      startImpersonationTicker();
     } catch (error) {
       setPageStatus(error.message || "Unable to load access profile.", "error");
     }

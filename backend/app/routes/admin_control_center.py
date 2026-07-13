@@ -15,11 +15,13 @@ from app.services.admin_control_service import (
     admin_control_action_allowed,
     admin_control_bulk_action_allowed,
     admin_control_queue_allowed,
+    active_admin_impersonation,
     admin_console_overview,
     assign_lane,
     assign_missing_lanes,
     customer_case_workspace,
     execute_case_action,
+    enable_admin_impersonation_editing,
     export_operations_report,
     enable_mint_review,
     generate_entitlement,
@@ -33,12 +35,19 @@ from app.services.admin_control_service import (
     repair_all_safe_records,
     repair_record,
     repair_selected_records,
+    start_admin_impersonation,
     super_admin_apply_package_change,
+    super_admin_apply_officer_permissions,
+    super_admin_apply_service_controls,
     super_admin_apply_user_state_action,
+    super_admin_list_officers,
     super_admin_repair_case_action,
     super_admin_list_users,
+    super_admin_preview_officer_permissions,
     super_admin_preview_package_change,
+    super_admin_preview_service_controls,
     super_admin_update_user,
+    stop_admin_impersonation,
     resync_current_mint_receipt,
     project_workspace_snapshot,
     run_readiness_check,
@@ -136,6 +145,34 @@ class SuperAdminPackageChangePayload(BaseModel):
     reason: str = Field(default="", description="Required for apply operations to maintain audit traceability.")
 
 
+class SuperAdminServiceControlPayload(BaseModel):
+    operation: str = Field(default="", description="assign, upgrade, downgrade, complimentary_package, promotional_package, internal_validation_account")
+    package_code: str = Field(default="")
+    project_lane: str = Field(default="")
+    add_addons: list[str] = Field(default_factory=list)
+    remove_addons: list[str] = Field(default_factory=list)
+    storage_adjustment_gb: float | None = None
+    upload_adjustment: int | None = None
+    member_allowance_adjustment: int | None = None
+    narration_enabled: bool | None = None
+    vault_enabled: bool | None = None
+    scheduled_reveal_enabled: bool | None = None
+    link_keys_enabled: bool | None = None
+    certificate_access_enabled: bool | None = None
+    viewer_access_enabled: bool | None = None
+    maintenance_state: str = Field(default="")
+    account_flags: list[str] = Field(default_factory=list)
+    reason: str = Field(default="", description="Required for apply operations to maintain audit traceability.")
+
+
+class SuperAdminOfficerPermissionPayload(BaseModel):
+    officer_email: str = Field(min_length=1)
+    role_assignments: list[str] = Field(default_factory=list)
+    grant_permissions: list[str] = Field(default_factory=list)
+    revoke_permissions: list[str] = Field(default_factory=list)
+    reason: str = Field(default="", description="Required for apply operations to maintain audit traceability.")
+
+
 class SuperAdminRepairPayload(BaseModel):
     action: str = Field(min_length=1)
     reason: str = Field(min_length=1)
@@ -159,6 +196,19 @@ class SuperAdminRepairPayload(BaseModel):
     privacy_scope: str | None = None
     status: str | None = None
     confirm_destructive: bool = False
+
+
+class SuperAdminImpersonationStartPayload(BaseModel):
+    case_id: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
+
+
+class SuperAdminImpersonationEditingPayload(BaseModel):
+    reason: str = Field(min_length=1)
+
+
+class SuperAdminImpersonationStopPayload(BaseModel):
+    reason: str = Field(default="")
 
 
 def _current_user_id(current_user: dict[str, Any]) -> str:
@@ -595,6 +645,90 @@ def super_admin_apply_project_package_change(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
+@router.post("/super-admin/projects/{project_id}/service-controls/preview")
+def super_admin_preview_project_service_controls(
+    project_id: str,
+    payload: SuperAdminServiceControlPayload,
+    current_user: dict[str, Any] = Depends(require_super_admin),
+):
+    del current_user
+    try:
+        return super_admin_preview_service_controls(
+            project_id=project_id,
+            payload=payload.model_dump(exclude_none=True),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/super-admin/projects/{project_id}/service-controls/apply")
+def super_admin_apply_project_service_controls(
+    project_id: str,
+    payload: SuperAdminServiceControlPayload,
+    current_user: dict[str, Any] = Depends(require_super_admin),
+):
+    if not (payload.reason or "").strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="A reason is required for service-control apply to maintain audit traceability.",
+        )
+    try:
+        return super_admin_apply_service_controls(
+            project_id=project_id,
+            payload=payload.model_dump(exclude_none=True),
+            actor=current_user,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.get("/super-admin/officers")
+def super_admin_get_officers(
+    current_user: dict[str, Any] = Depends(require_super_admin),
+):
+    del current_user
+    return super_admin_list_officers()
+
+
+@router.post("/super-admin/officers/permissions/preview")
+def super_admin_preview_officer_permissions_route(
+    payload: SuperAdminOfficerPermissionPayload,
+    current_user: dict[str, Any] = Depends(require_super_admin),
+):
+    del current_user
+    try:
+        return super_admin_preview_officer_permissions(
+            officer_email=payload.officer_email,
+            role_assignments=payload.role_assignments,
+            grant_permissions=payload.grant_permissions,
+            revoke_permissions=payload.revoke_permissions,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/super-admin/officers/permissions/apply")
+def super_admin_apply_officer_permissions_route(
+    payload: SuperAdminOfficerPermissionPayload,
+    current_user: dict[str, Any] = Depends(require_super_admin),
+):
+    if not (payload.reason or "").strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="A reason is required for officer-permissions apply to maintain audit traceability.",
+        )
+    try:
+        return super_admin_apply_officer_permissions(
+            officer_email=payload.officer_email,
+            role_assignments=payload.role_assignments,
+            grant_permissions=payload.grant_permissions,
+            revoke_permissions=payload.revoke_permissions,
+            actor=current_user,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
 @router.post("/super-admin/cases/{case_id}/repair")
 def super_admin_case_repair(
     case_id: str,
@@ -606,6 +740,63 @@ def super_admin_case_repair(
             case_id=case_id,
             action=payload.action,
             payload=payload.model_dump(exclude_none=True),
+            actor=current_user,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.get("/super-admin/impersonation/active")
+def super_admin_get_active_impersonation(
+    current_user: dict[str, Any] = Depends(require_super_admin),
+):
+    try:
+        return active_admin_impersonation(actor=current_user)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/super-admin/impersonation/start")
+def super_admin_start_impersonation(
+    payload: SuperAdminImpersonationStartPayload,
+    current_user: dict[str, Any] = Depends(require_super_admin),
+):
+    try:
+        return start_admin_impersonation(
+            case_id=payload.case_id,
+            reason=payload.reason,
+            actor=current_user,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/super-admin/impersonation/{session_id}/enable-editing")
+def super_admin_enable_impersonation_editing(
+    session_id: str,
+    payload: SuperAdminImpersonationEditingPayload,
+    current_user: dict[str, Any] = Depends(require_super_admin),
+):
+    try:
+        return enable_admin_impersonation_editing(
+            session_id=session_id,
+            reason=payload.reason,
+            actor=current_user,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/super-admin/impersonation/{session_id}/stop")
+def super_admin_stop_impersonation(
+    session_id: str,
+    payload: SuperAdminImpersonationStopPayload | None = None,
+    current_user: dict[str, Any] = Depends(require_super_admin),
+):
+    try:
+        return stop_admin_impersonation(
+            session_id=session_id,
+            reason=(payload.reason if payload else ""),
             actor=current_user,
         )
     except ValueError as exc:

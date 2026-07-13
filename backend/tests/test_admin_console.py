@@ -1,3 +1,4 @@
+import re
 import unittest
 from unittest.mock import patch
 
@@ -44,15 +45,41 @@ class FakeCollection:
         query = query or {}
         return len([document for document in self.documents if self._matches(document, query)])
 
-    def update_one(self, query, update):
+    def update_one(self, query, update, upsert=False):
         updated = 0
         for document in self.documents:
             if self._matches(document, query):
                 for key, value in (update.get("$set") or {}).items():
                     document[key] = value
+                for key, value in (update.get("$setOnInsert") or {}).items():
+                    document.setdefault(key, value)
                 updated = 1
                 break
-        return type("Result", (), {"matched_count": updated, "modified_count": updated})()
+        upserted_id = None
+        if not updated and upsert:
+            inserted = dict(query)
+            for key, value in (update.get("$setOnInsert") or {}).items():
+                inserted[key] = value
+            for key, value in (update.get("$set") or {}).items():
+                inserted[key] = value
+            inserted.setdefault("_id", ObjectId())
+            self.documents.append(inserted)
+            updated = 1
+            upserted_id = inserted["_id"]
+        return type(
+            "Result",
+            (),
+            {"matched_count": 0 if upserted_id else updated, "modified_count": updated if not upserted_id else 0, "upserted_id": upserted_id},
+        )()
+
+    def update_many(self, query, update):
+        modified = 0
+        for document in self.documents:
+            if self._matches(document, query):
+                for key, value in (update.get("$set") or {}).items():
+                    document[key] = value
+                modified += 1
+        return type("Result", (), {"modified_count": modified})()
 
     def insert_one(self, payload):
         document = dict(payload)
@@ -74,6 +101,10 @@ class FakeCollection:
                 if not any(self._matches(document, option) for option in expected):
                     return False
                 continue
+            if key == "$and":
+                if not all(self._matches(document, option) for option in expected):
+                    return False
+                continue
 
             actual = self._get_nested(document, key)
             if isinstance(expected, dict):
@@ -83,6 +114,18 @@ class FakeCollection:
                         if not any(item in values for item in actual):
                             return False
                     elif actual not in values:
+                        return False
+                elif "$nin" in expected:
+                    values = expected["$nin"]
+                    if isinstance(actual, list):
+                        if any(item in values for item in actual):
+                            return False
+                    elif actual in values:
+                        return False
+                elif "$regex" in expected:
+                    pattern = expected.get("$regex")
+                    flags = re.IGNORECASE if "i" in str(expected.get("$options") or "") else 0
+                    if not re.search(str(pattern), str(actual or ""), flags):
                         return False
                 else:
                     return False
@@ -797,6 +840,87 @@ class SuperAdminControlsTests(unittest.TestCase):
                     actor={"_id": ObjectId(), "email": "ceo@tomboflight.com"},
                 )
 
+    def test_ceo_master_admin_role_is_singleton_to_larry_identity(self):
+        user_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "users": [
+                    {
+                        "_id": user_id,
+                        "email": "someone.else@tomboflight.com",
+                        "full_name": "Someone Else",
+                        "role": "operations_admin",
+                        "status": "active",
+                    }
+                ]
+            }
+        )
+        with patch.object(admin_control_service, "get_database", return_value=db):
+            with self.assertRaisesRegex(
+                ValueError,
+                "ceo_master_admin role can only be assigned to Larry Robinson's canonical identity",
+            ):
+                admin_control_service.super_admin_update_user(
+                    user_id=str(user_id),
+                    payload={"role": "ceo_master_admin"},
+                    actor={"_id": ObjectId(), "email": "ceo@tomboflight.com"},
+                )
+
+    def test_impersonation_session_lifecycle_readonly_to_editing_to_stop(self):
+        actor_id = ObjectId()
+        customer_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "users": [
+                    {
+                        "_id": customer_id,
+                        "email": "rakim@example.com",
+                        "full_name": "Rakim Robinson",
+                        "role": "user",
+                        "status": "active",
+                    }
+                ],
+                "admin_impersonation_sessions": [],
+            }
+        )
+
+        with patch.object(admin_control_service, "get_database", return_value=db):
+            started = admin_control_service.start_admin_impersonation(
+                case_id=f"user:{customer_id}",
+                reason="Support walkthrough",
+                actor={"_id": actor_id, "email": "l.robinson@tomboflight.com", "role": "ceo_master_admin"},
+            )
+            self.assertTrue(started["active"])
+            self.assertFalse(started["editing_enabled"])
+
+            with self.assertRaisesRegex(ValueError, "active impersonation session already exists"):
+                admin_control_service.start_admin_impersonation(
+                    case_id=f"user:{customer_id}",
+                    reason="Second session should fail",
+                    actor={"_id": actor_id, "email": "l.robinson@tomboflight.com", "role": "ceo_master_admin"},
+                )
+
+            enabled = admin_control_service.enable_admin_impersonation_editing(
+                session_id=started["session_id"],
+                reason="Need to correct customer profile field",
+                actor={"_id": actor_id, "email": "l.robinson@tomboflight.com", "role": "ceo_master_admin"},
+            )
+            self.assertTrue(enabled["editing_enabled"])
+
+            active = admin_control_service.active_admin_impersonation(
+                actor={"_id": actor_id, "email": "l.robinson@tomboflight.com", "role": "ceo_master_admin"},
+            )
+            self.assertTrue(active["active"])
+            self.assertEqual(active["impersonated_customer_name"], "Rakim Robinson")
+
+            stopped = admin_control_service.stop_admin_impersonation(
+                session_id=started["session_id"],
+                reason="Finished assistance",
+                actor={"_id": actor_id, "email": "l.robinson@tomboflight.com", "role": "ceo_master_admin"},
+            )
+            self.assertFalse(stopped["active"])
+            self.assertEqual(stopped["status"], "stopped")
+
     def test_super_admin_package_change_preview_and_apply(self):
         project_id = ObjectId()
         order_id = ObjectId()
@@ -989,6 +1113,18 @@ class AdminConsoleOverviewTests(unittest.TestCase):
         )
         with (
             patch.object(admin_control_service, "get_database", return_value=db),
+            patch.object(
+                admin_control_service,
+                "get_project_entitlement",
+                return_value={
+                    "package_code": "legacy_plus",
+                    "package_lane": "household",
+                    "maintenance_plan": "monthly",
+                    "maintenance_status": "active",
+                    "resolved_entitlements": {"can_use_household_vault": True, "can_use_viewer": True},
+                    "active_addons": ["extra_storage"],
+                },
+            ),
             patch.object(
                 admin_control_service,
                 "run_readiness_check",
@@ -1329,6 +1465,28 @@ class CfoScopeAndFinanceHistoryTests(unittest.TestCase):
             patch.object(admin_control_service, "get_database", return_value=db),
             patch.object(
                 admin_control_service,
+                "get_project_entitlement",
+                return_value={
+                    "package_code": "legacy_plus",
+                    "package_lane": "household",
+                    "maintenance_plan": "monthly",
+                    "maintenance_status": "active",
+                    "resolved_entitlements": {"can_use_household_vault": True, "can_use_viewer": True},
+                    "active_addons": ["extra_storage"],
+                },
+            ),
+            patch.object(
+                admin_control_service,
+                "resolve_canonical_mint_status",
+                return_value={
+                    "project_id": str(project_id),
+                    "current_status": "not_started",
+                    "minted": False,
+                    "records": [],
+                },
+            ),
+            patch.object(
+                admin_control_service,
                 "run_readiness_check",
                 return_value={
                     "mint_review_ready": False,
@@ -1475,6 +1633,404 @@ class CfoScopeAndFinanceHistoryTests(unittest.TestCase):
         self.assertEqual(stored_order.get("package_slug"), "legacy_plus")
         self.assertEqual(stored_order.get("lane"), "household")
         self.assertEqual(stored_order.get("package_lane"), "household")
+
+
+class MasterAdminCompletionTests(unittest.TestCase):
+    def test_account_360_workspace_exposes_required_tabs(self):
+        project_id = ObjectId()
+        order_id = ObjectId()
+        user_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "users": [{"_id": user_id, "email": "rakim@example.com", "full_name": "Rakim Robinson", "role": "user", "status": "active"}],
+                "projects": [
+                    {
+                        "_id": project_id,
+                        "owner_email": "rakim@example.com",
+                        "owner_user_id": str(user_id),
+                        "name": "Rakim Legacy Project",
+                        "project_lane": "household",
+                        "package_code": "legacy_plus",
+                        "package_slug": "legacy_plus",
+                        "package_name": "Legacy Plus",
+                        "status": "in_production",
+                        "phase": "build_started",
+                        "family_id": str(ObjectId()),
+                        "household_id": str(ObjectId()),
+                    }
+                ],
+                "orders": [
+                    {
+                        "_id": order_id,
+                        "email": "rakim@example.com",
+                        "project_id": project_id,
+                        "status": "paid",
+                        "item_type": "package",
+                        "package_code": "legacy_plus",
+                        "package_slug": "legacy_plus",
+                        "stripe_session_id": "cs_test_123",
+                    }
+                ],
+                "project_entitlements": [
+                    {
+                        "_id": ObjectId(),
+                        "project_id": project_id,
+                        "user_id": user_id,
+                        "package_code": "legacy_plus",
+                        "package_lane": "household",
+                        "maintenance_plan": "monthly",
+                        "maintenance_status": "active",
+                        "resolved_entitlements": {"can_use_household_vault": True, "can_use_viewer": True},
+                        "active_addons": ["extra_storage"],
+                    }
+                ],
+                "uploaded_files": [],
+                "audit_logs": [],
+                "families": [],
+                "households": [],
+                "vault_items": [],
+                "vault_collections": [],
+                "vault_access_grants": [],
+                "vault_release_rules": [],
+                "vault_audit_events": [],
+                "mint_records": [],
+                "finance_events": [],
+            }
+        )
+        with (
+            patch.object(admin_control_service, "get_database", return_value=db),
+            patch.object(
+                admin_control_service,
+                "get_project_entitlement",
+                return_value={
+                    "package_code": "legacy_plus",
+                    "package_lane": "household",
+                    "maintenance_plan": "monthly",
+                    "maintenance_status": "active",
+                    "resolved_entitlements": {"can_use_household_vault": True, "can_use_viewer": True},
+                    "active_addons": ["extra_storage"],
+                },
+            ),
+            patch.object(
+                admin_control_service,
+                "resolve_canonical_mint_status",
+                return_value={
+                    "project_id": str(project_id),
+                    "current_status": "not_started",
+                    "minted": False,
+                    "records": [],
+                },
+            ),
+            patch.object(
+                admin_control_service,
+                "run_readiness_check",
+                return_value={
+                    "mint_review_ready": True,
+                    "mint_eligible": False,
+                    "mint_already_completed": False,
+                    "package_synced": True,
+                    "lane_assigned": True,
+                    "order_linked": True,
+                    "entitlement_exists": True,
+                    "blocking_reasons": ["upload_review_pending"],
+                    "summary": "Ready for review",
+                },
+            ),
+        ):
+            workspace = admin_control_service.customer_case_workspace(str(project_id))
+        tabs = workspace.get("tabs") or {}
+        for key in (
+            "overview",
+            "package_services",
+            "family_household",
+            "production",
+            "uploads",
+            "vault_metadata",
+            "billing",
+            "mint",
+            "audit_history",
+        ):
+            self.assertIn(key, tabs)
+
+    def test_master_search_supports_order_stripe_and_workflow_identifiers(self):
+        project_id = ObjectId()
+        order_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "projects": [
+                    {
+                        "_id": project_id,
+                        "owner_email": "rakim@example.com",
+                        "owner_user_id": str(ObjectId()),
+                        "name": "Rakim Search Project",
+                        "family_id": str(ObjectId()),
+                        "household_id": str(ObjectId()),
+                        "package_code": "legacy_plus",
+                        "project_lane": "household",
+                        "status": "client_review",
+                        "phase": "client_review",
+                    }
+                ],
+                "orders": [
+                    {
+                        "_id": order_id,
+                        "project_id": project_id,
+                        "email": "rakim@example.com",
+                        "status": "paid",
+                        "item_type": "package",
+                        "package_code": "legacy_plus",
+                        "stripe_session_id": "cs_test_search",
+                        "stripe_payment_intent_id": "pi_test_search",
+                        "stripe_customer_id": "cus_test_search",
+                    }
+                ],
+                "project_entitlements": [],
+                "uploaded_files": [],
+                "audit_logs": [],
+                "users": [],
+                "families": [],
+                "households": [],
+                "mint_records": [],
+            }
+        )
+        with (
+            patch.object(admin_control_service, "get_database", return_value=db),
+            patch.object(admin_control_service, "get_project_entitlement", return_value=None),
+            patch.object(
+                admin_control_service,
+                "run_readiness_check",
+                return_value={"mint_review_ready": False, "mint_eligible": False, "mint_already_completed": False, "blocking_reasons": []},
+            ),
+            patch.object(admin_control_service, "count_workspace_uploads", return_value=1),
+        ):
+            by_order_id = admin_control_service.list_customer_cases(search=str(order_id), limit=10)
+            by_stripe = admin_control_service.list_customer_cases(search="cs_test_search", limit=10)
+            by_workflow = admin_control_service.list_customer_cases(search="client_review", limit=10)
+        self.assertTrue(by_order_id["items"])
+        self.assertTrue(by_stripe["items"])
+        self.assertTrue(by_workflow["items"])
+
+    def test_service_controls_preview_and_apply_preserve_stripe_purchase_record(self):
+        project_id = ObjectId()
+        order_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "projects": [
+                    {
+                        "_id": project_id,
+                        "owner_email": "rakim@example.com",
+                        "owner_user_id": str(ObjectId()),
+                        "package_code": "legacy_snapshot",
+                        "package_slug": "legacy_snapshot",
+                        "package_name": "Legacy Snapshot",
+                        "project_lane": "portrait",
+                    }
+                ],
+                "orders": [
+                    {
+                        "_id": order_id,
+                        "email": "rakim@example.com",
+                        "project_id": project_id,
+                        "status": "paid",
+                        "item_type": "package",
+                        "package_code": "legacy_snapshot",
+                        "package_slug": "legacy_snapshot",
+                        "package_name": "Legacy Snapshot",
+                        "stripe_session_id": "cs_test_preserve",
+                    }
+                ],
+                "project_entitlements": [],
+                "finance_events": [],
+            }
+        )
+        with (
+            patch.object(admin_control_service, "get_database", return_value=db),
+            patch.object(admin_control_service, "get_project_entitlement", return_value=None),
+        ):
+            before_order = dict(db["orders"].find_one({"_id": order_id}) or {})
+            preview = admin_control_service.super_admin_preview_service_controls(
+                project_id=str(project_id),
+                payload={
+                    "operation": "upgrade",
+                    "package_code": "legacy_plus",
+                    "add_addons": ["extra_storage"],
+                    "storage_adjustment_gb": 1.0,
+                    "maintenance_state": "active",
+                },
+            )
+            after_preview_order = dict(db["orders"].find_one({"_id": order_id}) or {})
+            applied = admin_control_service.super_admin_apply_service_controls(
+                project_id=str(project_id),
+                payload={
+                    "operation": "upgrade",
+                    "package_code": "legacy_plus",
+                    "add_addons": ["extra_storage"],
+                    "storage_adjustment_gb": 1.0,
+                    "maintenance_state": "active",
+                },
+                actor={"_id": ObjectId(), "email": "l.robinson@tomboflight.com", "role": "ceo_master_admin"},
+            )
+        self.assertEqual(before_order.get("status"), after_preview_order.get("status"))
+        self.assertEqual(before_order.get("stripe_session_id"), after_preview_order.get("stripe_session_id"))
+        self.assertTrue(preview["validation"]["stripe_purchase_record_preserved"])
+        self.assertTrue(applied["stripe_purchase_record_preserved"])
+        stored_order = db["orders"].find_one({"_id": order_id}) or {}
+        self.assertEqual(stored_order.get("status"), "paid")
+        self.assertEqual(stored_order.get("stripe_session_id"), "cs_test_preserve")
+
+    def test_officer_permission_management_targets_only_named_officers(self):
+        jenn_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "users": [
+                    {
+                        "_id": jenn_id,
+                        "email": "jenn.wood@tomboflight.com",
+                        "full_name": "Jennifer Wood",
+                        "role": "admin",
+                        "access_tier": "finance_admin",
+                        "department_role": "finance_admin",
+                        "status": "active",
+                    }
+                ],
+                "user_role_assignments": [],
+                "user_permission_overrides": [],
+            }
+        )
+        with patch.object(admin_control_service, "get_database", return_value=db):
+            officers = admin_control_service.super_admin_list_officers()
+            preview = admin_control_service.super_admin_preview_officer_permissions(
+                officer_email="jenn.wood@tomboflight.com",
+                role_assignments=["finance_admin"],
+                grant_permissions=["admin.audit.read"],
+            )
+            applied = admin_control_service.super_admin_apply_officer_permissions(
+                officer_email="jenn.wood@tomboflight.com",
+                role_assignments=["finance_admin"],
+                grant_permissions=["admin.audit.read"],
+                actor={"_id": ObjectId(), "email": "l.robinson@tomboflight.com", "role": "ceo_master_admin"},
+            )
+        self.assertTrue(officers["items"])
+        self.assertIn("admin.audit.read", preview["proposed_after"]["permission_overrides"])
+        self.assertIn("admin.audit.read", applied["after"]["permission_overrides"])
+        self.assertTrue(db["user_permission_overrides"].documents)
+
+    def test_rakim_read_only_acceptance_path_no_production_writes(self):
+        actor_id = ObjectId()
+        customer_id = ObjectId()
+        project_id = ObjectId()
+        order_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "users": [
+                    {
+                        "_id": customer_id,
+                        "email": "rakim@example.com",
+                        "full_name": "Rakim Robinson",
+                        "role": "user",
+                        "status": "active",
+                    }
+                ],
+                "projects": [
+                    {
+                        "_id": project_id,
+                        "owner_email": "rakim@example.com",
+                        "owner_user_id": str(customer_id),
+                        "name": "Rakim Household",
+                        "package_code": "legacy_snapshot",
+                        "package_slug": "legacy_snapshot",
+                        "project_lane": "household",
+                        "status": "in_production",
+                    }
+                ],
+                "orders": [
+                    {
+                        "_id": order_id,
+                        "project_id": project_id,
+                        "email": "rakim@example.com",
+                        "status": "paid",
+                        "item_type": "package",
+                        "package_code": "legacy_snapshot",
+                        "package_slug": "legacy_snapshot",
+                        "stripe_session_id": "cs_test_rakim",
+                    }
+                ],
+                "project_entitlements": [],
+                "admin_impersonation_sessions": [],
+                "audit_logs": [],
+                "uploaded_files": [],
+                "families": [],
+                "households": [],
+                "mint_records": [],
+                "vault_items": [],
+                "vault_collections": [],
+                "vault_access_grants": [],
+                "vault_release_rules": [],
+                "vault_audit_events": [],
+                "finance_events": [],
+            }
+        )
+        with (
+            patch.object(admin_control_service, "get_database", return_value=db),
+            patch.object(
+                admin_control_service,
+                "run_readiness_check",
+                return_value={
+                    "mint_review_ready": False,
+                    "mint_eligible": False,
+                    "mint_already_completed": False,
+                    "package_synced": True,
+                    "lane_assigned": True,
+                    "order_linked": True,
+                    "entitlement_exists": False,
+                    "summary": "ready",
+                    "blocking_reasons": [],
+                },
+            ),
+            patch.object(admin_control_service, "get_project_entitlement", return_value=None),
+            patch.object(
+                admin_control_service,
+                "resolve_canonical_mint_status",
+                return_value={
+                    "project_id": str(project_id),
+                    "current_status": "not_started",
+                    "minted": False,
+                    "records": [],
+                },
+            ),
+        ):
+            cases = admin_control_service.list_customer_cases(search="Rakim", queue="users", limit=10)
+            workspace = admin_control_service.customer_case_workspace(str(project_id))
+            project_before = dict(db["projects"].find_one({"_id": project_id}) or {})
+            order_before = dict(db["orders"].find_one({"_id": order_id}) or {})
+            preview = admin_control_service.super_admin_preview_service_controls(
+                project_id=str(project_id),
+                payload={"operation": "upgrade", "package_code": "legacy_plus"},
+            )
+            project_after_preview = dict(db["projects"].find_one({"_id": project_id}) or {})
+            order_after_preview = dict(db["orders"].find_one({"_id": order_id}) or {})
+            started = admin_control_service.start_admin_impersonation(
+                case_id=str(project_id),
+                reason="Read-only acceptance verification",
+                actor={"_id": actor_id, "email": "l.robinson@tomboflight.com", "role": "ceo_master_admin"},
+            )
+            active = admin_control_service.active_admin_impersonation(
+                actor={"_id": actor_id, "email": "l.robinson@tomboflight.com", "role": "ceo_master_admin"},
+            )
+            stopped = admin_control_service.stop_admin_impersonation(
+                session_id=started["session_id"],
+                reason="Acceptance complete",
+                actor={"_id": actor_id, "email": "l.robinson@tomboflight.com", "role": "ceo_master_admin"},
+            )
+        self.assertTrue(cases["items"])
+        self.assertIn("overview", workspace.get("tabs") or {})
+        self.assertTrue(preview["changes"])
+        self.assertEqual(project_before.get("package_code"), project_after_preview.get("package_code"))
+        self.assertEqual(order_before.get("package_code"), order_after_preview.get("package_code"))
+        self.assertEqual(order_before.get("stripe_session_id"), order_after_preview.get("stripe_session_id"))
+        self.assertTrue(active["active"])
+        self.assertFalse(stopped["active"])
+        self.assertEqual(stopped["status"], "stopped")
 
 
 if __name__ == "__main__":

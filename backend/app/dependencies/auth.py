@@ -754,6 +754,31 @@ def _resolve_workflow_state(project_id: str | None) -> dict[str, Any]:
     }
 
 
+def _collect_user_permission_overrides(user_id: str) -> set[str]:
+    normalized_user_id = _normalize_value(user_id)
+    if not normalized_user_id:
+        return set()
+    permissions: set[str] = set()
+    db = _db()
+    collection = db.get("user_permission_overrides") if hasattr(db, "get") else None
+    if collection is None:
+        try:
+            collection = db["user_permission_overrides"]
+        except KeyError:
+            return permissions
+    docs = collection.find(
+        {
+            "user_id": normalized_user_id,
+            "status": {"$in": ["active", "enabled", ""]},
+        }
+    )
+    for doc in docs:
+        permission_code = _normalize_value(doc.get("permission_code"))
+        if permission_code:
+            permissions.add(permission_code)
+    return permissions
+
+
 def resolve_access_context(
     user_id: str,
     project_id: str | None = None,
@@ -770,6 +795,7 @@ def resolve_access_context(
     role_codes = _collect_role_codes_for_user(user)
     capabilities = _collect_capabilities_for_roles(role_codes)
     permissions = _collect_permissions_for_roles(role_codes, capabilities)
+    permissions.update(_collect_user_permission_overrides(user_id))
 
     entitlements = list_user_project_entitlements(
         user_id,
