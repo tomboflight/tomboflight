@@ -188,6 +188,10 @@ test("[asset-versioning] dashboard and control center include cache-busting live
   const dashboardScripts = await page.locator("script[src]").evaluateAll((nodes) =>
     nodes.map((node) => node.getAttribute("src") || ""),
   );
+  const dashboardStyles = await page.locator("link[rel='stylesheet']").evaluateAll((nodes) =>
+    nodes.map((node) => node.getAttribute("href") || ""),
+  );
+  expect(dashboardStyles.some((href) => href.includes("styles.css?v=20260713-livefix1"))).toBeTruthy();
   expect(dashboardScripts.some((src) => src.includes("app.js?v=20260713-livefix1"))).toBeTruthy();
   expect(dashboardScripts.some((src) => src.includes("dashboard-admin.js?v=20260713-livefix1"))).toBeTruthy();
 
@@ -195,6 +199,10 @@ test("[asset-versioning] dashboard and control center include cache-busting live
   const controlCenterScripts = await page.locator("script[src]").evaluateAll((nodes) =>
     nodes.map((node) => node.getAttribute("src") || ""),
   );
+  const controlCenterStyles = await page.locator("link[rel='stylesheet']").evaluateAll((nodes) =>
+    nodes.map((node) => node.getAttribute("href") || ""),
+  );
+  expect(controlCenterStyles.some((href) => href.includes("styles.css?v=20260713-livefix1"))).toBeTruthy();
   expect(controlCenterScripts.some((src) => src.includes("app.js?v=20260713-livefix1"))).toBeTruthy();
   expect(controlCenterScripts.some((src) => src.includes("admin-control-center.js?v=20260713-livefix1"))).toBeTruthy();
 });
