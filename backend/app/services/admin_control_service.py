@@ -440,6 +440,23 @@ def admin_control_access_profile(current_user: dict[str, Any]) -> dict[str, Any]
         for permission in (access_context.get("permissions") or [])
         if _normalize(permission)
     }
+    if not permissions:
+        fallback_role_codes = role_codes or [
+            _normalize(role).lower()
+            for role in (current_user.get("role_codes") or [])
+            if _normalize(role)
+        ]
+        if not fallback_role_codes:
+            fallback_role_codes = [
+                _normalize(current_user.get(field_name)).lower()
+                for field_name in ("role", "access_tier", "department_role")
+                if _normalize(current_user.get(field_name))
+            ]
+        for role_code in fallback_role_codes:
+            for permission in ROLE_PERMISSION_MAP.get(normalize_role_code(role_code), set()):
+                normalized_permission = _normalize(permission).lower()
+                if normalized_permission:
+                    permissions.add(normalized_permission)
     capabilities = {
         _normalize(capability).lower()
         for capability in (access_context.get("capabilities") or [])

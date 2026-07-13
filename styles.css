@@ -8915,7 +8915,7 @@ body.admin-interface-mode {
   line-height: 1.6;
 }
 
-body.admin-interface-mode[data-admin-theme="dark"] {
+:root[data-admin-theme="dark"] body.admin-interface-mode {
   --admin-bg: #08101d;
   --admin-panel: #0f192a;
   --admin-border: #2b3d53;
@@ -8931,7 +8931,7 @@ body.admin-interface-mode[data-admin-theme="dark"] {
   color-scheme: dark;
 }
 
-body.admin-interface-mode[data-admin-theme="high-contrast"] {
+:root[data-admin-theme="high-contrast"] body.admin-interface-mode {
   --admin-bg: #000000;
   --admin-panel: #000000;
   --admin-border: #ffffff;
@@ -8947,8 +8947,12 @@ body.admin-interface-mode[data-admin-theme="high-contrast"] {
   color-scheme: dark;
 }
 
-body.admin-interface-mode[data-admin-text-scale="large"] {
+:root[data-admin-text-scale="large"] body.admin-interface-mode {
   font-size: 18px;
+}
+
+:root[data-admin-theme="light"] {
+  color-scheme: light;
 }
 
 body.admin-interface-mode :focus-visible {
@@ -8998,6 +9002,14 @@ body.admin-interface-mode table,
 body.admin-interface-mode [role="tab"] {
   color: var(--admin-text);
   border-color: var(--admin-border);
+}
+
+body.admin-interface-mode input,
+body.admin-interface-mode textarea,
+body.admin-interface-mode select,
+body.admin-interface-mode option {
+  background: var(--admin-panel);
+  color: var(--admin-text);
 }
 
 body.admin-interface-mode .helper[data-state] {

@@ -53,6 +53,10 @@
     impersonationTicker: 0,
     bootstrapFailed: false,
     bootstrapErrorCode: "",
+    accessProfileLoadFailed: false,
+    overviewLoadFailed: false,
+    casesLoadFailed: false,
+    lastStatusMessage: "",
   };
   const DEFAULT_ROLE_KEY = "user";
 
@@ -216,7 +220,25 @@
   }
 
   function setPageStatus(message, type) {
+    state.lastStatusMessage = normalizeValue(message);
+    document.documentElement.dataset.adminLastStatus = state.lastStatusMessage;
     app.setStatus(document.querySelector("[data-admin-control-action-status]"), message, type);
+  }
+
+  function extractErrorMessage(error, fallback) {
+    const nested =
+      (error && (error.detail || error.message || error.error || error.reason)) ||
+      (error && error.responseBody && (error.responseBody.detail || error.responseBody.message)) ||
+      fallback;
+    return normalizeValue(nested) || fallback;
+  }
+
+  function actionableError(code, operation, endpoint, error) {
+    const safeOperation = normalizeValue(operation) || "Request";
+    const safeEndpoint = normalizeValue(endpoint);
+    const message = extractErrorMessage(error, "Unknown service failure.");
+    const endpointDetail = safeEndpoint ? ` Endpoint: ${safeEndpoint}.` : "";
+    return `${safeOperation} failed (${code}). ${message}.${endpointDetail} Use Refresh to retry.`;
   }
 
   function clearPageStatus() {
@@ -289,6 +311,7 @@
     state.allowedActions = normalizeAccessList(profile && profile.allowed_actions);
     state.allowedBulkActions = normalizeAccessList(profile && profile.allowed_bulk_actions);
     state.isSuperAdmin = Boolean(profile && profile.is_super_admin);
+    state.accessProfileLoadFailed = false;
 
     if (!isAllowedQueue(state.queue)) {
       state.queue = state.allowedQueues[0] || "overview";
@@ -669,6 +692,26 @@
   function renderTopSummary(summary, financeSections, marketingSections) {
     const node = document.querySelector("[data-admin-top-summary]");
     if (!node) return;
+    if (state.overviewLoadFailed) {
+      node.innerHTML = [
+        "Total Users",
+        "Active Projects",
+        "Paid Orders",
+        "Missing Entitlements",
+        "Mint-Ready Projects",
+        "Data Mismatches",
+      ]
+        .map(function (label) {
+          return `
+            <div class="admin-summary-tile">
+              <span>${escapeHtml(label)}</span>
+              <strong>Unavailable</strong>
+            </div>
+          `;
+        })
+        .join("");
+      return;
+    }
     const isMarketing = isMarketingRole();
     const isOpsRole = isOperationsRole();
     const isFinanceRole = state.roleKey === "finance_admin";
@@ -728,6 +771,15 @@
   function renderPriorityRepairs(priority, financeSections, marketingSections) {
     const node = document.querySelector("[data-admin-priority-repairs]");
     if (!node) return;
+    if (state.overviewLoadFailed) {
+      node.innerHTML = `
+        <div class="admin-priority-repair-item">
+          <span>Admin metrics status</span>
+          <strong>Unavailable</strong>
+        </div>
+      `;
+      return;
+    }
     const isMarketing = isMarketingRole();
     const isOpsRole = isOperationsRole();
     const isFinanceRole = state.roleKey === "finance_admin";
@@ -780,6 +832,7 @@
   async function loadOverview() {
     try {
       const payload = await fetchJson("/admin/control-center/overview?limit=24");
+      state.overviewLoadFailed = false;
       state.marketingSections = payload.marketing_sections || {};
       state.operationsSections = payload.operations_sections || {};
       renderTopSummary(payload.summary || {}, payload.finance_sections || {}, payload.marketing_sections || {});
@@ -787,8 +840,7 @@
       if (isMarketingRole()) renderMarketingQueuePanel();
     } catch (error) {
       console.error("Overview load failed:", error);
-      const code = classifyAdminError(error, ADMIN_ERROR_CODES.bootstrap);
-      showBootstrapError(code, error && error.message, loadOverview);
+      state.overviewLoadFailed = true;
       state.marketingSections = {};
       state.operationsSections = {};
       renderTopSummary({}, {}, {});
@@ -1597,13 +1649,17 @@
     try {
       const payload = await fetchJson(`/admin/control-center/cases/${encodeURIComponent(caseId)}`);
       state.workspace = payload || null;
+      state.casesLoadFailed = false;
       renderWorkspaceTab();
       renderCaseHeader();
       renderCaseContext();
       updateActionAvailability();
       updateBulkActionAvailability();
     } catch (error) {
-      setPageStatus(error.message || "Unable to load case workspace.", "error");
+      setPageStatus(
+        actionableError("ACC-CASE-WORKSPACE", "Case workspace load", `/admin/control-center/cases/${caseId}`, error),
+        "error",
+      );
     }
   }
 
@@ -1638,6 +1694,7 @@
       const payload = await fetchJson(
         `/admin/control-center/cases?queue=${encodeURIComponent(state.queue)}&limit=80&search=${encodeURIComponent(getSearchValue())}`,
       );
+      state.casesLoadFailed = false;
       state.cases = Array.isArray(payload.items) ? payload.items : [];
       if (!state.cases.length) {
         state.selectedCaseId = "";
@@ -1664,9 +1721,10 @@
       clearPageStatus();
     } catch (error) {
       console.error("Case load failed:", error);
+      state.casesLoadFailed = true;
       const code = classifyAdminError(error, ADMIN_ERROR_CODES.search);
       showBootstrapError(code, error && error.message, loadCases);
-      setPageStatus(`${code}: ${error && error.message ? error.message : "Unable to load customer cases."}`, "error");
+      setPageStatus(actionableError(code, "Case search", `/admin/control-center/cases?queue=${state.queue}`, error), "error");
     }
   }
 
@@ -2309,9 +2367,10 @@
       const isWildcardScope = Boolean(
         state.isSuperAdmin || (state.accessProfile && state.accessProfile.is_wildcard),
       );
-      // The CEO Master Admin (and any other wildcard-scoped role) must never
-      // display "0 permitted queues" -- wildcard scope always resolves to
-      // every operational queue, even if the ordinary allowlist is sparse.
+      if (state.accessProfileLoadFailed) {
+        statusNode.textContent = "Access scope unavailable (ACC-ACCESS-PROFILE). Use Refresh to retry.";
+        return;
+      }
       const scopeLabel = isWildcardScope
         ? "All permitted operational queues"
         : `${queueCount} permitted ${isMarketingRole() ? "section" : "queue"}${queueCount === 1 ? "" : "s"}`;
