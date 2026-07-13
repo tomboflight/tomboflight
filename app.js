@@ -559,11 +559,11 @@
   }
 
   function buildNetworkErrorMessage(apiBaseUrls) {
+    const candidates = uniqueNonEmptyValues(apiBaseUrls);
     if (!isLocalApp()) {
-      return "Service temporarily unavailable. Please try again in a few minutes.";
+      return `Service temporarily unavailable (NET-API-UNREACHABLE). Unable to reach ${candidates[0] || "the API host"}. Use Retry.`;
     }
 
-    const candidates = uniqueNonEmptyValues(apiBaseUrls);
     const details = [
       "Network error calling API.",
       "",
@@ -1585,16 +1585,12 @@
   function applyAdminAppearance(preference, user) {
     if (!shouldEnableAdminAppearance(user)) {
       document.body.classList.remove("admin-interface-mode");
-      delete document.body.dataset.adminTheme;
-      delete document.body.dataset.adminTextScale;
       delete document.documentElement.dataset.adminTheme;
       delete document.documentElement.dataset.adminTextScale;
       return;
     }
     const normalized = normalizeAdminAppearance(preference);
     document.body.classList.add("admin-interface-mode");
-    document.body.dataset.adminTheme = normalized.theme;
-    document.body.dataset.adminTextScale = normalized.textScale;
     document.documentElement.dataset.adminTheme = normalized.theme;
     document.documentElement.dataset.adminTextScale = normalized.textScale;
   }

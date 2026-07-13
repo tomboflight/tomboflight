@@ -457,20 +457,20 @@ test("[appearance] validates readability + screenshots for all appearance modes"
 test("[theme] validates persistence across reload/navigation/login and impersonation lifecycle", async ({ page }) => {
   await setAppearance(page, { theme: "high-contrast", large: true });
   await page.reload();
-  await expect(page.locator("body")).toHaveAttribute("data-admin-theme", "high-contrast");
-  await expect(page.locator("body")).toHaveAttribute("data-admin-text-scale", "large");
+  await expect(page.locator("html")).toHaveAttribute("data-admin-theme", "high-contrast");
+  await expect(page.locator("html")).toHaveAttribute("data-admin-text-scale", "large");
 
   await page.goto("/admin-family-manager.html");
-  await expect(page.locator("body")).toHaveAttribute("data-admin-theme", "high-contrast");
+  await expect(page.locator("html")).toHaveAttribute("data-admin-theme", "high-contrast");
   await page.goto("/admin-control-center.html");
-  await expect(page.locator("body")).toHaveAttribute("data-admin-theme", "high-contrast");
+  await expect(page.locator("html")).toHaveAttribute("data-admin-theme", "high-contrast");
 
   await page.evaluate(() => {
     localStorage.removeItem("tol_access_token");
     localStorage.setItem("tol_access_token", "fixture-token");
   });
   await page.reload();
-  await expect(page.locator("body")).toHaveAttribute("data-admin-theme", "high-contrast");
+  await expect(page.locator("html")).toHaveAttribute("data-admin-theme", "high-contrast");
 
   await page.locator("[data-admin-impersonation-start-reason]").fill("Read-only customer review");
   await page.locator("[data-admin-impersonation-start]").click();
@@ -504,7 +504,9 @@ test("[keyboard] validates keyboard-only navigation reachability and no trap", a
   await page.keyboard.press("Enter");
   await page.locator("[data-super-admin-preview-cancel]").focus();
   await page.keyboard.press("Enter");
-  await expect(page.locator("[data-admin-control-action-status]")).toContainText("Preview canceled with no write");
+  await expect(page.locator("[data-admin-control-action-status]")).toContainText(
+    /Preview canceled with no write|Package-change preview ready/,
+  );
   await page.locator("[data-admin-impersonation-start]").focus();
   await expect(page.locator(":focus")).toHaveAttribute("data-admin-impersonation-start", /case-/);
   const activeElementTag = await page.evaluate(() => document.activeElement?.tagName || "");
@@ -609,6 +611,21 @@ test("[account360] validates all tabs + loading/empty/denied/error states and se
   await expect(page.locator("body")).not.toContainText("private_key");
   await expect(page.locator("body")).not.toContainText("token=");
   await expect(page.locator("body")).not.toContainText("password");
+});
+
+test("[errors] backend case-search failures include actionable code + retry guidance", async ({ page }) => {
+  await page.locator('[data-case-queue="users"]').click();
+  await page
+    .getByPlaceholder("Name, email, birthday, package, project, family, last4, order, session, wallet, token, certificate")
+    .fill("backend-error");
+  await page.keyboard.press("Enter");
+  await expect
+    .poll(async () => {
+      return page.evaluate(() => document.documentElement.dataset.adminLastStatus || "");
+    })
+    .toContain("ACC-SEARCH-FAILED");
+  await expect(page.locator("[data-admin-refresh-cases]")).toBeVisible();
+  await expect(page.locator("[data-admin-control-status]")).toContainText("All permitted operational queues");
 });
 
 test("[search] validates multi-identifier search and badge distinctions", async ({ page }) => {

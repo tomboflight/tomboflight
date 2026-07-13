@@ -288,6 +288,25 @@ class AdminControlAccessProfileTests(unittest.TestCase):
         self.assertIn("queue_for_mint_review", profile["allowed_actions"])
         self.assertIn("repair-all-safe-records", profile["allowed_bulk_actions"])
 
+    def test_ceo_profile_falls_back_to_role_permissions_when_access_context_permissions_are_empty(self):
+        current_user = {
+            "role": "admin",
+            "access_tier": "ceo_master_admin",
+            "_access_context": {
+                "role_codes": ["ceo_master_admin", "executive_tech_admin"],
+                "permissions": [],
+            },
+        }
+
+        profile = admin_control_service.admin_control_access_profile(current_user)
+
+        self.assertTrue(profile["is_wildcard"])
+        self.assertEqual(profile["role_key"], "ceo_master_admin")
+        self.assertIn("overview", profile["allowed_queues"])
+        self.assertIn("users", profile["allowed_queues"])
+        self.assertIn("mint_queue", profile["allowed_queues"])
+        self.assertIn("audit", profile["allowed_queues"])
+
     def test_cfo_profile_excludes_operations_and_mint_menus(self):
         current_user = {
             "role": "admin",
