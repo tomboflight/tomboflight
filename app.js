@@ -9,10 +9,7 @@
     "http://[::1]:8000",
   ];
   const DEFAULT_LIVE_API_BASE_URL = "https://tomboflight-api.onrender.com";
-  const DEFAULT_LIVE_API_BASE_URLS = [
-    DEFAULT_LIVE_API_BASE_URL,
-    "https://api.tomboflight.com",
-  ];
+  const DEFAULT_LIVE_API_BASE_URLS = [DEFAULT_LIVE_API_BASE_URL];
 
   const TOKEN_KEY = "tol_access_token";
   const USER_KEY = "tol_user";
@@ -23,7 +20,8 @@
   const FOUNDER_MAINTENANCE_PENDING_KEY = "tol_founder_maintenance_pending";
   const LIGHT_NEVER_DIES_CAMPAIGN = "LIGHT_NEVER_DIES";
   const API_BASE_URL_STORAGE_KEY = "tol_api_base_url";
-  const API_REQUEST_TIMEOUT_MS = 15000;
+  const API_REQUEST_TIMEOUT_MS = 30000;
+  const API_REQUEST_RETRY_ATTEMPTS = 1;
 
   const ADDON_OR_EXTRA_SLUGS = new Set([
     "extra_upload_pack",
@@ -1022,84 +1020,103 @@
     for (let index = 0; index < apiBaseUrls.length; index += 1) {
       const apiBaseUrl = apiBaseUrls[index];
       const hasFallbackCandidate = index < apiBaseUrls.length - 1;
-      let timeoutId = null;
-      let signalHandler = null;
-      try {
-        const requestOptions = {
-          ...options,
-          headers,
-          credentials: "include",
-        };
+      for (
+        let attempt = 0;
+        attempt <= API_REQUEST_RETRY_ATTEMPTS;
+        attempt += 1
+      ) {
+        let timeoutId = null;
+        let signalHandler = null;
+        try {
+          const requestOptions = {
+            ...options,
+            headers,
+            credentials: "include",
+          };
 
-        if (typeof AbortController === "function") {
-          const controller = new AbortController();
-          requestOptions.signal = controller.signal;
+          if (typeof AbortController === "function") {
+            const controller = new AbortController();
+            requestOptions.signal = controller.signal;
 
-          timeoutId = window.setTimeout(function () {
-            controller.abort();
-          }, API_REQUEST_TIMEOUT_MS);
-
-          if (options.signal) {
-            if (options.signal.aborted) {
+            timeoutId = window.setTimeout(function () {
               controller.abort();
-            } else {
-              signalHandler = function () {
+            }, API_REQUEST_TIMEOUT_MS);
+
+            if (options.signal) {
+              if (options.signal.aborted) {
                 controller.abort();
-              };
-              options.signal.addEventListener("abort", signalHandler, {
-                once: true,
-              });
+              } else {
+                signalHandler = function () {
+                  controller.abort();
+                };
+                options.signal.addEventListener("abort", signalHandler, {
+                  once: true,
+                });
+              }
             }
           }
-        }
 
-        const requestUrl = `${apiBaseUrl}${path}`;
-        lastRequestUrl = requestUrl;
-        response = await fetch(requestUrl, requestOptions);
-        const normalizedPath = String(path || "");
-        const shouldRetry404Fallback =
-          normalizedPath.startsWith("/workspace-access/") ||
-          normalizedPath.startsWith("/workspace_access/") ||
-          normalizedPath.startsWith("/household-access/") ||
-          normalizedPath.startsWith("/admin/control-center/");
-        // Some deployments can expose mixed-version backends behind different
-        // API domains where `/health` passes but specific routes lag behind.
-        // For these known cross-host-sensitive routes, retry 404s against the
-        // next configured API base URL before surfacing an error.
-        if (
-          response &&
-          response.status === 404 &&
-          hasFallbackCandidate &&
-          shouldRetry404Fallback
-        ) {
-          console.warn("Tomb of Light API fallback retry after 404.", {
-            requestPath: normalizedPath,
-            failedApiBaseUrl: apiBaseUrl,
-          });
-          continue;
-        }
-        saveApiBaseUrl(apiBaseUrl);
-        break;
-      } catch (networkError) {
-        if (
-          networkError &&
-          networkError.name === "AbortError" &&
-          !response
-        ) {
-          lastNetworkError = new Error(
-            "Request timed out. Please try again in a moment.",
-          );
-        } else {
-          lastNetworkError = networkError;
-        }
-      } finally {
-        if (timeoutId) {
-          window.clearTimeout(timeoutId);
-        }
-        if (options.signal && signalHandler) {
-          options.signal.removeEventListener("abort", signalHandler);
+          const requestUrl = `${apiBaseUrl}${path}`;
+          lastRequestUrl = requestUrl;
+          response = await fetch(requestUrl, requestOptions);
+          const normalizedPath = String(path || "");
+          const shouldRetry404Fallback =
+            normalizedPath.startsWith("/workspace-access/") ||
+            normalizedPath.startsWith("/workspace_access/") ||
+            normalizedPath.startsWith("/household-access/") ||
+            normalizedPath.startsWith("/admin/control-center/");
+          // Some deployments can expose mixed-version backends behind different
+          // API domains where `/health` passes but specific routes lag behind.
+          // For these known cross-host-sensitive routes, retry 404s against the
+          // next configured API base URL before surfacing an error.
+          if (
+            response &&
+            response.status === 404 &&
+            hasFallbackCandidate &&
+            shouldRetry404Fallback
+          ) {
+            console.warn("Tomb of Light API fallback retry after 404.", {
+              requestPath: normalizedPath,
+              failedApiBaseUrl: apiBaseUrl,
+            });
+            response = null;
+            break;
+          }
+          saveApiBaseUrl(apiBaseUrl);
+          break;
+        } catch (networkError) {
+          const timedOut =
+            networkError &&
+            networkError.name === "AbortError" &&
+            !response;
+          if (timedOut) {
+            lastNetworkError = new Error(
+              "Request timed out. Please try again in a moment.",
+            );
+          } else {
+            lastNetworkError = networkError;
+          }
+
+          const retryable =
+            timedOut ||
+            (networkError &&
+              (networkError.name === "TypeError" ||
+                String(networkError.message || "")
+                  .toLowerCase()
+                  .includes("failed to fetch")));
+          if (retryable && attempt < API_REQUEST_RETRY_ATTEMPTS) {
+            continue;
+          }
+        } finally {
+          if (timeoutId) {
+            window.clearTimeout(timeoutId);
+          }
+          if (options.signal && signalHandler) {
+            options.signal.removeEventListener("abort", signalHandler);
+          }
         }
       }
+      if (response) break;
     }
 
     if (!response) {
