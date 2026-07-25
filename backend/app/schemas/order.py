@@ -1,21 +1,33 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-class OrderCreate(BaseModel):
+class PublicCheckoutOrderCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     package_code: str | None = Field(default=None)
     package_slug: str | None = Field(default=None)
-    package_name: str = Field(..., min_length=1)
-    price_label: str = Field(..., min_length=1)
-    item_type: str = Field(default="package")
-    billing_plan: str = Field(default="one_time")
-    source: str = Field(default="stripe_payment_link")
-    order_status: str = Field(default="paid")
-    project_id: Optional[str] = None
     stripe_session_id: Optional[str] = None
-    stripe_payment_link_id: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_package_identity(self):
+        if not (self.package_code or self.package_slug or self.stripe_session_id):
+            raise ValueError("package_code or package_slug is required.")
+        return self
+
+
+class AdminManualOrderCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    customer_email: str = Field(..., min_length=3)
+    package_code: str | None = Field(default=None)
+    package_slug: str | None = Field(default=None)
+    project_id: Optional[str] = None
+    reason: str = Field(..., min_length=3)
+    authorization_source: str = Field(..., min_length=3)
+    idempotency_key: str = Field(..., min_length=8)
 
     @model_validator(mode="after")
     def validate_package_identity(self):

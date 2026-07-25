@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from app.dependencies.auth import get_current_user, require_permission
-from app.schemas.order import OrderCreate, OrderResponse
+from app.dependencies.auth import get_current_user, require_any_permission, require_permission
+from app.schemas.order import AdminManualOrderCreate, OrderResponse, PublicCheckoutOrderCreate
 from app.services.order_service import (
+    create_manual_order_for_admin,
     create_order_for_user,
     ensure_order_indexes,
     get_orders_for_user,
@@ -23,11 +24,28 @@ def initialize_order_indexes() -> None:
     status_code=status.HTTP_201_CREATED,
 )
 def record_checkout_order(
-    payload: OrderCreate,
+    payload: PublicCheckoutOrderCreate,
     current_user: dict = Depends(get_current_user),
 ):
     try:
         return create_order_for_user(current_user, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post(
+    "/admin/manual-order",
+    response_model=OrderResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_manual_order_admin(
+    payload: AdminManualOrderCreate,
+    current_user: dict = Depends(
+        require_any_permission(["admin.control.billing", "admin.orders.repair"])
+    ),
+):
+    try:
+        return create_manual_order_for_admin(current_user, payload)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
