@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from starlette.responses import Response
 
 from app.dependencies import auth as auth_dependencies
+from app.core.role_catalog import resolve_primary_role_code
 from app.routes import auth as auth_routes
 from app.services.auth_service import build_user_response
 
@@ -164,6 +165,15 @@ class AccountSeparationTests(unittest.TestCase):
         self.assertIn("admin.control.billing", permissions)
         self.assertNotIn("admin.users.write", permissions)
         self.assertNotIn("admin.intake.write", permissions)
+
+    def test_ceo_master_admin_precedes_legacy_super_admin(self):
+        self.assertEqual(
+            resolve_primary_role_code(["super_admin", "ceo_master_admin"]),
+            "ceo_master_admin",
+        )
+
+    def test_legacy_super_admin_remains_super_admin_without_ceo_role(self):
+        self.assertEqual(resolve_primary_role_code(["super_admin"]), "super_admin")
 
     def test_larry_dual_role_assignments_are_resolved(self):
         with (
