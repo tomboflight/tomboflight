@@ -34,8 +34,8 @@ ROLE_CODE_ALIASES: dict[str, str] = {
 }
 
 OFFICER_ROLE_CODES: tuple[str, ...] = (
-    "super_admin",
     "ceo_master_admin",
+    "super_admin",
     "executive_tech_admin",
     "operations_admin",
     "finance_admin",

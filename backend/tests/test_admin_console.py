@@ -1,5 +1,6 @@
 import re
 import unittest
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 from bson import ObjectId
@@ -417,7 +418,7 @@ class AdminControlDiagnosticsTests(unittest.TestCase):
             "role": "admin",
             "access_tier": "ceo_master_admin",
             "_access_context": {
-                "role_codes": ["ceo_master_admin"],
+                "role_codes": ["ceo_master_admin", "super_admin"],
                 "permissions": ["*"],
             },
         }
@@ -436,6 +437,55 @@ class AdminControlDiagnosticsTests(unittest.TestCase):
         self.assertTrue(diagnostics["backend_revision"])
         for forbidden_key in ("token", "cookie", "password", "secret", "credential"):
             self.assertNotIn(forbidden_key, str(diagnostics).lower())
+
+    def test_diagnostics_prefer_deployed_git_commit_for_backend_revision(self):
+        current_user = {
+            "id": "user-larry-1",
+            "role": "admin",
+            "access_tier": "ceo_master_admin",
+            "_access_context": {
+                "role_codes": ["ceo_master_admin"],
+                "permissions": ["*"],
+            },
+        }
+        db = FakeDatabase({"projects": [{"_id": "proj-1"}]})
+        with (
+            patch.object(admin_control_service, "get_database", return_value=db),
+            patch.dict(admin_control_service.os.environ, {"RENDER_GIT_COMMIT": "render-sha-123"}, clear=False),
+        ):
+            diagnostics = admin_control_service.admin_control_diagnostics(current_user)
+
+        self.assertEqual(diagnostics["backend_revision"], "render-sha-123")
+
+    def test_diagnostics_falls_back_to_app_version_when_deployment_sha_missing(self):
+        current_user = {
+            "id": "user-larry-1",
+            "role": "admin",
+            "access_tier": "ceo_master_admin",
+            "_access_context": {
+                "role_codes": ["ceo_master_admin"],
+                "permissions": ["*"],
+            },
+        }
+        db = FakeDatabase({"projects": [{"_id": "proj-1"}]})
+        with (
+            patch.object(admin_control_service, "get_database", return_value=db),
+            patch.dict(
+                admin_control_service.os.environ,
+                {
+                    "RENDER_GIT_COMMIT": "",
+                    "RELEASE_SHA": "",
+                    "GIT_COMMIT": "",
+                    "COMMIT_SHA": "",
+                    "VERCEL_GIT_COMMIT_SHA": "",
+                },
+                clear=False,
+            ),
+        ):
+            diagnostics = admin_control_service.admin_control_diagnostics(current_user)
+
+        self.assertEqual(diagnostics["backend_revision"], admin_control_service.settings.app_version)
+        self.assertNotEqual(diagnostics["backend_revision"], "super-secret-token")
 
     def test_ordinary_admin_diagnostics_are_allowlist_scoped(self):
         current_user = {
@@ -1237,6 +1287,170 @@ class AdminConsoleOverviewTests(unittest.TestCase):
         self.assertGreaterEqual(summary["projects_with_data_mismatch"], 1)
         self.assertTrue(cases["items"])
 
+    def test_overview_normalizes_mixed_datetimes_and_does_not_write_metrics(self):
+        month_start = datetime(2026, 7, 1, tzinfo=timezone.utc)
+        before_month = month_start - timedelta(seconds=1)
+        naive_month_boundary = datetime(2026, 7, 1, 0, 0, 0)
+        aware_month_boundary = datetime(2026, 6, 30, 20, 0, 0, tzinfo=timezone(timedelta(hours=-4)))
+        z_boundary = "2026-07-01T00:00:00Z"
+        offset_boundary = "2026-07-01T02:00:00+02:00"
+        malformed_value = "not-a-timestamp"
+
+        project_id = ObjectId()
+        second_project_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "users": [
+                    {"_id": ObjectId(), "email": "admin@example.com", "account_type": "business_admin"},
+                    {"_id": ObjectId(), "email": "customer@example.com", "account_type": "customer"},
+                ],
+                "projects": [
+                    {
+                        "_id": project_id,
+                        "owner_email": "customer@example.com",
+                        "name": "Boundary Project",
+                        "package_code": "legacy_snapshot",
+                        "project_lane": "portrait",
+                        "status": "build_ready",
+                        "phase": "intake_approved",
+                        "created_at": naive_month_boundary,
+                        "updated_at": aware_month_boundary,
+                    },
+                    {
+                        "_id": second_project_id,
+                        "owner_email": "customer@example.com",
+                        "name": "Prior Project",
+                        "package_code": "legacy_plus",
+                        "project_lane": "household",
+                        "status": "archived",
+                        "phase": "intake_approved",
+                        "created_at": before_month,
+                        "updated_at": before_month,
+                    },
+                ],
+                "orders": [
+                    {
+                        "_id": ObjectId(),
+                        "email": "customer@example.com",
+                        "project_id": project_id,
+                        "status": "paid",
+                        "item_type": "package",
+                        "package_code": "legacy_snapshot",
+                        "amount": 10,
+                        "created_at": naive_month_boundary,
+                    },
+                    {
+                        "_id": ObjectId(),
+                        "email": "customer@example.com",
+                        "project_id": project_id,
+                        "status": "paid",
+                        "item_type": "package",
+                        "package_code": "legacy_snapshot",
+                        "amount": 20,
+                        "created_at": aware_month_boundary,
+                    },
+                    {
+                        "_id": ObjectId(),
+                        "email": "customer@example.com",
+                        "project_id": project_id,
+                        "status": "paid",
+                        "item_type": "package",
+                        "package_code": "legacy_snapshot",
+                        "amount": 30,
+                        "created_at": z_boundary,
+                    },
+                    {
+                        "_id": ObjectId(),
+                        "email": "customer@example.com",
+                        "project_id": project_id,
+                        "status": "paid",
+                        "item_type": "package",
+                        "package_code": "legacy_snapshot",
+                        "amount": 40,
+                        "created_at": offset_boundary,
+                    },
+                    {
+                        "_id": ObjectId(),
+                        "email": "customer@example.com",
+                        "project_id": project_id,
+                        "status": "paid",
+                        "item_type": "package",
+                        "package_code": "legacy_snapshot",
+                        "amount": 50,
+                        "created_at": before_month,
+                    },
+                    {
+                        "_id": ObjectId(),
+                        "email": "customer@example.com",
+                        "project_id": project_id,
+                        "status": "paid",
+                        "item_type": "package",
+                        "package_code": "legacy_snapshot",
+                        "amount": 60,
+                        "created_at": malformed_value,
+                    },
+                ],
+                "project_entitlements": [
+                    {"_id": ObjectId(), "project_id": project_id, "status": "active"}
+                ],
+                "audit_logs": [],
+                "payroll_runs": [],
+                "finance_events": [],
+                "uploaded_files": [{"_id": ObjectId(), "project_id": project_id, "status": "received"}],
+                "verification_records": [],
+                "household_invites": [],
+                "project_members": [],
+            }
+        )
+        before_finance_docs = list(db["finance_events"].documents)
+        readiness_map = {
+            str(project_id): {
+                "mint_review_ready": True,
+                "mint_eligible": True,
+                "mint_already_completed": False,
+                "package_synced": True,
+                "lane_assigned": True,
+                "order_linked": True,
+                "entitlement_exists": True,
+                "summary": "ready",
+                "blocking_reasons": [],
+            },
+            str(second_project_id): {
+                "mint_review_ready": False,
+                "mint_eligible": False,
+                "mint_already_completed": False,
+                "package_synced": False,
+                "lane_assigned": False,
+                "order_linked": False,
+                "entitlement_exists": False,
+                "summary": "blocked",
+                "blocking_reasons": ["missing_entitlement"],
+            },
+        }
+
+        def _fake_readiness_check(*, project_id, order_id=""):
+            del order_id
+            return readiness_map[project_id]
+
+        with (
+            patch.object(admin_control_service, "get_database", return_value=db),
+            patch.object(admin_control_service, "_now", return_value=datetime(2026, 7, 15, tzinfo=timezone.utc)),
+            patch.object(admin_control_service, "run_readiness_check", side_effect=_fake_readiness_check),
+            patch.object(admin_control_service, "get_project_entitlement", return_value=None),
+            patch.object(admin_control_service, "count_workspace_uploads", return_value=1),
+        ):
+            payload = admin_control_service.admin_console_overview(limit=24)
+
+        summary = payload["summary"]
+        self.assertEqual(summary["total_users"], 2)
+        self.assertEqual(summary["total_active_projects"], 1)
+        self.assertEqual(summary["paid_orders"], 6)
+        self.assertEqual(summary["missing_entitlements"], 1)
+        self.assertEqual(summary["mint_ready_projects"], 1)
+        self.assertEqual(summary["projects_with_data_mismatch"], 1)
+        self.assertEqual(summary["collected_month"], 100.0)
+        self.assertEqual(db["finance_events"].documents, before_finance_docs)
+
     def test_admin_overview_includes_postmark_runtime_configuration_flags(self):
         db = FakeDatabase(
             {
@@ -1285,7 +1499,7 @@ class AdminConsoleOverviewTests(unittest.TestCase):
         self.assertFalse(sections["reports_exports"]["export_generation_live"])
         self.assertNotIn("monthly_finance_export", sections["reports_exports"])
 
-    def test_overview_backfills_typed_finance_events(self):
+    def test_overview_does_not_backfill_typed_finance_events(self):
         order_id = ObjectId()
         project_id = ObjectId()
         db = FakeDatabase(
@@ -1314,13 +1528,7 @@ class AdminConsoleOverviewTests(unittest.TestCase):
         )
         with patch.object(admin_control_service, "get_database", return_value=db):
             admin_control_service.admin_console_overview(limit=5)
-        event_types = {
-            item.get("event_type")
-            for item in db["finance_events"].documents
-        }
-        self.assertIn("refund_recorded", event_types)
-        self.assertIn("credit_recorded", event_types)
-        self.assertIn("billing_adjustment", event_types)
+        self.assertEqual(db["finance_events"].documents, [])
 
 
 class CfoScopeAndFinanceHistoryTests(unittest.TestCase):

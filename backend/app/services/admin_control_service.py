@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 import secrets
 from datetime import UTC, datetime, timedelta
@@ -591,6 +592,14 @@ def admin_control_bulk_action_allowed(
 FRONTEND_ASSET_REVISION = "20260713-livefix2"
 
 
+def _backend_release_identifier() -> str:
+    for key in ("RENDER_GIT_COMMIT", "RELEASE_SHA", "GIT_COMMIT", "COMMIT_SHA", "VERCEL_GIT_COMMIT_SHA"):
+        value = _normalize(os.environ.get(key))
+        if value:
+            return value
+    return _normalize(settings.app_version) or "unknown"
+
+
 def admin_control_diagnostics(current_user: dict[str, Any]) -> dict[str, Any]:
     """Read-only Master Admin self-check.
 
@@ -625,7 +634,7 @@ def admin_control_diagnostics(current_user: dict[str, Any]) -> dict[str, Any]:
         "bootstrap_endpoint_status": bootstrap_endpoint_status,
         "search_endpoint_status": search_endpoint_status,
         "frontend_revision": FRONTEND_ASSET_REVISION,
-        "backend_revision": settings.app_version,
+        "backend_revision": _backend_release_identifier(),
     }
 
 
@@ -1017,7 +1026,9 @@ def _extract_object_id_hex(value: Any) -> str | None:
 
 def _coerce_datetime(value: Any) -> datetime | None:
     if isinstance(value, datetime):
-        return value
+        if value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
     if isinstance(value, (int, float)):
         try:
             return datetime.fromtimestamp(float(value), tz=UTC)
@@ -3099,7 +3110,6 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
         status_value = _normalize(order.get("status")).lower()
         amount = _order_amount_value(order)
         order_dt = _coerce_datetime(order.get("created_at") or order.get("updated_at"))
-        _record_order_finance_events(order, source="admin_console_overview")
 
         if _is_paid_package_order(order):
             successful_payments += 1
