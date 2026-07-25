@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlparse
@@ -760,12 +761,12 @@ def _collect_user_permission_overrides(user_id: str) -> set[str]:
         return set()
     permissions: set[str] = set()
     db = _db()
-    collection = db.get("user_permission_overrides") if hasattr(db, "get") else None
-    if collection is None:
-        try:
-            collection = db["user_permission_overrides"]
-        except KeyError:
-            return permissions
+    if isinstance(db, Mapping) and "user_permission_overrides" not in db:
+        return permissions
+    try:
+        collection = db["user_permission_overrides"]
+    except KeyError:
+        return permissions
     docs = collection.find(
         {
             "user_id": normalized_user_id,
