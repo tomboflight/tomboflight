@@ -32,6 +32,7 @@ AUTHORITATIVE_ORDER_SOURCES = {
 }
 
 PAID_ORDER_STATUSES = {"paid", "complete", "completed", "succeeded"}
+PENDING_PUBLIC_ORDER_STATUS = "pending_confirmation"
 logger = logging.getLogger(__name__)
 
 
@@ -353,15 +354,80 @@ def _serialize_order(order: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def create_order_for_user(user: dict[str, Any], payload: Any) -> dict[str, Any]:
-    orders = _get_orders_collection()
+def _validated_user_object_id(user: dict[str, Any]) -> ObjectId:
+    user_id = _normalize(str(user.get("_id") or user.get("id") or user.get("user_id") or ""))
+    if not ObjectId.is_valid(user_id):
+        raise ValueError("Authenticated user id is invalid.")
+    return ObjectId(user_id)
 
-    package_code = _normalize_package_code(
-        getattr(payload, "package_code", None) or getattr(payload, "package_slug", None)
+
+def _create_pending_public_checkout_order(
+    *,
+    user: dict[str, Any],
+    package_code: str,
+) -> dict[str, Any]:
+    if package_code == "unknown" or not get_package(package_code):
+        raise ValueError("Unknown package.")
+
+    orders = _get_orders_collection()
+    user_oid = _validated_user_object_id(user)
+    existing = orders.find_one(
+        {
+            "user_id": user_oid,
+            "package_code": package_code,
+            "status": PENDING_PUBLIC_ORDER_STATUS,
+            "source": "customer_checkout_pending",
+        },
+        sort=[("created_at", -1)],
     )
-    item_type = _normalize(getattr(payload, "item_type", "package")).lower() or "package"
-    target_project_id = _normalize(getattr(payload, "project_id", None))
-    if item_type == "package" and target_project_id:
+    if existing:
+        return _serialize_order(existing)
+
+    package = get_package(package_code) or {}
+    order_doc = {
+        "user_id": user_oid,
+        "email": _normalize_email(user.get("email")),
+        "package_code": package_code,
+        "package_slug": package_code,
+        "lane": _package_lane_for_code(package_code),
+        "package_lane": _package_lane_for_code(package_code),
+        "package_name": _normalize(package.get("display_name")) or package_code.replace("_", " ").title(),
+        "price_label": _format_price_label(_base_package_price_cents(package_code), "one_time"),
+        "item_type": "package",
+        "billing_plan": "one_time",
+        "source": "customer_checkout_pending",
+        "status": PENDING_PUBLIC_ORDER_STATUS,
+        "created_at": datetime.now(UTC),
+    }
+    result = orders.insert_one(order_doc)
+    order_doc["_id"] = result.inserted_id
+    return _serialize_order(order_doc)
+
+
+def _create_verified_paid_package_order(
+    *,
+    user: dict[str, Any],
+    session_id: str,
+    requested_package_code: str = "",
+) -> dict[str, Any]:
+    orders = _get_orders_collection()
+    existing = _find_order_by_session_id_for_customer(
+        orders=orders,
+        session_id=session_id,
+        user=user,
+    )
+    if existing:
+        return _serialize_order(existing)
+
+    session = _retrieve_checkout_session(session_id)
+    _ensure_session_belongs_to_user(user=user, session=session)
+    purchase = _extract_verified_package_purchase_from_session(session)
+    package_code = purchase["package_code"]
+    if requested_package_code and requested_package_code != package_code:
+        raise ValueError("Checkout session product and requested package do not match.")
+
+    target_project_id = _extract_target_project_id(session)
+    if target_project_id:
         entitlement = get_project_entitlement(target_project_id) or {}
         entitlement_status = _normalize(entitlement.get("status")).lower() or "active"
         entitlement_package = _normalize_package_code(entitlement.get("package_code"))
@@ -370,81 +436,149 @@ def create_order_for_user(user: dict[str, Any], payload: Any) -> dict[str, Any]:
                 "This workspace already has an active package entitlement. Invite members instead of purchasing again."
             )
 
-    order_status = _public_checkout_status(
-        getattr(payload, "source", ""),
-        getattr(payload, "order_status", ""),
-    )
-    stripe_session_id = _normalize(getattr(payload, "stripe_session_id", None))
-
-    existing = None
-    if stripe_session_id:
-        existing = orders.find_one({"stripe_session_id": stripe_session_id})
-
-    if existing is None:
-        existing = orders.find_one(
-            {
-                "user_id": ObjectId(str(user["_id"])),
-                "package_code": package_code,
-                "status": order_status,
-            },
-            sort=[("created_at", -1)],
-        )
-
-    if existing:
-        return _serialize_order(existing)
-
+    user_oid = _validated_user_object_id(user)
     order_doc = {
-        "user_id": ObjectId(str(user["_id"])),
-        "email": user["email"],
+        "user_id": user_oid,
+        "email": _normalize_email(user.get("email")),
         "package_code": package_code,
         "package_slug": package_code,
         "lane": _package_lane_for_code(package_code),
         "package_lane": _package_lane_for_code(package_code),
-        "package_name": payload.package_name,
-        "price_label": payload.price_label,
-        "item_type": getattr(payload, "item_type", "package"),
-        "billing_plan": getattr(payload, "billing_plan", "one_time"),
-        "source": payload.source,
-        "status": order_status,
+        "package_name": purchase["package_name"],
+        "price_label": purchase["price_label"],
+        "item_type": "package",
+        "billing_plan": purchase["billing_plan"],
+        "source": "stripe_verified",
+        "status": "paid",
+        "stripe_session_id": session_id,
         "created_at": datetime.now(UTC),
     }
-    _set_if_present(order_doc, "stripe_session_id", payload.stripe_session_id)
-    _set_if_present(order_doc, "stripe_payment_link_id", payload.stripe_payment_link_id)
-
+    _set_if_present(order_doc, "stripe_payment_link_id", purchase.get("stripe_payment_link_id"))
     result = orders.insert_one(order_doc)
     order_doc["_id"] = result.inserted_id
 
-    if (
-        order_doc["item_type"] == "package"
-        and order_doc["status"] in PAID_ORDER_STATUSES
-        and _is_authoritative_order_source(order_doc.get("source"))
-    ):
-        order_doc = _attach_project_to_paid_package_order(
-            order_id=result.inserted_id,
-            order_doc=order_doc,
-            user=user,
-            package_code=package_code,
-            package_name=payload.package_name,
-            target_project_id=target_project_id,
-            stripe_session_id=payload.stripe_session_id,
-            stripe_payment_link_id=payload.stripe_payment_link_id,
-        )
-    elif order_doc["item_type"] == "maintenance":
-        if target_project_id:
-            project_oid = _to_object_id(target_project_id)
-            if project_oid is not None:
-                orders.update_one(
-                    {"_id": result.inserted_id},
-                    {"$set": {"project_id": project_oid}},
-                )
-                order_doc["project_id"] = project_oid
-                _schedule_maintenance_start(
-                    project_id=str(project_oid),
-                    billing_plan=order_doc.get("billing_plan", "monthly"),
-                )
+    order_doc = _attach_project_to_paid_package_order(
+        order_id=result.inserted_id,
+        order_doc=order_doc,
+        user=user,
+        package_code=package_code,
+        package_name=purchase["package_name"],
+        target_project_id=target_project_id,
+        stripe_session_id=session_id,
+        stripe_payment_link_id=purchase.get("stripe_payment_link_id"),
+    )
+    _trigger_package_provisioning()
+    return _serialize_order(order_doc)
 
-    if order_doc["item_type"] == "package":
-        _trigger_package_provisioning()
+
+def create_order_for_user(user: dict[str, Any], payload: Any) -> dict[str, Any]:
+    requested_package_code = _normalize_package_code(
+        getattr(payload, "package_code", None) or getattr(payload, "package_slug", None)
+    )
+    target_project_id = _normalize(getattr(payload, "project_id", None))
+    if target_project_id and requested_package_code != "unknown":
+        entitlement = get_project_entitlement(target_project_id) or {}
+        entitlement_status = _normalize(entitlement.get("status")).lower() or "active"
+        entitlement_package = _normalize_package_code(entitlement.get("package_code"))
+        if entitlement_status == "active" and entitlement_package == requested_package_code:
+            raise ValueError(
+                "This workspace already has an active package entitlement. Invite members instead of purchasing again."
+            )
+
+    stripe_session_id = _normalize(getattr(payload, "stripe_session_id", None))
+
+    if stripe_session_id:
+        return _create_verified_paid_package_order(
+            user=user,
+            session_id=stripe_session_id,
+            requested_package_code=requested_package_code if requested_package_code != "unknown" else "",
+        )
+
+    return _create_pending_public_checkout_order(
+        user=user,
+        package_code=requested_package_code,
+    )
+
+
+def create_manual_order_for_admin(admin_user: dict[str, Any], payload: Any) -> dict[str, Any]:
+    customer_email = _normalize_email(getattr(payload, "customer_email", ""))
+    if not customer_email:
+        raise ValueError("customer_email is required.")
+    reason = _normalize(getattr(payload, "reason", ""))
+    authorization_source = _normalize(getattr(payload, "authorization_source", ""))
+    idempotency_key = _normalize(getattr(payload, "idempotency_key", ""))
+    if not reason:
+        raise ValueError("reason is required.")
+    if not authorization_source:
+        raise ValueError("authorization_source is required.")
+    if not idempotency_key:
+        raise ValueError("idempotency_key is required.")
+
+    package_code = _normalize_package_code(
+        getattr(payload, "package_code", None) or getattr(payload, "package_slug", None)
+    )
+    if package_code == "unknown" or not get_package(package_code):
+        raise ValueError("Unknown package.")
+
+    customer_user = _get_user_by_email(customer_email) or create_pending_checkout_user(customer_email)
+    if not customer_user:
+        raise ValueError("Customer account could not be resolved.")
+
+    orders = _get_orders_collection()
+    existing = orders.find_one({"manual_idempotency_key": idempotency_key})
+    if existing:
+        return _serialize_order(existing)
+
+    package = get_package(package_code) or {}
+    package_name = _normalize(package.get("display_name")) or package_code.replace("_", " ").title()
+    order_doc = {
+        "user_id": _validated_user_object_id(customer_user),
+        "email": customer_email,
+        "package_code": package_code,
+        "package_slug": package_code,
+        "lane": _package_lane_for_code(package_code),
+        "package_lane": _package_lane_for_code(package_code),
+        "package_name": package_name,
+        "price_label": _format_price_label(_base_package_price_cents(package_code), "one_time"),
+        "item_type": "package",
+        "billing_plan": "one_time",
+        "source": "admin_manual",
+        "status": "paid",
+        "manual_reason": reason,
+        "manual_authorization_source": authorization_source,
+        "manual_idempotency_key": idempotency_key,
+        "created_at": datetime.now(UTC),
+    }
+    result = orders.insert_one(order_doc)
+    order_doc["_id"] = result.inserted_id
+
+    order_doc = _attach_project_to_paid_package_order(
+        order_id=result.inserted_id,
+        order_doc=order_doc,
+        user=customer_user,
+        package_code=package_code,
+        package_name=package_name,
+        target_project_id=_normalize(getattr(payload, "project_id", "")),
+    )
+    _trigger_package_provisioning()
+
+    from app.services.audit_log_service import write_audit_log
+
+    write_audit_log(
+        actor_user_id=_normalize(str(admin_user.get("_id") or admin_user.get("id") or admin_user.get("user_id") or "")) or None,
+        actor_email=_normalize_email(admin_user.get("email")),
+        actor_name=_normalize(admin_user.get("full_name") or admin_user.get("name")),
+        action="admin_manual_order_recorded",
+        target_type="order",
+        target_id=str(result.inserted_id),
+        details={
+            "customer_email": customer_email,
+            "package_code": package_code,
+            "reason": reason,
+            "authorization_source": authorization_source,
+            "idempotency_key": idempotency_key,
+        },
+    )
 
     return _serialize_order(order_doc)
 
@@ -667,6 +801,12 @@ def ensure_order_indexes() -> None:
         unique=False,
         sparse=True,
     )
+    _ensure_index(
+        [("manual_idempotency_key", 1)],
+        name="manual_idempotency_key_1",
+        unique=True,
+        sparse=True,
+    )
 
 
 def _get_user_by_email(email: str) -> Optional[dict[str, Any]]:
@@ -809,6 +949,157 @@ def _format_price_label(amount_subtotal: Any, billing_plan: str) -> str:
 
     return f"${amount:,.2f}"
 
+
+def _normalize_currency(value: Any) -> str:
+    return _normalize(str(value or "")).lower()
+
+
+def _base_package_price_cents(package_code: str) -> int:
+    package = get_package(package_code) or {}
+    base_price = package.get("base_price_usd")
+    try:
+        return int(round(float(base_price) * 100))
+    except Exception:
+        return 0
+
+
+def _match_package_code_from_product(
+    *,
+    raw_code: str,
+    product_name: str,
+) -> str:
+    if raw_code:
+        normalized = _normalize_package_code(raw_code)
+        if normalized != "unknown" and get_package(normalized):
+            return normalized
+    normalized_from_name = _normalize_package_code(product_name)
+    if normalized_from_name != "unknown" and get_package(normalized_from_name):
+        return normalized_from_name
+    return "unknown"
+
+
+def _extract_verified_package_purchase_from_session(session: dict[str, Any]) -> dict[str, Any]:
+    session_status = _normalize(session.get("status")).lower()
+    if session_status == "expired":
+        raise ValueError("Checkout session has expired.")
+
+    if _normalize(session.get("payment_status")).lower() != "paid":
+        raise ValueError("Checkout session is not paid.")
+
+    line_items = ((session.get("line_items") or {}).get("data")) or []
+    if not line_items:
+        raise ValueError("Checkout session has no line items.")
+
+    first_item = line_items[0] or {}
+    price_obj = first_item.get("price") or {}
+    if not price_obj:
+        raise ValueError("Checkout session line item is missing price data.")
+
+    price_id = _normalize(price_obj.get("id"))
+    if not price_id:
+        raise ValueError("Checkout session line item has unknown price.")
+
+    product_obj = price_obj.get("product") or {}
+    product_id = _normalize(product_obj.get("id"))
+    if not product_id:
+        raise ValueError("Checkout session line item has unknown product.")
+
+    raw_package_code = _normalize(
+        ((session.get("metadata") or {}).get("package_code"))
+        or ((session.get("metadata") or {}).get("package_slug"))
+        or ((product_obj.get("metadata") or {}).get("package_code"))
+        or ((product_obj.get("metadata") or {}).get("package_slug"))
+    )
+    product_name = _normalize(
+        product_obj.get("name")
+        or first_item.get("description")
+        or ((session.get("metadata") or {}).get("package_name"))
+    )
+    package_code = _match_package_code_from_product(
+        raw_code=raw_package_code,
+        product_name=product_name,
+    )
+    if package_code == "unknown":
+        raise ValueError("Checkout session product is not an approved Tomb of Light package.")
+
+    package = get_package(package_code) or {}
+    amount_cents = price_obj.get("unit_amount")
+    if not isinstance(amount_cents, int):
+        raise ValueError("Checkout session line item has unknown price amount.")
+
+    currency = _normalize_currency(price_obj.get("currency") or session.get("currency"))
+    if not currency:
+        raise ValueError("Checkout session line item currency is missing.")
+
+    expected_cents = _base_package_price_cents(package_code)
+    if expected_cents <= 0:
+        raise ValueError("Package catalog price is not configured.")
+    if currency != "usd" or amount_cents != expected_cents:
+        raise ValueError("Checkout session product and price do not match the approved package catalog.")
+
+    amount_total = session.get("amount_total")
+    if isinstance(amount_total, int) and amount_total != expected_cents:
+        raise ValueError("Checkout session amount does not match expected package total.")
+
+    billing_plan = "one_time"
+    package_name = _normalize(package.get("display_name")) or package_code.replace("_", " ").title()
+
+    return {
+        "package_code": package_code,
+        "package_name": package_name,
+        "price_label": _format_price_label(expected_cents, billing_plan),
+        "item_type": "package",
+        "billing_plan": billing_plan,
+        "currency": currency,
+        "amount_cents": expected_cents,
+        "stripe_payment_link_id": _normalize(session.get("payment_link")) or None,
+        "price_id": price_id,
+        "product_id": product_id,
+    }
+
+
+def _ensure_session_belongs_to_user(
+    *,
+    user: dict[str, Any],
+    session: dict[str, Any],
+) -> None:
+    session_email = _extract_email_from_session(session)
+    user_email = _normalize_email(user.get("email"))
+    if not session_email or not user_email or session_email != user_email:
+        raise ValueError("Checkout session email does not match authenticated customer.")
+
+    metadata = session.get("metadata") or {}
+    metadata_user_id = _normalize(metadata.get("user_id"))
+    current_user_id = _normalize(str(user.get("_id") or user.get("id") or user.get("user_id") or ""))
+    if metadata_user_id and current_user_id and metadata_user_id != current_user_id:
+        raise ValueError("Checkout session user association mismatch.")
+
+    session_customer_id = _normalize(session.get("customer"))
+    user_customer_id = _normalize(user.get("stripe_customer_id"))
+    if session_customer_id and user_customer_id and session_customer_id != user_customer_id:
+        raise ValueError("Checkout session customer does not match authenticated customer.")
+
+
+def _find_order_by_session_id_for_customer(
+    *,
+    orders: Collection,
+    session_id: str,
+    user: dict[str, Any],
+) -> dict[str, Any] | None:
+    existing = orders.find_one({"stripe_session_id": session_id})
+    if not existing:
+        return None
+
+    existing_user_id = _normalize(str(existing.get("user_id") or ""))
+    current_user_id = _normalize(str(user.get("_id") or user.get("id") or user.get("user_id") or ""))
+    existing_email = _normalize_email(existing.get("email"))
+    current_email = _normalize_email(user.get("email"))
+    if (
+        (existing_user_id and current_user_id and existing_user_id != current_user_id)
+        or (existing_email and current_email and existing_email != current_email)
+    ):
+        raise ValueError("Checkout session is already associated with another customer.")
+    return existing
 
 def _schedule_maintenance_start(
     *,
@@ -1034,10 +1325,18 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
             "error": str(e),
         }
 
-    email = _extract_email_from_session(session)
-    if not email:
-        email = _get_email_from_event(event)
+    try:
+        purchase = _extract_verified_package_purchase_from_session(session)
+    except ValueError as exc:
+        return {
+            "order_id": None,
+            "reason": "invalid_checkout_session",
+            "error": str(exc),
+            "type": event_type,
+            "session_id": session_id,
+        }
 
+    email = _extract_email_from_session(session) or _get_email_from_event(event)
     if not email:
         return {
             "order_id": None,
@@ -1046,20 +1345,30 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
             "session_id": session_id,
         }
 
-    user = _get_user_by_email(email)
+    user = _get_user_by_email(email) or create_pending_checkout_user(
+        email,
+        full_name=_extract_customer_name_from_session(session),
+    )
     if not user:
-        user = create_pending_checkout_user(
-            email,
-            full_name=_extract_customer_name_from_session(session),
-        )
-        if not user:
-            return {
-                "order_id": None,
-                "reason": "no_matching_user",
-                "type": event_type,
-                "session_id": session_id,
-                "email": email,
-            }
+        return {
+            "order_id": None,
+            "reason": "no_matching_user",
+            "type": event_type,
+            "session_id": session_id,
+            "email": email,
+        }
+
+    try:
+        _ensure_session_belongs_to_user(user=user, session=session)
+    except ValueError as exc:
+        return {
+            "order_id": None,
+            "reason": "customer_association_mismatch",
+            "error": str(exc),
+            "type": event_type,
+            "session_id": session_id,
+            "email": email,
+        }
 
     customer_id = _normalize(session.get("customer"))
     if customer_id:
@@ -1076,11 +1385,29 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
     checkout_context = _extract_checkout_context(session)
     campaign = _normalize((session.get("metadata") or {}).get("campaign") or checkout_context.get("campaign")).upper()
 
-    item_type, package_code, package_name, price_label, billing_plan = _infer_purchase_fields(session)
-    stripe_payment_link_id = session.get("payment_link")
+    item_type = purchase["item_type"]
+    package_code = purchase["package_code"]
+    package_name = purchase["package_name"]
+    price_label = purchase["price_label"]
+    billing_plan = purchase["billing_plan"]
+    stripe_payment_link_id = purchase["stripe_payment_link_id"]
 
     existing = orders.find_one({"stripe_session_id": session_id})
     if existing:
+        existing_user_id = _normalize(str(existing.get("user_id") or ""))
+        incoming_user_id = _normalize(str(user.get("_id") or user.get("id") or user.get("user_id") or ""))
+        existing_email = _normalize_email(existing.get("email"))
+        if (
+            (existing_user_id and incoming_user_id and existing_user_id != incoming_user_id)
+            or (existing_email and existing_email != email)
+        ):
+            return {
+                "order_id": None,
+                "reason": "session_already_associated_with_another_customer",
+                "type": event_type,
+                "session_id": session_id,
+                "email": email,
+            }
         update_fields: dict[str, Any] = {
             "email": email,
             "package_code": package_code,
