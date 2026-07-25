@@ -639,13 +639,13 @@
     TOL_PRICING,
     API_BASE_URL: isLocal
       ? preferredLocalApiBaseUrl
-      : "https://tomboflight-api.onrender.com",
+      : "https://tomboflight.com/api-gateway",
     API_BASE_URLS: isLocal
       ? localApiBaseUrls
-      : ["https://tomboflight-api.onrender.com"],
+      : ["https://tomboflight.com/api-gateway", "https://tomboflight-api.onrender.com"],
     INVITE_API_BASE_URL_FALLBACKS: isLocal
       ? localApiBaseUrls
-      : ["https://tomboflight-api.onrender.com"],
+      : ["https://tomboflight.com/api-gateway", "https://tomboflight-api.onrender.com"],
 
     PAYMENT_LINKS: Object.assign({}, buildPaymentLinksFromPricing(TOL_PRICING)),
   });

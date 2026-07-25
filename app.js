@@ -433,7 +433,14 @@
   function isFrontendOriginBaseUrl(value) {
     try {
       const parsed = new URL(String(value || "").trim());
-      return parsed.origin === window.location.origin;
+      if (parsed.origin !== window.location.origin) {
+        return false;
+      }
+      // A same-origin URL with a non-root path (e.g. /api-gateway) is a
+      // same-origin API gateway, not the frontend root — treat it as a backend URL.
+      const hasApiPath =
+        parsed.pathname && parsed.pathname !== "/" && parsed.pathname !== "";
+      return !hasApiPath;
     } catch (_error) {
       return false;
     }
