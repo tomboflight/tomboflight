@@ -28,6 +28,7 @@ from app.services.admin_control_service import (
     generate_entitlement,
     link_order_to_project,
     link_unlinked_paid_orders,
+    legacy_admin_security_review,
     list_customer_cases,
     normalize_broken_package_records,
     refresh_mint_readiness,
@@ -830,6 +831,28 @@ def super_admin_get_officers(
 ):
     del current_user
     return super_admin_list_officers()
+
+
+@router.get("/super-admin/legacy-admin-review")
+def super_admin_legacy_account_review(
+    current_user: dict[str, Any] = Depends(require_super_admin),
+):
+    _assert_canonical_ceo(current_user)
+    return legacy_admin_security_review()
+
+
+@router.post("/super-admin/legacy-admin-review")
+def super_admin_apply_legacy_account_review(
+    payload: SuperAdminPackageRevocationPayload,
+    current_user: dict[str, Any] = Depends(require_super_admin),
+):
+    _assert_canonical_ceo(current_user)
+    if not payload.confirmed or not payload.reason.strip():
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Reason and confirmation are required.")
+    try:
+        return legacy_admin_security_review(apply=True, reason=payload.reason, actor=current_user)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 @router.post("/super-admin/officers/permissions/preview")

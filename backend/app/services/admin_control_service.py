@@ -5142,6 +5142,98 @@ def super_admin_transfer_project_ownership(
     return {"project_id": resolved_project_id, "before": before, "after": after, "audit_event_created": True}
 
 
+def legacy_admin_security_review(
+    *,
+    apply: bool = False,
+    reason: str = "",
+    actor: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    db = _db()
+    user = db["users"].find_one({"email": "admin@tomboflight.com"})
+    if user is None:
+        return {
+            "found": False,
+            "email": "admin@tomboflight.com",
+            "disposition": "no_user_identity_found",
+            "repository_references": ["POSTMARK_FROM_EMAIL default sender address"],
+            "service_dependency": False,
+        }
+    user_id = _normalize_object_id(user.get("_id")) or _normalize(user.get("id"))
+    ownership = {
+        "projects": db["projects"].count_documents({"owner_user_id": {"$in": _project_id_candidates(user_id)}}),
+        "families": db["families"].count_documents({"owner_user_id": {"$in": _project_id_candidates(user_id)}}),
+        "households": db["households"].count_documents({"owner_user_id": {"$in": _project_id_candidates(user_id)}}),
+        "orders": db["orders"].count_documents({"user_id": {"$in": _project_id_candidates(user_id)}}),
+    }
+    roles = _officer_role_assignments(user_id)
+    overrides = _officer_permission_overrides(user_id)
+    is_service = _normalize(user.get("account_type")).lower() == "service" or _normalize(user.get("source")).lower() in {
+        "service",
+        "automation",
+        "system",
+    }
+    active_sessions = db["admin_impersonation_sessions"].count_documents(
+        {"administrator_user_id": user_id, "status": "active"}
+    )
+    review = {
+        "found": True,
+        "user_id": user_id,
+        "email": "admin@tomboflight.com",
+        "name": _user_display_name(user),
+        "created_at": _serialize_datetime(user.get("created_at")),
+        "created_by": _normalize(user.get("created_by")) or None,
+        "source": _normalize(user.get("source")) or None,
+        "last_login_at": _serialize_datetime(user.get("last_login_at")),
+        "role": _user_role_value(user),
+        "access_tier": _normalize(user.get("access_tier")) or None,
+        "permission_overrides": overrides,
+        "wildcard_access": "*" in overrides or any(role in SUPER_ADMIN_ROLE_CODES for role in roles),
+        "active_sessions": active_sessions,
+        "owned_records": ownership,
+        "role_assignments": roles,
+        "repository_references": ["POSTMARK_FROM_EMAIL default sender address"],
+        "service_dependency": is_service,
+        "safe_to_suspend": not is_service and not any(ownership.values()),
+    }
+    if not apply:
+        review["disposition"] = "suspend_recommended" if review["safe_to_suspend"] else "manual_dependency_review_required"
+        return review
+    if not _normalize(reason):
+        raise ValueError("A reason is required.")
+    if not review["safe_to_suspend"]:
+        raise ValueError("Legacy admin suspension is blocked by a service classification or owned records.")
+    now_value = _now()
+    db["users"].update_one(
+        {"_id": _to_object_id(user_id) or user_id},
+        {"$set": {
+            "status": "suspended",
+            "login_enabled": False,
+            "session_token_version": int(user.get("session_token_version") or 0) + 1,
+            "security_review_reason": _normalize(reason),
+            "security_reviewed_at": now_value,
+            "updated_at": now_value,
+        }},
+    )
+    db["user_role_assignments"].update_many(
+        {"user_id": user_id, "status": {"$in": ["active", "enabled", ""]}},
+        {"$set": {"status": "inactive", "updated_at": now_value}},
+    )
+    db["user_permission_overrides"].update_many(
+        {"user_id": user_id, "status": {"$in": ["active", "enabled", ""]}},
+        {"$set": {"status": "inactive", "updated_at": now_value}},
+    )
+    _write_admin_action_audit(
+        actor=actor,
+        action="super_admin.legacy_privileged_account_suspend",
+        target_type="user",
+        target_id=user_id,
+        before=review,
+        after={"status": "suspended", "wildcard_access": False, "sessions_revoked": True},
+        context={"reason": _normalize(reason), "surface": "admin_control_center.security_review"},
+    )
+    return {**review, "applied": True, "disposition": "suspended", "sessions_revoked": True}
+
+
 def _impersonation_collection():
     return _db()["admin_impersonation_sessions"]
 
