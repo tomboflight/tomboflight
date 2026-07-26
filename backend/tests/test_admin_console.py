@@ -1114,6 +1114,7 @@ class SuperAdminControlsTests(unittest.TestCase):
                 package_code="legacy_plus",
                 project_lane="household",
                 order_status="complete",
+                reason="CEO-authorized controlled test assignment",
                 actor={"_id": ObjectId(), "email": "ceo@example.com"},
             )
 

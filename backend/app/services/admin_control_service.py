@@ -107,6 +107,10 @@ ADMIN_CONTROL_TABS = [
     "uploads_verification",
     "mint_readiness",
     "audit_timeline",
+    "maintenance",
+    "certificates",
+    "delivery",
+    "roles_access",
 ]
 CASE_ACTION_PERMISSIONS: dict[str, set[str]] = {
     "sync_package": {"admin.control.write"},
@@ -173,6 +177,10 @@ TAB_PERMISSIONS: dict[str, set[str]] = {
     "uploads_verification": {"uploads.admin.review", "verification.review"},
     "mint_readiness": {"admin.control.mint.readiness"},
     "audit_timeline": {"admin.audit.read"},
+    "maintenance": {"admin.control.view"},
+    "certificates": {"admin.control.view"},
+    "delivery": {"admin.control.view"},
+    "roles_access": {"admin.users.read"},
 }
 
 FINANCE_QUEUE_ALLOWLIST = [
@@ -1878,12 +1886,14 @@ def super_admin_preview_package_change(
     project_after = {
         "package_code": normalized_package,
         "package_slug": normalized_package,
+        "package_type": normalized_package,
         "package_name": _normalize(package_profile.get("display_name")) or normalized_package,
         "project_lane": target_lane,
     }
     order_after = {
         "package_code": normalized_package,
         "package_slug": normalized_package,
+        "package_type": normalized_package,
         "package_name": _normalize(package_profile.get("display_name")) or normalized_package,
         "lane": target_lane if order else None,
         "package_lane": target_lane if order else None,
@@ -1898,12 +1908,14 @@ def super_admin_preview_package_change(
             "package_code": before_package_fields.get("package_code"),
             "package_slug": before_package_fields.get("package_slug"),
             "package_name": before_package_fields.get("package_name"),
+            "package_type": _normalize(project.get("package_type")),
             "project_lane": _normalize(project.get("project_lane")) or before_package_fields.get("project_lane"),
         },
         "order": {
             "package_code": _normalize((order or {}).get("package_code")),
             "package_slug": _normalize((order or {}).get("package_slug")),
             "package_name": _normalize((order or {}).get("package_name")),
+            "package_type": _normalize((order or {}).get("package_type")),
             "lane": _normalize((order or {}).get("lane")),
             "package_lane": _normalize((order or {}).get("package_lane")),
             "status": _normalize((order or {}).get("status")) if order else None,
@@ -1918,12 +1930,36 @@ def super_admin_preview_package_change(
         "order": order_after,
         "entitlement": entitlement_after,
     }
+    current_entitlements = dict((entitlement or {}).get("resolved_entitlements") or {})
+    proposed_entitlements = {
+        key: value
+        for key, value in package_profile.items()
+        if key.startswith("can_") or key.startswith("max_")
+    }
+    current_services = {key for key, value in current_entitlements.items() if value is True}
+    proposed_services = {key for key, value in proposed_entitlements.items() if value is True}
     return {
         "project_id": _normalize(project.get("_id")),
         "order_id": _normalize((order or {}).get("_id")) or None,
         "before": before,
         "proposed_after": proposed,
         "changes": _build_package_change_summary(before=before, proposed=proposed),
+        "summary": {
+            "current_package": before["project"].get("package_name") or before["project"].get("package_code"),
+            "proposed_package": project_after.get("package_name"),
+            "current_lane": before["project"].get("project_lane"),
+            "proposed_lane": target_lane,
+            "current_entitlements": current_entitlements,
+            "proposed_entitlements": proposed_entitlements,
+            "services_added": sorted(proposed_services - current_services),
+            "services_removed": sorted(current_services - proposed_services),
+            "household_family_impact": "Lane and member allowances will follow the proposed package; ownership is unchanged.",
+            "maintenance_impact": package_profile.get("maintenance_default") or "Catalog defaults apply.",
+            "billing_history_impact": "Existing Stripe and paid-order evidence is preserved.",
+            "project_impact": "Canonical project package, lane, and entitlement records will be synchronized.",
+            "warnings": [] if order else ["No linked purchase order; assignment will be classified as CEO-authorized."],
+            "records_to_write": ["projects", "project_entitlements", "admin_package_assignments", "audit_logs"],
+        },
         "validation": {
             "project_exists": True,
             "known_package": True,
@@ -1940,8 +1976,12 @@ def super_admin_apply_package_change(
     package_code: str,
     project_lane: str = "",
     order_status: str = "",
+    reason: str = "",
     actor: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    normalized_reason = _normalize(reason)
+    if not normalized_reason:
+        raise ValueError("A reason is required for package assignment or change.")
     preview = super_admin_preview_package_change(
         project_id=project_id,
         package_code=package_code,
@@ -2003,13 +2043,144 @@ def super_admin_apply_package_change(
         after_package_code=_normalize((after_snapshot.get("project") or {}).get("package_code")),
         source="admin_control.super_admin_package_change",
     )
+    db["admin_package_assignments"].insert_one(
+        {
+            "project_id": project_oid,
+            "customer_user_id": _normalize((after_snapshot.get("project") or {}).get("owner_user_id")) or None,
+            "previous_package": before_order_package or before_project_package or None,
+            "new_package": _normalize((after_snapshot.get("project") or {}).get("package_code")) or None,
+            "status": "active",
+            "source": "ceo_admin_assignment",
+            "billing_classification": "ceo_authorized",
+            "payment_required": False,
+            "authorization_source": "ceo_master_admin",
+            "reason": normalized_reason,
+            "assigned_by": _normalize((actor or {}).get("_id") or (actor or {}).get("id") or (actor or {}).get("user_id")) or None,
+            "assigned_at": _now(),
+            "order_id": _to_object_id(order_id) or order_id or None,
+            "stripe_payment_mutated": False,
+        }
+    )
     return {
         "project_id": resolved_project_id,
         "order_id": order_id or None,
         "before": preview.get("before") or {},
         "after": after_snapshot,
         "changes": preview.get("changes") or [],
+        "assignment_history_written": True,
     }
+
+
+def super_admin_preview_package_revocation(*, project_id: str) -> dict[str, Any]:
+    project, order = _resolve_project_order_context(project_id, allow_owner_order_fallback=True)
+    entitlement = get_project_entitlement(_normalize(project.get("_id")))
+    paid_order = bool(order and _normalize(order.get("status")).lower() in PAID_ORDER_STATUSES)
+    current = _package_fields_from_context(project, order, entitlement)
+    return {
+        "project_id": _normalize_object_id(project.get("_id")) or _normalize(project_id),
+        "order_id": _normalize_object_id((order or {}).get("_id")) or None,
+        "current_package": current,
+        "current_entitlements": dict((entitlement or {}).get("resolved_entitlements") or {}),
+        "services_removed": sorted(
+            key for key, value in dict((entitlement or {}).get("resolved_entitlements") or {}).items()
+            if value is True
+        ),
+        "protected_records": ["orders", "uploaded_files", "vault_metadata", "certificates", "audit_logs"],
+        "billing_history_impact": "No payment or Stripe records will be changed.",
+        "blocked": paid_order,
+        "warnings": ["An active paid order supports this package; use the authorized refund/cancellation workflow."] if paid_order else [],
+        "records_to_write": ["projects", "project_entitlements", "admin_package_assignments", "audit_logs"],
+    }
+
+
+def super_admin_apply_package_revocation(
+    *,
+    project_id: str,
+    reason: str,
+    actor: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if not _normalize(reason):
+        raise ValueError("A reason is required.")
+    preview = super_admin_preview_package_revocation(project_id=project_id)
+    if preview.get("blocked"):
+        raise ValueError("Direct package removal is blocked by an active paid order.")
+    db = _db()
+    resolved_project_id = _normalize(preview.get("project_id"))
+    project_key = _to_object_id(resolved_project_id) or resolved_project_id
+    now_value = _now()
+    db["projects"].update_one(
+        {"_id": project_key},
+        {"$set": {
+            "package_code": None,
+            "package_slug": None,
+            "package_type": None,
+            "package_name": None,
+            "package_status": "revoked",
+            "updated_at": now_value,
+        }},
+    )
+    db["project_entitlements"].update_many(
+        {"project_id": {"$in": _project_id_candidates(resolved_project_id)}, "status": {"$in": ["active", "enabled", ""]}},
+        {"$set": {
+            "status": "revoked",
+            "revoked_at": now_value,
+            "revoked_by": _normalize((actor or {}).get("_id") or (actor or {}).get("id")) or None,
+            "revocation_reason": _normalize(reason),
+            "resolved_entitlements": {},
+            "active_addons": [],
+            "updated_at": now_value,
+        }},
+    )
+    history = {
+        "project_id": project_key,
+        "previous_package": (preview.get("current_package") or {}).get("package_code"),
+        "new_package": None,
+        "status": "revoked",
+        "source": "ceo_admin_assignment",
+        "authorization_source": "ceo_master_admin",
+        "billing_classification": "revocation",
+        "payment_required": False,
+        "reason": _normalize(reason),
+        "assigned_by": _normalize((actor or {}).get("_id") or (actor or {}).get("id")) or None,
+        "assigned_at": now_value,
+        "stripe_payment_mutated": False,
+    }
+    db["admin_package_assignments"].insert_one(history)
+    _write_admin_action_audit(
+        actor=actor,
+        action="super_admin.package_revoke",
+        target_type="project",
+        target_id=resolved_project_id,
+        before=preview.get("current_package") or {},
+        after={"package_status": "revoked", "services_active": False},
+        context={"surface": "admin_control_center.restricted_actions", "reason": _normalize(reason)},
+    )
+    return {**preview, "revoked": True, "audit_event_created": True, "stripe_payment_mutated": False}
+
+
+def super_admin_restore_package(
+    *,
+    project_id: str,
+    reason: str,
+    actor: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if not _normalize(reason):
+        raise ValueError("A reason is required.")
+    db = _db()
+    resolved_project_id = _normalize(project_id)
+    project_key = _to_object_id(resolved_project_id) or resolved_project_id
+    latest = db["admin_package_assignments"].find_one(
+        {"project_id": {"$in": _project_id_candidates(resolved_project_id)}, "previous_package": {"$nin": [None, ""]}}
+    )
+    package_code = _normalize((latest or {}).get("previous_package"))
+    if not package_code or not get_package(package_code):
+        raise ValueError("No restorable package assignment history was found.")
+    return super_admin_apply_package_change(
+        project_id=resolved_project_id,
+        package_code=package_code,
+        reason=reason,
+        actor=actor,
+    )
 
 
 def _service_entitlement_view(*, package_code: str, entitlement: dict[str, Any] | None) -> dict[str, Any]:
@@ -2125,10 +2296,12 @@ def _apply_service_control_payload_to_preview(
             raise ValueError("Invalid project lane.")
         proposed["project"]["package_code"] = target_package_code
         proposed["project"]["package_slug"] = target_package_code
+        proposed["project"]["package_type"] = target_package_code
         proposed["project"]["package_name"] = _normalize(target_package.get("display_name")) or target_package_code
         proposed["project"]["project_lane"] = target_lane
         proposed["order"]["package_code"] = target_package_code
         proposed["order"]["package_slug"] = target_package_code
+        proposed["order"]["package_type"] = target_package_code
         proposed["order"]["package_name"] = _normalize(target_package.get("display_name")) or target_package_code
         proposed["order"]["lane"] = target_lane
         proposed["order"]["package_lane"] = target_lane
@@ -4807,6 +4980,168 @@ def super_admin_apply_user_state_action(
     )
 
 
+def super_admin_create_customer(
+    *,
+    payload: dict[str, Any],
+    actor: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    email = _validate_super_admin_email(_normalize(payload.get("email")), user_id="")
+    full_name = _normalize(payload.get("full_name"))
+    if not full_name:
+        raise ValueError("full_name is required.")
+    now_value = _now()
+    document = {
+        "_id": ObjectId(),
+        "email": email,
+        "full_name": full_name,
+        "phone_number": _normalize(payload.get("phone_number")) or None,
+        "mailing_address": _normalize(payload.get("mailing_address")) or None,
+        "birthday": _normalize(payload.get("birthday")) or None,
+        "role": "user",
+        "account_type": "customer",
+        "status": "pending_activation",
+        "password_hash": None,
+        "session_token_version": 0,
+        "created_at": now_value,
+        "updated_at": now_value,
+        "created_by": _normalize((actor or {}).get("_id") or (actor or {}).get("id")) or None,
+        "source": "ceo_master_admin",
+    }
+    _db()["users"].insert_one(document)
+    user_id = str(document["_id"])
+    _write_admin_action_audit(
+        actor=actor,
+        action="super_admin.customer_create",
+        target_type="user",
+        target_id=user_id,
+        before={},
+        after={"email": email, "full_name": full_name, "role": "user", "status": "pending_activation"},
+        context={"surface": "admin_control_center.account_360"},
+    )
+    return {"user_id": user_id, "email": email, "role": "user", "status": "pending_activation"}
+
+
+def super_admin_preview_account_lifecycle(*, user_id: str, action: str) -> dict[str, Any]:
+    user = _user_by_id(user_id)
+    if user is None:
+        raise ValueError("User not found.")
+    normalized_action = _normalize(action).lower()
+    if normalized_action not in {"activate", "restore", "suspend", "disable", "archive"}:
+        raise ValueError("Unsupported account lifecycle action.")
+    resolved_user_id = _normalize_object_id(user.get("_id")) or _normalize(user_id)
+    db = _db()
+    ownership = {
+        "projects": db["projects"].count_documents({"owner_user_id": {"$in": _project_id_candidates(resolved_user_id)}, "status": {"$nin": ["archived", "deleted"]}}),
+        "families": db["families"].count_documents({"owner_user_id": {"$in": _project_id_candidates(resolved_user_id)}, "status": {"$nin": ["archived", "deleted"]}}),
+        "households": db["households"].count_documents({"owner_user_id": {"$in": _project_id_candidates(resolved_user_id)}, "status": {"$nin": ["archived", "deleted"]}}),
+    }
+    blocked = normalized_action == "archive" and any(ownership.values())
+    target_status = "archived" if normalized_action == "archive" else SUPER_ADMIN_USER_STATE_ACTIONS.get(normalized_action)
+    return {
+        "user_id": resolved_user_id,
+        "action": normalized_action,
+        "before": {"status": _normalize(user.get("status")) or "active", "session_token_version": int(user.get("session_token_version") or 0)},
+        "proposed_after": {"status": target_status, "login_enabled": normalized_action not in {"suspend", "disable", "archive"}},
+        "ownership_dependencies": ownership,
+        "blocked": blocked,
+        "warnings": ["Transfer active ownership before archive."] if blocked else [],
+        "records_preserved": ["orders", "projects", "families", "households", "audit_logs", "billing_history"],
+    }
+
+
+def super_admin_apply_account_lifecycle(
+    *,
+    user_id: str,
+    action: str,
+    reason: str,
+    actor: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    normalized_reason = _normalize(reason)
+    if not normalized_reason:
+        raise ValueError("A reason is required.")
+    preview = super_admin_preview_account_lifecycle(user_id=user_id, action=action)
+    if preview.get("blocked"):
+        raise ValueError("Account archive is blocked while active ownership remains.")
+    user = _user_by_id(user_id) or {}
+    resolved_user_id = _normalize(preview.get("user_id"))
+    now_value = _now()
+    updates: dict[str, Any] = {
+        "status": (preview.get("proposed_after") or {}).get("status"),
+        "session_token_version": int(user.get("session_token_version") or 0) + 1,
+        "updated_at": now_value,
+    }
+    if _normalize(action).lower() == "archive":
+        updates.update(
+            {
+                "archived_at": now_value,
+                "archived_by": _normalize((actor or {}).get("_id") or (actor or {}).get("id")) or None,
+                "archive_reason": normalized_reason,
+                "login_enabled": False,
+            }
+        )
+        _db()["user_role_assignments"].update_many(
+            {"user_id": resolved_user_id, "status": {"$in": ["active", "enabled", ""]}},
+            {"$set": {"status": "inactive", "updated_at": now_value}},
+        )
+        _db()["user_permission_overrides"].update_many(
+            {"user_id": resolved_user_id, "status": {"$in": ["active", "enabled", ""]}},
+            {"$set": {"status": "inactive", "updated_at": now_value}},
+        )
+    elif _normalize(action).lower() == "restore":
+        updates.update({"archived_at": None, "archived_by": None, "archive_reason": None, "login_enabled": True})
+    else:
+        updates["login_enabled"] = _normalize(action).lower() == "activate"
+    oid = _to_object_id(resolved_user_id)
+    _db()["users"].update_one({"_id": oid or resolved_user_id}, {"$set": updates})
+    _write_admin_action_audit(
+        actor=actor,
+        action=f"super_admin.account_{_normalize(action).lower()}",
+        target_type="user",
+        target_id=resolved_user_id,
+        before=preview.get("before") or {},
+        after=preview.get("proposed_after") or {},
+        context={"surface": "admin_control_center.restricted_actions", "reason": normalized_reason},
+    )
+    return {**preview, "applied": True, "sessions_revoked": True, "audit_event_created": True}
+
+
+def super_admin_transfer_project_ownership(
+    *,
+    project_id: str,
+    new_owner_user_id: str,
+    reason: str,
+    actor: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if not _normalize(reason):
+        raise ValueError("A reason is required.")
+    project = _project_by_id(project_id)
+    new_owner = _user_by_id(new_owner_user_id)
+    if project is None or new_owner is None:
+        raise ValueError("Project and new owner must both exist.")
+    if _is_internal_user_document(new_owner):
+        raise ValueError("Projects must be owned by a customer identity, not an internal administrator.")
+    resolved_project_id = _normalize_object_id(project.get("_id")) or _normalize(project_id)
+    owner_id = _normalize_object_id(new_owner.get("_id")) or _normalize(new_owner_user_id)
+    before = {"owner_user_id": _normalize(project.get("owner_user_id")), "owner_email": _normalize_email(project.get("owner_email"))}
+    after = {"owner_user_id": owner_id, "owner_email": _normalize_email(new_owner.get("email"))}
+    _db()["projects"].update_one({"_id": _to_object_id(resolved_project_id) or resolved_project_id}, {"$set": {**after, "updated_at": _now()}})
+    _db()["project_members"].update_one(
+        {"project_id": _to_object_id(resolved_project_id) or resolved_project_id, "user_id": _to_object_id(owner_id) or owner_id},
+        {"$set": {"role": "owner", "status": "active", "updated_at": _now()}, "$setOnInsert": {"created_at": _now()}},
+        upsert=True,
+    )
+    _write_admin_action_audit(
+        actor=actor,
+        action="super_admin.project_ownership_transfer",
+        target_type="project",
+        target_id=resolved_project_id,
+        before=before,
+        after=after,
+        context={"surface": "admin_control_center.account_360", "reason": _normalize(reason)},
+    )
+    return {"project_id": resolved_project_id, "before": before, "after": after, "audit_event_created": True}
+
+
 def _impersonation_collection():
     return _db()["admin_impersonation_sessions"]
 
@@ -5479,6 +5814,36 @@ def _decorate_account_360_workspace(workspace: dict[str, Any]) -> dict[str, Any]
         owner_user_id=owner_user_id,
         owner_email=owner_email,
     )
+    db = _db()
+    linked_query_parts: list[dict[str, Any]] = []
+    if project_id:
+        linked_query_parts.append({"project_id": {"$in": _project_id_candidates(project_id)}})
+    if owner_user_id:
+        linked_query_parts.append({"user_id": {"$in": _project_id_candidates(owner_user_id)}})
+    if owner_email:
+        linked_query_parts.append({"email": owner_email})
+    linked_query = {"$or": linked_query_parts} if linked_query_parts else {"_id": None}
+
+    def linked_record_summaries(collection_name: str) -> list[dict[str, Any]]:
+        summaries: list[dict[str, Any]] = []
+        for item in db[collection_name].find(linked_query).sort("updated_at", -1).limit(100):
+            summaries.append(
+                {
+                    "id": _normalize_object_id(item.get("_id")),
+                    "status": _normalize(item.get("status") or item.get("state")) or None,
+                    "type": _normalize(item.get("type") or item.get("record_type") or item.get("plan_type")) or None,
+                    "reference": _normalize(item.get("certificate_id") or item.get("delivery_id") or item.get("external_id")) or None,
+                    "created_at": _serialize_datetime(item.get("created_at")),
+                    "updated_at": _serialize_datetime(item.get("updated_at")),
+                }
+            )
+        return summaries
+
+    maintenance_records = linked_record_summaries("maintenance_records")
+    certificate_records = linked_record_summaries("certificates")
+    delivery_records = linked_record_summaries("deliveries")
+    role_assignments = _officer_role_assignments(owner_user_id) if owner_user_id else []
+    permission_overrides = _officer_permission_overrides(owner_user_id) if owner_user_id else []
 
     tabs["overview"] = {
         "case_id": payload.get("case_id"),
@@ -5530,6 +5895,25 @@ def _decorate_account_360_workspace(workspace: dict[str, Any]) -> dict[str, Any]
         "can_use_scheduled_reveal": bool((entitlement.get("resolved_entitlements") or {}).get("can_use_scheduled_reveal")),
     }
     tabs["billing"] = billing
+    tabs["maintenance"] = {
+        "maintenance_plan": entitlement.get("maintenance_plan"),
+        "maintenance_status": entitlement.get("maintenance_status"),
+        "records": maintenance_records,
+        "record_count": len(maintenance_records),
+    }
+    tabs["certificates"] = {"records": certificate_records, "record_count": len(certificate_records)}
+    tabs["delivery"] = {
+        "project_status": family_household.get("build_status") or project_snapshot.get("status"),
+        "records": delivery_records,
+        "record_count": len(delivery_records),
+    }
+    tabs["roles_access"] = {
+        "role": identity.get("role"),
+        "access_tier": identity.get("access_tier"),
+        "department_role": identity.get("department_role"),
+        "role_assignments": role_assignments,
+        "permission_overrides": permission_overrides,
+    }
     tabs["mint"] = mint
     tabs["audit_history"] = audit_history
     payload["tabs"] = tabs

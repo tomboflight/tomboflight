@@ -269,6 +269,39 @@ a {
   flex-wrap: wrap;
 }
 
+@media (max-width: 1180px) {
+  .site-header-inner {
+    flex-wrap: wrap;
+  }
+
+  .menu-toggle {
+    display: inline-flex;
+    margin-left: auto;
+  }
+
+  .site-nav,
+  .header-actions {
+    display: none;
+  }
+
+  .site-header.open .site-nav,
+  .site-header.open .header-actions {
+    display: flex;
+  }
+
+  .site-header.open .site-nav {
+    order: 3;
+    flex: 1 0 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    margin-left: 0;
+  }
+
+  .site-header.open .header-actions {
+    order: 4;
+  }
+}
+
 @media (min-width: 861px) {
   .homepage-body .site-header {
     background:

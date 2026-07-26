@@ -16,6 +16,7 @@
   const COOKIE_CHOICE_KEY = "tol_cookie_choice";
   const ADMIN_APPEARANCE_DEFAULT_KEY = "tol_admin_appearance_default";
   const ADMIN_APPEARANCE_BY_USER_KEY = "tol_admin_appearance_by_user";
+  const ADMIN_APPEARANCE_ENABLED = false;
   const PENDING_CHECKOUT_KEY = "tol_pending_checkout";
   const FOUNDER_MAINTENANCE_PENDING_KEY = "tol_founder_maintenance_pending";
   const LIGHT_NEVER_DIES_CAMPAIGN = "LIGHT_NEVER_DIES";
@@ -1725,6 +1726,15 @@
   }
 
   function setupAdminAppearance(user) {
+    if (!ADMIN_APPEARANCE_ENABLED) {
+      document.querySelectorAll(".admin-appearance-controls").forEach(function (node) {
+        node.remove();
+      });
+      document.body.classList.toggle("admin-interface-mode", shouldEnableAdminAppearance(user));
+      document.documentElement.dataset.adminTheme = "light";
+      document.documentElement.dataset.adminTextScale = "normal";
+      return;
+    }
     const saved = getSavedAdminAppearance(user);
     applyAdminAppearance(saved, user);
     injectAdminAppearanceControls(user);

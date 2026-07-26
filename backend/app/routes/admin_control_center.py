@@ -38,14 +38,21 @@ from app.services.admin_control_service import (
     repair_selected_records,
     start_admin_impersonation,
     super_admin_apply_package_change,
+    super_admin_apply_package_revocation,
+    super_admin_apply_account_lifecycle,
     super_admin_apply_officer_permissions,
     super_admin_apply_service_controls,
     super_admin_apply_user_state_action,
     super_admin_list_officers,
     super_admin_repair_case_action,
     super_admin_list_users,
+    super_admin_create_customer,
+    super_admin_preview_account_lifecycle,
     super_admin_preview_officer_permissions,
     super_admin_preview_package_change,
+    super_admin_preview_package_revocation,
+    super_admin_restore_package,
+    super_admin_transfer_project_ownership,
     super_admin_preview_service_controls,
     super_admin_update_user,
     stop_admin_impersonation,
@@ -137,6 +144,22 @@ class SuperAdminUserUpdatePayload(BaseModel):
 
 class SuperAdminUserStateActionPayload(BaseModel):
     action: str = Field(min_length=1)
+    reason: str = Field(default="")
+    confirmed: bool = False
+
+
+class SuperAdminCustomerCreatePayload(BaseModel):
+    email: str = Field(min_length=3)
+    full_name: str = Field(min_length=1)
+    phone_number: str | None = None
+    birthday: str | None = None
+    mailing_address: str | None = None
+
+
+class SuperAdminOwnershipTransferPayload(BaseModel):
+    new_owner_user_id: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
+    confirmed: bool = False
 
 
 class SuperAdminPackageChangePayload(BaseModel):
@@ -144,6 +167,12 @@ class SuperAdminPackageChangePayload(BaseModel):
     project_lane: str = Field(default="")
     order_status: str = Field(default="")
     reason: str = Field(default="", description="Required for apply operations to maintain audit traceability.")
+    confirmed: bool = False
+
+
+class SuperAdminPackageRevocationPayload(BaseModel):
+    reason: str = Field(default="")
+    confirmed: bool = False
 
 
 class SuperAdminServiceControlPayload(BaseModel):
@@ -164,6 +193,7 @@ class SuperAdminServiceControlPayload(BaseModel):
     maintenance_state: str = Field(default="")
     account_flags: list[str] = Field(default_factory=list)
     reason: str = Field(default="", description="Required for apply operations to maintain audit traceability.")
+    confirmed: bool = False
 
 
 class SuperAdminOfficerPermissionPayload(BaseModel):
@@ -172,6 +202,7 @@ class SuperAdminOfficerPermissionPayload(BaseModel):
     grant_permissions: list[str] = Field(default_factory=list)
     revoke_permissions: list[str] = Field(default_factory=list)
     reason: str = Field(default="", description="Required for apply operations to maintain audit traceability.")
+    confirmed: bool = False
 
 
 class SuperAdminRepairPayload(BaseModel):
@@ -223,6 +254,15 @@ def _current_user_display(current_user: dict[str, Any]) -> str:
     first_name = _string_value(current_user.get("first_name"))
     last_name = _string_value(current_user.get("last_name"))
     return " ".join([first_name, last_name]).strip()
+
+
+def _assert_canonical_ceo(current_user: dict[str, Any]) -> None:
+    if _string_value(current_user.get("email")).lower() == "l.robinson@tomboflight.com":
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="This protected operation is restricted to the canonical CEO Master Administrator.",
+    )
 
 
 def _assert_bulk_action_allowed(current_user: dict[str, Any], action: str) -> None:
@@ -565,6 +605,18 @@ def super_admin_users_index(
     return super_admin_list_users(search=search, limit=limit)
 
 
+@router.post("/super-admin/users")
+def super_admin_create_user(
+    payload: SuperAdminCustomerCreatePayload,
+    current_user: dict[str, Any] = Depends(require_super_admin),
+):
+    _assert_canonical_ceo(current_user)
+    try:
+        return super_admin_create_customer(payload=payload.model_dump(exclude_none=True), actor=current_user)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
 @router.patch("/super-admin/users/{user_id}")
 def super_admin_patch_user(
     user_id: str,
@@ -587,12 +639,29 @@ def super_admin_user_status_action(
     payload: SuperAdminUserStateActionPayload,
     current_user: dict[str, Any] = Depends(require_super_admin),
 ):
+    _assert_canonical_ceo(current_user)
+    if not payload.confirmed or not payload.reason.strip():
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Reason and confirmation are required.")
     try:
-        return super_admin_apply_user_state_action(
+        return super_admin_apply_account_lifecycle(
             user_id=user_id,
             action=payload.action,
+            reason=payload.reason,
             actor=current_user,
         )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/super-admin/users/{user_id}/status-action/preview")
+def super_admin_user_status_action_preview(
+    user_id: str,
+    payload: SuperAdminUserStateActionPayload,
+    current_user: dict[str, Any] = Depends(require_super_admin),
+):
+    _assert_canonical_ceo(current_user)
+    try:
+        return super_admin_preview_account_lifecycle(user_id=user_id, action=payload.action)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
@@ -636,7 +705,8 @@ def super_admin_apply_project_package_change(
     payload: SuperAdminPackageChangePayload,
     current_user: dict[str, Any] = Depends(require_super_admin),
 ):
-    if not (payload.reason or "").strip():
+    _assert_canonical_ceo(current_user)
+    if not payload.confirmed or not (payload.reason or "").strip():
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="A reason is required for package-change apply to maintain audit traceability.",
@@ -647,6 +717,69 @@ def super_admin_apply_project_package_change(
             package_code=payload.package_code,
             project_lane=payload.project_lane,
             order_status=payload.order_status,
+            reason=payload.reason,
+            actor=current_user,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/super-admin/projects/{project_id}/package-revoke/preview")
+def super_admin_preview_project_package_revoke(
+    project_id: str,
+    current_user: dict[str, Any] = Depends(require_super_admin),
+):
+    _assert_canonical_ceo(current_user)
+    try:
+        return super_admin_preview_package_revocation(project_id=project_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/super-admin/projects/{project_id}/package-revoke/apply")
+def super_admin_apply_project_package_revoke(
+    project_id: str,
+    payload: SuperAdminPackageRevocationPayload,
+    current_user: dict[str, Any] = Depends(require_super_admin),
+):
+    _assert_canonical_ceo(current_user)
+    if not payload.confirmed or not payload.reason.strip():
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Reason and confirmation are required.")
+    try:
+        return super_admin_apply_package_revocation(project_id=project_id, reason=payload.reason, actor=current_user)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/super-admin/projects/{project_id}/package-restore")
+def super_admin_restore_project_package(
+    project_id: str,
+    payload: SuperAdminPackageRevocationPayload,
+    current_user: dict[str, Any] = Depends(require_super_admin),
+):
+    _assert_canonical_ceo(current_user)
+    if not payload.confirmed or not payload.reason.strip():
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Reason and confirmation are required.")
+    try:
+        return super_admin_restore_package(project_id=project_id, reason=payload.reason, actor=current_user)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/super-admin/projects/{project_id}/transfer-ownership")
+def super_admin_transfer_ownership(
+    project_id: str,
+    payload: SuperAdminOwnershipTransferPayload,
+    current_user: dict[str, Any] = Depends(require_super_admin),
+):
+    _assert_canonical_ceo(current_user)
+    if not payload.confirmed:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Confirmation is required.")
+    try:
+        return super_admin_transfer_project_ownership(
+            project_id=project_id,
+            new_owner_user_id=payload.new_owner_user_id,
+            reason=payload.reason,
             actor=current_user,
         )
     except ValueError as exc:
@@ -675,7 +808,8 @@ def super_admin_apply_project_service_controls(
     payload: SuperAdminServiceControlPayload,
     current_user: dict[str, Any] = Depends(require_super_admin),
 ):
-    if not (payload.reason or "").strip():
+    _assert_canonical_ceo(current_user)
+    if not payload.confirmed or not (payload.reason or "").strip():
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="A reason is required for service-control apply to maintain audit traceability.",
@@ -720,7 +854,8 @@ def super_admin_apply_officer_permissions_route(
     payload: SuperAdminOfficerPermissionPayload,
     current_user: dict[str, Any] = Depends(require_super_admin),
 ):
-    if not (payload.reason or "").strip():
+    _assert_canonical_ceo(current_user)
+    if not payload.confirmed or not (payload.reason or "").strip():
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="A reason is required for officer-permissions apply to maintain audit traceability.",
