@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 const OFFICER_A = { _id: "officer-a", id: "officer-a", email: "officer.a@tomboflight.test", role: "admin", access_tier: "ceo_master_admin", department_role: "executive_tech_admin", role_codes: ["ceo_master_admin", "executive_tech_admin"] };
 const OFFICER_B = { _id: "officer-b", id: "officer-b", email: "officer.b@tomboflight.test", role: "admin", access_tier: "operations_admin", department_role: "operations_admin", role_codes: ["operations_admin"] };
-const TABS = ["overview", "package_services", "family_household", "production", "uploads", "vault_metadata", "billing", "mint", "audit_history"];
+const TABS = ["overview", "package_services", "family_household", "production", "uploads", "vault_metadata", "billing", "maintenance", "certificates", "delivery", "mint", "roles_access", "audit_history"];
 
 function normalize(value) {
   return String(value || "").trim().toLowerCase();
@@ -404,89 +404,21 @@ test.beforeEach(async ({ page }) => {
   page.__env = env;
 });
 
-test("[appearance] validates readability + screenshots for all appearance modes", async ({ page }) => {
-  const modes = [
-    { name: "light", theme: "light", large: false },
-    { name: "dark", theme: "dark", large: false },
-    { name: "high-contrast", theme: "high-contrast", large: false },
-    { name: "larger-text", theme: "light", large: true },
-    { name: "high-contrast-larger-text", theme: "high-contrast", large: true },
-  ];
-
-  for (const mode of modes) {
-    await setAppearance(page, { theme: mode.theme, large: mode.large });
-    await page.getByRole("tab", { name: "Package & Services" }).click();
-    await expect(page.locator("[data-admin-impersonation-banner]")).toBeAttached();
-    await page.screenshot({ path: `browser-screenshots/${mode.name}.png`, fullPage: true });
-    const checks = await page.evaluate(() => {
-      const body = document.body;
-      const bodyStyle = getComputedStyle(body);
-      const baseFont = parseFloat(bodyStyle.fontSize || "0");
-      const lineHeight = parseFloat(bodyStyle.lineHeight || "0");
-      const labels = [...document.querySelectorAll("label")].slice(0, 10).map((el) => parseFloat(getComputedStyle(el).fontSize || "0"));
-      const lowOpacityImportantText = [...document.querySelectorAll("h1, h2, h3, p, label, th, td, button")]
-        .filter((el) => {
-          const style = getComputedStyle(el);
-          return parseFloat(style.opacity || "1") < 0.75 && (el.textContent || "").trim().length > 0;
-        })
-        .length;
-      const focusBefore = document.activeElement;
-      const firstFocusable = document.querySelector("button, a, input, select, textarea");
-      if (firstFocusable instanceof HTMLElement) firstFocusable.focus();
-      const focusStyle = firstFocusable ? getComputedStyle(firstFocusable) : null;
-      const outlineWidth = focusStyle ? parseFloat(focusStyle.outlineWidth || "0") : 0;
-      return {
-        baseFont,
-        lineHeight,
-        minLabelFont: labels.length ? Math.min(...labels) : 99,
-        lowOpacityImportantText,
-        outlineWidth,
-        hasImpersonationBanner: !!document.querySelector("[data-admin-impersonation-banner]"),
-        _focusBeforeTag: focusBefore ? focusBefore.tagName : "",
-      };
-    });
-    expect(checks.baseFont).toBeGreaterThanOrEqual(16);
-    expect(checks.lineHeight).toBeGreaterThanOrEqual(1.45);
-    expect(checks.minLabelFont).toBeGreaterThanOrEqual(15);
-    expect(checks.lowOpacityImportantText).toBe(0);
-    expect(checks.outlineWidth).toBeGreaterThan(0);
-    expect(checks.hasImpersonationBanner).toBeTruthy();
-  }
+test("[appearance] is temporarily disabled and forces standard light mode", async ({ page }) => {
+  await expect(page.getByRole("button", { name: "Appearance" })).toHaveCount(0);
+  await expect(page.locator("[data-admin-appearance-panel]")).toHaveCount(0);
+  await expect(page.locator("html")).toHaveAttribute("data-admin-theme", "light");
+  await expect(page.locator("html")).toHaveAttribute("data-admin-text-scale", "normal");
 });
 
-test("[theme] validates persistence across reload/navigation/login and impersonation lifecycle", async ({ page }) => {
-  await setAppearance(page, { theme: "high-contrast", large: true });
-  await page.reload();
-  await expect(page.locator("html")).toHaveAttribute("data-admin-theme", "high-contrast");
-  await expect(page.locator("html")).toHaveAttribute("data-admin-text-scale", "large");
-
-  await page.goto("/admin-family-manager.html");
-  await expect(page.locator("html")).toHaveAttribute("data-admin-theme", "high-contrast");
-  await page.goto("/admin-control-center.html");
-  await expect(page.locator("html")).toHaveAttribute("data-admin-theme", "high-contrast");
-
+test("[theme] ignores stored admin appearance while disabled", async ({ page }) => {
   await page.evaluate(() => {
-    localStorage.removeItem("tol_access_token");
-    localStorage.setItem("tol_access_token", "fixture-token");
+    localStorage.setItem("tol_admin_appearance_default", JSON.stringify({ theme: "high-contrast", textScale: "large" }));
   });
   await page.reload();
-  await expect(page.locator("html")).toHaveAttribute("data-admin-theme", "high-contrast");
-
-  await page.locator("[data-admin-impersonation-start-reason]").fill("Read-only customer review");
-  await page.locator("[data-admin-impersonation-start]").click();
-  await expect(page.locator("[data-admin-impersonation-banner]")).toContainText("Impersonation Active");
-  await page.locator("[data-admin-impersonation-stop]").click();
-  await expect(page.locator("[data-admin-impersonation-banner]")).toBeHidden();
-
-  const preferenceStore = await page.evaluate(() => {
-    const map = JSON.parse(localStorage.getItem("tol_admin_appearance_by_user") || "{}");
-    map["email:officer.a@tomboflight.test"] = { theme: "high-contrast", textScale: "large" };
-    map["email:officer.b@tomboflight.test"] = { theme: "dark", textScale: "normal" };
-    localStorage.setItem("tol_admin_appearance_by_user", JSON.stringify(map));
-    return map;
-  });
-  expect(preferenceStore["email:officer.a@tomboflight.test"].theme).toBe("high-contrast");
-  expect(preferenceStore["email:officer.b@tomboflight.test"].theme).toBe("dark");
+  await expect(page.locator("html")).toHaveAttribute("data-admin-theme", "light");
+  await expect(page.locator("html")).toHaveAttribute("data-admin-text-scale", "normal");
+  await expect(page.locator("[data-admin-appearance-theme-option]")).toHaveCount(0);
 });
 
 test("[keyboard] validates keyboard-only navigation reachability and no trap", async ({ page }) => {

@@ -147,6 +147,10 @@
     uploads: "Uploads",
     vault_metadata: "Vault Metadata",
     billing: "Billing",
+    maintenance: "Maintenance",
+    certificates: "Certificates",
+    delivery: "Delivery",
+    roles_access: "Roles & Access",
     mint: "Mint",
     audit_history: "Audit History",
   };
@@ -158,6 +162,10 @@
     uploads: "uploads_verification",
     vault_metadata: "entitlements",
     billing: "orders_billing",
+    maintenance: "maintenance",
+    certificates: "certificates",
+    delivery: "delivery",
+    roles_access: "roles_access",
     mint: "mint_readiness",
     audit_history: "audit_timeline",
   };
@@ -1171,7 +1179,7 @@
           showSuperAdminControls
             ? `
               <article class="admin-dossier-card admin-dossier-card--wide">
-                <div class="admin-card-header"><span class="admin-card-badge">S</span><h3 class="admin-card-title">Super Admin Controls</h3></div>
+                <div class="admin-card-header"><span class="admin-card-badge">S</span><h3 class="admin-card-title">CEO Master Admin Controls</h3></div>
                 <div class="admin-field-grid">
                   <label class="admin-field"><span>Full Name</span><input type="text" data-super-admin-user-field="full_name" value="${escapeHtml(tabData.full_name || "")}" /></label>
                   <label class="admin-field"><span>Email</span><input type="email" data-super-admin-user-field="email" value="${escapeHtml(tabData.email || "")}" /></label>
@@ -1189,6 +1197,7 @@
                   <button class="btn btn-secondary" type="button" data-super-admin-user-action="suspend" data-super-admin-user-id="${escapeHtml(userId)}">Suspend</button>
                   <button class="btn btn-secondary" type="button" data-super-admin-user-action="disable" data-super-admin-user-id="${escapeHtml(userId)}">Disable</button>
                   <button class="btn btn-secondary" type="button" data-super-admin-user-action="restore" data-super-admin-user-id="${escapeHtml(userId)}">Restore</button>
+                  <button class="btn btn-secondary" type="button" data-super-admin-user-action="archive" data-super-admin-user-id="${escapeHtml(userId)}">Archive Account</button>
                   <button class="btn btn-secondary" type="button" data-super-admin-user-password-reset="${escapeHtml(userId)}">Trigger Password Reset</button>
                 </div>
               </article>
@@ -1298,7 +1307,7 @@
           showSuperAdminControls
             ? `
             <article class="admin-dossier-card admin-dossier-card--wide">
-              <div class="admin-card-header"><span class="admin-card-badge">S</span><h3 class="admin-card-title">Super Admin Package Change</h3></div>
+              <div class="admin-card-header"><span class="admin-card-badge">S</span><h3 class="admin-card-title">CEO Master Admin Package &amp; Service Controls</h3></div>
               <div class="admin-field-grid">
                 <label class="admin-field">
                   <span>Target Package</span>
@@ -1307,7 +1316,7 @@
                   </select>
                 </label>
                 <label class="admin-field"><span>Target Lane</span><input type="text" data-super-admin-package-field="project_lane" value="${escapeHtml(tabData.project_lane || tabData.lane || "")}" /></label>
-                <label class="admin-field"><span>Order Status</span><input type="text" data-super-admin-package-field="order_status" value="${escapeHtml((workspace.tabs.orders_billing || {}).order_status || "")}" /></label>
+                <label class="admin-field"><span>Verified Order Status (read-only)</span><input type="text" data-super-admin-package-field="order_status" readonly value="${escapeHtml((workspace.tabs.orders_billing || {}).order_status || "")}" /></label>
                 <label class="admin-field"><span>Reason</span><input type="text" data-super-admin-package-field="reason" placeholder="Required for apply operations" /></label>
                 <label class="admin-field">
                   <span>Service Operation</span>
@@ -1335,10 +1344,13 @@
                 <label class="admin-field" style="display: inline-flex; align-items: center; gap: 0.45rem;"><input type="checkbox" data-super-admin-service-field="viewer_access_enabled" /><span>Viewer Access</span></label>
               </div>
               <div class="inline-actions" style="margin-top: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                <button class="btn btn-secondary" type="button" data-super-admin-package-preview="${escapeHtml(projectId)}">Preview Change</button>
-                <button class="btn btn-primary" type="button" data-super-admin-package-apply="${escapeHtml(projectId)}">Apply Package Change</button>
+                <button class="btn btn-secondary" type="button" data-super-admin-package-preview="${escapeHtml(projectId)}">Preview Package Assignment / Change</button>
+                <button class="btn btn-primary" type="button" data-super-admin-package-apply="${escapeHtml(projectId)}">Apply Package Assignment / Change</button>
                 <button class="btn btn-secondary" type="button" data-super-admin-service-preview="${escapeHtml(projectId)}">Preview Service Controls</button>
                 <button class="btn btn-primary" type="button" data-super-admin-service-apply="${escapeHtml(projectId)}">Apply Service Controls</button>
+                <button class="btn btn-secondary" type="button" data-super-admin-package-revoke-preview="${escapeHtml(projectId)}">Preview Package Revocation</button>
+                <button class="btn btn-secondary" type="button" data-super-admin-package-revoke="${escapeHtml(projectId)}">Revoke Current Package</button>
+                <button class="btn btn-secondary" type="button" data-super-admin-package-restore="${escapeHtml(projectId)}">Restore Package</button>
                 <button class="btn btn-secondary" type="button" data-super-admin-preview-cancel>Cancel Preview</button>
               </div>
               <div data-super-admin-package-preview-output class="helper" style="margin-top: 0.75rem;"></div>
@@ -1374,7 +1386,7 @@
           showSuperAdminControls
             ? `
               <article class="admin-dossier-card admin-dossier-card--wide">
-                <div class="admin-card-header"><span class="admin-card-badge">S</span><h3 class="admin-card-title">Super Admin Repair Toolkit</h3></div>
+                <div class="admin-card-header"><span class="admin-card-badge">S</span><h3 class="admin-card-title">Restricted Administrative Actions</h3></div>
                 <p class="card-copy">All actions are audit-logged with before/after snapshots and a required repair reason.</p>
                 <div class="admin-field-grid">
                   <label class="admin-field"><span>Repair Tool</span><select data-super-admin-repair-field="action">
@@ -1411,6 +1423,7 @@
                   <label class="admin-field"><span>Invite Email</span><input type="email" data-super-admin-repair-field="invite_email" /></label>
                   <label class="admin-field"><span>Notes</span><input type="text" data-super-admin-repair-field="notes" /></label>
                   <label class="admin-field"><span>Status</span><input type="text" data-super-admin-repair-field="status" /></label>
+                  <label class="admin-field"><span>New Owner User ID</span><input type="text" data-super-admin-new-owner-id /></label>
                 </div>
                 <label class="admin-field" style="margin-top: 0.6rem; display: inline-flex; align-items: center; gap: 0.45rem;">
                   <input type="checkbox" data-super-admin-repair-field="confirm_destructive" />
@@ -1418,6 +1431,7 @@
                 </label>
                 <div class="inline-actions" style="margin-top: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
                   <button class="btn btn-primary" type="button" data-super-admin-repair-run="${escapeHtml(caseId)}">Apply Repair Tool</button>
+                  <button class="btn btn-secondary" type="button" data-super-admin-transfer-ownership="${escapeHtml(tabData.project_id || "")}">Transfer Ownership</button>
                 </div>
               </article>
             `
@@ -1912,6 +1926,38 @@
       setPageStatus("Super Admin access is required.", "error");
       return;
     }
+
+    async function runSuperAdminCreateAccount() {
+      if (!state.isSuperAdmin) return;
+      const fullName = normalizeValue(window.prompt("Customer full name:") || "");
+      const email = normalizeValue(window.prompt("Customer email:") || "");
+      if (!fullName || !email || !window.confirm(`Create customer account for ${email}?`)) return;
+      try {
+        await postJson("/admin/control-center/super-admin/users", { full_name: fullName, email });
+        await loadCases();
+        setPageStatus("Customer account created pending activation.", "success");
+      } catch (error) {
+        setPageStatus(error.message || "Unable to create account.", "error");
+      }
+    }
+
+    async function runSuperAdminTransferOwnership(projectId) {
+      const ownerNode = document.querySelector("[data-super-admin-new-owner-id]");
+      const newOwnerUserId = normalizeValue(ownerNode && ownerNode.value);
+      const reason = normalizeValue(window.prompt("Reason for ownership transfer:") || "");
+      if (!newOwnerUserId || !reason || !window.confirm("Confirm project ownership transfer?")) return;
+      try {
+        await postJson(`/admin/control-center/super-admin/projects/${encodeURIComponent(projectId)}/transfer-ownership`, {
+          new_owner_user_id: newOwnerUserId,
+          reason,
+          confirmed: true,
+        });
+        await loadCaseWorkspace(state.selectedCaseId);
+        setPageStatus("Project ownership transferred.", "success");
+      } catch (error) {
+        setPageStatus(error.message || "Unable to transfer ownership.", "error");
+      }
+    }
     if (!window.confirm("Apply user profile and account updates?")) return;
     setPageStatus("Saving user updates...", "info");
     try {
@@ -1932,12 +1978,13 @@
       setPageStatus("Super Admin access is required.", "error");
       return;
     }
-    if (!window.confirm(`Confirm ${action} for this account?`)) return;
+    const reason = normalizeValue(window.prompt(`Reason for ${action}:`) || "");
+    if (!reason || !window.confirm(`Confirm ${action} for this account?`)) return;
     setPageStatus("Updating account status...", "info");
     try {
       await postJson(
         `/admin/control-center/super-admin/users/${encodeURIComponent(userId)}/status-action`,
-        { action },
+        { action, reason, confirmed: true },
       );
       await loadCases();
       if (state.selectedCaseId) await loadCaseWorkspace(state.selectedCaseId);
@@ -2076,7 +2123,7 @@
     try {
       const payload = await postJson(
         `/admin/control-center/super-admin/projects/${encodeURIComponent(projectId)}/service-controls/apply`,
-        collectSuperAdminServicePayload(),
+        { ...collectSuperAdminServicePayload(), confirmed: true },
       );
       renderSuperAdminPackagePreview(payload || {});
       await loadOverview();
@@ -2099,7 +2146,7 @@
     try {
       const payload = await postJson(
         `/admin/control-center/super-admin/projects/${encodeURIComponent(projectId)}/package-change/apply`,
-        collectSuperAdminPackagePayload(),
+        { ...collectSuperAdminPackagePayload(), confirmed: true },
       );
       renderSuperAdminPackagePreview(payload || {});
       await loadOverview();
@@ -2108,6 +2155,28 @@
       setPageStatus("Package change applied and synchronized.", "success");
     } catch (error) {
       setPageStatus(error.message || "Unable to apply package change.", "error");
+    }
+
+    async function runSuperAdminPackageLifecycle(projectId, action, previewOnly) {
+      if (!state.isSuperAdmin) return;
+      const reason = previewOnly ? "" : normalizeValue(window.prompt(`Reason to ${action} this package:`) || "");
+      if (!previewOnly && (!reason || !window.confirm(`Confirm package ${action}?`))) return;
+      const endpoint = previewOnly
+        ? `/admin/control-center/super-admin/projects/${encodeURIComponent(projectId)}/package-revoke/preview`
+        : action === "restore"
+          ? `/admin/control-center/super-admin/projects/${encodeURIComponent(projectId)}/package-restore`
+          : `/admin/control-center/super-admin/projects/${encodeURIComponent(projectId)}/package-revoke/apply`;
+      try {
+        const payload = await postJson(endpoint, previewOnly ? {} : { reason, confirmed: true });
+        renderSuperAdminPackagePreview(payload || {});
+        if (!previewOnly) {
+          await Promise.allSettled([loadOverview(), loadCases()]);
+          if (state.selectedCaseId) await loadCaseWorkspace(state.selectedCaseId);
+        }
+        setPageStatus(previewOnly ? "Package revocation preview ready." : `Package ${action} completed.`, "success");
+      } catch (error) {
+        setPageStatus(error.message || `Unable to ${action} package.`, "error");
+      }
     }
   }
 
@@ -2176,6 +2245,11 @@
           retryFn();
         } else {
           bootstrapAccessAndData();
+        }
+
+        if (target.closest("[data-super-admin-create-account]")) {
+          runSuperAdminCreateAccount();
+          return;
         }
         return;
       }
@@ -2276,6 +2350,24 @@
         return;
       }
 
+      const packageRevokePreview = target.closest("[data-super-admin-package-revoke-preview]");
+      if (packageRevokePreview) {
+        runSuperAdminPackageLifecycle(packageRevokePreview.getAttribute("data-super-admin-package-revoke-preview"), "revoke", true);
+        return;
+      }
+
+      const packageRevoke = target.closest("[data-super-admin-package-revoke]");
+      if (packageRevoke) {
+        runSuperAdminPackageLifecycle(packageRevoke.getAttribute("data-super-admin-package-revoke"), "revoke", false);
+        return;
+      }
+
+      const packageRestore = target.closest("[data-super-admin-package-restore]");
+      if (packageRestore) {
+        runSuperAdminPackageLifecycle(packageRestore.getAttribute("data-super-admin-package-restore"), "restore", false);
+        return;
+      }
+
       const superAdminPreviewCancel = target.closest("[data-super-admin-preview-cancel]");
       if (superAdminPreviewCancel) {
         clearSuperAdminPreviewOutput();
@@ -2287,6 +2379,12 @@
       if (superAdminRepair) {
         const caseId = superAdminRepair.getAttribute("data-super-admin-repair-run");
         if (caseId) runSuperAdminCaseRepair(caseId);
+        return;
+      }
+
+      const transferOwnership = target.closest("[data-super-admin-transfer-ownership]");
+      if (transferOwnership) {
+        runSuperAdminTransferOwnership(transferOwnership.getAttribute("data-super-admin-transfer-ownership"));
         return;
       }
 
@@ -2360,7 +2458,11 @@
     const titleNode = document.querySelector("[data-admin-control-title]");
     const statusNode = document.querySelector("[data-admin-control-status]");
     if (titleNode) {
-      titleNode.textContent = isMarketingRole() ? "Marketing Command Center" : "Customer Operations Workspace";
+      titleNode.textContent = state.roleKey === "ceo_master_admin"
+        ? "CEO Master Administrator"
+        : isMarketingRole()
+          ? "Marketing Command Center"
+          : "Customer Operations Workspace";
     }
     if (statusNode) {
       const queueCount = Array.isArray(state.allowedQueues) ? state.allowedQueues.length : 0;
