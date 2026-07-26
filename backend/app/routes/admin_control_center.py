@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
+from app.core.admin_permission_registry import CEO_MASTER_ADMIN_EMAIL
 from app.dependencies.auth import require_any_permission, require_permission, require_super_admin
 from app.services.auth_service import admin_issue_password_reset
 from app.services.audit_log_service import write_audit_log
@@ -258,7 +259,7 @@ def _current_user_display(current_user: dict[str, Any]) -> str:
 
 
 def _assert_canonical_ceo(current_user: dict[str, Any]) -> None:
-    if _string_value(current_user.get("email")).lower() == "l.robinson@tomboflight.com":
+    if _string_value(current_user.get("email")).lower() == CEO_MASTER_ADMIN_EMAIL:
         return
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
