@@ -10,6 +10,10 @@ from app.core.admin_permission_registry import CEO_MASTER_ADMIN_EMAIL
 from app.dependencies.auth import require_any_permission, require_permission, require_super_admin
 from app.services.auth_service import admin_issue_password_reset
 from app.services.audit_log_service import write_audit_log
+from app.services.manual_fulfillment_service import (
+    execute_fulfillment_action,
+    list_manual_fulfillment_queue,
+)
 from app.services.admin_control_service import (
     MAX_BULK_ACTION_LIMIT,
     admin_control_access_profile,
@@ -413,6 +417,43 @@ def link_project_to_order(
             order_id=order_id,
             project_id=(payload.project_id if payload else ""),
             actor=current_user,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+class FulfillmentActionPayload(BaseModel):
+    reason: str = Field(..., min_length=3)
+    idempotency_key: str = Field(..., min_length=8)
+
+
+@router.get("/fulfillment/queue")
+def get_manual_fulfillment_queue(
+    limit: int = Query(default=100, ge=1, le=500),
+    current_user: dict[str, Any] = Depends(
+        require_any_permission(["admin.control.billing", "admin.orders.read"])
+    ),
+):
+    del current_user
+    return list_manual_fulfillment_queue(limit=limit)
+
+
+@router.post("/fulfillment/orders/{order_id}/actions/{action}")
+def run_manual_fulfillment_action(
+    order_id: str,
+    action: str,
+    payload: FulfillmentActionPayload,
+    current_user: dict[str, Any] = Depends(
+        require_any_permission(["admin.control.billing", "admin.orders.repair"])
+    ),
+):
+    try:
+        return execute_fulfillment_action(
+            current_user,
+            order_id=order_id,
+            action=action,
+            reason=payload.reason,
+            idempotency_key=payload.idempotency_key,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc

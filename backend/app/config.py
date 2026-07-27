@@ -140,6 +140,10 @@ class Settings(BaseSettings):
         default=3,
         validation_alias=AliasChoices("STRIPE_PAYMENT_METHOD_MAX_CARDS"),
     )
+    manual_fulfillment_mode: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("MANUAL_FULFILLMENT_MODE"),
+    )
     password_reset_token_expire_minutes: int = Field(
         default=30,
         validation_alias=AliasChoices("PASSWORD_RESET_TOKEN_EXPIRE_MINUTES"),

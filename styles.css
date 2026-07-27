@@ -9227,3 +9227,66 @@ body.portal-dashboard-body.admin-interface-mode .portal-core-label {
     left: 0;
   }
 }
+
+/* Master Admin: compact status summary, collapsed diagnostics, fulfillment queue */
+.admin-status-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+
+.admin-status-summary:empty {
+  display: none;
+}
+
+.admin-status-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid rgba(94, 124, 175, 0.35);
+  padding: 0.2rem 0.65rem;
+  font-size: 0.74rem;
+  color: #a8cbff;
+  background: rgba(22, 34, 55, 0.6);
+}
+
+.admin-status-chip[data-state="ok"] {
+  border-color: rgba(94, 200, 140, 0.5);
+  color: #8fe0b0;
+}
+
+.admin-status-chip[data-state="attention"] {
+  border-color: rgba(230, 160, 90, 0.55);
+  color: #f0c08a;
+}
+
+/* Diagnostics stays in normal document flow: never fixed, never sticky,
+   never overlaying cases or Account 360. Collapsed by default. */
+.admin-diagnostics-section {
+  position: static;
+  margin-top: 1rem;
+}
+
+.admin-diagnostics-toggle {
+  font-size: 0.8rem;
+}
+
+.admin-diagnostics-panel {
+  position: static;
+  margin-top: 0.75rem;
+  border: 1px solid rgba(120, 160, 220, 0.19);
+  border-radius: 14px;
+  padding: 0.9rem;
+  background: linear-gradient(155deg, rgba(8, 15, 27, 0.96), rgba(6, 11, 20, 0.98));
+}
+
+body.admin-interface-mode .admin-diagnostics-panel {
+  background: var(--admin-panel);
+  border-color: var(--admin-border);
+  color: var(--admin-text);
+}
+
+.admin-fulfillment-card .admin-bulk-action-grid {
+  margin-top: 0.75rem;
+}

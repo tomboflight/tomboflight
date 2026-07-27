@@ -57,6 +57,8 @@
     overviewLoadFailed: false,
     casesLoadFailed: false,
     lastStatusMessage: "",
+    diagnostics: null,
+    fulfillmentItems: [],
   };
   const DEFAULT_ROLE_KEY = "user";
 
@@ -109,6 +111,10 @@
 
   const QUEUE_META = {
     overview: ["Overview", "Executive repair posture across active customer operations."],
+    manual_fulfillment: [
+      "Paid — Manual Fulfillment Required",
+      "Stripe-verified purchases awaiting manual review and provisioning by an authorized operator.",
+    ],
     intake_onboarding: ["Intake & Onboarding", "New accounts/projects, intake progression, and stalled intake visibility."],
     verification_upload_review: ["Verification & Upload Review", "Upload review, verification pending states, and aging verification queues."],
     workspace_access_invites: ["Workspace Access & Invites", "Invite delivery health, expiration risk, and member access mismatches."],
@@ -613,11 +619,15 @@
   }
 
   function renderDiagnostics(payload) {
-    const panel = document.querySelector("[data-admin-diagnostics-panel]");
+    const section = document.querySelector("[data-admin-diagnostics-section]");
     const output = document.querySelector("[data-admin-diagnostics-output]");
-    if (!panel || !output) return;
-    panel.hidden = false;
+    if (!section || !output) return;
+    // The diagnostics section becomes available but stays collapsed by
+    // default; it sits in normal document flow and never overlays cases.
+    section.hidden = false;
     const data = payload || {};
+    state.diagnostics = data;
+    renderStatusSummary();
     const rows = [
       ["Authenticated user ID", data.user_id],
       ["Normalized role", data.role_key],
@@ -648,6 +658,235 @@
         bootstrap_endpoint_status: "unavailable",
         search_endpoint_status: "unavailable",
       });
+    }
+  }
+
+  function roleDisplayLabel(roleKey) {
+    const labels = {
+      ceo_master_admin: "CEO Master Administrator",
+      finance_admin: "Finance Administrator (CFO)",
+      operations_admin: "Operations Administrator (COO)",
+      marketing_admin: "Marketing Administrator (CMO)",
+    };
+    return labels[roleKey] || "Administrator";
+  }
+
+  function renderStatusSummary() {
+    const summary = document.querySelector("[data-admin-status-summary]");
+    if (!summary) return;
+    const data = state.diagnostics || {};
+    const bootstrapOk = (data.bootstrap_endpoint_status || "") === "ok";
+    const searchOk = (data.search_endpoint_status || "") === "ok";
+    const chips = [
+      ["System Ready", bootstrapOk],
+      ["CEO Role Verified", Boolean(data.is_ceo_master_admin)],
+      ["Search Ready", searchOk],
+      ["Metrics Ready", !state.overviewLoadFailed],
+      [
+        state.bootstrapFailed ? "Payments Attention Required" : "Payments Ready",
+        !state.bootstrapFailed,
+      ],
+    ];
+    summary.innerHTML = chips
+      .map(function (chip) {
+        return `<span class="admin-status-chip" data-state="${chip[1] ? "ok" : "attention"}">${escapeHtml(chip[0])}</span>`;
+      })
+      .join("");
+  }
+
+  function toggleDiagnosticsPanel() {
+    const panel = document.querySelector("[data-admin-diagnostics-panel]");
+    const toggle = document.querySelector("[data-admin-diagnostics-toggle]");
+    if (!panel || !toggle) return;
+    const expanded = panel.hidden;
+    panel.hidden = !expanded;
+    toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
+    toggle.textContent = expanded ? "Hide System Diagnostics" : "Show System Diagnostics";
+  }
+
+  const FULFILLMENT_ACTION_LABELS = {
+    verify_payment: "Verify Payment",
+    start_fulfillment: "Mark Fulfillment In Progress",
+    assign_package: "Assign Purchased Package",
+    complete_fulfillment: "Mark Fulfillment Complete",
+    escalate_mismatch: "Escalate Payment Mismatch",
+  };
+
+  function renderFulfillmentQueue() {
+    const list = document.querySelector("[data-admin-case-list]");
+    if (!list) return;
+    const items = state.fulfillmentItems || [];
+    if (!items.length) {
+      list.innerHTML = `<div class="family-record-card admin-card"><h3>No paid orders waiting</h3><p class="card-copy">Verified purchases requiring manual fulfillment will appear here.</p></div>`;
+      return;
+    }
+    list.innerHTML = items
+      .map(function (item) {
+        const actionButtons = Object.keys(FULFILLMENT_ACTION_LABELS)
+          .map(function (action) {
+            return `<button class="btn btn-secondary" type="button" data-fulfillment-action="${action}" data-fulfillment-order="${escapeHtml(item.order_id)}">${escapeHtml(FULFILLMENT_ACTION_LABELS[action])}</button>`;
+          })
+          .join("");
+        return `
+          <div class="family-record-card admin-card admin-fulfillment-card">
+            <h3>${escapeHtml(item.customer_name || item.email || "Unknown customer")}</h3>
+            <p class="card-copy">${escapeHtml(item.email || "no email")} · ${escapeHtml(item.package_name || item.package_code || "unknown package")} · ${escapeHtml(item.amount_label || "amount unknown")} ${escapeHtml((item.currency || "usd").toUpperCase())}</p>
+            <dl class="admin-diagnostics-grid">
+              <div><dt>Order</dt><dd>${escapeHtml(item.order_id)}</dd></div>
+              <div><dt>Stripe session</dt><dd>${escapeHtml(item.stripe_session_id || "none")}</dd></div>
+              <div><dt>Payment intent</dt><dd>${escapeHtml(item.stripe_payment_intent_id || "none")}</dd></div>
+              <div><dt>Payment status</dt><dd>${escapeHtml(item.payment_status || "unknown")}${item.payment_verified ? " (verified)" : " (not verified)"}</dd></div>
+              <div><dt>Billing plan</dt><dd>${escapeHtml(item.billing_plan || "one_time")}</dd></div>
+              <div><dt>Coupon</dt><dd>${escapeHtml(item.coupon || "none")}</dd></div>
+              <div><dt>Payment date</dt><dd>${escapeHtml(item.payment_date || "unknown")}</dd></div>
+              <div><dt>Fulfillment status</dt><dd>${escapeHtml(item.fulfillment_status || "pending_manual_fulfillment")}</dd></div>
+              <div><dt>Linked project</dt><dd>${escapeHtml(item.linked_project_id || "none")}</dd></div>
+              <div><dt>Entitlement</dt><dd>${escapeHtml(item.entitlement_status || "unknown")}</dd></div>
+              <div><dt>Assigned operator</dt><dd>${escapeHtml(item.assigned_operator || "unassigned")}</dd></div>
+              <div><dt>Next required action</dt><dd>${escapeHtml(item.next_required_action || "verify_payment")}</dd></div>
+            </dl>
+            <div class="admin-bulk-action-grid">${actionButtons}</div>
+          </div>`;
+      })
+      .join("");
+  }
+
+  async function loadFulfillmentQueue() {
+    setPageStatus("Loading paid manual fulfillment queue...", "info");
+    try {
+      const payload = await fetchJson("/admin/control-center/fulfillment/queue");
+      state.fulfillmentItems = Array.isArray(payload.items) ? payload.items : [];
+      renderFulfillmentQueue();
+      clearPageStatus();
+    } catch (error) {
+      setPageStatus(error.message || "Unable to load fulfillment queue.", "error");
+    }
+  }
+
+  async function runFulfillmentAction(orderId, action) {
+    const label = FULFILLMENT_ACTION_LABELS[action] || action;
+    const reason = window.prompt(`${label}: enter a reason for the audit record.`);
+    if (reason === null) return;
+    if (!reason || reason.trim().length < 3) {
+      setPageStatus("A reason of at least 3 characters is required.", "error");
+      return;
+    }
+    const idempotencyKey =
+      window.crypto && window.crypto.randomUUID
+        ? window.crypto.randomUUID()
+        : `mf-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    setPageStatus(`Running ${label.toLowerCase()}...`, "info");
+    try {
+      await postJson(
+        `/admin/control-center/fulfillment/orders/${encodeURIComponent(orderId)}/actions/${encodeURIComponent(action)}`,
+        { reason: reason.trim(), idempotency_key: idempotencyKey },
+      );
+      await loadFulfillmentQueue();
+      setPageStatus(`${label} completed.`, "success");
+    } catch (error) {
+      setPageStatus(error.message || `${label} failed.`, "error");
+    }
+  }
+
+  function renderStripeOpsCard(workspace, tabData) {
+    const identity = (workspace && workspace.tabs && workspace.tabs.identity) || {};
+    const email = identity.email || "";
+    const subscriptionId = (tabData && (tabData.subscription || (tabData.primary_order || {}).subscription_id)) || "";
+    return `
+      <article class="admin-dossier-card admin-dossier-card--wide" data-stripe-ops-card>
+        <div class="admin-card-header"><span class="admin-card-badge">$</span><h3 class="admin-card-title">Stripe Operations</h3></div>
+        <p class="card-copy">Server-side Stripe actions for this customer. Every action requires a reason and is audit logged.</p>
+        <div class="admin-field-grid">
+          <label class="admin-field"><span>Customer Email</span><input type="email" data-stripe-ops-field="customer_email" value="${escapeHtml(email)}" /></label>
+          <label class="admin-field"><span>Reason (required)</span><input type="text" data-stripe-ops-field="reason" placeholder="Why are you doing this?" /></label>
+          <label class="admin-field"><span>Stripe Price ID (links / subscriptions)</span><input type="text" data-stripe-ops-field="price_id" placeholder="price_..." /></label>
+          <label class="admin-field"><span>Subscription ID</span><input type="text" data-stripe-ops-field="subscription_id" value="${escapeHtml(subscriptionId)}" placeholder="sub_..." /></label>
+          <label class="admin-field"><span>Invoice ID (retry)</span><input type="text" data-stripe-ops-field="invoice_id" placeholder="in_..." /></label>
+          <label class="admin-field"><span>Invoice Amount (cents)</span><input type="number" min="1" data-stripe-ops-field="amount_cents" placeholder="e.g. 250000" /></label>
+          <label class="admin-field"><span>Invoice Description</span><input type="text" data-stripe-ops-field="description" placeholder="What is being invoiced" /></label>
+        </div>
+        <div class="inline-actions" style="margin-top: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
+          <button class="btn btn-secondary" type="button" data-stripe-ops-action="ensure_customer">Ensure Stripe Customer</button>
+          <button class="btn btn-secondary" type="button" data-stripe-ops-action="open_customer">Open in Stripe</button>
+          <button class="btn btn-secondary" type="button" data-stripe-ops-action="payment_link">Create Payment Link</button>
+          <button class="btn btn-secondary" type="button" data-stripe-ops-action="invoice">Create + Send Invoice</button>
+          <button class="btn btn-secondary" type="button" data-stripe-ops-action="invoice_retry">Retry Invoice</button>
+          <button class="btn btn-secondary" type="button" data-stripe-ops-action="subscription_create">Create Subscription</button>
+          <button class="btn btn-secondary" type="button" data-stripe-ops-action="subscription_change">Change Subscription Price</button>
+          <button class="btn btn-secondary" type="button" data-stripe-ops-action="subscription_pause">Pause Subscription</button>
+          <button class="btn btn-secondary" type="button" data-stripe-ops-action="subscription_resume">Resume Subscription</button>
+          <button class="btn btn-secondary" type="button" data-stripe-ops-action="subscription_cancel">Cancel Subscription</button>
+          <button class="btn btn-secondary" type="button" data-stripe-ops-action="payment_method_link">Send Payment-Method Update Link</button>
+          <button class="btn btn-secondary" type="button" data-stripe-ops-action="history">Payment History</button>
+        </div>
+        <div class="admin-record-list" data-stripe-ops-result style="margin-top: 0.75rem;"></div>
+      </article>
+    `;
+  }
+
+  function stripeOpsField(card, name) {
+    const input = card.querySelector(`[data-stripe-ops-field="${name}"]`);
+    return input ? String(input.value || "").trim() : "";
+  }
+
+  function renderStripeOpsResult(card, payload) {
+    const node = card.querySelector("[data-stripe-ops-result]");
+    if (!node) return;
+    node.innerHTML = `<pre style="white-space: pre-wrap; word-break: break-word; margin: 0;">${escapeHtml(JSON.stringify(payload, null, 2))}</pre>`;
+  }
+
+  async function runStripeOpsAction(card, action) {
+    const email = stripeOpsField(card, "customer_email");
+    const reason = stripeOpsField(card, "reason");
+    const needsReason = action !== "open_customer" && action !== "history";
+    if (needsReason && reason.length < 3) {
+      setPageStatus("A reason of at least 3 characters is required for Stripe operations.", "error");
+      return;
+    }
+    setPageStatus("Running Stripe operation...", "info");
+    try {
+      let result;
+      if (action === "ensure_customer") {
+        result = await postJson("/admin/stripe-ops/customers/ensure", { customer_email: email, reason });
+      } else if (action === "open_customer") {
+        result = await fetchJson(`/admin/stripe-ops/customers/open?customer_email=${encodeURIComponent(email)}`);
+        if (result && result.dashboard_url) window.open(result.dashboard_url, "_blank", "noopener");
+      } else if (action === "payment_link") {
+        result = await postJson("/admin/stripe-ops/payment-links", { price_id: stripeOpsField(card, "price_id"), reason });
+      } else if (action === "invoice") {
+        result = await postJson("/admin/stripe-ops/invoices", {
+          customer_email: email,
+          amount_cents: Number(stripeOpsField(card, "amount_cents")) || 0,
+          description: stripeOpsField(card, "description"),
+          reason,
+        });
+      } else if (action === "invoice_retry") {
+        result = await postJson("/admin/stripe-ops/invoices/retry", { invoice_id: stripeOpsField(card, "invoice_id"), reason });
+      } else if (action === "subscription_create") {
+        result = await postJson("/admin/stripe-ops/subscriptions", { customer_email: email, price_id: stripeOpsField(card, "price_id"), reason });
+      } else if (action === "subscription_change") {
+        result = await postJson("/admin/stripe-ops/subscriptions/change-price", { subscription_id: stripeOpsField(card, "subscription_id"), price_id: stripeOpsField(card, "price_id"), reason });
+      } else if (action === "subscription_pause") {
+        result = await postJson("/admin/stripe-ops/subscriptions/pause", { subscription_id: stripeOpsField(card, "subscription_id"), reason });
+      } else if (action === "subscription_resume") {
+        result = await postJson("/admin/stripe-ops/subscriptions/resume", { subscription_id: stripeOpsField(card, "subscription_id"), reason });
+      } else if (action === "subscription_cancel") {
+        if (!window.confirm("Cancel this subscription? This is a destructive action.")) {
+          setPageStatus("Subscription cancel aborted.", "info");
+          return;
+        }
+        result = await postJson("/admin/stripe-ops/subscriptions/cancel", { subscription_id: stripeOpsField(card, "subscription_id"), reason, at_period_end: true, confirm: true });
+      } else if (action === "payment_method_link") {
+        result = await postJson("/admin/stripe-ops/payment-method-update-link", { customer_email: email, reason });
+      } else if (action === "history") {
+        result = await fetchJson(`/admin/stripe-ops/customers/history?customer_email=${encodeURIComponent(email)}`);
+      } else {
+        return;
+      }
+      renderStripeOpsResult(card, result);
+      setPageStatus("Stripe operation completed.", "success");
+    } catch (error) {
+      setPageStatus(error.message || "Stripe operation failed.", "error");
     }
   }
 
@@ -995,6 +1234,7 @@
             <div class="admin-case-primary">
               <h3>${escapeHtml(item.name || "Customer Case")}</h3>
               <p>${escapeHtml(item.email || "No email")} · ${escapeHtml(item.role || "customer")}</p>
+              ${item.account_type ? `<p class="card-copy">Account Type: ${escapeHtml(item.account_type)}</p>` : ""}
             </div>
             <div class="admin-case-detail">
               <span>Project</span>
@@ -1126,6 +1366,7 @@
             ${related.length ? related.map(function (order) { return `<p><strong>${escapeHtml(shortId(order.id))}</strong><span>${escapeHtml(order.status || "unknown")} · ${escapeHtml(order.package_name || order.package_code || "—")} · ${escapeHtml(formatDate(order.created_at))}</span></p>`; }).join("") : '<p>No related orders.</p>'}
           </div>
         </article>
+        ${state.isSuperAdmin ? renderStripeOpsCard(workspace, tabData) : ""}
       `;
       return;
     }
@@ -1678,6 +1919,17 @@
   }
 
   async function loadCases() {
+    if (state.queue === "manual_fulfillment") {
+      state.cases = [];
+      state.selectedCaseId = "";
+      state.workspace = null;
+      renderCaseHeader();
+      renderCaseContext();
+      updateActionAvailability();
+      updateBulkActionAvailability();
+      await loadFulfillmentQueue();
+      return;
+    }
     if (isMarketingRole()) {
       state.cases = [];
       state.selectedCaseId = "";
@@ -2264,6 +2516,28 @@
         return;
       }
 
+      const diagnosticsToggle = target.closest("[data-admin-diagnostics-toggle]");
+      if (diagnosticsToggle) {
+        toggleDiagnosticsPanel();
+        return;
+      }
+
+      const fulfillmentActionButton = target.closest("[data-fulfillment-action]");
+      if (fulfillmentActionButton) {
+        const action = fulfillmentActionButton.getAttribute("data-fulfillment-action") || "";
+        const orderId = fulfillmentActionButton.getAttribute("data-fulfillment-order") || "";
+        if (action && orderId) runFulfillmentAction(orderId, action);
+        return;
+      }
+
+      const stripeOpsButton = target.closest("[data-stripe-ops-action]");
+      if (stripeOpsButton) {
+        const card = stripeOpsButton.closest("[data-stripe-ops-card]");
+        const action = stripeOpsButton.getAttribute("data-stripe-ops-action") || "";
+        if (card && action) runStripeOpsAction(card, action);
+        return;
+      }
+
       const openCaseButton = target.closest("[data-open-case]");
       if (openCaseButton) {
         const caseId = openCaseButton.getAttribute("data-open-case");
@@ -2477,8 +2751,8 @@
         ? "All permitted operational queues"
         : `${queueCount} permitted ${isMarketingRole() ? "section" : "queue"}${queueCount === 1 ? "" : "s"}`;
       statusNode.textContent = isMarketingRole()
-        ? `Marketing command center is active for role: ${state.roleKey || DEFAULT_ROLE_KEY} across ${scopeLabel}.`
-        : `Search-first case operations are active for role: ${state.roleKey || DEFAULT_ROLE_KEY} across ${scopeLabel}.`;
+        ? `Marketing command center is active for ${roleDisplayLabel(state.roleKey)} across ${scopeLabel}.`
+        : `Search-first case operations are active for ${roleDisplayLabel(state.roleKey)} across ${scopeLabel}.`;
     }
   }
 

@@ -8,7 +8,7 @@
       name="description"
       content="Internal premium operations console for Tomb of Light customer cases, repairs, entitlements, mint readiness, and audit review."
     />
-    <link rel="stylesheet" href="styles.css?v=20260713-livefix3" />
+    <link rel="stylesheet" href="styles.css?v=20260727-masterops1" />
   </head>
   <body>
     <div class="page-wrap">
@@ -50,6 +50,7 @@
               <span class="eyebrow">Internal Premium Operations</span>
               <h1 data-admin-control-title>Customer Operations Workspace</h1>
               <p data-admin-control-status>Loading internal case operations...</p>
+              <div class="admin-status-summary" data-admin-status-summary aria-live="polite"></div>
             </div>
 
             <div class="admin-command-search">
@@ -84,17 +85,12 @@
             <div data-admin-impersonation-banner aria-live="polite"></div>
           </div>
 
-          <section class="admin-case-context-panel" data-admin-diagnostics-panel hidden aria-label="Master Admin diagnostics">
-            <h3>System Diagnostics — read-only</h3>
-            <p class="card-copy">This section displays system and release metadata only. Your CEO Master Administrator controls remain fully operational.</p>
-            <dl class="admin-diagnostics-grid" data-admin-diagnostics-output></dl>
-          </section>
-
           <div class="admin-case-console-shell">
               <aside class="admin-case-rail">
                 <h3>Operations Rail</h3>
                 <nav class="admin-case-nav" aria-label="Admin operations navigation">
                    <button type="button" data-case-queue="overview" class="is-active">Overview</button>
+                   <button type="button" data-case-queue="manual_fulfillment">Paid — Manual Fulfillment</button>
                    <button type="button" data-case-queue="intake_onboarding">Intake &amp; Onboarding</button>
                    <button type="button" data-case-queue="verification_upload_review">Verification &amp; Upload Review</button>
                    <button type="button" data-case-queue="workspace_access_invites">Workspace Access &amp; Invites</button>
@@ -208,6 +204,22 @@
                 <div class="admin-case-context" data-admin-case-context></div>
               </aside>
           </div>
+
+          <section class="admin-diagnostics-section" data-admin-diagnostics-section hidden aria-label="Master Admin diagnostics">
+            <button
+              class="btn btn-secondary admin-diagnostics-toggle"
+              type="button"
+              data-admin-diagnostics-toggle
+              aria-expanded="false"
+            >
+              Show System Diagnostics
+            </button>
+            <div class="admin-diagnostics-panel" data-admin-diagnostics-panel hidden>
+              <h3>System Diagnostics — read-only</h3>
+              <p class="card-copy">This section displays system and release metadata only. Your CEO Master Administrator controls remain fully operational.</p>
+              <dl class="admin-diagnostics-grid" data-admin-diagnostics-output></dl>
+            </div>
+          </section>
         </section>
       </main>
 
@@ -222,8 +234,8 @@
     </div>
 
     <script src="config.js?v=20260329-1"></script>
-    <script src="app.js?v=20260713-livefix3"></script>
-    <script src="auth.js?v=20260713-livefix3"></script>
-    <script src="admin-control-center.js?v=20260713-livefix3"></script>
+    <script src="app.js?v=20260727-masterops1"></script>
+    <script src="auth.js?v=20260727-masterops1"></script>
+    <script src="admin-control-center.js?v=20260727-masterops1"></script>
   </body>
 </html>

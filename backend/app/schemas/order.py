@@ -51,6 +51,7 @@ class OrderResponse(BaseModel):
     project_id: Optional[str] = None
     stripe_session_id: Optional[str] = None
     stripe_payment_link_id: Optional[str] = None
+    fulfillment_status: Optional[str] = None
     created_at: datetime
 
 
