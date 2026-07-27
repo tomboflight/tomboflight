@@ -68,6 +68,7 @@ OFFICER_ADMIN_EMAILS = {
 
 ADMIN_CONTROL_QUEUES = [
     "overview",
+    "manual_fulfillment",
     "intake_onboarding",
     "verification_upload_review",
     "workspace_access_invites",
@@ -138,6 +139,7 @@ BULK_ACTION_PERMISSIONS: dict[str, set[str]] = {
 }
 QUEUE_PERMISSIONS: dict[str, set[str]] = {
     "overview": {"admin.control.view"},
+    "manual_fulfillment": {"admin.control.billing", "admin.orders.read"},
     "intake_onboarding": {"admin.intake.review", "admin.control.view"},
     "verification_upload_review": {"uploads.admin.review", "verification.review"},
     "workspace_access_invites": {"admin.control.view"},
@@ -239,6 +241,7 @@ MARKETING_TAB_ALLOWLIST = [
     "marketing_dashboard",
 ]
 OPERATIONS_QUEUE_ALLOWLIST = [
+    "manual_fulfillment",
     "intake_onboarding",
     "verification_upload_review",
     "workspace_access_invites",
@@ -597,7 +600,7 @@ def admin_control_bulk_action_allowed(
 # Bumped alongside the static frontend cache-busting query string
 # (see admin-control-center.html / dashboard.html `?v=` suffix) whenever a
 # hotfix ships to the admin control center or dashboard assets.
-FRONTEND_ASSET_REVISION = "20260713-livefix2"
+FRONTEND_ASSET_REVISION = "20260727-masterops1"
 
 
 def _backend_release_identifier() -> str:
@@ -4391,6 +4394,72 @@ def _user_supports_search(user: dict[str, Any], search: str) -> bool:
     return normalized_search in haystack
 
 
+def _classify_user_account_type(
+    user: dict[str, Any],
+    *,
+    is_internal: bool,
+    has_project: bool,
+    has_pending_verified_purchase: bool,
+) -> str:
+    status_value = _normalize(user.get("status")).lower()
+    if status_value in {"archived"}:
+        return "Archived Account"
+    if status_value in {"suspended", "disabled", "locked"}:
+        return "Suspended Account"
+    email = _normalize_email(user.get("email")) or ""
+    name = _normalize(user.get("full_name") or user.get("name")).lower()
+    if "genesis prototype" in name or "genesis-prototype" in email:
+        return "Prototype"
+    if _normalize(user.get("account_class")).lower() == "internal_validation" or "internal validation" in name:
+        return "Internal Validation Account"
+    haystack = f"{name} {email}"
+    if any(marker in haystack for marker in ("smoke user", "smoke-user", "cors test", "test fixture", "smoketest")):
+        return "Test/Smoke Account"
+    if is_internal:
+        if email in OFFICER_ADMIN_EMAILS:
+            return "Officer Administrative Identity"
+        if email == _normalize(CEO_MASTER_ADMIN_EMAIL).lower():
+            return "Internal Administrative Identity"
+        return "Unexplained Privileged Account"
+    if has_project:
+        return "Customer with Active Project"
+    if has_pending_verified_purchase:
+        return "Customer With Verified Purchase Pending Fulfillment"
+    return "Customer Identity"
+
+
+def _user_owns_project(user_id: str) -> bool:
+    db = _db()
+    user_oid = _to_object_id(user_id)
+    owner_values: list[Any] = [user_id]
+    if user_oid is not None:
+        owner_values.append(user_oid)
+    return db["projects"].find_one({"$or": [
+        {"user_id": {"$in": owner_values}},
+        {"owner_id": {"$in": owner_values}},
+        {"created_by": {"$in": owner_values}},
+    ]}) is not None
+
+
+def _user_has_pending_verified_purchase(user_id: str, email: str | None) -> bool:
+    db = _db()
+    user_oid = _to_object_id(user_id)
+    or_clauses: list[dict[str, Any]] = [{"user_id": user_id}]
+    if user_oid is not None:
+        or_clauses.append({"user_id": user_oid})
+    if email:
+        or_clauses.append({"email": email})
+    order = db["orders"].find_one(
+        {
+            "$or": or_clauses,
+            "status": {"$in": sorted(PAID_ORDER_STATUSES)},
+            "source": {"$in": ["stripe_webhook", "stripe_verified", "admin_manual"]},
+            "project_id": None,
+        }
+    )
+    return order is not None
+
+
 def _serialize_user_case(user: dict[str, Any]) -> dict[str, Any]:
     user_id = _normalize_object_id(user.get("_id")) or _normalize(user.get("id"))
     if not user_id:
@@ -4398,24 +4467,43 @@ def _serialize_user_case(user: dict[str, Any]) -> dict[str, Any]:
     role = _user_role_value(user)
     is_internal = _is_internal_user_document(user)
     status_value = _normalize(user.get("status")) or "active"
+    email = _normalize_email(user.get("email")) or None
+    has_project = _user_owns_project(user_id)
+    has_pending_purchase = False if has_project else _user_has_pending_verified_purchase(user_id, email)
+    account_type = _classify_user_account_type(
+        user,
+        is_internal=is_internal,
+        has_project=has_project,
+        has_pending_verified_purchase=has_pending_purchase,
+    )
     alerts: list[str] = []
     if status_value not in {"active", "enabled", ""}:
         alerts.append("user_inactive")
     if is_internal:
         alerts.append("internal_admin_identity")
+    if account_type == "Customer With Verified Purchase Pending Fulfillment":
+        alerts.append("verified_purchase_pending_fulfillment")
+
+    quick_actions = ["refresh_case_data"]
 
     return {
         "case_id": f"user:{user_id}",
         "project_id": None,
         "order_id": None,
         "name": _user_display_name(user),
-        "email": _normalize_email(user.get("email")) or None,
+        "email": email,
         "role": role,
-        "project": "User account",
-        "package": "Account",
-        "package_name": "Account",
-        "package_slug": "account",
-        "package_code": "account",
+        "account_type": account_type,
+        "project": "Active Project" if has_project else "No Project",
+        "package": "No Package Assigned",
+        "package_name": "No Package Assigned",
+        "package_slug": "",
+        "package_code": "",
+        "purchase": (
+            "Verified Purchase Pending Fulfillment"
+            if has_pending_purchase
+            else "No Verified Purchase Linked"
+        ),
         "package_normalization_status": "not_applicable",
         "lane": "admin" if is_internal else "customer",
         "project_lane": "admin" if is_internal else "customer",
@@ -4424,7 +4512,7 @@ def _serialize_user_case(user: dict[str, Any]) -> dict[str, Any]:
         "status": status_value,
         "alerts": alerts,
         "operator_guidance": _operator_guidance_items(alerts=alerts),
-        "quick_actions": ["refresh_case_data"],
+        "quick_actions": quick_actions,
         "mint_blocking_reasons": [],
         "updated_at": _serialize_datetime(user.get("updated_at") or user.get("last_login_at") or user.get("created_at")),
     }

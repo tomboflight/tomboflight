@@ -10,6 +10,7 @@ from pymongo.collection import Collection
 from pymongo.database import Database
 from pymongo.errors import OperationFailure
 
+from app.config import settings
 from app.core.package_catalog import get_package
 from app.core.package_mapping import normalize_package_code as normalize_mapped_package_code
 from app.database import get_database
@@ -33,6 +34,16 @@ AUTHORITATIVE_ORDER_SOURCES = {
 
 PAID_ORDER_STATUSES = {"paid", "complete", "completed", "succeeded"}
 PENDING_PUBLIC_ORDER_STATUS = "pending_confirmation"
+FULFILLMENT_PENDING = "pending_manual_fulfillment"
+FULFILLMENT_IN_PROGRESS = "fulfillment_in_progress"
+FULFILLMENT_COMPLETE = "fulfillment_complete"
+FULFILLMENT_ESCALATED = "payment_mismatch_escalated"
+FULFILLMENT_AUTO = "auto_provisioned"
+OPEN_FULFILLMENT_STATUSES = {FULFILLMENT_PENDING, FULFILLMENT_IN_PROGRESS, FULFILLMENT_ESCALATED}
+
+
+def manual_fulfillment_mode_enabled() -> bool:
+    return bool(getattr(settings, "manual_fulfillment_mode", True))
 logger = logging.getLogger(__name__)
 
 
@@ -350,6 +361,7 @@ def _serialize_order(order: dict[str, Any]) -> dict[str, Any]:
         "project_id": str(order["project_id"]) if order.get("project_id") else None,
         "stripe_session_id": order.get("stripe_session_id"),
         "stripe_payment_link_id": order.get("stripe_payment_link_id"),
+        "fulfillment_status": order.get("fulfillment_status"),
         "created_at": order["created_at"],
     }
 
@@ -453,9 +465,18 @@ def _create_verified_paid_package_order(
         "stripe_session_id": session_id,
         "created_at": datetime.now(UTC),
     }
+    manual_mode = manual_fulfillment_mode_enabled()
+    if manual_mode:
+        order_doc["fulfillment_status"] = FULFILLMENT_PENDING
     _set_if_present(order_doc, "stripe_payment_link_id", purchase.get("stripe_payment_link_id"))
+    _set_if_present(order_doc, "stripe_payment_intent_id", _normalize(session.get("payment_intent")) or None)
     result = orders.insert_one(order_doc)
     order_doc["_id"] = result.inserted_id
+
+    if manual_mode:
+        # Payment is verified and recorded, but package provisioning stays
+        # manually controlled through the admin fulfillment queue.
+        return _serialize_order(order_doc)
 
     order_doc = _attach_project_to_paid_package_order(
         order_id=result.inserted_id,
@@ -1424,13 +1445,22 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
         }
         _set_if_present(update_fields, "stripe_payment_link_id", stripe_payment_link_id)
         _set_if_present(update_fields, "campaign", campaign)
+        _set_if_present(update_fields, "stripe_payment_intent_id", _normalize(session.get("payment_intent")) or None)
+        manual_mode = manual_fulfillment_mode_enabled()
+        if (
+            manual_mode
+            and item_type == "package"
+            and not existing.get("fulfillment_status")
+            and not existing.get("project_id")
+        ):
+            update_fields["fulfillment_status"] = FULFILLMENT_PENDING
         orders.update_one({"_id": existing["_id"]}, {"$set": update_fields})
 
         order_doc = orders.find_one({"_id": existing["_id"]}) or {
             **existing,
             **update_fields,
         }
-        if item_type == "package" and not order_doc.get("project_id"):
+        if item_type == "package" and not manual_mode and not order_doc.get("project_id"):
             order_doc = _attach_project_to_paid_package_order(
                 order_id=existing["_id"],
                 order_doc=order_doc,
@@ -1441,7 +1471,7 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
                 stripe_session_id=session_id,
                 stripe_payment_link_id=stripe_payment_link_id,
             )
-        if item_type == "package":
+        if item_type == "package" and not manual_mode:
             _trigger_package_provisioning()
 
         return {
@@ -1472,13 +1502,17 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
         "stripe_session_id": session_id,
         "created_at": datetime.now(UTC),
     }
+    manual_mode = manual_fulfillment_mode_enabled()
+    if manual_mode and item_type == "package":
+        order_doc["fulfillment_status"] = FULFILLMENT_PENDING
     _set_if_present(order_doc, "stripe_payment_link_id", stripe_payment_link_id)
     _set_if_present(order_doc, "campaign", campaign)
+    _set_if_present(order_doc, "stripe_payment_intent_id", _normalize(session.get("payment_intent")) or None)
 
     result = orders.insert_one(order_doc)
     order_doc["_id"] = result.inserted_id
 
-    if item_type == "package":
+    if item_type == "package" and not manual_mode:
         target_project_id = _extract_target_project_id(session)
         order_doc = _attach_project_to_paid_package_order(
             order_id=result.inserted_id,
@@ -1506,7 +1540,7 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
                     stripe_subscription_id=_normalize(session.get("subscription")) or None,
                     stripe_customer_id=_normalize(session.get("customer")) or None,
                 )
-    if item_type == "package":
+    if item_type == "package" and not manual_mode:
         _trigger_package_provisioning()
 
     return {

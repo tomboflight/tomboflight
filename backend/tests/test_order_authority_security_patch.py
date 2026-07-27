@@ -248,6 +248,7 @@ class OrderAuthoritySecurityTests(unittest.TestCase):
         with (
             patch.object(order_service, "_get_orders_collection", return_value=orders),
             patch.object(order_service, "_retrieve_checkout_session", return_value=session),
+            patch.object(order_service, "manual_fulfillment_mode_enabled", return_value=False),
             patch.object(
                 order_service,
                 "_attach_project_to_paid_package_order",
@@ -262,6 +263,52 @@ class OrderAuthoritySecurityTests(unittest.TestCase):
         self.assertEqual(attach_mock.call_count, 1)
         self.assertEqual(provisioning_mock.call_count, 1)
         self.assertEqual(len([d for d in orders.docs if d.get("stripe_session_id") == "cs_test_paid_one"]), 1)
+
+    def test_manual_fulfillment_mode_records_paid_order_without_auto_provisioning(self):
+        orders = FakeOrdersCollection()
+        payload = SimpleNamespace(package_code="legacy_plus", stripe_session_id="cs_test_manual_one")
+        session = _paid_checkout_session(session_id="cs_test_manual_one")
+        with (
+            patch.object(order_service, "_get_orders_collection", return_value=orders),
+            patch.object(order_service, "_retrieve_checkout_session", return_value=session),
+            patch.object(order_service, "manual_fulfillment_mode_enabled", return_value=True),
+            patch.object(order_service, "_attach_project_to_paid_package_order") as attach_mock,
+            patch.object(order_service, "_trigger_package_provisioning") as provisioning_mock,
+        ):
+            first = order_service.create_order_for_user(self.user, payload)
+            second = order_service.create_order_for_user(self.user, payload)
+        self.assertEqual(first["status"], "paid")
+        self.assertEqual(first["source"], "stripe_verified")
+        self.assertEqual(first["fulfillment_status"], order_service.FULFILLMENT_PENDING)
+        self.assertIsNone(first["project_id"])
+        self.assertEqual(second["id"], first["id"])
+        attach_mock.assert_not_called()
+        provisioning_mock.assert_not_called()
+
+    def test_manual_fulfillment_mode_webhook_records_pending_fulfillment(self):
+        orders = FakeOrdersCollection()
+        event = {
+            "type": "checkout.session.completed",
+            "data": {"object": {"id": "cs_test_manual_evt"}},
+        }
+        session = _paid_checkout_session(session_id="cs_test_manual_evt")
+        with (
+            patch.object(order_service, "_get_orders_collection", return_value=orders),
+            patch.object(order_service, "_retrieve_checkout_session", return_value=session),
+            patch.object(order_service, "_get_user_by_email", return_value=self.user),
+            patch.object(order_service, "store_stripe_customer_reference"),
+            patch.object(order_service, "manual_fulfillment_mode_enabled", return_value=True),
+            patch.object(order_service, "_attach_project_to_paid_package_order") as attach_mock,
+            patch.object(order_service, "_trigger_package_provisioning") as provisioning_mock,
+        ):
+            result = order_service.upsert_order_from_stripe_event(event)
+        attach_mock.assert_not_called()
+        provisioning_mock.assert_not_called()
+        stored = orders.find_one({"stripe_session_id": "cs_test_manual_evt"})
+        self.assertIsNotNone(stored)
+        self.assertEqual(stored["status"], "paid")
+        self.assertEqual(stored["fulfillment_status"], order_service.FULFILLMENT_PENDING)
+        self.assertIsNone(result.get("project_id"))
 
     def test_repeated_webhook_delivery_is_idempotent(self):
         orders = FakeOrdersCollection()

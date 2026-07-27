@@ -19,6 +19,7 @@ from app.routes.admin_intake_submissions import (
 from app.routes.admin_continuity_preview import router as admin_continuity_preview_router
 from app.routes.asset_delivery import router as asset_delivery_router
 from app.routes.admin_control_center import router as admin_control_center_router
+from app.routes.admin_stripe_operations import router as admin_stripe_operations_router
 from app.routes.admin_maintenance import router as admin_maintenance_router
 from app.routes.audit_logs import router as audit_logs_router
 from app.routes.auth import router as auth_router
@@ -233,6 +234,7 @@ app.include_router(intake_submissions_router)
 app.include_router(admin_intake_submissions_router)
 app.include_router(admin_continuity_preview_router)
 app.include_router(admin_control_center_router)
+app.include_router(admin_stripe_operations_router)
 app.include_router(projects_router)
 app.include_router(project_entitlements_router)
 app.include_router(project_workflow_router)
