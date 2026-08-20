@@ -1,6 +1,13 @@
 # Tomb of Light Continuity Kernel (Proposed Architecture)
 
-Status: design draft (documentation-only, no behavior change)
+> Operational status (Phase 8): the covered admin repair and restricted CEO
+> actions now have an authenticated execution runtime, persistent evidence and
+> event records, role/category validation, idempotency enforcement, and an
+> emergency kill switch. See
+> `backend/docs/governance/continuity_kernel_phase8_operational_runtime.md`.
+
+Status: original architecture retained as the reference model; Phase 8 now
+implements the covered operational admin execution slice.
 
 The Continuity Kernel is the protected internal architecture layer that controls identity, package entitlement, workspace/co-owner access, uploads, verification, lineage data, viewer manifests, certificates, mint readiness, admin repair, and audit history.
 

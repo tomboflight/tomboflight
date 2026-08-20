@@ -59,6 +59,9 @@
     lastStatusMessage: "",
     diagnostics: null,
     fulfillmentItems: [],
+    kernelStatus: null,
+    kernelOperations: [],
+    kernelPendingIdempotency: {},
   };
   const DEFAULT_ROLE_KEY = "user";
 
@@ -602,6 +605,217 @@
       method: "POST",
       body: JSON.stringify(body || {}),
     });
+  }
+
+  function kernelIdempotencyKey(action, target) {
+    const suffix =
+      window.crypto && typeof window.crypto.randomUUID === "function"
+        ? window.crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const targetId = normalizeValue(
+      target && (target.project_id || target.case_id || target.user_id || target.officer_email || target.target_id),
+    );
+    return `kernel-${normalizeLower(action).replaceAll("-", "_")}-${targetId || "bulk"}-${suffix}`;
+  }
+
+  function promptExecutionReason(label, defaultReason) {
+    const reason = window.prompt(
+      `${label}: enter the operational reason that will be attached to the evidence packet.`,
+      defaultReason || "",
+    );
+    if (reason === null) return null;
+    const normalized = normalizeValue(reason);
+    if (normalized.length < 3) {
+      setPageStatus("A reason of at least 3 characters is required for governed execution.", "error");
+      return null;
+    }
+    return normalized;
+  }
+
+  async function submitGovernedOperation(action, target, parameters, reason) {
+    if (!state.kernelStatus || !state.kernelStatus.execution_enabled) {
+      throw new Error("Continuity Kernel execution is unavailable or disabled by the emergency kill switch.");
+    }
+    const normalizedAction = normalizeLower(action).replaceAll("-", "_");
+    const fingerprint = JSON.stringify({
+      action: normalizedAction,
+      target: target || {},
+      parameters: parameters || {},
+      reason,
+    });
+    const idempotencyKey =
+      state.kernelPendingIdempotency[fingerprint] || kernelIdempotencyKey(normalizedAction, target || {});
+    state.kernelPendingIdempotency[fingerprint] = idempotencyKey;
+    const payload = {
+      action: normalizedAction,
+      target: target || {},
+      parameters: parameters || {},
+      reason,
+      idempotency_key: idempotencyKey,
+    };
+    let operation;
+    if (state.kernelStatus.one_step_execution_allowed) {
+      operation = await postJson("/admin/control-center/kernel/execute", {
+        ...payload,
+        confirmed: true,
+        solo_founder_override_acknowledged: true,
+      });
+    } else {
+      operation = await postJson("/admin/control-center/kernel/operations", payload);
+    }
+    delete state.kernelPendingIdempotency[fingerprint];
+    return operation;
+  }
+
+  function kernelOperationMessage(operation, completedLabel) {
+    const payload = operation || {};
+    if (Array.isArray(payload.blocked_reasons) && payload.blocked_reasons.length) {
+      return `Operation ${shortId(payload.operation_id)} was blocked by preflight; no business write executed.`;
+    }
+    if (payload.state === "review_requested") {
+      return `Governed operation ${shortId(payload.operation_id)} submitted for officer approval.`;
+    }
+    if (payload.execution_outcome === "partial_failure") {
+      return `Operation ${shortId(payload.operation_id)} executed with ${payload.execution_failure_count || 0} recorded failure(s).`;
+    }
+    if (payload.evidence_recording_status === "incomplete") {
+      return `Operation ${shortId(payload.operation_id)} executed, but secondary audit evidence is incomplete and requires review.`;
+    }
+    return `${completedLabel} Kernel operation ${shortId(payload.operation_id)} captured the execution evidence.`;
+  }
+
+  function kernelOperationStatusType(operation) {
+    return operation &&
+      ((Array.isArray(operation.blocked_reasons) && operation.blocked_reasons.length > 0) ||
+        operation.execution_outcome === "partial_failure" ||
+        operation.evidence_recording_status === "incomplete")
+      ? "error"
+      : "success";
+  }
+
+  function renderKernelStatus() {
+    const node = document.querySelector("[data-admin-kernel-status]");
+    const label = document.querySelector("[data-admin-kernel-status-label]");
+    const meta = document.querySelector("[data-admin-kernel-status-meta]");
+    if (!node || !label || !meta) return;
+    const payload = state.kernelStatus;
+    if (!payload) {
+      node.dataset.state = "error";
+      label.textContent = "Operational runtime unavailable";
+      meta.textContent = " Governed writes are fail-closed.";
+      return;
+    }
+    const enabled = Boolean(payload.execution_enabled);
+    node.dataset.state = enabled ? "success" : "error";
+    label.textContent = enabled ? "Operational execution enabled" : "Emergency kill switch active";
+    const mode = payload.one_step_execution_allowed ? "CEO one-step execution" : "officer request workflow";
+    meta.textContent = ` v${payload.runtime_version || "—"} · ${payload.action_count || 0} actions · ${mode}`;
+  }
+
+  function renderKernelOperations() {
+    const node = document.querySelector("[data-admin-kernel-operations]");
+    if (!node) return;
+    const items = Array.isArray(state.kernelOperations) ? state.kernelOperations : [];
+    if (!items.length) {
+      node.innerHTML = '<p class="card-copy">No governed operations have been recorded yet.</p>';
+      return;
+    }
+    node.innerHTML = items
+      .map(function (operation) {
+        const canApprove = Boolean(
+            state.kernelStatus &&
+            state.kernelStatus.one_step_execution_allowed &&
+            operation.state === "review_requested" &&
+            (!Array.isArray(operation.blocked_reasons) || operation.blocked_reasons.length === 0),
+        );
+        const canClose = Boolean(
+          state.kernelStatus &&
+            state.kernelStatus.one_step_execution_allowed &&
+            operation.state === "apply_executed" &&
+            operation.execution_outcome !== "partial_failure" &&
+            operation.evidence_recording_status !== "incomplete",
+        );
+        return `
+          <div class="admin-priority-repair-item">
+            <span>
+              ${escapeHtml(titleize(operation.action))}
+              <small class="admin-id-ref">${escapeHtml(shortId(operation.target_id))}</small>
+            </span>
+            <strong>${escapeHtml(titleize(operation.state))}</strong>
+            ${
+              canApprove
+                ? `<button class="btn btn-primary" type="button" data-admin-kernel-approve-execute="${escapeHtml(operation.operation_id)}">Approve + Execute</button>`
+                : ""
+            }
+            ${
+              canClose
+                ? `<button class="btn btn-secondary" type="button" data-admin-kernel-close="${escapeHtml(operation.operation_id)}">Close Audit</button>`
+                : ""
+            }
+          </div>
+        `;
+      })
+      .join("");
+  }
+
+  async function loadKernelOperations() {
+    if (!state.kernelStatus) {
+      state.kernelOperations = [];
+      renderKernelOperations();
+      return;
+    }
+    try {
+      const payload = await fetchJson("/admin/control-center/kernel/operations?limit=12");
+      state.kernelOperations = Array.isArray(payload && payload.items) ? payload.items : [];
+    } catch (_error) {
+      state.kernelOperations = [];
+    }
+    renderKernelOperations();
+  }
+
+  async function loadKernelStatus() {
+    try {
+      state.kernelStatus = await fetchJson("/admin/control-center/kernel/status");
+    } catch (_error) {
+      state.kernelStatus = null;
+    }
+    renderKernelStatus();
+    await loadKernelOperations();
+  }
+
+  async function approveAndExecuteKernelOperation(operationId) {
+    const reason = promptExecutionReason("Approve and execute this governed operation");
+    if (reason === null) return;
+    if (!window.confirm("Approve and execute this operation against live business records?")) return;
+    setPageStatus("Approving and executing governed operation...", "info");
+    try {
+      await postJson(`/admin/control-center/kernel/operations/${encodeURIComponent(operationId)}/approve`, {
+        approval_reason: reason,
+        solo_founder_override_acknowledged: true,
+      });
+      const operation = await postJson(
+        `/admin/control-center/kernel/operations/${encodeURIComponent(operationId)}/execute`,
+        {},
+      );
+      await Promise.allSettled([loadKernelStatus(), loadOverview(), loadCases()]);
+      setPageStatus(
+        kernelOperationMessage(operation, "Execution completed."),
+        kernelOperationStatusType(operation),
+      );
+    } catch (error) {
+      setPageStatus(error.message || "Unable to approve and execute the governed operation.", "error");
+    }
+  }
+
+  async function closeKernelOperation(operationId) {
+    if (!window.confirm("Close the audit record for this completed operation?")) return;
+    try {
+      await postJson(`/admin/control-center/kernel/operations/${encodeURIComponent(operationId)}/close`, {});
+      await loadKernelStatus();
+      setPageStatus("Continuity operation audit closed.", "success");
+    } catch (error) {
+      setPageStatus(error.message || "Unable to close the Continuity audit record.", "error");
+    }
   }
 
   async function loadActiveImpersonation() {
@@ -2015,18 +2229,6 @@
       setPageStatus("Your role cannot run that bulk action.", "error");
       return;
     }
-    const endpointMap = {
-      "repair-missing-entitlements": "/admin/control-center/bulk/repair-missing-entitlements",
-      "assign-missing-lanes": "/admin/control-center/bulk/assign-missing-lanes",
-      "link-unlinked-paid-orders": "/admin/control-center/bulk/link-unlinked-paid-orders",
-      "normalize-broken-package-records": "/admin/control-center/bulk/normalize-broken-package-records",
-      "refresh-mint-readiness": "/admin/control-center/bulk/refresh-mint-readiness",
-      "repair-selected-records": "/admin/control-center/bulk/repair-selected-records",
-      "repair-all-safe-records": "/admin/control-center/bulk/repair-all-safe-records",
-    };
-    const endpoint = endpointMap[action];
-    if (!endpoint) return;
-
     const body = action === "repair-selected-records" ? selectedRepairIds() : { limit: 500 };
     if (
       action === "repair-selected-records" &&
@@ -2036,13 +2238,17 @@
       return;
     }
 
-    setPageStatus("Running bulk action...", "info");
+    const reason = promptExecutionReason(`Run ${titleize(action)}`);
+    if (reason === null) return;
+    if (!window.confirm("Submit this bulk operation to the Continuity Kernel for live execution?")) return;
+
+    setPageStatus("Submitting governed bulk operation...", "info");
     try {
-      await postJson(endpoint, body);
-      await Promise.allSettled([loadOverview(), loadCases()]);
-      setPageStatus("Bulk action completed.", "success");
+      const operation = await submitGovernedOperation(action, {}, body, reason);
+      await Promise.allSettled([loadKernelStatus(), loadOverview(), loadCases()]);
+      setPageStatus(kernelOperationMessage(operation, "Bulk action completed."), kernelOperationStatusType(operation));
     } catch (error) {
-      setPageStatus(error.message || "Bulk action failed.", "error");
+      setPageStatus(error.message || "Governed bulk action failed.", "error");
     }
   }
 
@@ -2123,18 +2329,33 @@
       return;
     }
     const caseId = state.selectedCaseId;
+    const isReadOnlyAction = action === "run_readiness_check" || action === "refresh_case_data";
+    let reason = "";
+    if (!isReadOnlyAction) {
+      reason = promptExecutionReason(`Run ${titleize(action)} for the selected case`);
+      if (reason === null) return;
+      if (!window.confirm("Submit this case operation to the Continuity Kernel for live execution?")) return;
+    }
     setPageStatus("Running case action...", "info");
     try {
-      await postJson(
-        `/admin/control-center/cases/${encodeURIComponent(caseId)}/actions/${encodeURIComponent(action)}`,
-        {},
-      );
+      const operation = isReadOnlyAction
+        ? await postJson(
+            `/admin/control-center/cases/${encodeURIComponent(caseId)}/actions/${encodeURIComponent(action)}`,
+            {},
+          )
+        : await submitGovernedOperation(action, { case_id: caseId }, {}, reason);
       await loadOverview();
       await loadCases();
+      if (!isReadOnlyAction) await loadKernelStatus();
       if (state.selectedCaseId === caseId) {
         await loadCaseWorkspace(caseId);
       }
-      setPageStatus("Case action completed.", "success");
+      setPageStatus(
+        isReadOnlyAction
+          ? "Case check completed."
+          : kernelOperationMessage(operation, "Case action completed."),
+        isReadOnlyAction ? "success" : kernelOperationStatusType(operation),
+      );
     } catch (error) {
       setPageStatus(error.message || "Case action failed.", "error");
     }
@@ -2173,43 +2394,44 @@
     return payload;
   }
 
+  async function runSuperAdminCreateAccount() {
+    if (!state.isSuperAdmin) return;
+    const fullName = normalizeValue(window.prompt("Customer full name:") || "");
+    const email = normalizeValue(window.prompt("Customer email:") || "");
+    if (!fullName || !email || !window.confirm(`Create customer account for ${email}?`)) return;
+    try {
+      await postJson("/admin/control-center/super-admin/users", { full_name: fullName, email });
+      await loadCases();
+      setPageStatus("Customer account created pending activation.", "success");
+    } catch (error) {
+      setPageStatus(error.message || "Unable to create account.", "error");
+    }
+  }
+
+  async function runSuperAdminTransferOwnership(projectId) {
+    const ownerNode = document.querySelector("[data-super-admin-new-owner-id]");
+    const newOwnerUserId = normalizeValue(ownerNode && ownerNode.value);
+    const reason = normalizeValue(window.prompt("Reason for ownership transfer:") || "");
+    if (!newOwnerUserId || !reason || !window.confirm("Confirm project ownership transfer?")) return;
+    try {
+      await postJson(`/admin/control-center/super-admin/projects/${encodeURIComponent(projectId)}/transfer-ownership`, {
+        new_owner_user_id: newOwnerUserId,
+        reason,
+        confirmed: true,
+      });
+      await loadCaseWorkspace(state.selectedCaseId);
+      setPageStatus("Project ownership transferred.", "success");
+    } catch (error) {
+      setPageStatus(error.message || "Unable to transfer ownership.", "error");
+    }
+  }
+
   async function runSuperAdminUserUpdate(userId) {
     if (!state.isSuperAdmin) {
       setPageStatus("Super Admin access is required.", "error");
       return;
     }
 
-    async function runSuperAdminCreateAccount() {
-      if (!state.isSuperAdmin) return;
-      const fullName = normalizeValue(window.prompt("Customer full name:") || "");
-      const email = normalizeValue(window.prompt("Customer email:") || "");
-      if (!fullName || !email || !window.confirm(`Create customer account for ${email}?`)) return;
-      try {
-        await postJson("/admin/control-center/super-admin/users", { full_name: fullName, email });
-        await loadCases();
-        setPageStatus("Customer account created pending activation.", "success");
-      } catch (error) {
-        setPageStatus(error.message || "Unable to create account.", "error");
-      }
-    }
-
-    async function runSuperAdminTransferOwnership(projectId) {
-      const ownerNode = document.querySelector("[data-super-admin-new-owner-id]");
-      const newOwnerUserId = normalizeValue(ownerNode && ownerNode.value);
-      const reason = normalizeValue(window.prompt("Reason for ownership transfer:") || "");
-      if (!newOwnerUserId || !reason || !window.confirm("Confirm project ownership transfer?")) return;
-      try {
-        await postJson(`/admin/control-center/super-admin/projects/${encodeURIComponent(projectId)}/transfer-ownership`, {
-          new_owner_user_id: newOwnerUserId,
-          reason,
-          confirmed: true,
-        });
-        await loadCaseWorkspace(state.selectedCaseId);
-        setPageStatus("Project ownership transferred.", "success");
-      } catch (error) {
-        setPageStatus(error.message || "Unable to transfer ownership.", "error");
-      }
-    }
     if (!window.confirm("Apply user profile and account updates?")) return;
     setPageStatus("Saving user updates...", "info");
     try {
@@ -2230,17 +2452,19 @@
       setPageStatus("Super Admin access is required.", "error");
       return;
     }
-    const reason = normalizeValue(window.prompt(`Reason for ${action}:`) || "");
-    if (!reason || !window.confirm(`Confirm ${action} for this account?`)) return;
+    const reason = promptExecutionReason(`${titleize(action)} this account`);
+    if (reason === null || !window.confirm(`Confirm ${action} for this account?`)) return;
     setPageStatus("Updating account status...", "info");
     try {
-      await postJson(
-        `/admin/control-center/super-admin/users/${encodeURIComponent(userId)}/status-action`,
-        { action, reason, confirmed: true },
+      const operation = await submitGovernedOperation(
+        "account_lifecycle",
+        { user_id: userId },
+        { lifecycle_action: action },
+        reason,
       );
-      await loadCases();
+      await Promise.allSettled([loadKernelStatus(), loadCases()]);
       if (state.selectedCaseId) await loadCaseWorkspace(state.selectedCaseId);
-      setPageStatus("Account status updated.", "success");
+      setPageStatus(kernelOperationMessage(operation, "Account status updated."), kernelOperationStatusType(operation));
     } catch (error) {
       setPageStatus(error.message || "Unable to update account status.", "error");
     }
@@ -2370,18 +2594,29 @@
       setPageStatus("Super Admin access is required.", "error");
       return;
     }
-    if (!window.confirm("Apply service controls while preserving Stripe purchase history?")) return;
+    const parameters = collectSuperAdminServicePayload();
+    const reason = normalizeValue(parameters.reason);
+    if (reason.length < 3) {
+      setPageStatus("A reason of at least 3 characters is required for service-control execution.", "error");
+      return;
+    }
+    if (!window.confirm("Apply service controls through the Continuity Kernel while preserving Stripe purchase history?")) return;
     setPageStatus("Applying service controls...", "info");
     try {
-      const payload = await postJson(
-        `/admin/control-center/super-admin/projects/${encodeURIComponent(projectId)}/service-controls/apply`,
-        { ...collectSuperAdminServicePayload(), confirmed: true },
+      const operation = await submitGovernedOperation(
+        "service_controls",
+        { project_id: projectId },
+        parameters,
+        reason,
       );
-      renderSuperAdminPackagePreview(payload || {});
+      renderSuperAdminPackagePreview(
+        operation.execution_result || operation.proposed_after_snapshot || operation || {},
+      );
       await loadOverview();
       await loadCases();
+      await loadKernelStatus();
       if (state.selectedCaseId) await loadCaseWorkspace(state.selectedCaseId);
-      setPageStatus("Service controls applied.", "success");
+      setPageStatus(kernelOperationMessage(operation, "Service controls applied."), kernelOperationStatusType(operation));
     } catch (error) {
       setPageStatus(error.message || "Unable to apply service controls.", "error");
     }
@@ -2393,42 +2628,73 @@
       return;
     }
 
-    if (!window.confirm("Apply package change and repair consistency across project/order/entitlements?")) return;
+    const parameters = collectSuperAdminPackagePayload();
+    const reason = normalizeValue(parameters.reason);
+    if (reason.length < 3) {
+      setPageStatus("A reason of at least 3 characters is required for package execution.", "error");
+      return;
+    }
+    if (!window.confirm("Apply the package change through the Continuity Kernel and repair consistency across project/order/entitlements?")) return;
     setPageStatus("Applying package change...", "info");
     try {
-      const payload = await postJson(
-        `/admin/control-center/super-admin/projects/${encodeURIComponent(projectId)}/package-change/apply`,
-        { ...collectSuperAdminPackagePayload(), confirmed: true },
+      const operation = await submitGovernedOperation(
+        "package_change",
+        { project_id: projectId },
+        parameters,
+        reason,
       );
-      renderSuperAdminPackagePreview(payload || {});
+      renderSuperAdminPackagePreview(
+        operation.execution_result || operation.proposed_after_snapshot || operation || {},
+      );
       await loadOverview();
       await loadCases();
+      await loadKernelStatus();
       if (state.selectedCaseId) await loadCaseWorkspace(state.selectedCaseId);
-      setPageStatus("Package change applied and synchronized.", "success");
+      setPageStatus(
+        kernelOperationMessage(operation, "Package change applied and synchronized."),
+        kernelOperationStatusType(operation),
+      );
     } catch (error) {
       setPageStatus(error.message || "Unable to apply package change.", "error");
     }
+  }
 
-    async function runSuperAdminPackageLifecycle(projectId, action, previewOnly) {
-      if (!state.isSuperAdmin) return;
-      const reason = previewOnly ? "" : normalizeValue(window.prompt(`Reason to ${action} this package:`) || "");
-      if (!previewOnly && (!reason || !window.confirm(`Confirm package ${action}?`))) return;
-      const endpoint = previewOnly
-        ? `/admin/control-center/super-admin/projects/${encodeURIComponent(projectId)}/package-revoke/preview`
-        : action === "restore"
-          ? `/admin/control-center/super-admin/projects/${encodeURIComponent(projectId)}/package-restore`
-          : `/admin/control-center/super-admin/projects/${encodeURIComponent(projectId)}/package-revoke/apply`;
+  async function runSuperAdminPackageLifecycle(projectId, action, previewOnly) {
+    if (!state.isSuperAdmin) return;
+    if (previewOnly) {
       try {
-        const payload = await postJson(endpoint, previewOnly ? {} : { reason, confirmed: true });
+        const payload = await postJson(
+          `/admin/control-center/super-admin/projects/${encodeURIComponent(projectId)}/package-revoke/preview`,
+          {},
+        );
         renderSuperAdminPackagePreview(payload || {});
-        if (!previewOnly) {
-          await Promise.allSettled([loadOverview(), loadCases()]);
-          if (state.selectedCaseId) await loadCaseWorkspace(state.selectedCaseId);
-        }
-        setPageStatus(previewOnly ? "Package revocation preview ready." : `Package ${action} completed.`, "success");
+        setPageStatus("Package revocation preview ready.", "success");
       } catch (error) {
-        setPageStatus(error.message || `Unable to ${action} package.`, "error");
+        setPageStatus(error.message || "Unable to preview package revocation.", "error");
       }
+      return;
+    }
+
+    const reason = promptExecutionReason(`${titleize(action)} this package`);
+    if (reason === null || !window.confirm(`Confirm package ${action} through the Continuity Kernel?`)) return;
+    try {
+      const operation = await submitGovernedOperation(
+        action === "restore" ? "package_restore" : "package_revoke",
+        { project_id: projectId },
+        {},
+        reason,
+      );
+      renderSuperAdminPackagePreview(
+        operation.execution_result || operation.proposed_after_snapshot || operation || {},
+      );
+      await Promise.allSettled([loadKernelStatus(), loadOverview(), loadCases()]);
+      if (state.selectedCaseId) await loadCaseWorkspace(state.selectedCaseId);
+      setPageStatus(
+        kernelOperationMessage(operation, `Package ${action} completed.`),
+        kernelOperationStatusType(operation),
+      );
+    } catch (error) {
+      setPageStatus(error.message || `Unable to ${action} package.`, "error");
     }
   }
 
@@ -2470,14 +2736,18 @@
     }
     setPageStatus("Applying super admin repair...", "info");
     try {
-      await postJson(
-        `/admin/control-center/super-admin/cases/${encodeURIComponent(caseId)}/repair`,
-        payload,
+      const operation = await submitGovernedOperation(
+        "case_repair",
+        { case_id: caseId },
+        { repair_action: payload.action, repair_payload: payload },
+        payload.reason,
       );
-      await loadOverview();
-      await loadCases();
+      await Promise.allSettled([loadKernelStatus(), loadOverview(), loadCases()]);
       if (state.selectedCaseId) await loadCaseWorkspace(state.selectedCaseId);
-      setPageStatus("Super admin repair completed and logged.", "success");
+      setPageStatus(
+        kernelOperationMessage(operation, "Super admin repair completed and logged."),
+        kernelOperationStatusType(operation),
+      );
     } catch (error) {
       setPageStatus(error.message || "Unable to complete super admin repair.", "error");
     }
@@ -2499,10 +2769,32 @@
           bootstrapAccessAndData();
         }
 
-        if (target.closest("[data-super-admin-create-account]")) {
-          runSuperAdminCreateAccount();
-          return;
-        }
+        return;
+      }
+
+      const superAdminCreateAccount = target.closest("[data-super-admin-create-account]");
+      if (superAdminCreateAccount) {
+        runSuperAdminCreateAccount();
+        return;
+      }
+
+      const kernelRefresh = target.closest("[data-admin-kernel-refresh]");
+      if (kernelRefresh) {
+        loadKernelStatus();
+        return;
+      }
+
+      const kernelApproveExecute = target.closest("[data-admin-kernel-approve-execute]");
+      if (kernelApproveExecute) {
+        const operationId = kernelApproveExecute.getAttribute("data-admin-kernel-approve-execute");
+        if (operationId) approveAndExecuteKernelOperation(operationId);
+        return;
+      }
+
+      const kernelClose = target.closest("[data-admin-kernel-close]");
+      if (kernelClose) {
+        const operationId = kernelClose.getAttribute("data-admin-kernel-close");
+        if (operationId) closeKernelOperation(operationId);
         return;
       }
 
@@ -2722,7 +3014,7 @@
     if (refreshButton) {
       refreshButton.addEventListener("click", async function () {
         setPageStatus("Refreshing customer case console...", "info");
-        await Promise.allSettled([loadOverview(), loadCases()]);
+        await Promise.allSettled([loadKernelStatus(), loadOverview(), loadCases()]);
         setPageStatus("Customer case console refreshed.", "success");
       });
     }
@@ -2774,6 +3066,7 @@
       if (state.isSuperAdmin) {
         await loadPackageOptions();
       }
+      await loadKernelStatus();
       await loadActiveImpersonation();
       startImpersonationTicker();
       clearBootstrapError();
