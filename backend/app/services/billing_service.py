@@ -155,7 +155,11 @@ def store_stripe_customer_reference(
         )
 
 
-def _ensure_stripe_customer_for_user(user: dict[str, Any]) -> dict[str, Any]:
+def _ensure_stripe_customer_for_user(
+    user: dict[str, Any],
+    *,
+    idempotency_key: str = "",
+) -> dict[str, Any]:
     _require_stripe_secret_key()
     document = _get_user_document(user)
     user_id = _current_user_id(document)
@@ -182,6 +186,9 @@ def _ensure_stripe_customer_for_user(user: dict[str, Any]) -> dict[str, Any]:
         create_payload["email"] = email
     if full_name:
         create_payload["name"] = full_name
+    normalized_idempotency_key = _normalize_text(idempotency_key)
+    if normalized_idempotency_key:
+        create_payload["idempotency_key"] = normalized_idempotency_key[:255]
 
     created_customer = stripe.Customer.create(**create_payload)
     customer_dict = _stripe_to_dict(created_customer)

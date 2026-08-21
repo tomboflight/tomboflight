@@ -305,5 +305,106 @@ class TestContinuityRuntimeService(unittest.TestCase):
         self.assertTrue(any(item[1].get("name") == "continuity_event_id_unique" for item in event_indexes))
 
 
+class TestContinuityRuntimeControlSurfaceAdapters(unittest.TestCase):
+    def test_phase9_registers_every_live_control_surface_mutation(self) -> None:
+        expected = {
+            "manual_fulfillment",
+            "stripe_operation",
+            "customer_account_create",
+            "user_profile_update",
+            "user_password_reset",
+            "project_ownership_transfer",
+            "impersonation_start",
+            "impersonation_stop",
+        }
+        self.assertEqual(runtime.RUNTIME_VERSION, "9.0.0")
+        self.assertEqual(len(runtime.ACTION_SPECS), 35)
+        self.assertTrue(expected.issubset(runtime.ACTION_SPECS))
+
+    def test_manual_fulfillment_adapter_preserves_kernel_idempotency(self) -> None:
+        actor = {"_id": "ceo-1", "email": CEO_MASTER_ADMIN_EMAIL}
+        with patch.object(
+            runtime.manual_fulfillment_service,
+            "execute_fulfillment_action",
+            return_value={"fulfillment_status": "completed"},
+        ) as execute:
+            result = runtime._invoke_action(
+                "manual_fulfillment",
+                {"order_id": "order-1"},
+                {
+                    "fulfillment_action": "complete_fulfillment",
+                    "reason": "Complete verified order",
+                    "continuity_idempotency_key": "kernel-order-1",
+                },
+                actor,
+            )
+        self.assertEqual(result["fulfillment_status"], "completed")
+        execute.assert_called_once_with(
+            actor,
+            order_id="order-1",
+            action="complete_fulfillment",
+            reason="Complete verified order",
+            idempotency_key="kernel-order-1",
+        )
+
+    def test_stripe_adapter_passes_kernel_idempotency_to_external_write(self) -> None:
+        actor = {"_id": "ceo-1", "email": CEO_MASTER_ADMIN_EMAIL}
+        with patch.object(
+            runtime.stripe_admin_operations_service,
+            "ensure_customer",
+            return_value={"customer_id": "cus_1"},
+        ) as execute:
+            result = runtime._invoke_action(
+                "stripe_operation",
+                {"target_id": "customer@example.com"},
+                {
+                    "stripe_action": "ensure_customer",
+                    "customer_email": "customer@example.com",
+                    "reason": "Create billing profile",
+                    "continuity_idempotency_key": "kernel-stripe-1",
+                },
+                actor,
+            )
+        self.assertEqual(result["customer_id"], "cus_1")
+        execute.assert_called_once_with(
+            admin_user=actor,
+            reason="Create billing profile",
+            idempotency_key="kernel-stripe-1",
+            customer_email="customer@example.com",
+        )
+
+    def test_password_reset_adapter_never_needs_raw_reset_token(self) -> None:
+        actor = {
+            "_id": "ceo-1",
+            "email": CEO_MASTER_ADMIN_EMAIL,
+            "full_name": "CEO Operator",
+        }
+        with patch.object(
+            runtime,
+            "admin_issue_password_reset",
+            return_value={"success": True, "delivery_mode": "email"},
+        ) as execute:
+            result = runtime._invoke_action(
+                "user_password_reset",
+                {"user_id": "user-1"},
+                {"reason": "Customer requested secure reset"},
+                actor,
+            )
+        self.assertNotIn("reset_token", result)
+        execute.assert_called_once_with(
+            "user-1",
+            admin_user_id="ceo-1",
+            admin_display="CEO Operator",
+        )
+
+    def test_delivery_failure_marks_execution_as_partial_failure(self) -> None:
+        self.assertEqual(
+            runtime._execution_failure_count(
+                {"delivery_sent": False, "failure_count": 1}
+            ),
+            1,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

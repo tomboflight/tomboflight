@@ -10,6 +10,13 @@ from app.services import household_access_service
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 AUDIT_CACHE_VERSION = "20260509-audit"
+PORTAL_CACHE_OVERRIDES = {
+    "dashboard.html": {
+        "styles.css": "20260713-livefix3",
+        "auth.js": "20260713-livefix3",
+        "dashboard-intake.js": "20260713-livefix2",
+    },
+}
 AUDITED_PORTAL_PAGES = [
     "dashboard.html",
     "upload-hub.html",
@@ -107,8 +114,15 @@ class CustomerDashboardIntegrityTests(unittest.TestCase):
         for page in AUDITED_PORTAL_PAGES:
             with self.subTest(page=page):
                 source = (REPO_ROOT / page).read_text(encoding="utf-8")
-                self.assertIn(f"styles.css?v={AUDIT_CACHE_VERSION}", source)
-                self.assertIn(f"auth.js?v={AUDIT_CACHE_VERSION}", source)
+                overrides = PORTAL_CACHE_OVERRIDES.get(page, {})
+                self.assertIn(
+                    f"styles.css?v={overrides.get('styles.css', AUDIT_CACHE_VERSION)}",
+                    source,
+                )
+                self.assertIn(
+                    f"auth.js?v={overrides.get('auth.js', AUDIT_CACHE_VERSION)}",
+                    source,
+                )
 
     def test_changed_page_scripts_use_audit_cache_versions(self):
         expected_scripts = {
@@ -124,7 +138,11 @@ class CustomerDashboardIntegrityTests(unittest.TestCase):
         for page, script in expected_scripts.items():
             with self.subTest(page=page):
                 source = (REPO_ROOT / page).read_text(encoding="utf-8")
-                self.assertIn(f"{script}?v={AUDIT_CACHE_VERSION}", source)
+                expected_version = PORTAL_CACHE_OVERRIDES.get(page, {}).get(
+                    script,
+                    AUDIT_CACHE_VERSION,
+                )
+                self.assertIn(f"{script}?v={expected_version}", source)
 
     def test_dashboard_members_access_link_points_to_household_access(self):
         source = (REPO_ROOT / "dashboard.html").read_text(encoding="utf-8")

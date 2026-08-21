@@ -14,6 +14,12 @@ class UploadScanResult:
     detail: str = ""
 
 
+def _must_fail_closed() -> bool:
+    environment = str(settings.environment or "development").strip().lower()
+    production = environment not in {"development", "dev", "local", "test"}
+    return production or bool(settings.upload_scan_fail_closed)
+
+
 def _within_upload_root(path: Path) -> bool:
     try:
         upload_root = Path(settings.upload_root_path).resolve()
@@ -66,18 +72,23 @@ def scan_uploaded_file(path: str) -> UploadScanResult:
             detail = "scanner_command_execution_disabled_use_upload_scan_hook"
         else:
             detail = "scanner_not_configured"
-        if bool(settings.upload_scan_fail_closed):
+        if _must_fail_closed():
             return UploadScanResult(status="error", detail=detail)
         return UploadScanResult(status="skipped", detail=detail)
 
     try:
         result = _coerce_result(hook(file_path))
     except Exception as exc:
-        if bool(settings.upload_scan_fail_closed):
+        if _must_fail_closed():
             return UploadScanResult(status="error", detail=f"scanner_error:{exc}")
         return UploadScanResult(status="skipped", detail=f"scanner_error:{exc}")
 
     normalized_status = str(result.status or "").strip().lower()
+    if normalized_status == "skipped" and _must_fail_closed():
+        return UploadScanResult(
+            status="error",
+            detail=result.detail or "scanner_skipped_without_clean_verdict",
+        )
     if normalized_status in {"clean", "infected", "error", "skipped"}:
         return UploadScanResult(status=normalized_status, detail=result.detail)
     return UploadScanResult(status="error", detail="invalid_scanner_status")

@@ -600,7 +600,7 @@ def admin_control_bulk_action_allowed(
 # Bumped alongside the static frontend cache-busting query string
 # (see admin-control-center.html / dashboard.html `?v=` suffix) whenever a
 # hotfix ships to the admin control center or dashboard assets.
-FRONTEND_ASSET_REVISION = "20260727-masterops1"
+FRONTEND_ASSET_REVISION = "20260821-phase9"
 
 
 def _backend_release_identifier() -> str:
@@ -3649,6 +3649,43 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
     }
 
 
+def filter_admin_console_overview_for_access(
+    payload: dict[str, Any],
+    current_user: dict[str, Any],
+) -> dict[str, Any]:
+    """Return only the overview domains authorized for the officer role.
+
+    The browser already hides disallowed rails, but the API must enforce the
+    same boundary so hidden finance, operations, and customer-repair data
+    cannot be recovered by calling the overview endpoint directly.
+    """
+    profile = admin_control_access_profile(current_user)
+    role_key = _normalize(profile.get("role_key")).lower()
+    if bool(profile.get("is_wildcard")) or role_key in {
+        "ceo_master_admin",
+        "super_admin",
+        "executive_tech_admin",
+    }:
+        return payload
+
+    filtered: dict[str, Any] = {
+        "summary": {},
+        "finance_sections": {},
+        "marketing_sections": {},
+        "operations_sections": {},
+        "priority_repairs": {},
+        "mismatches": [],
+        "system_health": {},
+    }
+    if role_key == "finance_admin":
+        filtered["finance_sections"] = dict(payload.get("finance_sections") or {})
+    elif role_key == "operations_admin":
+        filtered["operations_sections"] = dict(payload.get("operations_sections") or {})
+    elif role_key == "marketing_admin":
+        filtered["marketing_sections"] = dict(payload.get("marketing_sections") or {})
+    return filtered
+
+
 def export_operations_report() -> dict[str, Any]:
     payload = admin_console_overview(limit=200)
     return {
@@ -5407,7 +5444,7 @@ def _impersonation_doc_to_payload(document: dict[str, Any] | None) -> dict[str, 
         "editing_enabled": bool(document.get("editing_enabled")),
         "editing_enabled_at": _serialize_datetime(document.get("editing_enabled_at")),
         "editing_reason": _normalize(document.get("editing_reason")) or None,
-        "banner": f"Viewing Tomb of Light as {_normalize(document.get('impersonated_customer_name')) or 'Customer'}",
+        "banner": f"Read-only customer context for {_normalize(document.get('impersonated_customer_name')) or 'Customer'}",
     }
 
 

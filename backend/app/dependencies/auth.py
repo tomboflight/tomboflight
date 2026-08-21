@@ -469,9 +469,12 @@ def get_current_user(
             detail="Session has been revoked. Please log in again.",
         )
 
-    if _has_internal_admin_access(normalized_user) and bool(
-        normalized_user.get("mfa_enabled")
-    ):
+    if _has_internal_admin_access(normalized_user):
+        if not bool(normalized_user.get("mfa_enabled")):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="MFA enrollment is required for internal administrator accounts.",
+            )
         if not bool(payload.get("mfa")):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,

@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://tomboflight-api.onrender.com https://*.onrender.com http://127.0.0.1:* http://localhost:*; media-src 'self' blob: https:; worker-src 'self' blob:; frame-src 'self' https:; form-action 'self' https://buy.stripe.com; upgrade-insecure-requests" />
 
     <title>Security | Tomb of Light</title>
 
@@ -132,37 +133,64 @@
               </article>
 
               <article class="section-card">
-                <span class="eyebrow">Website and Platform Protections</span>
-                <h2>
-                  Public-facing protections begin with disciplined fundamentals.
-                </h2>
+                <span class="eyebrow">Implemented Security Controls</span>
+                <h2>Current safeguards protect accounts, customer workspaces, payments, uploads, and administrator actions.</h2>
+                <p class="card-copy">The controls below describe the implemented Tomb of Light application posture as of August 21, 2026.</p>
 
                 <div class="feature-strip">
                   <article class="policy-card">
-                    <h3>Encrypted Website Sessions</h3>
+                    <h3>Account and Sign-In Protection</h3>
                     <p class="card-copy">
-                      Tomb of Light expects public website traffic to be
-                      delivered over encrypted connections to help protect
-                      information in transit.
+                      Passwords are one-way hashed with bcrypt. New passwords require at least 12 characters. Sign-in and verification endpoints use rate limits and account lockouts, and internal administrator accounts require authenticator-based multi-factor authentication.
                     </p>
                   </article>
 
                   <article class="policy-card">
-                    <h3>Controlled Administrative Access</h3>
+                    <h3>Time-Limited, Revocable Sessions</h3>
                     <p class="card-copy">
-                      Access to internal systems and platform-management
-                      functions is intended to be limited to authorized
-                      personnel or service providers with a legitimate business
-                      purpose.
+                      Authenticated sessions are signed and time-limited. Logout, password changes, and security resets revoke prior sessions server-side. Browser bearer credentials and account context are kept within the active browser tab instead of persistent local storage.
                     </p>
                   </article>
 
                   <article class="policy-card">
-                    <h3>Security Review Mindset</h3>
+                    <h3>Server-Enforced Access Boundaries</h3>
                     <p class="card-copy">
-                      Tomb of Light continues to review workflows, system
-                      exposure, and operating practices to reduce unnecessary
-                      risk and strengthen platform stewardship over time.
+                      Role and permission checks are enforced by the API, not only by hidden interface controls. Customer access is scoped by account, project, active entitlement, workspace membership, and assigned capabilities. Officer dashboards are reduced to their authorized operational domain.
+                    </p>
+                  </article>
+
+                  <article class="policy-card">
+                    <h3>Governed Administrator Execution</h3>
+                    <p class="card-copy">
+                      Live Control Center writes run through the Continuity Kernel with a named action, reason, confirmation, idempotency protection, before-and-after evidence, audit events, and an emergency execution kill switch. Customer preview remains read-only; edits use explicit governed operations.
+                    </p>
+                  </article>
+
+                  <article class="policy-card">
+                    <h3>Upload Controls and Quarantine</h3>
+                    <p class="card-copy">
+                      Uploads are restricted by supported file types and size limits. Malware scanning is fail-closed by default: infected files, scanner errors, or unavailable scanning are quarantined and blocked from ordinary download rather than treated as safe.
+                    </p>
+                  </article>
+
+                  <article class="policy-card">
+                    <h3>Payment Data Separation</h3>
+                    <p class="card-copy">
+                      Card entry occurs on Stripe-hosted payment surfaces. Tomb of Light does not accept or store raw card numbers or CVC values. Payment events use Stripe signature verification and idempotent processing, while administrative Stripe writes are governed and audit logged.
+                    </p>
+                  </article>
+
+                  <article class="policy-card">
+                    <h3>Transport and Browser Protections</h3>
+                    <p class="card-copy">
+                      Tomb of Light uses HTTPS for information in transit. The API applies transport, anti-sniffing, anti-framing, referrer, permissions, and no-store headers. Website pages apply a Content Security Policy that limits executable scripts and network connections to approved sources.
+                    </p>
+                  </article>
+
+                  <article class="policy-card">
+                    <h3>Private-by-Default Legacy Content</h3>
+                    <p class="card-copy">
+                      Private workspace materials are not published or placed on-chain by default. Public or collectible workflows use separate readiness and approval gates intended to limit output to approved public-safe material and metadata.
                     </p>
                   </article>
                 </div>
@@ -291,6 +319,9 @@
                   account system can be guaranteed to remain fully protected at
                   all times.
                 </p>
+                <p class="card-copy">
+                  Tomb of Light does not claim SOC 2, ISO 27001, HIPAA, PCI DSS certification, end-to-end encryption, or another independent security certification unless a current written statement expressly confirms it. Card processing is delegated to Stripe-hosted systems, but that does not make the entire Tomb of Light platform PCI certified.
+                </p>
               </article>
 
               <article class="cta-panel cta-panel-premium">
@@ -386,6 +417,6 @@
       </div>
     </div>
 
-    <script src="app.js?v=20260507-434"></script>
+    <script src="app.js?v=20260821-phase9"></script>
   </body>
 </html>

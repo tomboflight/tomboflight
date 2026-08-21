@@ -47,6 +47,13 @@ def _require_reason(reason: str) -> str:
     return normalized
 
 
+def _idempotency_options(idempotency_key: str, suffix: str) -> dict[str, str]:
+    normalized = _normalize(idempotency_key)
+    if not normalized:
+        return {}
+    return {"idempotency_key": f"{normalized}:{suffix}"[:255]}
+
+
 def _find_customer_user(customer_email: str) -> dict[str, Any]:
     email = _normalize(customer_email).lower()
     if not email:
@@ -88,10 +95,19 @@ def _safe_card_metadata(payment_method: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def ensure_customer(admin_user: dict[str, Any], *, customer_email: str, reason: str) -> dict[str, Any]:
+def ensure_customer(
+    admin_user: dict[str, Any],
+    *,
+    customer_email: str,
+    reason: str,
+    idempotency_key: str = "",
+) -> dict[str, Any]:
     reason = _require_reason(reason)
     user = _find_customer_user(customer_email)
-    customer = _ensure_stripe_customer_for_user(user)
+    customer = _ensure_stripe_customer_for_user(
+        user,
+        idempotency_key=f"{_normalize(idempotency_key)}:customer" if _normalize(idempotency_key) else "",
+    )
     customer_id = _normalize(customer.get("id"))
     _audit(admin_user, action="ensure_customer", target_id=customer_id, reason=reason,
            details={"customer_email": _normalize(customer_email).lower()})
@@ -119,6 +135,7 @@ def create_payment_link(
     price_id: str,
     quantity: int = 1,
     reason: str,
+    idempotency_key: str = "",
 ) -> dict[str, Any]:
     reason = _require_reason(reason)
     price_id = _normalize(price_id)
@@ -129,6 +146,7 @@ def create_payment_link(
     link = _stripe_to_dict(
         stripe.PaymentLink.create(
             line_items=[{"price": price_id, "quantity": max(1, int(quantity))}],
+            **_idempotency_options(idempotency_key, "payment_link"),
         )
     )
     link_id = _normalize(link.get("id"))
@@ -151,6 +169,7 @@ def create_and_send_invoice(
     description: str,
     days_until_due: int = 7,
     reason: str,
+    idempotency_key: str = "",
 ) -> dict[str, Any]:
     reason = _require_reason(reason)
     if int(amount_cents) <= 0:
@@ -160,7 +179,10 @@ def create_and_send_invoice(
         raise ValueError("An invoice line description is required.")
     user = _find_customer_user(customer_email)
     _require_stripe_secret_key()
-    customer = _ensure_stripe_customer_for_user(user)
+    customer = _ensure_stripe_customer_for_user(
+        user,
+        idempotency_key=f"{_normalize(idempotency_key)}:customer" if _normalize(idempotency_key) else "",
+    )
     customer_id = _normalize(customer.get("id"))
     invoice = _stripe_to_dict(
         stripe.Invoice.create(
@@ -168,6 +190,7 @@ def create_and_send_invoice(
             collection_method="send_invoice",
             days_until_due=max(1, int(days_until_due)),
             auto_advance=False,
+            **_idempotency_options(idempotency_key, "invoice"),
         )
     )
     stripe.InvoiceItem.create(
@@ -176,9 +199,20 @@ def create_and_send_invoice(
         currency="usd",
         description=description,
         invoice=invoice["id"],
+        **_idempotency_options(idempotency_key, "invoice_item"),
     )
-    finalized = _stripe_to_dict(stripe.Invoice.finalize_invoice(invoice["id"]))
-    sent = _stripe_to_dict(stripe.Invoice.send_invoice(finalized["id"]))
+    finalized = _stripe_to_dict(
+        stripe.Invoice.finalize_invoice(
+            invoice["id"],
+            **_idempotency_options(idempotency_key, "invoice_finalize"),
+        )
+    )
+    sent = _stripe_to_dict(
+        stripe.Invoice.send_invoice(
+            finalized["id"],
+            **_idempotency_options(idempotency_key, "invoice_send"),
+        )
+    )
     _audit(admin_user, action="create_and_send_invoice", target_id=_normalize(sent.get("id")), reason=reason,
            details={"customer_id": customer_id, "amount_cents": int(amount_cents)})
     return {
@@ -195,6 +229,7 @@ def create_subscription(
     customer_email: str,
     price_id: str,
     reason: str,
+    idempotency_key: str = "",
 ) -> dict[str, Any]:
     reason = _require_reason(reason)
     price_id = _normalize(price_id)
@@ -202,7 +237,10 @@ def create_subscription(
         raise ValueError("A valid Stripe price id (price_...) is required.")
     user = _find_customer_user(customer_email)
     _require_stripe_secret_key()
-    customer = _ensure_stripe_customer_for_user(user)
+    customer = _ensure_stripe_customer_for_user(
+        user,
+        idempotency_key=f"{_normalize(idempotency_key)}:customer" if _normalize(idempotency_key) else "",
+    )
     customer_id = _normalize(customer.get("id"))
     subscription = _stripe_to_dict(
         stripe.Subscription.create(
@@ -210,6 +248,7 @@ def create_subscription(
             items=[{"price": price_id}],
             collection_method="send_invoice",
             days_until_due=7,
+            **_idempotency_options(idempotency_key, "subscription_create"),
         )
     )
     _audit(admin_user, action="create_subscription", target_id=_normalize(subscription.get("id")), reason=reason,
@@ -235,6 +274,7 @@ def change_subscription_price(
     subscription_id: str,
     price_id: str,
     reason: str,
+    idempotency_key: str = "",
 ) -> dict[str, Any]:
     reason = _require_reason(reason)
     price_id = _normalize(price_id)
@@ -249,6 +289,7 @@ def change_subscription_price(
             subscription["id"],
             items=[{"id": items[0]["id"], "price": price_id}],
             proration_behavior="create_prorations",
+            **_idempotency_options(idempotency_key, "subscription_change"),
         )
     )
     _audit(admin_user, action="change_subscription_price", target_id=subscription["id"], reason=reason,
@@ -256,24 +297,41 @@ def change_subscription_price(
     return {"subscription_id": subscription["id"], "status": _normalize(updated.get("status")), "price_id": price_id}
 
 
-def pause_subscription(admin_user: dict[str, Any], *, subscription_id: str, reason: str) -> dict[str, Any]:
+def pause_subscription(
+    admin_user: dict[str, Any],
+    *,
+    subscription_id: str,
+    reason: str,
+    idempotency_key: str = "",
+) -> dict[str, Any]:
     reason = _require_reason(reason)
     subscription = _retrieve_subscription(subscription_id)
     updated = _stripe_to_dict(
         stripe.Subscription.modify(
             subscription["id"],
             pause_collection={"behavior": "keep_as_draft"},
+            **_idempotency_options(idempotency_key, "subscription_pause"),
         )
     )
     _audit(admin_user, action="pause_subscription", target_id=subscription["id"], reason=reason)
     return {"subscription_id": subscription["id"], "paused": True, "status": _normalize(updated.get("status"))}
 
 
-def resume_subscription(admin_user: dict[str, Any], *, subscription_id: str, reason: str) -> dict[str, Any]:
+def resume_subscription(
+    admin_user: dict[str, Any],
+    *,
+    subscription_id: str,
+    reason: str,
+    idempotency_key: str = "",
+) -> dict[str, Any]:
     reason = _require_reason(reason)
     subscription = _retrieve_subscription(subscription_id)
     updated = _stripe_to_dict(
-        stripe.Subscription.modify(subscription["id"], pause_collection="")
+        stripe.Subscription.modify(
+            subscription["id"],
+            pause_collection="",
+            **_idempotency_options(idempotency_key, "subscription_resume"),
+        )
     )
     _audit(admin_user, action="resume_subscription", target_id=subscription["id"], reason=reason)
     return {"subscription_id": subscription["id"], "paused": False, "status": _normalize(updated.get("status"))}
@@ -286,17 +344,27 @@ def cancel_subscription(
     at_period_end: bool = True,
     confirm: bool = False,
     reason: str,
+    idempotency_key: str = "",
 ) -> dict[str, Any]:
     reason = _require_reason(reason)
     subscription = _retrieve_subscription(subscription_id)
     if at_period_end:
         updated = _stripe_to_dict(
-            stripe.Subscription.modify(subscription["id"], cancel_at_period_end=True)
+            stripe.Subscription.modify(
+                subscription["id"],
+                cancel_at_period_end=True,
+                **_idempotency_options(idempotency_key, "subscription_cancel_period_end"),
+            )
         )
     else:
         if not confirm:
             raise ValueError("Immediate cancellation requires explicit confirmation.")
-        updated = _stripe_to_dict(stripe.Subscription.cancel(subscription["id"]))
+        updated = _stripe_to_dict(
+            stripe.Subscription.cancel(
+                subscription["id"],
+                **_idempotency_options(idempotency_key, "subscription_cancel_now"),
+            )
+        )
     _audit(admin_user, action="cancel_subscription", target_id=subscription["id"], reason=reason,
            details={"at_period_end": bool(at_period_end)})
     return {
@@ -311,24 +379,35 @@ def send_payment_method_update_link(
     *,
     customer_email: str,
     reason: str,
+    idempotency_key: str = "",
 ) -> dict[str, Any]:
     reason = _require_reason(reason)
     user = _find_customer_user(customer_email)
     _require_stripe_secret_key()
-    customer = _ensure_stripe_customer_for_user(user)
+    customer = _ensure_stripe_customer_for_user(
+        user,
+        idempotency_key=f"{_normalize(idempotency_key)}:customer" if _normalize(idempotency_key) else "",
+    )
     customer_id = _normalize(customer.get("id"))
     session = _stripe_to_dict(
         stripe.billing_portal.Session.create(
             customer=customer_id,
             return_url=settings.stripe_billing_portal_return_url_clean
             or "https://tomboflight.com/billing.html",
+            **_idempotency_options(idempotency_key, "payment_method_portal"),
         )
     )
     _audit(admin_user, action="send_payment_method_update_link", target_id=customer_id, reason=reason)
     return {"customer_id": customer_id, "portal_url": _normalize(session.get("url"))}
 
 
-def retry_invoice_payment(admin_user: dict[str, Any], *, invoice_id: str, reason: str) -> dict[str, Any]:
+def retry_invoice_payment(
+    admin_user: dict[str, Any],
+    *,
+    invoice_id: str,
+    reason: str,
+    idempotency_key: str = "",
+) -> dict[str, Any]:
     reason = _require_reason(reason)
     invoice_id = _normalize(invoice_id)
     if not invoice_id.startswith("in_"):
@@ -337,7 +416,12 @@ def retry_invoice_payment(admin_user: dict[str, Any], *, invoice_id: str, reason
     invoice = _stripe_to_dict(stripe.Invoice.retrieve(invoice_id))
     if _normalize(invoice.get("status")) not in {"open", "uncollectible"}:
         raise ValueError(f"Invoice status '{invoice.get('status')}' is not retryable.")
-    paid = _stripe_to_dict(stripe.Invoice.pay(invoice_id))
+    paid = _stripe_to_dict(
+        stripe.Invoice.pay(
+            invoice_id,
+            **_idempotency_options(idempotency_key, "invoice_retry"),
+        )
+    )
     _audit(admin_user, action="retry_invoice_payment", target_id=invoice_id, reason=reason)
     return {"invoice_id": invoice_id, "status": _normalize(paid.get("status")), "paid": bool(paid.get("paid"))}
 

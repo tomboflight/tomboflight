@@ -649,7 +649,10 @@
     const payload = {
       action: normalizedAction,
       target: target || {},
-      parameters: parameters || {},
+      parameters: {
+        ...(parameters || {}),
+        continuity_idempotency_key: idempotencyKey,
+      },
       reason,
       idempotency_key: idempotencyKey,
     };
@@ -985,18 +988,20 @@
       setPageStatus("A reason of at least 3 characters is required.", "error");
       return;
     }
-    const idempotencyKey =
-      window.crypto && window.crypto.randomUUID
-        ? window.crypto.randomUUID()
-        : `mf-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    if (!window.confirm(`Submit ${label.toLowerCase()} to the Continuity Kernel for live execution?`)) return;
     setPageStatus(`Running ${label.toLowerCase()}...`, "info");
     try {
-      await postJson(
-        `/admin/control-center/fulfillment/orders/${encodeURIComponent(orderId)}/actions/${encodeURIComponent(action)}`,
-        { reason: reason.trim(), idempotency_key: idempotencyKey },
+      const operation = await submitGovernedOperation(
+        "manual_fulfillment",
+        { order_id: orderId },
+        { fulfillment_action: action },
+        reason.trim(),
       );
-      await loadFulfillmentQueue();
-      setPageStatus(`${label} completed.`, "success");
+      await Promise.allSettled([loadKernelStatus(), loadFulfillmentQueue()]);
+      setPageStatus(
+        kernelOperationMessage(operation, `${label} completed.`),
+        kernelOperationStatusType(operation),
+      );
     } catch (error) {
       setPageStatus(error.message || `${label} failed.`, "error");
     }
@@ -1060,45 +1065,53 @@
     setPageStatus("Running Stripe operation...", "info");
     try {
       let result;
-      if (action === "ensure_customer") {
-        result = await postJson("/admin/stripe-ops/customers/ensure", { customer_email: email, reason });
-      } else if (action === "open_customer") {
+      if (action === "open_customer") {
         result = await fetchJson(`/admin/stripe-ops/customers/open?customer_email=${encodeURIComponent(email)}`);
         if (result && result.dashboard_url) window.open(result.dashboard_url, "_blank", "noopener");
-      } else if (action === "payment_link") {
-        result = await postJson("/admin/stripe-ops/payment-links", { price_id: stripeOpsField(card, "price_id"), reason });
-      } else if (action === "invoice") {
-        result = await postJson("/admin/stripe-ops/invoices", {
-          customer_email: email,
-          amount_cents: Number(stripeOpsField(card, "amount_cents")) || 0,
-          description: stripeOpsField(card, "description"),
-          reason,
-        });
-      } else if (action === "invoice_retry") {
-        result = await postJson("/admin/stripe-ops/invoices/retry", { invoice_id: stripeOpsField(card, "invoice_id"), reason });
-      } else if (action === "subscription_create") {
-        result = await postJson("/admin/stripe-ops/subscriptions", { customer_email: email, price_id: stripeOpsField(card, "price_id"), reason });
-      } else if (action === "subscription_change") {
-        result = await postJson("/admin/stripe-ops/subscriptions/change-price", { subscription_id: stripeOpsField(card, "subscription_id"), price_id: stripeOpsField(card, "price_id"), reason });
-      } else if (action === "subscription_pause") {
-        result = await postJson("/admin/stripe-ops/subscriptions/pause", { subscription_id: stripeOpsField(card, "subscription_id"), reason });
-      } else if (action === "subscription_resume") {
-        result = await postJson("/admin/stripe-ops/subscriptions/resume", { subscription_id: stripeOpsField(card, "subscription_id"), reason });
-      } else if (action === "subscription_cancel") {
-        if (!window.confirm("Cancel this subscription? This is a destructive action.")) {
-          setPageStatus("Subscription cancel aborted.", "info");
-          return;
-        }
-        result = await postJson("/admin/stripe-ops/subscriptions/cancel", { subscription_id: stripeOpsField(card, "subscription_id"), reason, at_period_end: true, confirm: true });
-      } else if (action === "payment_method_link") {
-        result = await postJson("/admin/stripe-ops/payment-method-update-link", { customer_email: email, reason });
       } else if (action === "history") {
         result = await fetchJson(`/admin/stripe-ops/customers/history?customer_email=${encodeURIComponent(email)}`);
       } else {
-        return;
+        if (action === "subscription_cancel") {
+          if (!window.confirm("Cancel this subscription? This is a destructive action.")) {
+            setPageStatus("Subscription cancel aborted.", "info");
+            return;
+          }
+        }
+        if (!window.confirm("Submit this Stripe operation to the Continuity Kernel for live execution?")) return;
+        const parameters = {
+          stripe_action: action,
+          customer_email: email,
+          price_id: stripeOpsField(card, "price_id"),
+          subscription_id: stripeOpsField(card, "subscription_id"),
+          invoice_id: stripeOpsField(card, "invoice_id"),
+          amount_cents: Number(stripeOpsField(card, "amount_cents")) || 0,
+          description: stripeOpsField(card, "description"),
+          at_period_end: true,
+          confirm: action === "subscription_cancel",
+        };
+        const targetId =
+          parameters.subscription_id ||
+          parameters.invoice_id ||
+          email ||
+          parameters.price_id ||
+          action;
+        const operation = await submitGovernedOperation(
+          "stripe_operation",
+          { target_id: targetId },
+          parameters,
+          reason,
+        );
+        result = operation.execution_result || operation.proposed_after_snapshot || operation;
+        await loadKernelStatus();
+        setPageStatus(
+          kernelOperationMessage(operation, "Stripe operation completed."),
+          kernelOperationStatusType(operation),
+        );
       }
       renderStripeOpsResult(card, result);
-      setPageStatus("Stripe operation completed.", "success");
+      if (action === "open_customer" || action === "history") {
+        setPageStatus("Stripe read-only operation completed.", "success");
+      }
     } catch (error) {
       setPageStatus(error.message || "Stripe operation failed.", "error");
     }
@@ -1133,7 +1146,7 @@
       <div class="admin-warning-strip" style="margin-top:0.75rem;">
         <span>Impersonation Active</span>
         <div>
-          <strong>${escapeHtml(session.banner || "Viewing Tomb of Light as Customer")}</strong>
+          <strong>${escapeHtml(session.banner || "Read-only customer context")}</strong>
           <span class="admin-id-ref" style="margin-left:0.5rem;">project ${escapeHtml(project)}</span>
           <span style="margin-left:0.5rem;">${escapeHtml(statusLabel)}</span>
           <span style="margin-left:0.5rem;">${escapeHtml(expires)}</span>
@@ -1971,7 +1984,14 @@
       <div class="admin-context-card">
         ${
           isImpersonating
-            ? `<div class="admin-warning-strip"><span>Impersonation Active</span><div><strong>${escapeHtml(impersonation.banner || "Viewing Tomb of Light as Customer")}</strong></div></div>`
+            ? `<div class="admin-warning-strip"><span>Customer Preview Active</span><div><strong>${escapeHtml(impersonation.banner || "Read-only customer context")}</strong></div></div>
+               <div class="admin-diagnostics-grid" style="margin-top:0.75rem;">
+                 <div><dt>Customer-visible package</dt><dd>${escapeHtml(context.packageName || "No package")}</dd></div>
+                 <div><dt>Customer-visible project</dt><dd>${escapeHtml(context.projectName || selected.project || "No linked project")}</dd></div>
+                 <div><dt>Current status</dt><dd>${escapeHtml(selected.status || "unknown")}</dd></div>
+                 <div><dt>Access lane</dt><dd>${escapeHtml(context.lane || "unknown")}</dd></div>
+               </div>
+               <p class="card-copy">This is an audited, read-only customer-context preview. It does not replace the administrator identity or authorize hidden customer-session writes.</p>`
             : ""
         }
         <h3>${escapeHtml(context.name || "Selected Case")}</h3>
@@ -1990,11 +2010,9 @@
         ${
           state.isSuperAdmin
             ? `<div class="inline-actions" style="margin-top: 0.85rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                <label class="admin-field" style="min-width: 18rem;"><span>View reason</span><input type="text" data-admin-impersonation-start-reason placeholder="Required reason to start customer view" /></label>
-                <button class="btn btn-secondary" type="button" data-admin-impersonation-start="${escapeHtml(context.caseId)}" ${canStartImpersonation ? "" : "disabled"}>View as Customer</button>
-                <label class="admin-field" style="min-width: 18rem;"><span>Edit reason</span><input type="text" data-admin-impersonation-edit-reason placeholder="Required reason to enable editing" /></label>
-                <button class="btn btn-secondary" type="button" data-admin-impersonation-enable-editing ${isImpersonating ? "" : "disabled"}>Enable Admin Editing</button>
-                <button class="btn btn-primary" type="button" data-admin-impersonation-stop ${canStopImpersonation ? "" : "disabled"}>Exit Customer View</button>
+                <label class="admin-field" style="min-width: 18rem;"><span>Preview reason</span><input type="text" data-admin-impersonation-start-reason placeholder="Required reason to start customer preview" /></label>
+                <button class="btn btn-secondary" type="button" data-admin-impersonation-start="${escapeHtml(context.caseId)}" ${canStartImpersonation ? "" : "disabled"}>Start Read-Only Customer Preview</button>
+                <button class="btn btn-primary" type="button" data-admin-impersonation-stop ${canStopImpersonation ? "" : "disabled"}>Exit Customer Preview</button>
               </div>`
             : ""
         }
@@ -2262,41 +2280,24 @@
       setPageStatus("A reason is required to start customer view.", "error");
       return;
     }
-    setPageStatus("Starting View as Customer session...", "info");
+    if (!window.confirm("Start an audited, read-only customer-context preview through the Continuity Kernel?")) return;
+    setPageStatus("Starting customer-context preview...", "info");
     try {
-      await postJson("/admin/control-center/super-admin/impersonation/start", {
-        case_id: caseId,
+      const operation = await submitGovernedOperation(
+        "impersonation_start",
+        { case_id: caseId },
+        {},
         reason,
-      });
+      );
+      await loadKernelStatus();
       await loadActiveImpersonation();
       renderCaseContext();
-      setPageStatus("Customer view started in read-only mode.", "success");
+      setPageStatus(
+        kernelOperationMessage(operation, "Read-only customer preview started."),
+        kernelOperationStatusType(operation),
+      );
     } catch (error) {
       setPageStatus(error.message || "Unable to start customer view.", "error");
-    }
-  }
-
-  async function enableImpersonationEditing(reasonValue) {
-    if (!state.isSuperAdmin || !state.activeImpersonation || !state.activeImpersonation.session_id) {
-      setPageStatus("No active customer-view session.", "error");
-      return;
-    }
-    const reason = normalizeValue(reasonValue);
-    if (!reason) {
-      setPageStatus("A reason is required to enable admin editing.", "error");
-      return;
-    }
-    setPageStatus("Enabling admin editing...", "info");
-    try {
-      await postJson(
-        `/admin/control-center/super-admin/impersonation/${encodeURIComponent(state.activeImpersonation.session_id)}/enable-editing`,
-        { reason },
-      );
-      await loadActiveImpersonation();
-      renderCaseContext();
-      setPageStatus("Admin editing enabled for the current customer-view session.", "success");
-    } catch (error) {
-      setPageStatus(error.message || "Unable to enable admin editing.", "error");
     }
   }
 
@@ -2305,15 +2306,23 @@
       setPageStatus("No active customer-view session.", "error");
       return;
     }
-    setPageStatus("Exiting customer view...", "info");
+    const reason = promptExecutionReason("Exit this customer preview", "Operator exited preview");
+    if (reason === null || !window.confirm("Exit this audited customer preview through the Continuity Kernel?")) return;
+    setPageStatus("Exiting customer preview...", "info");
     try {
-      await postJson(
-        `/admin/control-center/super-admin/impersonation/${encodeURIComponent(state.activeImpersonation.session_id)}/stop`,
+      const operation = await submitGovernedOperation(
+        "impersonation_stop",
+        { session_id: state.activeImpersonation.session_id },
         {},
+        reason,
       );
+      await loadKernelStatus();
       await loadActiveImpersonation();
       renderCaseContext();
-      setPageStatus("Exited customer view.", "success");
+      setPageStatus(
+        kernelOperationMessage(operation, "Exited customer preview."),
+        kernelOperationStatusType(operation),
+      );
     } catch (error) {
       setPageStatus(error.message || "Unable to exit customer view.", "error");
     }
@@ -2398,11 +2407,21 @@
     if (!state.isSuperAdmin) return;
     const fullName = normalizeValue(window.prompt("Customer full name:") || "");
     const email = normalizeValue(window.prompt("Customer email:") || "");
-    if (!fullName || !email || !window.confirm(`Create customer account for ${email}?`)) return;
+    if (!fullName || !email) return;
+    const reason = promptExecutionReason(`Create customer account for ${email}`);
+    if (reason === null || !window.confirm(`Create customer account for ${email} through the Continuity Kernel?`)) return;
     try {
-      await postJson("/admin/control-center/super-admin/users", { full_name: fullName, email });
-      await loadCases();
-      setPageStatus("Customer account created pending activation.", "success");
+      const operation = await submitGovernedOperation(
+        "customer_account_create",
+        { customer_email: email },
+        { user_payload: { full_name: fullName, email } },
+        reason,
+      );
+      await Promise.allSettled([loadKernelStatus(), loadCases()]);
+      setPageStatus(
+        kernelOperationMessage(operation, "Customer account created pending activation."),
+        kernelOperationStatusType(operation),
+      );
     } catch (error) {
       setPageStatus(error.message || "Unable to create account.", "error");
     }
@@ -2412,15 +2431,20 @@
     const ownerNode = document.querySelector("[data-super-admin-new-owner-id]");
     const newOwnerUserId = normalizeValue(ownerNode && ownerNode.value);
     const reason = normalizeValue(window.prompt("Reason for ownership transfer:") || "");
-    if (!newOwnerUserId || !reason || !window.confirm("Confirm project ownership transfer?")) return;
+    if (!newOwnerUserId || !reason || !window.confirm("Confirm project ownership transfer through the Continuity Kernel?")) return;
     try {
-      await postJson(`/admin/control-center/super-admin/projects/${encodeURIComponent(projectId)}/transfer-ownership`, {
-        new_owner_user_id: newOwnerUserId,
+      const operation = await submitGovernedOperation(
+        "project_ownership_transfer",
+        { project_id: projectId },
+        { new_owner_user_id: newOwnerUserId },
         reason,
-        confirmed: true,
-      });
+      );
+      await loadKernelStatus();
       await loadCaseWorkspace(state.selectedCaseId);
-      setPageStatus("Project ownership transferred.", "success");
+      setPageStatus(
+        kernelOperationMessage(operation, "Project ownership transferred."),
+        kernelOperationStatusType(operation),
+      );
     } catch (error) {
       setPageStatus(error.message || "Unable to transfer ownership.", "error");
     }
@@ -2432,16 +2456,22 @@
       return;
     }
 
-    if (!window.confirm("Apply user profile and account updates?")) return;
+    const reason = promptExecutionReason("Apply user profile and account updates");
+    if (reason === null || !window.confirm("Apply user updates through the Continuity Kernel?")) return;
     setPageStatus("Saving user updates...", "info");
     try {
-      await app.apiRequest(`/admin/control-center/super-admin/users/${encodeURIComponent(userId)}`, {
-        method: "PATCH",
-        body: JSON.stringify(collectSuperAdminUserPayload()),
-      });
-      await loadCases();
+      const operation = await submitGovernedOperation(
+        "user_profile_update",
+        { user_id: userId },
+        { user_payload: collectSuperAdminUserPayload() },
+        reason,
+      );
+      await Promise.allSettled([loadKernelStatus(), loadCases()]);
       if (state.selectedCaseId) await loadCaseWorkspace(state.selectedCaseId);
-      setPageStatus("User updates saved.", "success");
+      setPageStatus(
+        kernelOperationMessage(operation, "User updates saved."),
+        kernelOperationStatusType(operation),
+      );
     } catch (error) {
       setPageStatus(error.message || "Unable to update user.", "error");
     }
@@ -2475,14 +2505,21 @@
       setPageStatus("Super Admin access is required.", "error");
       return;
     }
-    if (!window.confirm("Trigger password reset for this account?")) return;
+    const reason = promptExecutionReason("Send a password reset to this account");
+    if (reason === null || !window.confirm("Send a password-reset link through the Continuity Kernel?")) return;
     setPageStatus("Issuing password reset...", "info");
     try {
-      await postJson(
-        `/admin/control-center/super-admin/users/${encodeURIComponent(userId)}/password-reset`,
+      const operation = await submitGovernedOperation(
+        "user_password_reset",
+        { user_id: userId },
         {},
+        reason,
       );
-      setPageStatus("Password reset issued.", "success");
+      await loadKernelStatus();
+      setPageStatus(
+        kernelOperationMessage(operation, "Password-reset link sent to the account email."),
+        kernelOperationStatusType(operation),
+      );
     } catch (error) {
       setPageStatus(error.message || "Unable to issue password reset.", "error");
     }
@@ -2970,14 +3007,6 @@
         const reasonInput = document.querySelector("[data-admin-impersonation-start-reason]");
         const reason = reasonInput instanceof HTMLInputElement ? reasonInput.value : "";
         if (caseId) startImpersonation(caseId, reason);
-        return;
-      }
-
-      const impersonationEnableEditing = target.closest("[data-admin-impersonation-enable-editing]");
-      if (impersonationEnableEditing) {
-        const reasonInput = document.querySelector("[data-admin-impersonation-edit-reason]");
-        const reason = reasonInput instanceof HTMLInputElement ? reasonInput.value : "";
-        enableImpersonationEditing(reason);
         return;
       }
 
