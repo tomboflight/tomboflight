@@ -105,7 +105,7 @@
       can_use_organization_records_vault: false,
       can_use_scheduled_reveal: false,
       can_build_household: false,
-      can_build_family_tree: false,
+      can_build_family_tree: true,
       can_build_org_chart: false,
       can_link_households: false,
       can_link_org_units: false,
@@ -114,8 +114,8 @@
       can_use_viewer: false,
       can_use_secure_share_viewer: true,
       can_use_narration: false,
-      can_use_lineage_certificate: false,
-      can_open_family_intake: false,
+      can_use_lineage_certificate: true,
+      can_open_family_intake: true,
       can_open_org_intake: false,
       can_use_link_keys: false,
       can_manage_link_keys: false,
@@ -129,7 +129,7 @@
       can_use_organization_records_vault: false,
       can_use_scheduled_reveal: false,
       can_build_household: false,
-      can_build_family_tree: false,
+      can_build_family_tree: true,
       can_build_org_chart: false,
       can_link_households: false,
       can_link_org_units: false,
@@ -138,8 +138,8 @@
       can_use_viewer: false,
       can_use_secure_share_viewer: true,
       can_use_narration: false,
-      can_use_lineage_certificate: false,
-      can_open_family_intake: false,
+      can_use_lineage_certificate: true,
+      can_open_family_intake: true,
       can_open_org_intake: false,
       can_use_link_keys: false,
       can_manage_link_keys: false,
@@ -153,7 +153,7 @@
       can_use_organization_records_vault: false,
       can_use_scheduled_reveal: false,
       can_build_household: false,
-      can_build_family_tree: false,
+      can_build_family_tree: true,
       can_build_org_chart: false,
       can_link_households: false,
       can_link_org_units: false,
@@ -161,8 +161,8 @@
       can_upload_verification_docs: true,
       can_use_viewer: true,
       can_use_narration: false,
-      can_use_lineage_certificate: false,
-      can_open_family_intake: false,
+      can_use_lineage_certificate: true,
+      can_open_family_intake: true,
       can_open_org_intake: false,
       can_use_link_keys: true,
       can_manage_link_keys: true,
@@ -808,25 +808,46 @@
 
   function saveToken(token) {
     if (typeof token === "string" && token.trim()) {
-      localStorage.setItem(TOKEN_KEY, token);
+      // Bearer credentials are tab-scoped so they do not survive a browser
+      // restart or remain available to unrelated future sessions.
+      sessionStorage.setItem(TOKEN_KEY, token);
+      localStorage.removeItem(TOKEN_KEY);
     }
   }
 
   function getToken() {
-    return localStorage.getItem(TOKEN_KEY);
+    const sessionToken = sessionStorage.getItem(TOKEN_KEY);
+    if (sessionToken) return sessionToken;
+
+    // One-time migration for sessions created before tab-scoped storage.
+    const legacyToken = localStorage.getItem(TOKEN_KEY);
+    if (legacyToken) {
+      sessionStorage.setItem(TOKEN_KEY, legacyToken);
+      localStorage.removeItem(TOKEN_KEY);
+    }
+    return legacyToken;
   }
 
   function clearToken() {
+    sessionStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(TOKEN_KEY);
   }
 
   function saveUser(user) {
-    localStorage.setItem(USER_KEY, JSON.stringify(user || {}));
+    sessionStorage.setItem(USER_KEY, JSON.stringify(user || {}));
+    localStorage.removeItem(USER_KEY);
   }
 
   function getSavedUser() {
     try {
-      const raw = localStorage.getItem(USER_KEY);
+      let raw = sessionStorage.getItem(USER_KEY);
+      if (!raw) {
+        raw = localStorage.getItem(USER_KEY);
+        if (raw) {
+          sessionStorage.setItem(USER_KEY, raw);
+          localStorage.removeItem(USER_KEY);
+        }
+      }
       return raw ? JSON.parse(raw) : null;
     } catch (error) {
       return null;
@@ -834,6 +855,7 @@
   }
 
   function clearUser() {
+    sessionStorage.removeItem(USER_KEY);
     localStorage.removeItem(USER_KEY);
   }
 

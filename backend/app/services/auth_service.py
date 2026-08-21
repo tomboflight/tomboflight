@@ -13,6 +13,7 @@ from cryptography.fernet import Fernet, InvalidToken
 
 from app.config import settings
 from app.core.password_policy import validate_password_strength
+from app.core.role_catalog import has_internal_admin_role
 from app.core.security import (
     create_access_token,
     decode_access_token,
@@ -49,6 +50,17 @@ def _get_database_or_none():
 def _current_user_id_from_doc(user: dict) -> str:
     raw_value = user.get("_id") or user.get("id") or user.get("user_id")
     return _normalize_text(raw_value)
+
+
+def _requires_internal_admin_mfa(user: dict[str, Any]) -> bool:
+    role_values: list[Any] = [
+        user.get("role"),
+        user.get("access_tier"),
+        user.get("department_role"),
+    ]
+    for field_name in ("role_codes", "admin_roles", "officer_roles"):
+        role_values.extend(list(user.get(field_name) or []))
+    return has_internal_admin_role(role_values)
 
 
 def _password_reset_expiry_iso() -> str:
@@ -227,23 +239,10 @@ def register_user(payload: UserCreate) -> dict | None:
             "You must confirm your eligibility and authority to create the account."
         )
 
-    db = _get_database_or_none()
+    # Account creation must never claim success unless the account was
+    # persisted. DatabaseUnavailableError is mapped to a 503 by the app.
+    db = get_database()
     now_iso = _now_iso()
-
-    if db is None:
-        return {
-            "_id": "local-user-preview",
-            "email": payload.email.lower(),
-            "full_name": payload.full_name.strip(),
-            "role": PUBLIC_SIGNUP_ROLE,
-            "account_type": "customer",
-            "status": "active",
-            "created_at": now_iso,
-            "policy_version": payload.policy_version,
-            "terms_accepted_at": now_iso,
-            "privacy_accepted_at": now_iso,
-            "eligibility_attested_at": now_iso,
-        }
 
     normalized_email = payload.email.lower()
     existing = db.users.find_one({"email": normalized_email})
@@ -354,12 +353,9 @@ def create_pending_checkout_user(
 
 
 def authenticate_user(email: str, password: str) -> dict[str, Any] | None:
-    db = _get_database_or_none()
-    if db is None:
-        token = create_access_token(
-            {"sub": email.lower(), "role": "user", "tv": 0, "mfa": False}
-        )
-        return {"status": "authenticated", "access_token": token}
+    # Authentication is fail-closed: an unavailable identity store can never
+    # mint a bearer token for unverified credentials.
+    db = get_database()
 
     user = db.users.find_one({"email": email.lower()})
     if user is None:
@@ -385,6 +381,21 @@ def authenticate_user(email: str, password: str) -> dict[str, Any] | None:
         )
         return {
             "status": "mfa_required",
+            "mfa_challenge_token": challenge,
+        }
+
+    if _requires_internal_admin_mfa(user):
+        challenge = create_access_token(
+            {
+                "sub": user["email"],
+                "user_id": str(user["_id"]),
+                "purpose": "mfa_enroll",
+                "tv": _session_version(user),
+            },
+            expires_minutes=max(2, int(settings.mfa_challenge_expire_minutes or 10)),
+        )
+        return {
+            "status": "mfa_enrollment_required",
             "mfa_challenge_token": challenge,
         }
 
@@ -617,6 +628,8 @@ def disable_mfa_for_user(
     recovery_code: str | None,
     actor_user_id: str,
 ) -> None:
+    if _requires_internal_admin_mfa(user):
+        raise ValueError("MFA is required for internal administrator accounts.")
     password_hash = _normalize_text(user.get("password_hash"))
     if not verify_password(current_password, password_hash):
         raise ValueError("Current password is incorrect.")
@@ -718,6 +731,7 @@ def request_password_reset(
     requested_by_user_id: str | None = None,
     requested_by: str | None = None,
     expose_token: bool = False,
+    include_delivery_status: bool = False,
 ) -> dict[str, object]:
     normalized_email = _normalize_text(email).lower()
     generic_message = (
@@ -731,10 +745,30 @@ def request_password_reset(
 
     db = _get_database_or_none()
     if db is None:
+        if include_delivery_status:
+            generic_response.update(
+                {
+                    "success": False,
+                    "delivery_sent": False,
+                    "delivery_provider": "postmark",
+                    "delivery_error": "identity_store_unavailable",
+                    "failure_count": 1,
+                }
+            )
         return generic_response
 
     user = db.users.find_one({"email": normalized_email})
     if user is None:
+        if include_delivery_status:
+            generic_response.update(
+                {
+                    "success": False,
+                    "delivery_sent": False,
+                    "delivery_provider": "postmark",
+                    "delivery_error": "account_not_found",
+                    "failure_count": 1,
+                }
+            )
         return generic_response
 
     now_iso = _now_iso()
@@ -770,7 +804,7 @@ def request_password_reset(
             {
                 "email": normalized_email,
                 "requested_via": _normalize_text(requested_via) or "self_service",
-                "admin_assisted": bool(expose_token),
+                "admin_assisted": _normalize_text(requested_via).lower() == "admin_assist",
             },
         )
     except Exception:
@@ -778,16 +812,39 @@ def request_password_reset(
 
     reset_url = _build_password_reset_url(token)
 
-    # Send reset email (best-effort; never blocks the auth flow).
+    # Self-service responses remain generic to prevent account enumeration.
+    # The authenticated admin-assist flow may request a safe delivery result
+    # so the Control Center does not claim an email was sent when it was not.
     if not bool(expose_token):
         try:
-            send_password_reset_email(
+            delivery = send_password_reset_email(
                 to_email=normalized_email,
                 reset_url=reset_url,
                 expires_at=expires_at,
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            delivery = {
+                "sent": False,
+                "provider": "postmark",
+                "error": type(exc).__name__,
+            }
+        if include_delivery_status:
+            delivery = delivery if isinstance(delivery, dict) else {}
+            delivery_sent = bool(delivery.get("sent"))
+            generic_response.update(
+                {
+                    "success": delivery_sent,
+                    "reset_persisted": True,
+                    "delivery_sent": delivery_sent,
+                    "delivery_provider": _normalize_text(delivery.get("provider")) or "postmark",
+                    "delivery_error": (
+                        None
+                        if delivery_sent
+                        else _normalize_text(delivery.get("error")) or "delivery_not_confirmed"
+                    ),
+                    "failure_count": 0 if delivery_sent else 1,
+                }
+            )
 
     if bool(expose_token):
         generic_response["reset_token"] = token
@@ -938,7 +995,15 @@ def admin_issue_password_reset(
         requested_via="admin_assist",
         requested_by_user_id=admin_user_id,
         requested_by=admin_display,
-        expose_token=True,
+        # Deliver the reset link to the verified account email. Returning the
+        # raw reset token to an administrator would bypass customer control of
+        # the mailbox and could leak into operation evidence or browser logs.
+        expose_token=False,
+        include_delivery_status=True,
     )
-    response["message"] = "Admin password reset issued successfully."
+    response["message"] = (
+        "Password-reset link sent to the account email."
+        if bool(response.get("delivery_sent"))
+        else "Password reset was not delivered; review the operation evidence and email configuration."
+    )
     return response

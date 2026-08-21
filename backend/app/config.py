@@ -104,7 +104,10 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("UPLOAD_SCAN_HOOK"),
     )
     upload_scan_fail_closed: bool = Field(
-        default=False,
+        # Files must enter quarantine when malware scanning is unavailable or
+        # errors. Production can only accept a file after an explicit clean
+        # or configured scanner decision.
+        default=True,
         validation_alias=AliasChoices("UPLOAD_SCAN_FAIL_CLOSED"),
     )
     upload_quarantine_dir: str = Field(

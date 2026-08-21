@@ -332,7 +332,7 @@ def send_password_reset_email(
     to_email: str,
     reset_url: str,
     expires_at: str,
-) -> None:
+) -> dict[str, Any]:
     """Send a password-reset link email to *to_email*."""
     safe_reset_url = escape(_normalize_text(reset_url), quote=True)
     safe_expires_at = escape(_normalize_text(expires_at), quote=True)
@@ -359,7 +359,7 @@ def send_password_reset_email(
         "<p>Tomb of Light Security</p>"
     )
 
-    _send_email(
+    return _send_email(
         to_email=to_email,
         subject=subject,
         text_body=text_body,

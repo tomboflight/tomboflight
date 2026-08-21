@@ -4,7 +4,8 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
-from jose import JWTError, jwt
+import jwt
+from jwt.exceptions import InvalidTokenError
 from passlib.context import CryptContext
 
 from app.config import settings
@@ -13,18 +14,23 @@ from app.config import settings
 def _resolve_secret_key() -> str:
     secret_key = str(settings.secret_key or "").strip()
     environment = str(settings.environment or "development").strip().lower()
-
-    if not secret_key:
-        raise RuntimeError("SECRET_KEY is not configured.")
-
-    if secret_key == "change-me" and environment not in {
+    is_non_production = environment in {
         "development",
         "dev",
         "local",
         "test",
-    }:
+    }
+
+    if not secret_key:
+        raise RuntimeError("SECRET_KEY is not configured.")
+
+    if secret_key == "change-me" and not is_non_production:
         raise RuntimeError(
             "SECRET_KEY must be set to a unique value outside development."
+        )
+    if len(secret_key.encode("utf-8")) < 32 and not is_non_production:
+        raise RuntimeError(
+            "SECRET_KEY must contain at least 32 bytes outside development."
         )
 
     return secret_key
@@ -32,6 +38,8 @@ def _resolve_secret_key() -> str:
 
 SECRET_KEY: str = _resolve_secret_key()
 ALGORITHM: str = str(settings.algorithm or "HS256")
+if ALGORITHM not in {"HS256", "HS384", "HS512"}:
+    raise RuntimeError("ALGORITHM must be one of HS256, HS384, or HS512.")
 ACCESS_TOKEN_EXPIRE_MINUTES: int = int(settings.access_token_expire_minutes or 60)
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -88,7 +96,7 @@ def decode_access_token(token: str) -> dict[str, Any] | None:
         if not isinstance(payload, dict):
             return None
         return cast(dict[str, Any], payload)
-    except JWTError:
+    except InvalidTokenError:
         return None
 
 

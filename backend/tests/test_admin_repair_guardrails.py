@@ -417,6 +417,7 @@ class PaymentStateGuardrailTests(unittest.TestCase):
                 package_code="legacy_plus",
                 project_lane="household",
                 order_status="complete",
+                reason="Correct the package assignment without changing payment state.",
                 actor={"_id": ObjectId(), "email": "super@tomboflight.com"},
             )
 

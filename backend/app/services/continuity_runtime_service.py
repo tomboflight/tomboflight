@@ -30,11 +30,16 @@ from pymongo.errors import DuplicateKeyError
 
 from app.core.admin_permission_registry import CEO_MASTER_ADMIN_EMAIL
 from app.database import get_database
-from app.services import admin_control_service
+from app.services import (
+    admin_control_service,
+    manual_fulfillment_service,
+    stripe_admin_operations_service,
+)
+from app.services.auth_service import admin_issue_password_reset
 from app.services.audit_log_service import write_audit_log
 
 
-RUNTIME_VERSION = "8.0.0"
+RUNTIME_VERSION = "9.0.0"
 OPERATIONS_COLLECTION = "continuity_operations"
 EVENTS_COLLECTION = "continuity_events"
 EXECUTION_KILL_SWITCH = "CONTINUITY_EXECUTION_KILL_SWITCH"
@@ -93,10 +98,39 @@ SUPER_ADMIN_ACTION_SPECS: dict[str, ActionSpec] = {
 }
 
 
+CONTROL_SURFACE_ACTION_SPECS: dict[str, ActionSpec] = {
+    "manual_fulfillment": ActionSpec(
+        "billing_order_payment_repair", "high", "order", ("order_id",)
+    ),
+    "stripe_operation": ActionSpec(
+        "billing_order_payment_repair", "high", "stripe", ("target_id",)
+    ),
+    "customer_account_create": ActionSpec(
+        "admin_repair_safety", "high", "user", ("customer_email",)
+    ),
+    "user_profile_update": ActionSpec(
+        "admin_repair_safety", "high", "user", ("user_id",)
+    ),
+    "user_password_reset": ActionSpec(
+        "admin_repair_safety", "high", "user", ("user_id",)
+    ),
+    "project_ownership_transfer": ActionSpec(
+        "admin_repair_safety", "high", "project", ("project_id",)
+    ),
+    "impersonation_start": ActionSpec(
+        "admin_repair_safety", "medium", "customer_case", ("case_id",)
+    ),
+    "impersonation_stop": ActionSpec(
+        "admin_repair_safety", "medium", "impersonation_session", ("session_id",)
+    ),
+}
+
+
 ACTION_SPECS: dict[str, ActionSpec] = {
     **CASE_ACTION_SPECS,
     **BULK_ACTION_SPECS,
     **SUPER_ADMIN_ACTION_SPECS,
+    **CONTROL_SURFACE_ACTION_SPECS,
 }
 
 
@@ -251,7 +285,16 @@ def _require_text(value: Any, field: str, *, minimum: int = 1) -> str:
 
 
 def _target_id(spec: ActionSpec, action: str, target: dict[str, Any]) -> str:
-    for field in ("case_id", "project_id", "order_id", "user_id", "officer_email", "target_id"):
+    for field in (
+        "case_id",
+        "project_id",
+        "order_id",
+        "user_id",
+        "officer_email",
+        "customer_email",
+        "session_id",
+        "target_id",
+    ):
         value = _normalize(target.get(field))
         if value:
             return value
@@ -510,6 +553,61 @@ def _snapshot_for_action(action: str, target: dict[str, Any]) -> dict[str, Any]:
             return _project_operational_snapshot(project_id)
         except ValueError:
             return {"target": target, "snapshot_status": "project_not_resolved"}
+    db = get_database()
+    user_id = _normalize(target.get("user_id"))
+    customer_email = _normalize(target.get("customer_email")).lower()
+    if user_id:
+        user = _find_by_id(db["users"], user_id)
+        return {
+            "user": _safe_document(
+                user,
+                (
+                    "email",
+                    "full_name",
+                    "role",
+                    "access_tier",
+                    "department_role",
+                    "status",
+                    "mfa_enabled",
+                    "session_token_version",
+                ),
+            )
+        }
+    if customer_email:
+        user = db["users"].find_one({"email": customer_email})
+        return {
+            "user": _safe_document(
+                user,
+                ("email", "full_name", "role", "status", "mfa_enabled"),
+            ),
+            "customer_email": customer_email,
+        }
+    order_id = _normalize(target.get("order_id"))
+    if order_id:
+        order = _find_by_id(db["orders"], order_id)
+        return {
+            "order": _safe_document(
+                order,
+                (
+                    "status",
+                    "payment_status",
+                    "payment_verified",
+                    "fulfillment_status",
+                    "project_id",
+                    "package_code",
+                    "package_name",
+                ),
+            )
+        }
+    session_id = _normalize(target.get("session_id"))
+    if session_id:
+        session = db["admin_impersonation_sessions"].find_one({"session_id": session_id})
+        return {
+            "impersonation_session": _safe_document(
+                session,
+                ("session_id", "status", "case_id", "project_id", "editing_enabled", "expires_at"),
+            )
+        }
     if ACTION_SPECS[action].target_type == "bulk_repair":
         return _bulk_snapshot()
     return {"target": target}
@@ -706,7 +804,16 @@ def request_operation(
     reason_value = _require_text(reason, "reason", minimum=3)
     idempotency_value = _require_text(idempotency_key, "idempotency_key", minimum=8)
     clean_target = _validate_target(spec, normalized_action, target)
-    clean_parameters = _serialize({**(parameters or {}), "reason": reason_value})
+    # The Kernel's idempotency key is authoritative all the way down to
+    # downstream providers. A caller cannot substitute a different key in the
+    # free-form parameters payload.
+    clean_parameters = _serialize(
+        {
+            **(parameters or {}),
+            "reason": reason_value,
+            "continuity_idempotency_key": idempotency_value,
+        }
+    )
 
     existing = _operations_collection().find_one({"idempotency_key": idempotency_value})
     if existing is not None:
@@ -995,6 +1102,9 @@ def _rollback_verification(operation: dict[str, Any]) -> dict[str, Any]:
 def _execution_failure_count(result: Any) -> int:
     if not isinstance(result, dict):
         return 0
+    failure_count = result.get("failure_count")
+    if isinstance(failure_count, (int, float)) and not isinstance(failure_count, bool):
+        return max(0, int(failure_count))
     failed_count = result.get("failed_count")
     if isinstance(failed_count, (int, float)) and not isinstance(failed_count, bool):
         return max(0, int(failed_count))
@@ -1004,6 +1114,77 @@ def _execution_failure_count(result: Any) -> int:
     if isinstance(failed, list):
         return len(failed)
     return 0
+
+
+def _invoke_stripe_operation(
+    *,
+    stripe_action: str,
+    parameters: dict[str, Any],
+    actor: dict[str, Any] | None,
+) -> dict[str, Any]:
+    action = _normalize(stripe_action).lower()
+    reason = _normalize(parameters.get("reason"))
+    idempotency_key = _normalize(parameters.get("continuity_idempotency_key"))
+    common = {"admin_user": actor or {}, "reason": reason, "idempotency_key": idempotency_key}
+    if action == "ensure_customer":
+        return stripe_admin_operations_service.ensure_customer(
+            **common,
+            customer_email=_normalize(parameters.get("customer_email")),
+        )
+    if action == "payment_link":
+        return stripe_admin_operations_service.create_payment_link(
+            **common,
+            price_id=_normalize(parameters.get("price_id")),
+            quantity=max(1, int(parameters.get("quantity") or 1)),
+        )
+    if action == "invoice":
+        return stripe_admin_operations_service.create_and_send_invoice(
+            **common,
+            customer_email=_normalize(parameters.get("customer_email")),
+            amount_cents=int(parameters.get("amount_cents") or 0),
+            description=_normalize(parameters.get("description")),
+            days_until_due=max(1, int(parameters.get("days_until_due") or 7)),
+        )
+    if action == "invoice_retry":
+        return stripe_admin_operations_service.retry_invoice_payment(
+            **common,
+            invoice_id=_normalize(parameters.get("invoice_id")),
+        )
+    if action == "subscription_create":
+        return stripe_admin_operations_service.create_subscription(
+            **common,
+            customer_email=_normalize(parameters.get("customer_email")),
+            price_id=_normalize(parameters.get("price_id")),
+        )
+    if action == "subscription_change":
+        return stripe_admin_operations_service.change_subscription_price(
+            **common,
+            subscription_id=_normalize(parameters.get("subscription_id")),
+            price_id=_normalize(parameters.get("price_id")),
+        )
+    if action == "subscription_pause":
+        return stripe_admin_operations_service.pause_subscription(
+            **common,
+            subscription_id=_normalize(parameters.get("subscription_id")),
+        )
+    if action == "subscription_resume":
+        return stripe_admin_operations_service.resume_subscription(
+            **common,
+            subscription_id=_normalize(parameters.get("subscription_id")),
+        )
+    if action == "subscription_cancel":
+        return stripe_admin_operations_service.cancel_subscription(
+            **common,
+            subscription_id=_normalize(parameters.get("subscription_id")),
+            at_period_end=bool(parameters.get("at_period_end", True)),
+            confirm=bool(parameters.get("confirm")),
+        )
+    if action == "payment_method_link":
+        return stripe_admin_operations_service.send_payment_method_update_link(
+            **common,
+            customer_email=_normalize(parameters.get("customer_email")),
+        )
+    raise ValueError("Unsupported governed Stripe operation.")
 
 
 def _record_post_execution_evidence(
@@ -1069,6 +1250,58 @@ def _invoke_action(
             case_id=_normalize(target.get("case_id")), action=action, actor=actor
         )
 
+    reason = _normalize(parameters.get("reason"))
+    if action == "manual_fulfillment":
+        return manual_fulfillment_service.execute_fulfillment_action(
+            actor or {},
+            order_id=_normalize(target.get("order_id")),
+            action=_normalize(parameters.get("fulfillment_action")),
+            reason=reason,
+            idempotency_key=_normalize(parameters.get("continuity_idempotency_key")),
+        )
+    if action == "stripe_operation":
+        return _invoke_stripe_operation(
+            stripe_action=_normalize(parameters.get("stripe_action")),
+            parameters=parameters,
+            actor=actor,
+        )
+    if action == "customer_account_create":
+        return admin_control_service.super_admin_create_customer(
+            payload=dict(parameters.get("user_payload") or parameters),
+            actor=actor,
+        )
+    if action == "user_profile_update":
+        return admin_control_service.super_admin_update_user(
+            user_id=_normalize(target.get("user_id")),
+            payload=dict(parameters.get("user_payload") or {}),
+            actor=actor,
+        )
+    if action == "user_password_reset":
+        return admin_issue_password_reset(
+            _normalize(target.get("user_id")),
+            admin_user_id=_actor_id(actor),
+            admin_display=_actor_name(actor) or _actor_email(actor),
+        )
+    if action == "project_ownership_transfer":
+        return admin_control_service.super_admin_transfer_project_ownership(
+            project_id=_normalize(target.get("project_id")),
+            new_owner_user_id=_normalize(parameters.get("new_owner_user_id")),
+            reason=reason,
+            actor=actor,
+        )
+    if action == "impersonation_start":
+        return admin_control_service.start_admin_impersonation(
+            case_id=_normalize(target.get("case_id")),
+            reason=reason,
+            actor=actor,
+        )
+    if action == "impersonation_stop":
+        return admin_control_service.stop_admin_impersonation(
+            session_id=_normalize(target.get("session_id")),
+            reason=reason,
+            actor=actor,
+        )
+
     limit = max(1, min(int(parameters.get("limit") or 500), admin_control_service.MAX_BULK_ACTION_LIMIT))
     if action == "repair_missing_entitlements":
         return admin_control_service.repair_missing_entitlements(limit=limit)
@@ -1089,7 +1322,6 @@ def _invoke_action(
         return admin_control_service.repair_all_safe_records(limit=limit)
 
     project_id = _normalize(target.get("project_id"))
-    reason = _normalize(parameters.get("reason"))
     if action == "package_change":
         return admin_control_service.super_admin_apply_package_change(
             project_id=project_id,

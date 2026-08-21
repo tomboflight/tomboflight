@@ -2,14 +2,17 @@ import tempfile
 import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from bson import ObjectId
 from fastapi import HTTPException
 
+from app.core import security as security_core
 from app.core.security import create_csrf_token, verify_csrf_token
+from app.database import DatabaseUnavailableError
 from app.routes import uploads as upload_routes
-from app.services import auth_service, link_key_service, rate_limit_service
+from app.services import auth_service, link_key_service, rate_limit_service, upload_scan_service
 
 
 class FakeInsertResult:
@@ -91,6 +94,16 @@ class CsrfTokenTests(unittest.TestCase):
         self.assertFalse(verify_csrf_token(token, user_id="other-user"))
 
 
+class SigningKeyTests(unittest.TestCase):
+    def test_production_signing_key_must_be_at_least_32_bytes(self):
+        with (
+            patch.object(security_core.settings, "environment", "production"),
+            patch.object(security_core.settings, "secret_key", "too-short"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "at least 32 bytes"):
+                security_core._resolve_secret_key()
+
+
 class RateLimitAndLockoutTests(unittest.TestCase):
     def test_lockout_after_repeated_failures(self):
         key = "ip:test@example.com"
@@ -116,7 +129,7 @@ class RateLimitAndLockoutTests(unittest.TestCase):
 
 
 class AuthMfaTests(unittest.TestCase):
-    def test_internal_admin_without_mfa_can_authenticate(self):
+    def test_internal_admin_without_mfa_must_enroll_before_authentication(self):
         user_id = ObjectId()
         db = FakeDatabase(
             {
@@ -134,12 +147,13 @@ class AuthMfaTests(unittest.TestCase):
                 ]
             }
         )
-        with patch.object(auth_service, "_get_database_or_none", return_value=db):
+        with patch.object(auth_service, "get_database", return_value=db):
             result = auth_service.authenticate_user("admin@example.com", "StrongPass!123")
         self.assertIsNotNone(result)
         assert result is not None
-        self.assertEqual(result["status"], "authenticated")
-        self.assertTrue(result.get("access_token"))
+        self.assertEqual(result["status"], "mfa_enrollment_required")
+        self.assertTrue(result.get("mfa_challenge_token"))
+        self.assertFalse(result.get("access_token"))
 
     def test_mfa_enabled_user_requires_verification(self):
         user_id = ObjectId()
@@ -159,12 +173,119 @@ class AuthMfaTests(unittest.TestCase):
                 ]
             }
         )
-        with patch.object(auth_service, "_get_database_or_none", return_value=db):
+        with patch.object(auth_service, "get_database", return_value=db):
             result = auth_service.authenticate_user("admin@example.com", "StrongPass!123")
         self.assertIsNotNone(result)
         assert result is not None
         self.assertEqual(result["status"], "mfa_required")
         self.assertTrue(result.get("mfa_challenge_token"))
+
+    def test_internal_admin_cannot_disable_required_mfa(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            "MFA is required for internal administrator accounts",
+        ):
+            auth_service.disable_mfa_for_user(
+                user={"role": "admin", "access_tier": "super_admin"},
+                current_password="StrongPass!123",
+                code="123456",
+                recovery_code=None,
+                actor_user_id="admin-1",
+            )
+
+
+class AuthDatabaseFailClosedTests(unittest.TestCase):
+    def test_login_does_not_issue_token_when_database_is_unavailable(self):
+        with patch.object(
+            auth_service,
+            "get_database",
+            side_effect=DatabaseUnavailableError("database unavailable"),
+        ):
+            with self.assertRaises(DatabaseUnavailableError):
+                auth_service.authenticate_user("known@example.com", "Anything!123")
+
+    def test_signup_does_not_claim_success_when_database_is_unavailable(self):
+        payload = SimpleNamespace(
+            email="new@example.com",
+            password="StrongPass!123",
+            full_name="New Customer",
+            terms_accepted=True,
+            privacy_accepted=True,
+            eligibility_attested=True,
+            policy_version="2026-03-26",
+        )
+        with patch.object(
+            auth_service,
+            "get_database",
+            side_effect=DatabaseUnavailableError("database unavailable"),
+        ):
+            with self.assertRaises(DatabaseUnavailableError):
+                auth_service.register_user(payload)
+
+    def test_admin_password_reset_is_delivered_without_exposing_raw_token(self):
+        user_id = str(ObjectId())
+        with (
+            patch.object(
+                auth_service,
+                "get_user_by_id",
+                return_value={"_id": ObjectId(user_id), "email": "customer@example.com"},
+            ),
+            patch.object(
+                auth_service,
+                "request_password_reset",
+                return_value={"success": True, "delivery_mode": "email"},
+            ) as request_reset,
+        ):
+            result = auth_service.admin_issue_password_reset(
+                user_id,
+                admin_user_id="ceo-1",
+                admin_display="CEO Operator",
+            )
+        self.assertNotIn("reset_token", result)
+        request_reset.assert_called_once_with(
+            "customer@example.com",
+            requested_via="admin_assist",
+            requested_by_user_id="ceo-1",
+            requested_by="CEO Operator",
+            expose_token=False,
+            include_delivery_status=True,
+        )
+
+    def test_admin_password_reset_reports_delivery_failure_without_exposing_token(self):
+        user_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "users": [
+                    {
+                        "_id": user_id,
+                        "email": "customer@example.com",
+                    }
+                ]
+            }
+        )
+        with (
+            patch.object(auth_service, "_get_database_or_none", return_value=db),
+            patch.object(auth_service, "create_audit_log"),
+            patch.object(
+                auth_service,
+                "send_password_reset_email",
+                return_value={
+                    "sent": False,
+                    "provider": "postmark",
+                    "error": "postmark_token_missing",
+                },
+            ),
+        ):
+            result = auth_service.request_password_reset(
+                "customer@example.com",
+                requested_via="admin_assist",
+                include_delivery_status=True,
+            )
+        self.assertFalse(result["success"])
+        self.assertFalse(result["delivery_sent"])
+        self.assertEqual(result["failure_count"], 1)
+        self.assertNotIn("reset_token", result)
+        self.assertTrue(db["users"].documents[0].get("password_reset_token_hash"))
 
 
 class LinkKeyHardeningTests(unittest.TestCase):
@@ -193,6 +314,28 @@ class LinkKeyHardeningTests(unittest.TestCase):
 
 
 class UploadHardeningTests(unittest.TestCase):
+    def test_production_scan_cannot_be_configured_fail_open(self):
+        with (
+            tempfile.TemporaryDirectory() as tmpdir,
+            patch.object(upload_scan_service.settings, "environment", "production"),
+            patch.object(upload_scan_service.settings, "upload_scan_fail_closed", False),
+            patch.object(upload_scan_service.settings, "upload_scan_hook", ""),
+            patch.object(upload_scan_service.settings, "upload_scan_command", ""),
+            patch.object(upload_scan_service.settings, "upload_storage_dir", tmpdir),
+            patch.object(upload_scan_service.settings, "render_disk_mount_path", ""),
+        ):
+            file_path = Path(tmpdir) / "pending.pdf"
+            file_path.write_bytes(b"pending")
+            result = upload_scan_service.scan_uploaded_file(str(file_path))
+        self.assertEqual(result.status, "error")
+
+    def test_scan_error_blocks_download_even_if_quarantine_move_failed(self):
+        self.assertTrue(
+            upload_routes._upload_scan_blocks_download(
+                {"scan_status": "error", "quarantined": False}
+            )
+        )
+
     def test_scan_and_quarantine_marks_record(self):
         upload_id = ObjectId()
         with tempfile.TemporaryDirectory() as tmpdir:

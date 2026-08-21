@@ -612,6 +612,16 @@ def _scan_and_quarantine_upload(*, db: Any, upload_record: dict[str, Any]) -> di
     return refreshed or upload_record
 
 
+def _upload_scan_blocks_download(upload_record: dict[str, Any]) -> bool:
+    scan_status = _normalize_value(upload_record.get("scan_status")).lower()
+    return bool(upload_record.get("quarantined")) or scan_status in {
+        "infected",
+        "error",
+        "skipped",
+        "pending",
+    }
+
+
 def _file_extension(filename: str) -> str:
     return Path(filename or "").suffix.lower()
 
@@ -1487,7 +1497,7 @@ def download_upload(
         current_user,
         detail="Your active package does not include upload access.",
     )
-    if bool(upload_record.get("quarantined")):
+    if _upload_scan_blocks_download(upload_record):
         is_admin = _is_admin(current_user)
         if not (
             is_admin
@@ -1500,13 +1510,16 @@ def download_upload(
                     _current_user_id(current_user),
                     "upload",
                     upload_id,
-                    {"reason": "quarantined"},
+                    {
+                        "reason": "scan_not_clean",
+                        "scan_status": _normalize_value(upload_record.get("scan_status")) or "unknown",
+                    },
                 )
             except Exception:
                 pass
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="This file is quarantined and cannot be downloaded.",
+                detail="This file is unavailable until its security scan passes.",
             )
 
     if _normalize_value(upload_record.get("storage_provider")).lower() == "r2":

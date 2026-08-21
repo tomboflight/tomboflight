@@ -188,6 +188,68 @@ class AdminPermissionContextTests(unittest.TestCase):
 
 
 class AdminControlAccessProfileTests(unittest.TestCase):
+    def test_overview_payload_is_reduced_to_each_officers_authorized_domain(self):
+        payload = {
+            "summary": {"gross_revenue": 100, "total_users": 19},
+            "finance_sections": {"money_now": {"gross_revenue": 100}},
+            "marketing_sections": {"traffic_awareness": {"visitors": 10}},
+            "operations_sections": {"intake_onboarding": {"intake_started": 2}},
+            "priority_repairs": {
+                "paid_order_without_project_link": [
+                    {"email": "private@example.com", "order_id": "order-1"}
+                ]
+            },
+            "mismatches": [{"project_id": "project-1"}],
+            "system_health": {"postmark": {"token_configured": True}},
+        }
+        role_payloads = {
+            "finance_admin": ("finance_sections", "money_now"),
+            "operations_admin": ("operations_sections", "intake_onboarding"),
+            "marketing_admin": ("marketing_sections", "traffic_awareness"),
+        }
+
+        for role_code, (allowed_section, allowed_key) in role_payloads.items():
+            with self.subTest(role_code=role_code):
+                filtered = admin_control_service.filter_admin_console_overview_for_access(
+                    payload,
+                    {
+                        "role": role_code,
+                        "_access_context": {
+                            "role_codes": [role_code],
+                            "permissions": [
+                                "admin.control.view",
+                                "admin.control.billing",
+                                "admin.analytics.read",
+                            ],
+                        },
+                    },
+                )
+                self.assertIn(allowed_key, filtered[allowed_section])
+                self.assertEqual(filtered["summary"], {})
+                self.assertEqual(filtered["priority_repairs"], {})
+                self.assertEqual(filtered["mismatches"], [])
+                self.assertEqual(filtered["system_health"], {})
+                for section_name in {
+                    "finance_sections",
+                    "marketing_sections",
+                    "operations_sections",
+                } - {allowed_section}:
+                    self.assertEqual(filtered[section_name], {})
+
+    def test_wildcard_overview_payload_remains_complete(self):
+        payload = {"summary": {"total_users": 19}, "finance_sections": {"money_now": {}}}
+        filtered = admin_control_service.filter_admin_console_overview_for_access(
+            payload,
+            {
+                "role": "ceo_master_admin",
+                "_access_context": {
+                    "role_codes": ["ceo_master_admin"],
+                    "permissions": ["*"],
+                },
+            },
+        )
+        self.assertIs(filtered, payload)
+
     def test_finance_profile_can_handle_billing_but_not_mint_or_upload_review(self):
         current_user = {
             "role": "finance",

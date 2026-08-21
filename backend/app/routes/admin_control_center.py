@@ -29,6 +29,7 @@ from app.services.admin_control_service import (
     execute_case_action,
     enable_admin_impersonation_editing,
     export_operations_report,
+    filter_admin_console_overview_for_access,
     enable_mint_review,
     generate_entitlement,
     link_order_to_project,
@@ -299,9 +300,9 @@ def get_admin_control_overview(
     limit: int = Query(default=20, ge=1, le=100),
     current_user: dict[str, Any] = Depends(require_any_permission(["admin.control.view", "admin.analytics.read"])),
 ):
-    del current_user
     try:
-        return admin_console_overview(limit=limit)
+        payload = admin_console_overview(limit=limit)
+        return filter_admin_console_overview_for_access(payload, current_user)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
 
