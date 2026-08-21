@@ -13,7 +13,6 @@ from cryptography.fernet import Fernet, InvalidToken
 
 from app.config import settings
 from app.core.password_policy import validate_password_strength
-from app.core.role_catalog import has_internal_admin_role
 from app.core.security import (
     create_access_token,
     decode_access_token,
@@ -50,17 +49,6 @@ def _get_database_or_none():
 def _current_user_id_from_doc(user: dict) -> str:
     raw_value = user.get("_id") or user.get("id") or user.get("user_id")
     return _normalize_text(raw_value)
-
-
-def _requires_internal_admin_mfa(user: dict[str, Any]) -> bool:
-    role_values: list[Any] = [
-        user.get("role"),
-        user.get("access_tier"),
-        user.get("department_role"),
-    ]
-    for field_name in ("role_codes", "admin_roles", "officer_roles"):
-        role_values.extend(list(user.get(field_name) or []))
-    return has_internal_admin_role(role_values)
 
 
 def _password_reset_expiry_iso() -> str:
@@ -384,21 +372,6 @@ def authenticate_user(email: str, password: str) -> dict[str, Any] | None:
             "mfa_challenge_token": challenge,
         }
 
-    if _requires_internal_admin_mfa(user):
-        challenge = create_access_token(
-            {
-                "sub": user["email"],
-                "user_id": str(user["_id"]),
-                "purpose": "mfa_enroll",
-                "tv": _session_version(user),
-            },
-            expires_minutes=max(2, int(settings.mfa_challenge_expire_minutes or 10)),
-        )
-        return {
-            "status": "mfa_enrollment_required",
-            "mfa_challenge_token": challenge,
-        }
-
     now_iso = _now_iso()
     db.users.update_one(
         {"_id": user["_id"]},
@@ -406,6 +379,8 @@ def authenticate_user(email: str, password: str) -> dict[str, Any] | None:
             "$set": {
                 "last_login_at": now_iso,
                 **_clear_password_reset_fields(),
+                "mfa_pending_secret_encrypted": None,
+                "mfa_pending_started_at": None,
             }
         },
     )
@@ -628,8 +603,6 @@ def disable_mfa_for_user(
     recovery_code: str | None,
     actor_user_id: str,
 ) -> None:
-    if _requires_internal_admin_mfa(user):
-        raise ValueError("MFA is required for internal administrator accounts.")
     password_hash = _normalize_text(user.get("password_hash"))
     if not verify_password(current_password, password_hash):
         raise ValueError("Current password is incorrect.")

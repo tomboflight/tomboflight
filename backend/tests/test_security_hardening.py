@@ -129,7 +129,7 @@ class RateLimitAndLockoutTests(unittest.TestCase):
 
 
 class AuthMfaTests(unittest.TestCase):
-    def test_internal_admin_without_mfa_must_enroll_before_authentication(self):
+    def test_internal_admin_without_mfa_authenticates_normally(self):
         user_id = ObjectId()
         db = FakeDatabase(
             {
@@ -151,9 +151,12 @@ class AuthMfaTests(unittest.TestCase):
             result = auth_service.authenticate_user("admin@example.com", "StrongPass!123")
         self.assertIsNotNone(result)
         assert result is not None
-        self.assertEqual(result["status"], "mfa_enrollment_required")
-        self.assertTrue(result.get("mfa_challenge_token"))
-        self.assertFalse(result.get("access_token"))
+        self.assertEqual(result["status"], "authenticated")
+        self.assertTrue(result.get("access_token"))
+        self.assertFalse(result.get("mfa_challenge_token"))
+        stored = db.users.find_one({"_id": user_id})
+        self.assertIsNone(stored.get("mfa_pending_secret_encrypted"))
+        self.assertIsNone(stored.get("mfa_pending_started_at"))
 
     def test_mfa_enabled_user_requires_verification(self):
         user_id = ObjectId()
@@ -180,18 +183,35 @@ class AuthMfaTests(unittest.TestCase):
         self.assertEqual(result["status"], "mfa_required")
         self.assertTrue(result.get("mfa_challenge_token"))
 
-    def test_internal_admin_cannot_disable_required_mfa(self):
-        with self.assertRaisesRegex(
-            ValueError,
-            "MFA is required for internal administrator accounts",
+    def test_internal_admin_can_disable_opted_in_mfa(self):
+        user_id = ObjectId()
+        user = {
+            "_id": user_id,
+            "email": "admin@example.com",
+            "role": "admin",
+            "access_tier": "super_admin",
+            "password_hash": "stored-password-hash",
+            "mfa_enabled": True,
+            "mfa_secret_encrypted": "encrypted-secret",
+        }
+        db = FakeDatabase({"users": [user]})
+        with (
+            patch.object(auth_service, "verify_password", return_value=True),
+            patch.object(auth_service, "_mfa_decrypt_secret", return_value="secret"),
+            patch.object(auth_service, "_verify_totp", return_value=True),
+            patch.object(auth_service, "get_database", return_value=db),
+            patch.object(auth_service, "create_audit_log"),
         ):
             auth_service.disable_mfa_for_user(
-                user={"role": "admin", "access_tier": "super_admin"},
+                user=user,
                 current_password="StrongPass!123",
                 code="123456",
                 recovery_code=None,
                 actor_user_id="admin-1",
             )
+        stored = db.users.find_one({"_id": user_id})
+        self.assertFalse(stored.get("mfa_enabled"))
+        self.assertIsNone(stored.get("mfa_secret_encrypted"))
 
 
 class AuthDatabaseFailClosedTests(unittest.TestCase):
