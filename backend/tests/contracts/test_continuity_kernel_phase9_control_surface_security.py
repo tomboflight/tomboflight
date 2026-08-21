@@ -55,11 +55,13 @@ class TestContinuityKernelPhase9ControlSurfaceSecurity(unittest.TestCase):
             self.assertNotIn(forbidden, self.control_js)
         self.assertIn("submitGovernedOperation", self.control_js)
 
-    def test_03_authentication_fails_closed_and_admin_mfa_is_mandatory(self) -> None:
+    def test_03_authentication_fails_closed_and_mfa_is_account_opt_in(self) -> None:
         self.assertNotIn('"status": "authenticated", "access_token": token', self.auth)
-        self.assertIn("mfa_enrollment_required", self.auth)
-        self.assertIn("MFA is required for internal administrator accounts", self.auth)
-        self.assertIn("MFA enrollment is required for internal administrator accounts", self.dependencies)
+        self.assertNotIn("_requires_internal_admin_mfa", self.auth)
+        self.assertNotIn("mfa_enrollment_required", self.auth)
+        self.assertNotIn("MFA enrollment is required for internal administrator accounts", self.dependencies)
+        self.assertIn('if bool(normalized_user.get("mfa_enabled")):', self.dependencies)
+        self.assertIn("MFA verification is required for this session", self.dependencies)
 
     def test_04_bearer_and_user_context_are_tab_scoped(self) -> None:
         self.assertIn("sessionStorage.setItem(TOKEN_KEY, token)", self.app_js)

@@ -40,7 +40,7 @@ The pre-existing Phase 8 action registry continues to cover case mutations, safe
 ## Security changes
 
 - Login and signup fail closed when the identity database is unavailable; no preview account or fallback bearer token is issued.
-- Internal administrator accounts must enroll and complete MFA, and cannot disable MFA while they retain an internal admin role.
+- Authenticator MFA is available as an account-level opt-in for customers, officers, and administrators. Accounts without MFA can authenticate with their password; accounts that enable MFA must complete it at sign-in and may later disable it after password and authenticator/recovery-code verification.
 - Production HMAC signing secrets must be unique and at least 32 bytes; allowed JWT algorithms are restricted to `HS256`, `HS384`, and `HS512`.
 - Browser bearer and user context are stored in `sessionStorage`, with legacy persistent copies removed.
 - Overview payloads are reduced server-side to finance, operations, or marketing domains for restricted officer roles.
