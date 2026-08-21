@@ -70,6 +70,13 @@
               </button>
             </div>
             <div class="helper" data-admin-control-action-status aria-live="polite"></div>
+            <div class="admin-warning-strip" data-admin-kernel-status aria-live="polite">
+              <span>Continuity Kernel</span>
+              <div>
+                <strong data-admin-kernel-status-label>Checking operational runtime...</strong>
+                <span data-admin-kernel-status-meta></span>
+              </div>
+            </div>
             <div
               class="notice"
               data-state="error"
@@ -199,6 +206,18 @@
                     <button class="btn btn-primary" type="button" data-admin-bulk-action="repair-all-safe-records">Repair All Safe Records</button>
                   </div>
                   <div class="admin-priority-repair-list" data-admin-priority-repairs></div>
+                </div>
+                <div class="admin-console-priority" data-admin-kernel-operations-panel>
+                  <div class="admin-card-header">
+                    <h3>Governed Operations</h3>
+                    <button class="btn btn-secondary" type="button" data-admin-kernel-refresh>
+                      Refresh
+                    </button>
+                  </div>
+                  <p class="card-copy">
+                    Execution requests, approvals, results, and audit closure from the operational Kernel.
+                  </p>
+                  <div class="admin-priority-repair-list" data-admin-kernel-operations></div>
                 </div>
                 <div class="helper" data-admin-priority-feed-status aria-live="polite"></div>
                 <div class="admin-case-context" data-admin-case-context></div>

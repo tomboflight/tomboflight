@@ -17,6 +17,7 @@ from app.routes.admin_intake_submissions import (
     router as admin_intake_submissions_router,
 )
 from app.routes.admin_continuity_preview import router as admin_continuity_preview_router
+from app.routes.admin_continuity_runtime import router as admin_continuity_runtime_router
 from app.routes.asset_delivery import router as asset_delivery_router
 from app.routes.admin_control_center import router as admin_control_center_router
 from app.routes.admin_stripe_operations import router as admin_stripe_operations_router
@@ -74,6 +75,7 @@ from app.routes.organizations import router as organizations_router
 from app.services.project_entitlement_service import ensure_project_entitlement_indexes
 from app.services.admin_access_bootstrap_service import bootstrap_admin_access_controls
 from app.services.admin_control_service import ensure_finance_event_indexes
+from app.services.continuity_runtime_service import ensure_continuity_runtime_indexes
 from app.services.organization_service import ensure_organization_indexes
 from app.routes.package_catalog import router as package_catalog_router
 from app.routes.package_catalog_public import router as package_catalog_public_router
@@ -157,6 +159,7 @@ async def lifespan(app: FastAPI):
         initialize_mint_job_indexes()
         ensure_stripe_event_indexes()
         ensure_finance_event_indexes()
+        ensure_continuity_runtime_indexes()
         ensure_organization_indexes()
         try:
             bootstrap_admin_access_controls()
@@ -233,6 +236,7 @@ app.include_router(intake_options_router)
 app.include_router(intake_submissions_router)
 app.include_router(admin_intake_submissions_router)
 app.include_router(admin_continuity_preview_router)
+app.include_router(admin_continuity_runtime_router)
 app.include_router(admin_control_center_router)
 app.include_router(admin_stripe_operations_router)
 app.include_router(projects_router)
