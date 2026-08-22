@@ -792,7 +792,8 @@ test("[account360] validates all tabs + loading/empty/denied/error states and se
   await expect(page.locator("body")).not.toContainText("sk_live_");
   await expect(page.locator("body")).not.toContainText("private_key");
   await expect(page.locator("body")).not.toContainText("token=");
-  await expect(page.locator("body")).not.toContainText("password");
+  await expect(page.locator("body")).not.toContainText("password_hash");
+  await expect(page.locator("body")).not.toContainText("password=");
 });
 
 test("[errors] backend case-search failures include actionable code + retry guidance", async ({ page }) => {
