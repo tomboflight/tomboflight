@@ -733,9 +733,9 @@ test("[package-service] validates preview/cancel/apply/idempotent and no Stripe 
   await page.locator("[data-super-admin-service-apply]").click();
   await page.locator("[data-super-admin-service-apply]").click();
   await page.locator("[data-super-admin-package-apply]").click();
-  await expect.poll(() => env.stats.serviceApplyWrites).toBeGreaterThanOrEqual(2);
+  await expect.poll(() => env.stats.serviceApplyWrites).toBe(1);
   await expect.poll(() => env.stats.packageApplyWrites).toBeGreaterThanOrEqual(1);
-  expect(env.stats.kernelExecutions.filter((item) => item.action === "service_controls").length).toBeGreaterThanOrEqual(2);
+  expect(env.stats.kernelExecutions.filter((item) => item.action === "service_controls")).toHaveLength(1);
   expect(env.stats.kernelExecutions.filter((item) => item.action === "package_change").length).toBeGreaterThanOrEqual(1);
   expect(env.stats.stripeMutations).toBe(0);
   expect(env.stats.blockchainOps).toBe(0);
