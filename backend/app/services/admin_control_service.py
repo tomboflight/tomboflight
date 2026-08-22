@@ -10,9 +10,11 @@ from bson import ObjectId
 
 from app.config import settings
 from app.core.admin_permission_registry import (
+    ASSIGNABLE_OFFICER_ROLE_CODES,
     CEO_MASTER_ADMIN_EMAIL,
     OFFICER_PROFILE_FIELDS,
     PERMISSION_REGISTRY,
+    ROLE_METADATA,
     ROLE_PERMISSION_MAP,
 )
 from app.core.package_catalog import (
@@ -62,6 +64,7 @@ SERVICE_CONTROL_OPERATIONS = {
     "internal_validation_account",
 }
 OFFICER_ADMIN_EMAILS = set(OFFICER_PROFILE_FIELDS) - {str(CEO_MASTER_ADMIN_EMAIL).strip().lower()}
+TEAM_ACCESS_ROLE_TEMPLATES = ASSIGNABLE_OFFICER_ROLE_CODES
 
 ADMIN_CONTROL_QUEUES = [
     "overview",
@@ -597,7 +600,7 @@ def admin_control_bulk_action_allowed(
 # Bumped alongside the static frontend cache-busting query string
 # (see admin-control-center.html / dashboard.html `?v=` suffix) whenever a
 # hotfix ships to the admin control center or dashboard assets.
-FRONTEND_ASSET_REVISION = "20260821-phase9"
+FRONTEND_ASSET_REVISION = "20260821-phase10"
 
 
 def _backend_release_identifier() -> str:
@@ -4769,6 +4772,7 @@ def super_admin_list_officers() -> dict[str, Any]:
             items.append(
                 {
                     "email": email,
+                    "officer_email": email,
                     "full_name": profile.get("full_name"),
                     "business_title": profile.get("business_title"),
                     "expected_access_tier": profile.get("access_tier"),
@@ -4784,6 +4788,7 @@ def super_admin_list_officers() -> dict[str, Any]:
             {
                 "user_id": user_id,
                 "email": _normalize_email(user.get("email")) or email,
+                "officer_email": _normalize_email(user.get("email")) or email,
                 "full_name": _user_display_name(user),
                 "business_title": _normalize(user.get("business_title")) or profile.get("business_title"),
                 "status": _normalize(user.get("status")) or "active",
@@ -4796,7 +4801,39 @@ def super_admin_list_officers() -> dict[str, Any]:
                 "permission_overrides": _officer_permission_overrides(user_id),
             }
         )
-    return {"items": items, "total": len(items)}
+    role_templates: dict[str, dict[str, Any]] = {}
+    for role_code in TEAM_ACCESS_ROLE_TEMPLATES:
+        permissions = sorted(ROLE_PERMISSION_MAP.get(role_code) or set())
+        profile = admin_control_access_profile(
+            {
+                "_access_context": {
+                    "role_codes": [role_code],
+                    "permissions": permissions,
+                    "capabilities": [],
+                }
+            }
+        )
+        metadata = ROLE_METADATA.get(role_code) or {}
+        role_templates[role_code] = {
+            "role_code": role_code,
+            "name": metadata.get("name") or role_code.replace("_", " ").title(),
+            "description": metadata.get("description") or "Job-scoped Tomb of Light administrative access.",
+            "permissions": permissions,
+            "allowed_queues": list(profile.get("allowed_queues") or []),
+            "allowed_tabs": list(profile.get("allowed_tabs") or []),
+            "allowed_actions": list(profile.get("allowed_actions") or []),
+            "allowed_bulk_actions": list(profile.get("allowed_bulk_actions") or []),
+        }
+    return {
+        "items": items,
+        "total": len(items),
+        "ceo_identity": {
+            "email": CEO_MASTER_ADMIN_EMAIL,
+            "role_code": "ceo_master_admin",
+            "immutable": True,
+        },
+        "role_templates": role_templates,
+    }
 
 
 def super_admin_preview_officer_permissions(
@@ -4821,9 +4858,11 @@ def super_admin_preview_officer_permissions(
         for role_code in (role_assignments or [])
         if normalize_role_code(role_code)
     }
+    if len(target_roles) > 1:
+        raise ValueError("Select exactly one job-scoped officer role.")
     for role_code in target_roles:
-        if role_code == "ceo_master_admin":
-            raise ValueError("ceo_master_admin cannot be assigned through officer management.")
+        if role_code not in TEAM_ACCESS_ROLE_TEMPLATES:
+            raise ValueError("Only a CEO-approved job-scoped officer role can be assigned.")
 
     after_roles = set(before_roles)
     if target_roles:
@@ -4838,7 +4877,7 @@ def super_admin_preview_officer_permissions(
     for permission in revoke_permissions or []:
         after_permissions.discard(_normalize(permission))
 
-    expected_profile = OFFICER_PROFILE_FIELDS.get(normalized_email) or {}
+    managed_role_code = next(iter(target_roles), "")
     return {
         "officer_email": normalized_email,
         "user_id": user_id,
@@ -4851,8 +4890,9 @@ def super_admin_preview_officer_permissions(
         "proposed_after": {
             "role_assignments": sorted(after_roles),
             "permission_overrides": sorted(after_permissions),
-            "access_tier": _normalize(expected_profile.get("access_tier")) or _normalize(user.get("access_tier")) or None,
-            "department_role": _normalize(expected_profile.get("department_role")) or _normalize(user.get("department_role")) or None,
+            "access_tier": managed_role_code or _normalize(user.get("access_tier")) or None,
+            "department_role": managed_role_code or _normalize(user.get("department_role")) or None,
+            "managed_role_code": managed_role_code or _normalize(user.get("managed_role_code")) or None,
         },
         "changes": _build_package_change_summary(
             before={
@@ -4890,7 +4930,24 @@ def super_admin_apply_officer_permissions(
     if not user_id:
         raise ValueError("Officer user is missing an id.")
     now_value = _now()
-    for role_code in preview.get("proposed_after", {}).get("role_assignments", []):
+    proposed_after = preview.get("proposed_after", {})
+    managed_role_code = _normalize(proposed_after.get("managed_role_code"))
+    if managed_role_code:
+        user_lookup_id = _to_object_id(user_id) or user_id
+        db["users"].update_one(
+            {"_id": user_lookup_id},
+            {
+                "$set": {
+                    "role": "admin",
+                    "account_type": "business_admin",
+                    "access_tier": managed_role_code,
+                    "department_role": managed_role_code,
+                    "managed_role_code": managed_role_code,
+                    "updated_at": now_value,
+                }
+            },
+        )
+    for role_code in proposed_after.get("role_assignments", []):
         db["user_role_assignments"].update_one(
             {"user_id": user_id, "role_code": role_code},
             {"$set": {"status": "active", "updated_at": now_value}, "$setOnInsert": {"created_at": now_value}},
@@ -4899,12 +4956,12 @@ def super_admin_apply_officer_permissions(
     db["user_role_assignments"].update_many(
         {
             "user_id": user_id,
-            "role_code": {"$nin": preview.get("proposed_after", {}).get("role_assignments", [])},
+            "role_code": {"$nin": proposed_after.get("role_assignments", [])},
             "status": {"$in": ["active", "enabled", ""]},
         },
         {"$set": {"status": "inactive", "updated_at": now_value}},
     )
-    for permission_code in preview.get("proposed_after", {}).get("permission_overrides", []):
+    for permission_code in proposed_after.get("permission_overrides", []):
         db["user_permission_overrides"].update_one(
             {"user_id": user_id, "permission_code": permission_code},
             {"$set": {"status": "active", "updated_at": now_value}, "$setOnInsert": {"created_at": now_value}},
@@ -4913,7 +4970,7 @@ def super_admin_apply_officer_permissions(
     db["user_permission_overrides"].update_many(
         {
             "user_id": user_id,
-            "permission_code": {"$nin": preview.get("proposed_after", {}).get("permission_overrides", [])},
+            "permission_code": {"$nin": proposed_after.get("permission_overrides", [])},
             "status": {"$in": ["active", "enabled", ""]},
         },
         {"$set": {"status": "inactive", "updated_at": now_value}},

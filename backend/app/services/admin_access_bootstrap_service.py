@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from app.core.admin_permission_registry import (
+    ASSIGNABLE_OFFICER_ROLE_CODES,
     CEO_MASTER_ADMIN_EMAIL,
     OFFICER_PROFILE_FIELDS,
     PERMISSION_REGISTRY,
@@ -12,6 +13,7 @@ from app.core.admin_permission_registry import (
     ROLE_PERMISSION_MAP,
     normalized_officer_role_mapping,
 )
+from app.core.role_catalog import normalize_role_code
 from app.database import get_database
 
 
@@ -103,6 +105,7 @@ def _sync_officer_assignments(db, now_iso: str) -> dict[str, Any]:
     assignments = db["user_role_assignments"]
     mapping = normalized_officer_role_mapping()
     required_role_codes = set(role_code for role_codes in mapping.values() for role_code in role_codes)
+    required_role_codes.update(ASSIGNABLE_OFFICER_ROLE_CODES)
 
     updated_users = 0
     missing_users: list[str] = []
@@ -111,13 +114,19 @@ def _sync_officer_assignments(db, now_iso: str) -> dict[str, Any]:
     assignments_disabled = 0
 
     ceo_master_admin_user_id = ""
-    for email, expected_roles in mapping.items():
+    for email, seeded_roles in mapping.items():
         user = users.find_one({"email": email})
         if user is None:
             missing_users.append(email)
             continue
 
         profile_fields = OFFICER_PROFILE_FIELDS.get(email, {})
+        managed_role_code = normalize_role_code(user.get("managed_role_code"))
+        if email == CEO_MASTER_ADMIN_EMAIL or managed_role_code not in ASSIGNABLE_OFFICER_ROLE_CODES:
+            expected_roles = list(seeded_roles)
+            managed_role_code = ""
+        else:
+            expected_roles = [managed_role_code]
         update_payload = {
             "email": email,
             "role": "admin",
@@ -129,10 +138,15 @@ def _sync_officer_assignments(db, now_iso: str) -> dict[str, Any]:
             update_payload["full_name"] = profile_fields["full_name"]
         if profile_fields.get("business_title"):
             update_payload["business_title"] = profile_fields["business_title"]
-        if profile_fields.get("access_tier"):
-            update_payload["access_tier"] = profile_fields["access_tier"]
-        if profile_fields.get("department_role"):
-            update_payload["department_role"] = profile_fields["department_role"]
+        if managed_role_code:
+            update_payload["access_tier"] = managed_role_code
+            update_payload["department_role"] = managed_role_code
+            update_payload["managed_role_code"] = managed_role_code
+        else:
+            if profile_fields.get("access_tier"):
+                update_payload["access_tier"] = profile_fields["access_tier"]
+            if profile_fields.get("department_role"):
+                update_payload["department_role"] = profile_fields["department_role"]
 
         update_result = users.update_one({"_id": user["_id"]}, {"$set": update_payload})
         updated_users += int(bool(update_result.modified_count))

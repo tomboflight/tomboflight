@@ -78,6 +78,10 @@ class FakeCollection:
                 if document.get(key) not in set(expected["$in"]):
                     return False
                 continue
+            if isinstance(expected, dict) and "$nin" in expected:
+                if document.get(key) in set(expected["$nin"]):
+                    return False
+                continue
             if document.get(key) != expected:
                 return False
         return True
@@ -179,6 +183,41 @@ class AdminAccessBootstrapTests(unittest.TestCase):
             "inactive",
         )
         self.assertGreaterEqual(first_result["retired_officers"]["assignments_disabled"], 1)
+
+    def test_bootstrap_preserves_ceo_assigned_job_scope_for_active_officer(self):
+        db = FakeDatabase(
+            {
+                "users": [
+                    {"_id": "u-larry", "email": "l.robinson@tomboflight.com", "role": "admin"},
+                    {
+                        "_id": "u-jenn",
+                        "email": "jenn.wood@tomboflight.com",
+                        "role": "admin",
+                        "access_tier": "finance_admin",
+                        "department_role": "finance_admin",
+                        "managed_role_code": "marketing_admin",
+                    },
+                    {"_id": "u-keith", "email": "k.goffigan@tomboflight.com", "role": "admin"},
+                ],
+                "user_role_assignments": [
+                    {"_id": "jenn-finance", "user_id": "u-jenn", "role_code": "finance_admin", "status": "active"},
+                    {"_id": "jenn-marketing", "user_id": "u-jenn", "role_code": "marketing_admin", "status": "active"},
+                ],
+            }
+        )
+
+        with patch.object(admin_access_bootstrap_service, "get_database", return_value=db):
+            admin_access_bootstrap_service.bootstrap_admin_access_controls()
+
+        jenn = db["users"].find_one({"_id": "u-jenn"}) or {}
+        self.assertEqual(jenn.get("access_tier"), "marketing_admin")
+        self.assertEqual(jenn.get("department_role"), "marketing_admin")
+        active_roles = sorted(
+            item.get("role_code")
+            for item in db["user_role_assignments"].documents
+            if item.get("user_id") == "u-jenn" and item.get("status") == "active"
+        )
+        self.assertEqual(active_roles, ["marketing_admin"])
 
 
 if __name__ == "__main__":

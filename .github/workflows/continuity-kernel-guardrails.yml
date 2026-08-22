@@ -84,3 +84,24 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install pip-audit
           python -m pip_audit -r backend/requirements.txt
+
+  admin-control-center-browser-execution:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install browser verification dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Verify every CEO control workflow in a browser
+        run: npm run test:browser
