@@ -250,6 +250,23 @@ async function installApiRoutes(page, env) {
     if (method === "POST" && path === "/admin/control-center/kernel/execute") {
       const body = JSON.parse(request.postData() || "{}");
       env.stats.kernelExecutions.push(body);
+      if (body.action === "service_controls") env.stats.serviceApplyWrites += 1;
+      if (body.action === "package_change") env.stats.packageApplyWrites += 1;
+      if (body.action === "impersonation_start") {
+        env.state.activeImpersonation = {
+          active: true,
+          session_id: "imp-session-1",
+          banner: "Viewing Tomb of Light as Customer",
+          project_id: "proj-customer",
+          editing_enabled: false,
+          expires_at: new Date(Date.now() + 30 * 60_000).toISOString(),
+        };
+        env.stats.impersonationAuditEvents += 1;
+      }
+      if (body.action === "impersonation_stop") {
+        env.state.activeImpersonation = null;
+        env.stats.impersonationAuditEvents += 1;
+      }
       return json({
         operation_id: `kernel-operation-${env.stats.kernelExecutions.length}`,
         state: "executed",
@@ -511,7 +528,7 @@ test("[account controls] creates an account with a package and closes owned work
   expect(env.stats.kernelExecutions[0].parameters.user_payload.package_code).toBe("legacy_plus");
   expect(env.stats.kernelExecutions[0].parameters.user_payload.project_name).toBe("New Customer Legacy Build");
 
-  await page.locator('[data-admin-case-tab="identity"]').click();
+  await page.locator('[data-admin-case-tab="overview"]').click();
   await expect(page.locator('[data-super-admin-archive-owned="true"]')).toBeVisible();
   await page.locator('[data-super-admin-archive-owned="true"]').click();
   await expect(page.locator("[data-admin-lifecycle-dialog]")).toBeVisible();
@@ -661,6 +678,7 @@ test("[account360] validates all tabs + loading/empty/denied/error states and se
 });
 
 test("[errors] backend case-search failures include actionable code + retry guidance", async ({ page }) => {
+  await page.locator('[data-admin-nav-group="governance"] summary').click();
   await page.locator('[data-case-queue="users"]').click();
   await page
     .getByPlaceholder("Name, email, birthday, package, project, family, last4, order, session, wallet, token, certificate")
@@ -715,8 +733,10 @@ test("[package-service] validates preview/cancel/apply/idempotent and no Stripe 
   await page.locator("[data-super-admin-service-apply]").click();
   await page.locator("[data-super-admin-service-apply]").click();
   await page.locator("[data-super-admin-package-apply]").click();
-  expect(env.stats.serviceApplyWrites).toBeGreaterThanOrEqual(2);
-  expect(env.stats.packageApplyWrites).toBeGreaterThanOrEqual(1);
+  await expect.poll(() => env.stats.serviceApplyWrites).toBeGreaterThanOrEqual(2);
+  await expect.poll(() => env.stats.packageApplyWrites).toBeGreaterThanOrEqual(1);
+  expect(env.stats.kernelExecutions.filter((item) => item.action === "service_controls").length).toBeGreaterThanOrEqual(2);
+  expect(env.stats.kernelExecutions.filter((item) => item.action === "package_change").length).toBeGreaterThanOrEqual(1);
   expect(env.stats.stripeMutations).toBe(0);
   expect(env.stats.blockchainOps).toBe(0);
 });
@@ -756,6 +776,13 @@ test("[officer] applies an exact job template through the visible CEO Team Acces
 
 test("[impersonation] validates read-only start, reason requirements, banner, stop, and nested rejection", async ({ page }) => {
   const env = page.__env;
+  page.on("dialog", async (dialog) => {
+    if (dialog.type() === "prompt") {
+      await dialog.accept("Operator exited preview");
+      return;
+    }
+    await dialog.accept();
+  });
   await expect(page.locator("[data-admin-impersonation-start]")).toBeVisible();
   await page.locator("[data-admin-impersonation-start]").click();
   await expect(page.locator("[data-admin-control-action-status]")).toContainText("reason is required");
