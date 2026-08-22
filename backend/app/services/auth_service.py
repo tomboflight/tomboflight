@@ -744,6 +744,25 @@ def request_password_reset(
             )
         return generic_response
 
+    account_status = _normalize_text(user.get("status")).lower()
+    account_type = _normalize_text(user.get("account_type")).lower()
+    if account_status not in {"", "active"} or account_type == "deleted_tombstone":
+        # Do not create a credential-recovery path for suspended, archived, or
+        # permanently deleted identities. Self-service callers still receive
+        # the generic response so account state cannot be enumerated.
+        if include_delivery_status:
+            generic_response.update(
+                {
+                    "success": False,
+                    "reset_persisted": False,
+                    "delivery_sent": False,
+                    "delivery_provider": "postmark",
+                    "delivery_error": "account_not_active",
+                    "failure_count": 1,
+                }
+            )
+        return generic_response
+
     now_iso = _now_iso()
     expires_at = _password_reset_expiry_iso()
     token = secrets.token_urlsafe(32)
@@ -962,6 +981,11 @@ def admin_issue_password_reset(
     user = get_user_by_id(user_id)
     if user is None:
         raise ValueError("User account not found.")
+    if (
+        _normalize_text(user.get("status")).lower() == "permanently_deleted"
+        or _normalize_text(user.get("account_type")).lower() == "deleted_tombstone"
+    ):
+        raise ValueError("A permanently deleted account cannot receive a password reset.")
 
     response = request_password_reset(
         _normalize_text(user.get("email")).lower(),

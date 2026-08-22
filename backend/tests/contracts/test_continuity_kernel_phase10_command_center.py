@@ -22,10 +22,10 @@ class TestContinuityKernelPhase10CommandCenter(unittest.TestCase):
         cls.workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
 
     def test_01_control_center_assets_use_phase10_revision(self) -> None:
-        self.assertIn("styles.css?v=20260821-phase10", self.html)
-        self.assertIn("app.js?v=20260821-phase10", self.html)
-        self.assertIn("admin-control-center.js?v=20260821-phase10", self.html)
-        self.assertIn('FRONTEND_ASSET_REVISION = "20260821-phase10"', self.service)
+        self.assertIn("styles.css?v=20260821-phase10-1", self.html)
+        self.assertIn("app.js?v=20260821-phase10-1", self.html)
+        self.assertIn("admin-control-center.js?v=20260821-phase10-1", self.html)
+        self.assertIn('FRONTEND_ASSET_REVISION = "20260821-phase10-1"', self.service)
 
     def test_02_account_creation_and_closure_are_visible_previewed_workflows(self) -> None:
         for marker in (

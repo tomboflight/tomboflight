@@ -39,7 +39,7 @@ from app.services.auth_service import admin_issue_password_reset
 from app.services.audit_log_service import write_audit_log
 
 
-RUNTIME_VERSION = "9.0.0"
+RUNTIME_VERSION = "10.1.0"
 OPERATIONS_COLLECTION = "continuity_operations"
 EVENTS_COLLECTION = "continuity_events"
 EXECUTION_KILL_SWITCH = "CONTINUITY_EXECUTION_KILL_SWITCH"
@@ -94,6 +94,7 @@ SUPER_ADMIN_ACTION_SPECS: dict[str, ActionSpec] = {
     "service_controls": ActionSpec("admin_repair_safety", "high", "project", ("project_id",)),
     "officer_permissions": ActionSpec("admin_repair_safety", "high", "officer", ("officer_email",)),
     "account_lifecycle": ActionSpec("admin_repair_safety", "high", "user", ("user_id",)),
+    "account_permanent_delete": ActionSpec("admin_repair_safety", "high", "user", ("user_id",)),
     "case_repair": ActionSpec("admin_repair_safety", "high", "customer_case", ("case_id",)),
 }
 
@@ -188,6 +189,11 @@ def ensure_continuity_runtime_indexes() -> None:
     events.create_index([("operation_id", ASCENDING), ("created_at", ASCENDING)], name="continuity_operation_events")
     events.create_index([("target_id", ASCENDING), ("created_at", DESCENDING)], name="continuity_target_events")
 
+    tombstones = get_database()[admin_control_service.ACCOUNT_DELETION_TOMBSTONES_COLLECTION]
+    tombstones.create_index([("deletion_id", ASCENDING)], unique=True, name="account_deletion_id_unique")
+    tombstones.create_index([("user_id", ASCENDING)], unique=True, name="account_deletion_user_unique")
+    tombstones.create_index([("original_email_sha256", ASCENDING)], name="account_deletion_email_hash")
+
 
 def _actor_id(actor: dict[str, Any] | None) -> str:
     actor = actor or {}
@@ -277,11 +283,29 @@ def _assert_action_allowed_for_actor(spec: ActionSpec, actor: dict[str, Any] | N
     return role
 
 
+def _assert_action_actor_scope(action: str, actor: dict[str, Any] | None) -> None:
+    if _normalize(action) != "account_permanent_delete":
+        return
+    if _actor_email(actor) != str(CEO_MASTER_ADMIN_EMAIL).strip().lower():
+        raise PermissionError("Permanent account deletion is restricted to the canonical CEO Master Administrator.")
+
+
 def _require_text(value: Any, field: str, *, minimum: int = 1) -> str:
     normalized = _normalize(value)
     if len(normalized) < minimum:
         raise ValueError(f"{field} is required and must contain at least {minimum} characters.")
     return normalized
+
+
+def _require_permanent_deletion_confirmations(parameters: dict[str, Any]) -> None:
+    if parameters.get("initial_confirmation") is not True:
+        raise ValueError("The target-account permanent-deletion confirmation is required.")
+    if _normalize(parameters.get("final_confirmation")) != admin_control_service.PERMANENT_DELETE_CONFIRMATION_PHRASE:
+        raise ValueError(
+            f'Type "{admin_control_service.PERMANENT_DELETE_CONFIRMATION_PHRASE}" to authorize permanent deletion.'
+        )
+    if parameters.get("final_acknowledgement") is not True:
+        raise ValueError("The final permanent-closure acknowledgement is required.")
 
 
 def _target_id(spec: ActionSpec, action: str, target: dict[str, Any]) -> str:
@@ -642,6 +666,11 @@ def _preview_action(action: str, target: dict[str, Any], parameters: dict[str, A
             action=_normalize(parameters.get("lifecycle_action")),
             archive_owned_records=bool(parameters.get("archive_owned_records")),
         )
+    if action == "account_permanent_delete":
+        return admin_control_service.super_admin_preview_account_permanent_deletion(
+            user_id=_normalize(target.get("user_id")),
+            reason_category=_normalize(parameters.get("reason_category")),
+        )
     if action == "customer_account_create":
         return admin_control_service.super_admin_preview_customer_create(
             payload=dict(parameters.get("user_payload") or parameters)
@@ -806,6 +835,7 @@ def request_operation(
         raise PermissionError("Authenticated actor id is required.")
     if not actor_snapshot["actor_role"]:
         raise PermissionError("Authenticated actor role is not recognized.")
+    _assert_action_actor_scope(normalized_action, actor)
 
     reason_value = _require_text(reason, "reason", minimum=3)
     idempotency_value = _require_text(idempotency_key, "idempotency_key", minimum=8)
@@ -820,6 +850,8 @@ def request_operation(
             "continuity_idempotency_key": idempotency_value,
         }
     )
+    if normalized_action == "account_permanent_delete":
+        _require_permanent_deletion_confirmations(clean_parameters)
 
     existing = _operations_collection().find_one({"idempotency_key": idempotency_value})
     if existing is not None:
@@ -839,6 +871,20 @@ def request_operation(
     operation_id = f"ckop_{uuid4().hex}"
     now = _now()
     target_id = _normalize(clean_target.get("target_id"))
+    rollback_plan = {
+        "strategy": "restore_from_before_snapshot",
+        "before_snapshot_ref": f"operation:{operation_id}:before_snapshot",
+        "automatic": False,
+        "requires_explicit_rollback_authorization": True,
+    }
+    if normalized_action == "account_permanent_delete":
+        rollback_plan = {
+            "strategy": "irreversible_identity_erasure",
+            "before_snapshot_ref": f"operation:{operation_id}:before_snapshot",
+            "automatic": False,
+            "restoration_prohibited": True,
+            "evidence_only": True,
+        }
     operation = {
         "operation_id": operation_id,
         "evidence_packet_id": f"ckevidence_{uuid4().hex}",
@@ -859,12 +905,7 @@ def request_operation(
         "executed_by": None,
         "before_snapshot": _serialize(before_snapshot),
         "proposed_after_snapshot": _serialize(proposed_after_snapshot),
-        "rollback_plan": {
-            "strategy": "restore_from_before_snapshot",
-            "before_snapshot_ref": f"operation:{operation_id}:before_snapshot",
-            "automatic": False,
-            "requires_explicit_rollback_authorization": True,
-        },
+        "rollback_plan": rollback_plan,
         "blocked_reasons": blocked_reasons,
         "transitions": [
             {
@@ -946,7 +987,9 @@ def approve_operation(
             + ", ".join(str(reason) for reason in operation.get("blocked_reasons") or [])
         )
 
-    spec = ACTION_SPECS[_normalize(operation.get("action"))]
+    action = _normalize(operation.get("action"))
+    _assert_action_actor_scope(action, actor)
+    spec = ACTION_SPECS[action]
     role = _assert_action_allowed_for_actor(spec, actor)
     reason_value = _require_text(approval_reason, "approval_reason", minimum=3)
     requester_id = _normalize((operation.get("requested_by") or {}).get("actor_user_id"))
@@ -993,7 +1036,9 @@ def reject_operation(operation_id: str, *, rejection_reason: str, actor: dict[st
         return _serialize_operation(operation) or {}
     if operation.get("state") not in {"review_requested", "officer_reviewing"}:
         raise ValueError("Only an operation under review can be rejected.")
-    spec = ACTION_SPECS[_normalize(operation.get("action"))]
+    action = _normalize(operation.get("action"))
+    _assert_action_actor_scope(action, actor)
+    spec = ACTION_SPECS[action]
     _assert_action_allowed_for_actor(spec, actor)
     reason = _require_text(rejection_reason, "rejection_reason", minimum=3)
     expected = _normalize(operation.get("state"))
@@ -1092,14 +1137,23 @@ def _scheduled_transition(operation: dict[str, Any], actor: dict[str, Any]) -> d
 
 def _rollback_verification(operation: dict[str, Any]) -> dict[str, Any]:
     rollback_plan = dict(operation.get("rollback_plan") or {})
+    irreversible = _normalize(operation.get("action")) == "account_permanent_delete"
     return {
         "evidence_packet_id": operation.get("evidence_packet_id"),
         "rollback_plan": rollback_plan,
         "before_snapshot_ref": rollback_plan.get("before_snapshot_ref"),
         "target_type": operation.get("target_type"),
         "target_id": operation.get("target_id"),
-        "verification_status": "before_snapshot_reference_verified",
-        "reason_codes": ["BEFORE_SNAPSHOT_CAPTURED", "MANUAL_ROLLBACK_AUTHORIZATION_REQUIRED"],
+        "verification_status": (
+            "irreversible_evidence_reference_verified"
+            if irreversible
+            else "before_snapshot_reference_verified"
+        ),
+        "reason_codes": (
+            ["BEFORE_SNAPSHOT_CAPTURED", "IRREVERSIBLE_ACTION_EVIDENCE_ONLY"]
+            if irreversible
+            else ["BEFORE_SNAPSHOT_CAPTURED", "MANUAL_ROLLBACK_AUTHORIZATION_REQUIRED"]
+        ),
         "verified_at": _now_iso(),
         "audit_context": _operation_audit_context(operation),
     }
@@ -1368,6 +1422,18 @@ def _invoke_action(
             archive_owned_records=bool(parameters.get("archive_owned_records")),
             actor=actor,
         )
+    if action == "account_permanent_delete":
+        return admin_control_service.super_admin_apply_account_permanent_deletion(
+            user_id=_normalize(target.get("user_id")),
+            reason_category=_normalize(parameters.get("reason_category")),
+            reason=reason,
+            confirmation_email=_normalize(parameters.get("confirmation_email")),
+            initial_confirmation=parameters.get("initial_confirmation") is True,
+            final_confirmation=_normalize(parameters.get("final_confirmation")),
+            final_acknowledgement=parameters.get("final_acknowledgement") is True,
+            continuity_operation_id=_normalize(parameters.get("continuity_operation_id")),
+            actor=actor,
+        )
     if action == "case_repair":
         payload = dict(parameters.get("repair_payload") or parameters)
         payload["reason"] = reason
@@ -1389,7 +1455,9 @@ def execute_operation(operation_id: str, *, actor: dict[str, Any] | None) -> dic
     if operation.get("state") != "approved_for_apply":
         raise ValueError("Operation must be approved_for_apply before execution.")
 
-    spec = ACTION_SPECS[_normalize(operation.get("action"))]
+    action = _normalize(operation.get("action"))
+    _assert_action_actor_scope(action, actor)
+    spec = ACTION_SPECS[action]
     _assert_action_allowed_for_actor(spec, actor)
     packet = _evidence_packet(operation, actor or {})
     authorization = _authorization_decision(operation)
@@ -1440,10 +1508,12 @@ def execute_operation(operation_id: str, *, actor: dict[str, Any] | None) -> dic
     )
 
     try:
+        execution_parameters = dict(operation.get("parameters") or {})
+        execution_parameters["continuity_operation_id"] = operation_id
         execution_result = _invoke_action(
             _normalize(operation.get("action")),
             dict(operation.get("target") or {}),
-            dict(operation.get("parameters") or {}),
+            execution_parameters,
             actor,
         )
         after_snapshot = _snapshot_for_action(
@@ -1517,7 +1587,9 @@ def close_operation(operation_id: str, *, actor: dict[str, Any] | None) -> dict[
         raise ValueError("Partial-failure operations require remediation before audit closure.")
     if operation.get("evidence_recording_status") != "complete":
         raise ValueError("Execution evidence must be complete before audit closure.")
-    spec = ACTION_SPECS[_normalize(operation.get("action"))]
+    action = _normalize(operation.get("action"))
+    _assert_action_actor_scope(action, actor)
+    spec = ACTION_SPECS[action]
     _assert_action_allowed_for_actor(spec, actor)
     expected = _normalize(operation.get("state"))
     operation = _transition(

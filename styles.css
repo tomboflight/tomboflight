@@ -9792,6 +9792,14 @@ body.admin-interface-mode textarea {
   background: var(--admin-danger-button-hover) !important;
 }
 
+.admin-control-center-body .btn:disabled,
+.admin-control-center-body .btn[aria-disabled="true"] {
+  opacity: 0.48 !important;
+  cursor: not-allowed !important;
+  filter: grayscale(0.2);
+  box-shadow: none !important;
+}
+
 .admin-account-control-section,
 .admin-danger-zone {
   display: grid;
@@ -10095,6 +10103,71 @@ body.admin-interface-mode textarea {
   color: var(--admin-success) !important;
   font-size: 0.84rem;
   font-weight: 750;
+}
+
+.admin-preview-assurance--danger {
+  color: var(--admin-danger) !important;
+}
+
+.admin-irreversible-warning {
+  padding: 15px;
+  border: 2px solid var(--admin-danger-button);
+  border-radius: 13px;
+  background: var(--admin-danger-soft);
+  color: var(--admin-danger);
+}
+
+.admin-irreversible-warning strong {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--admin-danger);
+  font-size: 1.05rem;
+}
+
+.admin-irreversible-warning p {
+  margin: 0;
+  color: var(--admin-text);
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.admin-field-status {
+  color: var(--admin-muted);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.admin-field-status[data-state="error"] {
+  color: var(--admin-danger);
+  font-weight: 750;
+}
+
+.admin-field-status[data-state="success"] {
+  color: var(--admin-success);
+  font-weight: 750;
+}
+
+.admin-confirmation-check--danger {
+  border-color: #d9a6a6;
+  background: var(--admin-danger-soft);
+}
+
+.admin-confirmation-check--danger input {
+  accent-color: var(--admin-danger-button);
+}
+
+.admin-receipt-code {
+  display: block;
+  margin-top: 10px;
+  padding: 10px;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--admin-border);
+  border-radius: 10px;
+  background: var(--admin-panel);
+  color: var(--admin-text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.78rem;
+  white-space: pre-wrap;
 }
 
 .admin-confirmation-check {

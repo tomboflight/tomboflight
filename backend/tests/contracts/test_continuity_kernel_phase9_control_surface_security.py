@@ -25,7 +25,7 @@ class TestContinuityKernelPhase9ControlSurfaceSecurity(unittest.TestCase):
         cls.auth_js = AUTH_JS_PATH.read_text(encoding="utf-8")
 
     def test_01_runtime_registers_complete_control_surface_actions(self) -> None:
-        self.assertIn('RUNTIME_VERSION = "9.0.0"', self.runtime)
+        self.assertIn('RUNTIME_VERSION = "10.1.0"', self.runtime)
         for action in (
             "manual_fulfillment",
             "stripe_operation",
@@ -114,7 +114,7 @@ class TestContinuityKernelPhase9ControlSurfaceSecurity(unittest.TestCase):
             if path.name in separately_managed_commercial_pages:
                 continue
             app_pages.append(path.name)
-            expected_revision = "20260821-phase10" if path.name == "admin-control-center.html" else "20260821-phase9"
+            expected_revision = "20260821-phase10-1" if path.name == "admin-control-center.html" else "20260821-phase9"
             self.assertIn(f"app.js?v={expected_revision}", source, path.name)
             csp_match = re.search(
                 r'http-equiv="Content-Security-Policy"\s+content="([^"]+)"',

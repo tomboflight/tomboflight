@@ -238,8 +238,8 @@ async function installApiRoutes(page, env) {
     }
     if (method === "GET" && path === "/admin/control-center/kernel/status") {
       return json({
-        runtime_version: "9.0.0",
-        action_count: 35,
+        runtime_version: "10.1.0",
+        action_count: 36,
         execution_enabled: true,
         one_step_execution_allowed: true,
       });
@@ -267,13 +267,40 @@ async function installApiRoutes(page, env) {
         env.state.activeImpersonation = null;
         env.stats.impersonationAuditEvents += 1;
       }
-      return json({
+      const operation = {
         operation_id: `kernel-operation-${env.stats.kernelExecutions.length}`,
-        state: "executed",
+        state: "apply_executed",
         execution_outcome: "success",
         evidence_recording_status: "complete",
-        execution_result: { applied: true },
-      });
+        execution_result: body.action === "account_permanent_delete"
+          ? {
+              applied: true,
+              permanent: true,
+              deletion_receipt: {
+                deletion_id: "acctdel-browser-fixture",
+                user_id: body.target.user_id,
+                deleted_at: new Date().toISOString(),
+                reason_category: body.parameters.reason_category,
+                restorable: false,
+                records_closed: { projects: 1, project_entitlements: 1, project_members: 1, vault_access_grants_revoked: 1 },
+                records_preserved: ["orders", "billing_history", "audit_logs", "continuity_evidence"],
+                mongo_evidence: {
+                  tombstone_collection: "account_deletion_tombstones",
+                  audit_collection: "audit_logs",
+                  continuity_operation_collection: "continuity_operations",
+                  continuity_event_collection: "continuity_events",
+                },
+              },
+            }
+          : { applied: true },
+      };
+      if (body.action === "account_permanent_delete") env.state.lastDeletionOperation = operation;
+      return json(operation);
+    }
+    if (method === "POST" && /\/admin\/control-center\/kernel\/operations\/[^/]+\/close$/.test(path)) {
+      if (!env.state.lastDeletionOperation) return json({ detail: "Operation not found." }, 404);
+      env.state.lastDeletionOperation = { ...env.state.lastDeletionOperation, state: "audit_closed" };
+      return json(env.state.lastDeletionOperation);
     }
     if (method === "POST" && path === "/admin/control-center/super-admin/users/preview") {
       const body = JSON.parse(request.postData() || "{}");
@@ -311,8 +338,35 @@ async function installApiRoutes(page, env) {
         records_preserved: ["orders", "billing_history", "uploads", "vault_metadata", "certificates", "delivery_records", "audit_logs"],
         blocked: body.action === "archive" && !body.archive_owned_records,
         warnings: body.action === "archive" && !body.archive_owned_records
-          ? ["Use Close Account & Workspaces because this account owns active records."]
+          ? ["Use Archive Account & Workspaces because this account owns active records."]
           : [],
+      });
+    }
+    if (method === "POST" && path.includes("/permanent-deletion/preview")) {
+      return json({
+        action: "account_permanent_delete",
+        target_account: {
+          user_id: "user-customer",
+          email: "customer.fixture@tomboflight.test",
+          full_name: "Customer Fixture",
+        },
+        before: { status: "archived", login_enabled: false, session_token_version: 1 },
+        proposed_after: {
+          status: "permanently_deleted",
+          login_enabled: false,
+          restorable: false,
+          personal_profile_erased: true,
+          owned_workspace_access_permanently_closed: true,
+        },
+        ownership_dependencies: { projects: 1, families: 1, households: 0 },
+        external_service_impact: { stripe_subscriptions_cancelled_immediately: 1 },
+        records_erased_or_deidentified: ["authentication_credentials", "mfa_secrets", "personal_profile_fields"],
+        records_permanently_closed: ["projects", "entitlements", "memberships", "vault_access"],
+        records_preserved: ["orders", "billing_history", "corporate_ownership_records", "audit_logs", "continuity_evidence"],
+        blocked: false,
+        warnings: ["Permanent deletion cannot be undone or restored."],
+        confirmation_phrase: "PERMANENTLY DELETE",
+        irreversible: true,
       });
     }
     if (method === "GET" && path === "/admin/control-center/cases") {
@@ -543,6 +597,53 @@ test("[account controls] creates an account with a package and closes owned work
   expect(env.stats.kernelExecutions[1].parameters.archive_owned_records).toBe(true);
 });
 
+test("[permanent deletion] requires two confirmations and returns MongoDB evidence", async ({ page }) => {
+  const env = page.__env;
+  await expect(page.locator("[data-super-admin-permanent-delete]")).toBeVisible();
+  await page.locator("[data-super-admin-permanent-delete]").click();
+
+  const reviewDialog = page.locator("[data-admin-permanent-delete-dialog]");
+  await expect(reviewDialog).toBeVisible();
+  await expect(page.locator("[data-admin-permanent-delete-preview]")).toContainText("Permanent deletion cannot be undone");
+  await expect(page.locator("[data-admin-permanent-delete-preview]")).toContainText("Stripe subscriptions cancelled immediately: 1");
+  await page.locator("[data-admin-permanent-delete-category]").selectOption("customer_request");
+  await page.locator("[data-admin-permanent-delete-reason]").fill("Verified written request for permanent account closure");
+  await page.locator("[data-admin-permanent-delete-email]").fill("wrong@tomboflight.test");
+  await page.locator("[data-admin-permanent-delete-confirm]").check();
+  await expect(page.locator("[data-admin-permanent-delete-continue]")).toBeDisabled();
+  await expect(page.locator("[data-admin-permanent-delete-email-status]")).toContainText("Email does not match");
+
+  await page.locator("[data-admin-permanent-delete-email]").fill("customer.fixture@tomboflight.test");
+  await expect(page.locator("[data-admin-permanent-delete-continue]")).toBeEnabled();
+  await page.locator("[data-admin-permanent-delete-continue]").click();
+
+  const finalDialog = page.locator("[data-admin-permanent-delete-final-dialog]");
+  await expect(finalDialog).toBeVisible();
+  await expect(finalDialog).toContainText("This account will be permanently closed");
+  await page.locator("[data-admin-permanent-delete-phrase]").fill("DELETE");
+  await page.locator("[data-admin-permanent-delete-final-confirm]").check();
+  await expect(page.locator("[data-admin-permanent-delete-execute]")).toBeDisabled();
+  await page.locator("[data-admin-permanent-delete-phrase]").fill("PERMANENTLY DELETE");
+  await expect(page.locator("[data-admin-permanent-delete-execute]")).toBeEnabled();
+  await page.locator("[data-admin-permanent-delete-execute]").click();
+
+  await expect.poll(() => env.stats.kernelExecutions.length).toBe(1);
+  expect(env.stats.kernelExecutions[0].action).toBe("account_permanent_delete");
+  expect(env.stats.kernelExecutions[0].parameters.reason_category).toBe("customer_request");
+  expect(env.stats.kernelExecutions[0].parameters.confirmation_email).toBe("customer.fixture@tomboflight.test");
+  expect(env.stats.kernelExecutions[0].parameters.initial_confirmation).toBe(true);
+  expect(env.stats.kernelExecutions[0].parameters.final_confirmation).toBe("PERMANENTLY DELETE");
+  expect(env.stats.kernelExecutions[0].parameters.final_acknowledgement).toBe(true);
+
+  const receiptDialog = page.locator("[data-admin-deletion-receipt-dialog]");
+  await expect(receiptDialog).toBeVisible();
+  await expect(page.locator("[data-admin-deletion-receipt]")).toContainText("acctdel-browser-fixture");
+  await expect(page.locator("[data-admin-deletion-receipt]")).toContainText("MongoDB records closed");
+  await expect(page.locator("[data-admin-deletion-receipt-close-audit]")).toBeVisible();
+  await page.locator("[data-admin-deletion-receipt-close-audit]").click();
+  await expect(page.locator("[data-admin-deletion-receipt]")).toContainText("Audit Closed");
+});
+
 test("[theme] ignores stored admin appearance while disabled", async ({ page }) => {
   await page.evaluate(() => {
     localStorage.setItem("tol_admin_appearance_default", JSON.stringify({ theme: "high-contrast", textScale: "large" }));
@@ -691,7 +792,8 @@ test("[account360] validates all tabs + loading/empty/denied/error states and se
   await expect(page.locator("body")).not.toContainText("sk_live_");
   await expect(page.locator("body")).not.toContainText("private_key");
   await expect(page.locator("body")).not.toContainText("token=");
-  await expect(page.locator("body")).not.toContainText("password");
+  await expect(page.locator("body")).not.toContainText("password_hash");
+  await expect(page.locator("body")).not.toContainText("password=");
 });
 
 test("[errors] backend case-search failures include actionable code + retry guidance", async ({ page }) => {

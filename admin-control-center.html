@@ -9,7 +9,7 @@
       name="description"
       content="Internal premium operations console for Tomb of Light customer cases, repairs, entitlements, mint readiness, and audit review."
     />
-    <link rel="stylesheet" href="styles.css?v=20260821-phase10" />
+    <link rel="stylesheet" href="styles.css?v=20260821-phase10-1" />
   </head>
   <body class="admin-control-center-body">
     <div class="page-wrap">
@@ -323,7 +323,11 @@
 
               <div class="admin-workflow-grid">
                 <label class="admin-form-field admin-form-field--wide"><span>Operational reason</span><textarea rows="3" required minlength="3" data-admin-lifecycle-reason placeholder="Why this account action is authorized"></textarea></label>
-                <label class="admin-form-field admin-form-field--wide" data-admin-lifecycle-typed-wrap hidden><span>Type the account email to confirm closure</span><input type="text" autocomplete="off" data-admin-lifecycle-typed-confirm /></label>
+                <label class="admin-form-field admin-form-field--wide" data-admin-lifecycle-typed-wrap hidden>
+                  <span data-admin-lifecycle-typed-label>Type the target account email to confirm archive</span>
+                  <input type="text" autocomplete="off" spellcheck="false" data-admin-lifecycle-typed-confirm />
+                  <small class="admin-field-status" data-admin-lifecycle-typed-status aria-live="polite"></small>
+                </label>
               </div>
               <label class="admin-confirmation-check"><input type="checkbox" data-admin-lifecycle-confirm /><span data-admin-lifecycle-confirm-label>I confirm this account action and its immediate access impact.</span></label>
               <div class="admin-workflow-actions">
@@ -331,6 +335,107 @@
                 <button class="btn btn-danger" type="submit" data-admin-lifecycle-execute disabled>Execute Account Action</button>
               </div>
             </form>
+          </dialog>
+
+          <dialog class="admin-workflow-dialog" data-admin-permanent-delete-dialog aria-labelledby="admin-permanent-delete-title">
+            <form class="admin-workflow-form" data-admin-permanent-delete-form novalidate>
+              <header class="admin-workflow-header">
+                <div>
+                  <span class="eyebrow">Continuity Kernel · Irreversible Account Action</span>
+                  <h2 id="admin-permanent-delete-title">Permanently delete account</h2>
+                  <p data-admin-permanent-delete-target>No account selected.</p>
+                </div>
+                <button class="admin-dialog-close" type="button" data-admin-dialog-close="permanent-delete" aria-label="Close permanent deletion dialog">×</button>
+              </header>
+
+              <section class="admin-execution-preview" data-admin-permanent-delete-preview aria-live="polite">
+                <h3>Permanent-deletion impact</h3>
+                <p>Loading the account identity, access records, and protected business evidence…</p>
+              </section>
+
+              <div class="admin-workflow-grid">
+                <label class="admin-form-field admin-form-field--wide">
+                  <span>Authorized deletion category</span>
+                  <select required data-admin-permanent-delete-category>
+                    <option value="">Select why permanent deletion is authorized</option>
+                    <option value="customer_request">Verified customer request</option>
+                    <option value="policy_violation">Tomb of Light policy violation</option>
+                    <option value="security_incident">Security incident</option>
+                    <option value="company_authorized">CEO-authorized company decision</option>
+                  </select>
+                </label>
+                <label class="admin-form-field admin-form-field--wide">
+                  <span>Operational reason</span>
+                  <textarea rows="3" required minlength="3" data-admin-permanent-delete-reason placeholder="Document the verified request, policy violation, security incident, or company authority"></textarea>
+                </label>
+                <label class="admin-form-field admin-form-field--wide">
+                  <span data-admin-permanent-delete-email-label>Type the target account email exactly</span>
+                  <input type="text" autocomplete="off" spellcheck="false" data-admin-permanent-delete-email aria-describedby="admin-permanent-delete-email-status" />
+                  <small id="admin-permanent-delete-email-status" class="admin-field-status" data-admin-permanent-delete-email-status aria-live="polite"></small>
+                </label>
+              </div>
+              <label class="admin-confirmation-check">
+                <input type="checkbox" data-admin-permanent-delete-confirm />
+                <span>I confirm this is the correct account and understand that its login identity and access cannot be restored.</span>
+              </label>
+              <div class="admin-workflow-actions">
+                <button class="btn btn-secondary" type="button" data-admin-dialog-close="permanent-delete">Cancel</button>
+                <button class="btn btn-danger" type="submit" data-admin-permanent-delete-continue disabled>Continue to Final Warning</button>
+              </div>
+            </form>
+          </dialog>
+
+          <dialog class="admin-workflow-dialog" data-admin-permanent-delete-final-dialog aria-labelledby="admin-permanent-delete-final-title">
+            <form class="admin-workflow-form" data-admin-permanent-delete-final-form novalidate>
+              <header class="admin-workflow-header">
+                <div>
+                  <span class="eyebrow">Final Warning · Permanent Action</span>
+                  <h2 id="admin-permanent-delete-final-title">This account will be permanently closed</h2>
+                  <p data-admin-permanent-delete-final-target>No account selected.</p>
+                </div>
+                <button class="admin-dialog-close" type="button" data-admin-dialog-close="permanent-delete-final" aria-label="Close final permanent deletion warning">×</button>
+              </header>
+
+              <section class="admin-irreversible-warning" role="alert">
+                <strong>Permanent deletion cannot be undone.</strong>
+                <p>The login credentials, MFA secrets, password-reset tokens, personal profile, roles, permissions, memberships, and workspace access will be permanently closed. Any active maintenance subscription will be cancelled immediately. Required orders, billing, corporate ownership, security evidence, certificates, and audit records will remain protected.</p>
+              </section>
+
+              <div class="admin-workflow-grid">
+                <label class="admin-form-field admin-form-field--wide">
+                  <span>Type PERMANENTLY DELETE</span>
+                  <input type="text" autocomplete="off" spellcheck="false" data-admin-permanent-delete-phrase />
+                  <small class="admin-field-status" data-admin-permanent-delete-phrase-status aria-live="polite">This exact phrase is required.</small>
+                </label>
+              </div>
+              <label class="admin-confirmation-check admin-confirmation-check--danger">
+                <input type="checkbox" data-admin-permanent-delete-final-confirm />
+                <span>I understand this account cannot be restored after execution.</span>
+              </label>
+              <div class="admin-workflow-actions">
+                <button class="btn btn-secondary" type="button" data-admin-permanent-delete-back>Back</button>
+                <button class="btn btn-danger" type="submit" data-admin-permanent-delete-execute disabled>Permanently Delete Account</button>
+              </div>
+            </form>
+          </dialog>
+
+          <dialog class="admin-workflow-dialog" data-admin-deletion-receipt-dialog aria-labelledby="admin-deletion-receipt-title">
+            <div class="admin-workflow-form">
+              <header class="admin-workflow-header">
+                <div>
+                  <span class="eyebrow">Continuity Kernel · MongoDB Evidence Receipt</span>
+                  <h2 id="admin-deletion-receipt-title">Permanent deletion completed</h2>
+                  <p>The receipt below is the operational proof for this irreversible action.</p>
+                </div>
+                <button class="admin-dialog-close" type="button" data-admin-dialog-close="deletion-receipt" aria-label="Close deletion receipt">×</button>
+              </header>
+              <section class="admin-execution-preview" data-admin-deletion-receipt aria-live="polite"></section>
+              <div class="admin-workflow-actions">
+                <button class="btn btn-secondary" type="button" data-admin-deletion-receipt-copy>Copy Receipt</button>
+                <button class="btn btn-primary" type="button" data-admin-deletion-receipt-close-audit hidden>Close Audit Record</button>
+                <button class="btn btn-secondary" type="button" data-admin-dialog-close="deletion-receipt">Done</button>
+              </div>
+            </div>
           </dialog>
 
           <dialog class="admin-workflow-dialog admin-workflow-dialog--wide" data-admin-team-dialog aria-labelledby="admin-team-title">
@@ -386,8 +491,8 @@
     </div>
 
     <script src="config.js?v=20260329-1"></script>
-    <script src="app.js?v=20260821-phase10"></script>
+    <script src="app.js?v=20260821-phase10-1"></script>
     <script src="auth.js?v=20260727-masterops1"></script>
-    <script src="admin-control-center.js?v=20260821-phase10"></script>
+    <script src="admin-control-center.js?v=20260821-phase10-1"></script>
   </body>
 </html>

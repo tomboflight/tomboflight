@@ -64,6 +64,8 @@
     kernelPendingIdempotency: {},
     createAccountPreview: null,
     lifecycleWorkflow: null,
+    permanentDeletionWorkflow: null,
+    deletionReceipt: null,
     teamAccess: {
       officers: [],
       roleTemplates: {},
@@ -264,6 +266,9 @@
     const selectors = {
       create: "[data-admin-create-dialog]",
       lifecycle: "[data-admin-lifecycle-dialog]",
+      "permanent-delete": "[data-admin-permanent-delete-dialog]",
+      "permanent-delete-final": "[data-admin-permanent-delete-final-dialog]",
+      "deletion-receipt": "[data-admin-deletion-receipt-dialog]",
       team: "[data-admin-team-dialog]",
     };
     const selector = selectors[name];
@@ -819,6 +824,11 @@
             operation.execution_outcome !== "partial_failure" &&
             operation.evidence_recording_status !== "incomplete",
         );
+        const canViewDeletionReceipt = Boolean(
+          normalizeLower(operation.action) === "account_permanent_delete" &&
+            operation.execution_result &&
+            operation.execution_result.deletion_receipt,
+        );
         return `
           <div class="admin-priority-repair-item">
             <span>
@@ -829,6 +839,11 @@
             ${
               canApprove
                 ? `<button class="btn btn-primary" type="button" data-admin-kernel-approve-execute="${escapeHtml(operation.operation_id)}">Approve + Execute</button>`
+                : ""
+            }
+            ${
+              canViewDeletionReceipt
+                ? `<button class="btn btn-secondary" type="button" data-admin-kernel-view-deletion-receipt="${escapeHtml(operation.operation_id)}">View Receipt</button>`
                 : ""
             }
             ${
@@ -899,6 +914,18 @@
       setPageStatus("Continuity operation audit closed.", "success");
     } catch (error) {
       setPageStatus(error.message || "Unable to close the Continuity audit record.", "error");
+    }
+  }
+
+  async function viewKernelDeletionReceipt(operationId) {
+    try {
+      const operation = await fetchJson(`/admin/control-center/kernel/operations/${encodeURIComponent(operationId)}`);
+      if (!operation || !operation.execution_result || !operation.execution_result.deletion_receipt) {
+        throw new Error("This operation does not contain a permanent-deletion receipt.");
+      }
+      renderDeletionReceipt(operation);
+    } catch (error) {
+      setPageStatus(error.message || "Unable to load the permanent-deletion receipt.", "error");
     }
   }
 
@@ -1311,6 +1338,9 @@
           ["Mint-Ready Projects", summary.mint_ready_projects],
           ["Data Mismatches", summary.projects_with_data_mismatch],
             ];
+    if (state.isSuperAdmin) {
+      cards.push(["Permanent Deletions", summary.permanently_deleted_users]);
+    }
     node.innerHTML = cards
       .map(function (item, index) {
         return `
@@ -1705,6 +1735,8 @@
         (workspace.tabs && workspace.tabs.identity && workspace.tabs.identity.user_id) ||
         "";
       const showSuperAdminControls = Boolean(state.isSuperAdmin && userId);
+      const permanentlyDeleted = normalizeLower(tabData && tabData.status) === "permanently_deleted";
+      const accountControlDisabled = permanentlyDeleted ? ' disabled aria-disabled="true"' : "";
       node.innerHTML = `
         ${warningMarkup}
         <article class="admin-dossier-card admin-dossier-card--wide">
@@ -1728,37 +1760,47 @@
           showSuperAdminControls
             ? `
               <article class="admin-dossier-card admin-dossier-card--wide">
-                <div class="admin-card-header"><span class="admin-card-badge">S</span><div><h3 class="admin-card-title">CEO Account Controls</h3><p class="card-copy">Update identity details, control access, or close the account through one governed workflow.</p></div></div>
+                <div class="admin-card-header"><span class="admin-card-badge">S</span><div><h3 class="admin-card-title">CEO Account Controls</h3><p class="card-copy">Temporary access holds, recoverable archives, and permanent deletion are separate governed actions.</p></div></div>
+                ${permanentlyDeleted ? '<div class="admin-irreversible-warning"><strong>This account was permanently deleted.</strong><p>Profile editing, password reset, restoration, and lifecycle actions are disabled. Review the Continuity Kernel receipt and audit history for proof.</p></div>' : ""}
                 <div class="admin-field-grid">
-                  <label class="admin-field"><span>Full Name</span><input type="text" data-super-admin-user-field="full_name" value="${escapeHtml(tabData.full_name || "")}" /></label>
-                  <label class="admin-field"><span>Email</span><input type="email" data-super-admin-user-field="email" value="${escapeHtml(tabData.email || "")}" /></label>
-                  <label class="admin-field"><span>Phone Number</span><input type="text" data-super-admin-user-field="phone_number" value="${escapeHtml(tabData.phone_number || "")}" /></label>
-                  <label class="admin-field"><span>Birthday</span><input type="text" data-super-admin-user-field="birthday" value="${escapeHtml(tabData.birthday || "")}" /></label>
-                  <label class="admin-field"><span>Mailing Address</span><input type="text" data-super-admin-user-field="mailing_address" value="${escapeHtml(tabData.mailing_address || "")}" /></label>
-                  <label class="admin-field"><span>Role</span><input type="text" data-super-admin-user-field="role" value="${escapeHtml(tabData.role || "")}" /></label>
-                  <label class="admin-field"><span>Status</span><input type="text" data-super-admin-user-field="status" value="${escapeHtml(tabData.status || "")}" /></label>
-                  <label class="admin-field"><span>Access Tier</span><input type="text" data-super-admin-user-field="access_tier" value="${escapeHtml(tabData.access_tier || "")}" /></label>
-                  <label class="admin-field"><span>Department Role</span><input type="text" data-super-admin-user-field="department_role" value="${escapeHtml(tabData.department_role || "")}" /></label>
+                  <label class="admin-field"><span>Full Name</span><input type="text" data-super-admin-user-field="full_name" value="${escapeHtml(tabData.full_name || "")}"${accountControlDisabled} /></label>
+                  <label class="admin-field"><span>Email</span><input type="email" data-super-admin-user-field="email" value="${escapeHtml(tabData.email || "")}"${accountControlDisabled} /></label>
+                  <label class="admin-field"><span>Phone Number</span><input type="text" data-super-admin-user-field="phone_number" value="${escapeHtml(tabData.phone_number || "")}"${accountControlDisabled} /></label>
+                  <label class="admin-field"><span>Birthday</span><input type="text" data-super-admin-user-field="birthday" value="${escapeHtml(tabData.birthday || "")}"${accountControlDisabled} /></label>
+                  <label class="admin-field"><span>Mailing Address</span><input type="text" data-super-admin-user-field="mailing_address" value="${escapeHtml(tabData.mailing_address || "")}"${accountControlDisabled} /></label>
+                  <label class="admin-field"><span>Role</span><input type="text" data-super-admin-user-field="role" value="${escapeHtml(tabData.role || "")}"${accountControlDisabled} /></label>
+                  <label class="admin-field"><span>Status</span><input type="text" data-super-admin-user-field="status" value="${escapeHtml(tabData.status || "")}"${accountControlDisabled} /></label>
+                  <label class="admin-field"><span>Access Tier</span><input type="text" data-super-admin-user-field="access_tier" value="${escapeHtml(tabData.access_tier || "")}"${accountControlDisabled} /></label>
+                  <label class="admin-field"><span>Department Role</span><input type="text" data-super-admin-user-field="department_role" value="${escapeHtml(tabData.department_role || "")}"${accountControlDisabled} /></label>
                 </div>
                 <div class="admin-account-control-section">
                   <div><h4>Profile &amp; sign-in</h4><p>Contact changes and account access changes are audited separately.</p></div>
                   <div class="inline-actions">
-                    <button class="btn btn-primary" type="button" data-super-admin-user-save="${escapeHtml(userId)}">Save Profile</button>
-                    <button class="btn btn-secondary" type="button" data-super-admin-user-password-reset="${escapeHtml(userId)}">Send Password Reset</button>
-                    <button class="btn btn-secondary" type="button" data-super-admin-user-action="activate" data-super-admin-user-id="${escapeHtml(userId)}">Activate</button>
-                    <button class="btn btn-secondary" type="button" data-super-admin-user-action="restore" data-super-admin-user-id="${escapeHtml(userId)}">Restore</button>
-                    <button class="btn btn-secondary" type="button" data-super-admin-user-action="suspend" data-super-admin-user-id="${escapeHtml(userId)}">Suspend</button>
-                    <button class="btn btn-secondary" type="button" data-super-admin-user-action="disable" data-super-admin-user-id="${escapeHtml(userId)}">Disable</button>
+                    <button class="btn btn-primary" type="button" data-super-admin-user-save="${escapeHtml(userId)}"${accountControlDisabled}>Save Profile</button>
+                    <button class="btn btn-secondary" type="button" data-super-admin-user-password-reset="${escapeHtml(userId)}"${accountControlDisabled}>Send Password Reset</button>
+                    <button class="btn btn-secondary" type="button" data-super-admin-user-action="activate" data-super-admin-user-id="${escapeHtml(userId)}"${accountControlDisabled}>Activate</button>
+                    <button class="btn btn-secondary" type="button" data-super-admin-user-action="restore" data-super-admin-user-id="${escapeHtml(userId)}"${accountControlDisabled}>Restore Access</button>
+                    <button class="btn btn-secondary" type="button" data-super-admin-user-action="billing_hold" data-super-admin-user-id="${escapeHtml(userId)}"${accountControlDisabled}>Place on Billing Hold</button>
+                    <button class="btn btn-secondary" type="button" data-super-admin-user-action="disable" data-super-admin-user-id="${escapeHtml(userId)}"${accountControlDisabled}>Disable for Security Review</button>
                   </div>
                 </div>
                 <div class="admin-danger-zone">
                   <div>
-                    <h4>Close account</h4>
-                    <p>Preview owned projects, family workspaces, memberships, entitlements, and invites before access is archived. Orders, billing evidence, uploads, vault records, certificates, delivery records, and audit history are preserved.</p>
+                    <h4>Recoverable archive</h4>
+                    <p>Use this when access may need to be restored. Login is disabled and access records are archived, while customer and business records remain recoverable.</p>
                   </div>
                   <div class="inline-actions">
-                    <button class="btn btn-secondary" type="button" data-super-admin-user-action="archive" data-super-admin-user-id="${escapeHtml(userId)}">Archive Account Only</button>
-                    <button class="btn btn-danger" type="button" data-super-admin-user-action="archive" data-super-admin-user-id="${escapeHtml(userId)}" data-super-admin-archive-owned="true">Close Account &amp; Workspaces</button>
+                    <button class="btn btn-secondary" type="button" data-super-admin-user-action="archive" data-super-admin-user-id="${escapeHtml(userId)}"${accountControlDisabled}>Archive Account Only</button>
+                    <button class="btn btn-secondary" type="button" data-super-admin-user-action="archive" data-super-admin-user-id="${escapeHtml(userId)}" data-super-admin-archive-owned="true"${accountControlDisabled}>Archive Account &amp; Workspaces</button>
+                  </div>
+                </div>
+                <div class="admin-danger-zone">
+                  <div>
+                    <h4>Permanent deletion</h4>
+                    <p>For a verified customer deletion request, policy violation, security incident, or CEO-authorized company decision. This destroys the login identity and permanently closes access. It cannot be restored.</p>
+                  </div>
+                  <div class="inline-actions">
+                    <button class="btn btn-danger" type="button" data-super-admin-permanent-delete="${escapeHtml(userId)}"${accountControlDisabled}>Permanently Delete Account</button>
                   </div>
                 </div>
               </article>
@@ -2775,7 +2817,7 @@
   }
 
   function lifecycleIsDestructive(workflow) {
-    return Boolean(workflow && ["suspend", "disable", "archive"].includes(workflow.action));
+    return Boolean(workflow && ["billing_hold", "suspend", "disable", "archive"].includes(workflow.action));
   }
 
   function renderLifecyclePreview(preview) {
@@ -2807,7 +2849,13 @@
       ${after.archive_owned_records ? `<div class="admin-preview-section"><span>Access records archived</span><div>${renderChipList(Object.keys((preview && preview.records_to_archive) || {}), "No owned access records")}</div></div>` : ""}
       <div class="admin-preview-section"><span>Business and evidence records preserved</span><div>${renderChipList(preview && preview.records_preserved, "Audit history")}</div></div>
       ${warnings.length ? `<div class="admin-preview-warning">${warnings.map(function (item) { return `<p>${escapeHtml(item)}</p>`; }).join("")}</div>` : ""}
-      <p class="admin-preview-assurance">Closure is a recoverable access archive, not an untraceable database deletion.</p>
+      <p class="admin-preview-assurance">${
+        after.billing_hold
+          ? "A billing hold is temporary and recoverable. Restore Access reopens the account after billing is resolved."
+          : after.archive_owned_records
+            ? "This is a recoverable access archive, not a permanent deletion."
+            : "This lifecycle action remains auditable and recoverable through CEO account controls."
+      }</p>
     `;
   }
 
@@ -2822,6 +2870,17 @@
     const confirmed = Boolean(document.querySelector("[data-admin-lifecycle-confirm]")?.checked);
     const typed = fieldValue("[data-admin-lifecycle-typed-confirm]").toLowerCase();
     const typedMatches = !workflow.closeOwned || typed === workflow.email.toLowerCase();
+    const typedStatus = document.querySelector("[data-admin-lifecycle-typed-status]");
+    if (typedStatus) {
+      typedStatus.dataset.state = !workflow.closeOwned || typedMatches ? "success" : typed ? "error" : "";
+      typedStatus.textContent = !workflow.closeOwned
+        ? ""
+        : typedMatches
+          ? "Target account confirmed."
+          : typed
+            ? `Email does not match. Enter ${workflow.email} exactly.`
+            : `Required target email: ${workflow.email}`;
+    }
     setButtonEnabled(execute, !workflow.preview.blocked && reason.length >= 3 && confirmed && typedMatches);
   }
 
@@ -2847,18 +2906,22 @@
     const title = document.querySelector("[data-admin-lifecycle-title]");
     const target = document.querySelector("[data-admin-lifecycle-target]");
     const typedWrap = document.querySelector("[data-admin-lifecycle-typed-wrap]");
+    const typedLabel = document.querySelector("[data-admin-lifecycle-typed-label]");
+    const typedInput = document.querySelector("[data-admin-lifecycle-typed-confirm]");
     const confirmLabel = document.querySelector("[data-admin-lifecycle-confirm-label]");
     const execute = document.querySelector("[data-admin-lifecycle-execute]");
-    if (title) title.textContent = closeOwned ? "Close account and owned workspaces" : `${titleize(action)} account`;
+    if (title) title.textContent = closeOwned ? "Archive account and owned workspaces" : `${titleize(action)} account`;
     if (target) target.textContent = `${state.lifecycleWorkflow.name} · ${state.lifecycleWorkflow.email || userId}`;
     if (typedWrap) typedWrap.hidden = !closeOwned;
+    if (typedLabel && closeOwned) typedLabel.textContent = `Type ${state.lifecycleWorkflow.email} to confirm the archive`;
+    if (typedInput instanceof HTMLInputElement && closeOwned) typedInput.placeholder = state.lifecycleWorkflow.email;
     if (confirmLabel) {
       confirmLabel.textContent = closeOwned
         ? "I confirm login, roles, memberships, entitlements, and active owned workspaces should be archived."
         : `I confirm this account should be ${titleize(action).toLowerCase()}.`;
     }
     if (execute instanceof HTMLButtonElement) {
-      execute.textContent = closeOwned ? "Close Account & Workspaces" : `${titleize(action)} Account`;
+      execute.textContent = closeOwned ? "Archive Account & Workspaces" : `${titleize(action)} Account`;
       execute.classList.toggle("btn-danger", lifecycleIsDestructive(state.lifecycleWorkflow));
       execute.classList.toggle("btn-primary", !lifecycleIsDestructive(state.lifecycleWorkflow));
     }
@@ -2872,7 +2935,13 @@
         { action, archive_owned_records: closeOwned, confirmed: false, reason: "" },
       );
       if (!state.lifecycleWorkflow || state.lifecycleWorkflow.userId !== userId || state.lifecycleWorkflow.action !== action) return;
+      const previewTarget = (preview && preview.target_account) || {};
+      state.lifecycleWorkflow.email = normalizeValue(previewTarget.email) || state.lifecycleWorkflow.email;
+      state.lifecycleWorkflow.name = normalizeValue(previewTarget.full_name) || state.lifecycleWorkflow.name;
       state.lifecycleWorkflow.preview = preview || {};
+      if (target) target.textContent = `${state.lifecycleWorkflow.name} · ${state.lifecycleWorkflow.email || userId}`;
+      if (typedLabel && closeOwned) typedLabel.textContent = `Type ${state.lifecycleWorkflow.email} to confirm the archive`;
+      if (typedInput instanceof HTMLInputElement && closeOwned) typedInput.placeholder = state.lifecycleWorkflow.email;
       renderLifecyclePreview(preview || {});
       syncLifecycleExecuteAvailability();
     } catch (error) {
@@ -2918,6 +2987,299 @@
     } catch (error) {
       setPageStatus(error.message || "Unable to update account status.", "error");
       syncLifecycleExecuteAvailability();
+    }
+  }
+
+  function renderPermanentDeletionPreview(preview) {
+    const node = document.querySelector("[data-admin-permanent-delete-preview]");
+    if (!node) return;
+    const before = (preview && preview.before) || {};
+    const after = (preview && preview.proposed_after) || {};
+    const ownership = (preview && preview.ownership_dependencies) || {};
+    const externalImpact = (preview && preview.external_service_impact) || {};
+    const stripeCancellationCount = Number(externalImpact.stripe_subscriptions_cancelled_immediately || 0);
+    const ownershipRows = Object.entries(ownership).filter(function (entry) { return Number(entry[1] || 0) > 0; });
+    const warnings = asArray(preview && preview.warnings);
+    const blocked = Boolean(preview && preview.blocked);
+    node.dataset.state = blocked ? "error" : "success";
+    node.innerHTML = `
+      <div class="admin-preview-heading">
+        <h3>Permanent-deletion impact</h3>
+        ${statusChip(blocked ? "Blocked" : "Eligible for CEO confirmation", blocked ? "error" : "warning")}
+      </div>
+      <div class="admin-preview-facts">
+        <div><span>Current status</span><strong>${escapeHtml(titleize(before.status || "active"))}</strong></div>
+        <div><span>Resulting status</span><strong>${escapeHtml(titleize(after.status || "permanently deleted"))}</strong></div>
+        <div><span>Login access</span><strong>Destroyed and disabled</strong></div>
+        <div><span>Restoration</span><strong>${after.restorable ? "Available" : "Not possible"}</strong></div>
+      </div>
+      <div class="admin-preview-section"><span>Owned workspace records</span><div>${
+        ownershipRows.length
+          ? ownershipRows.map(function (entry) { return `<span class="admin-scope-chip">${escapeHtml(titleize(entry[0]))}: ${escapeHtml(entry[1])}</span>`; }).join("")
+          : '<span class="admin-scope-empty">No owned workspace records</span>'
+      }</div></div>
+      <div class="admin-preview-section"><span>Erased or deidentified</span><div>${renderChipList(preview && preview.records_erased_or_deidentified, "No identity fields")}</div></div>
+      <div class="admin-preview-section"><span>Permanently closed</span><div>${renderChipList(preview && preview.records_permanently_closed, "No access records")}</div></div>
+      ${stripeCancellationCount > 0 ? `<div class="admin-preview-section"><span>External billing action</span><div><span class="admin-scope-chip">Stripe subscriptions cancelled immediately: ${escapeHtml(stripeCancellationCount)}</span></div></div>` : ""}
+      <div class="admin-preview-section"><span>Required evidence preserved</span><div>${renderChipList(preview && preview.records_preserved, "Audit evidence")}</div></div>
+      ${warnings.length ? `<div class="admin-preview-warning">${warnings.map(function (item) { return `<p>${escapeHtml(item)}</p>`; }).join("")}</div>` : ""}
+      <p class="admin-preview-assurance admin-preview-assurance--danger">This action is irreversible and cannot be restored through account controls.</p>
+    `;
+  }
+
+  function syncPermanentDeletionContinueAvailability() {
+    const workflow = state.permanentDeletionWorkflow;
+    const continueButton = document.querySelector("[data-admin-permanent-delete-continue]");
+    if (!workflow || !workflow.preview) {
+      setButtonEnabled(continueButton, false);
+      return;
+    }
+    const category = fieldValue("[data-admin-permanent-delete-category]");
+    const reason = fieldValue("[data-admin-permanent-delete-reason]");
+    const typedEmail = fieldValue("[data-admin-permanent-delete-email]").toLowerCase();
+    const emailMatches = typedEmail === workflow.email.toLowerCase();
+    const confirmed = Boolean(document.querySelector("[data-admin-permanent-delete-confirm]")?.checked);
+    const statusNode = document.querySelector("[data-admin-permanent-delete-email-status]");
+    if (statusNode) {
+      statusNode.dataset.state = emailMatches ? "success" : typedEmail ? "error" : "";
+      statusNode.textContent = emailMatches
+        ? "Target account confirmed."
+        : typedEmail
+          ? `Email does not match. Enter ${workflow.email} exactly.`
+          : `Required target email: ${workflow.email}`;
+    }
+    setButtonEnabled(
+      continueButton,
+      !workflow.preview.blocked && Boolean(category) && reason.length >= 3 && emailMatches && confirmed,
+    );
+  }
+
+  async function openPermanentDeletion(userId) {
+    if (!state.isSuperAdmin) {
+      setPageStatus("CEO Master Administrator access is required for permanent deletion.", "error");
+      return;
+    }
+    const identity = currentIdentityRecord();
+    state.permanentDeletionWorkflow = {
+      userId,
+      email: normalizeValue(identity.email),
+      name: normalizeValue(identity.full_name) || "Selected account",
+      preview: null,
+    };
+    const dialog = dialogByName("permanent-delete");
+    const form = document.querySelector("[data-admin-permanent-delete-form]");
+    if (!(dialog instanceof HTMLDialogElement) || !(form instanceof HTMLFormElement)) return;
+    form.reset();
+    const target = document.querySelector("[data-admin-permanent-delete-target]");
+    const emailLabel = document.querySelector("[data-admin-permanent-delete-email-label]");
+    const emailInput = document.querySelector("[data-admin-permanent-delete-email]");
+    const previewNode = document.querySelector("[data-admin-permanent-delete-preview]");
+    if (target) target.textContent = `${state.permanentDeletionWorkflow.name} · ${state.permanentDeletionWorkflow.email || userId}`;
+    if (emailLabel) emailLabel.textContent = `Type ${state.permanentDeletionWorkflow.email || "the target email"} exactly`;
+    if (emailInput instanceof HTMLInputElement) emailInput.placeholder = state.permanentDeletionWorkflow.email;
+    if (previewNode) previewNode.innerHTML = "<h3>Permanent-deletion impact</h3><p>Loading the account identity, access records, and protected business evidence…</p>";
+    setButtonEnabled(document.querySelector("[data-admin-permanent-delete-continue]"), false);
+    openDialog(dialog);
+    try {
+      const preview = await postJson(
+        `/admin/control-center/super-admin/users/${encodeURIComponent(userId)}/permanent-deletion/preview`,
+        { reason_category: "" },
+      );
+      if (!state.permanentDeletionWorkflow || state.permanentDeletionWorkflow.userId !== userId) return;
+      const previewTarget = (preview && preview.target_account) || {};
+      state.permanentDeletionWorkflow.email = normalizeValue(previewTarget.email) || state.permanentDeletionWorkflow.email;
+      state.permanentDeletionWorkflow.name = normalizeValue(previewTarget.full_name) || state.permanentDeletionWorkflow.name;
+      state.permanentDeletionWorkflow.preview = preview || {};
+      if (target) target.textContent = `${state.permanentDeletionWorkflow.name} · ${state.permanentDeletionWorkflow.email || userId}`;
+      if (emailLabel) emailLabel.textContent = `Type ${state.permanentDeletionWorkflow.email} exactly`;
+      if (emailInput instanceof HTMLInputElement) emailInput.placeholder = state.permanentDeletionWorkflow.email;
+      renderPermanentDeletionPreview(preview || {});
+      syncPermanentDeletionContinueAvailability();
+    } catch (error) {
+      if (previewNode) {
+        previewNode.dataset.state = "error";
+        previewNode.innerHTML = `<h3>Permanent-deletion preview unavailable</h3><p>${escapeHtml(error.message || "Unable to load the deletion impact.")}</p>`;
+      }
+      setPageStatus(error.message || "Unable to preview permanent deletion.", "error");
+    }
+  }
+
+  function continuePermanentDeletionToFinalWarning(event) {
+    if (event) event.preventDefault();
+    const workflow = state.permanentDeletionWorkflow;
+    if (!workflow || !workflow.preview) return;
+    syncPermanentDeletionContinueAvailability();
+    const continueButton = document.querySelector("[data-admin-permanent-delete-continue]");
+    if (!(continueButton instanceof HTMLButtonElement) || continueButton.disabled) {
+      setPageStatus("Complete the deletion category, reason, target email, and confirmation before continuing.", "error");
+      return;
+    }
+    workflow.reasonCategory = fieldValue("[data-admin-permanent-delete-category]");
+    workflow.reason = fieldValue("[data-admin-permanent-delete-reason]");
+    workflow.confirmationEmail = fieldValue("[data-admin-permanent-delete-email]");
+    workflow.initialConfirmation = Boolean(document.querySelector("[data-admin-permanent-delete-confirm]")?.checked);
+    const finalForm = document.querySelector("[data-admin-permanent-delete-final-form]");
+    if (finalForm instanceof HTMLFormElement) finalForm.reset();
+    const finalTarget = document.querySelector("[data-admin-permanent-delete-final-target]");
+    if (finalTarget) finalTarget.textContent = `${workflow.name} · ${workflow.email}`;
+    setButtonEnabled(document.querySelector("[data-admin-permanent-delete-execute]"), false);
+    closeDialog(dialogByName("permanent-delete"));
+    openDialog(dialogByName("permanent-delete-final"));
+  }
+
+  function syncPermanentDeletionFinalAvailability() {
+    const phrase = fieldValue("[data-admin-permanent-delete-phrase]");
+    const phraseMatches = phrase === "PERMANENTLY DELETE";
+    const confirmed = Boolean(document.querySelector("[data-admin-permanent-delete-final-confirm]")?.checked);
+    const statusNode = document.querySelector("[data-admin-permanent-delete-phrase-status]");
+    if (statusNode) {
+      statusNode.dataset.state = phraseMatches ? "success" : phrase ? "error" : "";
+      statusNode.textContent = phraseMatches
+        ? "Final deletion phrase confirmed."
+        : phrase
+          ? "The phrase must be exactly PERMANENTLY DELETE."
+          : "This exact phrase is required.";
+    }
+    setButtonEnabled(document.querySelector("[data-admin-permanent-delete-execute]"), phraseMatches && confirmed);
+  }
+
+  function backToPermanentDeletionReview() {
+    closeDialog(dialogByName("permanent-delete-final"));
+    openDialog(dialogByName("permanent-delete"));
+    syncPermanentDeletionContinueAvailability();
+  }
+
+  function deletionReceiptText(operation) {
+    const execution = (operation && operation.execution_result) || {};
+    const receipt = execution.deletion_receipt || {};
+    const recordsClosed = receipt.records_closed || {};
+    const mongoEvidence = receipt.mongo_evidence || {};
+    const lines = [
+      "TOMB OF LIGHT CONTINUITY KERNEL — PERMANENT DELETION RECEIPT",
+      `Operation ID: ${normalizeValue(operation && operation.operation_id) || "unavailable"}`,
+      `Operation state: ${normalizeValue(operation && operation.state) || "unavailable"}`,
+      `Execution outcome: ${normalizeValue(operation && operation.execution_outcome) || "unavailable"}`,
+      `Evidence status: ${normalizeValue(operation && operation.evidence_recording_status) || "unavailable"}`,
+      `Deletion ID: ${normalizeValue(receipt.deletion_id) || "unavailable"}`,
+      `Target user ID: ${normalizeValue(receipt.user_id) || "unavailable"}`,
+      `Deleted at: ${normalizeValue(receipt.deleted_at) || "unavailable"}`,
+      `Reason category: ${normalizeValue(receipt.reason_category) || "unavailable"}`,
+      "Restorable: no",
+      `MongoDB record counts: ${JSON.stringify(recordsClosed)}`,
+      `MongoDB tombstone collection: ${normalizeValue(mongoEvidence.tombstone_collection) || "unavailable"}`,
+      `MongoDB audit collection: ${normalizeValue(mongoEvidence.audit_collection) || "unavailable"}`,
+      `Continuity operation collection: ${normalizeValue(mongoEvidence.continuity_operation_collection) || "unavailable"}`,
+      `Continuity event collection: ${normalizeValue(mongoEvidence.continuity_event_collection) || "unavailable"}`,
+    ];
+    return lines.join("\n");
+  }
+
+  function renderDeletionReceipt(operation) {
+    const node = document.querySelector("[data-admin-deletion-receipt]");
+    if (!node) return;
+    const execution = (operation && operation.execution_result) || {};
+    const receipt = execution.deletion_receipt || {};
+    const mongoEvidence = receipt.mongo_evidence || {};
+    const evidenceComplete = normalizeLower(operation && operation.evidence_recording_status) === "complete";
+    const executionSucceeded = normalizeLower(operation && operation.execution_outcome) === "success";
+    node.dataset.state = evidenceComplete && executionSucceeded ? "success" : "error";
+    const closedEntries = Object.entries(receipt.records_closed || {});
+    node.innerHTML = `
+      <div class="admin-preview-heading">
+        <h3>Execution evidence</h3>
+        ${statusChip(executionSucceeded ? "Permanent deletion executed" : "Review required", executionSucceeded ? "success" : "error")}
+      </div>
+      <div class="admin-preview-facts">
+        <div><span>Operation ID</span><strong>${escapeHtml(operation && operation.operation_id || "—")}</strong></div>
+        <div><span>Operation state</span><strong>${escapeHtml(titleize(operation && operation.state || "—"))}</strong></div>
+        <div><span>Deletion ID</span><strong>${escapeHtml(receipt.deletion_id || "—")}</strong></div>
+        <div><span>Evidence status</span><strong>${escapeHtml(titleize(operation && operation.evidence_recording_status || "—"))}</strong></div>
+        <div><span>Target user ID</span><strong>${escapeHtml(receipt.user_id || "—")}</strong></div>
+        <div><span>Restorable</span><strong>No</strong></div>
+      </div>
+      <div class="admin-preview-section"><span>MongoDB records closed</span><div>${closedEntries.length
+          ? closedEntries.map(function (entry) { return `<span class="admin-scope-chip">${escapeHtml(titleize(entry[0]))}: ${escapeHtml(entry[1])}</span>`; }).join("")
+          : '<span class="admin-scope-empty">No linked access records required changes</span>'}
+      </div></div>
+      <div class="admin-preview-section"><span>Evidence collections</span><div>${renderChipList(Object.values(mongoEvidence), "Continuity evidence collections unavailable")}</div></div>
+      <div class="admin-preview-section"><span>Required evidence preserved</span><div>${renderChipList(receipt.records_preserved, "Continuity and audit evidence")}</div></div>
+      <code class="admin-receipt-code">${escapeHtml(deletionReceiptText(operation))}</code>
+    `;
+    state.deletionReceipt = { operation, text: deletionReceiptText(operation) };
+    const closeAuditButton = document.querySelector("[data-admin-deletion-receipt-close-audit]");
+    if (closeAuditButton instanceof HTMLButtonElement) {
+      const canClose = normalizeLower(operation && operation.state) === "apply_executed" && evidenceComplete && executionSucceeded;
+      closeAuditButton.hidden = !canClose;
+      closeAuditButton.setAttribute("data-admin-deletion-receipt-close-audit", canClose ? operation.operation_id : "");
+    }
+    openDialog(dialogByName("deletion-receipt"));
+  }
+
+  async function executePermanentDeletion(event) {
+    if (event) event.preventDefault();
+    const workflow = state.permanentDeletionWorkflow;
+    if (!state.isSuperAdmin || !workflow || !workflow.preview) return;
+    syncPermanentDeletionFinalAvailability();
+    const executeButton = document.querySelector("[data-admin-permanent-delete-execute]");
+    if (!(executeButton instanceof HTMLButtonElement) || executeButton.disabled) {
+      setPageStatus("Complete the final irreversible-deletion warning before execution.", "error");
+      return;
+    }
+    setButtonEnabled(executeButton, false);
+    setPageStatus("Executing permanent account deletion through the Continuity Kernel…", "info");
+    try {
+      const operation = await submitGovernedOperation(
+        "account_permanent_delete",
+        { user_id: workflow.userId },
+        {
+          reason_category: workflow.reasonCategory,
+          confirmation_email: workflow.confirmationEmail,
+          initial_confirmation: workflow.initialConfirmation === true,
+          final_confirmation: fieldValue("[data-admin-permanent-delete-phrase]"),
+          final_acknowledgement: Boolean(document.querySelector("[data-admin-permanent-delete-final-confirm]")?.checked),
+        },
+        workflow.reason,
+      );
+      if (
+        (Array.isArray(operation.blocked_reasons) && operation.blocked_reasons.length) ||
+        normalizeLower(operation.execution_outcome) !== "success" ||
+        normalizeLower(operation.evidence_recording_status) !== "complete"
+      ) {
+        throw new Error(kernelOperationMessage(operation, "Permanent account deletion did not complete."));
+      }
+      closeDialog(dialogByName("permanent-delete-final"));
+      state.permanentDeletionWorkflow = null;
+      state.selectedCaseId = "";
+      state.workspace = null;
+      await Promise.allSettled([loadKernelStatus(), loadOverview(), loadCases()]);
+      renderDeletionReceipt(operation);
+      setPageStatus(kernelOperationMessage(operation, "Account permanently deleted."), "success");
+    } catch (error) {
+      setPageStatus(error.message || "Permanent account deletion failed. No success receipt was issued.", "error");
+      syncPermanentDeletionFinalAvailability();
+    }
+  }
+
+  async function copyDeletionReceipt() {
+    const textValue = normalizeValue(state.deletionReceipt && state.deletionReceipt.text);
+    if (!textValue) return;
+    try {
+      await navigator.clipboard.writeText(textValue);
+      setPageStatus("Permanent-deletion receipt copied.", "success");
+    } catch (_error) {
+      setPageStatus("Unable to copy automatically. Select the receipt text manually.", "error");
+    }
+  }
+
+  async function closeDeletionReceiptAudit(operationId) {
+    if (!operationId) return;
+    try {
+      const operation = await postJson(`/admin/control-center/kernel/operations/${encodeURIComponent(operationId)}/close`, {});
+      await loadKernelStatus();
+      renderDeletionReceipt(operation);
+      setPageStatus("Permanent-deletion audit record closed.", "success");
+    } catch (error) {
+      setPageStatus(error.message || "Unable to close the permanent-deletion audit record.", "error");
     }
   }
 
@@ -3443,6 +3805,12 @@
         const name = dialogClose.getAttribute("data-admin-dialog-close") || "";
         closeDialog(dialogByName(name));
         if (name === "lifecycle") state.lifecycleWorkflow = null;
+        if (name === "permanent-delete" || name === "permanent-delete-final") {
+          state.permanentDeletionWorkflow = null;
+          closeDialog(dialogByName("permanent-delete"));
+          closeDialog(dialogByName("permanent-delete-final"));
+        }
+        if (name === "deletion-receipt") state.deletionReceipt = null;
         return;
       }
 
@@ -3501,6 +3869,13 @@
       if (kernelClose) {
         const operationId = kernelClose.getAttribute("data-admin-kernel-close");
         if (operationId) closeKernelOperation(operationId);
+        return;
+      }
+
+      const kernelDeletionReceipt = target.closest("[data-admin-kernel-view-deletion-receipt]");
+      if (kernelDeletionReceipt) {
+        const operationId = kernelDeletionReceipt.getAttribute("data-admin-kernel-view-deletion-receipt");
+        if (operationId) viewKernelDeletionReceipt(operationId);
         return;
       }
 
@@ -3585,6 +3960,32 @@
         const userId = superAdminUserAction.getAttribute("data-super-admin-user-id");
         const archiveOwnedRecords = superAdminUserAction.getAttribute("data-super-admin-archive-owned") === "true";
         if (action && userId) openSuperAdminLifecycle(userId, action, archiveOwnedRecords);
+        return;
+      }
+
+      const superAdminPermanentDelete = target.closest("[data-super-admin-permanent-delete]");
+      if (superAdminPermanentDelete) {
+        const userId = superAdminPermanentDelete.getAttribute("data-super-admin-permanent-delete");
+        if (userId) openPermanentDeletion(userId);
+        return;
+      }
+
+      const permanentDeleteBack = target.closest("[data-admin-permanent-delete-back]");
+      if (permanentDeleteBack) {
+        backToPermanentDeletionReview();
+        return;
+      }
+
+      const deletionReceiptCopy = target.closest("[data-admin-deletion-receipt-copy]");
+      if (deletionReceiptCopy) {
+        copyDeletionReceipt();
+        return;
+      }
+
+      const deletionReceiptCloseAudit = target.closest("[data-admin-deletion-receipt-close-audit]");
+      if (deletionReceiptCloseAudit) {
+        const operationId = deletionReceiptCloseAudit.getAttribute("data-admin-deletion-receipt-close-audit") || "";
+        if (operationId) closeDeletionReceiptAudit(operationId);
         return;
       }
 
@@ -3716,6 +4117,20 @@
       lifecycleForm.addEventListener("change", syncLifecycleExecuteAvailability);
     }
 
+    const permanentDeleteForm = document.querySelector("[data-admin-permanent-delete-form]");
+    if (permanentDeleteForm instanceof HTMLFormElement) {
+      permanentDeleteForm.addEventListener("submit", continuePermanentDeletionToFinalWarning);
+      permanentDeleteForm.addEventListener("input", syncPermanentDeletionContinueAvailability);
+      permanentDeleteForm.addEventListener("change", syncPermanentDeletionContinueAvailability);
+    }
+
+    const permanentDeleteFinalForm = document.querySelector("[data-admin-permanent-delete-final-form]");
+    if (permanentDeleteFinalForm instanceof HTMLFormElement) {
+      permanentDeleteFinalForm.addEventListener("submit", executePermanentDeletion);
+      permanentDeleteFinalForm.addEventListener("input", syncPermanentDeletionFinalAvailability);
+      permanentDeleteFinalForm.addEventListener("change", syncPermanentDeletionFinalAvailability);
+    }
+
     const teamForm = document.querySelector("[data-admin-team-form]");
     if (teamForm instanceof HTMLFormElement) {
       teamForm.addEventListener("submit", applyTeamAccess);
@@ -3740,6 +4155,12 @@
     document.querySelectorAll(".admin-workflow-dialog").forEach(function (dialog) {
       dialog.addEventListener("cancel", function () {
         if (dialog.matches("[data-admin-lifecycle-dialog]")) state.lifecycleWorkflow = null;
+        if (dialog.matches("[data-admin-permanent-delete-dialog], [data-admin-permanent-delete-final-dialog]")) {
+          state.permanentDeletionWorkflow = null;
+          closeDialog(dialogByName("permanent-delete"));
+          closeDialog(dialogByName("permanent-delete-final"));
+        }
+        if (dialog.matches("[data-admin-deletion-receipt-dialog]")) state.deletionReceipt = null;
       });
     });
 

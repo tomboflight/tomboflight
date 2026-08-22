@@ -56,6 +56,7 @@ from app.services.admin_control_service import (
     super_admin_create_customer,
     super_admin_preview_customer_create,
     super_admin_preview_account_lifecycle,
+    super_admin_preview_account_permanent_deletion,
     super_admin_preview_officer_permissions,
     super_admin_preview_package_change,
     super_admin_preview_package_revocation,
@@ -155,6 +156,10 @@ class SuperAdminUserStateActionPayload(BaseModel):
     reason: str = Field(default="")
     confirmed: bool = False
     archive_owned_records: bool = False
+
+
+class SuperAdminPermanentDeletionPreviewPayload(BaseModel):
+    reason_category: str = Field(default="")
 
 
 class SuperAdminCustomerCreatePayload(BaseModel):
@@ -734,6 +739,22 @@ def super_admin_user_status_action_preview(
             user_id=user_id,
             action=payload.action,
             archive_owned_records=payload.archive_owned_records,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/super-admin/users/{user_id}/permanent-deletion/preview")
+def super_admin_user_permanent_deletion_preview(
+    user_id: str,
+    payload: SuperAdminPermanentDeletionPreviewPayload,
+    current_user: dict[str, Any] = Depends(require_super_admin),
+):
+    _assert_canonical_ceo(current_user)
+    try:
+        return super_admin_preview_account_permanent_deletion(
+            user_id=user_id,
+            reason_category=payload.reason_category,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc

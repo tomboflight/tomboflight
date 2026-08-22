@@ -335,11 +335,35 @@ def _rollback_plan_references_before_snapshot(rollback_plan: Any) -> bool:
     return "before_snapshot" in rollback_plan_text or "before_snapshot_ref" in rollback_plan_text
 
 
-def _scan_prohibited_text_fields(fields: list[Any], acc: ValidationAccumulator) -> None:
+def _scan_prohibited_text_fields(
+    fields: list[Any],
+    acc: ValidationAccumulator,
+    *,
+    allowed_reason_codes: set[str] | None = None,
+) -> None:
     combined_text = " ".join(_flatten_to_text(field) for field in fields).lower()
+    allowed = allowed_reason_codes or set()
     for reason_code, signals in PROHIBITED_ACTION_SIGNALS.items():
+        if reason_code in allowed:
+            continue
         if any(signal in combined_text for signal in signals):
             _add_error(acc, reason_code, f"Prohibited action signal detected: {reason_code}")
+
+
+def _is_governed_permanent_account_deletion(packet: dict[str, Any]) -> bool:
+    diff_summary = packet.get("diff_summary")
+    proposed_snapshot = packet.get("proposed_after_snapshot")
+    if not isinstance(diff_summary, dict) or not isinstance(proposed_snapshot, dict):
+        return False
+    proposed_after = proposed_snapshot.get("proposed_after")
+    if not isinstance(proposed_after, dict):
+        return False
+    return (
+        _flatten_to_text(diff_summary.get("action")).strip() == "account_permanent_delete"
+        and proposed_snapshot.get("irreversible") is True
+        and proposed_after.get("restorable") is False
+        and _flatten_to_text(proposed_after.get("status")).strip() == "permanently_deleted"
+    )
 
 
 def _normalize_role(role: Any) -> str:
@@ -585,6 +609,11 @@ def validate_evidence_packet(packet: dict[str, Any]) -> dict[str, Any]:
         packet=packet,
     )
 
+    allowed_prohibited_signals = (
+        {"PROHIBITED_DELETE_CUSTOMER_RECORD"}
+        if _is_governed_permanent_account_deletion(packet)
+        else set()
+    )
     _scan_prohibited_text_fields(
         [
             packet.get("proposed_after_snapshot"),
@@ -593,6 +622,7 @@ def validate_evidence_packet(packet: dict[str, Any]) -> dict[str, Any]:
             packet.get("audit_context"),
         ],
         acc,
+        allowed_reason_codes=allowed_prohibited_signals,
     )
 
     risk_level = _flatten_to_text(packet.get("risk_level")).lower().strip()

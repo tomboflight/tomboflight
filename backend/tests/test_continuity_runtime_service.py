@@ -285,6 +285,80 @@ class TestContinuityRuntimeService(unittest.TestCase):
         self.assertEqual(operation["before_snapshot"]["action_before"], {"status": "active"})
         self.assertEqual(operation["before_snapshot"]["operational_snapshot"], {"state": "canonical"})
 
+    def test_permanent_deletion_has_evidence_only_irreversible_plan(self) -> None:
+        operation = runtime.request_operation(
+            action="account_permanent_delete",
+            target={"user_id": "user-3"},
+            parameters={
+                "reason_category": "customer_request",
+                "confirmation_email": "target@example.com",
+                "initial_confirmation": True,
+                "final_confirmation": "PERMANENTLY DELETE",
+                "final_acknowledgement": True,
+            },
+            reason="Verified account deletion request",
+            idempotency_key="kernel-idempotency-permanent-delete",
+            actor=self.actor,
+        )
+
+        self.assertEqual(operation["rollback_plan"]["strategy"], "irreversible_identity_erasure")
+        self.assertTrue(operation["rollback_plan"]["restoration_prohibited"])
+        self.assertTrue(operation["rollback_plan"]["evidence_only"])
+
+    def test_permanent_deletion_request_is_restricted_to_canonical_ceo(self) -> None:
+        with self.assertRaisesRegex(PermissionError, "canonical CEO"):
+            runtime.request_operation(
+                action="account_permanent_delete",
+                target={"user_id": "user-3"},
+                parameters={
+                    "reason_category": "policy_violation",
+                    "confirmation_email": "target@example.com",
+                    "initial_confirmation": True,
+                    "final_confirmation": "PERMANENTLY DELETE",
+                    "final_acknowledgement": True,
+                },
+                reason="Documented policy violation",
+                idempotency_key="kernel-idempotency-non-ceo-delete",
+                actor={
+                    "_id": "operations-1",
+                    "email": "operations@example.com",
+                    "role_codes": ["operations_admin"],
+                },
+            )
+
+    def test_permanent_deletion_request_requires_both_server_side_acknowledgements(self) -> None:
+        with self.assertRaisesRegex(ValueError, "target-account"):
+            runtime.request_operation(
+                action="account_permanent_delete",
+                target={"user_id": "user-3"},
+                parameters={
+                    "reason_category": "customer_request",
+                    "confirmation_email": "target@example.com",
+                    "initial_confirmation": False,
+                    "final_confirmation": "PERMANENTLY DELETE",
+                    "final_acknowledgement": True,
+                },
+                reason="Verified account deletion request",
+                idempotency_key="kernel-delete-confirmation-missing",
+                actor=self.actor,
+            )
+
+        with self.assertRaisesRegex(ValueError, "final permanent-closure"):
+            runtime.request_operation(
+                action="account_permanent_delete",
+                target={"user_id": "user-3"},
+                parameters={
+                    "reason_category": "customer_request",
+                    "confirmation_email": "target@example.com",
+                    "initial_confirmation": True,
+                    "final_confirmation": "PERMANENTLY DELETE",
+                    "final_acknowledgement": False,
+                },
+                reason="Verified account deletion request",
+                idempotency_key="kernel-delete-final-ack-missing",
+                actor=self.actor,
+            )
+
     def test_kill_switch_disables_execution_only_when_explicitly_set(self) -> None:
         self.assertTrue(runtime.execution_enabled(env={}))
         for value in ("1", "true", "yes", "on", "enabled"):
@@ -300,9 +374,12 @@ class TestContinuityRuntimeService(unittest.TestCase):
 
         operation_indexes = self.database[runtime.OPERATIONS_COLLECTION].indexes
         event_indexes = self.database[runtime.EVENTS_COLLECTION].indexes
+        tombstone_indexes = self.database["account_deletion_tombstones"].indexes
         self.assertTrue(any(item[1].get("name") == "continuity_operation_id_unique" for item in operation_indexes))
         self.assertTrue(any(item[1].get("name") == "continuity_idempotency_unique" for item in operation_indexes))
         self.assertTrue(any(item[1].get("name") == "continuity_event_id_unique" for item in event_indexes))
+        self.assertTrue(any(item[1].get("name") == "account_deletion_id_unique" for item in tombstone_indexes))
+        self.assertTrue(any(item[1].get("name") == "account_deletion_user_unique" for item in tombstone_indexes))
 
 
 class TestContinuityRuntimeControlSurfaceAdapters(unittest.TestCase):
@@ -317,9 +394,44 @@ class TestContinuityRuntimeControlSurfaceAdapters(unittest.TestCase):
             "impersonation_start",
             "impersonation_stop",
         }
-        self.assertEqual(runtime.RUNTIME_VERSION, "9.0.0")
-        self.assertEqual(len(runtime.ACTION_SPECS), 35)
+        self.assertEqual(runtime.RUNTIME_VERSION, "10.1.0")
+        self.assertEqual(len(runtime.ACTION_SPECS), 36)
         self.assertTrue(expected.issubset(runtime.ACTION_SPECS))
+
+    def test_permanent_deletion_adapter_passes_both_irreversible_confirmations(self) -> None:
+        actor = {"_id": "ceo-1", "email": CEO_MASTER_ADMIN_EMAIL}
+        with patch.object(
+            runtime.admin_control_service,
+            "super_admin_apply_account_permanent_deletion",
+            return_value={"permanent": True, "failure_count": 0},
+        ) as execute:
+            result = runtime._invoke_action(
+                "account_permanent_delete",
+                {"user_id": "user-3"},
+                {
+                    "reason_category": "security_incident",
+                    "confirmation_email": "target@example.com",
+                    "initial_confirmation": True,
+                    "final_confirmation": "PERMANENTLY DELETE",
+                    "final_acknowledgement": True,
+                    "continuity_operation_id": "ckop-adapter-test",
+                    "reason": "Verified account compromise",
+                },
+                actor,
+            )
+
+        self.assertTrue(result["permanent"])
+        execute.assert_called_once_with(
+            user_id="user-3",
+            reason_category="security_incident",
+            reason="Verified account compromise",
+            confirmation_email="target@example.com",
+            initial_confirmation=True,
+            final_confirmation="PERMANENTLY DELETE",
+            final_acknowledgement=True,
+            continuity_operation_id="ckop-adapter-test",
+            actor=actor,
+        )
 
     def test_manual_fulfillment_adapter_preserves_kernel_idempotency(self) -> None:
         actor = {"_id": "ceo-1", "email": CEO_MASTER_ADMIN_EMAIL}

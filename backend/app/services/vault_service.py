@@ -123,8 +123,11 @@ def _has_grant(
     }
     if roles:
         query["permission_role"] = {"$in": roles}
-    grant = _col("vault_access_grants").find_one(query)
-    return bool(grant)
+    grants = _col("vault_access_grants").find(query)
+    return any(
+        _normalize(grant.get("status")).lower() not in {"revoked", "deleted"}
+        for grant in grants
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -299,7 +302,11 @@ def list_vault_items(
     owned_items = list(col.find(owned_query))
 
     owned_ids = {_str_id(doc.get("_id")) for doc in owned_items}
-    grants = list(_col("vault_access_grants").find({"grantee_user_id": requesting_user_id}))
+    grants = [
+        grant
+        for grant in _col("vault_access_grants").find({"grantee_user_id": requesting_user_id})
+        if _normalize(grant.get("status")).lower() not in {"revoked", "deleted"}
+    ]
     granted_item_ids = [_normalize(g.get("vault_item_id")) for g in grants if _normalize(g.get("vault_item_id"))]
 
     granted_items: list[dict[str, Any]] = []
@@ -544,12 +551,15 @@ def list_vault_audit_events(
     canonical_item_id = _str_id(item.get("_id"))
     owner = _normalize(item.get("owner_user_id"))
     if owner != _normalize(requesting_user_id):
-        grant = _col("vault_access_grants").find_one({
+        grants = _col("vault_access_grants").find({
             "vault_item_id": canonical_item_id,
             "grantee_user_id": requesting_user_id,
             "permission_role": "executor",
         })
-        if not grant:
+        if not any(
+            _normalize(grant.get("status")).lower() not in {"revoked", "deleted"}
+            for grant in grants
+        ):
             raise PermissionError("Only the owner or executor can view audit events.")
 
     col = _col("vault_audit_events")
