@@ -5494,11 +5494,11 @@ def _archive_owned_account_records(
         invite_filters.append({"family_id": {"$in": family_candidates}})
     if household_candidates:
         invite_filters.append({"household_id": {"$in": household_candidates}})
-    if original_email:
+    if user_email:
         invite_filters.extend(
             [
-                {"email": original_email},
-                {"invite_email": original_email},
+                {"email": user_email},
+                {"invite_email": user_email},
             ]
         )
     if invite_filters:

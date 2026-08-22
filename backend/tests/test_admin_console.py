@@ -1080,7 +1080,7 @@ class SuperAdminControlsTests(unittest.TestCase):
             preview = admin_control_service.super_admin_preview_account_lifecycle(
                 user_id=str(user_id), action="archive", archive_owned_records=True
             )
-            with self.assertRaisesRegex(ValueError, "blocked"):
+            with self.assertRaisesRegex(ValueError, "canonical CEO Master Administrator"):
                 admin_control_service.super_admin_apply_account_lifecycle(
                     user_id=str(user_id),
                     action="archive",
