@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import secrets
@@ -44,6 +45,7 @@ from app.services.project_entitlement_service import (
     upsert_project_entitlement,
 )
 from app.services.project_membership_service import ensure_project_owner_membership
+from app.services import stripe_admin_operations_service
 from app.services.workspace_access_service import count_workspace_uploads
 from app.services.email_service import send_household_invite_email
 
@@ -65,6 +67,14 @@ SERVICE_CONTROL_OPERATIONS = {
 }
 OFFICER_ADMIN_EMAILS = set(OFFICER_PROFILE_FIELDS) - {str(CEO_MASTER_ADMIN_EMAIL).strip().lower()}
 TEAM_ACCESS_ROLE_TEMPLATES = ASSIGNABLE_OFFICER_ROLE_CODES
+PERMANENT_DELETE_CONFIRMATION_PHRASE = "PERMANENTLY DELETE"
+PERMANENT_DELETE_REASON_CODES = {
+    "customer_request",
+    "policy_violation",
+    "security_incident",
+    "company_authorized",
+}
+ACCOUNT_DELETION_TOMBSTONES_COLLECTION = "account_deletion_tombstones"
 
 ADMIN_CONTROL_QUEUES = [
     "overview",
@@ -284,6 +294,7 @@ SUPER_ADMIN_USER_STATUS_VALUES = {
 SUPER_ADMIN_USER_STATE_ACTIONS = {
     "activate": "active",
     "restore": "active",
+    "billing_hold": "suspended",
     "suspend": "suspended",
     "disable": "disabled",
 }
@@ -600,7 +611,7 @@ def admin_control_bulk_action_allowed(
 # Bumped alongside the static frontend cache-busting query string
 # (see admin-control-center.html / dashboard.html `?v=` suffix) whenever a
 # hotfix ships to the admin control center or dashboard assets.
-FRONTEND_ASSET_REVISION = "20260821-phase10"
+FRONTEND_ASSET_REVISION = "20260821-phase10-1"
 
 
 def _backend_release_identifier() -> str:
@@ -3169,7 +3180,18 @@ def _marketing_sections_payload(
 
 def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
     db = _db()
-    users_total = int(db["users"].count_documents({}))
+    users_record_total = int(db["users"].count_documents({}))
+    permanently_deleted_users = int(
+        db["users"].count_documents(
+            {
+                "$or": [
+                    {"status": "permanently_deleted"},
+                    {"account_type": "deleted_tombstone"},
+                ]
+            }
+        )
+    )
+    users_total = max(users_record_total - permanently_deleted_users, 0)
     users_total_admin = int(db["users"].count_documents({"account_type": "business_admin"}))
     users_total_customer = max(users_total - users_total_admin, 0)
     archived_status_values = sorted(
@@ -3421,11 +3443,24 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
             member_role_access_issues += 1
 
     unresolved_admin_cases = len(mismatches)
-    new_accounts = int(db["users"].count_documents({"created_at": {"$gte": seven_days_ago}}))
+    new_accounts = int(
+        db["users"].count_documents(
+            {
+                "created_at": {"$gte": seven_days_ago},
+                "status": {"$nin": ["permanently_deleted"]},
+                "account_type": {"$nin": ["deleted_tombstone"]},
+            }
+        )
+    )
     new_projects_accounts += new_accounts
     paid_customers = 0
     signed_up_no_purchase = 0
     for user in db["users"].find({}):
+        if (
+            _normalize(user.get("status")).lower() == "permanently_deleted"
+            or _normalize(user.get("account_type")).lower() == "deleted_tombstone"
+        ):
+            continue
         if _normalize(user.get("account_type")).lower() == "business_admin":
             continue
         email = _normalize_email(user.get("email"))
@@ -3490,6 +3525,8 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
     return {
         "summary": {
             "total_users": users_total,
+            "permanently_deleted_users": permanently_deleted_users,
+            "user_identity_records_retained": users_record_total,
             "total_customer_users": users_total_customer,
             "total_business_admin_users": users_total_admin,
             "signed_up_no_purchase_users": signed_up_no_purchase,
@@ -4422,6 +4459,7 @@ def _user_supports_search(user: dict[str, Any], search: str) -> bool:
             _normalize(user.get("access_tier")),
             _normalize(user.get("department_role")),
             _normalize(user.get("status")),
+            _normalize(user.get("permanent_deletion_id")),
             _normalize(user.get("birthday")),
             _normalize(user.get("birth_date")),
             _normalize(user.get("date_of_birth")),
@@ -4439,6 +4477,8 @@ def _classify_user_account_type(
     has_pending_verified_purchase: bool,
 ) -> str:
     status_value = _normalize(user.get("status")).lower()
+    if status_value == "permanently_deleted" or _normalize(user.get("account_type")).lower() == "deleted_tombstone":
+        return "Permanently Deleted Account"
     if status_value in {"archived"}:
         return "Archived Account"
     if status_value in {"suspended", "disabled", "locked"}:
@@ -5048,6 +5088,8 @@ def super_admin_update_user(
     user = _user_by_id(user_id)
     if user is None:
         raise ValueError("User not found.")
+    if _normalize(user.get("status")).lower() == "permanently_deleted" or _normalize(user.get("account_type")).lower() == "deleted_tombstone":
+        raise ValueError("A permanently deleted account cannot be edited or restored.")
     db = _db()
     current_user_id = _normalize_object_id(user.get("_id")) or _normalize(user_id)
     updates: dict[str, Any] = {"updated_at": _now()}
@@ -5452,6 +5494,13 @@ def _archive_owned_account_records(
         invite_filters.append({"family_id": {"$in": family_candidates}})
     if household_candidates:
         invite_filters.append({"household_id": {"$in": household_candidates}})
+    if original_email:
+        invite_filters.extend(
+            [
+                {"email": original_email},
+                {"invite_email": original_email},
+            ]
+        )
     if invite_filters:
         invite_result = db["household_invites"].update_many(
             {"$or": invite_filters, "status": {"$in": ["active", "enabled", "pending", "sent", ""]}},
@@ -5480,7 +5529,7 @@ def super_admin_preview_account_lifecycle(
     if user is None:
         raise ValueError("User not found.")
     normalized_action = _normalize(action).lower()
-    if normalized_action not in {"activate", "restore", "suspend", "disable", "archive"}:
+    if normalized_action not in {"activate", "restore", "billing_hold", "suspend", "disable", "archive"}:
         raise ValueError("Unsupported account lifecycle action.")
     if archive_owned_records and normalized_action != "archive":
         raise ValueError("archive_owned_records is only valid for account archive.")
@@ -5490,26 +5539,37 @@ def super_admin_preview_account_lifecycle(
         user_email=_normalize_email(user.get("email")),
     )
     ownership = {name: len(records) for name, records in ownership_records.items()}
+    current_status = _normalize(user.get("status")).lower() or "active"
     is_canonical_ceo = _normalize_email(user.get("email")) == str(CEO_MASTER_ADMIN_EMAIL).strip().lower()
-    ceo_protected = is_canonical_ceo and normalized_action in {"suspend", "disable", "archive"}
+    permanently_deleted = current_status == "permanently_deleted" or _normalize(user.get("account_type")).lower() == "deleted_tombstone"
+    ceo_protected = is_canonical_ceo and normalized_action in {"billing_hold", "suspend", "disable", "archive"}
     blocked_by_ownership = normalized_action == "archive" and any(ownership.values()) and not archive_owned_records
-    blocked = ceo_protected or blocked_by_ownership
+    blocked = ceo_protected or blocked_by_ownership or permanently_deleted
     target_status = "archived" if normalized_action == "archive" else SUPER_ADMIN_USER_STATE_ACTIONS.get(normalized_action)
     warnings: list[str] = []
-    if ceo_protected:
+    if permanently_deleted:
+        warnings.append("A permanently deleted account cannot be restored or changed through recoverable lifecycle controls.")
+    elif ceo_protected:
         warnings.append("The canonical CEO Master Administrator cannot be disabled or archived through routine account controls.")
     elif blocked_by_ownership:
-        warnings.append("Transfer ownership or use Close Account & Workspaces to archive the owned workspaces together.")
+        warnings.append("Transfer ownership or use Archive Account & Workspaces to archive the owned workspaces together.")
     elif normalized_action == "archive" and archive_owned_records and any(ownership.values()):
         warnings.append("Owned projects, families, households, entitlements, memberships, invites, and intake access will be archived.")
     return {
         "user_id": resolved_user_id,
         "action": normalized_action,
-        "before": {"status": _normalize(user.get("status")) or "active", "session_token_version": int(user.get("session_token_version") or 0)},
+        "target_account": {
+            "user_id": resolved_user_id,
+            "email": _normalize_email(user.get("email")),
+            "full_name": _user_display_name(user),
+        },
+        "before": {"status": current_status, "session_token_version": int(user.get("session_token_version") or 0)},
         "proposed_after": {
             "status": target_status,
-            "login_enabled": normalized_action not in {"suspend", "disable", "archive"},
+            "login_enabled": normalized_action not in {"billing_hold", "suspend", "disable", "archive"},
             "archive_owned_records": bool(archive_owned_records),
+            "recoverable": True,
+            "billing_hold": normalized_action == "billing_hold",
         },
         "ownership_dependencies": ownership,
         "records_to_archive": ownership if normalized_action == "archive" and archive_owned_records else {},
@@ -5544,7 +5604,8 @@ def super_admin_apply_account_lifecycle(
         archive_owned_records=archive_owned_records,
     )
     if preview.get("blocked"):
-        raise ValueError("Account archive is blocked while active ownership remains.")
+        warnings = "; ".join(str(item) for item in preview.get("warnings") or [])
+        raise ValueError(warnings or "Account lifecycle action is blocked.")
     user = _user_by_id(user_id) or {}
     resolved_user_id = _normalize(preview.get("user_id"))
     now_value = _now()
@@ -5557,7 +5618,8 @@ def super_admin_apply_account_lifecycle(
         "session_token_version": int(user.get("session_token_version") or 0) + 1,
         "updated_at": now_value,
     }
-    if _normalize(action).lower() == "archive":
+    normalized_action = _normalize(action).lower()
+    if normalized_action == "archive":
         updates.update(
             {
                 "archived_at": now_value,
@@ -5574,14 +5636,33 @@ def super_admin_apply_account_lifecycle(
             {"user_id": resolved_user_id, "status": {"$in": ["active", "enabled", ""]}},
             {"$set": {"status": "inactive", "updated_at": now_value}},
         )
-    elif _normalize(action).lower() == "restore":
-        updates.update({"archived_at": None, "archived_by": None, "archive_reason": None, "login_enabled": True})
+    elif normalized_action in {"restore", "activate"}:
+        updates.update(
+            {
+                "archived_at": None,
+                "archived_by": None,
+                "archive_reason": None,
+                "billing_hold_at": None,
+                "billing_hold_by": None,
+                "billing_hold_reason": None,
+                "login_enabled": True,
+            }
+        )
+    elif normalized_action == "billing_hold":
+        updates.update(
+            {
+                "billing_hold_at": now_value,
+                "billing_hold_by": _normalize((actor or {}).get("_id") or (actor or {}).get("id")) or None,
+                "billing_hold_reason": normalized_reason,
+                "login_enabled": False,
+            }
+        )
     else:
-        updates["login_enabled"] = _normalize(action).lower() == "activate"
+        updates["login_enabled"] = normalized_action == "activate"
     oid = _to_object_id(resolved_user_id)
     _db()["users"].update_one({"_id": oid or resolved_user_id}, {"$set": updates})
     archive_results: dict[str, int] = {}
-    if _normalize(action).lower() == "archive" and archive_owned_records:
+    if normalized_action == "archive" and archive_owned_records:
         archive_results = _archive_owned_account_records(
             user_id=resolved_user_id,
             user_email=_normalize_email(user.get("email")),
@@ -5592,7 +5673,7 @@ def super_admin_apply_account_lifecycle(
         )
     _write_admin_action_audit(
         actor=actor,
-        action=f"super_admin.account_{_normalize(action).lower()}",
+        action=f"super_admin.account_{normalized_action}",
         target_type="user",
         target_id=resolved_user_id,
         before=preview.get("before") or {},
@@ -5610,6 +5691,801 @@ def super_admin_apply_account_lifecycle(
         "sessions_revoked": True,
         "archive_results": archive_results,
         "audit_event_created": True,
+    }
+
+
+def _all_owned_records(*, user_id: str, user_email: str = "") -> dict[str, list[dict[str, Any]]]:
+    """Resolve owned workspaces regardless of active/archive state.
+
+    Permanent account deletion must also close records that were previously
+    archived.  The ordinary lifecycle preview intentionally ignores those
+    records because they are already outside active access.
+    """
+
+    db = _db()
+    owner_candidates = _project_id_candidates(user_id)
+    normalized_email = _normalize_email(user_email)
+    ownership_filters: list[dict[str, Any]] = [{"owner_user_id": {"$in": owner_candidates}}]
+    legacy_project_filters: list[dict[str, Any]] = [
+        {"user_id": {"$in": owner_candidates}},
+        {"created_by": {"$in": owner_candidates}},
+    ]
+    if normalized_email:
+        ownership_filters.append({"owner_email": normalized_email})
+    return {
+        "projects": list(db["projects"].find({"$or": ownership_filters + legacy_project_filters})),
+        "families": list(db["families"].find({"$or": ownership_filters})),
+        "households": list(db["households"].find({"$or": ownership_filters})),
+    }
+
+
+def _active_maintenance_subscription_ids(
+    *,
+    ownership_records: dict[str, list[dict[str, Any]]],
+) -> list[str]:
+    project_candidates = _record_reference_candidates(ownership_records.get("projects") or [])
+    if not project_candidates:
+        return []
+    subscription_ids: list[str] = []
+    for entitlement in _db()["project_entitlements"].find(
+        {"project_id": {"$in": project_candidates}}
+    ):
+        subscription_id = _normalize(entitlement.get("maintenance_stripe_subscription_id"))
+        status_value = _normalize(
+            entitlement.get("maintenance_stripe_status")
+            or entitlement.get("maintenance_status")
+        ).lower()
+        if (
+            subscription_id
+            and status_value not in {"canceled", "cancelled", "ended", "inactive"}
+            and subscription_id not in subscription_ids
+        ):
+            subscription_ids.append(subscription_id)
+    return subscription_ids
+
+
+def _permanently_close_owned_account_records(
+    *,
+    user_id: str,
+    original_email: str,
+    deleted_email: str,
+    deletion_id: str,
+    reason_category: str,
+    ownership_records: dict[str, list[dict[str, Any]]],
+    actor: dict[str, Any] | None,
+    now_value: datetime,
+) -> dict[str, int]:
+    """Permanently close access records without destroying business evidence."""
+
+    db = _db()
+    owner_candidates = _project_id_candidates(user_id)
+    actor_id = _normalize((actor or {}).get("_id") or (actor or {}).get("id")) or None
+    permanent_fields = {
+        "status": "deleted",
+        "deleted_at": now_value,
+        "deleted_by": actor_id,
+        "permanent_deletion_id": deletion_id,
+        "permanent_deletion_reason_category": reason_category,
+        "access_enabled": False,
+        "permanently_closed": True,
+        "owner_email": deleted_email,
+        "updated_at": now_value,
+    }
+    results: dict[str, int] = {}
+
+    for collection_name in ("projects", "families", "households"):
+        record_candidates = _record_reference_candidates(ownership_records.get(collection_name) or [])
+        if not record_candidates:
+            results[collection_name] = 0
+            continue
+        result = db[collection_name].update_many(
+            {"_id": {"$in": record_candidates}, "status": {"$nin": ["deleted"]}},
+            {"$set": permanent_fields},
+        )
+        results[collection_name] = int(result.modified_count)
+
+    project_candidates = _record_reference_candidates(ownership_records.get("projects") or [])
+    family_candidates = _record_reference_candidates(ownership_records.get("families") or [])
+    household_candidates = _record_reference_candidates(ownership_records.get("households") or [])
+
+    entitlement_filters: list[dict[str, Any]] = [{"user_id": {"$in": owner_candidates}}]
+    if project_candidates:
+        entitlement_filters.append({"project_id": {"$in": project_candidates}})
+    entitlement_result = db["project_entitlements"].update_many(
+        {"$or": entitlement_filters, "status": {"$nin": ["deleted"]}},
+        {
+            "$set": {
+                **permanent_fields,
+                "entitlement_access_enabled": False,
+                "maintenance_status": "canceled",
+                "maintenance_stripe_status": "canceled",
+            }
+        },
+    )
+    results["project_entitlements"] = int(entitlement_result.modified_count)
+
+    membership_filters: list[dict[str, Any]] = [{"user_id": {"$in": owner_candidates}}]
+    if project_candidates:
+        membership_filters.append({"project_id": {"$in": project_candidates}})
+    membership_result = db["project_members"].update_many(
+        {"$or": membership_filters, "status": {"$nin": ["removed"]}},
+        {
+            "$set": {
+                "status": "removed",
+                "removed_at": now_value,
+                "removed_by": actor_id,
+                "updated_at": now_value,
+            }
+        },
+    )
+    results["project_members"] = int(membership_result.modified_count)
+
+    invite_filters: list[dict[str, Any]] = []
+    if project_candidates:
+        invite_filters.append({"project_id": {"$in": project_candidates}})
+    if family_candidates:
+        invite_filters.append({"family_id": {"$in": family_candidates}})
+    if household_candidates:
+        invite_filters.append({"household_id": {"$in": household_candidates}})
+    if invite_filters:
+        invite_result = db["household_invites"].update_many(
+            {"$or": invite_filters, "status": {"$nin": ["cancelled"]}},
+            {
+                "$set": {
+                    "status": "cancelled",
+                    "cancelled_at": now_value,
+                    "permanently_closed": True,
+                    "updated_at": now_value,
+                }
+            },
+        )
+        results["household_invites"] = int(invite_result.modified_count)
+    else:
+        results["household_invites"] = 0
+
+    intake_filters: list[dict[str, Any]] = [{"user_id": {"$in": owner_candidates}}]
+    if original_email:
+        intake_filters.append({"email": original_email})
+    intake_result = db["intake_submissions"].update_many(
+        {"$or": intake_filters, "status": {"$nin": ["deleted"]}},
+        {
+            "$set": {
+                "status": "deleted",
+                "email": deleted_email,
+                "deleted_at": now_value,
+                "deleted_by": actor_id,
+                "permanently_closed": True,
+                "updated_at": now_value,
+            }
+        },
+    )
+    results["intake_submissions"] = int(intake_result.modified_count)
+
+    upload_filters: list[dict[str, Any]] = [{"uploaded_by_user_id": {"$in": owner_candidates}}]
+    if project_candidates:
+        upload_filters.append({"project_id": {"$in": project_candidates}})
+    if original_email:
+        upload_filters.append({"uploaded_by": original_email})
+    if upload_filters:
+        upload_result = db["uploaded_files"].update_many(
+            {"$or": upload_filters},
+            {
+                "$set": {
+                    "uploaded_by": deleted_email,
+                    "owner_account_deleted": True,
+                    "account_access_enabled": False,
+                    "updated_at": now_value,
+                }
+            },
+        )
+        results["uploaded_files_deidentified"] = int(upload_result.modified_count)
+    else:
+        results["uploaded_files_deidentified"] = 0
+
+    vault_item_filters: list[dict[str, Any]] = [{"owner_user_id": {"$in": owner_candidates}}]
+    if project_candidates:
+        vault_item_filters.append({"project_id": {"$in": project_candidates}})
+    vault_items = list(db["vault_items"].find({"$or": vault_item_filters}))
+    vault_item_ids = _record_reference_candidates(vault_items)
+    vault_item_result = db["vault_items"].update_many(
+        {"$or": vault_item_filters},
+        {
+            "$set": {
+                "owner_account_deleted": True,
+                "access_enabled": False,
+                "retention_state": "closed_account_retention",
+                "updated_at": now_value,
+            }
+        },
+    )
+    results["vault_items_access_closed"] = int(vault_item_result.modified_count)
+
+    grant_filters: list[dict[str, Any]] = [{"grantee_user_id": {"$in": owner_candidates}}]
+    if vault_item_ids:
+        grant_filters.append({"vault_item_id": {"$in": vault_item_ids}})
+    grant_result = db["vault_access_grants"].update_many(
+        {"$or": grant_filters, "status": {"$nin": ["revoked", "deleted"]}},
+        {"$set": {"status": "revoked", "revoked_at": now_value, "updated_at": now_value}},
+    )
+    results["vault_access_grants_revoked"] = int(grant_result.modified_count)
+
+    link_key_filters: list[dict[str, Any]] = [
+        {"user_id": {"$in": owner_candidates}},
+        {"issuer_user_id": {"$in": owner_candidates}},
+    ]
+    if original_email:
+        link_key_filters.append({"target_email": original_email})
+    if project_candidates:
+        link_key_filters.append({"project_id": {"$in": project_candidates}})
+    link_key_result = db["project_link_keys"].update_many(
+        {"$or": link_key_filters, "status": {"$nin": ["revoked", "deleted", "expired"]}},
+        {
+            "$set": {
+                "status": "revoked",
+                "revoked_at": now_value,
+                "revocation_reason": "account_permanently_deleted",
+                "permanent_deletion_id": deletion_id,
+                "updated_at": now_value,
+            }
+        },
+    )
+    results["project_link_keys_revoked"] = int(link_key_result.modified_count)
+
+    link_request_filters: list[dict[str, Any]] = [
+        {"requested_by_user_id": {"$in": owner_candidates}},
+        {"source_handshake_user_id": {"$in": owner_candidates}},
+        {"target_handshake_user_id": {"$in": owner_candidates}},
+    ]
+    if project_candidates:
+        link_request_filters.extend(
+            [
+                {"source_project_id": {"$in": project_candidates}},
+                {"target_project_id": {"$in": project_candidates}},
+            ]
+        )
+    link_request_result = db["link_requests"].update_many(
+        {"$or": link_request_filters, "status": {"$nin": ["cancelled", "rejected", "completed", "deleted"]}},
+        {
+            "$set": {
+                "status": "cancelled",
+                "cancelled_at": now_value,
+                "cancellation_reason": "account_permanently_deleted",
+                "permanent_deletion_id": deletion_id,
+                "updated_at": now_value,
+            }
+        },
+    )
+    results["link_requests_cancelled"] = int(link_request_result.modified_count)
+
+    if household_candidates:
+        household_link_result = db["household_links"].update_many(
+            {
+                "$or": [
+                    {"source_household_id": {"$in": household_candidates}},
+                    {"target_household_id": {"$in": household_candidates}},
+                ],
+                "link_status": {"$nin": ["revoked", "deleted"]},
+            },
+            {
+                "$set": {
+                    "status": "revoked",
+                    "link_status": "revoked",
+                    "revoked_at": now_value,
+                    "revocation_reason": "account_permanently_deleted",
+                    "permanent_deletion_id": deletion_id,
+                    "updated_at": now_value,
+                }
+            },
+        )
+        results["household_links_revoked"] = int(household_link_result.modified_count)
+    else:
+        results["household_links_revoked"] = 0
+
+    vault_collection_filters: list[dict[str, Any]] = [
+        {"owner_user_id": {"$in": owner_candidates}},
+    ]
+    if project_candidates:
+        vault_collection_filters.append({"project_id": {"$in": project_candidates}})
+    vault_collection_result = db["vault_collections"].update_many(
+        {"$or": vault_collection_filters, "status": {"$nin": ["closed", "deleted"]}},
+        {
+            "$set": {
+                "status": "closed",
+                "access_enabled": False,
+                "closed_at": now_value,
+                "closure_reason": "account_permanently_deleted",
+                "permanent_deletion_id": deletion_id,
+                "updated_at": now_value,
+            }
+        },
+    )
+    results["vault_collections_closed"] = int(vault_collection_result.modified_count)
+
+    vault_release_filters: list[dict[str, Any]] = [
+        {"created_by_user_id": {"$in": owner_candidates}},
+        {"trustee_user_id": {"$in": owner_candidates}},
+    ]
+    if vault_item_ids:
+        vault_release_filters.append({"vault_item_id": {"$in": vault_item_ids}})
+    vault_release_result = db["vault_release_rules"].update_many(
+        {"$or": vault_release_filters, "status": {"$nin": ["revoked", "deleted"]}},
+        {
+            "$set": {
+                "status": "revoked",
+                "revoked_at": now_value,
+                "revocation_reason": "account_permanently_deleted",
+                "permanent_deletion_id": deletion_id,
+                "updated_at": now_value,
+            }
+        },
+    )
+    results["vault_release_rules_revoked"] = int(vault_release_result.modified_count)
+
+    organization_invite_filters: list[dict[str, Any]] = []
+    if project_candidates:
+        organization_invite_filters.append({"project_id": {"$in": project_candidates}})
+    if original_email:
+        organization_invite_filters.append({"email": original_email})
+    if organization_invite_filters:
+        organization_invite_result = db["organization_admin_invites"].update_many(
+            {"$or": organization_invite_filters, "status": {"$nin": ["cancelled", "revoked", "deleted"]}},
+            {
+                "$set": {
+                    "status": "cancelled",
+                    "cancelled_at": now_value,
+                    "cancellation_reason": "account_permanently_deleted",
+                    "permanent_deletion_id": deletion_id,
+                    "updated_at": now_value,
+                }
+            },
+        )
+        results["organization_admin_invites_cancelled"] = int(organization_invite_result.modified_count)
+    else:
+        results["organization_admin_invites_cancelled"] = 0
+
+    experience_result = db["experience_sessions"].update_many(
+        {"user_id": {"$in": owner_candidates}, "status": {"$nin": ["closed", "deleted"]}},
+        {
+            "$set": {
+                "status": "closed",
+                "access_enabled": False,
+                "closed_at": now_value,
+                "closure_reason": "account_permanently_deleted",
+                "permanent_deletion_id": deletion_id,
+                "updated_at": now_value,
+            }
+        },
+    )
+    results["experience_sessions_closed"] = int(experience_result.modified_count)
+
+    impersonation_result = db["admin_impersonation_sessions"].update_many(
+        {
+            "impersonated_user_id": {"$in": owner_candidates},
+            "status": {"$in": ["active"]},
+        },
+        {
+            "$set": {
+                "status": "stopped",
+                "editing_enabled": False,
+                "impersonated_customer_name": "Permanently Deleted Account",
+                "impersonated_email": deleted_email,
+                "ended_at": now_value,
+                "stop_reason": "account_permanently_deleted",
+                "permanent_deletion_id": deletion_id,
+                "updated_at": now_value,
+            }
+        },
+    )
+    results["impersonation_sessions_stopped"] = int(impersonation_result.modified_count)
+
+    if project_candidates:
+        mint_job_result = db["mint_jobs"].update_many(
+            {
+                "project_id": {"$in": project_candidates},
+                "status": {"$in": ["queued", "retry_scheduled", "processing", "in_progress"]},
+            },
+            {
+                "$set": {
+                    "status": "obsolete",
+                    "finished_at": now_value,
+                    "error_code": "account_permanently_deleted",
+                    "error_message": "Mint execution stopped because the owning account was permanently deleted.",
+                    "permanent_deletion_id": deletion_id,
+                    "updated_at": now_value,
+                }
+            },
+        )
+        results["mint_jobs_stopped"] = int(mint_job_result.modified_count)
+        mint_approval_result = db["mint_approvals"].update_many(
+            {
+                "project_id": {"$in": project_candidates},
+                "status": {"$in": ["pending", "approved", "in_review"]},
+            },
+            {
+                "$set": {
+                    "status": "revoked",
+                    "revoked_at": now_value,
+                    "revocation_reason": "account_permanently_deleted",
+                    "permanent_deletion_id": deletion_id,
+                    "updated_at": now_value,
+                }
+            },
+        )
+        results["mint_approvals_revoked"] = int(mint_approval_result.modified_count)
+    else:
+        results["mint_jobs_stopped"] = 0
+        results["mint_approvals_revoked"] = 0
+
+    return results
+
+
+def super_admin_preview_account_permanent_deletion(
+    *,
+    user_id: str,
+    reason_category: str = "",
+) -> dict[str, Any]:
+    user = _user_by_id(user_id)
+    if user is None:
+        raise ValueError("User not found.")
+    normalized_reason_category = _normalize(reason_category).lower()
+    if normalized_reason_category and normalized_reason_category not in PERMANENT_DELETE_REASON_CODES:
+        raise ValueError("A supported permanent-deletion reason category is required.")
+
+    resolved_user_id = _normalize_object_id(user.get("_id")) or _normalize(user_id)
+    email = _normalize_email(user.get("email"))
+    current_status = _normalize(user.get("status")).lower() or "active"
+    ownership_records = _all_owned_records(user_id=resolved_user_id, user_email=email)
+    ownership = {name: len(records) for name, records in ownership_records.items()}
+    active_subscription_ids = _active_maintenance_subscription_ids(
+        ownership_records=ownership_records
+    )
+    is_canonical_ceo = email == str(CEO_MASTER_ADMIN_EMAIL).strip().lower()
+    existing_tombstone = _db()[ACCOUNT_DELETION_TOMBSTONES_COLLECTION].find_one({"user_id": resolved_user_id})
+    completed_tombstone = _normalize((existing_tombstone or {}).get("status")).lower() == "completed"
+    deletion_started = _normalize((existing_tombstone or {}).get("status")).lower() == "started"
+    already_deleted = (
+        current_status == "permanently_deleted"
+        or _normalize(user.get("account_type")).lower() == "deleted_tombstone"
+        or completed_tombstone
+    )
+    blocked = is_canonical_ceo or already_deleted
+    warnings: list[str] = []
+    if is_canonical_ceo:
+        warnings.append("The canonical CEO Master Administrator can never be permanently deleted through account controls.")
+    elif already_deleted:
+        warnings.append("This account has already been permanently deleted and cannot be restored or deleted again.")
+    else:
+        warnings.extend(
+            [
+                "Permanent deletion cannot be undone or restored.",
+                "Required orders, billing, corporate ownership, security evidence, issued certificates, and audit records remain preserved.",
+            ]
+        )
+        if deletion_started:
+            warnings.append("MongoDB contains evidence of an earlier incomplete deletion attempt; a new governed execution will resume and finalize it.")
+        if active_subscription_ids:
+            warnings.append(
+                f"{len(active_subscription_ids)} active Stripe maintenance subscription(s) will be cancelled immediately before identity deletion."
+            )
+
+    return {
+        "user_id": resolved_user_id,
+        "action": "account_permanent_delete",
+        "target_account": {
+            "user_id": resolved_user_id,
+            "email": email,
+            "full_name": _user_display_name(user),
+        },
+        "before": {
+            "status": current_status,
+            "login_enabled": bool(user.get("login_enabled", current_status == "active")),
+            "session_token_version": int(user.get("session_token_version") or 0),
+        },
+        "proposed_after": {
+            "status": "permanently_deleted",
+            "login_enabled": False,
+            "restorable": False,
+            "personal_profile_erased": True,
+            "owned_workspace_access_permanently_closed": True,
+        },
+        "reason_category": normalized_reason_category or None,
+        "ownership_dependencies": ownership,
+        "external_service_impact": {
+            "stripe_subscriptions_cancelled_immediately": len(active_subscription_ids),
+        },
+        "records_erased_or_deidentified": [
+            "authentication_credentials",
+            "mfa_secrets",
+            "password_reset_tokens",
+            "personal_profile_fields",
+            "role_assignments",
+            "permission_overrides",
+        ],
+        "records_permanently_closed": [
+            "projects",
+            "families",
+            "households",
+            "entitlements",
+            "memberships",
+            "invites",
+            "intake_access",
+            "vault_access",
+        ],
+        "records_preserved": [
+            "orders",
+            "billing_history",
+            "corporate_ownership_records",
+            "issued_certificates",
+            "delivery_records",
+            "security_evidence",
+            "audit_logs",
+            "continuity_evidence",
+        ],
+        "blocked": blocked,
+        "warnings": warnings,
+        "confirmation_phrase": PERMANENT_DELETE_CONFIRMATION_PHRASE,
+        "irreversible": True,
+    }
+
+
+def super_admin_apply_account_permanent_deletion(
+    *,
+    user_id: str,
+    reason_category: str,
+    reason: str,
+    confirmation_email: str,
+    initial_confirmation: bool,
+    final_confirmation: str,
+    final_acknowledgement: bool,
+    continuity_operation_id: str = "",
+    actor: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if _normalize_email((actor or {}).get("email")) != str(CEO_MASTER_ADMIN_EMAIL).strip().lower():
+        raise PermissionError("Permanent account deletion is restricted to the canonical CEO Master Administrator.")
+    normalized_reason = _normalize(reason)
+    if len(normalized_reason) < 3:
+        raise ValueError("A permanent-deletion reason of at least 3 characters is required.")
+    normalized_reason_category = _normalize(reason_category).lower()
+    if normalized_reason_category not in PERMANENT_DELETE_REASON_CODES:
+        raise ValueError("A supported permanent-deletion reason category is required.")
+    if initial_confirmation is not True:
+        raise ValueError("Confirm that the correct target account and irreversible access impact were reviewed.")
+    if _normalize(final_confirmation) != PERMANENT_DELETE_CONFIRMATION_PHRASE:
+        raise ValueError(f'Type "{PERMANENT_DELETE_CONFIRMATION_PHRASE}" to authorize permanent deletion.')
+    if final_acknowledgement is not True:
+        raise ValueError("The final permanent-closure acknowledgement is required.")
+
+    user = _user_by_id(user_id)
+    if user is None:
+        raise ValueError("User not found.")
+    original_email = _normalize_email(user.get("email"))
+    if not original_email or "@" not in original_email:
+        raise ValueError("Permanent deletion requires a valid target account email for confirmation.")
+    if _normalize_email(confirmation_email) != original_email:
+        raise ValueError("The confirmation email does not match the account being permanently deleted.")
+
+    preview = super_admin_preview_account_permanent_deletion(
+        user_id=user_id,
+        reason_category=normalized_reason_category,
+    )
+    if preview.get("blocked"):
+        raise ValueError("Permanent account deletion is blocked for this identity.")
+
+    resolved_user_id = _normalize(preview.get("user_id"))
+    now_value = _now()
+    actor_id = _normalize((actor or {}).get("_id") or (actor or {}).get("id")) or None
+    deletion_id = f"acctdel_{secrets.token_hex(16)}"
+    deleted_email = f"deleted-{resolved_user_id}@deleted.tomboflight.invalid"
+    email_sha256 = hashlib.sha256(original_email.encode("utf-8")).hexdigest()
+    ownership_records = _all_owned_records(user_id=resolved_user_id, user_email=original_email)
+    active_subscription_ids = _active_maintenance_subscription_ids(
+        ownership_records=ownership_records
+    )
+
+    subscription_results: list[dict[str, Any]] = []
+    for subscription_id in active_subscription_ids:
+        subscription_results.append(
+            stripe_admin_operations_service.cancel_subscription(
+                actor or {},
+                subscription_id=subscription_id,
+                at_period_end=False,
+                confirm=True,
+                reason=f"Permanent account deletion: {normalized_reason}",
+                idempotency_key=_normalize(continuity_operation_id) or deletion_id,
+            )
+        )
+
+    updates: dict[str, Any] = {
+        "email": deleted_email,
+        "full_name": "Permanently Deleted Account",
+        "name": None,
+        "display_name": None,
+        "first_name": None,
+        "last_name": None,
+        "given_name": None,
+        "family_name": None,
+        "phone_number": None,
+        "phone": None,
+        "birthday": None,
+        "birth_date": None,
+        "date_of_birth": None,
+        "dob": None,
+        "mailing_address": None,
+        "address": None,
+        "business_title": None,
+        "prototype_key": None,
+        "creator_credit": None,
+        "password_hash": None,
+        "password_updated_at": None,
+        "password_reset_token_hash": None,
+        "password_reset_expires_at": None,
+        "password_reset_requested_at": None,
+        "password_reset_requested_via": None,
+        "password_reset_requested_by": None,
+        "password_reset_requested_by_user_id": None,
+        "password_reset_used_at": None,
+        "mfa_enabled": False,
+        "mfa_secret_encrypted": None,
+        "mfa_backup_code_hashes": [],
+        "mfa_enrolled_at": None,
+        "mfa_last_verified_at": None,
+        "mfa_pending_secret_encrypted": None,
+        "mfa_pending_started_at": None,
+        "last_login_at": None,
+        "stripe_customer_id": None,
+        "role": "deleted_account",
+        "account_type": "deleted_tombstone",
+        "access_tier": None,
+        "department_role": None,
+        "role_codes": [],
+        "capabilities": [],
+        "permissions": [],
+        "admin_roles": [],
+        "officer_roles": [],
+        "admin_permissions": [],
+        "is_admin": False,
+        "dashboard_type": "deleted",
+        "allowed_rails": [],
+        "active_project_id": None,
+        "active_family_id": None,
+        "status": "permanently_deleted",
+        "login_enabled": False,
+        "restorable": False,
+        "personal_profile_erased": True,
+        "permanent_deletion_id": deletion_id,
+        "permanently_deleted_at": now_value,
+        "permanently_deleted_by": actor_id,
+        "permanent_deletion_reason_category": normalized_reason_category,
+        "session_token_version": int(user.get("session_token_version") or 0) + 1,
+        "updated_at": now_value,
+    }
+    db = _db()
+    tombstone_collection = db[ACCOUNT_DELETION_TOMBSTONES_COLLECTION]
+    tombstone_collection.update_one(
+        {"user_id": resolved_user_id},
+        {
+            "$set": {
+                "deletion_id": deletion_id,
+                "continuity_operation_id": _normalize(continuity_operation_id) or None,
+                "original_email_sha256": email_sha256,
+                "status": "started",
+                "irreversible": True,
+                "restorable": False,
+                "reason_category": normalized_reason_category,
+                "reason_sha256": hashlib.sha256(normalized_reason.encode("utf-8")).hexdigest(),
+                "requested_by": _actor_snapshot(actor),
+                "records_preserved": list(preview.get("records_preserved") or []),
+                "started_at": now_value,
+                "updated_at": now_value,
+            },
+            "$setOnInsert": {"created_at": now_value},
+        },
+        upsert=True,
+    )
+
+    role_result = db["user_role_assignments"].update_many(
+        {"user_id": {"$in": _project_id_candidates(resolved_user_id)}, "status": {"$nin": ["revoked", "deleted"]}},
+        {"$set": {"status": "revoked", "revoked_at": now_value, "updated_at": now_value}},
+    )
+    permission_result = db["user_permission_overrides"].update_many(
+        {"user_id": {"$in": _project_id_candidates(resolved_user_id)}, "status": {"$nin": ["revoked", "deleted"]}},
+        {"$set": {"status": "revoked", "revoked_at": now_value, "updated_at": now_value}},
+    )
+    closure_results = _permanently_close_owned_account_records(
+        user_id=resolved_user_id,
+        original_email=original_email,
+        deleted_email=deleted_email,
+        deletion_id=deletion_id,
+        reason_category=normalized_reason_category,
+        ownership_records=ownership_records,
+        actor=actor,
+        now_value=now_value,
+    )
+    closure_results["user_role_assignments"] = int(role_result.modified_count)
+    closure_results["user_permission_overrides"] = int(permission_result.modified_count)
+    closure_results["stripe_subscriptions_cancelled"] = len(subscription_results)
+
+    # Destroy the authentication identity only after linked access records are
+    # closed.  The exact original email in this compare-and-set prevents a
+    # concurrent profile edit from redirecting the irreversible operation.
+    oid = _to_object_id(resolved_user_id)
+    update_result = db["users"].update_one(
+        {
+            "_id": oid or resolved_user_id,
+            "email": original_email,
+            "status": {"$nin": ["permanently_deleted"]},
+        },
+        {"$set": updates},
+    )
+    if int(getattr(update_result, "matched_count", 0)) != 1:
+        raise RuntimeError("The target account changed before permanent deletion could be applied.")
+
+    tombstone_result = tombstone_collection.update_one(
+        {"user_id": resolved_user_id, "deletion_id": deletion_id},
+        {
+            "$set": {
+                "status": "completed",
+                "records_closed": closure_results,
+                "completed_at": now_value,
+                "updated_at": now_value,
+            }
+        },
+    )
+    if int(getattr(tombstone_result, "matched_count", 0)) != 1:
+        raise RuntimeError("Permanent deletion completed, but its MongoDB tombstone could not be finalized.")
+
+    refreshed = _user_by_id(resolved_user_id) or {}
+    if _normalize(refreshed.get("status")).lower() != "permanently_deleted" or bool(refreshed.get("login_enabled", True)):
+        raise RuntimeError("Permanent deletion verification failed after the MongoDB write.")
+
+    _write_admin_action_audit(
+        actor=actor,
+        action="super_admin.account_permanently_deleted",
+        target_type="user",
+        target_id=resolved_user_id,
+        before=preview.get("before") or {},
+        after={
+            "status": "permanently_deleted",
+            "login_enabled": False,
+            "restorable": False,
+            "personal_profile_erased": True,
+        },
+        context={
+            "surface": "admin_control_center.permanent_deletion",
+            "deletion_id": deletion_id,
+            "reason_category": normalized_reason_category,
+            "records_closed": closure_results,
+            "records_preserved": list(preview.get("records_preserved") or []),
+        },
+    )
+    return {
+        **preview,
+        "applied": True,
+        "permanent": True,
+        "restorable": False,
+        "sessions_revoked": True,
+        "audit_event_created": True,
+        "failure_count": 0,
+        "deletion_receipt": {
+            "deletion_id": deletion_id,
+            "continuity_operation_id": _normalize(continuity_operation_id) or None,
+            "user_id": resolved_user_id,
+            "status": "permanently_deleted",
+            "deleted_at": _serialize_datetime(now_value),
+            "deleted_by": actor_id,
+            "reason_category": normalized_reason_category,
+            "personal_profile_erased": True,
+            "login_enabled": False,
+            "restorable": False,
+            "records_closed": closure_results,
+            "records_preserved": list(preview.get("records_preserved") or []),
+            "mongo_evidence": {
+                "tombstone_collection": ACCOUNT_DELETION_TOMBSTONES_COLLECTION,
+                "audit_collection": "audit_logs",
+                "continuity_operation_collection": "continuity_operations",
+                "continuity_event_collection": "continuity_events",
+            },
+        },
     }
 
 
@@ -6751,6 +7627,8 @@ def list_customer_cases(
 
     cases: list[dict[str, Any]] = []
     for project in db["projects"].find({}).sort("updated_at", -1).limit(max(400, safe_limit * 10)):
+        if _normalize(project.get("status")).lower() == "deleted" and normalized_queue != "audit":
+            continue
         project_id = _normalize(project.get("_id") or project.get("id"))
         order = _latest_linked_order(project_id) or _latest_user_order_for_project(project)
         if not _project_supports_search(

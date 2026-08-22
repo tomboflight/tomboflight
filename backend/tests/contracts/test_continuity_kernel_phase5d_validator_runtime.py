@@ -146,6 +146,36 @@ class TestContinuityKernelPhase5DValidatorRuntime(unittest.TestCase):
         result = self.module.validate_evidence_packet(packet)
         self.assertFalse(result["passed"])
 
+    def test_explicit_governed_permanent_account_deletion_is_not_treated_as_an_ordinary_repair(self) -> None:
+        packet = self._valid_packet()
+        packet.update(
+            {
+                "target_type": "user",
+                "target_id": "user-1",
+                "repair_category": "admin_repair_safety",
+                "proposed_after_snapshot": {
+                    "irreversible": True,
+                    "proposed_after": {
+                        "status": "permanently_deleted",
+                        "restorable": False,
+                    },
+                },
+                "diff_summary": {
+                    "action": "account_permanent_delete",
+                    "reason": "Verified request to delete customer record",
+                    "mutates_business_data": True,
+                },
+                "rollback_plan": {
+                    "strategy": "irreversible_identity_erasure",
+                    "before_snapshot_ref": "snapshot-1",
+                    "restoration_prohibited": True,
+                    "evidence_only": True,
+                },
+            }
+        )
+        result = self.module.validate_evidence_packet(packet)
+        self.assertTrue(result["passed"])
+
     def test_unknown_role_fails_closed(self) -> None:
         auth = self._valid_authorization()
         auth["actor_role"] = "unknown_role"

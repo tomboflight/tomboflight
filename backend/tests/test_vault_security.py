@@ -205,6 +205,38 @@ class VaultSecurityTests(unittest.TestCase):
         assert owner_item is not None
         self.assertEqual(owner_item["id"], str(item_id))
 
+    def test_revoked_grant_cannot_open_vault_item(self):
+        item_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "vault_items": [
+                    {
+                        "_id": item_id,
+                        "project_id": "project-a",
+                        "owner_user_id": "owner-1",
+                        "title": "Closed account evidence",
+                    }
+                ],
+                "vault_access_grants": [
+                    {
+                        "_id": ObjectId(),
+                        "vault_item_id": str(item_id),
+                        "grantee_user_id": "deleted-user",
+                        "permission_role": "viewer",
+                        "status": "revoked",
+                    }
+                ],
+            }
+        )
+
+        with patch.object(vault_service, "get_database", return_value=db):
+            with self.assertRaisesRegex(ValueError, "Access denied"):
+                vault_service.get_vault_item(
+                    str(item_id),
+                    "deleted-user",
+                    authorized_project_id="project-a",
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -307,6 +307,60 @@ class AuthDatabaseFailClosedTests(unittest.TestCase):
         self.assertNotIn("reset_token", result)
         self.assertTrue(db["users"].documents[0].get("password_reset_token_hash"))
 
+    def test_permanently_deleted_identity_cannot_receive_password_reset(self):
+        user_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "users": [
+                    {
+                        "_id": user_id,
+                        "email": f"deleted+{user_id}@accounts.invalid",
+                        "status": "permanently_deleted",
+                        "account_type": "deleted_tombstone",
+                    }
+                ]
+            }
+        )
+        with (
+            patch.object(auth_service, "_get_database_or_none", return_value=db),
+            patch.object(auth_service, "send_password_reset_email") as send_reset,
+        ):
+            result = auth_service.request_password_reset(
+                f"deleted+{user_id}@accounts.invalid",
+                requested_via="admin_assist",
+                include_delivery_status=True,
+            )
+
+        self.assertFalse(result["success"])
+        self.assertFalse(result["reset_persisted"])
+        self.assertFalse(result["delivery_sent"])
+        self.assertEqual(result["delivery_error"], "account_not_active")
+        self.assertNotIn("password_reset_token_hash", db["users"].documents[0])
+        send_reset.assert_not_called()
+
+    def test_admin_cannot_issue_reset_for_permanently_deleted_identity(self):
+        user_id = str(ObjectId())
+        with (
+            patch.object(
+                auth_service,
+                "get_user_by_id",
+                return_value={
+                    "_id": ObjectId(user_id),
+                    "email": f"deleted+{user_id}@accounts.invalid",
+                    "status": "permanently_deleted",
+                    "account_type": "deleted_tombstone",
+                },
+            ),
+            patch.object(auth_service, "request_password_reset") as request_reset,
+        ):
+            with self.assertRaisesRegex(ValueError, "permanently deleted"):
+                auth_service.admin_issue_password_reset(
+                    user_id,
+                    admin_user_id="ceo-1",
+                    admin_display="CEO Operator",
+                )
+        request_reset.assert_not_called()
+
 
 class LinkKeyHardeningTests(unittest.TestCase):
     def test_generate_link_key_stores_hash_only(self):

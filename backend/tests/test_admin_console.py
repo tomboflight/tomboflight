@@ -1,3 +1,4 @@
+import hashlib
 import re
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -1091,6 +1092,405 @@ class SuperAdminControlsTests(unittest.TestCase):
         self.assertTrue(preview["blocked"])
         self.assertEqual(db["users"].documents[0]["status"], "active")
 
+    def test_billing_hold_is_recoverable_and_restore_clears_the_hold(self):
+        user_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "users": [
+                    {
+                        "_id": user_id,
+                        "email": "past.due@example.com",
+                        "full_name": "Past Due Customer",
+                        "role": "user",
+                        "status": "active",
+                        "session_token_version": 1,
+                    }
+                ],
+                "projects": [],
+                "families": [],
+                "households": [],
+                "audit_logs": [],
+            }
+        )
+        actor = {"_id": ObjectId(), "email": "l.robinson@tomboflight.com"}
+
+        with patch.object(admin_control_service, "get_database", return_value=db):
+            held = admin_control_service.super_admin_apply_account_lifecycle(
+                user_id=str(user_id),
+                action="billing_hold",
+                reason="Monthly maintenance payment is past due",
+                actor=actor,
+            )
+            restored = admin_control_service.super_admin_apply_account_lifecycle(
+                user_id=str(user_id),
+                action="restore",
+                reason="Billing balance resolved",
+                actor=actor,
+            )
+
+        user = db["users"].documents[0]
+        self.assertTrue(held["proposed_after"]["billing_hold"])
+        self.assertEqual(held["proposed_after"]["status"], "suspended")
+        self.assertEqual(restored["proposed_after"]["status"], "active")
+        self.assertEqual(user["status"], "active")
+        self.assertTrue(user["login_enabled"])
+        self.assertIsNone(user["billing_hold_at"])
+        self.assertIsNone(user["billing_hold_reason"])
+        self.assertEqual(user["session_token_version"], 3)
+
+    def test_permanent_deletion_erases_identity_closes_access_and_writes_mongodb_receipt(self):
+        user_id = ObjectId()
+        project_id = ObjectId()
+        family_id = ObjectId()
+        household_id = ObjectId()
+        original_email = "departed.permanent@example.com"
+        db = FakeDatabase(
+            {
+                "users": [
+                    {
+                        "_id": user_id,
+                        "email": original_email,
+                        "full_name": "Departed Permanent",
+                        "phone_number": "757-555-0100",
+                        "mailing_address": "Protected address",
+                        "password_hash": "hashed-password",
+                        "mfa_enabled": True,
+                        "mfa_secret_encrypted": "encrypted-secret",
+                        "role": "user",
+                        "status": "archived",
+                        "login_enabled": False,
+                        "session_token_version": 4,
+                    }
+                ],
+                "projects": [
+                    {"_id": project_id, "owner_user_id": str(user_id), "owner_email": original_email, "status": "archived"}
+                ],
+                "families": [
+                    {"_id": family_id, "owner_user_id": str(user_id), "owner_email": original_email, "status": "archived"}
+                ],
+                "households": [
+                    {"_id": household_id, "owner_user_id": str(user_id), "owner_email": original_email, "status": "archived"}
+                ],
+                "project_entitlements": [
+                    {
+                        "_id": ObjectId(),
+                        "project_id": project_id,
+                        "user_id": user_id,
+                        "status": "archived",
+                        "maintenance_status": "active",
+                        "maintenance_stripe_status": "active",
+                        "maintenance_stripe_subscription_id": "sub_permanent_delete_test",
+                    }
+                ],
+                "project_members": [
+                    {"_id": ObjectId(), "project_id": str(project_id), "user_id": str(user_id), "status": "inactive"}
+                ],
+                "household_invites": [
+                    {"_id": ObjectId(), "household_id": str(household_id), "status": "cancelled"}
+                ],
+                "household_links": [
+                    {"_id": ObjectId(), "source_household_id": str(household_id), "target_household_id": "other-household", "link_status": "approved"}
+                ],
+                "intake_submissions": [
+                    {"_id": ObjectId(), "user_id": user_id, "email": original_email, "status": "archived"}
+                ],
+                "uploaded_files": [
+                    {
+                        "_id": ObjectId(),
+                        "project_id": str(project_id),
+                        "uploaded_by_user_id": str(user_id),
+                        "uploaded_by": original_email,
+                    }
+                ],
+                "vault_items": [
+                    {"_id": "vault-item-1", "project_id": str(project_id), "owner_user_id": str(user_id), "access_enabled": True}
+                ],
+                "vault_access_grants": [
+                    {"_id": ObjectId(), "vault_item_id": "vault-item-1", "grantee_user_id": str(user_id), "status": "active"}
+                ],
+                "vault_collections": [
+                    {"_id": ObjectId(), "project_id": str(project_id), "owner_user_id": str(user_id), "status": "active"}
+                ],
+                "vault_release_rules": [
+                    {"_id": ObjectId(), "vault_item_id": "vault-item-1", "created_by_user_id": str(user_id), "status": "scheduled"}
+                ],
+                "organization_admin_invites": [
+                    {"_id": ObjectId(), "project_id": str(project_id), "email": original_email, "status": "pending"}
+                ],
+                "project_link_keys": [
+                    {"_id": ObjectId(), "project_id": str(project_id), "issuer_user_id": str(user_id), "status": "active"}
+                ],
+                "link_requests": [
+                    {"_id": ObjectId(), "source_project_id": str(project_id), "requested_by_user_id": str(user_id), "status": "pending"}
+                ],
+                "experience_sessions": [
+                    {"_id": ObjectId(), "project_id": str(project_id), "user_id": str(user_id), "status": "active"}
+                ],
+                "admin_impersonation_sessions": [
+                    {
+                        "_id": ObjectId(),
+                        "impersonated_user_id": str(user_id),
+                        "impersonated_email": original_email,
+                        "status": "active",
+                        "editing_enabled": True,
+                    }
+                ],
+                "mint_jobs": [
+                    {"_id": ObjectId(), "project_id": str(project_id), "status": "queued"}
+                ],
+                "mint_approvals": [
+                    {"_id": ObjectId(), "project_id": str(project_id), "status": "approved"}
+                ],
+                "user_role_assignments": [
+                    {"_id": ObjectId(), "user_id": user_id, "status": "active", "role_code": "marketing_admin"}
+                ],
+                "user_permission_overrides": [
+                    {"_id": ObjectId(), "user_id": str(user_id), "status": "active", "permission": "admin.control_center"}
+                ],
+                "orders": [{"_id": ObjectId(), "user_id": user_id, "email": original_email, "status": "paid", "amount": 79900}],
+                "account_deletion_tombstones": [],
+                "audit_logs": [],
+            }
+        )
+
+        with (
+            patch.object(admin_control_service, "get_database", return_value=db),
+            patch.object(
+                admin_control_service.stripe_admin_operations_service,
+                "cancel_subscription",
+                return_value={"subscription_id": "sub_permanent_delete_test", "status": "canceled"},
+            ) as cancel_subscription,
+        ):
+            result = admin_control_service.super_admin_apply_account_permanent_deletion(
+                user_id=str(user_id),
+                reason_category="customer_request",
+                reason="Verified written request to permanently close the account",
+                confirmation_email=original_email,
+                initial_confirmation=True,
+                final_confirmation="PERMANENTLY DELETE",
+                final_acknowledgement=True,
+                continuity_operation_id="ckop_test_permanent_delete",
+                actor={"_id": ObjectId(), "email": "l.robinson@tomboflight.com", "full_name": "Larry Robinson"},
+            )
+            restore_preview = admin_control_service.super_admin_preview_account_lifecycle(
+                user_id=str(user_id), action="restore"
+            )
+            with self.assertRaisesRegex(ValueError, "permanently deleted"):
+                admin_control_service.super_admin_update_user(
+                    user_id=str(user_id), payload={"status": "active"}
+                )
+
+        cancel_subscription.assert_called_once()
+        self.assertEqual(
+            cancel_subscription.call_args.kwargs["subscription_id"],
+            "sub_permanent_delete_test",
+        )
+        self.assertFalse(cancel_subscription.call_args.kwargs["at_period_end"])
+        self.assertTrue(cancel_subscription.call_args.kwargs["confirm"])
+
+        user = db["users"].documents[0]
+        tombstone = db["account_deletion_tombstones"].documents[0]
+        self.assertTrue(result["permanent"])
+        self.assertFalse(result["restorable"])
+        self.assertEqual(user["status"], "permanently_deleted")
+        self.assertEqual(user["account_type"], "deleted_tombstone")
+        self.assertFalse(user["login_enabled"])
+        self.assertIsNone(user["password_hash"])
+        self.assertIsNone(user["mfa_secret_encrypted"])
+        self.assertIsNone(user["phone_number"])
+        self.assertNotEqual(user["email"], original_email)
+        self.assertEqual(user["session_token_version"], 5)
+        self.assertTrue(restore_preview["blocked"])
+        self.assertEqual(db["projects"].documents[0]["status"], "deleted")
+        self.assertEqual(db["families"].documents[0]["status"], "deleted")
+        self.assertEqual(db["households"].documents[0]["status"], "deleted")
+        self.assertEqual(db["project_entitlements"].documents[0]["status"], "deleted")
+        self.assertEqual(db["project_entitlements"].documents[0]["maintenance_status"], "canceled")
+        self.assertEqual(db["project_members"].documents[0]["status"], "removed")
+        self.assertEqual(db["uploaded_files"].documents[0]["uploaded_by"], user["email"])
+        self.assertFalse(db["vault_items"].documents[0]["access_enabled"])
+        self.assertEqual(db["vault_access_grants"].documents[0]["status"], "revoked")
+        self.assertEqual(db["vault_collections"].documents[0]["status"], "closed")
+        self.assertEqual(db["vault_release_rules"].documents[0]["status"], "revoked")
+        self.assertEqual(db["project_link_keys"].documents[0]["status"], "revoked")
+        self.assertEqual(db["link_requests"].documents[0]["status"], "cancelled")
+        self.assertEqual(db["household_links"].documents[0]["link_status"], "revoked")
+        self.assertEqual(db["organization_admin_invites"].documents[0]["status"], "cancelled")
+        self.assertEqual(db["experience_sessions"].documents[0]["status"], "closed")
+        self.assertEqual(db["admin_impersonation_sessions"].documents[0]["status"], "stopped")
+        self.assertFalse(db["admin_impersonation_sessions"].documents[0]["editing_enabled"])
+        self.assertEqual(db["mint_jobs"].documents[0]["status"], "obsolete")
+        self.assertEqual(db["mint_approvals"].documents[0]["status"], "revoked")
+        self.assertEqual(db["user_role_assignments"].documents[0]["status"], "revoked")
+        self.assertEqual(db["user_permission_overrides"].documents[0]["status"], "revoked")
+        self.assertEqual(db["orders"].documents[0]["status"], "paid")
+        self.assertEqual(db["orders"].documents[0]["amount"], 79900)
+        self.assertEqual(tombstone["status"], "completed")
+        self.assertEqual(tombstone["continuity_operation_id"], "ckop_test_permanent_delete")
+        self.assertEqual(tombstone["original_email_sha256"], hashlib.sha256(original_email.encode()).hexdigest())
+        self.assertNotIn(original_email, str(tombstone))
+        self.assertEqual(
+            result["deletion_receipt"]["mongo_evidence"]["tombstone_collection"],
+            "account_deletion_tombstones",
+        )
+
+    def test_permanent_deletion_requires_exact_email_phrase_and_never_deletes_ceo(self):
+        target_id = ObjectId()
+        ceo_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "users": [
+                    {"_id": target_id, "email": "target@example.com", "full_name": "Target", "role": "user", "status": "active"},
+                    {"_id": ceo_id, "email": "l.robinson@tomboflight.com", "full_name": "Larry Robinson", "role": "ceo_master_admin", "status": "active"},
+                ],
+                "projects": [],
+                "families": [],
+                "households": [],
+                "account_deletion_tombstones": [],
+            }
+        )
+        common = {
+            "user_id": str(target_id),
+            "reason_category": "policy_violation",
+            "reason": "Documented policy violation",
+            "actor": {"_id": ceo_id, "email": "l.robinson@tomboflight.com"},
+            "continuity_operation_id": "ckop_test_validation",
+        }
+
+        with patch.object(admin_control_service, "get_database", return_value=db):
+            with self.assertRaisesRegex(PermissionError, "canonical CEO"):
+                admin_control_service.super_admin_apply_account_permanent_deletion(
+                    user_id=str(target_id),
+                    reason_category="policy_violation",
+                    reason="Documented policy violation",
+                    confirmation_email="target@example.com",
+                    initial_confirmation=True,
+                    final_confirmation="PERMANENTLY DELETE",
+                    final_acknowledgement=True,
+                    actor={"_id": ObjectId(), "email": "operations@example.com"},
+                )
+            with self.assertRaisesRegex(ValueError, "correct target account"):
+                admin_control_service.super_admin_apply_account_permanent_deletion(
+                    **common,
+                    confirmation_email="target@example.com",
+                    initial_confirmation=False,
+                    final_confirmation="PERMANENTLY DELETE",
+                    final_acknowledgement=True,
+                )
+            with self.assertRaisesRegex(ValueError, "final permanent-closure"):
+                admin_control_service.super_admin_apply_account_permanent_deletion(
+                    **common,
+                    confirmation_email="target@example.com",
+                    initial_confirmation=True,
+                    final_confirmation="PERMANENTLY DELETE",
+                    final_acknowledgement=False,
+                )
+            with self.assertRaisesRegex(ValueError, "confirmation email"):
+                admin_control_service.super_admin_apply_account_permanent_deletion(
+                    **common,
+                    confirmation_email="wrong@example.com",
+                    initial_confirmation=True,
+                    final_confirmation="PERMANENTLY DELETE",
+                    final_acknowledgement=True,
+                )
+            with self.assertRaisesRegex(ValueError, "PERMANENTLY DELETE"):
+                admin_control_service.super_admin_apply_account_permanent_deletion(
+                    **common,
+                    confirmation_email="target@example.com",
+                    initial_confirmation=True,
+                    final_confirmation="delete",
+                    final_acknowledgement=True,
+                )
+            with self.assertRaisesRegex(ValueError, "Invalid account status"):
+                admin_control_service.super_admin_update_user(
+                    user_id=str(target_id), payload={"status": "permanently_deleted"}
+                )
+            ceo_preview = admin_control_service.super_admin_preview_account_permanent_deletion(
+                user_id=str(ceo_id), reason_category="company_authorized"
+            )
+            with self.assertRaisesRegex(ValueError, "blocked"):
+                admin_control_service.super_admin_apply_account_permanent_deletion(
+                    user_id=str(ceo_id),
+                    reason_category="company_authorized",
+                    reason="Attempted CEO deletion",
+                    confirmation_email="l.robinson@tomboflight.com",
+                    initial_confirmation=True,
+                    final_confirmation="PERMANENTLY DELETE",
+                    final_acknowledgement=True,
+                    continuity_operation_id="ckop_test_ceo_protection",
+                    actor={"_id": ceo_id, "email": "l.robinson@tomboflight.com"},
+                )
+
+        self.assertTrue(ceo_preview["blocked"])
+        self.assertEqual(db["users"].documents[0]["status"], "active")
+        self.assertEqual(db["users"].documents[1]["status"], "active")
+        self.assertEqual(db["account_deletion_tombstones"].documents, [])
+
+    def test_permanent_deletion_fails_before_mongodb_changes_when_subscription_cancel_fails(self):
+        user_id = ObjectId()
+        project_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "users": [
+                    {
+                        "_id": user_id,
+                        "email": "subscribed@example.com",
+                        "full_name": "Subscribed Customer",
+                        "role": "user",
+                        "status": "active",
+                        "login_enabled": True,
+                    }
+                ],
+                "projects": [
+                    {
+                        "_id": project_id,
+                        "owner_user_id": str(user_id),
+                        "owner_email": "subscribed@example.com",
+                        "status": "active",
+                    }
+                ],
+                "families": [],
+                "households": [],
+                "project_entitlements": [
+                    {
+                        "_id": ObjectId(),
+                        "project_id": str(project_id),
+                        "user_id": str(user_id),
+                        "status": "active",
+                        "maintenance_status": "active",
+                        "maintenance_stripe_subscription_id": "sub_cancel_failure",
+                    }
+                ],
+                "account_deletion_tombstones": [],
+            }
+        )
+
+        with (
+            patch.object(admin_control_service, "get_database", return_value=db),
+            patch.object(
+                admin_control_service.stripe_admin_operations_service,
+                "cancel_subscription",
+                side_effect=RuntimeError("Stripe cancellation unavailable"),
+            ),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "Stripe cancellation unavailable"):
+                admin_control_service.super_admin_apply_account_permanent_deletion(
+                    user_id=str(user_id),
+                    reason_category="customer_request",
+                    reason="Verified deletion request",
+                    confirmation_email="subscribed@example.com",
+                    initial_confirmation=True,
+                    final_confirmation="PERMANENTLY DELETE",
+                    final_acknowledgement=True,
+                    continuity_operation_id="ckop_stripe_failure",
+                    actor={"_id": ObjectId(), "email": "l.robinson@tomboflight.com"},
+                )
+
+        self.assertEqual(db["users"].documents[0]["status"], "active")
+        self.assertTrue(db["users"].documents[0]["login_enabled"])
+        self.assertEqual(db["projects"].documents[0]["status"], "active")
+        self.assertEqual(db["account_deletion_tombstones"].documents, [])
+
     def test_super_admin_update_user_updates_profile_fields(self):
         user_id = ObjectId()
         db = FakeDatabase(
@@ -1373,6 +1773,12 @@ class AdminConsoleOverviewTests(unittest.TestCase):
                     {"_id": ObjectId(), "email": "l.robinson@tomboflight.com", "account_type": "business_admin"},
                     {"_id": ObjectId(), "email": "customer-paid@example.com", "account_type": "customer"},
                     {"_id": ObjectId(), "email": "customer-unpaid@example.com", "account_type": "customer"},
+                    {
+                        "_id": ObjectId(),
+                        "email": "deleted-fixture@deleted.tomboflight.invalid",
+                        "account_type": "deleted_tombstone",
+                        "status": "permanently_deleted",
+                    },
                 ],
                 "projects": [],
                 "orders": [
@@ -1400,6 +1806,8 @@ class AdminConsoleOverviewTests(unittest.TestCase):
         self.assertEqual(summary["total_users"], 3)
         self.assertEqual(summary["total_business_admin_users"], 1)
         self.assertEqual(summary["total_customer_users"], 2)
+        self.assertEqual(summary["permanently_deleted_users"], 1)
+        self.assertEqual(summary["user_identity_records_retained"], 4)
         self.assertEqual(summary["paid_customer_users"], 1)
         self.assertEqual(summary["signed_up_no_purchase_users"], 1)
 
