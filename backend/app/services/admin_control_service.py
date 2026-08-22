@@ -41,6 +41,7 @@ from app.services.project_entitlement_service import (
     get_project_entitlement,
     upsert_project_entitlement,
 )
+from app.services.project_membership_service import ensure_project_owner_membership
 from app.services.workspace_access_service import count_workspace_uploads
 from app.services.email_service import send_household_invite_email
 
@@ -60,11 +61,7 @@ SERVICE_CONTROL_OPERATIONS = {
     "promotional_package",
     "internal_validation_account",
 }
-OFFICER_ADMIN_EMAILS = {
-    "jenn.wood@tomboflight.com",
-    "k.goffigan@tomboflight.com",
-    "marquis.l.floyd@tomboflight.com",
-}
+OFFICER_ADMIN_EMAILS = set(OFFICER_PROFILE_FIELDS) - {str(CEO_MASTER_ADMIN_EMAIL).strip().lower()}
 
 ADMIN_CONTROL_QUEUES = [
     "overview",
@@ -5105,15 +5102,67 @@ def super_admin_apply_user_state_action(
     )
 
 
+def super_admin_preview_customer_create(*, payload: dict[str, Any]) -> dict[str, Any]:
+    email = _validate_super_admin_email(_normalize(payload.get("email")), user_id="")
+    full_name = _normalize(payload.get("full_name"))
+    if not full_name:
+        raise ValueError("full_name is required.")
+
+    requested_package = _normalize(payload.get("package_code"))
+    package_code = normalize_package_code(requested_package) if requested_package else ""
+    package = get_package(package_code) if package_code else None
+    if requested_package and package is None:
+        raise ValueError("A known package_code is required for account package provisioning.")
+
+    grant_type = _normalize(payload.get("package_grant_type")).lower() or "complimentary_package"
+    allowed_grant_types = {"complimentary_package", "promotional_package", "internal_validation_account"}
+    if package and grant_type not in allowed_grant_types:
+        raise ValueError("package_grant_type must be complimentary_package, promotional_package, or internal_validation_account.")
+
+    package_lane = _normalize((package or {}).get("package_lane")) if package else ""
+    if package and package_lane not in ALLOWED_LANES:
+        raise ValueError("The selected package does not have a valid operational lane.")
+    project_name = _normalize(payload.get("project_name"))
+    if package and not project_name:
+        project_name = f"{full_name} {_normalize(package.get('display_name')) or package_code}"
+
+    return {
+        "before": {"account_exists": False, "project_exists": False, "entitlement_exists": False},
+        "proposed_after": {
+            "email": email,
+            "full_name": full_name,
+            "role": "user",
+            "status": "pending_activation",
+            "package_code": package_code or None,
+            "package_name": _normalize((package or {}).get("display_name")) or None,
+            "project_name": project_name or None,
+            "project_lane": package_lane or None,
+            "package_grant_type": grant_type if package else None,
+        },
+        "records_to_write": (
+            ["users", "projects", "project_members", "project_entitlements", "admin_package_assignments", "audit_logs"]
+            if package
+            else ["users", "audit_logs"]
+        ),
+        "payment_record_created": False,
+        "stripe_payment_mutated": False,
+        "warnings": (
+            ["This CEO-authorized package grant does not create or alter a paid order or Stripe transaction."]
+            if package
+            else []
+        ),
+    }
+
+
 def super_admin_create_customer(
     *,
     payload: dict[str, Any],
     actor: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    email = _validate_super_admin_email(_normalize(payload.get("email")), user_id="")
-    full_name = _normalize(payload.get("full_name"))
-    if not full_name:
-        raise ValueError("full_name is required.")
+    preview = super_admin_preview_customer_create(payload=payload)
+    proposed = dict(preview.get("proposed_after") or {})
+    email = _normalize_email(proposed.get("email"))
+    full_name = _normalize(proposed.get("full_name"))
     now_value = _now()
     document = {
         "_id": ObjectId(),
@@ -5132,45 +5181,292 @@ def super_admin_create_customer(
         "created_by": _normalize((actor or {}).get("_id") or (actor or {}).get("id")) or None,
         "source": "ceo_master_admin",
     }
-    _db()["users"].insert_one(document)
+    db = _db()
+    db["users"].insert_one(document)
     user_id = str(document["_id"])
+
+    project_id: str | None = None
+    entitlement: dict[str, Any] | None = None
+    package_code = _normalize(proposed.get("package_code"))
+    try:
+        if package_code:
+            project_oid = ObjectId()
+            project_id = str(project_oid)
+            package_name = _normalize(proposed.get("package_name")) or package_code
+            project_name = _normalize(proposed.get("project_name")) or f"{full_name} {package_name}"
+            project_lane = _normalize(proposed.get("project_lane"))
+            grant_type = _normalize(proposed.get("package_grant_type")) or "complimentary_package"
+            project_document = {
+                "_id": project_oid,
+                "name": project_name,
+                "project_name": project_name,
+                "project_lane": project_lane,
+                "owner_user_id": user_id,
+                "owner_email": email,
+                "package_code": package_code,
+                "package_slug": package_code,
+                "package_type": package_code,
+                "package_name": package_name,
+                "item_type": "package",
+                "billing_plan": "one_time",
+                "status": "intake_pending",
+                "phase": "intake_pending",
+                "source": "ceo_master_admin_grant",
+                "package_assignment_source": grant_type,
+                "payment_required": False,
+                "family_id": None,
+                "household_id": None,
+                "organization_id": None,
+                "intake_submission_id": None,
+                "created_at": now_value,
+                "updated_at": now_value,
+            }
+            db["projects"].insert_one(project_document)
+            if ensure_project_owner_membership(project_document) is None:
+                raise ValueError("Unable to create the project owner membership.")
+            entitlement = upsert_project_entitlement(
+                project_id=project_id,
+                user_id=user_id,
+                package_code=package_code,
+                active_addons=[],
+                maintenance_plan="not_started",
+                status="active",
+            )
+            if entitlement is None:
+                raise ValueError("Unable to create the project entitlement.")
+            db["admin_package_assignments"].insert_one(
+                {
+                    "project_id": project_oid,
+                    "customer_user_id": user_id,
+                    "previous_package": None,
+                    "new_package": package_code,
+                    "status": "active",
+                    "source": "ceo_admin_assignment",
+                    "billing_classification": grant_type,
+                    "payment_required": False,
+                    "authorization_source": "ceo_master_admin",
+                    "reason": _normalize(payload.get("reason")) or "CEO-authorized account package grant",
+                    "assigned_by": _normalize((actor or {}).get("_id") or (actor or {}).get("id")) or None,
+                    "assigned_at": now_value,
+                    "order_id": None,
+                    "stripe_payment_mutated": False,
+                }
+            )
+    except Exception:
+        # Compensate only records created by this operation so account and
+        # package provisioning remain all-or-nothing without touching history.
+        if project_id:
+            project_candidates = _project_id_candidates(project_id)
+            if hasattr(db["project_entitlements"], "delete_many"):
+                db["project_entitlements"].delete_many({"project_id": {"$in": project_candidates}})
+            if hasattr(db["project_members"], "delete_many"):
+                db["project_members"].delete_many({"project_id": {"$in": project_candidates}})
+            if hasattr(db["admin_package_assignments"], "delete_many"):
+                db["admin_package_assignments"].delete_many({"project_id": {"$in": project_candidates}})
+            if hasattr(db["projects"], "delete_one"):
+                db["projects"].delete_one({"_id": _to_object_id(project_id) or project_id})
+        if hasattr(db["users"], "delete_one"):
+            db["users"].delete_one({"_id": document["_id"]})
+        raise
+
     _write_admin_action_audit(
         actor=actor,
         action="super_admin.customer_create",
         target_type="user",
         target_id=user_id,
         before={},
-        after={"email": email, "full_name": full_name, "role": "user", "status": "pending_activation"},
-        context={"surface": "admin_control_center.account_360"},
+        after={
+            "email": email,
+            "full_name": full_name,
+            "role": "user",
+            "status": "pending_activation",
+            "project_id": project_id,
+            "package_code": package_code or None,
+        },
+        context={"surface": "admin_control_center.account_360", "package_granted": bool(package_code)},
     )
-    return {"user_id": user_id, "email": email, "role": "user", "status": "pending_activation"}
+    return {
+        "user_id": user_id,
+        "email": email,
+        "role": "user",
+        "status": "pending_activation",
+        "project_id": project_id,
+        "package_code": package_code or None,
+        "package_granted": bool(package_code),
+        "entitlement_status": _normalize((entitlement or {}).get("status")) or None,
+        "payment_record_created": False,
+        "stripe_payment_mutated": False,
+    }
 
 
-def super_admin_preview_account_lifecycle(*, user_id: str, action: str) -> dict[str, Any]:
+def _active_owned_records(*, user_id: str, user_email: str = "") -> dict[str, list[dict[str, Any]]]:
+    db = _db()
+    owner_candidates = _project_id_candidates(user_id)
+    normalized_email = _normalize_email(user_email)
+    ownership_filters: list[dict[str, Any]] = [{"owner_user_id": {"$in": owner_candidates}}]
+    legacy_project_filters: list[dict[str, Any]] = [
+        {"user_id": {"$in": owner_candidates}},
+        {"created_by": {"$in": owner_candidates}},
+    ]
+    if normalized_email:
+        ownership_filters.append({"owner_email": normalized_email})
+    active_status = {"status": {"$nin": ["archived", "deleted"]}}
+    return {
+        "projects": list(
+            db["projects"].find({"$or": ownership_filters + legacy_project_filters, **active_status})
+        ),
+        "families": list(db["families"].find({"$or": ownership_filters, **active_status})),
+        "households": list(db["households"].find({"$or": ownership_filters, **active_status})),
+    }
+
+
+def _record_reference_candidates(records: list[dict[str, Any]]) -> list[Any]:
+    candidates: list[Any] = []
+    for record in records:
+        record_id = _normalize_object_id(record.get("_id")) or _normalize(record.get("id"))
+        if not record_id:
+            continue
+        for candidate in _project_id_candidates(record_id):
+            if candidate not in candidates:
+                candidates.append(candidate)
+    return candidates
+
+
+def _archive_owned_account_records(
+    *,
+    user_id: str,
+    user_email: str,
+    ownership_records: dict[str, list[dict[str, Any]]],
+    reason: str,
+    actor: dict[str, Any] | None,
+    now_value: datetime,
+) -> dict[str, int]:
+    db = _db()
+    owner_candidates = _project_id_candidates(user_id)
+    archive_fields = {
+        "status": "archived",
+        "archived_at": now_value,
+        "archived_by": _normalize((actor or {}).get("_id") or (actor or {}).get("id")) or None,
+        "archive_reason": reason,
+        "access_enabled": False,
+        "updated_at": now_value,
+    }
+    results: dict[str, int] = {}
+
+    for collection_name in ("projects", "families", "households"):
+        record_candidates = _record_reference_candidates(ownership_records.get(collection_name) or [])
+        if not record_candidates:
+            results[collection_name] = 0
+            continue
+        result = db[collection_name].update_many(
+            {
+                "_id": {"$in": record_candidates},
+                "status": {"$nin": ["archived", "deleted"]},
+            },
+            {"$set": archive_fields},
+        )
+        results[collection_name] = int(result.modified_count)
+
+    project_candidates = _record_reference_candidates(ownership_records.get("projects") or [])
+    family_candidates = _record_reference_candidates(ownership_records.get("families") or [])
+    household_candidates = _record_reference_candidates(ownership_records.get("households") or [])
+    if project_candidates:
+        entitlement_result = db["project_entitlements"].update_many(
+            {
+                "$or": [
+                    {"project_id": {"$in": project_candidates}},
+                    {"user_id": {"$in": owner_candidates}},
+                ],
+                "status": {"$nin": ["archived", "deleted", "revoked"]},
+            },
+            {"$set": {**archive_fields, "entitlement_access_enabled": False}},
+        )
+        results["project_entitlements"] = int(entitlement_result.modified_count)
+        membership_result = db["project_members"].update_many(
+            {"project_id": {"$in": project_candidates}, "status": {"$in": ["active", "enabled", ""]}},
+            {"$set": {"status": "inactive", "updated_at": now_value}},
+        )
+        results["project_members"] = int(membership_result.modified_count)
+
+    invite_filters: list[dict[str, Any]] = []
+    if project_candidates:
+        invite_filters.append({"project_id": {"$in": project_candidates}})
+    if family_candidates:
+        invite_filters.append({"family_id": {"$in": family_candidates}})
+    if household_candidates:
+        invite_filters.append({"household_id": {"$in": household_candidates}})
+    if invite_filters:
+        invite_result = db["household_invites"].update_many(
+            {"$or": invite_filters, "status": {"$in": ["active", "enabled", "pending", "sent", ""]}},
+            {"$set": {"status": "cancelled", "cancelled_at": now_value, "updated_at": now_value}},
+        )
+        results["household_invites"] = int(invite_result.modified_count)
+
+    intake_filters: list[dict[str, Any]] = [{"user_id": {"$in": owner_candidates}}]
+    if user_email:
+        intake_filters.append({"email": user_email})
+    intake_result = db["intake_submissions"].update_many(
+        {"$or": intake_filters, "status": {"$nin": ["archived", "deleted"]}},
+        {"$set": archive_fields},
+    )
+    results["intake_submissions"] = int(intake_result.modified_count)
+    return results
+
+
+def super_admin_preview_account_lifecycle(
+    *,
+    user_id: str,
+    action: str,
+    archive_owned_records: bool = False,
+) -> dict[str, Any]:
     user = _user_by_id(user_id)
     if user is None:
         raise ValueError("User not found.")
     normalized_action = _normalize(action).lower()
     if normalized_action not in {"activate", "restore", "suspend", "disable", "archive"}:
         raise ValueError("Unsupported account lifecycle action.")
+    if archive_owned_records and normalized_action != "archive":
+        raise ValueError("archive_owned_records is only valid for account archive.")
     resolved_user_id = _normalize_object_id(user.get("_id")) or _normalize(user_id)
-    db = _db()
-    ownership = {
-        "projects": db["projects"].count_documents({"owner_user_id": {"$in": _project_id_candidates(resolved_user_id)}, "status": {"$nin": ["archived", "deleted"]}}),
-        "families": db["families"].count_documents({"owner_user_id": {"$in": _project_id_candidates(resolved_user_id)}, "status": {"$nin": ["archived", "deleted"]}}),
-        "households": db["households"].count_documents({"owner_user_id": {"$in": _project_id_candidates(resolved_user_id)}, "status": {"$nin": ["archived", "deleted"]}}),
-    }
-    blocked = normalized_action == "archive" and any(ownership.values())
+    ownership_records = _active_owned_records(
+        user_id=resolved_user_id,
+        user_email=_normalize_email(user.get("email")),
+    )
+    ownership = {name: len(records) for name, records in ownership_records.items()}
+    is_canonical_ceo = _normalize_email(user.get("email")) == str(CEO_MASTER_ADMIN_EMAIL).strip().lower()
+    ceo_protected = is_canonical_ceo and normalized_action in {"suspend", "disable", "archive"}
+    blocked_by_ownership = normalized_action == "archive" and any(ownership.values()) and not archive_owned_records
+    blocked = ceo_protected or blocked_by_ownership
     target_status = "archived" if normalized_action == "archive" else SUPER_ADMIN_USER_STATE_ACTIONS.get(normalized_action)
+    warnings: list[str] = []
+    if ceo_protected:
+        warnings.append("The canonical CEO Master Administrator cannot be disabled or archived through routine account controls.")
+    elif blocked_by_ownership:
+        warnings.append("Transfer ownership or use Close Account & Workspaces to archive the owned workspaces together.")
+    elif normalized_action == "archive" and archive_owned_records and any(ownership.values()):
+        warnings.append("Owned projects, families, households, entitlements, memberships, invites, and intake access will be archived.")
     return {
         "user_id": resolved_user_id,
         "action": normalized_action,
         "before": {"status": _normalize(user.get("status")) or "active", "session_token_version": int(user.get("session_token_version") or 0)},
-        "proposed_after": {"status": target_status, "login_enabled": normalized_action not in {"suspend", "disable", "archive"}},
+        "proposed_after": {
+            "status": target_status,
+            "login_enabled": normalized_action not in {"suspend", "disable", "archive"},
+            "archive_owned_records": bool(archive_owned_records),
+        },
         "ownership_dependencies": ownership,
+        "records_to_archive": ownership if normalized_action == "archive" and archive_owned_records else {},
         "blocked": blocked,
-        "warnings": ["Transfer active ownership before archive."] if blocked else [],
-        "records_preserved": ["orders", "projects", "families", "households", "audit_logs", "billing_history"],
+        "warnings": warnings,
+        "records_preserved": [
+            "orders",
+            "billing_history",
+            "uploads",
+            "vault_metadata",
+            "certificates",
+            "delivery_records",
+            "audit_logs",
+        ],
     }
 
 
@@ -5179,17 +5475,26 @@ def super_admin_apply_account_lifecycle(
     user_id: str,
     action: str,
     reason: str,
+    archive_owned_records: bool = False,
     actor: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     normalized_reason = _normalize(reason)
     if not normalized_reason:
         raise ValueError("A reason is required.")
-    preview = super_admin_preview_account_lifecycle(user_id=user_id, action=action)
+    preview = super_admin_preview_account_lifecycle(
+        user_id=user_id,
+        action=action,
+        archive_owned_records=archive_owned_records,
+    )
     if preview.get("blocked"):
         raise ValueError("Account archive is blocked while active ownership remains.")
     user = _user_by_id(user_id) or {}
     resolved_user_id = _normalize(preview.get("user_id"))
     now_value = _now()
+    ownership_records = _active_owned_records(
+        user_id=resolved_user_id,
+        user_email=_normalize_email(user.get("email")),
+    )
     updates: dict[str, Any] = {
         "status": (preview.get("proposed_after") or {}).get("status"),
         "session_token_version": int(user.get("session_token_version") or 0) + 1,
@@ -5218,6 +5523,16 @@ def super_admin_apply_account_lifecycle(
         updates["login_enabled"] = _normalize(action).lower() == "activate"
     oid = _to_object_id(resolved_user_id)
     _db()["users"].update_one({"_id": oid or resolved_user_id}, {"$set": updates})
+    archive_results: dict[str, int] = {}
+    if _normalize(action).lower() == "archive" and archive_owned_records:
+        archive_results = _archive_owned_account_records(
+            user_id=resolved_user_id,
+            user_email=_normalize_email(user.get("email")),
+            ownership_records=ownership_records,
+            reason=normalized_reason,
+            actor=actor,
+            now_value=now_value,
+        )
     _write_admin_action_audit(
         actor=actor,
         action=f"super_admin.account_{_normalize(action).lower()}",
@@ -5225,9 +5540,20 @@ def super_admin_apply_account_lifecycle(
         target_id=resolved_user_id,
         before=preview.get("before") or {},
         after=preview.get("proposed_after") or {},
-        context={"surface": "admin_control_center.restricted_actions", "reason": normalized_reason},
+        context={
+            "surface": "admin_control_center.restricted_actions",
+            "reason": normalized_reason,
+            "archive_owned_records": bool(archive_owned_records),
+            "archive_results": archive_results,
+        },
     )
-    return {**preview, "applied": True, "sessions_revoked": True, "audit_event_created": True}
+    return {
+        **preview,
+        "applied": True,
+        "sessions_revoked": True,
+        "archive_results": archive_results,
+        "audit_event_created": True,
+    }
 
 
 def super_admin_transfer_project_ownership(

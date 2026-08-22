@@ -638,7 +638,13 @@ def _preview_action(action: str, target: dict[str, Any], parameters: dict[str, A
         )
     if action == "account_lifecycle":
         return admin_control_service.super_admin_preview_account_lifecycle(
-            user_id=_normalize(target.get("user_id")), action=_normalize(parameters.get("lifecycle_action"))
+            user_id=_normalize(target.get("user_id")),
+            action=_normalize(parameters.get("lifecycle_action")),
+            archive_owned_records=bool(parameters.get("archive_owned_records")),
+        )
+    if action == "customer_account_create":
+        return admin_control_service.super_admin_preview_customer_create(
+            payload=dict(parameters.get("user_payload") or parameters)
         )
     return {
         "action": action,
@@ -1266,8 +1272,10 @@ def _invoke_action(
             actor=actor,
         )
     if action == "customer_account_create":
+        payload = dict(parameters.get("user_payload") or parameters)
+        payload["reason"] = reason
         return admin_control_service.super_admin_create_customer(
-            payload=dict(parameters.get("user_payload") or parameters),
+            payload=payload,
             actor=actor,
         )
     if action == "user_profile_update":
@@ -1357,6 +1365,7 @@ def _invoke_action(
             user_id=_normalize(target.get("user_id")),
             action=_normalize(parameters.get("lifecycle_action")),
             reason=reason,
+            archive_owned_records=bool(parameters.get("archive_owned_records")),
             actor=actor,
         )
     if action == "case_repair":

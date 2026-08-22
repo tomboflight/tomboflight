@@ -955,6 +955,142 @@ class AdminUserQueueTests(unittest.TestCase):
 
 
 class SuperAdminControlsTests(unittest.TestCase):
+    def test_create_customer_can_provision_complimentary_package_atomically(self):
+        db = FakeDatabase({"users": [], "projects": [], "admin_package_assignments": [], "audit_logs": []})
+        with (
+            patch.object(admin_control_service, "get_database", return_value=db),
+            patch.object(admin_control_service, "ensure_project_owner_membership", return_value={"status": "active"}) as membership,
+            patch.object(
+                admin_control_service,
+                "upsert_project_entitlement",
+                return_value={"status": "active", "package_code": "digital_legacy_portrait"},
+            ) as entitlement,
+        ):
+            result = admin_control_service.super_admin_create_customer(
+                payload={
+                    "email": "new.customer@example.com",
+                    "full_name": "New Customer",
+                    "package_code": "digital_legacy_portrait",
+                    "project_name": "New Customer Legacy Build",
+                    "package_grant_type": "complimentary_package",
+                    "reason": "CEO-approved customer package grant",
+                },
+                actor={"_id": ObjectId(), "email": "l.robinson@tomboflight.com"},
+            )
+
+        self.assertTrue(result["package_granted"])
+        self.assertEqual(result["package_code"], "digital_legacy_portrait")
+        self.assertEqual(result["entitlement_status"], "active")
+        self.assertFalse(result["payment_record_created"])
+        self.assertEqual(len(db["users"].documents), 1)
+        self.assertEqual(len(db["projects"].documents), 1)
+        self.assertEqual(db["projects"].documents[0]["owner_user_id"], result["user_id"])
+        self.assertEqual(db["projects"].documents[0]["status"], "intake_pending")
+        self.assertEqual(db["admin_package_assignments"].documents[0]["billing_classification"], "complimentary_package")
+        membership.assert_called_once()
+        entitlement.assert_called_once()
+
+    def test_account_close_archives_owned_workspaces_and_preserves_financial_history(self):
+        user_id = ObjectId()
+        project_id = ObjectId()
+        family_id = ObjectId()
+        household_id = ObjectId()
+        order_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "users": [
+                    {
+                        "_id": user_id,
+                        "email": "departed@example.com",
+                        "full_name": "Departed Customer",
+                        "role": "user",
+                        "status": "active",
+                        "session_token_version": 4,
+                    }
+                ],
+                "projects": [{"_id": project_id, "owner_user_id": str(user_id), "status": "build_ready"}],
+                "families": [{"_id": family_id, "owner_user_id": str(user_id), "status": "active"}],
+                "households": [{"_id": household_id, "owner_user_id": str(user_id), "status": "active"}],
+                "project_entitlements": [
+                    {"_id": ObjectId(), "project_id": project_id, "user_id": user_id, "status": "active"}
+                ],
+                "project_members": [
+                    {"_id": ObjectId(), "project_id": str(project_id), "user_id": str(user_id), "status": "active"}
+                ],
+                "household_invites": [
+                    {"_id": ObjectId(), "household_id": str(household_id), "status": "pending"}
+                ],
+                "intake_submissions": [
+                    {"_id": ObjectId(), "user_id": user_id, "email": "departed@example.com", "status": "submitted"}
+                ],
+                "orders": [{"_id": order_id, "user_id": user_id, "status": "paid", "amount": 79900}],
+                "user_role_assignments": [],
+                "user_permission_overrides": [],
+                "audit_logs": [],
+            }
+        )
+
+        with patch.object(admin_control_service, "get_database", return_value=db):
+            blocked = admin_control_service.super_admin_preview_account_lifecycle(
+                user_id=str(user_id), action="archive"
+            )
+            applied = admin_control_service.super_admin_apply_account_lifecycle(
+                user_id=str(user_id),
+                action="archive",
+                reason="Customer and former staff separation",
+                archive_owned_records=True,
+                actor={"_id": ObjectId(), "email": "l.robinson@tomboflight.com"},
+            )
+
+        self.assertTrue(blocked["blocked"])
+        self.assertFalse(applied["blocked"])
+        self.assertTrue(applied["sessions_revoked"])
+        self.assertEqual(db["users"].documents[0]["status"], "archived")
+        self.assertFalse(db["users"].documents[0]["login_enabled"])
+        self.assertEqual(db["users"].documents[0]["session_token_version"], 5)
+        self.assertEqual(db["projects"].documents[0]["status"], "archived")
+        self.assertEqual(db["families"].documents[0]["status"], "archived")
+        self.assertEqual(db["households"].documents[0]["status"], "archived")
+        self.assertEqual(db["project_entitlements"].documents[0]["status"], "archived")
+        self.assertEqual(db["project_members"].documents[0]["status"], "inactive")
+        self.assertEqual(db["household_invites"].documents[0]["status"], "cancelled")
+        self.assertEqual(db["intake_submissions"].documents[0]["status"], "archived")
+        self.assertEqual(db["orders"].documents[0]["status"], "paid")
+        self.assertEqual(db["orders"].documents[0]["amount"], 79900)
+
+    def test_canonical_ceo_account_cannot_be_archived_by_routine_control(self):
+        user_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "users": [
+                    {
+                        "_id": user_id,
+                        "email": "l.robinson@tomboflight.com",
+                        "role": "ceo_master_admin",
+                        "status": "active",
+                    }
+                ],
+                "projects": [],
+                "families": [],
+                "households": [],
+            }
+        )
+        with patch.object(admin_control_service, "get_database", return_value=db):
+            preview = admin_control_service.super_admin_preview_account_lifecycle(
+                user_id=str(user_id), action="archive", archive_owned_records=True
+            )
+            with self.assertRaisesRegex(ValueError, "blocked"):
+                admin_control_service.super_admin_apply_account_lifecycle(
+                    user_id=str(user_id),
+                    action="archive",
+                    reason="Accidental self-removal attempt",
+                    archive_owned_records=True,
+                    actor={"_id": user_id, "email": "l.robinson@tomboflight.com"},
+                )
+
+        self.assertTrue(preview["blocked"])
+        self.assertEqual(db["users"].documents[0]["status"], "active")
+
     def test_super_admin_update_user_updates_profile_fields(self):
         user_id = ObjectId()
         db = FakeDatabase(

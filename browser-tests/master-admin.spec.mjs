@@ -183,6 +183,7 @@ function createMockEnvironment() {
     blockchainOps: 0,
     productionWrites: 0,
     impersonationAuditEvents: 0,
+    kernelExecutions: [],
   };
 
   const state = {
@@ -190,7 +191,6 @@ function createMockEnvironment() {
     officerPermissions: {
       "jenn.wood@tomboflight.com": { role_assignments: ["finance_admin"], permission_overrides: [] },
       "k.goffigan@tomboflight.com": { role_assignments: ["operations_admin"], permission_overrides: [] },
-      "marquis.l.floyd@tomboflight.com": { role_assignments: ["marketing_admin"], permission_overrides: [] },
     },
   };
 
@@ -234,6 +234,28 @@ async function installApiRoutes(page, env) {
       return json({
         summary: { total_users: 6, total_active_projects: 6, paid_orders: 6, missing_entitlements: 0, mint_ready_projects: 0, projects_with_data_mismatch: 0 },
         priority_repairs: { paid_order_without_project_link: [], project_without_entitlement: [], package_without_lane: [], mint_eligible_blocked: [] },
+      });
+    }
+    if (method === "GET" && path === "/admin/control-center/kernel/status") {
+      return json({
+        runtime_version: "9.0.0",
+        action_count: 35,
+        execution_enabled: true,
+        one_step_execution_allowed: true,
+      });
+    }
+    if (method === "GET" && path === "/admin/control-center/kernel/operations") {
+      return json({ items: [] });
+    }
+    if (method === "POST" && path === "/admin/control-center/kernel/execute") {
+      const body = JSON.parse(request.postData() || "{}");
+      env.stats.kernelExecutions.push(body);
+      return json({
+        operation_id: `kernel-operation-${env.stats.kernelExecutions.length}`,
+        state: "executed",
+        execution_outcome: "success",
+        evidence_recording_status: "complete",
+        execution_result: { applied: true },
       });
     }
     if (method === "GET" && path === "/admin/control-center/cases") {
@@ -344,7 +366,6 @@ async function installApiRoutes(page, env) {
         items: [
           { full_name: "Jennifer Wood", officer_email: "jenn.wood@tomboflight.com", role_assignments: env.state.officerPermissions["jenn.wood@tomboflight.com"].role_assignments, permission_overrides: env.state.officerPermissions["jenn.wood@tomboflight.com"].permission_overrides },
           { full_name: "Keith Goffigan", officer_email: "k.goffigan@tomboflight.com", role_assignments: env.state.officerPermissions["k.goffigan@tomboflight.com"].role_assignments, permission_overrides: env.state.officerPermissions["k.goffigan@tomboflight.com"].permission_overrides },
-          { full_name: "Marquis Floyd", officer_email: "marquis.l.floyd@tomboflight.com", role_assignments: env.state.officerPermissions["marquis.l.floyd@tomboflight.com"].role_assignments, permission_overrides: env.state.officerPermissions["marquis.l.floyd@tomboflight.com"].permission_overrides },
         ],
       });
     }
@@ -409,6 +430,38 @@ test("[appearance] is temporarily disabled and forces standard light mode", asyn
   await expect(page.locator("[data-admin-appearance-panel]")).toHaveCount(0);
   await expect(page.locator("html")).toHaveAttribute("data-admin-theme", "light");
   await expect(page.locator("html")).toHaveAttribute("data-admin-text-scale", "normal");
+});
+
+test("[account controls] creates an account with a package and closes owned workspaces through the Kernel", async ({ page }) => {
+  const env = page.__env;
+  await page.evaluate(() => {
+    const responses = [
+      "New Customer",
+      "new.customer@tomboflight.test",
+      "legacy_plus",
+      "New Customer Legacy Build",
+      "CEO-approved package grant",
+    ];
+    window.prompt = () => responses.shift() || "";
+    window.confirm = () => true;
+  });
+  await page.locator("[data-super-admin-create-account]").click();
+  await expect.poll(() => env.stats.kernelExecutions.length).toBe(1);
+  expect(env.stats.kernelExecutions[0].action).toBe("customer_account_create");
+  expect(env.stats.kernelExecutions[0].parameters.user_payload.package_code).toBe("legacy_plus");
+  expect(env.stats.kernelExecutions[0].parameters.user_payload.project_name).toBe("New Customer Legacy Build");
+
+  await page.locator('[data-admin-case-tab="identity"]').click();
+  await expect(page.locator('[data-super-admin-archive-owned="true"]')).toBeVisible();
+  await page.evaluate(() => {
+    window.prompt = () => "Former customer closure";
+    window.confirm = () => true;
+  });
+  await page.locator('[data-super-admin-archive-owned="true"]').click();
+  await expect.poll(() => env.stats.kernelExecutions.length).toBe(2);
+  expect(env.stats.kernelExecutions[1].action).toBe("account_lifecycle");
+  expect(env.stats.kernelExecutions[1].parameters.lifecycle_action).toBe("archive");
+  expect(env.stats.kernelExecutions[1].parameters.archive_owned_records).toBe(true);
 });
 
 test("[theme] ignores stored admin appearance while disabled", async ({ page }) => {
@@ -659,7 +712,7 @@ test("[officer] validates officer permission templates/preview/apply/guardrails 
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        officer_email: "marquis.l.floyd@tomboflight.com",
+        officer_email: "jenn.wood@tomboflight.com",
         role_assignments: ["ceo_master_admin"],
       }),
     });
