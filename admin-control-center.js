@@ -62,6 +62,15 @@
     kernelStatus: null,
     kernelOperations: [],
     kernelPendingIdempotency: {},
+    createAccountPreview: null,
+    lifecycleWorkflow: null,
+    teamAccess: {
+      officers: [],
+      roleTemplates: {},
+      ceoIdentity: null,
+      loaded: false,
+    },
+    teamAccessPreview: null,
   };
   const DEFAULT_ROLE_KEY = "user";
 
@@ -99,6 +108,7 @@
     if (banner) banner.hidden = false;
     updateActionAvailability();
     updateBulkActionAvailability();
+    updateGlobalAdminControls();
   }
 
   function clearBootstrapError() {
@@ -110,6 +120,7 @@
     if (banner) banner.hidden = true;
     updateActionAvailability();
     updateBulkActionAvailability();
+    updateGlobalAdminControls();
   }
 
   const QUEUE_META = {
@@ -227,6 +238,59 @@
       .replaceAll("'", "&#039;");
   }
 
+  function asArray(value) {
+    return Array.isArray(value) ? value : [];
+  }
+
+  function openDialog(node) {
+    if (!(node instanceof HTMLDialogElement)) return;
+    if (typeof node.showModal === "function") {
+      if (!node.open) node.showModal();
+      return;
+    }
+    node.setAttribute("open", "open");
+  }
+
+  function closeDialog(node) {
+    if (!(node instanceof HTMLDialogElement)) return;
+    if (typeof node.close === "function" && node.open) {
+      node.close();
+      return;
+    }
+    node.removeAttribute("open");
+  }
+
+  function dialogByName(name) {
+    const selectors = {
+      create: "[data-admin-create-dialog]",
+      lifecycle: "[data-admin-lifecycle-dialog]",
+      team: "[data-admin-team-dialog]",
+    };
+    const selector = selectors[name];
+    return selector ? document.querySelector(selector) : null;
+  }
+
+  function fieldValue(selector) {
+    const node = document.querySelector(selector);
+    return normalizeValue(node && node.value);
+  }
+
+  function renderChipList(values, emptyLabel) {
+    const items = asArray(values).filter(Boolean);
+    if (!items.length) return `<span class="admin-scope-empty">${escapeHtml(emptyLabel || "None")}</span>`;
+    return items
+      .map(function (item) {
+        return `<span class="admin-scope-chip">${escapeHtml(titleize(item))}</span>`;
+      })
+      .join("");
+  }
+
+  function setButtonEnabled(button, enabled) {
+    if (!(button instanceof HTMLButtonElement)) return;
+    button.disabled = !enabled;
+    button.setAttribute("aria-disabled", enabled ? "false" : "true");
+  }
+
   function formatDate(value) {
     if (!value) return "—";
     try {
@@ -329,6 +393,7 @@
     state.allowedBulkActions = normalizeAccessList(profile && profile.allowed_bulk_actions);
     state.isSuperAdmin = Boolean(profile && profile.is_super_admin);
     state.accessProfileLoadFailed = false;
+    updateGlobalAdminControls();
 
     if (!isAllowedQueue(state.queue)) {
       state.queue = state.allowedQueues[0] || "overview";
@@ -361,6 +426,22 @@
     } catch (_error) {
       state.packageOptions = [];
     }
+  }
+
+  async function loadTeamAccessBlueprint(force) {
+    if (!state.isSuperAdmin) return null;
+    if (state.teamAccess.loaded && !force) return state.teamAccess;
+    const payload = await fetchJson("/admin/control-center/super-admin/officers");
+    state.teamAccess = {
+      officers: asArray(payload && payload.items),
+      roleTemplates:
+        payload && payload.role_templates && typeof payload.role_templates === "object"
+          ? payload.role_templates
+          : {},
+      ceoIdentity: payload && payload.ceo_identity ? payload.ceo_identity : null,
+      loaded: true,
+    };
+    return state.teamAccess;
   }
 
   function shortId(value) {
@@ -1647,7 +1728,7 @@
           showSuperAdminControls
             ? `
               <article class="admin-dossier-card admin-dossier-card--wide">
-                <div class="admin-card-header"><span class="admin-card-badge">S</span><h3 class="admin-card-title">CEO Master Admin Controls</h3></div>
+                <div class="admin-card-header"><span class="admin-card-badge">S</span><div><h3 class="admin-card-title">CEO Account Controls</h3><p class="card-copy">Update identity details, control access, or close the account through one governed workflow.</p></div></div>
                 <div class="admin-field-grid">
                   <label class="admin-field"><span>Full Name</span><input type="text" data-super-admin-user-field="full_name" value="${escapeHtml(tabData.full_name || "")}" /></label>
                   <label class="admin-field"><span>Email</span><input type="email" data-super-admin-user-field="email" value="${escapeHtml(tabData.email || "")}" /></label>
@@ -1659,15 +1740,26 @@
                   <label class="admin-field"><span>Access Tier</span><input type="text" data-super-admin-user-field="access_tier" value="${escapeHtml(tabData.access_tier || "")}" /></label>
                   <label class="admin-field"><span>Department Role</span><input type="text" data-super-admin-user-field="department_role" value="${escapeHtml(tabData.department_role || "")}" /></label>
                 </div>
-                <div class="inline-actions" style="margin-top: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                  <button class="btn btn-primary" type="button" data-super-admin-user-save="${escapeHtml(userId)}">Save User Updates</button>
-                  <button class="btn btn-secondary" type="button" data-super-admin-user-action="activate" data-super-admin-user-id="${escapeHtml(userId)}">Activate</button>
-                  <button class="btn btn-secondary" type="button" data-super-admin-user-action="suspend" data-super-admin-user-id="${escapeHtml(userId)}">Suspend</button>
-                  <button class="btn btn-secondary" type="button" data-super-admin-user-action="disable" data-super-admin-user-id="${escapeHtml(userId)}">Disable</button>
-                  <button class="btn btn-secondary" type="button" data-super-admin-user-action="restore" data-super-admin-user-id="${escapeHtml(userId)}">Restore</button>
-                  <button class="btn btn-secondary" type="button" data-super-admin-user-action="archive" data-super-admin-user-id="${escapeHtml(userId)}">Archive Account</button>
-                  <button class="btn btn-secondary" type="button" data-super-admin-user-action="archive" data-super-admin-user-id="${escapeHtml(userId)}" data-super-admin-archive-owned="true">Close Account &amp; Workspaces</button>
-                  <button class="btn btn-secondary" type="button" data-super-admin-user-password-reset="${escapeHtml(userId)}">Trigger Password Reset</button>
+                <div class="admin-account-control-section">
+                  <div><h4>Profile &amp; sign-in</h4><p>Contact changes and account access changes are audited separately.</p></div>
+                  <div class="inline-actions">
+                    <button class="btn btn-primary" type="button" data-super-admin-user-save="${escapeHtml(userId)}">Save Profile</button>
+                    <button class="btn btn-secondary" type="button" data-super-admin-user-password-reset="${escapeHtml(userId)}">Send Password Reset</button>
+                    <button class="btn btn-secondary" type="button" data-super-admin-user-action="activate" data-super-admin-user-id="${escapeHtml(userId)}">Activate</button>
+                    <button class="btn btn-secondary" type="button" data-super-admin-user-action="restore" data-super-admin-user-id="${escapeHtml(userId)}">Restore</button>
+                    <button class="btn btn-secondary" type="button" data-super-admin-user-action="suspend" data-super-admin-user-id="${escapeHtml(userId)}">Suspend</button>
+                    <button class="btn btn-secondary" type="button" data-super-admin-user-action="disable" data-super-admin-user-id="${escapeHtml(userId)}">Disable</button>
+                  </div>
+                </div>
+                <div class="admin-danger-zone">
+                  <div>
+                    <h4>Close account</h4>
+                    <p>Preview owned projects, family workspaces, memberships, entitlements, and invites before access is archived. Orders, billing evidence, uploads, vault records, certificates, delivery records, and audit history are preserved.</p>
+                  </div>
+                  <div class="inline-actions">
+                    <button class="btn btn-secondary" type="button" data-super-admin-user-action="archive" data-super-admin-user-id="${escapeHtml(userId)}">Archive Account Only</button>
+                    <button class="btn btn-danger" type="button" data-super-admin-user-action="archive" data-super-admin-user-id="${escapeHtml(userId)}" data-super-admin-archive-owned="true">Close Account &amp; Workspaces</button>
+                  </div>
                 </div>
               </article>
             `
@@ -2021,6 +2113,27 @@
     `;
   }
 
+  function syncRailGroups() {
+    document.querySelectorAll("[data-admin-nav-group]").forEach(function (group) {
+      const visibleButtons = Array.from(group.querySelectorAll("[data-case-queue]")).filter(function (button) {
+        return !button.hidden;
+      });
+      group.hidden = visibleButtons.length === 0;
+      const hasActive = visibleButtons.some(function (button) {
+        return button.classList.contains("is-active");
+      });
+      if (hasActive && group instanceof HTMLDetailsElement) group.open = true;
+    });
+  }
+
+  function updateGlobalAdminControls() {
+    document.querySelectorAll("[data-super-admin-create-account], [data-super-admin-manage-team-access]").forEach(function (button) {
+      button.hidden = !state.isSuperAdmin;
+      button.disabled = !state.isSuperAdmin || state.bootstrapFailed;
+      button.setAttribute("aria-disabled", button.disabled ? "true" : "false");
+    });
+  }
+
   function applyRailSelection() {
     document.querySelectorAll("[data-case-queue]").forEach(function (button) {
       const queue = button.getAttribute("data-case-queue") || "";
@@ -2033,8 +2146,11 @@
     const meta = QUEUE_META[state.queue] || QUEUE_META.customer_cases;
     const title = document.querySelector("[data-admin-list-title]");
     const subtitle = document.querySelector("[data-admin-list-subtitle]");
+    const activeQueue = document.querySelector("[data-admin-active-queue]");
     if (title) title.textContent = meta[0];
     if (subtitle) subtitle.textContent = meta[1];
+    if (activeQueue) activeQueue.textContent = meta[0];
+    syncRailGroups();
   }
 
   function applyTabSelection() {
@@ -2404,59 +2520,203 @@
     return payload;
   }
 
-  async function runSuperAdminCreateAccount() {
+  function populateCreatePackageOptions() {
+    const select = document.querySelector('[data-admin-create-field="package_code"]');
+    if (!(select instanceof HTMLSelectElement)) return;
+    const current = select.value;
+    select.innerHTML = `<option value="">Account only — no package</option>${state.packageOptions
+      .map(function (item) {
+        return `<option value="${escapeHtml(item.code)}">${escapeHtml(item.label)} · ${escapeHtml(item.code)}</option>`;
+      })
+      .join("")}`;
+    if (Array.from(select.options).some(function (option) { return option.value === current; })) {
+      select.value = current;
+    }
+  }
+
+  function createAccountPayloadFromDialog() {
+    const packageCode = fieldValue('[data-admin-create-field="package_code"]');
+    return {
+      full_name: fieldValue('[data-admin-create-field="full_name"]'),
+      email: fieldValue('[data-admin-create-field="email"]').toLowerCase(),
+      phone_number: fieldValue('[data-admin-create-field="phone_number"]') || null,
+      package_code: packageCode || null,
+      project_name: packageCode ? fieldValue('[data-admin-create-field="project_name"]') || null : null,
+      package_grant_type: packageCode
+        ? fieldValue('[data-admin-create-field="package_grant_type"]') || "complimentary_package"
+        : null,
+      reason: fieldValue('[data-admin-create-field="reason"]'),
+    };
+  }
+
+  function createAccountPreviewFingerprint(payload) {
+    return JSON.stringify({
+      full_name: payload.full_name,
+      email: payload.email,
+      phone_number: payload.phone_number,
+      package_code: payload.package_code,
+      project_name: payload.project_name,
+      package_grant_type: payload.package_grant_type,
+    });
+  }
+
+  function syncCreatePackageFields() {
+    const payload = createAccountPayloadFromDialog();
+    const projectName = document.querySelector('[data-admin-create-field="project_name"]');
+    const grantType = document.querySelector('[data-admin-create-field="package_grant_type"]');
+    const hasPackage = Boolean(payload.package_code);
+    if (projectName instanceof HTMLInputElement) {
+      projectName.disabled = !hasPackage;
+      projectName.required = hasPackage;
+      if (hasPackage && !normalizeValue(projectName.value) && payload.full_name) {
+        projectName.value = `${payload.full_name} Legacy Build`;
+      }
+      if (!hasPackage) projectName.value = "";
+    }
+    if (grantType instanceof HTMLSelectElement) grantType.disabled = !hasPackage;
+  }
+
+  function resetCreatePreview(message) {
+    state.createAccountPreview = null;
+    const previewNode = document.querySelector("[data-admin-create-preview]");
+    if (previewNode) {
+      previewNode.innerHTML = `<h3>Execution preview</h3><p>${escapeHtml(message || "Complete the fields and choose Preview. Nothing is written until Execute is confirmed.")}</p>`;
+    }
+    setButtonEnabled(document.querySelector("[data-admin-create-execute]"), false);
+  }
+
+  function validateCreateAccountPayload(payload) {
+    if (!payload.full_name) return "Full name is required.";
+    if (!payload.email || !payload.email.includes("@")) return "A valid customer email is required.";
+    if (payload.package_code && !payload.project_name) return "Project name is required when a package is granted.";
+    if (payload.reason.length < 3) return "An operational reason of at least 3 characters is required.";
+    return "";
+  }
+
+  function renderCreateAccountPreview(preview) {
+    const node = document.querySelector("[data-admin-create-preview]");
+    if (!node) return;
+    const proposed = (preview && preview.proposed_after) || {};
+    const warnings = asArray(preview && preview.warnings);
+    node.innerHTML = `
+      <div class="admin-preview-heading"><h3>Execution preview</h3>${statusChip("Ready for confirmation", "success")}</div>
+      <div class="admin-preview-facts">
+        <div><span>Account</span><strong>${escapeHtml(proposed.full_name || "—")}</strong><small>${escapeHtml(proposed.email || "—")}</small></div>
+        <div><span>Initial status</span><strong>${escapeHtml(titleize(proposed.status || "pending_activation"))}</strong></div>
+        <div><span>Package</span><strong>${escapeHtml(proposed.package_name || "No package")}</strong><small>${escapeHtml(proposed.package_code || "Account only")}</small></div>
+        <div><span>Project</span><strong>${escapeHtml(proposed.project_name || "No project")}</strong><small>${escapeHtml(proposed.project_lane || "No lane")}</small></div>
+      </div>
+      <div class="admin-preview-section"><span>Records written</span><div>${renderChipList(preview && preview.records_to_write, "Identity and audit records")}</div></div>
+      ${warnings.length ? `<div class="admin-preview-warning">${warnings.map(function (item) { return `<p>${escapeHtml(item)}</p>`; }).join("")}</div>` : ""}
+      <p class="admin-preview-assurance">No paid order is fabricated and no Stripe transaction is created or changed.</p>
+    `;
+  }
+
+  function syncCreateExecuteAvailability() {
+    const payload = createAccountPayloadFromDialog();
+    const confirmed = Boolean(document.querySelector("[data-admin-create-confirm]")?.checked);
+    const previewCurrent = Boolean(
+      state.createAccountPreview &&
+      state.createAccountPreview.fingerprint === createAccountPreviewFingerprint(payload),
+    );
+    setButtonEnabled(
+      document.querySelector("[data-admin-create-execute]"),
+      confirmed && previewCurrent && !validateCreateAccountPayload(payload),
+    );
+  }
+
+  function openSuperAdminCreateAccount() {
+    if (!state.isSuperAdmin) {
+      setPageStatus("CEO Master Administrator access is required.", "error");
+      return;
+    }
+    const dialog = dialogByName("create");
+    const form = document.querySelector("[data-admin-create-form]");
+    if (!(dialog instanceof HTMLDialogElement) || !(form instanceof HTMLFormElement)) return;
+    form.reset();
+    populateCreatePackageOptions();
+    syncCreatePackageFields();
+    resetCreatePreview();
+    openDialog(dialog);
+    const nameInput = document.querySelector('[data-admin-create-field="full_name"]');
+    if (nameInput instanceof HTMLInputElement) nameInput.focus();
+  }
+
+  async function previewSuperAdminCreateAccount() {
     if (!state.isSuperAdmin) return;
-    const fullName = normalizeValue(window.prompt("Customer full name:") || "");
-    const email = normalizeValue(window.prompt("Customer email:") || "");
-    if (!fullName || !email) return;
-    const packageChoices = (state.packageOptions || [])
-      .map(function (item) { return item.code; })
-      .filter(Boolean)
-      .join(", ");
-    const packageCode = normalizeValue(
-      window.prompt(
-        `Optional package code (leave blank for account only):${packageChoices ? `\n${packageChoices}` : ""}`,
-        "",
-      ) || "",
+    syncCreatePackageFields();
+    const payload = createAccountPayloadFromDialog();
+    const validationError = validateCreateAccountPayload(payload);
+    if (validationError) {
+      resetCreatePreview(validationError);
+      setPageStatus(validationError, "error");
+      return;
+    }
+    setPageStatus("Building account creation preview...", "info");
+    try {
+      const preview = await postJson("/admin/control-center/super-admin/users/preview", {
+        ...payload,
+        confirmed: false,
+      });
+      state.createAccountPreview = {
+        fingerprint: createAccountPreviewFingerprint(payload),
+        payload: preview || {},
+      };
+      renderCreateAccountPreview(preview || {});
+      syncCreateExecuteAvailability();
+      setPageStatus("Account creation preview is ready. No records have been written.", "success");
+    } catch (error) {
+      resetCreatePreview(error.message || "Unable to preview account creation.");
+      setPageStatus(error.message || "Unable to preview account creation.", "error");
+    }
+  }
+
+  async function runSuperAdminCreateAccount(event) {
+    if (event) event.preventDefault();
+    if (!state.isSuperAdmin) return;
+    const payload = createAccountPayloadFromDialog();
+    const validationError = validateCreateAccountPayload(payload);
+    const previewCurrent = Boolean(
+      state.createAccountPreview &&
+      state.createAccountPreview.fingerprint === createAccountPreviewFingerprint(payload),
     );
-    const projectName = packageCode
-      ? normalizeValue(window.prompt("Project name:", `${fullName} Legacy Build`) || "")
-      : "";
-    if (packageCode && !projectName) return;
-    const reason = promptExecutionReason(
-      packageCode ? `Create customer account and grant ${packageCode} to ${email}` : `Create customer account for ${email}`,
-    );
-    const confirmation = packageCode
-      ? `Create customer account for ${email} and grant ${packageCode}? This creates a project and entitlement but does not create a paid order or alter Stripe.`
-      : `Create customer account for ${email} through the Continuity Kernel?`;
-    if (reason === null || !window.confirm(confirmation)) return;
+    if (validationError || !previewCurrent || !document.querySelector("[data-admin-create-confirm]")?.checked) {
+      setPageStatus(validationError || "Preview and confirm the current account details before execution.", "error");
+      syncCreateExecuteAvailability();
+      return;
+    }
+    setButtonEnabled(document.querySelector("[data-admin-create-execute]"), false);
+    setPageStatus("Executing governed account creation...", "info");
     try {
       const operation = await submitGovernedOperation(
         "customer_account_create",
-        { customer_email: email },
+        { customer_email: payload.email },
         {
           user_payload: {
-            full_name: fullName,
-            email,
-            package_code: packageCode || null,
-            project_name: projectName || null,
-            package_grant_type: packageCode ? "complimentary_package" : null,
+            full_name: payload.full_name,
+            email: payload.email,
+            phone_number: payload.phone_number,
+            package_code: payload.package_code,
+            project_name: payload.project_name,
+            package_grant_type: payload.package_grant_type,
           },
         },
-        reason,
+        payload.reason,
       );
-      await Promise.allSettled([loadKernelStatus(), loadCases()]);
+      closeDialog(dialogByName("create"));
+      await Promise.allSettled([loadKernelStatus(), loadOverview(), loadCases()]);
       setPageStatus(
         kernelOperationMessage(
           operation,
-          packageCode
-            ? "Customer account, project, and package entitlement created pending account activation."
-            : "Customer account created pending activation.",
+          payload.package_code
+            ? "Customer identity, project, and package entitlement created pending activation."
+            : "Customer identity created pending activation.",
         ),
         kernelOperationStatusType(operation),
       );
     } catch (error) {
       setPageStatus(error.message || "Unable to create account.", "error");
+      syncCreateExecuteAvailability();
     }
   }
 
@@ -2510,30 +2770,370 @@
     }
   }
 
-  async function runSuperAdminUserStateAction(userId, action, archiveOwnedRecords) {
-    if (!state.isSuperAdmin) {
-      setPageStatus("Super Admin access is required.", "error");
+  function currentIdentityRecord() {
+    return (state.workspace && state.workspace.tabs && state.workspace.tabs.identity) || {};
+  }
+
+  function lifecycleIsDestructive(workflow) {
+    return Boolean(workflow && ["suspend", "disable", "archive"].includes(workflow.action));
+  }
+
+  function renderLifecyclePreview(preview) {
+    const node = document.querySelector("[data-admin-lifecycle-preview]");
+    if (!node) return;
+    const before = (preview && preview.before) || {};
+    const after = (preview && preview.proposed_after) || {};
+    const ownership = (preview && preview.ownership_dependencies) || {};
+    const ownershipRows = Object.entries(ownership).filter(function (entry) { return Number(entry[1] || 0) > 0; });
+    const warnings = asArray(preview && preview.warnings);
+    const blocked = Boolean(preview && preview.blocked);
+    node.dataset.state = blocked ? "error" : "success";
+    node.innerHTML = `
+      <div class="admin-preview-heading">
+        <h3>Impact preview</h3>
+        ${statusChip(blocked ? "Blocked" : "Ready for confirmation", blocked ? "error" : "success")}
+      </div>
+      <div class="admin-preview-facts">
+        <div><span>Current status</span><strong>${escapeHtml(titleize(before.status || "active"))}</strong></div>
+        <div><span>Resulting status</span><strong>${escapeHtml(titleize(after.status || "—"))}</strong></div>
+        <div><span>Login access</span><strong>${after.login_enabled ? "Enabled" : "Disabled immediately"}</strong></div>
+        <div><span>Owned workspace handling</span><strong>${after.archive_owned_records ? "Archive active access" : "Account only"}</strong></div>
+      </div>
+      <div class="admin-preview-section"><span>Active dependencies</span><div>${
+        ownershipRows.length
+          ? ownershipRows.map(function (entry) { return `<span class="admin-scope-chip">${escapeHtml(titleize(entry[0]))}: ${escapeHtml(entry[1])}</span>`; }).join("")
+          : '<span class="admin-scope-empty">No active owned dependencies</span>'
+      }</div></div>
+      ${after.archive_owned_records ? `<div class="admin-preview-section"><span>Access records archived</span><div>${renderChipList(Object.keys((preview && preview.records_to_archive) || {}), "No owned access records")}</div></div>` : ""}
+      <div class="admin-preview-section"><span>Business and evidence records preserved</span><div>${renderChipList(preview && preview.records_preserved, "Audit history")}</div></div>
+      ${warnings.length ? `<div class="admin-preview-warning">${warnings.map(function (item) { return `<p>${escapeHtml(item)}</p>`; }).join("")}</div>` : ""}
+      <p class="admin-preview-assurance">Closure is a recoverable access archive, not an untraceable database deletion.</p>
+    `;
+  }
+
+  function syncLifecycleExecuteAvailability() {
+    const workflow = state.lifecycleWorkflow;
+    const execute = document.querySelector("[data-admin-lifecycle-execute]");
+    if (!workflow || !workflow.preview) {
+      setButtonEnabled(execute, false);
       return;
     }
+    const reason = fieldValue("[data-admin-lifecycle-reason]");
+    const confirmed = Boolean(document.querySelector("[data-admin-lifecycle-confirm]")?.checked);
+    const typed = fieldValue("[data-admin-lifecycle-typed-confirm]").toLowerCase();
+    const typedMatches = !workflow.closeOwned || typed === workflow.email.toLowerCase();
+    setButtonEnabled(execute, !workflow.preview.blocked && reason.length >= 3 && confirmed && typedMatches);
+  }
+
+  async function openSuperAdminLifecycle(userId, action, archiveOwnedRecords) {
+    if (!state.isSuperAdmin) {
+      setPageStatus("CEO Master Administrator access is required.", "error");
+      return;
+    }
+    const identity = currentIdentityRecord();
     const closeOwned = Boolean(archiveOwnedRecords && action === "archive");
-    const reason = promptExecutionReason(closeOwned ? "Close this account and archive its owned workspaces" : `${titleize(action)} this account`);
-    const confirmation = closeOwned
-      ? "Close this account and all owned workspaces? Login, roles, entitlements, memberships, and pending invites will be disabled. Orders, billing, uploads, certificates, delivery records, and audit history will be preserved."
-      : `Confirm ${action} for this account?`;
-    if (reason === null || !window.confirm(confirmation)) return;
-    setPageStatus("Updating account status...", "info");
+    state.lifecycleWorkflow = {
+      userId,
+      action,
+      closeOwned,
+      email: normalizeValue(identity.email),
+      name: normalizeValue(identity.full_name) || "Selected account",
+      preview: null,
+    };
+    const dialog = dialogByName("lifecycle");
+    const form = document.querySelector("[data-admin-lifecycle-form]");
+    if (!(dialog instanceof HTMLDialogElement) || !(form instanceof HTMLFormElement)) return;
+    form.reset();
+    const title = document.querySelector("[data-admin-lifecycle-title]");
+    const target = document.querySelector("[data-admin-lifecycle-target]");
+    const typedWrap = document.querySelector("[data-admin-lifecycle-typed-wrap]");
+    const confirmLabel = document.querySelector("[data-admin-lifecycle-confirm-label]");
+    const execute = document.querySelector("[data-admin-lifecycle-execute]");
+    if (title) title.textContent = closeOwned ? "Close account and owned workspaces" : `${titleize(action)} account`;
+    if (target) target.textContent = `${state.lifecycleWorkflow.name} · ${state.lifecycleWorkflow.email || userId}`;
+    if (typedWrap) typedWrap.hidden = !closeOwned;
+    if (confirmLabel) {
+      confirmLabel.textContent = closeOwned
+        ? "I confirm login, roles, memberships, entitlements, and active owned workspaces should be archived."
+        : `I confirm this account should be ${titleize(action).toLowerCase()}.`;
+    }
+    if (execute instanceof HTMLButtonElement) {
+      execute.textContent = closeOwned ? "Close Account & Workspaces" : `${titleize(action)} Account`;
+      execute.classList.toggle("btn-danger", lifecycleIsDestructive(state.lifecycleWorkflow));
+      execute.classList.toggle("btn-primary", !lifecycleIsDestructive(state.lifecycleWorkflow));
+    }
+    const previewNode = document.querySelector("[data-admin-lifecycle-preview]");
+    if (previewNode) previewNode.innerHTML = "<h3>Impact preview</h3><p>Loading the account’s dependencies and protected records…</p>";
+    setButtonEnabled(execute, false);
+    openDialog(dialog);
+    try {
+      const preview = await postJson(
+        `/admin/control-center/super-admin/users/${encodeURIComponent(userId)}/status-action/preview`,
+        { action, archive_owned_records: closeOwned, confirmed: false, reason: "" },
+      );
+      if (!state.lifecycleWorkflow || state.lifecycleWorkflow.userId !== userId || state.lifecycleWorkflow.action !== action) return;
+      state.lifecycleWorkflow.preview = preview || {};
+      renderLifecyclePreview(preview || {});
+      syncLifecycleExecuteAvailability();
+    } catch (error) {
+      if (previewNode) {
+        previewNode.dataset.state = "error";
+        previewNode.innerHTML = `<h3>Impact preview unavailable</h3><p>${escapeHtml(error.message || "Unable to load account dependencies.")}</p>`;
+      }
+      setPageStatus(error.message || "Unable to preview the account action.", "error");
+    }
+  }
+
+  async function runSuperAdminUserStateAction(event) {
+    if (event) event.preventDefault();
+    const workflow = state.lifecycleWorkflow;
+    if (!state.isSuperAdmin || !workflow || !workflow.preview) return;
+    const reason = fieldValue("[data-admin-lifecycle-reason]");
+    const confirmed = Boolean(document.querySelector("[data-admin-lifecycle-confirm]")?.checked);
+    const typed = fieldValue("[data-admin-lifecycle-typed-confirm]").toLowerCase();
+    if (
+      workflow.preview.blocked ||
+      reason.length < 3 ||
+      !confirmed ||
+      (workflow.closeOwned && typed !== workflow.email.toLowerCase())
+    ) {
+      setPageStatus("Complete the reason and confirmation shown in the impact preview before execution.", "error");
+      syncLifecycleExecuteAvailability();
+      return;
+    }
+    setButtonEnabled(document.querySelector("[data-admin-lifecycle-execute]"), false);
+    setPageStatus("Executing governed account lifecycle action...", "info");
     try {
       const operation = await submitGovernedOperation(
         "account_lifecycle",
-        { user_id: userId },
-        { lifecycle_action: action, archive_owned_records: closeOwned },
+        { user_id: workflow.userId },
+        { lifecycle_action: workflow.action, archive_owned_records: workflow.closeOwned },
         reason,
       );
-      await Promise.allSettled([loadKernelStatus(), loadCases()]);
+      closeDialog(dialogByName("lifecycle"));
+      state.lifecycleWorkflow = null;
+      await Promise.allSettled([loadKernelStatus(), loadOverview(), loadCases()]);
       if (state.selectedCaseId) await loadCaseWorkspace(state.selectedCaseId);
-      setPageStatus(kernelOperationMessage(operation, "Account status updated."), kernelOperationStatusType(operation));
+      setPageStatus(kernelOperationMessage(operation, "Account lifecycle updated."), kernelOperationStatusType(operation));
     } catch (error) {
       setPageStatus(error.message || "Unable to update account status.", "error");
+      syncLifecycleExecuteAvailability();
+    }
+  }
+
+  function teamOfficerEmail(officer) {
+    return normalizeValue(officer && (officer.officer_email || officer.email)).toLowerCase();
+  }
+
+  function selectedTeamOfficer() {
+    const email = fieldValue('[data-admin-team-field="officer_email"]').toLowerCase();
+    return state.teamAccess.officers.find(function (officer) {
+      return teamOfficerEmail(officer) === email;
+    }) || null;
+  }
+
+  function selectedTeamTemplate() {
+    const roleCode = fieldValue('[data-admin-team-field="role_template"]');
+    return state.teamAccess.roleTemplates[roleCode] || null;
+  }
+
+  function populateTeamAccessControls() {
+    const officerSelect = document.querySelector('[data-admin-team-field="officer_email"]');
+    const templateSelect = document.querySelector('[data-admin-team-field="role_template"]');
+    if (officerSelect instanceof HTMLSelectElement) {
+      officerSelect.innerHTML = '<option value="">Select officer</option>' + state.teamAccess.officers
+        .map(function (officer) {
+          const email = teamOfficerEmail(officer);
+          const missing = normalizeLower(officer.status) === "missing_user";
+          const label = `${officer.full_name || email} · ${officer.business_title || titleize(officer.current_role || "officer")}`;
+          return `<option value="${escapeHtml(email)}" ${missing ? "disabled" : ""}>${escapeHtml(label)}${missing ? " · account missing" : ""}</option>`;
+        })
+        .join("");
+    }
+    if (templateSelect instanceof HTMLSelectElement) {
+      templateSelect.innerHTML = '<option value="">Select job template</option>' + Object.entries(state.teamAccess.roleTemplates)
+        .map(function (entry) {
+          const template = entry[1] || {};
+          return `<option value="${escapeHtml(entry[0])}">${escapeHtml(template.name || titleize(entry[0]))}</option>`;
+        })
+        .join("");
+    }
+    const ceoIdentity = document.querySelector("[data-admin-team-ceo-identity]");
+    if (ceoIdentity) {
+      ceoIdentity.textContent = normalizeValue(state.teamAccess.ceoIdentity && state.teamAccess.ceoIdentity.email) || "l.robinson@tomboflight.com";
+    }
+  }
+
+  function renderTeamScope() {
+    const node = document.querySelector("[data-admin-team-scope]");
+    if (!node) return;
+    const template = selectedTeamTemplate();
+    if (!template) {
+      node.innerHTML = "<h3>Job scope</h3><p>Select a job template to see exactly which queues, records, and actions it exposes.</p>";
+      return;
+    }
+    const queues = asArray(template.allowed_queues).map(function (queue) {
+      return (QUEUE_META[queue] && QUEUE_META[queue][0]) || titleize(queue);
+    });
+    const actions = asArray(template.allowed_actions).concat(asArray(template.allowed_bulk_actions));
+    node.innerHTML = `
+      <div class="admin-preview-heading"><h3>${escapeHtml(template.name || titleize(template.role_code))}</h3>${statusChip("Job-scoped", "success")}</div>
+      <p>${escapeHtml(template.description || "Scoped Tomb of Light operational access.")}</p>
+      <div class="admin-preview-section"><span>Visible work queues (${queues.length})</span><div>${renderChipList(queues, "No operational queues")}</div></div>
+      <div class="admin-preview-section"><span>Executable case actions (${actions.length})</span><div>${renderChipList(actions, "Read-only role")}</div></div>
+      <div class="admin-preview-section"><span>Backend permissions (${asArray(template.permissions).length})</span><div>${renderChipList(template.permissions, "No permissions")}</div></div>
+    `;
+  }
+
+  function teamAccessFingerprint(officer, template) {
+    return JSON.stringify({
+      officer_email: teamOfficerEmail(officer),
+      role_template: template && template.role_code,
+      revoke_permissions: asArray(officer && officer.permission_overrides).slice().sort(),
+    });
+  }
+
+  function resetTeamAccessPreview(message) {
+    state.teamAccessPreview = null;
+    const node = document.querySelector("[data-admin-team-preview]");
+    if (node) {
+      node.innerHTML = `<h3>Access-change preview</h3><p>${escapeHtml(message || "Preview compares current access with the selected job template. No access changes have been applied.")}</p>`;
+    }
+    setButtonEnabled(document.querySelector("[data-admin-team-execute]"), false);
+  }
+
+  function renderTeamAccessPreview(preview, officer, template) {
+    const node = document.querySelector("[data-admin-team-preview]");
+    if (!node) return;
+    const before = (preview && preview.before) || {};
+    const after = (preview && preview.proposed_after) || {};
+    node.innerHTML = `
+      <div class="admin-preview-heading"><h3>Access-change preview</h3>${statusChip("Ready for confirmation", "success")}</div>
+      <div class="admin-preview-facts">
+        <div><span>Officer</span><strong>${escapeHtml((officer && officer.full_name) || teamOfficerEmail(officer))}</strong><small>${escapeHtml(teamOfficerEmail(officer))}</small></div>
+        <div><span>Current role</span><strong>${escapeHtml(asArray(before.role_assignments).map(titleize).join(", ") || titleize(officer && officer.current_role))}</strong></div>
+        <div><span>New job template</span><strong>${escapeHtml((template && template.name) || titleize(template && template.role_code))}</strong></div>
+        <div><span>Custom overrides</span><strong>${asArray(after.permission_overrides).length ? escapeHtml(asArray(after.permission_overrides).join(", ")) : "Removed — exact job scope"}</strong></div>
+      </div>
+      <p class="admin-preview-assurance">The CEO Master Administrator role is not assignable here. The officer will see and execute only the selected job scope.</p>
+    `;
+  }
+
+  function syncTeamAccessExecuteAvailability() {
+    const officer = selectedTeamOfficer();
+    const template = selectedTeamTemplate();
+    const reason = fieldValue('[data-admin-team-field="reason"]');
+    const confirmed = Boolean(document.querySelector("[data-admin-team-confirm]")?.checked);
+    const previewCurrent = Boolean(
+      officer && template && state.teamAccessPreview &&
+      state.teamAccessPreview.fingerprint === teamAccessFingerprint(officer, template),
+    );
+    setButtonEnabled(
+      document.querySelector("[data-admin-team-execute]"),
+      previewCurrent && reason.length >= 3 && confirmed,
+    );
+  }
+
+  async function openTeamAccessDialog() {
+    if (!state.isSuperAdmin) {
+      setPageStatus("CEO Master Administrator access is required.", "error");
+      return;
+    }
+    const dialog = dialogByName("team");
+    const form = document.querySelector("[data-admin-team-form]");
+    if (!(dialog instanceof HTMLDialogElement) || !(form instanceof HTMLFormElement)) return;
+    form.reset();
+    resetTeamAccessPreview("Loading the CEO-owned role templates and active officers…");
+    openDialog(dialog);
+    try {
+      await loadTeamAccessBlueprint();
+      populateTeamAccessControls();
+      renderTeamScope();
+      resetTeamAccessPreview();
+    } catch (error) {
+      resetTeamAccessPreview(error.message || "Unable to load team access.");
+      setPageStatus(error.message || "Unable to load team access.", "error");
+    }
+  }
+
+  async function previewTeamAccess() {
+    const officer = selectedTeamOfficer();
+    const template = selectedTeamTemplate();
+    const reason = fieldValue('[data-admin-team-field="reason"]');
+    if (!officer || !template) {
+      resetTeamAccessPreview("Select an officer and a job template first.");
+      setPageStatus("Select an officer and a job template first.", "error");
+      return;
+    }
+    if (reason.length < 3) {
+      resetTeamAccessPreview("An operational reason of at least 3 characters is required.");
+      setPageStatus("An operational reason of at least 3 characters is required.", "error");
+      return;
+    }
+    const email = teamOfficerEmail(officer);
+    const revokePermissions = asArray(officer.permission_overrides);
+    setPageStatus("Building officer access preview...", "info");
+    try {
+      const preview = await postJson("/admin/control-center/super-admin/officers/permissions/preview", {
+        officer_email: email,
+        role_assignments: [template.role_code],
+        grant_permissions: [],
+        revoke_permissions: revokePermissions,
+        reason,
+        confirmed: false,
+      });
+      state.teamAccessPreview = {
+        fingerprint: teamAccessFingerprint(officer, template),
+        payload: preview || {},
+      };
+      renderTeamAccessPreview(preview || {}, officer, template);
+      syncTeamAccessExecuteAvailability();
+      setPageStatus("Officer access preview is ready. No permissions have changed.", "success");
+    } catch (error) {
+      resetTeamAccessPreview(error.message || "Unable to preview officer access.");
+      setPageStatus(error.message || "Unable to preview officer access.", "error");
+    }
+  }
+
+  async function applyTeamAccess(event) {
+    if (event) event.preventDefault();
+    const officer = selectedTeamOfficer();
+    const template = selectedTeamTemplate();
+    const reason = fieldValue('[data-admin-team-field="reason"]');
+    const confirmed = Boolean(document.querySelector("[data-admin-team-confirm]")?.checked);
+    const previewCurrent = Boolean(
+      officer && template && state.teamAccessPreview &&
+      state.teamAccessPreview.fingerprint === teamAccessFingerprint(officer, template),
+    );
+    if (!previewCurrent || reason.length < 3 || !confirmed) {
+      setPageStatus("Preview and confirm the current job assignment before applying access.", "error");
+      syncTeamAccessExecuteAvailability();
+      return;
+    }
+    const email = teamOfficerEmail(officer);
+    const parameters = {
+      role_assignments: [template.role_code],
+      grant_permissions: [],
+      revoke_permissions: asArray(officer.permission_overrides),
+    };
+    setButtonEnabled(document.querySelector("[data-admin-team-execute]"), false);
+    setPageStatus("Applying job-scoped officer access through the Continuity Kernel...", "info");
+    try {
+      const operation = await submitGovernedOperation(
+        "officer_permissions",
+        { officer_email: email },
+        parameters,
+        reason,
+      );
+      await Promise.allSettled([loadKernelStatus(), loadTeamAccessBlueprint(true)]);
+      closeDialog(dialogByName("team"));
+      setPageStatus(
+        kernelOperationMessage(operation, `${template.name || titleize(template.role_code)} access applied to ${officer.full_name || email}.`),
+        kernelOperationStatusType(operation),
+      );
+    } catch (error) {
+      setPageStatus(error.message || "Unable to apply officer access.", "error");
+      syncTeamAccessExecuteAvailability();
     }
   }
 
@@ -2675,6 +3275,8 @@
       return;
     }
     if (!window.confirm("Apply service controls through the Continuity Kernel while preserving Stripe purchase history?")) return;
+    const applyButton = document.querySelector("[data-super-admin-service-apply]");
+    setButtonEnabled(applyButton, false);
     setPageStatus("Applying service controls...", "info");
     try {
       const operation = await submitGovernedOperation(
@@ -2692,6 +3294,7 @@
       if (state.selectedCaseId) await loadCaseWorkspace(state.selectedCaseId);
       setPageStatus(kernelOperationMessage(operation, "Service controls applied."), kernelOperationStatusType(operation));
     } catch (error) {
+      setButtonEnabled(applyButton, true);
       setPageStatus(error.message || "Unable to apply service controls.", "error");
     }
   }
@@ -2709,6 +3312,8 @@
       return;
     }
     if (!window.confirm("Apply the package change through the Continuity Kernel and repair consistency across project/order/entitlements?")) return;
+    const applyButton = document.querySelector("[data-super-admin-package-apply]");
+    setButtonEnabled(applyButton, false);
     setPageStatus("Applying package change...", "info");
     try {
       const operation = await submitGovernedOperation(
@@ -2729,6 +3334,7 @@
         kernelOperationStatusType(operation),
       );
     } catch (error) {
+      setButtonEnabled(applyButton, true);
       setPageStatus(error.message || "Unable to apply package change.", "error");
     }
   }
@@ -2832,6 +3438,14 @@
       const target = event.target;
       if (!(target instanceof Element)) return;
 
+      const dialogClose = target.closest("[data-admin-dialog-close]");
+      if (dialogClose) {
+        const name = dialogClose.getAttribute("data-admin-dialog-close") || "";
+        closeDialog(dialogByName(name));
+        if (name === "lifecycle") state.lifecycleWorkflow = null;
+        return;
+      }
+
       const bootstrapRetry = target.closest("[data-admin-bootstrap-retry]");
       if (bootstrapRetry) {
         const retryFn = lastFailedRetry;
@@ -2848,7 +3462,25 @@
 
       const superAdminCreateAccount = target.closest("[data-super-admin-create-account]");
       if (superAdminCreateAccount) {
-        runSuperAdminCreateAccount();
+        openSuperAdminCreateAccount();
+        return;
+      }
+
+      const superAdminManageTeamAccess = target.closest("[data-super-admin-manage-team-access]");
+      if (superAdminManageTeamAccess) {
+        openTeamAccessDialog();
+        return;
+      }
+
+      const createPreviewAction = target.closest("[data-admin-create-preview-action]");
+      if (createPreviewAction) {
+        previewSuperAdminCreateAccount();
+        return;
+      }
+
+      const teamPreviewAction = target.closest("[data-admin-team-preview-action]");
+      if (teamPreviewAction) {
+        previewTeamAccess();
         return;
       }
 
@@ -2952,7 +3584,7 @@
         const action = superAdminUserAction.getAttribute("data-super-admin-user-action");
         const userId = superAdminUserAction.getAttribute("data-super-admin-user-id");
         const archiveOwnedRecords = superAdminUserAction.getAttribute("data-super-admin-archive-owned") === "true";
-        if (action && userId) runSuperAdminUserStateAction(userId, action, archiveOwnedRecords);
+        if (action && userId) openSuperAdminLifecycle(userId, action, archiveOwnedRecords);
         return;
       }
 
@@ -3052,6 +3684,63 @@
       if (impersonationStop) {
         stopImpersonation();
       }
+    });
+
+    const createForm = document.querySelector("[data-admin-create-form]");
+    if (createForm instanceof HTMLFormElement) {
+      createForm.addEventListener("submit", runSuperAdminCreateAccount);
+      createForm.addEventListener("input", function (event) {
+        const target = event.target;
+        if (target instanceof Element && target.matches('[data-admin-create-field="package_code"], [data-admin-create-field="full_name"]')) {
+          syncCreatePackageFields();
+        }
+        if (target instanceof Element && !target.matches('[data-admin-create-field="reason"], [data-admin-create-confirm]')) {
+          resetCreatePreview("Account details changed. Preview the current values before execution.");
+        }
+        syncCreateExecuteAvailability();
+      });
+      createForm.addEventListener("change", function (event) {
+        const target = event.target;
+        if (target instanceof Element && target.matches('[data-admin-create-field="package_code"]')) {
+          syncCreatePackageFields();
+          resetCreatePreview("Package selection changed. Preview the current values before execution.");
+        }
+        syncCreateExecuteAvailability();
+      });
+    }
+
+    const lifecycleForm = document.querySelector("[data-admin-lifecycle-form]");
+    if (lifecycleForm instanceof HTMLFormElement) {
+      lifecycleForm.addEventListener("submit", runSuperAdminUserStateAction);
+      lifecycleForm.addEventListener("input", syncLifecycleExecuteAvailability);
+      lifecycleForm.addEventListener("change", syncLifecycleExecuteAvailability);
+    }
+
+    const teamForm = document.querySelector("[data-admin-team-form]");
+    if (teamForm instanceof HTMLFormElement) {
+      teamForm.addEventListener("submit", applyTeamAccess);
+      teamForm.addEventListener("input", function (event) {
+        const target = event.target;
+        if (target instanceof Element && target.matches('[data-admin-team-field="officer_email"], [data-admin-team-field="role_template"]')) {
+          resetTeamAccessPreview("Officer or job template changed. Preview the current assignment before applying it.");
+          renderTeamScope();
+        }
+        syncTeamAccessExecuteAvailability();
+      });
+      teamForm.addEventListener("change", function (event) {
+        const target = event.target;
+        if (target instanceof Element && target.matches('[data-admin-team-field="officer_email"], [data-admin-team-field="role_template"]')) {
+          resetTeamAccessPreview("Officer or job template changed. Preview the current assignment before applying it.");
+          renderTeamScope();
+        }
+        syncTeamAccessExecuteAvailability();
+      });
+    }
+
+    document.querySelectorAll(".admin-workflow-dialog").forEach(function (dialog) {
+      dialog.addEventListener("cancel", function () {
+        if (dialog.matches("[data-admin-lifecycle-dialog]")) state.lifecycleWorkflow = null;
+      });
     });
 
     const searchInput = document.querySelector("[data-admin-case-search]");

@@ -250,12 +250,69 @@ async function installApiRoutes(page, env) {
     if (method === "POST" && path === "/admin/control-center/kernel/execute") {
       const body = JSON.parse(request.postData() || "{}");
       env.stats.kernelExecutions.push(body);
+      if (body.action === "service_controls") env.stats.serviceApplyWrites += 1;
+      if (body.action === "package_change") env.stats.packageApplyWrites += 1;
+      if (body.action === "impersonation_start") {
+        env.state.activeImpersonation = {
+          active: true,
+          session_id: "imp-session-1",
+          banner: "Viewing Tomb of Light as Customer",
+          project_id: "proj-customer",
+          editing_enabled: false,
+          expires_at: new Date(Date.now() + 30 * 60_000).toISOString(),
+        };
+        env.stats.impersonationAuditEvents += 1;
+      }
+      if (body.action === "impersonation_stop") {
+        env.state.activeImpersonation = null;
+        env.stats.impersonationAuditEvents += 1;
+      }
       return json({
         operation_id: `kernel-operation-${env.stats.kernelExecutions.length}`,
         state: "executed",
         execution_outcome: "success",
         evidence_recording_status: "complete",
         execution_result: { applied: true },
+      });
+    }
+    if (method === "POST" && path === "/admin/control-center/super-admin/users/preview") {
+      const body = JSON.parse(request.postData() || "{}");
+      return json({
+        before: { account_exists: false, project_exists: false, entitlement_exists: false },
+        proposed_after: {
+          email: body.email,
+          full_name: body.full_name,
+          role: "user",
+          status: "pending_activation",
+          package_code: body.package_code || null,
+          package_name: body.package_code === "legacy_plus" ? "Legacy Plus" : null,
+          project_name: body.project_name || null,
+          project_lane: body.package_code ? "household" : null,
+          package_grant_type: body.package_grant_type || null,
+        },
+        records_to_write: body.package_code
+          ? ["users", "projects", "project_members", "project_entitlements", "audit_logs"]
+          : ["users", "audit_logs"],
+        warnings: body.package_code ? ["This grant does not create or alter a Stripe transaction."] : [],
+      });
+    }
+    if (method === "POST" && path.includes("/status-action/preview")) {
+      const body = JSON.parse(request.postData() || "{}");
+      return json({
+        action: body.action,
+        before: { status: "active", session_token_version: 0 },
+        proposed_after: {
+          status: body.action === "archive" ? "archived" : body.action,
+          login_enabled: !["suspend", "disable", "archive"].includes(body.action),
+          archive_owned_records: Boolean(body.archive_owned_records),
+        },
+        ownership_dependencies: { projects: 1, families: 1, households: 0, entitlements: 1, memberships: 1, invites: 0 },
+        records_to_archive: body.archive_owned_records ? { projects: 1, families: 1, entitlements: 1, memberships: 1 } : {},
+        records_preserved: ["orders", "billing_history", "uploads", "vault_metadata", "certificates", "delivery_records", "audit_logs"],
+        blocked: body.action === "archive" && !body.archive_owned_records,
+        warnings: body.action === "archive" && !body.archive_owned_records
+          ? ["Use Close Account & Workspaces because this account owns active records."]
+          : [],
       });
     }
     if (method === "GET" && path === "/admin/control-center/cases") {
@@ -364,9 +421,30 @@ async function installApiRoutes(page, env) {
     if (method === "GET" && path === "/admin/control-center/super-admin/officers") {
       return json({
         items: [
-          { full_name: "Jennifer Wood", officer_email: "jenn.wood@tomboflight.com", role_assignments: env.state.officerPermissions["jenn.wood@tomboflight.com"].role_assignments, permission_overrides: env.state.officerPermissions["jenn.wood@tomboflight.com"].permission_overrides },
-          { full_name: "Keith Goffigan", officer_email: "k.goffigan@tomboflight.com", role_assignments: env.state.officerPermissions["k.goffigan@tomboflight.com"].role_assignments, permission_overrides: env.state.officerPermissions["k.goffigan@tomboflight.com"].permission_overrides },
+          { full_name: "Jennifer Wood", business_title: "CFO", officer_email: "jenn.wood@tomboflight.com", current_role: "finance_admin", status: "active", role_assignments: env.state.officerPermissions["jenn.wood@tomboflight.com"].role_assignments, permission_overrides: env.state.officerPermissions["jenn.wood@tomboflight.com"].permission_overrides },
+          { full_name: "Keith Goffigan", business_title: "COO", officer_email: "k.goffigan@tomboflight.com", current_role: "operations_admin", status: "active", role_assignments: env.state.officerPermissions["k.goffigan@tomboflight.com"].role_assignments, permission_overrides: env.state.officerPermissions["k.goffigan@tomboflight.com"].permission_overrides },
         ],
+        ceo_identity: { email: "l.robinson@tomboflight.com", role_code: "ceo_master_admin", immutable: true },
+        role_templates: {
+          finance_admin: {
+            role_code: "finance_admin",
+            name: "Chief Financial Officer",
+            description: "Finance dashboards, billing, and reconciliation controls.",
+            permissions: ["admin.control.billing", "admin.orders.read"],
+            allowed_queues: ["money_now", "finance_integrity"],
+            allowed_actions: ["link_order_to_project", "refresh_case_data"],
+            allowed_bulk_actions: ["link-unlinked-paid-orders"],
+          },
+          operations_admin: {
+            role_code: "operations_admin",
+            name: "Chief Operating Officer",
+            description: "Operational intake, fulfillment, and support controls.",
+            permissions: ["admin.control.view", "admin.intake.review"],
+            allowed_queues: ["intake_onboarding", "build_fulfillment"],
+            allowed_actions: ["sync_package", "run_readiness_check"],
+            allowed_bulk_actions: ["repair-selected-records"],
+          },
+        },
       });
     }
     if (method === "POST" && path === "/admin/control-center/super-admin/officers/permissions/preview") {
@@ -420,7 +498,7 @@ test.beforeEach(async ({ page }) => {
   await installApiRoutes(page, env);
   await bootstrap(page);
   await page.goto("/admin-control-center.html");
-  await expect(page.locator("[data-admin-control-title]")).toContainText("Customer Operations Workspace");
+  await expect(page.locator("[data-admin-control-title]")).toContainText("CEO Master Administrator");
   await expect(page.locator("[data-open-case]").first()).toBeVisible();
   page.__env = env;
 });
@@ -434,30 +512,31 @@ test("[appearance] is temporarily disabled and forces standard light mode", asyn
 
 test("[account controls] creates an account with a package and closes owned workspaces through the Kernel", async ({ page }) => {
   const env = page.__env;
-  await page.evaluate(() => {
-    const responses = [
-      "New Customer",
-      "new.customer@tomboflight.test",
-      "legacy_plus",
-      "New Customer Legacy Build",
-      "CEO-approved package grant",
-    ];
-    window.prompt = () => responses.shift() || "";
-    window.confirm = () => true;
-  });
   await page.locator("[data-super-admin-create-account]").click();
+  await expect(page.locator("[data-admin-create-dialog]")).toBeVisible();
+  await page.locator('[data-admin-create-field="full_name"]').fill("New Customer");
+  await page.locator('[data-admin-create-field="email"]').fill("new.customer@tomboflight.test");
+  await page.locator('[data-admin-create-field="package_code"]').selectOption("legacy_plus");
+  await page.locator('[data-admin-create-field="project_name"]').fill("New Customer Legacy Build");
+  await page.locator('[data-admin-create-field="reason"]').fill("CEO-approved package grant");
+  await page.locator("[data-admin-create-preview-action]").click();
+  await expect(page.locator("[data-admin-create-preview]")).toContainText("Ready for confirmation");
+  await page.locator("[data-admin-create-confirm]").check();
+  await page.locator("[data-admin-create-execute]").click();
   await expect.poll(() => env.stats.kernelExecutions.length).toBe(1);
   expect(env.stats.kernelExecutions[0].action).toBe("customer_account_create");
   expect(env.stats.kernelExecutions[0].parameters.user_payload.package_code).toBe("legacy_plus");
   expect(env.stats.kernelExecutions[0].parameters.user_payload.project_name).toBe("New Customer Legacy Build");
 
-  await page.locator('[data-admin-case-tab="identity"]').click();
+  await page.locator('[data-admin-case-tab="overview"]').click();
   await expect(page.locator('[data-super-admin-archive-owned="true"]')).toBeVisible();
-  await page.evaluate(() => {
-    window.prompt = () => "Former customer closure";
-    window.confirm = () => true;
-  });
   await page.locator('[data-super-admin-archive-owned="true"]').click();
+  await expect(page.locator("[data-admin-lifecycle-dialog]")).toBeVisible();
+  await expect(page.locator("[data-admin-lifecycle-preview]")).toContainText("Business and evidence records preserved");
+  await page.locator("[data-admin-lifecycle-reason]").fill("Former customer closure");
+  await page.locator("[data-admin-lifecycle-typed-confirm]").fill("customer.fixture@tomboflight.test");
+  await page.locator("[data-admin-lifecycle-confirm]").check();
+  await page.locator("[data-admin-lifecycle-execute]").click();
   await expect.poll(() => env.stats.kernelExecutions.length).toBe(2);
   expect(env.stats.kernelExecutions[1].action).toBe("account_lifecycle");
   expect(env.stats.kernelExecutions[1].parameters.lifecycle_action).toBe("archive");
@@ -496,6 +575,23 @@ test("[keyboard] validates keyboard-only navigation reachability and no trap", a
   await expect(page.locator(":focus")).toHaveAttribute("data-admin-impersonation-start", /case-/);
   const activeElementTag = await page.evaluate(() => document.activeElement?.tagName || "");
   expect(activeElementTag.length).toBeGreaterThan(0);
+});
+
+test("[responsive] keeps the CEO command center compact and readable at 960px", async ({ page }) => {
+  await page.setViewportSize({ width: 960, height: 1000 });
+  await expect(page.locator("[data-admin-control-title]")).toContainText("CEO Master Administrator");
+  await expect(page.locator("[data-super-admin-create-account]")).toBeVisible();
+  await expect(page.locator("[data-super-admin-manage-team-access]")).toBeVisible();
+  await expect(page.locator("[data-admin-nav-group]")).toHaveCount(4);
+  await expect(page.locator('[data-admin-nav-group="workflow"]')).toHaveAttribute("open", "");
+  await expect(page.locator('[data-admin-nav-group="finance"]')).not.toHaveAttribute("open", "");
+  const overflow = await page.evaluate(() => ({
+    viewport: document.documentElement.clientWidth,
+    content: document.documentElement.scrollWidth,
+  }));
+  expect(overflow.content).toBeLessThanOrEqual(overflow.viewport + 1);
+  await expect(page.locator("[data-open-case]").first()).toBeVisible();
+  await expect(page.locator("[data-admin-case-workspace]")).toContainText("Identity");
 });
 
 test("[contrast] validates WCAG AA contrast thresholds for key selectors", async ({ page }) => {
@@ -599,6 +695,7 @@ test("[account360] validates all tabs + loading/empty/denied/error states and se
 });
 
 test("[errors] backend case-search failures include actionable code + retry guidance", async ({ page }) => {
+  await page.locator('[data-admin-nav-group="governance"] summary').click();
   await page.locator('[data-case-queue="users"]').click();
   await page
     .getByPlaceholder("Name, email, birthday, package, project, family, last4, order, session, wallet, token, certificate")
@@ -651,61 +748,35 @@ test("[package-service] validates preview/cancel/apply/idempotent and no Stripe 
   expect(env.stats.packageApplyWrites + env.stats.serviceApplyWrites).toBe(beforeCancelWrites);
   await page.locator("[data-super-admin-service-preview]").click();
   await page.locator("[data-super-admin-service-apply]").click();
-  await page.locator("[data-super-admin-service-apply]").click();
+  await expect.poll(() => env.stats.serviceApplyWrites).toBe(1);
+  await expect(page.locator("[data-admin-control-action-status]")).toContainText("Service controls applied");
+  await page.locator("[data-super-admin-package-field='reason']").fill("Fixture package update after service refresh");
   await page.locator("[data-super-admin-package-apply]").click();
-  expect(env.stats.serviceApplyWrites).toBeGreaterThanOrEqual(2);
-  expect(env.stats.packageApplyWrites).toBeGreaterThanOrEqual(1);
+  await expect.poll(() => env.stats.packageApplyWrites).toBeGreaterThanOrEqual(1);
+  expect(env.stats.kernelExecutions.filter((item) => item.action === "service_controls")).toHaveLength(1);
+  expect(env.stats.kernelExecutions.filter((item) => item.action === "package_change").length).toBeGreaterThanOrEqual(1);
   expect(env.stats.stripeMutations).toBe(0);
   expect(env.stats.blockchainOps).toBe(0);
 });
 
-test("[officer] validates officer permission templates/preview/apply/guardrails via browser API flow", async ({ page }) => {
+test("[officer] applies an exact job template through the visible CEO Team Access workflow", async ({ page }) => {
   const env = page.__env;
-  const preview = await page.evaluate(async () => {
-    const res = await fetch(`${window.location.origin}/admin/control-center/super-admin/officers/permissions/preview`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        officer_email: "jenn.wood@tomboflight.com",
-        role_assignments: ["finance_admin"],
-        grant_permissions: ["admin.audit.read"],
-      }),
-    });
-    return { status: res.status, body: await res.json() };
-  });
-  expect(preview.status).toBe(200);
-  expect(preview.body.proposed_after.permission_overrides).toContain("admin.audit.read");
-
-  const noReason = await page.evaluate(async () => {
-    const res = await fetch(`${window.location.origin}/admin/control-center/super-admin/officers/permissions/apply`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        officer_email: "jenn.wood@tomboflight.com",
-        role_assignments: ["finance_admin"],
-        grant_permissions: ["admin.audit.read"],
-      }),
-    });
-    return res.status;
-  });
-  expect(noReason).toBe(422);
-
-  const applied = await page.evaluate(async () => {
-    const res = await fetch(`${window.location.origin}/admin/control-center/super-admin/officers/permissions/apply`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        officer_email: "k.goffigan@tomboflight.com",
-        role_assignments: ["operations_admin"],
-        grant_permissions: ["admin.control.view"],
-        reason: "Fixture approval",
-      }),
-    });
-    return { status: res.status, body: await res.json() };
-  });
-  expect(applied.status).toBe(200);
-  expect(applied.body.audit_event_created).toBeTruthy();
-  expect(env.stats.officerApplyWrites).toBeGreaterThanOrEqual(1);
+  await page.locator("[data-super-admin-manage-team-access]").click();
+  await expect(page.locator("[data-admin-team-dialog]")).toBeVisible();
+  await expect(page.locator("[data-admin-team-ceo-identity]")).toHaveText("l.robinson@tomboflight.com");
+  await page.locator('[data-admin-team-field="officer_email"]').selectOption("k.goffigan@tomboflight.com");
+  await page.locator('[data-admin-team-field="role_template"]').selectOption("operations_admin");
+  await expect(page.locator("[data-admin-team-scope]")).toContainText("Chief Operating Officer");
+  await expect(page.locator("[data-admin-team-scope]")).toContainText("Build & Fulfillment");
+  await page.locator('[data-admin-team-field="reason"]').fill("COO operations responsibility confirmed");
+  await page.locator("[data-admin-team-preview-action]").click();
+  await expect(page.locator("[data-admin-team-preview]")).toContainText("exact job scope");
+  await page.locator("[data-admin-team-confirm]").check();
+  await page.locator("[data-admin-team-execute]").click();
+  await expect.poll(() => env.stats.kernelExecutions.length).toBe(1);
+  expect(env.stats.kernelExecutions[0].action).toBe("officer_permissions");
+  expect(env.stats.kernelExecutions[0].target.officer_email).toBe("k.goffigan@tomboflight.com");
+  expect(env.stats.kernelExecutions[0].parameters.role_assignments).toEqual(["operations_admin"]);
 
   const ceoReject = await page.evaluate(async () => {
     const res = await fetch(`${window.location.origin}/admin/control-center/super-admin/officers/permissions/preview`, {
@@ -721,8 +792,15 @@ test("[officer] validates officer permission templates/preview/apply/guardrails 
   expect(ceoReject).toBe(400);
 });
 
-test("[impersonation] validates read-only start, reason requirements, banner, escalation, stop, and nested rejection", async ({ page }) => {
+test("[impersonation] validates read-only start, reason requirements, banner, stop, and nested rejection", async ({ page }) => {
   const env = page.__env;
+  page.on("dialog", async (dialog) => {
+    if (dialog.type() === "prompt") {
+      await dialog.accept("Operator exited preview");
+      return;
+    }
+    await dialog.accept();
+  });
   await expect(page.locator("[data-admin-impersonation-start]")).toBeVisible();
   await page.locator("[data-admin-impersonation-start]").click();
   await expect(page.locator("[data-admin-control-action-status]")).toContainText("reason is required");
@@ -738,12 +816,8 @@ test("[impersonation] validates read-only start, reason requirements, banner, es
     return res.status;
   });
   expect(nested).toBe(400);
-  await page.locator("[data-admin-impersonation-enable-editing]").click();
-  await expect(page.locator("[data-admin-control-action-status]")).toContainText("reason is required");
-  await page.locator("[data-admin-impersonation-edit-reason]").fill("Escalated correction review");
-  await page.locator("[data-admin-impersonation-enable-editing]").click();
-  await expect(page.locator("[data-admin-impersonation-banner]")).toContainText("editing enabled");
+  await expect(page.locator("[data-admin-impersonation-enable-editing]")).toHaveCount(0);
   await page.locator("[data-admin-impersonation-stop]").click();
   await expect(page.locator("[data-admin-impersonation-banner]")).toBeHidden();
-  expect(env.stats.impersonationAuditEvents).toBeGreaterThanOrEqual(3);
+  expect(env.stats.impersonationAuditEvents).toBeGreaterThanOrEqual(2);
 });

@@ -6,6 +6,15 @@ from app.core.role_catalog import normalize_role_code
 
 CEO_MASTER_ADMIN_EMAIL = "l.robinson@tomboflight.com"
 
+# Job-scoped roles that the canonical CEO may assign to an active officer.
+# The CEO singleton is intentionally excluded from this collection.
+ASSIGNABLE_OFFICER_ROLE_CODES: tuple[str, ...] = (
+    "executive_tech_admin",
+    "operations_admin",
+    "finance_admin",
+    "marketing_admin",
+)
+
 PERMISSION_REGISTRY: dict[str, dict[str, str]] = {
     "admin.access": {"name": "Admin Workspace Access", "description": "Access shared admin workspace data."},
     "admin.control.view": {"name": "Admin Control View", "description": "View admin control center case data."},

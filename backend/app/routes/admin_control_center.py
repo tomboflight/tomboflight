@@ -54,6 +54,7 @@ from app.services.admin_control_service import (
     super_admin_repair_case_action,
     super_admin_list_users,
     super_admin_create_customer,
+    super_admin_preview_customer_create,
     super_admin_preview_account_lifecycle,
     super_admin_preview_officer_permissions,
     super_admin_preview_package_change,
@@ -668,6 +669,18 @@ def super_admin_create_user(
         )
     try:
         return super_admin_create_customer(payload=payload.model_dump(exclude_none=True), actor=current_user)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/super-admin/users/preview")
+def super_admin_preview_user_create(
+    payload: SuperAdminCustomerCreatePayload,
+    current_user: dict[str, Any] = Depends(require_super_admin),
+):
+    _assert_canonical_ceo(current_user)
+    try:
+        return super_admin_preview_customer_create(payload=payload.model_dump(exclude_none=True))
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 

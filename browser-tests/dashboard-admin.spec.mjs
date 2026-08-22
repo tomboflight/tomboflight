@@ -72,13 +72,6 @@ async function installDashboardRoutes(page, options = {}) {
   return state;
 }
 
-async function openAppearancePanel(page) {
-  const toggle = page.locator("[data-admin-appearance-toggle]");
-  await expect(toggle).toBeVisible();
-  await toggle.click();
-  await expect(page.locator("[data-admin-appearance-panel]")).toBeVisible();
-}
-
 async function seedInternalSession(page) {
   await page.addInitScript((user) => {
     localStorage.setItem("tol_access_token", "fixture-token");
@@ -92,66 +85,23 @@ async function seedTokenOnlySession(page) {
   });
 }
 
-test("[dashboard-theme] light/dark/high-contrast + larger text change computed styles and persist", async ({ page }, testInfo) => {
+test("[dashboard-theme] uses the standard readable light appearance while custom modes are disabled", async ({ page }) => {
   await seedInternalSession(page);
   await installDashboardRoutes(page);
+  await page.addInitScript(() => {
+    localStorage.setItem("tol_admin_appearance_default", JSON.stringify({ theme: "high-contrast", textScale: "large" }));
+  });
   await page.goto("/dashboard.html", { waitUntil: "networkidle" });
   await expect(page.locator("[data-admin-tools-panel]")).toBeVisible();
-
-  await openAppearancePanel(page);
-  const selectTheme = async (value) =>
-    page.locator(`[data-admin-appearance-theme-option="${value}"]`).click();
-  const largeText = page.locator("[data-admin-appearance-large-text]");
-
-  const readStyles = async () =>
-    page.evaluate(() => {
-      const bodyStyles = window.getComputedStyle(document.body);
-      const panel = document.querySelector("[data-admin-tools-panel]") || document.querySelector(".portal-core-panel");
-      const panelStyles = panel ? window.getComputedStyle(panel) : bodyStyles;
-      const title = document.querySelector(".portal-core-title") || document.body;
-      const titleStyles = window.getComputedStyle(title);
-      return {
-        bodyBg: bodyStyles.backgroundColor,
-        bodyFg: bodyStyles.color,
-        bodyFont: bodyStyles.fontSize,
-        panelBg: panelStyles.backgroundColor,
-        panelFg: panelStyles.color,
-        fontSize: titleStyles.fontSize,
-        lineHeight: titleStyles.lineHeight,
-        htmlTheme: document.documentElement.dataset.adminTheme || "",
-      };
-    });
-
-  await selectTheme("light");
-  await page.waitForTimeout(120);
-  const light = await readStyles();
-  await page.screenshot({ path: testInfo.outputPath("dashboard-light.png"), fullPage: true });
-
-  await selectTheme("dark");
-  await page.waitForTimeout(120);
-  const dark = await readStyles();
-  await page.screenshot({ path: testInfo.outputPath("dashboard-dark.png"), fullPage: true });
-
-  await selectTheme("high-contrast");
-  await page.waitForTimeout(120);
-  const highContrast = await readStyles();
-  await page.screenshot({ path: testInfo.outputPath("dashboard-high-contrast.png"), fullPage: true });
-
-  await largeText.check();
-  await page.waitForTimeout(120);
-  const largerText = await readStyles();
-  await page.screenshot({ path: testInfo.outputPath("dashboard-high-contrast-large.png"), fullPage: true });
-
-  expect(light.bodyBg).not.toBe(dark.bodyBg);
-  expect(light.panelBg).not.toBe(dark.panelBg);
-  expect(highContrast.htmlTheme).toBe("high-contrast");
-  expect(parseFloat(largerText.bodyFont)).toBeGreaterThan(parseFloat(highContrast.bodyFont));
-  expect(parseFloat(largerText.lineHeight) || 0).toBeGreaterThan(0);
-
-  await page.reload({ waitUntil: "networkidle" });
-  const persisted = await readStyles();
-  expect(persisted.htmlTheme).toBe("high-contrast");
-  expect(parseFloat(persisted.bodyFont)).toBeGreaterThan(parseFloat(light.bodyFont));
+  await expect(page.locator("[data-admin-appearance-toggle]")).toHaveCount(0);
+  await expect(page.locator("html")).toHaveAttribute("data-admin-theme", "light");
+  await expect(page.locator("html")).toHaveAttribute("data-admin-text-scale", "normal");
+  const styles = await page.locator("[data-admin-tools-panel]").evaluate((node) => {
+    const computed = getComputedStyle(node);
+    return { background: computed.backgroundColor, color: computed.color };
+  });
+  expect(styles.background).not.toBe("rgba(0, 0, 0, 0)");
+  expect(styles.color).not.toBe("rgba(0, 0, 0, 0)");
 });
 
 test("[dashboard-bootstrap] ceo role resolves tools and workspace nodes", async ({ page }) => {
@@ -193,7 +143,7 @@ test("[asset-versioning] dashboard and control center include cache-busting live
     nodes.map((node) => node.getAttribute("href") || ""),
   );
   expect(dashboardStyles.some((href) => href.includes("styles.css?v=20260713-livefix3"))).toBeTruthy();
-  expect(dashboardScripts.some((src) => src.includes("app.js?v=20260713-livefix3"))).toBeTruthy();
+  expect(dashboardScripts.some((src) => src.includes("app.js?v=20260821-phase9"))).toBeTruthy();
   expect(dashboardScripts.some((src) => src.includes("dashboard-admin.js?v=20260713-livefix3"))).toBeTruthy();
 
   await page.goto("/admin-control-center.html", { waitUntil: "domcontentloaded" });
@@ -203,7 +153,7 @@ test("[asset-versioning] dashboard and control center include cache-busting live
   const controlCenterStyles = await page.locator("link[rel='stylesheet']").evaluateAll((nodes) =>
     nodes.map((node) => node.getAttribute("href") || ""),
   );
-  expect(controlCenterStyles.some((href) => href.includes("styles.css?v=20260713-livefix3"))).toBeTruthy();
-  expect(controlCenterScripts.some((src) => src.includes("app.js?v=20260713-livefix3"))).toBeTruthy();
-  expect(controlCenterScripts.some((src) => src.includes("admin-control-center.js?v=20260713-livefix3"))).toBeTruthy();
+  expect(controlCenterStyles.some((href) => href.includes("styles.css?v=20260821-phase10"))).toBeTruthy();
+  expect(controlCenterScripts.some((src) => src.includes("app.js?v=20260821-phase10"))).toBeTruthy();
+  expect(controlCenterScripts.some((src) => src.includes("admin-control-center.js?v=20260821-phase10"))).toBeTruthy();
 });

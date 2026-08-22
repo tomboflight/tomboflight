@@ -2393,19 +2393,45 @@ class MasterAdminCompletionTests(unittest.TestCase):
             officers = admin_control_service.super_admin_list_officers()
             preview = admin_control_service.super_admin_preview_officer_permissions(
                 officer_email="jenn.wood@tomboflight.com",
-                role_assignments=["finance_admin"],
+                role_assignments=["operations_admin"],
                 grant_permissions=["admin.audit.read"],
             )
             applied = admin_control_service.super_admin_apply_officer_permissions(
                 officer_email="jenn.wood@tomboflight.com",
-                role_assignments=["finance_admin"],
+                role_assignments=["operations_admin"],
                 grant_permissions=["admin.audit.read"],
                 actor={"_id": ObjectId(), "email": "l.robinson@tomboflight.com", "role": "ceo_master_admin"},
             )
+            with self.assertRaisesRegex(ValueError, "job-scoped officer role"):
+                admin_control_service.super_admin_preview_officer_permissions(
+                    officer_email="jenn.wood@tomboflight.com",
+                    role_assignments=["ceo_master_admin"],
+                )
         self.assertTrue(officers["items"])
+        self.assertTrue(officers["ceo_identity"]["immutable"])
+        self.assertEqual(officers["ceo_identity"]["role_code"], "ceo_master_admin")
+        self.assertNotIn("ceo_master_admin", officers["role_templates"])
+        self.assertEqual(
+            officers["role_templates"]["finance_admin"]["allowed_queues"],
+            admin_control_service.FINANCE_QUEUE_ALLOWLIST,
+        )
+        self.assertEqual(
+            officers["role_templates"]["operations_admin"]["allowed_queues"],
+            admin_control_service.OPERATIONS_QUEUE_ALLOWLIST,
+        )
         self.assertIn("admin.audit.read", preview["proposed_after"]["permission_overrides"])
         self.assertIn("admin.audit.read", applied["after"]["permission_overrides"])
         self.assertTrue(db["user_permission_overrides"].documents)
+        updated_user = db["users"].find_one({"_id": jenn_id}) or {}
+        self.assertEqual(updated_user.get("access_tier"), "operations_admin")
+        self.assertEqual(updated_user.get("department_role"), "operations_admin")
+        self.assertEqual(updated_user.get("managed_role_code"), "operations_admin")
+        active_roles = sorted(
+            item.get("role_code")
+            for item in db["user_role_assignments"].documents
+            if item.get("status") == "active"
+        )
+        self.assertEqual(active_roles, ["operations_admin"])
 
     def test_rakim_read_only_acceptance_path_no_production_writes(self):
         actor_id = ObjectId()
