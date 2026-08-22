@@ -577,6 +577,23 @@ test("[keyboard] validates keyboard-only navigation reachability and no trap", a
   expect(activeElementTag.length).toBeGreaterThan(0);
 });
 
+test("[responsive] keeps the CEO command center compact and readable at 960px", async ({ page }) => {
+  await page.setViewportSize({ width: 960, height: 1000 });
+  await expect(page.locator("[data-admin-control-title]")).toContainText("CEO Master Administrator");
+  await expect(page.locator("[data-super-admin-create-account]")).toBeVisible();
+  await expect(page.locator("[data-super-admin-manage-team-access]")).toBeVisible();
+  await expect(page.locator("[data-admin-nav-group]")).toHaveCount(4);
+  await expect(page.locator('[data-admin-nav-group="workflow"]')).toHaveAttribute("open", "");
+  await expect(page.locator('[data-admin-nav-group="finance"]')).not.toHaveAttribute("open", "");
+  const overflow = await page.evaluate(() => ({
+    viewport: document.documentElement.clientWidth,
+    content: document.documentElement.scrollWidth,
+  }));
+  expect(overflow.content).toBeLessThanOrEqual(overflow.viewport + 1);
+  await expect(page.locator("[data-open-case]").first()).toBeVisible();
+  await expect(page.locator("[data-admin-case-workspace]")).toContainText("Identity");
+});
+
 test("[contrast] validates WCAG AA contrast thresholds for key selectors", async ({ page }) => {
   const failures = await page.evaluate(() => {
     function parseRgb(value) {
