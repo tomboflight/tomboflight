@@ -153,6 +153,7 @@ class SuperAdminUserStateActionPayload(BaseModel):
     action: str = Field(min_length=1)
     reason: str = Field(default="")
     confirmed: bool = False
+    archive_owned_records: bool = False
 
 
 class SuperAdminCustomerCreatePayload(BaseModel):
@@ -161,6 +162,11 @@ class SuperAdminCustomerCreatePayload(BaseModel):
     phone_number: str | None = None
     birthday: str | None = None
     mailing_address: str | None = None
+    package_code: str | None = None
+    project_name: str | None = None
+    package_grant_type: str | None = None
+    reason: str = Field(default="")
+    confirmed: bool = False
 
 
 class SuperAdminOwnershipTransferPayload(BaseModel):
@@ -655,6 +661,11 @@ def super_admin_create_user(
     current_user: dict[str, Any] = Depends(require_super_admin),
 ):
     _assert_canonical_ceo(current_user)
+    if payload.package_code and (not payload.confirmed or not payload.reason.strip()):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Reason and confirmation are required when creating an account with a package grant.",
+        )
     try:
         return super_admin_create_customer(payload=payload.model_dump(exclude_none=True), actor=current_user)
     except ValueError as exc:
@@ -691,6 +702,7 @@ def super_admin_user_status_action(
             user_id=user_id,
             action=payload.action,
             reason=payload.reason,
+            archive_owned_records=payload.archive_owned_records,
             actor=current_user,
         )
     except ValueError as exc:
@@ -705,7 +717,11 @@ def super_admin_user_status_action_preview(
 ):
     _assert_canonical_ceo(current_user)
     try:
-        return super_admin_preview_account_lifecycle(user_id=user_id, action=payload.action)
+        return super_admin_preview_account_lifecycle(
+            user_id=user_id,
+            action=payload.action,
+            archive_owned_records=payload.archive_owned_records,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 

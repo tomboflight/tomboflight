@@ -7,6 +7,7 @@ from app.core.admin_permission_registry import (
     CEO_MASTER_ADMIN_EMAIL,
     OFFICER_PROFILE_FIELDS,
     PERMISSION_REGISTRY,
+    RETIRED_OFFICER_PROFILE_FIELDS,
     ROLE_METADATA,
     ROLE_PERMISSION_MAP,
     normalized_officer_role_mapping,
@@ -217,6 +218,73 @@ def _sync_officer_assignments(db, now_iso: str) -> dict[str, Any]:
     }
 
 
+def _sync_retired_officers(db, now_iso: str) -> dict[str, Any]:
+    """Keep separated officer identities archived and fully deprivileged."""
+    users = db["users"]
+    assignments = db["user_role_assignments"]
+    overrides = db["user_permission_overrides"]
+    updated_users = 0
+    missing_users: list[str] = []
+    assignments_disabled = 0
+    overrides_disabled = 0
+
+    for email, profile in RETIRED_OFFICER_PROFILE_FIELDS.items():
+        user = users.find_one({"email": email})
+        if user is None:
+            missing_users.append(email)
+            continue
+
+        user_id = _normalize(user.get("_id"))
+        already_retired = (
+            _normalize(user.get("status")).lower() == "archived"
+            and user.get("login_enabled") is False
+            and _normalize(user.get("role")).lower() == "user"
+            and _normalize(user.get("account_type")).lower() == "former_business_admin"
+        )
+        session_version = int(user.get("session_token_version") or 0)
+        if not already_retired:
+            session_version += 1
+
+        update_payload = {
+            "email": email,
+            "full_name": profile.get("full_name") or user.get("full_name"),
+            "business_title": f"Former {profile.get('former_business_title') or 'Officer'}",
+            "role": "user",
+            "account_type": "former_business_admin",
+            "access_tier": "retired_officer",
+            "department_role": None,
+            "status": "archived",
+            "login_enabled": False,
+            "session_token_version": session_version,
+            "archived_at": user.get("archived_at") or now_iso,
+            "archived_by": user.get("archived_by") or "system.bootstrap.retired_officer",
+            "archive_reason": user.get("archive_reason") or profile.get("retirement_reason") or "Officer separation",
+            "updated_at": now_iso,
+        }
+        result = users.update_one({"_id": user["_id"]}, {"$set": update_payload})
+        updated_users += int(bool(result.modified_count))
+
+        if not user_id:
+            continue
+        assignment_result = assignments.update_many(
+            {"user_id": user_id, "status": {"$in": ["active", "enabled", ""]}},
+            {"$set": {"status": "inactive", "updated_at": now_iso}},
+        )
+        assignments_disabled += int(assignment_result.modified_count)
+        override_result = overrides.update_many(
+            {"user_id": user_id, "status": {"$in": ["active", "enabled", ""]}},
+            {"$set": {"status": "inactive", "updated_at": now_iso}},
+        )
+        overrides_disabled += int(override_result.modified_count)
+
+    return {
+        "updated_users": updated_users,
+        "missing_users": missing_users,
+        "assignments_disabled": assignments_disabled,
+        "overrides_disabled": overrides_disabled,
+    }
+
+
 def bootstrap_admin_access_controls() -> dict[str, Any]:
     db = get_database()
     if db is None:
@@ -227,10 +295,12 @@ def bootstrap_admin_access_controls() -> dict[str, Any]:
     permission_stats = _upsert_permission_documents(db, now_iso)
     role_permission_stats = _upsert_role_permission_documents(db, now_iso)
     officer_stats = _sync_officer_assignments(db, now_iso)
+    retired_officer_stats = _sync_retired_officers(db, now_iso)
 
     return {
         "roles": role_stats,
         "permissions": permission_stats,
         "role_permissions": role_permission_stats,
         "officers": officer_stats,
+        "retired_officers": retired_officer_stats,
     }

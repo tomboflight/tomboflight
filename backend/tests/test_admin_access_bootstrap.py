@@ -104,7 +104,7 @@ class AdminAccessBootstrapTests(unittest.TestCase):
         )
         self.assertNotIn("l.robinson@tomboflight", mapping)
         self.assertEqual(mapping["jenn.wood@tomboflight.com"], ["finance_admin"])
-        self.assertEqual(mapping["marquis.l.floyd@tomboflight.com"], ["marketing_admin"])
+        self.assertNotIn("marquis.l.floyd@tomboflight.com", mapping)
         self.assertEqual(mapping["k.goffigan@tomboflight.com"], ["operations_admin"])
 
     def test_bootstrap_updates_existing_users_without_duplicate_role_assignments(self):
@@ -114,7 +114,17 @@ class AdminAccessBootstrapTests(unittest.TestCase):
             {"_id": "u-marquis", "email": "marquis.l.floyd@tomboflight.com", "role": "admin"},
             {"_id": "u-keith", "email": "k.goffigan@tomboflight.com", "role": "admin"},
         ]
-        db = FakeDatabase({"users": deepcopy(users)})
+        db = FakeDatabase(
+            {
+                "users": deepcopy(users),
+                "user_role_assignments": [
+                    {"_id": "marquis-role", "user_id": "u-marquis", "role_code": "marketing_admin", "status": "active"},
+                ],
+                "user_permission_overrides": [
+                    {"_id": "marquis-override", "user_id": "u-marquis", "permission_code": "admin.analytics.read", "status": "active"},
+                ],
+            }
+        )
 
         with patch.object(admin_access_bootstrap_service, "get_database", return_value=db):
             first_result = admin_access_bootstrap_service.bootstrap_admin_access_controls()
@@ -155,8 +165,20 @@ class AdminAccessBootstrapTests(unittest.TestCase):
             if doc["user_id"] == "u-keith" and doc.get("status") == "active"
         ]
         self.assertEqual(jenn_roles, ["finance_admin"])
-        self.assertEqual(marquis_roles, ["marketing_admin"])
+        self.assertEqual(marquis_roles, [])
         self.assertEqual(keith_roles, ["operations_admin"])
+
+        marquis_user = db["users"].find_one({"_id": "u-marquis"})
+        self.assertEqual(marquis_user["status"], "archived")
+        self.assertEqual(marquis_user["role"], "user")
+        self.assertEqual(marquis_user["account_type"], "former_business_admin")
+        self.assertFalse(marquis_user["login_enabled"])
+        self.assertEqual(marquis_user["session_token_version"], 1)
+        self.assertEqual(
+            db["user_permission_overrides"].find_one({"_id": "marquis-override"})["status"],
+            "inactive",
+        )
+        self.assertGreaterEqual(first_result["retired_officers"]["assignments_disabled"], 1)
 
 
 if __name__ == "__main__":

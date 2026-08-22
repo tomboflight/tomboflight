@@ -250,14 +250,7 @@ class InternalValidationAccountCompletionScriptTests(unittest.TestCase):
         self.assertEqual(specs["jennifer_wood"].expected_package_code, "digital_legacy_portrait")
         self.assertEqual(specs["jennifer_wood"].expected_lane, "portrait")
 
-        self.assertEqual(specs["marquis_floyd"].user_id, "69c5c94d3bb71c27eee96ec7")
-        self.assertEqual(specs["marquis_floyd"].project_id, "69c5db693bb71c27eee96edc")
-        self.assertEqual(specs["marquis_floyd"].family_id, "69c5db693bb71c27eee96eda")
-        self.assertEqual(specs["marquis_floyd"].household_id, "69c5db693bb71c27eee96edb")
-        self.assertEqual(specs["marquis_floyd"].intake_submission_id, "69c5d95e3bb71c27eee96ed9")
-        self.assertEqual(specs["marquis_floyd"].email, "mlfloyd00@gmail.com")
-        self.assertEqual(specs["marquis_floyd"].expected_package_code, "digital_legacy_portrait")
-        self.assertEqual(specs["marquis_floyd"].expected_lane, "portrait")
+        self.assertNotIn("marquis_floyd", specs)
 
         self.assertEqual(specs["keith_goffigan"].user_id, "69c5c8493bb71c27eee96ec5")
         self.assertEqual(specs["keith_goffigan"].project_id, "69c5d6c43bb71c27eee96ed8")
@@ -376,9 +369,9 @@ class InternalValidationAccountCompletionScriptTests(unittest.TestCase):
 
     def test_intended_state_summary_lists_all_accounts(self):
         summary = script.build_intended_state_summary(script.account_specs())
-        self.assertEqual(len(summary), 4)
+        self.assertEqual(len(summary), 3)
         keys = {item["account_key"] for item in summary}
-        self.assertEqual(keys, {"jennifer_wood", "marquis_floyd", "keith_goffigan", "larry_robinson"})
+        self.assertEqual(keys, {"jennifer_wood", "keith_goffigan", "larry_robinson"})
 
 
 if __name__ == "__main__":

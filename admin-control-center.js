@@ -1666,6 +1666,7 @@
                   <button class="btn btn-secondary" type="button" data-super-admin-user-action="disable" data-super-admin-user-id="${escapeHtml(userId)}">Disable</button>
                   <button class="btn btn-secondary" type="button" data-super-admin-user-action="restore" data-super-admin-user-id="${escapeHtml(userId)}">Restore</button>
                   <button class="btn btn-secondary" type="button" data-super-admin-user-action="archive" data-super-admin-user-id="${escapeHtml(userId)}">Archive Account</button>
+                  <button class="btn btn-secondary" type="button" data-super-admin-user-action="archive" data-super-admin-user-id="${escapeHtml(userId)}" data-super-admin-archive-owned="true">Close Account &amp; Workspaces</button>
                   <button class="btn btn-secondary" type="button" data-super-admin-user-password-reset="${escapeHtml(userId)}">Trigger Password Reset</button>
                 </div>
               </article>
@@ -2408,18 +2409,50 @@
     const fullName = normalizeValue(window.prompt("Customer full name:") || "");
     const email = normalizeValue(window.prompt("Customer email:") || "");
     if (!fullName || !email) return;
-    const reason = promptExecutionReason(`Create customer account for ${email}`);
-    if (reason === null || !window.confirm(`Create customer account for ${email} through the Continuity Kernel?`)) return;
+    const packageChoices = (state.packageOptions || [])
+      .map(function (item) { return item.code; })
+      .filter(Boolean)
+      .join(", ");
+    const packageCode = normalizeValue(
+      window.prompt(
+        `Optional package code (leave blank for account only):${packageChoices ? `\n${packageChoices}` : ""}`,
+        "",
+      ) || "",
+    );
+    const projectName = packageCode
+      ? normalizeValue(window.prompt("Project name:", `${fullName} Legacy Build`) || "")
+      : "";
+    if (packageCode && !projectName) return;
+    const reason = promptExecutionReason(
+      packageCode ? `Create customer account and grant ${packageCode} to ${email}` : `Create customer account for ${email}`,
+    );
+    const confirmation = packageCode
+      ? `Create customer account for ${email} and grant ${packageCode}? This creates a project and entitlement but does not create a paid order or alter Stripe.`
+      : `Create customer account for ${email} through the Continuity Kernel?`;
+    if (reason === null || !window.confirm(confirmation)) return;
     try {
       const operation = await submitGovernedOperation(
         "customer_account_create",
         { customer_email: email },
-        { user_payload: { full_name: fullName, email } },
+        {
+          user_payload: {
+            full_name: fullName,
+            email,
+            package_code: packageCode || null,
+            project_name: projectName || null,
+            package_grant_type: packageCode ? "complimentary_package" : null,
+          },
+        },
         reason,
       );
       await Promise.allSettled([loadKernelStatus(), loadCases()]);
       setPageStatus(
-        kernelOperationMessage(operation, "Customer account created pending activation."),
+        kernelOperationMessage(
+          operation,
+          packageCode
+            ? "Customer account, project, and package entitlement created pending account activation."
+            : "Customer account created pending activation.",
+        ),
         kernelOperationStatusType(operation),
       );
     } catch (error) {
@@ -2477,19 +2510,23 @@
     }
   }
 
-  async function runSuperAdminUserStateAction(userId, action) {
+  async function runSuperAdminUserStateAction(userId, action, archiveOwnedRecords) {
     if (!state.isSuperAdmin) {
       setPageStatus("Super Admin access is required.", "error");
       return;
     }
-    const reason = promptExecutionReason(`${titleize(action)} this account`);
-    if (reason === null || !window.confirm(`Confirm ${action} for this account?`)) return;
+    const closeOwned = Boolean(archiveOwnedRecords && action === "archive");
+    const reason = promptExecutionReason(closeOwned ? "Close this account and archive its owned workspaces" : `${titleize(action)} this account`);
+    const confirmation = closeOwned
+      ? "Close this account and all owned workspaces? Login, roles, entitlements, memberships, and pending invites will be disabled. Orders, billing, uploads, certificates, delivery records, and audit history will be preserved."
+      : `Confirm ${action} for this account?`;
+    if (reason === null || !window.confirm(confirmation)) return;
     setPageStatus("Updating account status...", "info");
     try {
       const operation = await submitGovernedOperation(
         "account_lifecycle",
         { user_id: userId },
-        { lifecycle_action: action },
+        { lifecycle_action: action, archive_owned_records: closeOwned },
         reason,
       );
       await Promise.allSettled([loadKernelStatus(), loadCases()]);
@@ -2914,7 +2951,8 @@
       if (superAdminUserAction) {
         const action = superAdminUserAction.getAttribute("data-super-admin-user-action");
         const userId = superAdminUserAction.getAttribute("data-super-admin-user-id");
-        if (action && userId) runSuperAdminUserStateAction(userId, action);
+        const archiveOwnedRecords = superAdminUserAction.getAttribute("data-super-admin-archive-owned") === "true";
+        if (action && userId) runSuperAdminUserStateAction(userId, action, archiveOwnedRecords);
         return;
       }
 

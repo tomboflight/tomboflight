@@ -46,7 +46,6 @@ PERSONAL_ACCOUNTS: dict[str, dict[str, str]] = {
         "account_type": "prototype_customer",
         "prototype_key": "genesis_prototype",
     },
-    "mlfloyd00@gmail.com": {"full_name": "Marquis Floyd", "account_type": "customer"},
 }
 
 ADMIN_ACCOUNTS: dict[str, dict[str, str]] = {
@@ -67,12 +66,6 @@ ADMIN_ACCOUNTS: dict[str, dict[str, str]] = {
         "business_title": "CEO",
         "department_role": "executive_tech_admin",
         "access_tier": "super_admin",
-    },
-    "marquis.l.floyd@tomboflight.com": {
-        "full_name": "Marquis Floyd",
-        "business_title": "CMO",
-        "department_role": "marketing_admin",
-        "access_tier": "marketing_admin",
     },
 }
 
@@ -106,11 +99,6 @@ TARGET_PERSONAL_ACCOUNT_EXPERIENCE: dict[str, dict[str, str]] = {
         "package_code": "legacy_plus",
         "project_name": "Larry Robinson Legacy Plus",
         "wallet_address": "0x3333333333333333333333333333333333333333",
-    },
-    "mlfloyd00@gmail.com": {
-        "package_code": "digital_legacy_portrait",
-        "project_name": "Marquis Floyd Digital Legacy Portrait",
-        "wallet_address": "0x2222222222222222222222222222222222222222",
     },
 }
 

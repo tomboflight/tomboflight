@@ -182,7 +182,6 @@ ROLE_METADATA: dict[str, dict[str, str]] = {
 
 OFFICER_ROLE_MAPPING: dict[str, list[str]] = {
     "l.robinson@tomboflight.com": ["CEO_MASTER_ADMIN", "EXECUTIVE_TECH_ADMIN"],
-    "marquis.l.floyd@tomboflight.com": ["CMO_ADMIN"],
     "jenn.wood@tomboflight.com": ["CFO_ADMIN"],
     "k.goffigan@tomboflight.com": ["COO_ADMIN"],
 }
@@ -193,12 +192,6 @@ OFFICER_PROFILE_FIELDS: dict[str, dict[str, str]] = {
         "business_title": "CEO",
         "access_tier": "ceo_master_admin",
         "department_role": "executive_tech_admin",
-    },
-    "marquis.l.floyd@tomboflight.com": {
-        "full_name": "Marquis Floyd",
-        "business_title": "CMO",
-        "access_tier": "marketing_admin",
-        "department_role": "marketing_admin",
     },
     "jenn.wood@tomboflight.com": {
         "full_name": "Jennifer Wood",
@@ -211,6 +204,16 @@ OFFICER_PROFILE_FIELDS: dict[str, dict[str, str]] = {
         "business_title": "COO",
         "access_tier": "operations_admin",
         "department_role": "operations_admin",
+    },
+}
+
+# Former officers remain explicit so startup reconciliation fails closed instead
+# of accidentally restoring a separated administrator from an old database row.
+RETIRED_OFFICER_PROFILE_FIELDS: dict[str, dict[str, str]] = {
+    "marquis.l.floyd@tomboflight.com": {
+        "full_name": "Marquis Floyd",
+        "former_business_title": "CMO",
+        "retirement_reason": "Officer separation",
     },
 }
 
