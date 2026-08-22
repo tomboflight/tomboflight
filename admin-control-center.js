@@ -3275,6 +3275,8 @@
       return;
     }
     if (!window.confirm("Apply service controls through the Continuity Kernel while preserving Stripe purchase history?")) return;
+    const applyButton = document.querySelector("[data-super-admin-service-apply]");
+    setButtonEnabled(applyButton, false);
     setPageStatus("Applying service controls...", "info");
     try {
       const operation = await submitGovernedOperation(
@@ -3292,6 +3294,7 @@
       if (state.selectedCaseId) await loadCaseWorkspace(state.selectedCaseId);
       setPageStatus(kernelOperationMessage(operation, "Service controls applied."), kernelOperationStatusType(operation));
     } catch (error) {
+      setButtonEnabled(applyButton, true);
       setPageStatus(error.message || "Unable to apply service controls.", "error");
     }
   }
@@ -3309,6 +3312,8 @@
       return;
     }
     if (!window.confirm("Apply the package change through the Continuity Kernel and repair consistency across project/order/entitlements?")) return;
+    const applyButton = document.querySelector("[data-super-admin-package-apply]");
+    setButtonEnabled(applyButton, false);
     setPageStatus("Applying package change...", "info");
     try {
       const operation = await submitGovernedOperation(
@@ -3329,6 +3334,7 @@
         kernelOperationStatusType(operation),
       );
     } catch (error) {
+      setButtonEnabled(applyButton, true);
       setPageStatus(error.message || "Unable to apply package change.", "error");
     }
   }

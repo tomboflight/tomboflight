@@ -731,7 +731,6 @@ test("[package-service] validates preview/cancel/apply/idempotent and no Stripe 
   expect(env.stats.packageApplyWrites + env.stats.serviceApplyWrites).toBe(beforeCancelWrites);
   await page.locator("[data-super-admin-service-preview]").click();
   await page.locator("[data-super-admin-service-apply]").click();
-  await page.locator("[data-super-admin-service-apply]").click();
   await expect.poll(() => env.stats.serviceApplyWrites).toBe(1);
   await expect(page.locator("[data-admin-control-action-status]")).toContainText("Service controls applied");
   await page.locator("[data-super-admin-package-field='reason']").fill("Fixture package update after service refresh");

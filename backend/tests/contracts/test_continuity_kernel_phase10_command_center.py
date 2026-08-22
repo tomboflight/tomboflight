@@ -47,6 +47,7 @@ class TestContinuityKernelPhase10CommandCenter(unittest.TestCase):
         self.assertIn('"account_lifecycle"', self.javascript)
         self.assertIn("submitGovernedOperation(", self.javascript)
         self.assertIn('@router.post("/super-admin/users/preview")', self.routes)
+        self.assertGreaterEqual(self.javascript.count("setButtonEnabled(applyButton, false)"), 2)
 
     def test_04_ceo_owned_job_templates_cannot_assign_ceo_role(self) -> None:
         self.assertIn("TEAM_ACCESS_ROLE_TEMPLATES", self.service)
