@@ -90,45 +90,87 @@
                 </label>
 
                 <label>
-                  Generation
-                  <input
-                    type="number"
-                    name="generation"
-                    placeholder="Example: 1"
-                    min="0"
-                    required
-                  />
+                  Tree Placement
+                  <input type="text" value="Calculated automatically from relationships" disabled />
                 </label>
               </div>
 
               <div class="form-grid two-col">
                 <label>
-                  Father ID
-                  <input
-                    type="text"
+                  Parent / Guardian 1
+                  <select
                     name="father_id"
-                    placeholder="Optional existing member ID"
-                  />
+                  >
+                    <option value="">Select a family first</option>
+                  </select>
                 </label>
 
                 <label>
-                  Mother ID
-                  <input
-                    type="text"
-                    name="mother_id"
-                    placeholder="Optional existing member ID"
-                  />
+                  Parent / Guardian 1 Type
+                  <select name="father_relationship_type">
+                    <option value="parent_unspecified">Parent (type not specified)</option>
+                    <option value="biological_parent">Biological parent</option>
+                    <option value="gestational_parent">Gestational parent</option>
+                    <option value="donor_parent">Donor parent</option>
+                    <option value="intended_parent">Intended parent</option>
+                    <option value="adoptive_parent">Adoptive parent</option>
+                    <option value="foster_parent">Foster parent</option>
+                    <option value="step_parent">Step-parent</option>
+                    <option value="guardian">Guardian</option>
+                    <option value="chosen_parent">Chosen parent</option>
+                    <option value="community_parent">Community parent</option>
+                    <option value="spiritual_parent">Spiritual parent</option>
+                  </select>
                 </label>
               </div>
 
-              <label>
-                Spouse ID
-                <input
-                  type="text"
-                  name="spouse_id"
-                  placeholder="Optional existing member ID"
-                />
-              </label>
+              <div class="form-grid two-col">
+                <label>
+                  Parent / Guardian 2
+                  <select
+                    name="mother_id"
+                  >
+                    <option value="">Select a family first</option>
+                  </select>
+                </label>
+
+                <label>
+                  Parent / Guardian 2 Type
+                  <select name="mother_relationship_type">
+                    <option value="parent_unspecified">Parent (type not specified)</option>
+                    <option value="biological_parent">Biological parent</option>
+                    <option value="gestational_parent">Gestational parent</option>
+                    <option value="donor_parent">Donor parent</option>
+                    <option value="intended_parent">Intended parent</option>
+                    <option value="adoptive_parent">Adoptive parent</option>
+                    <option value="foster_parent">Foster parent</option>
+                    <option value="step_parent">Step-parent</option>
+                    <option value="guardian">Guardian</option>
+                    <option value="chosen_parent">Chosen parent</option>
+                    <option value="community_parent">Community parent</option>
+                    <option value="spiritual_parent">Spiritual parent</option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="form-grid two-col">
+                <label>
+                  Spouse / Partner
+                  <select name="spouse_id">
+                    <option value="">Select a family first</option>
+                  </select>
+                </label>
+                <label>
+                  Partnership Type
+                  <select name="partner_relationship_type">
+                    <option value="spouse">Spouse</option>
+                    <option value="domestic_partner">Domestic partner</option>
+                    <option value="co_parent">Co-parent</option>
+                    <option value="former_spouse">Former spouse</option>
+                    <option value="former_partner">Former partner</option>
+                  </select>
+                </label>
+              </div>
 
               <label>
                 Bio / Notes
@@ -138,6 +180,41 @@
                   placeholder="Optional family notes, short biography, or lineage context."
                 ></textarea>
               </label>
+
+              <label style="display: flex; gap: 0.65rem; align-items: flex-start">
+                <input type="checkbox" name="identity_matching_consent" style="margin-top: 0.2rem" />
+                <span>
+                  Allow Tomb of Light to look for a possible duplicate of this person
+                  in other consented family records. A match is never merged automatically.
+                </span>
+              </label>
+
+              <label style="display: flex; gap: 0.65rem; align-items: flex-start">
+                <input type="checkbox" name="account_required" style="margin-top: 0.2rem" />
+                <span>
+                  This person should have their own private Tomb of Light account.
+                  Their password and private files will remain separate.
+                </span>
+              </label>
+
+              <div class="form-grid two-col">
+                <label>
+                  Account Email
+                  <input
+                    type="email"
+                    name="invite_email"
+                    maxlength="320"
+                    placeholder="Required when an account is expected"
+                  />
+                </label>
+                <label>
+                  Family Workspace Role
+                  <select name="account_member_role">
+                    <option value="viewer">Viewer — can review shared records</option>
+                    <option value="contributor">Contributor — can add permitted materials</option>
+                  </select>
+                </label>
+              </div>
 
               <div
                 class="helper"
@@ -171,7 +248,7 @@
                 <div class="card-number">2</div>
                 <h3>Generation placement</h3>
                 <p class="card-copy">
-                  The generation field helps place the person inside the lineage structure.
+                  Relationships calculate the person’s generation automatically and reject conflicting placement.
                 </p>
               </div>
 
@@ -179,7 +256,7 @@
                 <div class="card-number">3</div>
                 <h3>Relationship readiness</h3>
                 <p class="card-copy">
-                  Parent and spouse IDs prepare the member for future relationship mapping.
+                  Guided parent, guardian, step, adoptive, chosen-family, and partner selections create the relationship map with the person.
                 </p>
               </div>
             </div>

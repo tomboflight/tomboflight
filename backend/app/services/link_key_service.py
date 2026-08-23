@@ -9,6 +9,7 @@ from bson import ObjectId
 
 from app.config import settings
 from app.core.package_catalog import get_package
+from app.core.role_catalog import normalize_project_member_role
 from app.database import get_database
 from app.services.audit_log_service import create_audit_log
 from app.services.entitlement_service import resolve_project_entitlements
@@ -22,6 +23,7 @@ ALLOWED_KEY_TYPES = {
     "branch_link_key",
     "viewer_share_key",
 }
+LINK_KEY_MANAGER_ROLES = frozenset({"billing_owner", "co_owner"})
 
 
 def _utcnow_iso() -> str:
@@ -329,6 +331,29 @@ def project_supports_link_keys(project_id: str) -> bool:
     return bool(package.get("can_use_link_keys", False))
 
 
+def project_supports_household_links(project_id: str) -> bool:
+    entitlement = _get_project_entitlement(project_id)
+    if entitlement:
+        try:
+            resolved = resolve_project_entitlements(
+                str(entitlement.get("package_code") or "").strip(),
+                list(entitlement.get("active_addons", [])),
+            )
+        except Exception:
+            resolved = entitlement.get("resolved_entitlements") or {}
+        if "can_link_households" in resolved:
+            return bool(resolved.get("can_link_households"))
+
+    paid_order = _get_paid_package_order(project_id)
+    package_code = str(
+        (paid_order or {}).get("package_code")
+        or (paid_order or {}).get("package_slug")
+        or ""
+    ).strip()
+    package = get_package(package_code) or {}
+    return bool(package.get("can_link_households", False))
+
+
 def user_can_access_project(
     project_id: str,
     user_id: str,
@@ -348,6 +373,30 @@ def user_can_access_project(
     if not project:
         return False
     return _project_has_access_signal(str(project.get("_id")), project)
+
+
+def user_can_manage_project(
+    project_id: str,
+    user_id: str,
+    user_email: str = "",
+) -> bool:
+    project = get_project_by_id(project_id)
+    if not project or not _project_has_access_signal(str(project.get("_id")), project):
+        return False
+    snapshot = get_project_access_snapshot(
+        project,
+        user_id=str(user_id or "").strip(),
+        email=str(user_email or "").strip().lower(),
+    )
+    if not snapshot.get("accessible"):
+        return False
+    role = normalize_project_member_role(
+        snapshot.get("member_role")
+        or (snapshot.get("membership") or {}).get("member_role")
+        or (snapshot.get("membership") or {}).get("role"),
+        default="viewer",
+    )
+    return role in LINK_KEY_MANAGER_ROLES
 
 
 def list_accessible_link_key_project_ids(
@@ -473,13 +522,18 @@ def list_link_keys_for_user(
     user_email: str = "",
     project_id: str | None = None,
     include_revoked: bool = True,
+    allow_admin: bool = False,
 ) -> list[dict[str, Any]]:
     if project_id:
-        if not user_can_access_project(project_id, user_id, user_email):
+        if not allow_admin and not user_can_manage_project(project_id, user_id, user_email):
             return []
         owned_project_ids = [str(project_id)]
     else:
-        owned_project_ids = list_accessible_link_key_project_ids(user_id, user_email)
+        owned_project_ids = [
+            candidate
+            for candidate in list_accessible_link_key_project_ids(user_id, user_email)
+            if allow_admin or user_can_manage_project(candidate, user_id, user_email)
+        ]
 
     if not owned_project_ids:
         return []
@@ -510,10 +564,12 @@ def generate_link_key(
     normalized_key_type = _normalize_value(key_type).lower() or "branch_link_key"
     if normalized_key_type not in ALLOWED_KEY_TYPES:
         raise ValueError("Invalid key type.")
-    if not allow_admin and not user_can_access_project(project_id, user_id, user_email):
+    if not allow_admin and not user_can_manage_project(project_id, user_id, user_email):
         raise PermissionError("Not authorized to generate a link key for this project.")
 
-    if not project_supports_link_keys(project_id):
+    if normalized_key_type == "branch_link_key" and not project_supports_household_links(project_id):
+        raise ValueError("This package does not include linked-household structure.")
+    if normalized_key_type != "branch_link_key" and not project_supports_link_keys(project_id):
         raise ValueError("This package does not include link capabilities.")
 
     project_summary = get_project_summary(project_id)
@@ -591,7 +647,7 @@ def revoke_link_key(
         return None
 
     project_id = str(document.get("project_id") or "")
-    if not allow_admin and not user_can_access_project(
+    if not allow_admin and not user_can_manage_project(
         project_id,
         actor_user_id,
         actor_user_email,

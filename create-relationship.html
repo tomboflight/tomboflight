@@ -61,32 +61,113 @@
                 Relationship Type
                 <select name="relationship_type" required>
                   <option value="">Select relationship type</option>
-                  <option value="spouse">spouse</option>
-                  <option value="parent_child">parent_child</option>
-                  <option value="sibling">sibling</option>
-                  <option value="guardian">guardian</option>
-                  <option value="adoptive_parent_child">adoptive_parent_child</option>
-                  <option value="step_parent_child">step_parent_child</option>
+                  <optgroup label="Source is parent or elder of target">
+                    <option value="parent_unspecified">Parent → child (type not specified)</option>
+                    <option value="biological_parent">Biological parent → child</option>
+                    <option value="gestational_parent">Gestational parent → child</option>
+                    <option value="donor_parent">Donor parent → child</option>
+                    <option value="intended_parent">Intended parent → child</option>
+                    <option value="adoptive_parent">Adoptive parent → child</option>
+                    <option value="foster_parent">Foster parent → child</option>
+                    <option value="step_parent">Step-parent → stepchild</option>
+                    <option value="guardian">Guardian → ward</option>
+                    <option value="chosen_parent">Chosen parent → child</option>
+                    <option value="community_parent">Community parent → child</option>
+                    <option value="spiritual_parent">Spiritual parent → child</option>
+                    <option value="grandparent">Grandparent → grandchild</option>
+                    <option value="aunt_uncle">Aunt/uncle → niece/nephew</option>
+                  </optgroup>
+                  <optgroup label="Partners and peers">
+                    <option value="spouse">Spouse</option>
+                    <option value="former_spouse">Former spouse</option>
+                    <option value="domestic_partner">Domestic partner</option>
+                    <option value="former_partner">Former partner</option>
+                    <option value="co_parent">Co-parent</option>
+                    <option value="sibling">Sibling</option>
+                    <option value="half_sibling">Half-sibling</option>
+                    <option value="step_sibling">Step-sibling</option>
+                    <option value="adoptive_sibling">Adoptive sibling</option>
+                    <option value="chosen_sibling">Chosen sibling</option>
+                    <option value="cousin">Cousin</option>
+                  </optgroup>
+                  <optgroup label="Narrative, cultural, and household">
+                    <option value="godparent">Godparent</option>
+                    <option value="mentor">Mentor</option>
+                    <option value="clan_elder">Clan/cultural elder</option>
+                    <option value="spiritual_elder">Spiritual elder</option>
+                    <option value="in_law">In-law</option>
+                    <option value="other_relative">Other relative</option>
+                    <option value="family_friend">Family friend</option>
+                    <option value="household_member">Household member</option>
+                  </optgroup>
                 </select>
               </label>
 
               <label>
-                Source Member ID
-                <input
-                  type="text"
+                Source Family Member
+                <select
                   name="source_member_id"
-                  placeholder="Example: 69b8c44898aa11f9a41fc1ca"
                   required
-                />
+                >
+                  <option value="">Select a family first</option>
+                </select>
               </label>
 
               <label>
-                Target Member ID
+                Target Family Member
+                <select
+                  name="target_member_id"
+                  required
+                >
+                  <option value="">Select a family first</option>
+                </select>
+              </label>
+
+              <div class="form-grid two-col">
+                <label>
+                  Truth Layer
+                  <select name="relationship_mode" required>
+                    <option value="narrative">Narrative / family-held</option>
+                    <option value="verified">Verified by approved records</option>
+                  </select>
+                </label>
+
+                <label>
+                  Privacy
+                  <select name="privacy_scope" required>
+                    <option value="household_private">Household private</option>
+                    <option value="private_to_owner">Owner only</option>
+                    <option value="private_to_owner_and_co_owner">Owner and co-owner</option>
+                    <option value="branch_shared">Branch shared</option>
+                    <option value="linked_family_shared">Linked-family shared</option>
+                    <option value="public_memorial">Public memorial</option>
+                    <option value="minor_protected">Minor protected</option>
+                  </select>
+                </label>
+              </div>
+
+              <label>
+                Approved Verification Evidence
+                <select
+                  name="evidence_record_ids"
+                  multiple
+                  size="5"
+                >
+                  <option value="">Select a family to load approved evidence</option>
+                </select>
+                <span class="helper">
+                  Required only for Verified. Choose one or more approved records;
+                  no database IDs need to be typed.
+                </span>
+              </label>
+
+              <label>
+                Family or Cultural Label
                 <input
                   type="text"
-                  name="target_member_id"
-                  placeholder="Example: 69b8c48b98aa11f9a41fc1cc"
-                  required
+                  name="relationship_label"
+                  maxlength="100"
+                  placeholder="Optional, for example Big Mama, clan elder, or chosen aunt"
                 />
               </label>
 
@@ -138,7 +219,9 @@
                 <div class="card-number">2</div>
                 <h3>Parent-child links</h3>
                 <p class="card-copy">
-                  Use <strong>parent_child</strong> when connecting a parent to a child.
+                  Choose the parent as the <strong>source</strong> and the child
+                  as the <strong>target</strong>. Step-parent → stepchild and
+                  every other parent type use the same clear direction.
                 </p>
               </div>
               <div>

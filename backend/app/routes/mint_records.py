@@ -27,7 +27,10 @@ from app.services.mint_record_service import (
     list_mint_records,
 )
 from app.services.public_manifest_service import get_public_manifest_by_token_id
-from app.services.workspace_access_service import resolve_workspace_context
+from app.services.workspace_access_service import (
+    require_workspace_member_role,
+    resolve_workspace_context,
+)
 
 router = APIRouter(tags=["Mint Records"])
 
@@ -80,6 +83,24 @@ def _project_for_request(current_user: dict[str, Any], project_id: str) -> dict[
             detail="Project not found.",
         )
     return project
+
+
+def _require_customer_mint_owner(
+    current_user: dict[str, Any],
+    project_id: str,
+) -> dict[str, Any]:
+    context = _project_context(current_user, project_id)
+    if context.get("is_admin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Internal administrators cannot create customer mint consent.",
+        )
+    require_workspace_member_role(
+        context,
+        allowed_roles=("billing_owner", "co_owner"),
+        detail="Only the billing owner or co-owner can approve public mint consent.",
+    )
+    return context
 
 
 
@@ -285,7 +306,7 @@ def approve_project_mint_record_customer(
     payload: CustomerMintApprovalPayload,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
-    _project_for_request(current_user, project_id)
+    _require_customer_mint_owner(current_user, project_id)
     _require_project_match(project_id, mint_record_id)
 
     try:
@@ -314,26 +335,15 @@ def approve_project_mint_record_customer_admin(
     payload: CustomerMintApprovalPayload,
     current_user: dict[str, Any] = Depends(require_permission("admin.control.mint")),
 ):
-    _project_for_request(current_user, project_id)
-    _require_project_match(project_id, mint_record_id)
-
-    try:
-        return approve_customer_mint_record(
-            mint_record_id,
-            approved_by_user_id=_current_user_id(current_user),
-            approved_by_email=_current_user_email(current_user),
-            notes=payload.notes or "Approved by internal admin override.",
-            wallet_address=payload.wallet_address,
-            approved_poster_opt_in=payload.approved_poster_opt_in,
-            public_title_opt_in=payload.public_title_opt_in,
-            public_title=payload.public_title,
-            public_title_kind=payload.public_title_kind,
-        )
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
-        ) from exc
+    del project_id, mint_record_id, payload, current_user
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=(
+            "Customer wallet and public-content consent cannot be fabricated "
+            "through an administrator override. The billing owner or co-owner "
+            "must approve it from their own authenticated account."
+        ),
+    )
 
 
 

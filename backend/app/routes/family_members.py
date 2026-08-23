@@ -1,18 +1,26 @@
-from typing import Any, Dict
+from typing import Any
 
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.core.metadata import apply_create_metadata, apply_update_metadata
 from app.database import get_database
-from app.dependencies.auth import enforce_limit, get_current_user, has_internal_admin_access
 from app.dependencies.auth import (
     enforce_limit,
     get_current_user,
     has_internal_admin_access,
 )
+from app.core.relationship_catalog import (
+    PARENT_RELATIONSHIP_TYPES,
+    PARTNER_RELATIONSHIP_TYPES,
+    normalize_relationship_type,
+)
+from app.schemas.family_member import FamilyMemberCreate, FamilyMemberUpdate
+from app.schemas.relationship import RelationshipCreate
 from app.services.audit_log_service import create_audit_log
+from app.services.family_placement_service import rebuild_family_placement
 from app.services.matching import generate_match_candidates_for_member
+from app.services.relationship_guardrails import RelationshipGuardrailService
 from app.services.workspace_access_service import (
     family_is_visible_to_user,
     list_accessible_families_for_user,
@@ -169,6 +177,7 @@ def _serialize_member(member: dict[str, Any]) -> dict[str, Any]:
         "last_name": member.get("last_name"),
         "birth_year": member.get("birth_year"),
         "generation": member.get("generation"),
+        "placement_status": member.get("placement_status") or "unplaced",
         "father_id": member.get("father_id"),
         "mother_id": member.get("mother_id"),
         "spouse_id": member.get("spouse_id"),
@@ -176,6 +185,12 @@ def _serialize_member(member: dict[str, Any]) -> dict[str, Any]:
         "created_at": member.get("created_at"),
         "is_verified": member.get("is_verified"),
         "verification_status": member.get("verification_status"),
+        "approved_photo_upload_id": member.get("approved_photo_upload_id"),
+        "pending_photo_upload_id": member.get("pending_photo_upload_id"),
+        "identity_matching_consent": bool(member.get("identity_matching_consent")),
+        "account_required": bool(member.get("account_required")),
+        "invite_email": member.get("invite_email"),
+        "account_member_role": member.get("account_member_role") or "viewer",
     }
 
 
@@ -227,14 +242,14 @@ def list_family_members_index(current_user: dict[str, Any] = Depends(get_current
 
 @router.post("")
 def create_family_member(
-    payload: Dict[str, Any],
+    payload: FamilyMemberCreate,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
     db = get_database()
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")
 
-    family_id = str(payload.get("family_id") or "").strip()
+    family_id = str(payload.family_id or "").strip()
     context = require_workspace_capability(
         current_user,
         family_id=family_id,
@@ -249,18 +264,109 @@ def create_family_member(
 
     user_id = _current_user_id(current_user)
 
-    payload = dict(payload)
-    payload["family_id"] = str(context["family"].get("_id"))
+    payload_data = payload.model_dump()
+    payload_data["family_id"] = str(context["family"].get("_id"))
+    relationship_mode = str(payload_data.pop("relationship_mode") or "narrative").strip().lower()
+    relationship_privacy_scope = str(
+        payload_data.pop("privacy_scope") or "household_private"
+    ).strip().lower()
+    father_relationship_type = normalize_relationship_type(
+        payload_data.pop("father_relationship_type")
+    )
+    mother_relationship_type = normalize_relationship_type(
+        payload_data.pop("mother_relationship_type")
+    )
+    partner_relationship_type = normalize_relationship_type(
+        payload_data.pop("partner_relationship_type")
+    )
+    if bool(payload_data.get("account_required")) and not str(
+        payload_data.get("invite_email") or ""
+    ).strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="An invite email is required when this person needs an account.",
+        )
+    if payload_data.get("generation") is not None or bool(
+        payload_data.get("generation_locked")
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Generation and placement locks are calculated from relationships "
+                "and cannot be supplied when creating a family member."
+            ),
+        )
+    if relationship_mode != "narrative":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Verified relationships require approved evidence and must be "
+                "created through the guided relationship workflow."
+            ),
+        )
+    if father_relationship_type not in PARENT_RELATIONSHIP_TYPES:
+        raise HTTPException(status_code=400, detail="Invalid father/parent relationship type.")
+    if mother_relationship_type not in PARENT_RELATIONSHIP_TYPES:
+        raise HTTPException(status_code=400, detail="Invalid mother/parent relationship type.")
+    if partner_relationship_type not in PARTNER_RELATIONSHIP_TYPES:
+        raise HTTPException(status_code=400, detail="Invalid spouse/partner relationship type.")
+    payload_data["generation"] = 0
+    payload_data["generation_locked"] = False
 
     current_member_count = db.family_members.count_documents(
-        {"family_id": {"$in": _family_id_candidates(payload["family_id"])}}
+        {"family_id": {"$in": _family_id_candidates(payload_data["family_id"])}}
     )
     enforce_limit("family_members", current_member_count + 1, context=context)
 
-    payload = apply_create_metadata(payload, user_id)
-    result = db.family_members.insert_one(payload)
+    payload_data = apply_create_metadata(payload_data, user_id)
+    result = db.family_members.insert_one(payload_data)
 
     member_id = str(result.inserted_id)
+    relationship_service = RelationshipGuardrailService(db)
+    created_relationship_ids: list[str] = []
+    requested_relationships = [
+        (payload_data.get("father_id"), father_relationship_type, "father/parent"),
+        (payload_data.get("mother_id"), mother_relationship_type, "mother/parent"),
+    ]
+    if payload_data.get("spouse_id"):
+        requested_relationships.append(
+            (payload_data.get("spouse_id"), partner_relationship_type, "spouse/partner")
+        )
+
+    try:
+        for related_member_id, relationship_type, label in requested_relationships:
+            related_id = str(related_member_id or "").strip()
+            if not related_id:
+                continue
+            source_member_id = (
+                member_id if relationship_type in PARTNER_RELATIONSHIP_TYPES else related_id
+            )
+            target_member_id = (
+                related_id if relationship_type in PARTNER_RELATIONSHIP_TYPES else member_id
+            )
+            created_relationship = relationship_service.create_relationship(
+                RelationshipCreate(
+                    family_id=payload_data["family_id"],
+                    source_member_id=source_member_id,
+                    target_member_id=target_member_id,
+                    relationship_type=relationship_type,
+                    relationship_mode="narrative",
+                    status_marker="narrative",
+                    privacy_scope=relationship_privacy_scope,
+                    relationship_label=label,
+                    created_by=user_id,
+                )
+            )
+            created_relationship_ids.append(str(created_relationship.get("_id") or ""))
+        if not requested_relationships or not created_relationship_ids:
+            rebuild_family_placement(db, payload_data["family_id"])
+    except Exception:
+        for relationship_id in created_relationship_ids:
+            if ObjectId.is_valid(relationship_id):
+                db.relationships.delete_one({"_id": ObjectId(relationship_id)})
+        db.family_members.delete_one({"_id": result.inserted_id})
+        rebuild_family_placement(db, payload_data["family_id"])
+        raise
 
     create_audit_log(
         action="family_member_created",
@@ -268,12 +374,17 @@ def create_family_member(
         entity_type="family_member",
         entity_id=member_id,
         details={
-            "family_id": payload["family_id"],
-            "payload_keys": list(payload.keys()),
+            "family_id": payload_data["family_id"],
+            "payload_keys": list(payload_data.keys()),
+            "relationship_ids": created_relationship_ids,
         },
     )
 
-    created_candidates = generate_match_candidates_for_member(member_id, user_id)
+    created_candidates = (
+        generate_match_candidates_for_member(member_id, user_id)
+        if bool(payload_data.get("identity_matching_consent"))
+        else []
+    )
 
     return {
         "message": "Family member created successfully.",
@@ -285,7 +396,7 @@ def create_family_member(
 @router.put("/{member_id}")
 def update_family_member(
     member_id: str,
-    payload: Dict[str, Any],
+    payload: FamilyMemberUpdate,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
     db = get_database()
@@ -305,22 +416,32 @@ def update_family_member(
     )
     existing = context["member"]
 
-    if "family_id" in payload:
-        incoming_family_id = str(payload.get("family_id") or "").strip()
-        existing_family_id = str(existing.get("family_id") or "").strip()
-
-        if incoming_family_id and incoming_family_id != existing_family_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="family_id cannot be changed through this endpoint.",
-            )
-
     user_id = _current_user_id(current_user)
-    payload = apply_update_metadata(dict(payload), user_id)
+    payload_data = payload.model_dump(exclude_unset=True)
+    if "generation" in payload_data or "generation_locked" in payload_data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Generation and placement locks are calculated from relationships "
+                "and cannot be edited directly."
+            ),
+        )
+    effective_account_required = bool(
+        payload_data.get("account_required", existing.get("account_required"))
+    )
+    effective_invite_email = str(
+        payload_data.get("invite_email", existing.get("invite_email")) or ""
+    ).strip()
+    if effective_account_required and not effective_invite_email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="An invite email is required when this person needs an account.",
+        )
+    payload_data = apply_update_metadata(payload_data, user_id)
 
     db.family_members.update_one(
         {"_id": ObjectId(member_id)},
-        {"$set": payload},
+        {"$set": payload_data},
     )
 
     create_audit_log(
@@ -328,10 +449,14 @@ def update_family_member(
         actor_user_id=user_id,
         entity_type="family_member",
         entity_id=member_id,
-        details={"updated_keys": list(payload.keys())},
+        details={"updated_keys": list(payload_data.keys())},
     )
 
-    created_candidates = generate_match_candidates_for_member(member_id, user_id)
+    created_candidates = (
+        generate_match_candidates_for_member(member_id, user_id)
+        if bool(payload_data.get("identity_matching_consent") or existing.get("identity_matching_consent"))
+        else []
+    )
 
     return {
         "message": "Family member updated successfully.",

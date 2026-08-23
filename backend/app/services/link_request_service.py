@@ -4,10 +4,13 @@ from datetime import UTC, datetime
 from typing import Any
 
 from bson import ObjectId
+from pymongo.errors import DuplicateKeyError
 
 from app.core.package_catalog import get_package
 from app.core.relationship_catalog import (
     LINKED_HOUSEHOLD_RELATIONSHIP_TYPE,
+    normalize_relationship_type,
+    relationship_generation_delta,
 )
 from app.database import get_database
 from app.schemas.link_request import LinkRequestCreate
@@ -18,8 +21,8 @@ from app.services.link_key_service import (
     get_key_doc_by_value,
     get_project_summary,
     list_accessible_link_key_project_ids,
-    project_supports_link_keys,
-    user_can_access_project,
+    project_supports_household_links as project_supports_link_keys,
+    user_can_manage_project as user_can_access_project,
 )
 
 
@@ -61,6 +64,14 @@ def _entitlements_collection():
 
 def _normalize_value(value: Any) -> str:
     return str(value or "").strip()
+
+
+def _active_project_pair_key(source_project_id: str, target_project_id: str) -> str:
+    return "::".join(sorted([source_project_id, target_project_id]))
+
+
+def _household_pair_key(source_household_id: str, target_household_id: str) -> str:
+    return "::".join(sorted([source_household_id, target_household_id]))
 
 
 def _project_id_candidates(project_id: str) -> list[Any]:
@@ -147,6 +158,117 @@ def _household_ids_for_project(project_id: str) -> set[str]:
                 household_ids.add(candidate)
 
     return household_ids
+
+
+def _resolve_single_household_id(project_id: str) -> str:
+    households = list(
+        _households_collection().find(
+            {"project_id": {"$in": _project_id_candidates(project_id)}}
+        )
+    )
+    if len(households) > 1:
+        raise ValueError(
+            "Workspace has multiple household records. Reconcile it before linking."
+        )
+    if len(households) == 1:
+        return _normalize_value(households[0].get("_id"))
+
+    summary = get_project_summary(project_id) or {}
+    household_id = _normalize_value(summary.get("household_id"))
+    if household_id:
+        query_value: Any = (
+            ObjectId(household_id) if ObjectId.is_valid(household_id) else household_id
+        )
+        household = _households_collection().find_one(
+            {"$or": [{"_id": query_value}, {"household_id": household_id}]}
+        )
+        if household:
+            return _normalize_value(household.get("_id") or household.get("household_id"))
+
+    raise ValueError(
+        "Workspace does not have one resolvable household record. Complete workspace setup before linking."
+    )
+
+
+def _member_for_project(project_id: str, member_id: str) -> dict[str, Any]:
+    normalized_member_id = _normalize_value(member_id)
+    if not ObjectId.is_valid(normalized_member_id):
+        raise ValueError("Selected household anchor member id is invalid.")
+    db = get_database()
+    member = db["family_members"].find_one({"_id": ObjectId(normalized_member_id)})
+    if not member:
+        raise ValueError("Selected household anchor member was not found.")
+
+    summary = get_project_summary(project_id) or {}
+    family_id = _normalize_value(summary.get("family_id"))
+    if not family_id:
+        family = db["families"].find_one(
+            {"project_id": {"$in": _project_id_candidates(project_id)}}
+        )
+        family_id = _normalize_value((family or {}).get("_id"))
+    if not family_id or _normalize_value(member.get("family_id")) != family_id:
+        raise ValueError("Selected anchor member does not belong to this workspace.")
+
+    placement_status = _normalize_value(member.get("placement_status")).lower()
+    if placement_status not in {"placed", "root"}:
+        raise ValueError(
+            "Selected anchor member is not placed in a validated generation yet."
+        )
+    try:
+        int(member.get("generation"))
+    except (TypeError, ValueError):
+        raise ValueError("Selected anchor member does not have a valid generation.")
+    return member
+
+
+def _assert_key_has_available_use(key_document: dict[str, Any], *, label: str) -> None:
+    max_uses = max(1, int(key_document.get("max_uses") or 1))
+    use_count = max(0, int(key_document.get("use_count") or 0))
+    if use_count >= max_uses:
+        raise ValueError(f"The {label} link key has reached its use limit.")
+
+
+def _reserve_key_use(key_document: dict[str, Any], *, label: str) -> None:
+    key_id = key_document.get("_id")
+    if key_id is None:
+        raise ValueError(f"The {label} link key is invalid.")
+    max_uses = max(1, int(key_document.get("max_uses") or 1))
+    now = _utcnow_iso()
+    result = get_database()["project_link_keys"].update_one(
+        {
+            "_id": key_id,
+            "status": "active",
+            "$or": [
+                {"use_count": {"$lt": max_uses}},
+                {"use_count": {"$exists": False}},
+            ],
+        },
+        {
+            "$inc": {"use_count": 1},
+            "$set": {"last_used_at": now, "updated_at": now},
+        },
+    )
+    modified_count = getattr(result, "modified_count", None)
+    if modified_count is None:
+        refreshed = get_database()["project_link_keys"].find_one({"_id": key_id}) or {}
+        modified_count = int(refreshed.get("use_count") or 0) - int(
+            key_document.get("use_count") or 0
+        )
+    if int(modified_count or 0) != 1:
+        raise ValueError(f"The {label} link key has reached its use limit.")
+
+
+def _release_key_use(key_document: dict[str, Any]) -> None:
+    key_id = key_document.get("_id")
+    if key_id is None:
+        return
+    get_database()["project_link_keys"].update_one(
+        {"_id": key_id, "use_count": {"$gt": 0}},
+        {
+            "$inc": {"use_count": -1},
+            "$set": {"updated_at": _utcnow_iso()},
+        },
+    )
 
 
 def _linked_household_component(seed_household_ids: set[str]) -> set[str]:
@@ -286,6 +408,15 @@ def create_link_request(
 ) -> dict:
     source_project_id = str(payload.source_project_id or "").strip()
     target_key = str(payload.target_key or "").strip()
+    source_anchor_member_id = _normalize_value(payload.source_anchor_member_id)
+    bridge_relationship_type = normalize_relationship_type(
+        payload.bridge_relationship_type
+    )
+    generation_delta = relationship_generation_delta(bridge_relationship_type)
+    if generation_delta is None:
+        raise ValueError(
+            "The selected relationship cannot align the linked household tree."
+        )
 
     if not user_can_access_project(
         source_project_id,
@@ -295,7 +426,7 @@ def create_link_request(
         raise PermissionError("Not authorized to create a link request for this project.")
 
     if not project_supports_link_keys(source_project_id):
-        raise ValueError("Your package does not include link capabilities.")
+        raise ValueError("Your package does not include linked-household structure.")
 
     source_project = get_project_summary(source_project_id)
     if not source_project:
@@ -306,6 +437,11 @@ def create_link_request(
         raise ValueError("Generate a link key for your workspace before requesting a link.")
     if _normalize_value(source_key_doc.get("key_type") or "branch_link_key") != "branch_link_key":
         raise ValueError("The active source key must be a branch link key.")
+    _assert_key_has_available_use(source_key_doc, label="requesting workspace")
+    source_anchor_member = _member_for_project(
+        source_project_id,
+        source_anchor_member_id,
+    )
 
     target_key_doc = get_key_doc_by_value(target_key)
     if target_key_doc is None:
@@ -322,6 +458,7 @@ def create_link_request(
         raise ValueError("Target link key was not found or is no longer active.")
     if _normalize_value(target_key_doc.get("key_type") or "branch_link_key") != "branch_link_key":
         raise ValueError("The target key must be a branch link key.")
+    _assert_key_has_available_use(target_key_doc, label="receiving workspace")
 
     target_project_id = str(target_key_doc.get("project_id") or "").strip()
     if not target_project_id:
@@ -331,13 +468,15 @@ def create_link_request(
         raise ValueError("You cannot link a project to itself.")
 
     if not project_supports_link_keys(target_project_id):
-        raise ValueError("The target workspace does not support link capabilities.")
+        raise ValueError("The target workspace does not support linked-household structure.")
 
     target_project = get_project_summary(target_project_id)
     if not target_project:
         raise ValueError("Target project not found.")
 
     _assert_household_branch_capacity(source_project_id, target_project_id)
+    source_household_id = _resolve_single_household_id(source_project_id)
+    target_household_id = _resolve_single_household_id(target_project_id)
 
     existing = _requests_collection().find_one(
         {
@@ -357,13 +496,32 @@ def create_link_request(
     if existing is not None:
         raise ValueError("A pending or approved link already exists between these workspaces.")
 
+    _requests_collection().create_index(
+        [("active_project_pair_key", 1)],
+        name="active_project_pair_key_1_unique",
+        unique=True,
+        sparse=True,
+    )
+
     data = {
         "source_project_id": source_project_id,
         "target_project_id": target_project_id,
-        "source_household_id": source_project.get("household_id"),
-        "target_household_id": target_project.get("household_id"),
-        "source_key": str(source_key_doc.get("key_value") or ""),
-        "target_key": str(target_key_doc.get("key_value") or ""),
+        "source_household_id": source_household_id,
+        "target_household_id": target_household_id,
+        "source_anchor_member_id": source_anchor_member_id,
+        "target_anchor_member_id": None,
+        "bridge_relationship_type": bridge_relationship_type,
+        "generation_delta": generation_delta,
+        "source_anchor_generation": int(source_anchor_member.get("generation")),
+        "target_generation_offset": None,
+        "alignment_status": "awaiting_target_anchor",
+        "active_project_pair_key": _active_project_pair_key(
+            source_project_id,
+            target_project_id,
+        ),
+        # Raw keys are never persisted; the hashes bind both sides of the handshake.
+        "source_key": "",
+        "target_key": "",
         "source_key_hash": _normalize_value(source_key_doc.get("key_hash")),
         "target_key_hash": _normalize_value(target_key_doc.get("key_hash")),
         "status": "pending",
@@ -386,7 +544,24 @@ def create_link_request(
         "updated_at": _utcnow_iso(),
     }
 
-    result = _requests_collection().insert_one(data)
+    source_reserved = False
+    target_reserved = False
+    try:
+        _reserve_key_use(source_key_doc, label="requesting workspace")
+        source_reserved = True
+        _reserve_key_use(target_key_doc, label="receiving workspace")
+        target_reserved = True
+        result = _requests_collection().insert_one(data)
+    except Exception as exc:
+        if target_reserved:
+            _release_key_use(target_key_doc)
+        if source_reserved:
+            _release_key_use(source_key_doc)
+        if isinstance(exc, DuplicateKeyError):
+            raise ValueError(
+                "A pending or approved link already exists between these workspaces."
+            ) from exc
+        raise
     data["_id"] = result.inserted_id
     try:
         create_audit_log(
@@ -475,6 +650,7 @@ def approve_link_request(
     approver_user_id: str,
     approver_user_email: str = "",
     approval_notes: str | None = None,
+    target_anchor_member_id: str | None = None,
     is_admin: bool = False,
 ) -> dict | None:
     object_id = _to_object_id(request_id)
@@ -501,21 +677,134 @@ def approve_link_request(
     if not source_project_id or not target_project_id:
         raise ValueError("Link request project references are invalid.")
     if not project_supports_link_keys(source_project_id):
-        raise ValueError("The requesting workspace no longer supports link capabilities.")
+        raise ValueError("The requesting workspace no longer supports linked-household structure.")
     if not project_supports_link_keys(target_project_id):
-        raise ValueError("The receiving workspace no longer supports link capabilities.")
+        raise ValueError("The receiving workspace no longer supports linked-household structure.")
 
     _assert_household_branch_capacity(source_project_id, target_project_id)
 
     _validate_active_handshake_keys(request)
 
     now = _utcnow_iso()
+    normalized_target_anchor_id = _normalize_value(target_anchor_member_id)
+    source_anchor_member_id = _normalize_value(request.get("source_anchor_member_id"))
+    legacy_unanchored = not source_anchor_member_id
+    if not normalized_target_anchor_id and not legacy_unanchored:
+        raise ValueError(
+            "Select the receiving household member who anchors this family connection."
+        )
+    if legacy_unanchored:
+        source_household_id = _normalize_value(request.get("source_household_id"))
+        target_household_id = _normalize_value(request.get("target_household_id"))
+        if not source_household_id or not target_household_id:
+            raise ValueError(
+                "Legacy link request has no resolvable household references."
+            )
+        bridge_relationship_type = LINKED_HOUSEHOLD_RELATIONSHIP_TYPE
+        generation_delta = None
+        source_generation = None
+        target_generation = None
+        target_generation_offset = None
+        alignment_status = "unplaced_legacy_link"
+    else:
+        source_anchor = _member_for_project(source_project_id, source_anchor_member_id)
+        target_anchor = _member_for_project(
+            target_project_id,
+            normalized_target_anchor_id,
+        )
+        bridge_relationship_type = normalize_relationship_type(
+            request.get("bridge_relationship_type")
+        )
+        generation_delta = relationship_generation_delta(bridge_relationship_type)
+        if generation_delta is None:
+            raise ValueError("The household bridge cannot determine generation placement.")
+
+        source_household_id = _resolve_single_household_id(source_project_id)
+        target_household_id = _resolve_single_household_id(target_project_id)
+        source_generation = int(source_anchor.get("generation"))
+        target_generation = int(target_anchor.get("generation"))
+        target_generation_offset = (
+            source_generation + generation_delta - target_generation
+        )
+        alignment_status = "aligned"
+    link_document = {
+        "source_household_id": source_household_id,
+        "target_household_id": target_household_id,
+        "source_project_id": source_project_id,
+        "target_project_id": target_project_id,
+        "source_anchor_member_id": source_anchor_member_id,
+        "target_anchor_member_id": normalized_target_anchor_id,
+        "bridge_relationship_type": bridge_relationship_type,
+        "generation_delta": generation_delta,
+        "source_anchor_generation": source_generation,
+        "target_anchor_generation": target_generation,
+        "target_generation_offset": target_generation_offset,
+        "alignment_status": alignment_status,
+        "relationship_type": LINKED_HOUSEHOLD_RELATIONSHIP_TYPE,
+        "link_status": "approved",
+        "link_request_id": str(object_id),
+        "source_key_hash": _normalize_value(request.get("source_key_hash")),
+        "target_key_hash": _normalize_value(request.get("target_key_hash")),
+        "household_pair_key": _household_pair_key(
+            source_household_id,
+            target_household_id,
+        ),
+        "updated_at": now,
+    }
+    _household_links_collection().create_index(
+        [("household_pair_key", 1)],
+        name="household_pair_key_1_unique",
+        unique=True,
+        sparse=True,
+    )
+    existing_link = _household_links_collection().find_one(
+        {
+            "$or": [
+                {
+                    "source_household_id": source_household_id,
+                    "target_household_id": target_household_id,
+                },
+                {
+                    "source_household_id": target_household_id,
+                    "target_household_id": source_household_id,
+                },
+            ]
+        }
+    )
+    # The durable household link is written before the request is marked approved,
+    # so a partial database failure never produces a false completed handshake.
+    if existing_link is None:
+        link_document["created_at"] = now
+        try:
+            _household_links_collection().insert_one(link_document)
+        except DuplicateKeyError:
+            raced_link = _household_links_collection().find_one(
+                {"household_pair_key": link_document["household_pair_key"]}
+            )
+            if raced_link is None:
+                raise
+            _household_links_collection().update_one(
+                {"_id": raced_link["_id"]},
+                {"$set": link_document},
+            )
+    else:
+        _household_links_collection().update_one(
+            {"_id": existing_link["_id"]},
+            {"$set": link_document},
+        )
+
     _requests_collection().update_one(
-        {"_id": object_id},
+        {"_id": object_id, "status": "pending"},
         {
             "$set": {
                 "status": "approved",
                 "handshake_state": "complete",
+                "source_household_id": source_household_id,
+                "target_household_id": target_household_id,
+                "target_anchor_member_id": normalized_target_anchor_id,
+                "generation_delta": generation_delta,
+                "target_generation_offset": target_generation_offset,
+                "alignment_status": alignment_status,
                 "target_handshake_at": now,
                 "target_handshake_by": approved_by,
                 "target_handshake_user_id": approver_user_id,
@@ -527,41 +816,6 @@ def approve_link_request(
             }
         },
     )
-
-    source_household_id = str(request.get("source_household_id") or "").strip()
-    target_household_id = str(request.get("target_household_id") or "").strip()
-
-    if source_household_id and target_household_id:
-        existing_link = _household_links_collection().find_one(
-            {
-                "$or": [
-                    {
-                        "source_household_id": source_household_id,
-                        "target_household_id": target_household_id,
-                    },
-                    {
-                        "source_household_id": target_household_id,
-                        "target_household_id": source_household_id,
-                    },
-                ]
-            }
-        )
-
-        if existing_link is None:
-            _household_links_collection().insert_one(
-                {
-                    "source_household_id": source_household_id,
-                    "target_household_id": target_household_id,
-                    # This non-ancestry relationship marker is intentionally excluded from lineage traversal.
-                    "relationship_type": LINKED_HOUSEHOLD_RELATIONSHIP_TYPE,
-                    "link_status": "approved",
-                    "linked_by_key": request.get("source_key"),
-                    "source_key": request.get("source_key"),
-                    "target_key": request.get("target_key"),
-                    "created_at": now,
-                    "updated_at": now,
-                }
-            )
 
     updated = _requests_collection().find_one({"_id": object_id})
     try:
@@ -620,6 +874,7 @@ def reject_link_request(
                 "rejected_by": rejected_by,
                 "rejected_at": now,
                 "rejection_notes": rejection_notes,
+                "active_project_pair_key": None,
                 "updated_at": now,
             }
         },
@@ -681,6 +936,7 @@ def revoke_link_request(
                 "revoked_by": revoked_by,
                 "revoked_at": now,
                 "revoke_notes": revoke_notes,
+                "active_project_pair_key": None,
                 "updated_at": now,
             }
         },
@@ -690,8 +946,7 @@ def revoke_link_request(
     target_household_id = str(request.get("target_household_id") or "").strip()
 
     if source_household_id and target_household_id:
-        _household_links_collection().delete_many(
-            {
+        link_query = {
                 "$or": [
                     {
                         "source_household_id": source_household_id,
@@ -703,7 +958,19 @@ def revoke_link_request(
                     },
                 ]
             }
-        )
+        for household_link in _household_links_collection().find(link_query):
+            _household_links_collection().update_one(
+                {"_id": household_link["_id"]},
+                {
+                "$set": {
+                    "link_status": "revoked",
+                    "revoked_at": now,
+                    "revoked_by": revoked_by,
+                    "revoke_notes": revoke_notes,
+                    "updated_at": now,
+                }
+                },
+            )
 
     updated = _requests_collection().find_one({"_id": object_id})
     try:

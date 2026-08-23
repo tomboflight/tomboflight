@@ -37,6 +37,7 @@ from app.routes.families import router as families_router
 from app.routes.family_graph import router as family_graph_router
 from app.routes.family_members import router as family_members_router
 from app.routes.family_networks import router as family_networks_router
+from app.routes.family_reunion import router as family_reunion_router
 from app.routes.graph_integrity import router as graph_integrity_router
 from app.routes.health import router as health_router
 from app.routes.household_links import router as household_links_router
@@ -278,6 +279,7 @@ app.include_router(family_members_router)
 app.include_router(lineage_nodes_router)
 app.include_router(tree_router)
 app.include_router(family_networks_router)
+app.include_router(family_reunion_router)
 app.include_router(households_router)
 app.include_router(household_links_router)
 app.include_router(relationships_router)

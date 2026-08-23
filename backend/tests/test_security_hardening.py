@@ -708,8 +708,8 @@ class LinkKeyHardeningTests(unittest.TestCase):
         db = FakeDatabase({"project_link_keys": []})
         with (
             patch.object(link_key_service, "get_database", return_value=db),
-            patch.object(link_key_service, "user_can_access_project", return_value=True),
-            patch.object(link_key_service, "project_supports_link_keys", return_value=True),
+            patch.object(link_key_service, "user_can_manage_project", return_value=True),
+            patch.object(link_key_service, "project_supports_household_links", return_value=True),
             patch.object(
                 link_key_service,
                 "get_project_summary",
@@ -800,3 +800,4 @@ class RootDisclosureTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

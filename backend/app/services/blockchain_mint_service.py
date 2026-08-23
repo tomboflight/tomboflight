@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Any
+from typing import Any, Callable
 
 from app.config import settings
 
@@ -290,6 +290,8 @@ def mint_anchor(
     metadata_uri: str,
     recipient_wallet: str | None,
     token_type: str,
+    on_transaction_prepared: Callable[[dict[str, Any]], None] | None = None,
+    on_transaction_broadcast: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     _require_mint_runtime()
 
@@ -324,10 +326,14 @@ def mint_anchor(
         token_type=token_type,
     )
 
+    try:
+        nonce = client.eth.get_transaction_count(signer.address, "pending")
+    except TypeError:
+        nonce = client.eth.get_transaction_count(signer.address)
     transaction = contract_function.build_transaction(
         {
             "from": signer.address,
-            "nonce": client.eth.get_transaction_count(signer.address),
+            "nonce": nonce,
             "chainId": int(client.eth.chain_id),
             **_gas_fields(client),
         }
@@ -341,8 +347,48 @@ def mint_anchor(
         transaction,
         private_key=_normalize(settings.nft_minter_private_key),
     )
-    tx_hash = client.eth.send_raw_transaction(signed.raw_transaction)
-    tx_hash_hex = _normalize_tx_hash(tx_hash.hex())
+    raw_transaction = getattr(signed, "raw_transaction", None) or getattr(
+        signed,
+        "rawTransaction",
+        None,
+    )
+    if raw_transaction is None:
+        raise RuntimeError("Signed mint transaction bytes are unavailable.")
+    signed_hash = getattr(signed, "hash", None)
+    if signed_hash is None:
+        signed_hash = client.keccak(raw_transaction)
+    tx_hash_hex = _normalize_tx_hash(
+        signed_hash.hex() if hasattr(signed_hash, "hex") else signed_hash
+    )
+    raw_transaction_hex = (
+        raw_transaction.hex()
+        if hasattr(raw_transaction, "hex")
+        else bytes(raw_transaction).hex()
+    )
+    if on_transaction_prepared is not None:
+        on_transaction_prepared(
+            {
+                "tx_hash": tx_hash_hex,
+                "nonce": int(nonce),
+                "signed_transaction": raw_transaction_hex,
+                "broadcast_state": "prepared",
+            }
+        )
+
+    tx_hash = client.eth.send_raw_transaction(raw_transaction)
+    broadcast_hash = _normalize_tx_hash(
+        tx_hash.hex() if hasattr(tx_hash, "hex") else tx_hash
+    )
+    if broadcast_hash and broadcast_hash != tx_hash_hex:
+        raise RuntimeError("Broadcast transaction hash did not match the signed transaction.")
+    if on_transaction_broadcast is not None:
+        on_transaction_broadcast(
+            {
+                "tx_hash": tx_hash_hex,
+                "nonce": int(nonce),
+                "broadcast_state": "submitted",
+            }
+        )
 
     receipt = None
     try:
@@ -365,6 +411,33 @@ def mint_anchor(
         "recipient_wallet": recipient,
         "block_number": int(receipt.blockNumber) if receipt is not None else None,
     }
+
+
+def rebroadcast_signed_transaction(raw_transaction_hex: str) -> str:
+    _require_mint_runtime()
+    normalized = _normalize(raw_transaction_hex)
+    if normalized.lower().startswith("0x"):
+        normalized = normalized[2:]
+    if not normalized:
+        raise ValueError("Signed transaction is required for rebroadcast.")
+    raw_transaction = bytes.fromhex(normalized)
+    client = _web3_client()
+    expected_hash = _normalize_tx_hash(client.keccak(raw_transaction).hex())
+    try:
+        result = client.eth.send_raw_transaction(raw_transaction)
+        returned_hash = _normalize_tx_hash(
+            result.hex() if hasattr(result, "hex") else result
+        )
+        if returned_hash and returned_hash != expected_hash:
+            raise RuntimeError("Rebroadcast transaction hash mismatch.")
+    except Exception as exc:
+        message = str(exc).lower()
+        if not any(
+            marker in message
+            for marker in ("already known", "known transaction", "nonce too low")
+        ):
+            raise
+    return expected_hash
 
 
 def sync_mint_receipt(tx_hash: str) -> dict[str, Any]:

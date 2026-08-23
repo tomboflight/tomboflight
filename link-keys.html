@@ -106,6 +106,8 @@
                 this key with the other person or branch you want to connect.
                 A link is only completed when both sides present active keys and
                 the receiving side accepts the handshake by choice.
+                A raw key is shown once. Copy it when generated; Tomb of Light
+                stores only its cryptographic hash.
               </div>
 
               <label>
@@ -160,6 +162,59 @@
               </div>
 
               <form class="form-grid" data-link-request-form novalidate>
+                <label>
+                  Your Connecting Family Member
+                  <select name="source_anchor_member_id" required>
+                    <option value="">Loading family members...</option>
+                  </select>
+                </label>
+
+                <label>
+                  Your Selected Member Is…
+                  <select name="bridge_relationship_type" required>
+                    <option value="identity_bridge">The same person as their selected member</option>
+                    <option value="parent_unspecified">Parent of their selected member (type not specified)</option>
+                    <option value="biological_parent">Biological parent of their selected member</option>
+                    <option value="gestational_parent">Gestational parent of their selected member</option>
+                    <option value="donor_parent">Donor parent of their selected member</option>
+                    <option value="intended_parent">Intended parent of their selected member</option>
+                    <option value="adoptive_parent">Adoptive parent of their selected member</option>
+                    <option value="foster_parent">Foster parent of their selected member</option>
+                    <option value="step_parent">Step-parent of their selected member</option>
+                    <option value="guardian">Guardian of their selected member</option>
+                    <option value="chosen_parent">Chosen parent of their selected member</option>
+                    <option value="community_parent">Community parent of their selected member</option>
+                    <option value="spiritual_parent">Spiritual parent of their selected member</option>
+                    <option value="spouse">Spouse of their selected member</option>
+                    <option value="domestic_partner">Domestic partner of their selected member</option>
+                    <option value="former_spouse">Former spouse of their selected member</option>
+                    <option value="former_partner">Former partner of their selected member</option>
+                    <option value="co_parent">Co-parent of their selected member</option>
+                    <option value="sibling">Sibling of their selected member</option>
+                    <option value="half_sibling">Half-sibling of their selected member</option>
+                    <option value="step_sibling">Step-sibling of their selected member</option>
+                    <option value="adoptive_sibling">Adoptive sibling of their selected member</option>
+                    <option value="chosen_sibling">Chosen sibling of their selected member</option>
+                    <option value="cousin">Cousin of their selected member</option>
+                    <option value="grandparent">Grandparent of their selected member</option>
+                    <option value="aunt_uncle">Aunt/uncle of their selected member</option>
+                    <option value="child">Child of their selected member (type not specified)</option>
+                    <option value="biological_child">Biological child of their selected member</option>
+                    <option value="gestational_child">Gestational child of their selected member</option>
+                    <option value="donor_conceived_child">Donor-conceived child of their selected member</option>
+                    <option value="intended_child">Intended child of their selected member</option>
+                    <option value="adopted_child">Adopted child of their selected member</option>
+                    <option value="foster_child">Foster child of their selected member</option>
+                    <option value="step_child">Stepchild of their selected member</option>
+                    <option value="ward">Ward of their selected member</option>
+                    <option value="chosen_child">Chosen child of their selected member</option>
+                    <option value="community_child">Community child of their selected member</option>
+                    <option value="spiritual_child">Spiritual child of their selected member</option>
+                    <option value="grandchild">Grandchild of their selected member</option>
+                    <option value="niece_nephew">Niece/nephew of their selected member</option>
+                  </select>
+                </label>
+
                 <label>
                   Target Link Key
                   <input

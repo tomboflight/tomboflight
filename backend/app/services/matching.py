@@ -34,6 +34,7 @@ def normalize_member(member: Dict[str, Any]) -> Dict[str, Any]:
         "last_name": last_name,
         "full_name": full_name,
         "birth_date": normalize_string(member.get("birth_date")),
+        "birth_year": normalize_string(member.get("birth_year")),
         "gender": normalize_string(member.get("gender")),
         "household_id": str(member.get("household_id")) if member.get("household_id") else "",
         "father_name": normalize_string(member.get("father_name")),
@@ -76,6 +77,9 @@ def score_match(member_a: Dict[str, Any], member_b: Dict[str, Any]) -> Tuple[flo
     if a["birth_date"] and b["birth_date"] and a["birth_date"] == b["birth_date"]:
         score += 0.20
         reasons.append("Exact matching birth date")
+    elif a["birth_year"] and b["birth_year"] and a["birth_year"] == b["birth_year"]:
+        score += 0.12
+        reasons.append("Matching birth year")
 
     if a["gender"] and b["gender"] and a["gender"] == b["gender"]:
         score += 0.05
@@ -186,12 +190,21 @@ def generate_match_candidates_for_member(member_id: str, actor_user_id: Optional
     current_member = db.family_members.find_one({"_id": ObjectId(member_id)})
     if not current_member:
         return []
+    if not bool(current_member.get("identity_matching_consent")):
+        return []
 
     created_candidate_ids: List[str] = []
 
-    others = db.family_members.find({"_id": {"$ne": ObjectId(member_id)}})
+    others = db.family_members.find(
+        {
+            "_id": {"$ne": ObjectId(member_id)},
+            "identity_matching_consent": True,
+        }
+    )
 
     for other in others:
+        if not _members_share_authorized_identity_scope(db, current_member, other):
+            continue
         score, reasons = score_match(current_member, other)
         if score >= MATCH_THRESHOLD:
             candidate_id = create_match_candidate(
@@ -205,3 +218,65 @@ def generate_match_candidates_for_member(member_id: str, actor_user_id: Optional
                 created_candidate_ids.append(candidate_id)
 
     return created_candidate_ids
+
+
+def _members_share_authorized_identity_scope(
+    db: Any,
+    member_a: Dict[str, Any],
+    member_b: Dict[str, Any],
+) -> bool:
+    family_a_id = str(member_a.get("family_id") or "").strip()
+    family_b_id = str(member_b.get("family_id") or "").strip()
+    if not family_a_id or not family_b_id:
+        return False
+    if family_a_id == family_b_id:
+        return True
+
+    def family_document(family_id: str) -> Dict[str, Any] | None:
+        if ObjectId.is_valid(family_id):
+            found = db.families.find_one({"_id": ObjectId(family_id)})
+            if found:
+                return found
+        return db.families.find_one({"family_id": family_id})
+
+    family_a = family_document(family_a_id) or {}
+    family_b = family_document(family_b_id) or {}
+
+    def household_id_for_family(family: Dict[str, Any]) -> str:
+        direct = str(family.get("household_id") or "").strip()
+        if direct:
+            return direct
+        project_id = str(family.get("project_id") or "").strip()
+        if not project_id:
+            return ""
+        candidates: List[Any] = [project_id]
+        if ObjectId.is_valid(project_id):
+            candidates.append(ObjectId(project_id))
+        household = db.households.find_one(
+            {"project_id": {"$in": candidates}}
+        )
+        return str((household or {}).get("_id") or "").strip()
+
+    household_a = household_id_for_family(family_a)
+    household_b = household_id_for_family(family_b)
+    if not household_a or not household_b:
+        return False
+
+    return (
+        db.household_links.find_one(
+            {
+                "link_status": "approved",
+                "$or": [
+                    {
+                        "source_household_id": household_a,
+                        "target_household_id": household_b,
+                    },
+                    {
+                        "source_household_id": household_b,
+                        "target_household_id": household_a,
+                    },
+                ],
+            }
+        )
+        is not None
+    )

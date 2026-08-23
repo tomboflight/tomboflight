@@ -10,10 +10,18 @@ from app.core.relationship_catalog import (
     ALLOWED_RELATIONSHIP_TYPES,
     ANCESTRY_RELATIONSHIP_TYPES,
     BIOLOGICAL_PARENT_RELATIONSHIP_TYPE,
+    PARENT_RELATIONSHIP_TYPES,
+    PARTNER_RELATIONSHIP_TYPES,
+    SIBLING_RELATIONSHIP_TYPES,
     SYMMETRIC_RELATIONSHIP_TYPES,
     normalize_relationship_type,
 )
 from app.schemas.relationship import RelationshipCreate
+from app.services.family_placement_service import (
+    FamilyPlacementError,
+    calculate_family_placement,
+    rebuild_family_placement,
+)
 
 MIN_PARENT_CHILD_AGE_GAP = 12
 logger = logging.getLogger(__name__)
@@ -62,6 +70,23 @@ class RelationshipGuardrailService:
                 ),
             )
         payload.relationship_type = normalized_relationship_type
+
+        if payload.relationship_mode == "verified":
+            if payload.status_marker != "verified":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Verified relationships must use the verified status marker.",
+                )
+            if not payload.evidence_record_ids:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Verified relationships require at least one approved evidence record.",
+                )
+        elif payload.status_marker == "verified":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="A verified marker cannot be used for a narrative relationship.",
+            )
 
         if payload.source_member_id == payload.target_member_id:
             raise HTTPException(
@@ -112,6 +137,8 @@ class RelationshipGuardrailService:
                 detail="Cross-family links are not allowed. Members belong to different families.",
             )
 
+        self._validate_evidence_records(payload)
+
         duplicate = self._find_duplicate(payload)
         if duplicate:
             raise HTTPException(
@@ -123,6 +150,22 @@ class RelationshipGuardrailService:
             self._validate_no_ancestry_cycle(payload)
 
         self._validate_relationship_rules(payload, source_member, target_member)
+        try:
+            calculate_family_placement(
+                self.db,
+                payload.family_id,
+                extra_relationship={
+                    "family_id": payload.family_id,
+                    "source_member_id": payload.source_member_id,
+                    "target_member_id": payload.target_member_id,
+                    "relationship_type": payload.relationship_type,
+                },
+            )
+        except FamilyPlacementError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=str(exc),
+            ) from exc
 
     def create_relationship(self, payload: RelationshipCreate) -> dict[str, Any]:
         self.ensure_indexes()
@@ -133,14 +176,54 @@ class RelationshipGuardrailService:
             "source_member_id": payload.source_member_id,
             "target_member_id": payload.target_member_id,
             "relationship_type": payload.relationship_type,
+            "relationship_mode": payload.relationship_mode,
+            "status_marker": payload.status_marker,
+            "privacy_scope": payload.privacy_scope,
+            "relationship_label": payload.relationship_label,
+            "evidence_record_ids": list(payload.evidence_record_ids),
+            "valid_from": payload.valid_from,
+            "valid_to": payload.valid_to,
             "notes": payload.notes,
             "created_by": payload.created_by,
             "created_at": datetime.now(timezone.utc),
         }
 
         result = self.relationships.insert_one(document)
+        rebuild_family_placement(self.db, payload.family_id)
         created = self.relationships.find_one({"_id": result.inserted_id})
         return normalize_mongo_doc(created)
+
+    def _validate_evidence_records(self, payload: RelationshipCreate) -> None:
+        if not payload.evidence_record_ids:
+            return
+
+        for evidence_id in payload.evidence_record_ids:
+            if not ObjectId.is_valid(evidence_id):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Relationship evidence contains an invalid record id.",
+                )
+            evidence = self.db["uploaded_files"].find_one({"_id": ObjectId(evidence_id)})
+            if not evidence:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Relationship evidence record was not found.",
+                )
+            if str(evidence.get("family_id") or "") != payload.family_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Relationship evidence belongs to a different family.",
+                )
+            if (
+                str(evidence.get("category") or "") != "verification_evidence"
+                or str(evidence.get("scan_status") or "").lower() != "clean"
+                or bool(evidence.get("quarantined"))
+                or str(evidence.get("verification_status") or "").lower() != "approved"
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Verified relationships require clean, approved verification evidence.",
+                )
 
     def _find_member(self, member_id: str):
         member = self.family_members.find_one({"_id": self._to_object_id_or_raw(member_id)})
@@ -238,8 +321,8 @@ class RelationshipGuardrailService:
 
         pair_relationships = self._get_pair_relationships(family_id, source_id, target_id)
 
-        if rel_type == "spouse":
-            forbidden = {"sibling"} | ANCESTRY_RELATIONSHIP_TYPES
+        if rel_type in PARTNER_RELATIONSHIP_TYPES:
+            forbidden = set(SIBLING_RELATIONSHIP_TYPES) | ANCESTRY_RELATIONSHIP_TYPES
             if any(r["relationship_type"] in forbidden for r in pair_relationships):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -249,8 +332,8 @@ class RelationshipGuardrailService:
                     ),
                 )
 
-        elif rel_type == "sibling":
-            forbidden = {"spouse"} | ANCESTRY_RELATIONSHIP_TYPES
+        elif rel_type in SIBLING_RELATIONSHIP_TYPES:
+            forbidden = set(PARTNER_RELATIONSHIP_TYPES) | ANCESTRY_RELATIONSHIP_TYPES
             if any(r["relationship_type"] in forbidden for r in pair_relationships):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -261,7 +344,7 @@ class RelationshipGuardrailService:
                 )
 
         elif rel_type in ANCESTRY_RELATIONSHIP_TYPES:
-            forbidden = {"spouse", "sibling"}
+            forbidden = set(PARTNER_RELATIONSHIP_TYPES) | set(SIBLING_RELATIONSHIP_TYPES)
             if any(r["relationship_type"] in forbidden for r in pair_relationships):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -298,7 +381,7 @@ class RelationshipGuardrailService:
         source_member: dict[str, Any],
         target_member: dict[str, Any],
     ) -> None:
-        if payload.relationship_type not in ANCESTRY_RELATIONSHIP_TYPES:
+        if payload.relationship_type not in PARENT_RELATIONSHIP_TYPES:
             return
 
         source_birth_date = self._extract_birth_date(source_member)
@@ -307,7 +390,7 @@ class RelationshipGuardrailService:
         if not source_birth_date or not target_birth_date:
             return
 
-        if source_birth_date >= target_birth_date:
+        if source_birth_date < target_birth_date:
             age_gap = self._calculate_year_gap(source_birth_date, target_birth_date)
             if age_gap < MIN_PARENT_CHILD_AGE_GAP:
                 raise HTTPException(
@@ -321,7 +404,7 @@ class RelationshipGuardrailService:
 
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid ancestry relationship. Parent/guardian cannot be younger than child.",
+            detail="Invalid ancestry relationship. Parent/guardian cannot be the same age as or younger than child.",
         )
 
     def _validate_reverse_ancestry_conflict(self, payload: RelationshipCreate) -> None:

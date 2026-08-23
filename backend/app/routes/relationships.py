@@ -10,6 +10,7 @@ from app.dependencies.auth import (
 )
 from app.schemas.relationship import RelationshipCreate, RelationshipResponse
 from app.services.relationship_guardrails import RelationshipGuardrailService
+from app.services.family_placement_service import rebuild_family_placement
 from app.services.workspace_access_service import (
     family_is_visible_to_user,
     require_workspace_capability,
@@ -153,6 +154,13 @@ async def create_relationship(
         source_member_id=payload.source_member_id,
         target_member_id=payload.target_member_id,
         relationship_type=payload.relationship_type,
+        relationship_mode=payload.relationship_mode,
+        status_marker=payload.status_marker,
+        privacy_scope=payload.privacy_scope,
+        relationship_label=payload.relationship_label,
+        evidence_record_ids=payload.evidence_record_ids,
+        valid_from=payload.valid_from,
+        valid_to=payload.valid_to,
         notes=payload.notes,
         created_by=created_by,
     )
@@ -177,6 +185,13 @@ async def create_relationship(
         source_member_id=created["source_member_id"],
         target_member_id=created["target_member_id"],
         relationship_type=normalize_relationship_type(created["relationship_type"]),
+        relationship_mode=created.get("relationship_mode") or "narrative",
+        status_marker=created.get("status_marker") or "narrative",
+        privacy_scope=created.get("privacy_scope") or "household_private",
+        relationship_label=created.get("relationship_label"),
+        evidence_record_ids=list(created.get("evidence_record_ids") or []),
+        valid_from=created.get("valid_from"),
+        valid_to=created.get("valid_to"),
         notes=created.get("notes"),
         created_by=created.get("created_by"),
         created_at=created["created_at"],
@@ -211,6 +226,13 @@ async def get_family_relationships(
                 "relationship_type": normalize_relationship_type(
                     rel.get("relationship_type")
                 ),
+                "relationship_mode": rel.get("relationship_mode") or "narrative",
+                "status_marker": rel.get("status_marker") or "narrative",
+                "privacy_scope": rel.get("privacy_scope") or "household_private",
+                "relationship_label": rel.get("relationship_label"),
+                "evidence_record_ids": list(rel.get("evidence_record_ids") or []),
+                "valid_from": rel.get("valid_from"),
+                "valid_to": rel.get("valid_to"),
                 "notes": rel.get("notes"),
                 "created_by": rel.get("created_by"),
                 "created_at": rel.get("created_at"),
@@ -258,6 +280,13 @@ async def get_member_relationships(
                 "relationship_type": normalize_relationship_type(
                     rel.get("relationship_type")
                 ),
+                "relationship_mode": rel.get("relationship_mode") or "narrative",
+                "status_marker": rel.get("status_marker") or "narrative",
+                "privacy_scope": rel.get("privacy_scope") or "household_private",
+                "relationship_label": rel.get("relationship_label"),
+                "evidence_record_ids": list(rel.get("evidence_record_ids") or []),
+                "valid_from": rel.get("valid_from"),
+                "valid_to": rel.get("valid_to"),
                 "notes": rel.get("notes"),
                 "created_by": rel.get("created_by"),
                 "created_at": rel.get("created_at"),
@@ -287,6 +316,10 @@ async def delete_relationship(
     )
 
     db["relationships"].delete_one({"_id": ObjectId(relationship_id)})
+    rebuild_family_placement(
+        db,
+        str(relationship.get("family_id") or "").strip(),
+    )
 
     deleted_by = (
         current_user.get("email")
