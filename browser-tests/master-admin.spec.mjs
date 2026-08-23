@@ -238,8 +238,8 @@ async function installApiRoutes(page, env) {
     }
     if (method === "GET" && path === "/admin/control-center/kernel/status") {
       return json({
-        runtime_version: "10.1.0",
-        action_count: 36,
+        runtime_version: "12.0.0",
+        action_count: 38,
         execution_enabled: true,
         one_step_execution_allowed: true,
       });
@@ -292,7 +292,28 @@ async function installApiRoutes(page, env) {
                 },
               },
             }
-          : { applied: true },
+          : body.action === "orphan_identity_reconciliation"
+            ? {
+                applied: true,
+                governed_deletion_observed: false,
+                reconciliation_receipt: {
+                  reconciliation_id: "orphanrec-browser-fixture",
+                  resolved_user_id: body.parameters.known_user_id || "former-user-fixture",
+                  records_closed: {
+                    role_assignments: 1,
+                    permission_overrides: 1,
+                    project_memberships: 0,
+                  },
+                  records_preserved: [
+                    "orders",
+                    "billing_history",
+                    "corporate_ownership_records",
+                    "audit_logs",
+                    "continuity_evidence",
+                  ],
+                },
+              }
+            : { applied: true },
       };
       if (body.action === "account_permanent_delete") env.state.lastDeletionOperation = operation;
       return json(operation);
@@ -367,6 +388,40 @@ async function installApiRoutes(page, env) {
         warnings: ["Permanent deletion cannot be undone or restored."],
         confirmation_phrase: "PERMANENTLY DELETE",
         irreversible: true,
+      });
+    }
+    if (
+      method === "POST" &&
+      path === "/admin/control-center/super-admin/orphan-identity/reconciliation/preview"
+    ) {
+      const body = JSON.parse(request.postData() || "{}");
+      return json({
+        action: "orphan_identity_reconciliation",
+        identity_email: body.identity_email,
+        identity_document_present: false,
+        governed_deletion_observed: false,
+        resolved_user_id: body.known_user_id || "former-user-fixture",
+        ownership_dependencies: { projects: 0, families: 0, households: 0 },
+        direct_access_dependencies: {
+          role_assignments: 1,
+          permission_overrides: 1,
+          project_memberships: 0,
+        },
+        external_service_impact: {
+          stripe_subscriptions_cancelled_immediately: 0,
+        },
+        records_preserved: [
+          "orders",
+          "billing_history",
+          "corporate_ownership_records",
+          "audit_logs",
+          "continuity_evidence",
+        ],
+        warnings: [
+          "The original removal was not observed by the governed deletion workflow.",
+        ],
+        confirmation_phrase: "RECONCILE MANUAL REMOVAL",
+        blocked: false,
       });
     }
     if (method === "GET" && path === "/admin/control-center/cases") {
@@ -642,6 +697,39 @@ test("[permanent deletion] requires two confirmations and returns MongoDB eviden
   await expect(page.locator("[data-admin-deletion-receipt-close-audit]")).toBeVisible();
   await page.locator("[data-admin-deletion-receipt-close-audit]").click();
   await expect(page.locator("[data-admin-deletion-receipt]")).toContainText("Audit Closed");
+});
+
+test("[manual removal] previews and records a truthful post-hoc reconciliation through the Kernel", async ({ page }) => {
+  const env = page.__env;
+  await expect(page.locator("[data-super-admin-reconcile-orphan]")).toBeVisible();
+  await page.locator("[data-super-admin-reconcile-orphan]").click();
+
+  const dialog = page.locator("[data-admin-orphan-reconciliation-dialog]");
+  await expect(dialog).toBeVisible();
+  await page.locator('[data-admin-orphan-field="identity_email"]').fill("former.officer@tomboflight.test");
+  await page.locator('[data-admin-orphan-field="known_user_id"]').fill("former-user-fixture");
+  await page.locator('[data-admin-orphan-field="reason_category"]').selectOption("manual_database_removal");
+  await page.locator("[data-admin-orphan-preview-action]").click();
+
+  await expect(page.locator("[data-admin-orphan-preview]")).toContainText("Governed deletion observed");
+  await expect(page.locator("[data-admin-orphan-preview]")).toContainText("No");
+  await expect(page.locator("[data-admin-orphan-preview]")).toContainText("Role Assignments: 1");
+
+  await page.locator('[data-admin-orphan-field="reason"]').fill("Reconcile the prior CEO-authorized manual database removal");
+  await page.locator('[data-admin-orphan-field="confirmation_phrase"]').fill("RECONCILE MANUAL REMOVAL");
+  await page.locator("[data-admin-orphan-confirm]").check();
+  await expect(page.locator("[data-admin-orphan-execute]")).toBeEnabled();
+
+  page.once("dialog", (confirmation) => confirmation.accept());
+  await page.locator("[data-admin-orphan-execute]").click();
+
+  await expect.poll(() => env.stats.kernelExecutions.length).toBe(1);
+  expect(env.stats.kernelExecutions[0].action).toBe("orphan_identity_reconciliation");
+  expect(env.stats.kernelExecutions[0].target.identity_email).toBe("former.officer@tomboflight.test");
+  expect(env.stats.kernelExecutions[0].parameters.final_confirmation).toBe("RECONCILE MANUAL REMOVAL");
+  expect(env.stats.kernelExecutions[0].parameters.final_acknowledgement).toBe(true);
+  await expect(page.locator("[data-admin-orphan-preview]")).toContainText("orphanrec-browser-fixture");
+  await expect(page.locator("[data-admin-orphan-preview]")).toContainText("does not claim the original deletion was Kernel-governed");
 });
 
 test("[theme] ignores stored admin appearance while disabled", async ({ page }) => {

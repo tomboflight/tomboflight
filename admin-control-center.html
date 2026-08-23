@@ -72,6 +72,9 @@
               <button class="btn btn-secondary" type="button" data-super-admin-manage-team-access hidden>
                 Team Access
               </button>
+              <button class="btn btn-secondary" type="button" data-super-admin-reconcile-orphan hidden>
+                Reconcile Manual Removal
+              </button>
             </div>
             <div class="helper" data-admin-control-action-status aria-live="polite"></div>
             <div class="admin-warning-strip" data-admin-kernel-status aria-live="polite">
@@ -264,8 +267,8 @@
               Show System Diagnostics
             </button>
             <div class="admin-diagnostics-panel" data-admin-diagnostics-panel hidden>
-              <h3>System Diagnostics — read-only</h3>
-              <p class="card-copy">This section displays system and release metadata only. Your CEO Master Administrator controls remain fully operational.</p>
+              <h3>System Diagnostics</h3>
+              <p class="card-copy">Protected production-readiness controls and release metadata are shown here. Any degraded requirement is listed explicitly.</p>
               <dl class="admin-diagnostics-grid" data-admin-diagnostics-output></dl>
             </div>
           </section>
@@ -438,6 +441,62 @@
             </div>
           </dialog>
 
+          <dialog class="admin-workflow-dialog" data-admin-orphan-reconciliation-dialog aria-labelledby="admin-orphan-reconciliation-title">
+            <form class="admin-workflow-form" data-admin-orphan-reconciliation-form novalidate>
+              <header class="admin-workflow-header">
+                <div>
+                  <span class="eyebrow">Continuity Kernel · Post-hoc Evidence</span>
+                  <h2 id="admin-orphan-reconciliation-title">Reconcile a manually removed identity</h2>
+                  <p>Use only when the user document was already deleted outside the governed workflow. This records that fact and closes orphaned access without fabricating deletion history.</p>
+                </div>
+                <button class="admin-dialog-close" type="button" data-admin-dialog-close="orphan-reconciliation" aria-label="Close manual-removal reconciliation dialog">×</button>
+              </header>
+
+              <div class="admin-workflow-grid">
+                <label class="admin-form-field admin-form-field--wide">
+                  <span>Removed identity email</span>
+                  <input type="email" autocomplete="off" spellcheck="false" required data-admin-orphan-field="identity_email" />
+                </label>
+                <label class="admin-form-field">
+                  <span>Known former user ID (optional)</span>
+                  <input type="text" autocomplete="off" spellcheck="false" data-admin-orphan-field="known_user_id" />
+                </label>
+                <label class="admin-form-field">
+                  <span>Reconciliation category</span>
+                  <select required data-admin-orphan-field="reason_category">
+                    <option value="">Select category</option>
+                    <option value="manual_database_removal">Manual database removal</option>
+                    <option value="security_cleanup">Security cleanup</option>
+                    <option value="company_authorized">CEO-authorized company decision</option>
+                  </select>
+                </label>
+                <label class="admin-form-field admin-form-field--wide">
+                  <span>Operational reason</span>
+                  <textarea rows="3" minlength="3" required data-admin-orphan-field="reason" placeholder="Explain when and why the identity was removed outside the Kernel"></textarea>
+                </label>
+                <label class="admin-form-field admin-form-field--wide">
+                  <span>Type RECONCILE MANUAL REMOVAL</span>
+                  <input type="text" autocomplete="off" spellcheck="false" data-admin-orphan-field="confirmation_phrase" />
+                </label>
+              </div>
+
+              <section class="admin-execution-preview" data-admin-orphan-preview aria-live="polite">
+                <h3>Post-hoc reconciliation preview</h3>
+                <p>Enter the removed identity and choose Preview. No business record is changed by previewing.</p>
+              </section>
+
+              <label class="admin-confirmation-check admin-confirmation-check--danger">
+                <input type="checkbox" data-admin-orphan-confirm />
+                <span>I confirm the user document is already absent, the manual removal was not governed, and linked access should be permanently closed while required evidence remains preserved.</span>
+              </label>
+              <div class="admin-workflow-actions">
+                <button class="btn btn-secondary" type="button" data-admin-dialog-close="orphan-reconciliation">Cancel</button>
+                <button class="btn btn-secondary" type="button" data-admin-orphan-preview-action>Preview Reconciliation</button>
+                <button class="btn btn-danger" type="submit" data-admin-orphan-execute disabled>Execute Reconciliation</button>
+              </div>
+            </form>
+          </dialog>
+
           <dialog class="admin-workflow-dialog admin-workflow-dialog--wide" data-admin-team-dialog aria-labelledby="admin-team-title">
             <form class="admin-workflow-form" data-admin-team-form novalidate>
               <header class="admin-workflow-header">
@@ -493,6 +552,6 @@
     <script src="config.js?v=20260329-1"></script>
     <script src="app.js?v=20260821-phase10-1"></script>
     <script src="auth.js?v=20260727-masterops1"></script>
-    <script src="admin-control-center.js?v=20260821-phase10-1"></script>
+    <script src="admin-control-center.js?v=20260823-phase12"></script>
   </body>
 </html>

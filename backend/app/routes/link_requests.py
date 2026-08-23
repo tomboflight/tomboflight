@@ -57,7 +57,7 @@ def _is_admin(user: dict[str, Any]) -> bool:
 
 @router.get("/", response_model=list[LinkRequestResponse])
 def get_link_requests(
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.view")),
 ):
     requests = list_link_requests()
     return [build_link_request_response(item) for item in requests]

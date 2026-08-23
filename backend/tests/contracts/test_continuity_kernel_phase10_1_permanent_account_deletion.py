@@ -49,7 +49,7 @@ class TestContinuityKernelPhase101PermanentAccountDeletion(unittest.TestCase):
         self.assertIn("Permanent account deletion is blocked for this identity", self.service)
 
     def test_04_kernel_registers_irreversible_execution_and_evidence_only_rollback(self) -> None:
-        self.assertIn('RUNTIME_VERSION = "11.0.0"', self.runtime)
+        self.assertIn('RUNTIME_VERSION = "12.0.0"', self.runtime)
         self.assertIn('"account_permanent_delete": ActionSpec(', self.runtime)
         self.assertIn('"strategy": "irreversible_identity_erasure"', self.runtime)
         self.assertIn('"restoration_prohibited": True', self.runtime)

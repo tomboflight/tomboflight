@@ -12,7 +12,7 @@ router = APIRouter(prefix="/match-candidates", tags=["match_candidates"])
 
 
 @router.get("")
-def list_match_candidates(current_user: dict = Depends(require_permission("admin.access"))):
+def list_match_candidates(current_user: dict = Depends(require_permission("admin.control.view"))):
     db = get_database()
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")
@@ -27,7 +27,7 @@ def list_match_candidates(current_user: dict = Depends(require_permission("admin
 
 
 @router.post("/{candidate_id}/approve")
-def approve_candidate(candidate_id: str, current_user: dict = Depends(require_permission("admin.access"))):
+def approve_candidate(candidate_id: str, current_user: dict = Depends(require_permission("admin.control.write"))):
     user_id = str(current_user.get("_id")) if current_user.get("_id") else None
 
     try:
@@ -38,7 +38,7 @@ def approve_candidate(candidate_id: str, current_user: dict = Depends(require_pe
 
 
 @router.post("/{candidate_id}/reject")
-def reject_candidate(candidate_id: str, notes: dict | None = None, current_user: dict = Depends(require_permission("admin.access"))):
+def reject_candidate(candidate_id: str, notes: dict | None = None, current_user: dict = Depends(require_permission("admin.control.write"))):
     db = get_database()
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")

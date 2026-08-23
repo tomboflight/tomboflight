@@ -1432,6 +1432,172 @@ class SuperAdminControlsTests(unittest.TestCase):
             "account_deletion_tombstones",
         )
 
+    def test_orphan_identity_reconciliation_closes_access_and_records_post_hoc_evidence(self):
+        former_user_id = ObjectId()
+        project_id = ObjectId()
+        original_email = "former.officer@example.com"
+        db = FakeDatabase(
+            {
+                "users": [],
+                "projects": [
+                    {
+                        "_id": project_id,
+                        "owner_user_id": str(former_user_id),
+                        "owner_email": original_email,
+                        "status": "archived",
+                    }
+                ],
+                "project_entitlements": [
+                    {
+                        "_id": ObjectId(),
+                        "project_id": project_id,
+                        "user_id": former_user_id,
+                        "status": "archived",
+                        "maintenance_status": "active",
+                        "maintenance_stripe_status": "active",
+                        "maintenance_stripe_subscription_id": "sub_orphan_reconcile",
+                    }
+                ],
+                "user_role_assignments": [
+                    {
+                        "_id": ObjectId(),
+                        "user_id": former_user_id,
+                        "officer_email": original_email,
+                        "status": "active",
+                        "role_code": "marketing_admin",
+                    }
+                ],
+                "user_permission_overrides": [
+                    {
+                        "_id": ObjectId(),
+                        "user_id": str(former_user_id),
+                        "email": original_email,
+                        "status": "active",
+                        "permission": "admin.control.write",
+                    }
+                ],
+                "orders": [
+                    {
+                        "_id": ObjectId(),
+                        "user_id": former_user_id,
+                        "email": original_email,
+                        "status": "paid",
+                        "amount": 79900,
+                    }
+                ],
+                "account_deletion_tombstones": [],
+                "audit_logs": [],
+            }
+        )
+
+        with (
+            patch.object(admin_control_service, "get_database", return_value=db),
+            patch.object(
+                admin_control_service,
+                "write_audit_log",
+                return_value="audit-orphan-1",
+            ),
+            patch.object(
+                admin_control_service.stripe_admin_operations_service,
+                "cancel_subscription",
+                return_value={
+                    "subscription_id": "sub_orphan_reconcile",
+                    "status": "canceled",
+                },
+            ) as cancel_subscription,
+        ):
+            preview = admin_control_service.super_admin_preview_orphan_identity_reconciliation(
+                identity_email=original_email,
+                known_user_id=str(former_user_id),
+                reason_category="manual_database_removal",
+            )
+            result = admin_control_service.super_admin_apply_orphan_identity_reconciliation(
+                identity_email=original_email,
+                known_user_id=str(former_user_id),
+                reason_category="manual_database_removal",
+                reason="Reconcile the earlier CEO-authorized manual database removal",
+                confirmation_email=original_email,
+                initial_confirmation=True,
+                final_confirmation="RECONCILE MANUAL REMOVAL",
+                final_acknowledgement=True,
+                continuity_operation_id="ckop_test_orphan_reconciliation",
+                actor={
+                    "_id": ObjectId(),
+                    "email": "l.robinson@tomboflight.com",
+                    "full_name": "Larry Robinson",
+                },
+            )
+
+        self.assertFalse(preview["identity_document_present"])
+        self.assertFalse(preview["governed_deletion_observed"])
+        self.assertFalse(preview["blocked"])
+        cancel_subscription.assert_called_once()
+        self.assertFalse(result["governed_deletion_observed"])
+        self.assertIn("reconciliation_receipt", result)
+        self.assertNotIn("deletion_receipt", result)
+        self.assertEqual(
+            db["user_role_assignments"].documents[0]["status"],
+            "revoked",
+        )
+        self.assertEqual(
+            db["user_permission_overrides"].documents[0]["status"],
+            "revoked",
+        )
+        self.assertEqual(db["projects"].documents[0]["status"], "deleted")
+        self.assertEqual(db["orders"].documents[0]["status"], "paid")
+        evidence = db["account_deletion_tombstones"].documents[0]
+        self.assertEqual(
+            evidence["evidence_type"],
+            "post_hoc_manual_identity_reconciliation",
+        )
+        self.assertEqual(evidence["deletion_origin"], "manual_external_to_kernel")
+        self.assertFalse(evidence["governed_deletion_observed"])
+        self.assertEqual(evidence["status"], "completed")
+        self.assertNotIn(original_email, str(evidence))
+        self.assertEqual(
+            evidence["original_email_sha256"],
+            hashlib.sha256(original_email.encode()).hexdigest(),
+        )
+
+    def test_orphan_identity_reconciliation_blocks_a_live_user_resolved_by_known_id(self):
+        user_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "users": [
+                    {
+                        "_id": user_id,
+                        "email": "renamed.live@example.com",
+                        "status": "active",
+                    }
+                ],
+                "account_deletion_tombstones": [],
+            }
+        )
+        with patch.object(admin_control_service, "get_database", return_value=db):
+            preview = admin_control_service.super_admin_preview_orphan_identity_reconciliation(
+                identity_email="former.officer@example.com",
+                known_user_id=str(user_id),
+                reason_category="manual_database_removal",
+            )
+            self.assertTrue(preview["identity_document_present"])
+            self.assertTrue(preview["blocked"])
+            with self.assertRaisesRegex(ValueError, "blocked"):
+                admin_control_service.super_admin_apply_orphan_identity_reconciliation(
+                    identity_email="former.officer@example.com",
+                    known_user_id=str(user_id),
+                    reason_category="manual_database_removal",
+                    reason="Do not touch a surviving identity",
+                    confirmation_email="former.officer@example.com",
+                    initial_confirmation=True,
+                    final_confirmation="RECONCILE MANUAL REMOVAL",
+                    final_acknowledgement=True,
+                    continuity_operation_id="ckop_live_identity_block",
+                    actor={
+                        "_id": ObjectId(),
+                        "email": "l.robinson@tomboflight.com",
+                    },
+                )
+
     def test_permanent_deletion_requires_exact_email_phrase_and_never_deletes_ceo(self):
         target_id = ObjectId()
         ceo_id = ObjectId()

@@ -722,7 +722,9 @@ def ensure_order_indexes() -> None:
         try:
             orders.create_index(keys, name=name, unique=unique, sparse=sparse)
         except OperationFailure:
-            return
+            if unique:
+                raise
+            logger.warning("Could not create optional orders index %s.", name)
 
     _ensure_index([("user_id", 1)], name="user_id_1")
     _ensure_index([("owner_user_id", 1)], name="owner_user_id_1")

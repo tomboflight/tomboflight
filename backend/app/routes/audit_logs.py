@@ -8,6 +8,6 @@ router = APIRouter(prefix="/audit-logs", tags=["Audit Logs"])
 
 
 @router.get("/", response_model=list[AuditLogResponse])
-def get_audit_logs(current_user: dict = Depends(require_permission("admin.access"))):
+def get_audit_logs(current_user: dict = Depends(require_permission("admin.audit.read"))):
     logs = list_audit_logs()
     return [build_audit_log_response(log) for log in logs]

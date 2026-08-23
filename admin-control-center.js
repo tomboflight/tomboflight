@@ -66,6 +66,7 @@
     lifecycleWorkflow: null,
     permanentDeletionWorkflow: null,
     deletionReceipt: null,
+    orphanReconciliationWorkflow: null,
     teamAccess: {
       officers: [],
       roleTemplates: {},
@@ -269,6 +270,7 @@
       "permanent-delete": "[data-admin-permanent-delete-dialog]",
       "permanent-delete-final": "[data-admin-permanent-delete-final-dialog]",
       "deletion-receipt": "[data-admin-deletion-receipt-dialog]",
+      "orphan-reconciliation": "[data-admin-orphan-reconciliation-dialog]",
       team: "[data-admin-team-dialog]",
     };
     const selector = selectors[name];
@@ -699,7 +701,7 @@
         ? window.crypto.randomUUID()
         : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const targetId = normalizeValue(
-      target && (target.project_id || target.case_id || target.user_id || target.officer_email || target.target_id),
+      target && (target.project_id || target.case_id || target.user_id || target.identity_email || target.officer_email || target.target_id),
     );
     return `kernel-${normalizeLower(action).replaceAll("-", "_")}-${targetId || "bulk"}-${suffix}`;
   }
@@ -953,6 +955,9 @@
     const data = payload || {};
     state.diagnostics = data;
     renderStatusSummary();
+    const components = data.operational_components || {};
+    const scanner = components.upload_scanner || {};
+    const storage = components.private_upload_storage || {};
     const rows = [
       ["Authenticated user ID", data.user_id],
       ["Normalized role", data.role_key],
@@ -961,6 +966,16 @@
       ["Queue-scope mode", data.queue_scope_mode],
       ["Bootstrap endpoint status", data.bootstrap_endpoint_status],
       ["Search endpoint status", data.search_endpoint_status],
+      ["Operational readiness", data.operational_ready ? "ready" : "not ready"],
+      ["Operational degraded reasons", asArray(data.operational_degraded_reasons).join(", ") || "none"],
+      ["Production signing key", components.production_signing_key && components.production_signing_key.configured ? "configured" : "not configured"],
+      ["Stripe webhooks", components.stripe_webhooks && components.stripe_webhooks.configured ? "configured" : "not configured"],
+      ["Transactional email", components.transactional_email && components.transactional_email.configured ? "configured" : "not configured"],
+      ["Upload scanner", scanner.configured ? "configured" : "not configured"],
+      ["Upload scanner mode", scanner.mode],
+      ["Upload scanner fail closed", scanner.fail_closed ? "yes" : "no"],
+      ["Private upload storage", storage.persistent ? "persistent" : "not persistent"],
+      ["Continuity execution", components.continuity_kernel && components.continuity_kernel.execution_enabled ? "enabled" : "disabled"],
       ["Frontend revision", data.frontend_revision],
       ["Backend revision", data.backend_revision],
     ];
@@ -1002,8 +1017,9 @@
     const data = state.diagnostics || {};
     const bootstrapOk = (data.bootstrap_endpoint_status || "") === "ok";
     const searchOk = (data.search_endpoint_status || "") === "ok";
+    const operationalReady = Boolean(data.operational_ready);
     const chips = [
-      ["System Ready", bootstrapOk],
+      [operationalReady ? "Production Ready" : "Production Attention Required", operationalReady],
       ["CEO Role Verified", Boolean(data.is_ceo_master_admin)],
       ["Search Ready", searchOk],
       ["Metrics Ready", !state.overviewLoadFailed],
@@ -2169,7 +2185,7 @@
   }
 
   function updateGlobalAdminControls() {
-    document.querySelectorAll("[data-super-admin-create-account], [data-super-admin-manage-team-access]").forEach(function (button) {
+    document.querySelectorAll("[data-super-admin-create-account], [data-super-admin-manage-team-access], [data-super-admin-reconcile-orphan]").forEach(function (button) {
       button.hidden = !state.isSuperAdmin;
       button.disabled = !state.isSuperAdmin || state.bootstrapFailed;
       button.setAttribute("aria-disabled", button.disabled ? "true" : "false");
@@ -3283,6 +3299,332 @@
     }
   }
 
+  function orphanField(name) {
+    return fieldValue('[data-admin-orphan-field="' + name + '"]');
+  }
+
+  function renderOrphanReconciliationPreview(preview) {
+    const node = document.querySelector("[data-admin-orphan-preview]");
+    if (!node) return;
+    const payload = preview || {};
+    const ownership = payload.ownership_dependencies || {};
+    const directAccess = payload.direct_access_dependencies || {};
+    const externalImpact = payload.external_service_impact || {};
+    const ownershipRows = Object.entries(ownership).filter(function (entry) {
+      return Number(entry[1] || 0) > 0;
+    });
+    const accessRows = Object.entries(directAccess).filter(function (entry) {
+      return Number(entry[1] || 0) > 0;
+    });
+    const blocked = Boolean(payload.blocked);
+    const warnings = asArray(payload.warnings);
+    node.dataset.state = blocked ? "error" : "warning";
+    node.innerHTML =
+      '<div class="admin-preview-heading"><h3>Post-hoc reconciliation impact</h3>' +
+      statusChip(
+        blocked ? "Blocked" : "Eligible for CEO confirmation",
+        blocked ? "error" : "warning",
+      ) +
+      "</div>" +
+      '<div class="admin-preview-facts">' +
+      "<div><span>User document present</span><strong>" +
+      (payload.identity_document_present ? "Yes" : "No") +
+      "</strong></div>" +
+      "<div><span>Governed deletion observed</span><strong>" +
+      (payload.governed_deletion_observed ? "Yes" : "No") +
+      "</strong></div>" +
+      "<div><span>Resolved former user ID</span><strong>" +
+      escapeHtml(payload.resolved_user_id || "No surviving ID reference") +
+      "</strong></div>" +
+      "<div><span>Active subscriptions</span><strong>" +
+      escapeHtml(
+        String(externalImpact.stripe_subscriptions_cancelled_immediately || 0),
+      ) +
+      "</strong></div>" +
+      "</div>" +
+      '<div class="admin-preview-section"><span>Owned records located</span><div>' +
+      (ownershipRows.length
+        ? ownershipRows
+            .map(function (entry) {
+              return (
+                '<span class="admin-scope-chip">' +
+                escapeHtml(titleize(entry[0])) +
+                ": " +
+                escapeHtml(String(entry[1])) +
+                "</span>"
+              );
+            })
+            .join("")
+        : '<span class="admin-scope-empty">No owned workspace records found</span>') +
+      "</div></div>" +
+      '<div class="admin-preview-section"><span>Direct access records located</span><div>' +
+      (accessRows.length
+        ? accessRows
+            .map(function (entry) {
+              return (
+                '<span class="admin-scope-chip">' +
+                escapeHtml(titleize(entry[0])) +
+                ": " +
+                escapeHtml(String(entry[1])) +
+                "</span>"
+              );
+            })
+            .join("")
+        : '<span class="admin-scope-empty">No direct role or permission records found</span>') +
+      "</div></div>" +
+      '<div class="admin-preview-section"><span>Required evidence preserved</span><div>' +
+      renderChipList(payload.records_preserved, "Continuity and audit evidence") +
+      "</div></div>" +
+      (warnings.length
+        ? '<div class="admin-preview-warning">' +
+          warnings
+            .map(function (item) {
+              return "<p>" + escapeHtml(item) + "</p>";
+            })
+            .join("") +
+          "</div>"
+        : "");
+  }
+
+  function syncOrphanReconciliationAvailability() {
+    const workflow = state.orphanReconciliationWorkflow;
+    const execute = document.querySelector("[data-admin-orphan-execute]");
+    const identityEmail = orphanField("identity_email").toLowerCase();
+    const reasonCategory = orphanField("reason_category");
+    const reason = orphanField("reason");
+    const phrase = orphanField("confirmation_phrase");
+    const confirmed = Boolean(
+      document.querySelector("[data-admin-orphan-confirm]")?.checked,
+    );
+    const previewMatches = Boolean(
+      workflow &&
+        workflow.preview &&
+        workflow.identityEmail === identityEmail &&
+        !workflow.preview.blocked,
+    );
+    setButtonEnabled(
+      execute,
+      previewMatches &&
+        Boolean(reasonCategory) &&
+        reason.length >= 3 &&
+        phrase === "RECONCILE MANUAL REMOVAL" &&
+        confirmed,
+    );
+  }
+
+  function openOrphanReconciliationDialog() {
+    if (!state.isSuperAdmin) {
+      setPageStatus("CEO Master Administrator access is required.", "error");
+      return;
+    }
+    const dialog = dialogByName("orphan-reconciliation");
+    const form = document.querySelector("[data-admin-orphan-reconciliation-form]");
+    if (
+      !(dialog instanceof HTMLDialogElement) ||
+      !(form instanceof HTMLFormElement)
+    ) {
+      return;
+    }
+    form.reset();
+    state.orphanReconciliationWorkflow = null;
+    const preview = document.querySelector("[data-admin-orphan-preview]");
+    if (preview) {
+      preview.dataset.state = "";
+      preview.innerHTML =
+        "<h3>Post-hoc reconciliation preview</h3><p>Enter the removed identity and choose Preview. No business record is changed by previewing.</p>";
+    }
+    setButtonEnabled(
+      document.querySelector("[data-admin-orphan-execute]"),
+      false,
+    );
+    openDialog(dialog);
+  }
+
+  async function previewOrphanReconciliation() {
+    const identityEmail = orphanField("identity_email").toLowerCase();
+    const knownUserId = orphanField("known_user_id");
+    const reasonCategory = orphanField("reason_category");
+    if (!identityEmail.includes("@") || !reasonCategory) {
+      setPageStatus(
+        "Enter the removed identity email and reconciliation category before previewing.",
+        "error",
+      );
+      return;
+    }
+    setPageStatus("Resolving orphaned identity references...", "info");
+    try {
+      const preview = await postJson(
+        "/admin/control-center/super-admin/orphan-identity/reconciliation/preview",
+        {
+          identity_email: identityEmail,
+          known_user_id: knownUserId,
+          reason_category: reasonCategory,
+        },
+      );
+      state.orphanReconciliationWorkflow = {
+        identityEmail,
+        knownUserId,
+        reasonCategory,
+        preview: preview || {},
+      };
+      renderOrphanReconciliationPreview(preview || {});
+      syncOrphanReconciliationAvailability();
+      setPageStatus(
+        preview && preview.blocked
+          ? "Manual-removal reconciliation is blocked. Review the preview."
+          : "Reconciliation preview ready. No business record was changed.",
+        preview && preview.blocked ? "error" : "success",
+      );
+    } catch (error) {
+      state.orphanReconciliationWorkflow = null;
+      setPageStatus(
+        error.message || "Unable to preview the removed identity.",
+        "error",
+      );
+      syncOrphanReconciliationAvailability();
+    }
+  }
+
+  function renderOrphanReconciliationReceipt(operation) {
+    const node = document.querySelector("[data-admin-orphan-preview]");
+    if (!node) return;
+    const receipt =
+      (operation &&
+        operation.execution_result &&
+        operation.execution_result.reconciliation_receipt) ||
+      {};
+    const closedEntries = Object.entries(receipt.records_closed || {});
+    node.dataset.state = "success";
+    node.innerHTML =
+      '<div class="admin-preview-heading"><h3>Manual-removal reconciliation receipt</h3>' +
+      statusChip("Completed", "success") +
+      "</div>" +
+      '<div class="admin-preview-facts">' +
+      "<div><span>Operation ID</span><strong>" +
+      escapeHtml((operation && operation.operation_id) || "—") +
+      "</strong></div>" +
+      "<div><span>Reconciliation ID</span><strong>" +
+      escapeHtml(receipt.reconciliation_id || "—") +
+      "</strong></div>" +
+      "<div><span>Former user reference</span><strong>" +
+      escapeHtml(receipt.resolved_user_id || "—") +
+      "</strong></div>" +
+      "<div><span>Governed deletion observed</span><strong>No</strong></div>" +
+      "<div><span>Evidence status</span><strong>" +
+      escapeHtml(titleize((operation && operation.evidence_recording_status) || "—")) +
+      "</strong></div>" +
+      "</div>" +
+      '<div class="admin-preview-section"><span>MongoDB access records closed</span><div>' +
+      (closedEntries.length
+        ? closedEntries
+            .map(function (entry) {
+              return (
+                '<span class="admin-scope-chip">' +
+                escapeHtml(titleize(entry[0])) +
+                ": " +
+                escapeHtml(String(entry[1])) +
+                "</span>"
+              );
+            })
+            .join("")
+        : '<span class="admin-scope-empty">No linked access record required a write</span>') +
+      "</div></div>" +
+      '<div class="admin-preview-section"><span>Required evidence preserved</span><div>' +
+      renderChipList(receipt.records_preserved, "Continuity and audit evidence") +
+      "</div></div>" +
+      '<p class="admin-preview-assurance">The receipt truthfully records a post-hoc manual-removal reconciliation; it does not claim the original deletion was Kernel-governed.</p>';
+    setButtonEnabled(
+      document.querySelector("[data-admin-orphan-execute]"),
+      false,
+    );
+  }
+
+  async function executeOrphanReconciliation(event) {
+    if (event) event.preventDefault();
+    const workflow = state.orphanReconciliationWorkflow;
+    syncOrphanReconciliationAvailability();
+    const execute = document.querySelector("[data-admin-orphan-execute]");
+    if (
+      !workflow ||
+      !workflow.preview ||
+      !(execute instanceof HTMLButtonElement) ||
+      execute.disabled
+    ) {
+      setPageStatus(
+        "Preview the identity and complete every reconciliation confirmation before execution.",
+        "error",
+      );
+      return;
+    }
+    if (
+      !window.confirm(
+        "Execute this post-hoc reconciliation against live records? Linked access will be permanently closed and any active maintenance subscription will be cancelled.",
+      )
+    ) {
+      return;
+    }
+    setButtonEnabled(execute, false);
+    setPageStatus(
+      "Executing manual-removal reconciliation through the Continuity Kernel...",
+      "info",
+    );
+    try {
+      const operation = await submitGovernedOperation(
+        "orphan_identity_reconciliation",
+        { identity_email: workflow.identityEmail },
+        {
+          known_user_id: workflow.knownUserId,
+          reason_category: workflow.reasonCategory,
+          confirmation_email: workflow.identityEmail,
+          initial_confirmation: true,
+          final_confirmation: orphanField("confirmation_phrase"),
+          final_acknowledgement: Boolean(
+            document.querySelector("[data-admin-orphan-confirm]")?.checked,
+          ),
+        },
+        orphanField("reason"),
+      );
+      if (
+        (Array.isArray(operation.blocked_reasons) &&
+          operation.blocked_reasons.length) ||
+        normalizeLower(operation.execution_outcome) !== "success" ||
+        normalizeLower(operation.evidence_recording_status) !== "complete" ||
+        !(
+          operation.execution_result &&
+          operation.execution_result.reconciliation_receipt
+        )
+      ) {
+        throw new Error(
+          kernelOperationMessage(
+            operation,
+            "Manual-removal reconciliation did not complete.",
+          ),
+        );
+      }
+      renderOrphanReconciliationReceipt(operation);
+      await Promise.allSettled([
+        loadKernelStatus(),
+        loadOverview(),
+        loadCases(),
+        loadDiagnostics(),
+      ]);
+      setPageStatus(
+        kernelOperationMessage(
+          operation,
+          "Manual-removal reconciliation completed.",
+        ),
+        "success",
+      );
+    } catch (error) {
+      setPageStatus(
+        error.message ||
+          "Manual-removal reconciliation failed. No success receipt was issued.",
+        "error",
+      );
+      syncOrphanReconciliationAvailability();
+    }
+  }
+
   function teamOfficerEmail(officer) {
     return normalizeValue(officer && (officer.officer_email || officer.email)).toLowerCase();
   }
@@ -3811,6 +4153,7 @@
           closeDialog(dialogByName("permanent-delete-final"));
         }
         if (name === "deletion-receipt") state.deletionReceipt = null;
+        if (name === "orphan-reconciliation") state.orphanReconciliationWorkflow = null;
         return;
       }
 
@@ -3840,6 +4183,12 @@
         return;
       }
 
+      const superAdminReconcileOrphan = target.closest("[data-super-admin-reconcile-orphan]");
+      if (superAdminReconcileOrphan) {
+        openOrphanReconciliationDialog();
+        return;
+      }
+
       const createPreviewAction = target.closest("[data-admin-create-preview-action]");
       if (createPreviewAction) {
         previewSuperAdminCreateAccount();
@@ -3849,6 +4198,12 @@
       const teamPreviewAction = target.closest("[data-admin-team-preview-action]");
       if (teamPreviewAction) {
         previewTeamAccess();
+        return;
+      }
+
+      const orphanPreviewAction = target.closest("[data-admin-orphan-preview-action]");
+      if (orphanPreviewAction) {
+        previewOrphanReconciliation();
         return;
       }
 
@@ -4131,6 +4486,26 @@
       permanentDeleteFinalForm.addEventListener("change", syncPermanentDeletionFinalAvailability);
     }
 
+    const orphanForm = document.querySelector("[data-admin-orphan-reconciliation-form]");
+    if (orphanForm instanceof HTMLFormElement) {
+      orphanForm.addEventListener("submit", executeOrphanReconciliation);
+      orphanForm.addEventListener("input", function (event) {
+        const target = event.target;
+        if (
+          target instanceof Element &&
+          target.matches('[data-admin-orphan-field="identity_email"], [data-admin-orphan-field="known_user_id"], [data-admin-orphan-field="reason_category"]')
+        ) {
+          state.orphanReconciliationWorkflow = null;
+          const preview = document.querySelector("[data-admin-orphan-preview]");
+          if (preview) {
+            preview.innerHTML = "<h3>Post-hoc reconciliation preview</h3><p>Identity details changed. Preview the current scope before execution.</p>";
+          }
+        }
+        syncOrphanReconciliationAvailability();
+      });
+      orphanForm.addEventListener("change", syncOrphanReconciliationAvailability);
+    }
+
     const teamForm = document.querySelector("[data-admin-team-form]");
     if (teamForm instanceof HTMLFormElement) {
       teamForm.addEventListener("submit", applyTeamAccess);
@@ -4161,6 +4536,7 @@
           closeDialog(dialogByName("permanent-delete-final"));
         }
         if (dialog.matches("[data-admin-deletion-receipt-dialog]")) state.deletionReceipt = null;
+        if (dialog.matches("[data-admin-orphan-reconciliation-dialog]")) state.orphanReconciliationWorkflow = null;
       });
     });
 

@@ -46,15 +46,12 @@ def _require_setting(value: str, name: str) -> str:
 def ensure_stripe_event_indexes() -> None:
     db = get_database()
     events_col = db["stripe_events"]
-    try:
-        events_col.create_index(
-            [("event_id", 1)],
-            name="event_id_1",
-            unique=True,
-            sparse=True,
-        )
-    except OperationFailure:
-        return
+    events_col.create_index(
+        [("event_id", 1)],
+        name="event_id_1",
+        unique=True,
+        sparse=True,
+    )
 
 
 def _build_event_audit_record(event: dict[str, Any], now: datetime) -> dict[str, Any]:

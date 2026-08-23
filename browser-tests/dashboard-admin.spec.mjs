@@ -155,5 +155,5 @@ test("[asset-versioning] dashboard and control center include cache-busting live
   );
   expect(controlCenterStyles.some((href) => href.includes("styles.css?v=20260821-phase10"))).toBeTruthy();
   expect(controlCenterScripts.some((src) => src.includes("app.js?v=20260821-phase10"))).toBeTruthy();
-  expect(controlCenterScripts.some((src) => src.includes("admin-control-center.js?v=20260821-phase10"))).toBeTruthy();
+  expect(controlCenterScripts.some((src) => src.includes("admin-control-center.js?v=20260823-phase12"))).toBeTruthy();
 });

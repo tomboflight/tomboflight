@@ -15,7 +15,13 @@ from app.database import DatabaseUnavailableError
 from app.routes import auth as auth_routes
 from app.routes import uploads as upload_routes
 from app.schemas.auth import UserCreate as AuthUserCreate
-from app.services import auth_service, link_key_service, rate_limit_service, upload_scan_service
+from app.services import (
+    auth_service,
+    link_key_service,
+    poster_asset_service,
+    rate_limit_service,
+    upload_scan_service,
+)
 
 
 class FakeInsertResult:
@@ -62,6 +68,9 @@ class FakeCollection:
         if not item:
             return FakeUpdateResult()
         item.update(update.get("$set", {}))
+        for key, expected in update.get("$pull", {}).items():
+            values = list(item.get(key) or [])
+            item[key] = [value for value in values if value != expected]
         for key in update.get("$unset", {}):
             item.pop(key, None)
         return FakeUpdateResult(matched_count=1, modified_count=1)
@@ -84,6 +93,9 @@ class FakeCollection:
                     if value in expected["$nin"]:
                         return False
                 else:
+                    return False
+            elif isinstance(value, list):
+                if expected not in value:
                     return False
             elif value != expected:
                 return False
@@ -251,6 +263,130 @@ class AuthMfaTests(unittest.TestCase):
         stored = db.users.find_one({"_id": user_id})
         self.assertFalse(stored.get("mfa_enabled"))
         self.assertIsNone(stored.get("mfa_secret_encrypted"))
+
+
+    def test_stale_mfa_challenge_is_rejected_after_session_revocation(self):
+        user_id = ObjectId()
+        user = {
+            "_id": user_id,
+            "email": "admin@example.com",
+            "status": "active",
+            "mfa_enabled": True,
+            "session_token_version": 7,
+        }
+        with (
+            patch.object(
+                auth_service,
+                "decode_access_token",
+                return_value={
+                    "purpose": "mfa_login",
+                    "sub": "admin@example.com",
+                    "user_id": str(user_id),
+                    "tv": 1,
+                },
+            ),
+            patch.object(auth_service, "get_user_by_email", return_value=user),
+        ):
+            with self.assertRaisesRegex(ValueError, "Invalid MFA challenge token"):
+                auth_service.verify_mfa_login_challenge(
+                    "stale-challenge",
+                    code="123456",
+                )
+
+    def test_recovery_code_is_consumed_with_an_atomic_pull(self):
+        user_id = ObjectId()
+        recovery_code = "single-use-recovery"
+        recovery_hash = auth_service._hash_recovery_code(
+            recovery_code,
+            user_id=str(user_id),
+        )
+        stored_user = {
+            "_id": user_id,
+            "email": "admin@example.com",
+            "mfa_backup_code_hashes": [recovery_hash],
+        }
+        stale_snapshot = {
+            **stored_user,
+            "mfa_backup_code_hashes": [recovery_hash],
+        }
+        db = FakeDatabase({"users": [stored_user]})
+        with patch.object(auth_service, "get_database", return_value=db):
+            self.assertTrue(
+                auth_service._consume_recovery_code(
+                    stale_snapshot,
+                    recovery_code,
+                )
+            )
+            self.assertFalse(
+                auth_service._consume_recovery_code(
+                    stale_snapshot,
+                    recovery_code,
+                )
+            )
+
+    def test_password_reset_url_keeps_token_out_of_query_string(self):
+        reset_url = auth_service._build_password_reset_url(
+            "reset-token-that-must-not-enter-http-logs"
+        )
+        self.assertIn("#mode=reset&token=", reset_url)
+        self.assertNotIn("?mode=reset", reset_url)
+
+    def test_password_reset_compare_and_set_rejects_a_lost_token_race(self):
+        token = "single-use-password-reset-token"
+        user = {
+            "_id": ObjectId(),
+            "email": "customer@example.com",
+            "status": "active",
+            "session_token_version": 3,
+            "password_reset_token_hash": auth_service._hash_password_reset_token(token),
+            "password_reset_expires_at": "2999-01-01T00:00:00+00:00",
+        }
+
+        class ContendedUsers:
+            def find_one(self, query):
+                del query
+                return dict(user)
+
+            def update_one(self, query, update):
+                del query, update
+                return FakeUpdateResult(matched_count=0, modified_count=0)
+
+        class ContendedDatabase:
+            users = ContendedUsers()
+
+        with patch.object(auth_service, "get_database", return_value=ContendedDatabase()):
+            with self.assertRaisesRegex(ValueError, "already used"):
+                auth_service.reset_password_with_token(
+                    token,
+                    "NewStrongPassword!123",
+                )
+
+
+class PosterPublicationGateTests(unittest.TestCase):
+    def test_uploaded_portrait_query_requires_scan_approval_and_consent(self):
+        class CapturingUploads:
+            query = None
+
+            def find_one(self, query, sort=None):
+                self.query = query
+                self.sort = sort
+                return None
+
+        uploads = CapturingUploads()
+        with patch.object(
+            poster_asset_service,
+            "_uploads_collection",
+            return_value=uploads,
+        ):
+            self.assertIsNone(
+                poster_asset_service._best_uploaded_portrait("project-1")
+            )
+
+        self.assertEqual(uploads.query["scan_status"], "clean")
+        self.assertEqual(uploads.query["quarantined"], {"$ne": True})
+        self.assertTrue(uploads.query["approved_for_cinematic"])
+        self.assertEqual(uploads.query["verification_status"], "approved")
+        self.assertEqual(uploads.query["consent_status"], "approved")
 
 
 class AccountActivationSecurityTests(unittest.TestCase):

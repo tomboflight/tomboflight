@@ -17,7 +17,7 @@ router = APIRouter(prefix="/household-links", tags=["Household Links"])
 
 
 @router.get("/", response_model=list[HouseholdLinkResponse])
-def get_household_links(current_user: dict[str, Any] = Depends(require_permission("admin.access"))):
+def get_household_links(current_user: dict[str, Any] = Depends(require_permission("admin.control.view"))):
     links = list_household_links()
     return [build_household_link_response(link) for link in links]
 
@@ -25,7 +25,7 @@ def get_household_links(current_user: dict[str, Any] = Depends(require_permissio
 @router.post("/", response_model=HouseholdLinkResponse)
 def create_household_link_route(
     payload: HouseholdLinkCreate,
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.write")),
 ):
     link = create_household_link(payload)
     return build_household_link_response(link)

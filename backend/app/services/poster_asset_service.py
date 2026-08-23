@@ -168,6 +168,11 @@ def _best_uploaded_portrait(project_id: str) -> dict[str, Any] | None:
         {
             "project_id": _normalize(project_id),
             "category": "member_photo",
+            "scan_status": "clean",
+            "quarantined": {"$ne": True},
+            "approved_for_cinematic": True,
+            "verification_status": "approved",
+            "consent_status": "approved",
         },
         sort=[("created_at", -1)],
     )

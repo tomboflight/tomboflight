@@ -14,7 +14,7 @@ router = APIRouter(prefix="/lineage-nodes", tags=["Lineage Nodes"])
 
 
 @router.get("/", response_model=list[LineageNodeResponse])
-def get_lineage_nodes(current_user: dict[str, Any] = Depends(require_permission("admin.access"))):
+def get_lineage_nodes(current_user: dict[str, Any] = Depends(require_permission("admin.control.view"))):
     nodes = list_lineage_nodes()
     return [build_lineage_node_response(node) for node in nodes]
 
@@ -22,7 +22,7 @@ def get_lineage_nodes(current_user: dict[str, Any] = Depends(require_permission(
 @router.post("/", response_model=LineageNodeResponse)
 def create_lineage_node_route(
     payload: LineageNodeCreate,
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.write")),
 ):
     node = create_lineage_node(payload)
     return build_lineage_node_response(node)

@@ -8,7 +8,7 @@ router = APIRouter(prefix="/consistency", tags=["Consistency"])
 
 
 @router.get("/report", response_model=ConsistencyReport)
-def consistency_report(current_user: dict = Depends(require_permission("admin.access"))):
+def consistency_report(current_user: dict = Depends(require_permission("admin.control.view"))):
     issues = run_consistency_check()
 
     return {

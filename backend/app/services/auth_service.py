@@ -115,6 +115,20 @@ def _session_version(user: dict) -> int:
         return 0
 
 
+def _assert_mfa_token_version(
+    payload: dict[str, Any],
+    user: dict[str, Any],
+    *,
+    token_label: str,
+) -> None:
+    try:
+        token_version = int(payload.get("tv"))
+    except (TypeError, ValueError):
+        raise ValueError(f"Invalid {token_label}.") from None
+    if token_version != _session_version(user):
+        raise ValueError(f"Invalid {token_label}.")
+
+
 def _mfa_encrypt_secret(secret: str, *, user_id: str) -> str:
     key_material = hashlib.sha256(
         f"{settings.secret_key}:mfa:{_normalize_text(user_id)}".encode("utf-8")
@@ -193,9 +207,14 @@ def _build_password_reset_url(token: str) -> str:
         settings.password_reset_base_url_clean
         or "https://tomboflight.com/account-security.html"
     )
+    parsed = urlsplit(base_url)
+    base_without_fragment = urlunsplit(
+        (parsed.scheme, parsed.netloc, parsed.path, parsed.query, "")
+    )
     encoded_token = quote(_normalize_text(token), safe="")
-    joiner = "&" if "?" in base_url else "?"
-    return f"{base_url}{joiner}mode=reset&token={encoded_token}"
+    # Fragments are not sent in HTTP requests, proxy logs, or Referer headers.
+    # The account-security client removes the fragment immediately after reading it.
+    return f"{base_without_fragment}#mode=reset&token={encoded_token}"
 
 
 def _build_account_activation_url(token: str, *, email: str) -> str:
@@ -665,17 +684,22 @@ def _consume_recovery_code(user: dict, code: str) -> bool:
     normalized = _normalize_text(code).lower()
     if not normalized:
         return False
-    hashes = list(user.get("mfa_backup_code_hashes") or [])
-    target_hash = _hash_recovery_code(normalized, user_id=str(user.get("_id") or ""))
-    if target_hash not in hashes:
-        return False
-    hashes.remove(target_hash)
-    db = get_database()
-    db.users.update_one(
-        {"_id": user["_id"]},
-        {"$set": {"mfa_backup_code_hashes": hashes, "mfa_last_verified_at": _now_iso()}},
+    target_hash = _hash_recovery_code(
+        normalized,
+        user_id=str(user.get("_id") or ""),
     )
-    return True
+    db = get_database()
+    result = db.users.update_one(
+        {
+            "_id": user["_id"],
+            "mfa_backup_code_hashes": target_hash,
+        },
+        {
+            "$pull": {"mfa_backup_code_hashes": target_hash},
+            "$set": {"mfa_last_verified_at": _now_iso()},
+        },
+    )
+    return int(getattr(result, "modified_count", 0)) == 1
 
 
 def _begin_mfa_enrollment_for_user_document(user: dict) -> dict[str, Any]:
@@ -727,6 +751,7 @@ def begin_mfa_enrollment(challenge_token: str) -> dict[str, Any]:
     user_id = str(user.get("_id") or "")
     if _normalize_text(payload.get("user_id")) != user_id:
         raise ValueError("Invalid MFA challenge token.")
+    _assert_mfa_token_version(payload, user, token_label="MFA challenge token")
     return _begin_mfa_enrollment_for_user_document(user)
 
 
@@ -744,6 +769,7 @@ def verify_mfa_enrollment(setup_token: str, code: str) -> dict[str, Any]:
     user_id = str(user.get("_id") or "")
     if _normalize_text(payload.get("user_id")) != user_id:
         raise ValueError("Invalid MFA setup token.")
+    _assert_mfa_token_version(payload, user, token_label="MFA setup token")
     pending_secret = _mfa_decrypt_secret(
         _normalize_text(user.get("mfa_pending_secret_encrypted")),
         user_id=user_id,
@@ -808,6 +834,7 @@ def verify_mfa_login_challenge(
     user_id = str(user.get("_id") or "")
     if _normalize_text(payload.get("user_id")) != user_id:
         raise ValueError("Invalid MFA challenge token.")
+    _assert_mfa_token_version(payload, user, token_label="MFA challenge token")
     if not bool(user.get("mfa_enabled")):
         raise ValueError("MFA is not enabled for this account.")
     secret = _mfa_decrypt_secret(_normalize_text(user.get("mfa_secret_encrypted")), user_id=user_id)
@@ -1140,7 +1167,17 @@ def reset_password_with_token(token: str, new_password: str) -> dict[str, object
         "session_token_version": _session_version(user) + 1,
         **_clear_password_reset_fields(),
     }
-    db.users.update_one({"_id": user["_id"]}, {"$set": update_fields})
+    consume_result = db.users.update_one(
+        {
+            "_id": user["_id"],
+            "password_reset_token_hash": token_hash,
+            "password_reset_expires_at": user.get("password_reset_expires_at"),
+            "status": user.get("status"),
+        },
+        {"$set": update_fields},
+    )
+    if int(getattr(consume_result, "matched_count", 0)) != 1:
+        raise ValueError("Password reset token is invalid, expired, or already used.")
 
     try:
         create_audit_log(

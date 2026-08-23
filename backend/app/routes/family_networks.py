@@ -15,7 +15,7 @@ router = APIRouter(prefix="/family-networks", tags=["Family Networks"])
 
 
 @router.get("/", response_model=list[FamilyNetworkResponse])
-def get_family_networks(current_user: dict = Depends(require_permission("admin.access"))):
+def get_family_networks(current_user: dict = Depends(require_permission("admin.control.view"))):
     networks = list_family_networks()
     return [build_family_network_response(network) for network in networks]
 
@@ -23,7 +23,7 @@ def get_family_networks(current_user: dict = Depends(require_permission("admin.a
 @router.post("/", response_model=FamilyNetworkResponse)
 def create_family_network_route(
     payload: FamilyNetworkCreate,
-    current_user: dict = Depends(require_permission("admin.access")),
+    current_user: dict = Depends(require_permission("admin.control.write")),
 ):
     network = create_family_network(payload)
     return build_family_network_response(network)
