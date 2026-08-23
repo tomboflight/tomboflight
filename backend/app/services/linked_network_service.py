@@ -6,6 +6,7 @@ from typing import Any, cast
 from bson import ObjectId
 from pymongo.collection import Collection
 
+from app.core.relationship_catalog import LINK_BRIDGE_INVERSE_CANONICAL_TYPES
 from app.database import get_database
 from app.services.workspace_access_service import (
     resolve_strict_paid_active_project_entitlement,
@@ -24,6 +25,64 @@ def _str_id(value: Any) -> str:
     if isinstance(value, ObjectId):
         return str(value)
     return str(value or "").strip()
+
+
+def _int_or_none(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _approved_portrait_for_network(
+    member: dict[str, Any],
+    *,
+    family_id: str,
+    is_own_household: bool,
+) -> dict[str, Any] | None:
+    member_id = _str_id(member.get("_id"))
+    uploads = _col("uploaded_files")
+    candidates: list[dict[str, Any]] = []
+    approved_id = _str_id(member.get("approved_photo_upload_id"))
+    if approved_id and ObjectId.is_valid(approved_id):
+        approved = uploads.find_one({"_id": ObjectId(approved_id)})
+        if approved:
+            candidates.append(approved)
+    if not candidates:
+        candidates = list(
+            uploads.find(
+                {
+                    "family_id": family_id,
+                    "member_id": member_id,
+                    "category": "member_photo",
+                }
+            )
+        )
+        candidates.sort(
+            key=lambda item: _str_id(item.get("created_at")),
+            reverse=True,
+        )
+
+    for upload in candidates:
+        ready = bool(
+            _str_id(upload.get("scan_status")).lower() == "clean"
+            and not bool(upload.get("quarantined"))
+            and bool(upload.get("approved_for_cinematic"))
+            and _str_id(upload.get("verification_status")).lower() == "approved"
+            and _str_id(upload.get("consent_status")).lower() == "approved"
+            and bool(upload.get("consent_attested"))
+            and bool(upload.get("authority_attested"))
+        )
+        if not ready:
+            continue
+        if not is_own_household and not (
+            bool(upload.get("share_with_linked_families"))
+            or _str_id(upload.get("visibility_scope")).lower()
+            in {"linked_family_shared", "public_memorial"}
+        ):
+            continue
+        return upload
+    return None
 
 
 def build_linked_network(
@@ -73,6 +132,7 @@ def build_linked_network(
 
     visited_household_ids: set[str] = set()
     all_households: list[dict[str, Any]] = []
+    traversed_links: dict[str, dict[str, Any]] = {}
 
     queue: deque[tuple[str, int]] = deque()
     for hh in seed_households:
@@ -98,6 +158,9 @@ def build_linked_network(
         )
 
         for link in links:
+            link_id = _str_id(link.get("_id"))
+            if link_id:
+                traversed_links[link_id] = link
             src = _str_id(link.get("source_household_id"))
             tgt = _str_id(link.get("target_household_id"))
             neighbor_id = tgt if src == current_hid else src
@@ -108,6 +171,44 @@ def build_linked_network(
                 if neighbor_hh:
                     all_households.append(neighbor_hh)
                     queue.append((neighbor_id, depth + 1))
+
+    household_generation_offsets: dict[str, int] = {}
+    alignment_conflicts: list[dict[str, Any]] = []
+    if seed_households:
+        household_generation_offsets[_str_id(seed_households[0].get("_id"))] = 0
+    changed = True
+    while changed:
+        changed = False
+        for link_id, link in traversed_links.items():
+            source_id = _str_id(link.get("source_household_id"))
+            target_id = _str_id(link.get("target_household_id"))
+            if link.get("target_generation_offset") is None:
+                continue
+            try:
+                target_delta = int(link.get("target_generation_offset"))
+            except (TypeError, ValueError):
+                continue
+            if source_id in household_generation_offsets:
+                expected_target = household_generation_offsets[source_id] + target_delta
+                if target_id in household_generation_offsets:
+                    if household_generation_offsets[target_id] != expected_target:
+                        alignment_conflicts.append(
+                            {
+                                "link_id": link_id,
+                                "source_household_id": source_id,
+                                "target_household_id": target_id,
+                                "expected_offset": expected_target,
+                                "actual_offset": household_generation_offsets[target_id],
+                            }
+                        )
+                else:
+                    household_generation_offsets[target_id] = expected_target
+                    changed = True
+            elif target_id in household_generation_offsets:
+                household_generation_offsets[source_id] = (
+                    household_generation_offsets[target_id] - target_delta
+                )
+                changed = True
 
     # Determine the requesting user's household_id (for visibility)
     user_household_ids: set[str] = {_str_id(hh.get("_id")) for hh in seed_households}
@@ -167,6 +268,12 @@ def build_linked_network(
             "family_id": family_id,
             "member_count": len(members),
             "is_own_household": is_own_household,
+            "generation_offset": household_generation_offsets.get(hh_id),
+            "alignment_status": (
+                "aligned"
+                if hh_id in household_generation_offsets
+                else "unplaced_link"
+            ),
         })
 
         # Apply visibility rules and add provenance
@@ -185,10 +292,10 @@ def build_linked_network(
             )
 
             # Visibility logic
-            if member_household_id not in user_household_ids and not (
-                is_deceased
-                or approved_cross_branch
-            ):
+            # Death never overrides the household's privacy choice. A record is
+            # visible across a household boundary only when that household has
+            # explicitly shared it (including an explicit public memorial).
+            if member_household_id not in user_household_ids and not approved_cross_branch:
                 continue
 
             if is_deceased or visibility_scope in {"memorial", "public_memorial"}:
@@ -199,6 +306,14 @@ def build_linked_network(
                 effective_scope = "linked"
 
             seen_member_ids.add(mid)
+            approved_portrait = _approved_portrait_for_network(
+                member,
+                family_id=family_id or "",
+                is_own_household=is_own_household,
+            )
+            approved_portrait_id = _str_id(
+                (approved_portrait or {}).get("_id")
+            )
             all_nodes.append({
                 "id": mid,
                 "first_name": member.get("first_name"),
@@ -206,18 +321,43 @@ def build_linked_network(
                 "display_name": member.get("display_name"),
                 "birth_year": member.get("birth_year"),
                 "generation": member.get("generation"),
+                "local_generation": member.get("generation"),
+                "aligned_generation": (
+                    _int_or_none(member.get("generation"))
+                    + household_generation_offsets[hh_id]
+                    if hh_id in household_generation_offsets
+                    and _int_or_none(member.get("generation")) is not None
+                    else None
+                ),
+                "placement_status": member.get("placement_status") or "unplaced",
                 "bio": member.get("bio"),
                 "is_deceased": is_deceased,
                 "source_project_id": hh_project_id,
                 "source_household_id": hh_id,
                 "source_household_name": hh_name,
+                "family_id": family_id,
                 "visibility_scope": effective_scope,
                 "is_verified": bool(member.get("is_verified", False)),
+                "approved_photo_upload_id": approved_portrait_id or None,
+                "portrait_url": (
+                    f"/uploads/{approved_portrait_id}/download"
+                    if approved_portrait_id
+                    else ""
+                ),
             })
 
         for rel in relationships:
             rid = _str_id(rel.get("_id"))
             if rid in seen_relationship_ids:
+                continue
+            relationship_privacy = str(
+                rel.get("privacy_scope") or "household_private"
+            ).strip().lower()
+            if not is_own_household and not (
+                bool(rel.get("share_with_linked_families"))
+                or relationship_privacy
+                in {"linked_family_shared", "branch_shared", "public_memorial"}
+            ):
                 continue
             source_member_id = _str_id(rel.get("source_member_id") or "")
             target_member_id = _str_id(rel.get("target_member_id") or "")
@@ -231,10 +371,58 @@ def build_linked_network(
                 "source_member_id": source_member_id,
                 "target_member_id": target_member_id,
                 "relationship_type": rel.get("relationship_type"),
+                "relationship_mode": rel.get("relationship_mode") or "narrative",
+                "status_marker": rel.get("status_marker") or "narrative",
+                "privacy_scope": relationship_privacy,
+                "relationship_label": rel.get("relationship_label"),
                 "notes": rel.get("notes"),
                 "source_project_id": hh_project_id,
                 "source_household_id": hh_id,
             })
+
+    for link_id, link in traversed_links.items():
+        source_member_id = _str_id(link.get("source_anchor_member_id"))
+        target_member_id = _str_id(link.get("target_anchor_member_id"))
+        if not source_member_id or not target_member_id:
+            continue
+        if source_member_id not in seen_member_ids or target_member_id not in seen_member_ids:
+            continue
+        bridge_relationship_type = _str_id(
+            link.get("bridge_relationship_type")
+        ) or "linked_household"
+        original_bridge_relationship_type = bridge_relationship_type
+        canonical_generation_delta = link.get("generation_delta")
+        if bridge_relationship_type in LINK_BRIDGE_INVERSE_CANONICAL_TYPES:
+            source_member_id, target_member_id = (
+                target_member_id,
+                source_member_id,
+            )
+            bridge_relationship_type = LINK_BRIDGE_INVERSE_CANONICAL_TYPES[
+                bridge_relationship_type
+            ]
+            try:
+                canonical_generation_delta = -int(canonical_generation_delta)
+            except (TypeError, ValueError):
+                canonical_generation_delta = None
+        all_edges.append(
+            {
+                "id": f"household-bridge::{link_id}",
+                "source_member_id": source_member_id,
+                "target_member_id": target_member_id,
+                "relationship_type": bridge_relationship_type,
+                "bridge_relationship_type": original_bridge_relationship_type,
+                "relationship_label": original_bridge_relationship_type,
+                "relationship_mode": "verified",
+                "status_marker": "verified",
+                "privacy_scope": "linked_family_shared",
+                "source_household_id": _str_id(link.get("source_household_id")),
+                "target_household_id": _str_id(link.get("target_household_id")),
+                "generation_delta": canonical_generation_delta,
+                "bridge_generation_delta": link.get("generation_delta"),
+                "is_household_bridge": True,
+                "alignment_status": link.get("alignment_status") or "unplaced_link",
+            }
+        )
 
     return {
         "network_summary": {
@@ -242,9 +430,19 @@ def build_linked_network(
             "total_members": len(all_nodes),
             "total_relationships": len(all_edges),
             "root_project_id": normalized_project_id,
+            "alignment_conflict_count": len(alignment_conflicts),
+            "unplaced_household_count": len(
+                [
+                    household
+                    for household in all_households
+                    if _str_id(household.get("_id"))
+                    not in household_generation_offsets
+                ]
+            ),
         },
         "households": household_summaries,
         "nodes": all_nodes,
         "edges": all_edges,
         "link_count": len(all_households) - len(seed_households),
+        "alignment_conflicts": alignment_conflicts,
     }

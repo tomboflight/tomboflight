@@ -1,16 +1,21 @@
 from __future__ import annotations
 
 import logging
+from uuid import uuid4
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 from bson import ObjectId
 from pymongo import ReturnDocument
 from pymongo.collection import Collection
-from pymongo.errors import OperationFailure
+from pymongo.errors import DuplicateKeyError, OperationFailure
 
 from app.database import get_database
-from app.services.blockchain_mint_service import mint_anchor, sync_mint_receipt
+from app.services.blockchain_mint_service import (
+    mint_anchor,
+    rebroadcast_signed_transaction,
+    sync_mint_receipt,
+)
 from app.services.mint_record_service import (
     ACTIVE_MINT_JOB_STATUSES,
     _object_id_or_text,
@@ -83,6 +88,77 @@ def _records_collection() -> Collection[dict[str, Any]]:
     return cast(Collection[dict[str, Any]], db["mint_records"])
 
 
+def _mint_runtime_locks_collection() -> Collection[dict[str, Any]]:
+    db = get_database()
+    return cast(Collection[dict[str, Any]], db["mint_runtime_locks"])
+
+
+def _clear_completed_signed_transaction(mint_record_id: str) -> None:
+    record_id = _to_object_id(mint_record_id)
+    if record_id is None:
+        return
+    _records_collection().update_one(
+        {"_id": record_id},
+        {
+            "$set": {
+                "signed_transaction": None,
+                "broadcast_state": "confirmed",
+                "transaction_confirmed_at": _now(),
+                "updated_at": _now(),
+            }
+        },
+    )
+
+
+def _acquire_signer_lease(mint_record_id: str) -> str:
+    now = _now()
+    lease_token = f"{mint_record_id}:{uuid4().hex}"
+    try:
+        document = _mint_runtime_locks_collection().find_one_and_update(
+            {
+                "_id": "evm_mint_signer",
+                "$or": [
+                    {"expires_at": {"$lte": now}},
+                    {"lease_token": lease_token},
+                ],
+            },
+            {
+                "$set": {
+                    "lease_token": lease_token,
+                    "mint_record_id": mint_record_id,
+                    "locked_at": now,
+                    "expires_at": now + timedelta(minutes=4),
+                }
+            },
+            upsert=True,
+            return_document=ReturnDocument.AFTER,
+        )
+    except DuplicateKeyError as exc:
+        raise RuntimeError(
+            "Another mint transaction currently owns the blockchain signer lease."
+        ) from exc
+    if document is None or _normalize(document.get("lease_token")) != lease_token:
+        raise RuntimeError(
+            "Another mint transaction currently owns the blockchain signer lease."
+        )
+    return lease_token
+
+
+def _release_signer_lease(lease_token: str) -> None:
+    now = _now()
+    _mint_runtime_locks_collection().update_one(
+        {"_id": "evm_mint_signer", "lease_token": lease_token},
+        {
+            "$set": {
+                "lease_token": None,
+                "mint_record_id": None,
+                "released_at": now,
+                "expires_at": now,
+            }
+        },
+    )
+
+
 def ensure_mint_job_indexes() -> None:
     collection = _collection()
     existing = collection.index_information()
@@ -102,6 +178,14 @@ def ensure_mint_job_indexes() -> None:
             collection.create_index(keys, name=name)
         except OperationFailure:
             continue
+    # This sparse idempotency key closes the check-then-insert race without
+    # invalidating historical rows created before job keys existed.
+    collection.create_index(
+        [("job_key", 1)],
+        name="job_key_1_unique",
+        unique=True,
+        sparse=True,
+    )
 
 
 def _serialize_job(document: dict[str, Any]) -> dict[str, Any]:
@@ -163,10 +247,14 @@ def enqueue_job(
         raise ValueError("Mint job belongs to a non-canonical mint record.")
 
     now = _now()
+    job_key = (
+        f"{_normalize(project_id)}:{_normalize(mint_record_id)}:{normalized_job_type}"
+    )
     document = {
         "project_id": _object_id_or_text(project_id),
         "mint_record_id": _object_id_or_text(mint_record_id),
         "job_type": normalized_job_type,
+        "job_key": job_key,
         "status": "queued",
         "attempt_count": 0,
         "max_attempts": 5,
@@ -195,7 +283,43 @@ def enqueue_job(
     if existing is not None:
         return _serialize_job(existing)
 
-    result = _collection().insert_one(document)
+    terminal_existing = _collection().find_one({"job_key": job_key})
+    if terminal_existing is not None:
+        terminal_status = _normalize(terminal_existing.get("status")).lower()
+        attempts = int(terminal_existing.get("attempt_count") or 0)
+        max_attempts = int(terminal_existing.get("max_attempts") or 5)
+        if (
+            terminal_status in {"failed", "succeeded", "canceled"}
+            and attempts < max_attempts
+            and normalized_job_type == "sync_receipt"
+        ):
+            _collection().update_one(
+                {"_id": terminal_existing["_id"]},
+                {
+                    "$set": {
+                        "status": "queued",
+                        "run_after": run_after or now,
+                        "locked_by": None,
+                        "locked_at": None,
+                        "started_at": None,
+                        "finished_at": None,
+                        "error_code": None,
+                        "error_message": None,
+                        "updated_at": now,
+                    }
+                },
+            )
+            refreshed = _collection().find_one({"_id": terminal_existing["_id"]})
+            return _serialize_job(refreshed or terminal_existing)
+        return _serialize_job(terminal_existing)
+
+    try:
+        result = _collection().insert_one(document)
+    except DuplicateKeyError:
+        raced = _collection().find_one({"job_key": job_key})
+        if raced is None:
+            raise
+        return _serialize_job(raced)
     saved = _collection().find_one({"_id": result.inserted_id}) or document
     return _serialize_job(saved)
 
@@ -327,12 +451,73 @@ def _execute_mint_anchor(job: dict[str, Any], record: dict[str, Any]) -> dict[st
     if manifest is None:
         raise RuntimeError("Public manifest is missing for this mint record.")
 
-    mark_mint_minting(record["id"])
-    mint_result = mint_anchor(
-        metadata_uri=manifest["metadata_uri"],
-        recipient_wallet=record.get("customer_wallet"),
-        token_type=record.get("token_type") or "portrait_anchor",
-    )
+    lease_token = _acquire_signer_lease(record["id"])
+    try:
+        raw_record = _records_collection().find_one(
+            {"_id": _to_object_id(record["id"])}
+        ) or {}
+        existing_tx_hash = _normalize_tx_hash(
+            raw_record.get("tx_hash") or record.get("tx_hash")
+        )
+        if existing_tx_hash:
+            if (
+                _normalize(raw_record.get("broadcast_state")).lower() == "prepared"
+                and _normalize(raw_record.get("signed_transaction"))
+            ):
+                rebroadcast_signed_transaction(
+                    _normalize(raw_record.get("signed_transaction"))
+                )
+                _records_collection().update_one(
+                    {"_id": _to_object_id(record["id"])},
+                    {
+                        "$set": {
+                            "broadcast_state": "submitted",
+                            "broadcast_recovered_at": _now(),
+                            "updated_at": _now(),
+                        }
+                    },
+                )
+            return sync_receipt_for_mint_record(record["id"])
+
+        def persist_prepared_transaction(payload: dict[str, Any]) -> None:
+            tx_hash = _normalize_tx_hash(payload.get("tx_hash"))
+            _records_collection().update_one(
+                {"_id": _to_object_id(record["id"])},
+                {
+                    "$set": {
+                        "tx_hash": tx_hash,
+                        "mint_nonce": payload.get("nonce"),
+                        "signed_transaction": payload.get("signed_transaction"),
+                        "broadcast_state": "prepared",
+                        "transaction_prepared_at": _now(),
+                        "updated_at": _now(),
+                    }
+                },
+            )
+            mark_mint_minting(record["id"], tx_hash=tx_hash)
+
+        def persist_broadcast(payload: dict[str, Any]) -> None:
+            _records_collection().update_one(
+                {"_id": _to_object_id(record["id"])},
+                {
+                    "$set": {
+                        "broadcast_state": "submitted",
+                        "transaction_broadcast_at": _now(),
+                        "updated_at": _now(),
+                    }
+                },
+            )
+
+        mark_mint_minting(record["id"])
+        mint_result = mint_anchor(
+            metadata_uri=manifest["metadata_uri"],
+            recipient_wallet=record.get("customer_wallet"),
+            token_type=record.get("token_type") or "portrait_anchor",
+            on_transaction_prepared=persist_prepared_transaction,
+            on_transaction_broadcast=persist_broadcast,
+        )
+    finally:
+        _release_signer_lease(lease_token)
 
     token_id = _normalize(mint_result.get("token_id"))
     tx_hash = _normalize_tx_hash(mint_result.get("tx_hash"))
@@ -347,6 +532,7 @@ def _execute_mint_anchor(job: dict[str, Any], record: dict[str, Any]) -> dict[st
             contract_address=mint_result.get("contract_address"),
             chain=mint_result.get("chain"),
         )
+        _clear_completed_signed_transaction(record["id"])
 
     return mint_result
 
@@ -417,7 +603,7 @@ def sync_receipt_for_mint_record(mint_record_id: str) -> dict[str, Any]:
         )
 
     if token_id and synced_status in {"minted", "confirmed"}:
-        return mark_mint_minted(
+        minted = mark_mint_minted(
             mint_record_id,
             token_id=token_id,
             tx_hash=synced_tx_hash,
@@ -425,6 +611,8 @@ def sync_receipt_for_mint_record(mint_record_id: str) -> dict[str, Any]:
             contract_address=receipt.get("contract_address"),
             chain=receipt.get("chain"),
         )
+        _clear_completed_signed_transaction(mint_record_id)
+        return minted
 
     if synced_status == "confirmed":
         return mark_mint_failed(
@@ -470,7 +658,28 @@ def _finish_job(
 
 def run_next_job(worker_id: str) -> dict[str, Any]:
     now = _now()
-    job = _collection().find_one_and_update(
+    stale_before = now - timedelta(minutes=5)
+    collection = _collection()
+    if hasattr(collection, "update_many"):
+        collection.update_many(
+            {
+                "status": "started",
+                "locked_at": {"$lte": stale_before},
+            },
+            {
+                "$set": {
+                    "status": "queued",
+                    "locked_by": None,
+                    "locked_at": None,
+                    "started_at": None,
+                    "run_after": now,
+                    "error_code": "stale_worker_lease_recovered",
+                    "error_message": "A stale worker lease was recovered automatically.",
+                    "updated_at": now,
+                }
+            },
+        )
+    job = collection.find_one_and_update(
         {
             "status": "queued",
             "run_after": {"$lte": now},
@@ -597,14 +806,23 @@ def run_next_job(worker_id: str) -> dict[str, Any]:
             serialized_job["job_type"] == "sync_receipt"
             and _normalize((result or {}).get("status")).lower() == "pending"
         ):
-            enqueue_job(
-                project_id=record["project_id"],
-                mint_record_id=record["id"],
-                job_type="sync_receipt",
-                priority=60,
-                run_after=_now() + timedelta(seconds=60),
-                payload={"version_number": record["version_number"]},
+            _collection().update_one(
+                {"_id": job["_id"]},
+                {
+                    "$set": {
+                        "status": "queued",
+                        "run_after": _now() + timedelta(seconds=60),
+                        "locked_by": None,
+                        "locked_at": None,
+                        "started_at": None,
+                        "finished_at": None,
+                        "result": result or {},
+                        "updated_at": _now(),
+                    }
+                },
             )
+            refreshed = _collection().find_one({"_id": job["_id"]}) or job
+            return _serialize_job(refreshed)
 
         return _finish_job(
             job["_id"],
@@ -624,21 +842,28 @@ def run_next_job(worker_id: str) -> dict[str, Any]:
                 "tx_hash": record.get("tx_hash"),
             },
         )
-        mark_mint_failed(
-            record["id"],
-            error_code="mint_job_failed",
-            error_message=str(exc),
-        )
         retry_delay = now + timedelta(minutes=5)
+        attempt_count = int(serialized_job.get("attempt_count") or 0)
+        max_attempts = int(serialized_job.get("max_attempts") or 5)
+        will_retry = attempt_count < max_attempts
+        if not will_retry:
+            mark_mint_failed(
+                record["id"],
+                error_code="mint_job_failed",
+                error_message=str(exc),
+            )
         _collection().update_one(
             {"_id": job["_id"]},
             {
                 "$set": {
-                    "status": "failed",
+                    "status": "queued" if will_retry else "failed",
                     "run_after": retry_delay,
+                    "locked_by": None,
+                    "locked_at": None,
+                    "started_at": None if will_retry else serialized_job.get("started_at"),
                     "error_code": "mint_job_failed",
                     "error_message": str(exc),
-                    "finished_at": _now(),
+                    "finished_at": None if will_retry else _now(),
                     "updated_at": _now(),
                 }
             },

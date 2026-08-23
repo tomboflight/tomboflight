@@ -191,6 +191,12 @@ class UploadCinematicApprovalPayload(BaseModel):
     approved_for_cinematic: bool = Field(default=True)
     verification_status: str = Field(default="approved", max_length=50)
     consent_status: str = Field(default="approved", max_length=50)
+    review_notes: str = Field(default="", max_length=1000)
+
+
+class UploadVerificationReviewPayload(BaseModel):
+    decision: Literal["approved", "rejected", "needs_correction"]
+    review_notes: str = Field(default="", max_length=1000)
 
 
 def _normalize_value(value: Any) -> str:
@@ -488,6 +494,9 @@ def _public_upload_record(record: dict[str, Any]) -> dict[str, Any]:
     serialized.pop("absolute_path", None)
     serialized.pop("storage_path", None)
     serialized.pop("uploaded_by_user_id", None)
+    serialized.pop("master_review_notes", None)
+    serialized.pop("verification_review_notes", None)
+    serialized.pop("verified_by", None)
     return serialized
 
 
@@ -536,6 +545,13 @@ def _serialize_admin_upload_review(
         "family_name": _normalize_value((family or {}).get("family_name")) or None,
         "member_id": member_id or None,
         "member_name": _display_member_name(member),
+        "master_review_notes": _normalize_value(
+            record.get("master_review_notes")
+        ),
+        "verification_review_notes": _normalize_value(
+            record.get("verification_review_notes")
+        ),
+        "verified_by": _normalize_value(record.get("verified_by")) or None,
     }
 
 
@@ -960,6 +976,8 @@ def list_admin_uploads(
 async def upload_member_photo(
     family_id: str = Form(...),
     member_id: str = Form(...),
+    consent_attested: bool = Form(...),
+    authority_attested: bool = Form(...),
     file: UploadFile = File(...),
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
@@ -1012,6 +1030,8 @@ async def upload_member_photo(
         upload=file,
         uploaded_by=_actor_label(current_user),
         uploaded_by_user_id=_current_user_id(current_user),
+        consent_attested=consent_attested,
+        authority_attested=authority_attested,
     )
     upload_record = _scan_and_quarantine_upload(db=db, upload_record=upload_record)
 
@@ -1182,9 +1202,7 @@ async def upload_private_media(
 def list_member_uploads(
     member_id: str,
     category: Optional[str] = Query(default=None),
-    current_user: dict[str, Any] = Depends(
-        require_entitlement("can_upload_portraits", allow_internal_admin=True)
-    ),
+    current_user: dict[str, Any] = Depends(get_current_user),
 ):
     context = require_workspace_capability(
         current_user,
@@ -1228,9 +1246,7 @@ def list_member_uploads(
 def list_family_uploads(
     family_id: str,
     category: Optional[str] = Query(default=None),
-    current_user: dict[str, Any] = Depends(
-        require_entitlement("can_upload_portraits", allow_internal_admin=True)
-    ),
+    current_user: dict[str, Any] = Depends(get_current_user),
 ):
     context = require_workspace_capability(
         current_user,
@@ -1413,37 +1429,159 @@ def update_upload_privacy(
 def update_upload_cinematic_approval(
     upload_id: str,
     payload: UploadCinematicApprovalPayload,
-    current_user: dict[str, Any] = Depends(get_current_user),
+    current_user: dict[str, Any] = Depends(
+        require_permission("uploads.admin.review")
+    ),
 ):
     db = get_database()
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")
 
     upload_record, context = _require_upload_management_access(upload_id, db, current_user)
-    if not context.get("is_admin") and _normalize_value(context.get("member_role")) not in {
-        "billing_owner",
-        "co_owner",
-        "family_manager",
-    }:
+    if _normalize_value(upload_record.get("category")) != "member_photo":
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to approve cinematic assets.",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only member portraits can be approved for cinematic placement.",
+        )
+    approving = bool(payload.approved_for_cinematic)
+    if approving and (
+        _normalize_value(upload_record.get("scan_status")).lower() != "clean"
+        or bool(upload_record.get("quarantined"))
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Portrait must pass malware scanning before master approval.",
+        )
+    if approving and not (
+        bool(upload_record.get("consent_attested"))
+        and bool(upload_record.get("authority_attested"))
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Portrait is missing the required consent and authority attestations.",
+        )
+    verification_status = (
+        _normalize_value(payload.verification_status).lower()
+        or ("approved" if approving else "rejected")
+    )
+    consent_status = (
+        _normalize_value(payload.consent_status).lower()
+        or ("approved" if approving else "rejected")
+    )
+    if approving and (
+        verification_status != "approved" or consent_status != "approved"
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cinematic approval requires approved verification and consent decisions.",
         )
     now = datetime.now(UTC).isoformat()
     db["uploaded_files"].update_one(
         {"_id": ObjectId(upload_id)},
         {
             "$set": {
-                "approved_for_cinematic": bool(payload.approved_for_cinematic),
+                "approved_for_cinematic": approving,
                 "approved_by": _actor_label(current_user),
                 "approved_by_user_id": _current_user_id(current_user),
-                "verification_status": _normalize_value(payload.verification_status).lower() or "approved",
-                "consent_status": _normalize_value(payload.consent_status).lower() or "approved",
+                "verification_status": verification_status,
+                "consent_status": consent_status,
+                "master_review_status": "approved" if approving else "rejected",
+                "master_reviewed_at": now,
+                "master_review_notes": _normalize_value(payload.review_notes),
                 "updated_at": now,
             }
         },
     )
     updated = db["uploaded_files"].find_one({"_id": ObjectId(upload_id)}) or upload_record
+    member_id = _normalize_value(upload_record.get("member_id"))
+    if member_id and ObjectId.is_valid(member_id):
+        member_update: dict[str, Any] = {
+            "pending_photo_upload_id": None,
+            "photo_submission_status": "approved" if approving else "rejected",
+            "updated_at": now,
+        }
+        if approving:
+            member_update.update(
+                {
+                    "approved_photo_upload_id": upload_id,
+                    "photo_upload_id": upload_id,
+                    "photo_path": upload_record.get("relative_path"),
+                    "photo_original_filename": upload_record.get("original_filename"),
+                    "photo_content_type": upload_record.get("content_type"),
+                    "photo_size_bytes": upload_record.get("size_bytes"),
+                    "portrait_approved_at": now,
+                }
+            )
+        else:
+            member = db["family_members"].find_one({"_id": ObjectId(member_id)}) or {}
+            if _normalize_value(member.get("approved_photo_upload_id")) == upload_id:
+                member_update.update(
+                    {
+                        "approved_photo_upload_id": None,
+                        "photo_upload_id": None,
+                        "photo_path": None,
+                        "portrait_approved_at": None,
+                    }
+                )
+        db["family_members"].update_one(
+            {"_id": ObjectId(member_id)},
+            {"$set": member_update},
+        )
+    return {"upload": _public_upload_record(updated)}
+
+
+@router.post("/{upload_id}/verification-review")
+def update_upload_verification_review(
+    upload_id: str,
+    payload: UploadVerificationReviewPayload,
+    current_user: dict[str, Any] = Depends(
+        require_permission("uploads.admin.review")
+    ),
+):
+    db = get_database()
+    if db is None:
+        raise HTTPException(status_code=500, detail="Database is not connected.")
+
+    upload_record, _context = _require_upload_management_access(
+        upload_id,
+        db,
+        current_user,
+    )
+    if _normalize_value(upload_record.get("category")) != "verification_evidence":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only verification evidence can be decided through this review.",
+        )
+
+    decision = _normalize_value(payload.decision).lower()
+    if decision == "approved" and (
+        _normalize_value(upload_record.get("scan_status")).lower() != "clean"
+        or bool(upload_record.get("quarantined"))
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Verification evidence must pass malware scanning before approval.",
+        )
+
+    now = datetime.now(UTC).isoformat()
+    db["uploaded_files"].update_one(
+        {"_id": ObjectId(upload_id)},
+        {
+            "$set": {
+                "verification_status": decision,
+                "verified_by": _actor_label(current_user),
+                "verified_by_user_id": _current_user_id(current_user),
+                "verified_at": now,
+                "verification_review_notes": _normalize_value(
+                    payload.review_notes
+                ),
+                "updated_at": now,
+            }
+        },
+    )
+    updated = db["uploaded_files"].find_one(
+        {"_id": ObjectId(upload_id)}
+    ) or upload_record
     return {"upload": _public_upload_record(updated)}
 
 
@@ -1463,7 +1601,11 @@ def list_cinematic_assets(
         raise HTTPException(status_code=500, detail="Database is not connected.")
     query = {
         "family_id": _normalize_value((context.get("family") or {}).get("_id")),
+        "scan_status": "clean",
+        "quarantined": {"$ne": True},
         "approved_for_cinematic": True,
+        "verification_status": "approved",
+        "consent_status": "approved",
     }
     records = list(db["uploaded_files"].find(query).sort("created_at", -1))
     user_id = _current_user_id(current_user)

@@ -28,6 +28,7 @@ router = APIRouter(prefix="/link-requests", tags=["Link Requests"])
 
 class LinkRequestDecision(BaseModel):
     notes: str | None = Field(default=None, max_length=1000)
+    target_anchor_member_id: str | None = Field(default=None, min_length=1)
 
 
 def _current_user_id(user: dict[str, Any]) -> str:
@@ -120,6 +121,9 @@ def approve_link_request_route(
             approver_user_id=_current_user_id(current_user),
             approver_user_email=_current_user_email(current_user),
             approval_notes=(payload.notes if payload else None),
+            target_anchor_member_id=(
+                payload.target_anchor_member_id if payload else None
+            ),
             is_admin=_is_admin(current_user),
         )
     except PermissionError as exc:

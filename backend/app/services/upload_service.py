@@ -131,6 +131,8 @@ def serialize_upload_record(record: dict[str, Any]) -> dict[str, Any]:
         "verification_type": record.get("verification_type"),
         "original_filename": record.get("original_filename"),
         "stored_filename": record.get("stored_filename"),
+        # Internal callers need this to run malware scanning. Public routes remove it.
+        "relative_path": record.get("relative_path"),
         "content_type": record.get("content_type"),
         "size_bytes": record.get("size_bytes"),
         "uploaded_by": record.get("uploaded_by"),
@@ -145,8 +147,17 @@ def serialize_upload_record(record: dict[str, Any]) -> dict[str, Any]:
         "asset_type": record.get("asset_type") or record.get("category"),
         "verification_status": record.get("verification_status") or "pending",
         "consent_status": record.get("consent_status") or "pending",
+        "consent_attested": bool(record.get("consent_attested")),
+        "authority_attested": bool(record.get("authority_attested")),
+        "consent_attested_at": record.get("consent_attested_at"),
         "approved_for_cinematic": bool(record.get("approved_for_cinematic")),
         "approved_by": record.get("approved_by"),
+        "master_review_status": record.get("master_review_status") or "pending",
+        "master_reviewed_at": record.get("master_reviewed_at"),
+        "master_review_notes": record.get("master_review_notes") or "",
+        "verified_by": record.get("verified_by"),
+        "verified_at": record.get("verified_at"),
+        "verification_review_notes": record.get("verification_review_notes") or "",
         "share_with_linked_families": bool(record.get("share_with_linked_families")),
         "customer_visible": bool(record.get("customer_visible", True)),
         "internal_only": bool(record.get("internal_only")),
@@ -168,7 +179,14 @@ async def store_member_photo_upload(
     upload: UploadFile,
     uploaded_by: str,
     uploaded_by_user_id: str = "",
+    consent_attested: bool = False,
+    authority_attested: bool = False,
 ) -> dict[str, Any]:
+    if not consent_attested or not authority_attested:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Portrait consent and upload authority must both be confirmed.",
+        )
     content_type = str(upload.content_type or "").strip().lower()
     if content_type not in IMAGE_CONTENT_TYPES:
         raise HTTPException(
@@ -211,8 +229,15 @@ async def store_member_photo_upload(
         "asset_type": "portrait",
         "verification_status": "pending",
         "consent_status": "pending",
+        "consent_attested": True,
+        "authority_attested": True,
+        "consent_attested_at": now_iso,
+        "consent_attested_by_user_id": uploaded_by_user_id,
         "approved_for_cinematic": False,
         "approved_by": None,
+        "master_review_status": "pending",
+        "master_reviewed_at": None,
+        "master_review_notes": "",
         "share_with_linked_families": False,
         "evidence_kind": "",
         "verification_type": "",
@@ -240,11 +265,8 @@ async def store_member_photo_upload(
         {"_id": ObjectId(member_id)},
         {
             "$set": {
-                "photo_upload_id": upload_id,
-                "photo_path": upload_record["relative_path"],
-                "photo_original_filename": original_filename,
-                "photo_content_type": content_type,
-                "photo_size_bytes": size_bytes,
+                "pending_photo_upload_id": upload_id,
+                "photo_submission_status": "pending_scan",
                 "updated_at": now_iso,
                 "updated_by": uploaded_by,
                 "updated_by_user_id": uploaded_by_user_id,

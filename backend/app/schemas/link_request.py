@@ -3,13 +3,30 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from app.core.relationship_catalog import (
+    normalize_relationship_type,
+    relationship_supports_tree_placement,
+)
 
 
 class LinkRequestCreate(BaseModel):
     source_project_id: str = Field(..., min_length=1)
+    source_anchor_member_id: str = Field(..., min_length=1)
+    bridge_relationship_type: str = Field(default="identity_bridge", min_length=1)
     target_key: str = Field(..., min_length=1, max_length=150)
     notes: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("bridge_relationship_type")
+    @classmethod
+    def _validate_bridge_relationship_type(cls, value: str) -> str:
+        normalized = normalize_relationship_type(value)
+        if not relationship_supports_tree_placement(normalized):
+            raise ValueError(
+                "The selected cross-household relationship cannot determine tree placement."
+            )
+        return normalized
 
 
 class LinkRequestResponse(BaseModel):
@@ -18,6 +35,12 @@ class LinkRequestResponse(BaseModel):
     target_project_id: str
     source_household_id: str | None = None
     target_household_id: str | None = None
+    source_anchor_member_id: str | None = None
+    target_anchor_member_id: str | None = None
+    bridge_relationship_type: str | None = None
+    generation_delta: int | None = None
+    target_generation_offset: int | None = None
+    alignment_status: str | None = None
     source_key: str
     target_key: str
     status: str
@@ -68,6 +91,36 @@ def build_link_request_response(data: dict[str, Any]) -> LinkRequestResponse:
             str(data.get("target_household_id"))
             if data.get("target_household_id") is not None
             and str(data.get("target_household_id")).strip()
+            else None
+        ),
+        source_anchor_member_id=(
+            str(data.get("source_anchor_member_id"))
+            if data.get("source_anchor_member_id")
+            else None
+        ),
+        target_anchor_member_id=(
+            str(data.get("target_anchor_member_id"))
+            if data.get("target_anchor_member_id")
+            else None
+        ),
+        bridge_relationship_type=(
+            str(data.get("bridge_relationship_type"))
+            if data.get("bridge_relationship_type")
+            else None
+        ),
+        generation_delta=(
+            int(data.get("generation_delta"))
+            if data.get("generation_delta") is not None
+            else None
+        ),
+        target_generation_offset=(
+            int(data.get("target_generation_offset"))
+            if data.get("target_generation_offset") is not None
+            else None
+        ),
+        alignment_status=(
+            str(data.get("alignment_status"))
+            if data.get("alignment_status")
             else None
         ),
         source_key=str(data.get("source_key") or ""),

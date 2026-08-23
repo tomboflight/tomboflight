@@ -6,10 +6,13 @@ from bson import ObjectId
 
 from app.core.relationship_catalog import (
     ALLOWED_RELATIONSHIP_TYPES,
-    ANCESTRY_RELATIONSHIP_TYPES,
+    PARENT_RELATIONSHIP_TYPES,
+    PARTNER_RELATIONSHIP_TYPES,
+    SYMMETRIC_RELATIONSHIP_TYPES,
     normalize_relationship_type,
 )
 from app.database import get_database
+from app.services.linked_network_service import build_linked_network
 
 
 def _json_safe(value: Any) -> Any:
@@ -68,6 +71,12 @@ def _serialize_member(member: dict) -> dict:
             ).strip(),
             "birth_year": member.get("birth_year"),
             "generation": member.get("generation"),
+            "placement_status": member.get("placement_status") or "unplaced",
+            "approved_photo_upload_id": _string_or_none(
+                member.get("_approved_photo_upload_id")
+                or member.get("approved_photo_upload_id")
+            ),
+            "portrait_url": member.get("_approved_portrait_url") or "",
             "father_id": _string_or_none(member.get("father_id")),
             "mother_id": _string_or_none(member.get("mother_id")),
             "spouse_id": _string_or_none(member.get("spouse_id")),
@@ -120,8 +129,17 @@ def _serialize_relationship(rel: dict) -> dict:
             ),
             "relationship_mode": rel.get("relationship_mode"),
             "status_marker": rel.get("status_marker"),
+            "privacy_scope": rel.get("privacy_scope"),
+            "relationship_label": rel.get("relationship_label"),
+            "evidence_record_ids": list(rel.get("evidence_record_ids") or []),
+            "valid_from": rel.get("valid_from"),
+            "valid_to": rel.get("valid_to"),
             "notes": rel.get("notes"),
             "created_at": rel.get("created_at"),
+            "source_household_id": rel.get("source_household_id"),
+            "target_household_id": rel.get("target_household_id"),
+            "is_household_bridge": bool(rel.get("is_household_bridge")),
+            "alignment_status": rel.get("alignment_status"),
         }
     )
 
@@ -139,6 +157,8 @@ def _build_edges(relationships: list[dict]) -> list[dict]:
                     ),
                     "relationship_mode": rel.get("relationship_mode"),
                     "status_marker": rel.get("status_marker"),
+                    "is_household_bridge": bool(rel.get("is_household_bridge")),
+                    "alignment_status": rel.get("alignment_status"),
                 }
             )
         )
@@ -192,7 +212,7 @@ def _collect_tree_relationships(members: list[dict], relationships: list[dict]) 
     normalized: list[dict] = []
     seen_keys: set[tuple[str | None, str | None, str]] = set()
 
-    symmetric_types = {"spouse", "former_spouse", "sibling", "household_member"}
+    symmetric_types = SYMMETRIC_RELATIONSHIP_TYPES
 
     for rel in relationships:
         candidate = _normalized_relationship_document(rel)
@@ -248,8 +268,8 @@ def _relationship_allowed_for_mode(rel: dict, mode: str) -> bool:
 
 
 def _build_union_nodes(people: dict[str, dict[str, Any]], relationships: list[dict]) -> list[dict[str, Any]]:
-    primary_parent_types = {"biological_parent", "adoptive_parent"}
-    spouse_types = {"spouse", "former_spouse"}
+    primary_parent_types = PARENT_RELATIONSHIP_TYPES
+    spouse_types = PARTNER_RELATIONSHIP_TYPES
     spouse_pairs: dict[tuple[str, str], str] = {}
     for rel in relationships:
         rel_type = normalize_relationship_type(rel.get("relationship_type"))
@@ -332,15 +352,15 @@ def _build_tree_model(members: list[dict], relationships: list[dict]) -> dict[st
         if not source_id or not target_id:
             continue
 
-        if source_id in people and rel_type in ANCESTRY_RELATIONSHIP_TYPES:
+        if source_id in people and rel_type in PARENT_RELATIONSHIP_TYPES:
             current = set(people[source_id]["child_ids"])
             current.add(target_id)
             people[source_id]["child_ids"] = sorted(current)
-        if target_id in people and rel_type in ANCESTRY_RELATIONSHIP_TYPES:
+        if target_id in people and rel_type in PARENT_RELATIONSHIP_TYPES:
             current = set(people[target_id]["parent_ids"])
             current.add(source_id)
             people[target_id]["parent_ids"] = sorted(current)
-        if rel_type in {"spouse", "former_spouse"}:
+        if rel_type in PARTNER_RELATIONSHIP_TYPES:
             if source_id in people:
                 current = set(people[source_id]["spouse_ids"])
                 current.add(target_id)
@@ -354,7 +374,7 @@ def _build_tree_model(members: list[dict], relationships: list[dict]) -> dict[st
             related_people_by_id[source_id].append(
                 {"person_id": target_id, "relationship_type": rel_type}
             )
-        if rel_type in {"spouse", "former_spouse", "sibling", "household_member"} and target_id in related_people_by_id:
+        if rel_type in SYMMETRIC_RELATIONSHIP_TYPES and target_id in related_people_by_id:
             related_people_by_id[target_id].append(
                 {"person_id": source_id, "relationship_type": rel_type}
             )
@@ -395,7 +415,75 @@ def _find_family(db, family_id: str):
 
 def _find_members(db, family_id: str) -> list[dict]:
     candidates = _family_id_candidates(family_id)
-    return list(db.family_members.find({"family_id": {"$in": candidates}}))
+    members = list(db.family_members.find({"family_id": {"$in": candidates}}))
+    uploads = db["uploaded_files"]
+    for member in members:
+        member_id = str(member.get("_id") or "")
+        approved_upload = None
+        approved_upload_id = str(member.get("approved_photo_upload_id") or "").strip()
+        if approved_upload_id and ObjectId.is_valid(approved_upload_id):
+            approved_upload = uploads.find_one({"_id": ObjectId(approved_upload_id)})
+
+        if not _portrait_upload_is_ready(
+            approved_upload,
+            family_id=str(member.get("family_id") or family_id),
+            member_id=member_id,
+        ):
+            candidates_for_member = list(
+                uploads.find(
+                    {
+                        "family_id": str(member.get("family_id") or family_id),
+                        "member_id": member_id,
+                        "category": "member_photo",
+                    }
+                )
+            )
+            candidates_for_member.sort(
+                key=lambda item: str(item.get("created_at") or ""),
+                reverse=True,
+            )
+            approved_upload = next(
+                (
+                    upload
+                    for upload in candidates_for_member
+                    if _portrait_upload_is_ready(
+                        upload,
+                        family_id=str(member.get("family_id") or family_id),
+                        member_id=member_id,
+                    )
+                ),
+                None,
+            )
+
+        if approved_upload:
+            upload_id = str(approved_upload.get("_id") or "")
+            member["_approved_photo_upload_id"] = upload_id
+            member["_approved_portrait_url"] = (
+                f"/uploads/{upload_id}/download" if upload_id else ""
+            )
+    return members
+
+
+def _portrait_upload_is_ready(
+    upload: dict[str, Any] | None,
+    *,
+    family_id: str,
+    member_id: str,
+) -> bool:
+    if not upload:
+        return False
+    return bool(
+        str(upload.get("category") or "") == "member_photo"
+        and str(upload.get("family_id") or "") == family_id
+        and str(upload.get("member_id") or "") == member_id
+        and str(upload.get("scan_status") or "").lower() == "clean"
+        and not bool(upload.get("quarantined"))
+        and bool(upload.get("approved_for_cinematic"))
+        and str(upload.get("verification_status") or "").lower() == "approved"
+        and str(upload.get("consent_status") or "").lower() == "approved"
+        and bool(upload.get("consent_attested"))
+        and bool(upload.get("authority_attested"))
+    )
 
 
 def _find_nodes(db, family_id: str) -> list[dict]:
@@ -666,5 +754,150 @@ def get_linked_family_tree(family_id: str, mode: str = "default") -> dict:
         ],
         "edges": _build_edges(relationships),
         "linked_family_ids": seen_family_ids,
+        "tree_model": _build_tree_model(members, relationships),
+    }
+
+
+def get_authorized_linked_family_tree(
+    family_id: str,
+    mode: str,
+    *,
+    project_id: str,
+    current_user_id: str,
+    workspace_context: dict[str, Any],
+) -> dict[str, Any]:
+    """Return the privacy-filtered, generation-aligned linked tree.
+
+    The older linked-tree builder joined families by household id but did not
+    apply bridge offsets or cross-household privacy. This adapter uses the same
+    authorized linked-network graph as reunion readiness, then presents it in
+    the shape consumed by the tree UI.
+    """
+    db = get_database()
+    if db is None:
+        return {
+            "family_id": family_id,
+            "mode": mode,
+            "family": None,
+            "members": [],
+            "nodes": [],
+            "relationships": [],
+            "edges": [],
+            "linked_family_ids": [],
+            "households": [],
+            "alignment_conflicts": [],
+        }
+
+    network = build_linked_network(
+        project_id,
+        current_user_id,
+        workspace_context=workspace_context,
+    )
+    members: list[dict[str, Any]] = []
+    for node in network.get("nodes") or []:
+        aligned_generation = node.get("aligned_generation")
+        generation = (
+            aligned_generation
+            if aligned_generation is not None
+            else node.get("local_generation")
+        )
+        members.append(
+            {
+                "_id": node.get("id"),
+                "family_id": node.get("family_id"),
+                "household_id": node.get("source_household_id"),
+                "first_name": node.get("first_name"),
+                "last_name": node.get("last_name"),
+                "display_name": node.get("display_name"),
+                "birth_year": node.get("birth_year"),
+                "generation": generation,
+                "local_generation": node.get("local_generation"),
+                "placement_status": node.get("placement_status") or "unplaced",
+                "bio": node.get("bio"),
+                "privacy_marker": node.get("visibility_scope"),
+                "is_verified": node.get("is_verified"),
+                "_approved_photo_upload_id": node.get(
+                    "approved_photo_upload_id"
+                ),
+                "_approved_portrait_url": node.get("portrait_url") or "",
+            }
+        )
+
+    relationships: list[dict[str, Any]] = []
+    for edge in network.get("edges") or []:
+        relationship = {
+            "_id": edge.get("id"),
+            "family_id": family_id,
+            "source_member_id": edge.get("source_member_id"),
+            "target_member_id": edge.get("target_member_id"),
+            "relationship_type": edge.get("relationship_type"),
+            "relationship_mode": edge.get("relationship_mode") or "narrative",
+            "status_marker": edge.get("status_marker") or "narrative",
+            "privacy_scope": edge.get("privacy_scope") or "household_private",
+            "relationship_label": edge.get("relationship_label"),
+            "notes": edge.get("notes"),
+            "source_household_id": edge.get("source_household_id"),
+            "target_household_id": edge.get("target_household_id"),
+            "is_household_bridge": bool(edge.get("is_household_bridge")),
+            "alignment_status": edge.get("alignment_status"),
+        }
+        if str(mode or "default").strip().lower() != "default" and not (
+            _relationship_allowed_for_mode(relationship, mode)
+        ):
+            continue
+        relationships.append(relationship)
+
+    members_by_generation: dict[int, list[dict[str, Any]]] = {}
+    for member in members:
+        try:
+            generation = int(member.get("generation"))
+        except (TypeError, ValueError):
+            generation = 0
+        members_by_generation.setdefault(generation, []).append(member)
+
+    lineage_nodes: list[dict[str, Any]] = []
+    for generation, generation_members in sorted(members_by_generation.items()):
+        for row, member in enumerate(
+            sorted(
+                generation_members,
+                key=lambda item: str(item.get("_id") or ""),
+            )
+        ):
+            member_id = str(member.get("_id") or "")
+            lineage_nodes.append(
+                {
+                    "_id": f"linked-node::{member_id}",
+                    "family_id": family_id,
+                    "member_id": member_id,
+                    "generation": generation,
+                    "x": float(generation * 360),
+                    "y": float(row * 180),
+                    "parent_node_ids": [],
+                    "child_node_ids": [],
+                }
+            )
+
+    family_ids = sorted(
+        {
+            str(household.get("family_id") or "")
+            for household in network.get("households") or []
+            if str(household.get("family_id") or "")
+        }
+    )
+    return {
+        "family_id": family_id,
+        "mode": mode,
+        "family": _serialize_family(_find_family(db, family_id)),
+        "members": [_serialize_member(member) for member in members],
+        "nodes": [_serialize_node(node) for node in lineage_nodes],
+        "relationships": [
+            _serialize_relationship(relationship)
+            for relationship in relationships
+        ],
+        "edges": _build_edges(relationships),
+        "linked_family_ids": family_ids,
+        "households": network.get("households") or [],
+        "alignment_conflicts": network.get("alignment_conflicts") or [],
+        "network_summary": network.get("network_summary") or {},
         "tree_model": _build_tree_model(members, relationships),
     }

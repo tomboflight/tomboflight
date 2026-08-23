@@ -143,8 +143,13 @@ def _build_review_context(
                 {
                     "project_id": project_id,
                     "customer_visible": True,
-                    "approved_for_cinematic": True,
+                    "scan_status": "clean",
                     "quarantined": {"$ne": True},
+                    "approved_for_cinematic": True,
+                    "verification_status": "approved",
+                    "consent_status": "approved",
+                    "consent_attested": True,
+                    "authority_attested": True,
                     "category": {"$in": ["member_photo"]},
                 }
             )

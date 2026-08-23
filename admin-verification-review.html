@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: https:; connect-src 'self' https://tomboflight-api.onrender.com https://*.onrender.com http://127.0.0.1:* http://localhost:*; form-action 'self'; upgrade-insecure-requests" />
+    <title>Master Verification Review | Tomb of Light</title>
+    <link rel="stylesheet" href="styles.css?v=20260823-phase13" />
+  </head>
+  <body class="portal-dashboard-body">
+    <div class="page-wrap">
+      <header class="site-header">
+        <div class="container site-header-inner">
+          <a class="brand" href="index.html">Tomb of Light<span class="brand-symbol">™</span></a>
+          <nav class="site-nav" aria-label="Admin navigation">
+            <a href="admin-control-center.html">Control Center</a>
+            <a href="admin-portrait-review.html">Portrait Review</a>
+            <a href="admin-verification-review.html" aria-current="page">Evidence Review</a>
+            <a href="admin-family-manager.html">Family Manager</a>
+          </nav>
+          <button class="btn btn-secondary" type="button" data-logout-btn>Log Out</button>
+        </div>
+      </header>
+      <main data-admin-verification-review>
+        <section class="page-hero"><div class="container"><div class="page-hero-panel">
+          <span class="eyebrow">Master Account Review</span>
+          <h1>Decide family verification evidence.</h1>
+          <p data-verification-review-status>Loading evidence review queue…</p>
+          <div class="notice" style="margin-top: 1rem">
+            Approved evidence may support the Verified Tree. The document itself
+            remains private and is never placed in the public NFT metadata.
+          </div>
+        </div></div></section>
+        <section class="page-sections"><div class="container form-shell">
+          <div class="form-panel"><div class="inline-actions">
+            <button class="btn btn-primary" type="button" data-refresh-verification-review>Refresh Queue</button>
+          </div></div>
+          <div class="grid-3" data-verification-review-list></div>
+          <div class="form-panel" data-verification-review-empty style="display: none">
+            <h2>No verification evidence is waiting.</h2>
+          </div>
+        </div></section>
+      </main>
+    </div>
+    <script src="config.js?v=20260328-7"></script>
+    <script src="app.js?v=20260821-phase9"></script>
+    <script src="auth.js?v=20260509-audit"></script>
+    <script src="admin-verification-review.js?v=20260823-phase13"></script>
+  </body>
+</html>

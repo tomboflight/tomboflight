@@ -136,6 +136,21 @@
               <span class="eyebrow">Step 2 - Upload Portrait</span>
 
               <form class="form-grid" data-portrait-upload-form novalidate>
+                <div>
+                  <div class="helper" style="margin-bottom: 0.85rem">
+                    Each named box belongs to one family member. Choose the photo
+                    in that person’s box so Tomb of Light can keep placement aligned.
+                  </div>
+                  <div class="grid-3" data-portrait-member-dropboxes>
+                    <div class="family-record-card">
+                      Load a portrait record to create the named family dropboxes.
+                    </div>
+                  </div>
+                </div>
+
+                <div class="helper">
+                  The selector below is an accessible fallback for the same named dropboxes.
+                </div>
                 <div class="form-grid two-col">
                   <label>
                     Portrait Subject
@@ -166,6 +181,7 @@
                   >
                     <input
                       type="checkbox"
+                      name="authority_attested"
                       required
                       style="margin-top: 0.2rem"
                     />
@@ -182,6 +198,7 @@
                   >
                     <input
                       type="checkbox"
+                      name="consent_attested"
                       required
                       style="margin-top: 0.2rem"
                     />

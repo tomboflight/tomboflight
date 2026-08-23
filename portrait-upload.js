@@ -378,6 +378,101 @@
       members,
       "Select subject",
     );
+    renderMemberDropboxes(members);
+  }
+
+  function renderMemberDropboxes(members) {
+    const container = document.querySelector("[data-portrait-member-dropboxes]");
+    if (!container) return;
+    if (!Array.isArray(members) || !members.length) {
+      container.innerHTML =
+        '<div class="family-record-card">No family members are available for portrait upload yet.</div>';
+      return;
+    }
+
+    container.innerHTML = sortMembers(members)
+      .map(function (member) {
+        const memberId = String(member.id || "").trim();
+        const generation = Number.isFinite(Number(member.generation))
+          ? `Generation ${Number(member.generation)}`
+          : "Placement pending";
+        return `
+          <div class="family-record-card" data-portrait-dropbox-card="${escapeHtml(memberId)}">
+            <span class="eyebrow">${escapeHtml(generation)}</span>
+            <h3>${escapeHtml(getDisplayName(member))}</h3>
+            <p class="card-copy">Portrait dropbox for this family member only.</p>
+            <label>
+              Choose ${escapeHtml(getDisplayName(member))}’s portrait
+              <input
+                type="file"
+                data-portrait-dropbox-file="${escapeHtml(memberId)}"
+                accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+              />
+            </label>
+            <button
+              class="btn btn-primary"
+              type="button"
+              data-portrait-dropbox-upload="${escapeHtml(memberId)}"
+            >
+              Upload for ${escapeHtml(getDisplayName(member))}
+            </button>
+          </div>
+        `;
+      })
+      .join("");
+  }
+
+  async function uploadFromNamedDropBox(button, form) {
+    const actionStatus = document.querySelector("[data-portrait-action-status]");
+    const memberId = String(
+      button.getAttribute("data-portrait-dropbox-upload") || "",
+    ).trim();
+    const card = button.closest("[data-portrait-dropbox-card]");
+    const input = card?.querySelector("[data-portrait-dropbox-file]");
+    const file = input?.files?.[0] || null;
+    const authorityAttested = Boolean(form.elements.authority_attested?.checked);
+    const consentAttested = Boolean(form.elements.consent_attested?.checked);
+
+    if (!currentFamilyId || !memberId || !file) {
+      setStatus(actionStatus, "Choose a portrait inside the named family-member dropbox.", "error");
+      return;
+    }
+    if (!authorityAttested || !consentAttested) {
+      setStatus(actionStatus, "Complete both consent confirmations before uploading.", "error");
+      return;
+    }
+    if (!validateFileType(file)) {
+      setStatus(actionStatus, "Invalid file type. Allowed portrait formats are JPG, PNG, and WEBP.", "error");
+      return;
+    }
+
+    const body = new FormData();
+    body.append("family_id", currentFamilyId);
+    body.append("member_id", memberId);
+    body.append("authority_attested", "true");
+    body.append("consent_attested", "true");
+    body.append("file", file);
+
+    button.disabled = true;
+    try {
+      setStatus(actionStatus, "Uploading portrait for the named family member...", "info");
+      await app.apiRequest("/uploads/member-photo", { method: "POST", body });
+      input.value = "";
+      const memberSelect = document.querySelector("[data-portrait-member-select]");
+      const listMember = document.querySelector("[data-portrait-list-member]");
+      if (memberSelect) memberSelect.value = memberId;
+      if (listMember) listMember.value = memberId;
+      setStatus(
+        actionStatus,
+        "Portrait uploaded and sent for security scanning and master review. Approved portraits are placed automatically.",
+        "success",
+      );
+      await loadUploads();
+    } catch (error) {
+      setStatus(actionStatus, error.message || "Unable to upload portrait.", "error");
+    } finally {
+      button.disabled = false;
+    }
   }
 
   function renderFamilies(preferredFamilyId) {
@@ -641,6 +736,14 @@
     const body = new FormData();
     body.append("family_id", currentFamilyId);
     body.append("member_id", memberId);
+    body.append(
+      "authority_attested",
+      form.elements.authority_attested.checked ? "true" : "false",
+    );
+    body.append(
+      "consent_attested",
+      form.elements.consent_attested.checked ? "true" : "false",
+    );
     body.append("file", file);
 
     try {
@@ -660,7 +763,7 @@
 
       setStatus(
         actionStatus,
-        "Portrait uploaded successfully. You can return to the dashboard or add another portrait.",
+        "Portrait uploaded and sent for security scanning and master review. It will appear in the family tree and cinematic viewer only after approval.",
         "success",
       );
       await loadUploads();
@@ -854,6 +957,11 @@
 
       if (uploadForm) {
         uploadForm.addEventListener("submit", handlePortraitUploadSubmit);
+        uploadForm.addEventListener("click", function (event) {
+          const button = event.target.closest("[data-portrait-dropbox-upload]");
+          if (!button) return;
+          uploadFromNamedDropBox(button, uploadForm);
+        });
       }
 
       if (loadUploadsButton) {

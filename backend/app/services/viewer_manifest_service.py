@@ -8,9 +8,15 @@ from bson import ObjectId
 from app.core.package_type_catalog import normalize_package_type
 from app.core.state_catalog import normalize_visibility_state
 from app.core.package_catalog import get_package, normalize_package_code
+from app.core.relationship_catalog import (
+    PARENT_RELATIONSHIP_TYPES,
+    PARTNER_RELATIONSHIP_TYPES,
+    normalize_relationship_type,
+)
 from app.database import get_database
 from app.dependencies.auth import has_internal_admin_access
 from app.services.entitlement_service import resolve_project_entitlements
+from app.services.family_placement_service import rebuild_family_placement
 from app.services.project_entitlement_service import get_project_entitlement
 from app.services.project_service import list_projects
 
@@ -540,7 +546,9 @@ def ensure_project_workspace_anchor(
             "family_id": family_id,
             "first_name": first_name,
             "last_name": last_name,
-            "generation": 1,
+            "generation": 0,
+            "generation_locked": False,
+            "placement_status": "root",
             "bio": _build_anchor_description(
                 lane=lane,
                 project=project,
@@ -559,6 +567,7 @@ def ensure_project_workspace_anchor(
         result = family_members.insert_one(member_payload)
         member_payload["_id"] = result.inserted_id
         primary_member = member_payload
+        rebuild_family_placement(db, family_id)
 
     return family_doc, primary_member, project
 
@@ -651,7 +660,9 @@ def _sequence_members_for_viewer(
     members_with_photos = [
         member
         for member in _sort_members(members)
-        if _normalize_value(member.get("photo_upload_id"))
+        if _normalize_value(
+            member.get("approved_photo_upload_id") or member.get("photo_upload_id")
+        )
     ]
 
     primary_member_id = _normalize_value((primary_member or {}).get("_id"))
@@ -685,7 +696,9 @@ def _resolve_member_photo_upload(
     member_id = _normalize_value(member.get("_id"))
     candidate_upload_ids: list[str] = []
 
-    primary_upload_id = _normalize_value(member.get("photo_upload_id"))
+    primary_upload_id = _normalize_value(
+        member.get("approved_photo_upload_id") or member.get("photo_upload_id")
+    )
     if primary_upload_id:
         candidate_upload_ids.append(primary_upload_id)
 
@@ -709,19 +722,71 @@ def _resolve_member_photo_upload(
         upload = uploads.find_one({"_id": ObjectId(upload_id)})
         if upload is None:
             continue
-        if _normalize_value(upload.get("category")) != "member_photo":
-            continue
-        if _normalize_value(upload.get("project_id")) != project_id:
-            continue
-        if _normalize_value(upload.get("family_id")) != family_id:
-            continue
-        if _normalize_value(upload.get("member_id")) != member_id:
-            continue
-        if not _normalize_value(upload.get("relative_path")):
-            continue
-        return upload
+        if _upload_is_cinematic_ready(
+            upload,
+            project_id=project_id,
+            family_id=family_id,
+            member_id=member_id,
+        ):
+            return upload
 
     return None
+
+
+def _upload_is_cinematic_ready(
+    upload: dict[str, Any] | None,
+    *,
+    project_id: str,
+    family_id: str,
+    member_id: str,
+) -> bool:
+    if not upload:
+        return False
+    return bool(
+        _normalize_value(upload.get("category")) == "member_photo"
+        and _normalize_value(upload.get("project_id")) == project_id
+        and _normalize_value(upload.get("family_id")) == family_id
+        and _normalize_value(upload.get("member_id")) == member_id
+        and _normalize_value(upload.get("relative_path"))
+        and _normalize_value(upload.get("scan_status")).lower() == "clean"
+        and not bool(upload.get("quarantined"))
+        and bool(upload.get("approved_for_cinematic"))
+        and _normalize_value(upload.get("verification_status")).lower() == "approved"
+        and _normalize_value(upload.get("consent_status")).lower() == "approved"
+        and bool(upload.get("consent_attested"))
+        and bool(upload.get("authority_attested"))
+    )
+
+
+def _relationship_navigation(
+    relationships: list[dict[str, Any]],
+    visible_member_ids: set[str],
+) -> dict[str, dict[str, list[str]]]:
+    navigation = {
+        member_id: {"parents": [], "children": [], "partners": [], "branches": []}
+        for member_id in visible_member_ids
+    }
+    for relationship in relationships:
+        source_id = _normalize_value(relationship.get("source_member_id"))
+        target_id = _normalize_value(relationship.get("target_member_id"))
+        if source_id not in visible_member_ids or target_id not in visible_member_ids:
+            continue
+        relationship_type = normalize_relationship_type(
+            relationship.get("relationship_type")
+        )
+        if relationship_type in PARENT_RELATIONSHIP_TYPES:
+            navigation[source_id]["children"].append(target_id)
+            navigation[target_id]["parents"].append(source_id)
+        elif relationship_type in PARTNER_RELATIONSHIP_TYPES:
+            navigation[source_id]["partners"].append(target_id)
+            navigation[target_id]["partners"].append(source_id)
+        else:
+            navigation[source_id]["branches"].append(target_id)
+            navigation[target_id]["branches"].append(source_id)
+    for member_navigation in navigation.values():
+        for key, member_ids in member_navigation.items():
+            member_navigation[key] = sorted(set(member_ids))
+    return navigation
 
 
 def build_viewer_manifest(
@@ -792,7 +857,17 @@ def build_viewer_manifest(
                 upload_id = _normalize_value(member.get("photo_upload_id"))
                 if upload_id and ObjectId.is_valid(upload_id):
                     candidate = db["uploaded_files"].find_one({"_id": ObjectId(upload_id)})
-                    if candidate and _normalize_value(candidate.get("project_id")) == project_id_value:
+                    if (
+                        candidate
+                        and _normalize_value(candidate.get("project_id")) == project_id_value
+                        and _normalize_value(candidate.get("scan_status")).lower() == "clean"
+                        and not bool(candidate.get("quarantined"))
+                        and bool(candidate.get("approved_for_cinematic"))
+                        and _normalize_value(candidate.get("verification_status")).lower() == "approved"
+                        and _normalize_value(candidate.get("consent_status")).lower() == "approved"
+                        and bool(candidate.get("consent_attested"))
+                        and bool(candidate.get("authority_attested"))
+                    ):
                         upload_record = candidate
             else:
                 upload_record = _resolve_member_photo_upload(
@@ -803,6 +878,20 @@ def build_viewer_manifest(
                 )
             if upload_record is not None:
                 valid_member_views.append((member, upload_record))
+
+        visible_member_ids = {
+            _normalize_value(member.get("_id"))
+            for member, _upload in valid_member_views
+        }
+        family_relationships = (
+            list(db["relationships"].find({"family_id": family_id_value}))
+            if family_id_value
+            else []
+        )
+        relationship_navigation = _relationship_navigation(
+            family_relationships,
+            visible_member_ids,
+        )
 
         for index, (member, upload_record) in enumerate(valid_member_views):
             member_id = _normalize_value(member.get("_id"))
@@ -835,8 +924,44 @@ def build_viewer_manifest(
                     "node": title,
                     "description": description,
                     "narration": description,
-                    "left_state_id": f"member-{_normalize_value(valid_member_views[index - 1][0].get('_id'))}" if index > 0 else None,
-                    "right_state_id": f"member-{_normalize_value(valid_member_views[index + 1][0].get('_id'))}" if index + 1 < len(valid_member_views) else None,
+                    "generation": _coerce_int(member.get("generation")),
+                    "placement_status": _normalize_value(
+                        member.get("placement_status")
+                    ) or "unplaced",
+                    "left_state_id": (
+                        f"member-{relationship_navigation.get(member_id, {}).get('parents', [])[0]}"
+                        if relationship_navigation.get(member_id, {}).get("parents")
+                        else (
+                            f"member-{_normalize_value(valid_member_views[index - 1][0].get('_id'))}"
+                            if index > 0
+                            else None
+                        )
+                    ),
+                    "right_state_id": (
+                        f"member-{relationship_navigation.get(member_id, {}).get('children', [])[0]}"
+                        if relationship_navigation.get(member_id, {}).get("children")
+                        else (
+                            f"member-{_normalize_value(valid_member_views[index + 1][0].get('_id'))}"
+                            if index + 1 < len(valid_member_views)
+                            else None
+                        )
+                    ),
+                    "parent_state_ids": [
+                        f"member-{related_id}"
+                        for related_id in relationship_navigation.get(member_id, {}).get("parents", [])
+                    ],
+                    "child_state_ids": [
+                        f"member-{related_id}"
+                        for related_id in relationship_navigation.get(member_id, {}).get("children", [])
+                    ],
+                    "partner_state_ids": [
+                        f"member-{related_id}"
+                        for related_id in relationship_navigation.get(member_id, {}).get("partners", [])
+                    ],
+                    "branch_state_ids": [
+                        f"member-{related_id}"
+                        for related_id in relationship_navigation.get(member_id, {}).get("branches", [])
+                    ],
                     "eye_targets": DEFAULT_EYE_TARGETS,
                 }
             )

@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' https://tomboflight-api.onrender.com https://*.onrender.com http://127.0.0.1:* http://localhost:*; form-action 'self'; upgrade-insecure-requests" />
+    <title>Family Reunion Readiness | Tomb of Light</title>
+    <meta name="description" content="See which linked family members are ready without exposing private family files." />
+    <link rel="stylesheet" href="styles.css?v=20260823-phase13" />
+  </head>
+  <body class="portal-dashboard-body">
+    <a href="#main-content" class="skip-to-content">Skip to main content</a>
+    <div class="page-wrap">
+      <header class="site-header">
+        <div class="container site-header-inner">
+          <a class="brand" href="index.html">Tomb of Light<span class="brand-symbol">™</span></a>
+          <nav class="site-nav" aria-label="Portal navigation">
+            <a href="dashboard.html">Dashboard</a>
+            <a href="family-reunion.html" aria-current="page">Family Reunion</a>
+            <a href="portrait-upload.html">Portraits</a>
+            <a href="tree-view.html">Family Tree</a>
+            <a href="link-keys.html">Link Keys</a>
+          </nav>
+          <button class="btn btn-secondary" type="button" data-logout-btn>Log Out</button>
+        </div>
+      </header>
+
+      <main id="main-content" data-family-reunion-page>
+        <section class="page-hero">
+          <div class="container">
+            <div class="page-hero-panel">
+              <span class="eyebrow">Family Reunion Command View</span>
+              <h1>See who is ready—and who still needs help.</h1>
+              <p data-reunion-status>Loading linked-family readiness…</p>
+              <div class="notice" style="margin-top: 1rem">
+                This page shows completion states only. It never reveals anyone’s
+                password, private files, wallet secrets, or unshared living-person records.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="page-sections">
+          <div class="container form-shell">
+            <div class="form-panel">
+              <span class="eyebrow">Network Progress</span>
+              <div class="grid-3" data-reunion-summary></div>
+            </div>
+            <div data-reunion-households></div>
+            <div class="form-panel" data-reunion-empty style="display: none">
+              <h2>No family members are available yet.</h2>
+              <p class="card-copy">
+                Add family members, place their relationships, and use the named
+                portrait dropboxes to begin reunion readiness.
+              </p>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <div class="container"><div class="footer-card"><div class="footer-bottom">
+          <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
+        </div></div></div>
+      </footer>
+    </div>
+    <script src="config.js?v=20260328-7"></script>
+    <script src="app.js?v=20260821-phase9"></script>
+    <script src="auth.js?v=20260509-audit"></script>
+    <script src="family-reunion.js?v=20260823-phase13"></script>
+  </body>
+</html>
+

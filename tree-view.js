@@ -3,19 +3,45 @@
 
   const authPages = window.TOLAuthPages || {};
   const ANCESTRY_TYPES = new Set([
+    "parent_unspecified",
     "biological_parent",
+    "gestational_parent",
+    "donor_parent",
+    "intended_parent",
     "adoptive_parent",
+    "foster_parent",
     "step_parent",
     "guardian",
+    "chosen_parent",
+    "community_parent",
+    "spiritual_parent",
   ]);
 
   const PRIMARY_ANCESTRY_TYPES = new Set([
+    "parent_unspecified",
     "biological_parent",
+    "gestational_parent",
+    "donor_parent",
+    "intended_parent",
     "adoptive_parent",
-    "guardian",
   ]);
 
-  const SECONDARY_ANCESTRY_TYPES = new Set(["step_parent"]);
+  const SECONDARY_ANCESTRY_TYPES = new Set([
+    "foster_parent",
+    "step_parent",
+    "guardian",
+    "chosen_parent",
+    "community_parent",
+    "spiritual_parent",
+  ]);
+  const PARTNER_TYPES = new Set([
+    "spouse",
+    "former_spouse",
+    "domestic_partner",
+    "former_partner",
+    "co_parent",
+    "co_parent",
+  ]);
   const RELATIONSHIP_TYPE_ALIASES = {
     "parent-child": "biological_parent",
     parent_child: "biological_parent",
@@ -156,23 +182,42 @@
     const rel = normalizeRelationshipType(relationshipType);
 
     if (context === "parents") {
+      if (rel === "parent_unspecified") return "Parent";
       if (rel === "biological_parent") return "Biological parent";
+      if (rel === "gestational_parent") return "Gestational parent";
+      if (rel === "donor_parent") return "Donor parent";
+      if (rel === "intended_parent") return "Intended parent";
       if (rel === "step_parent") return "Step-parent";
       if (rel === "adoptive_parent") return "Adoptive parent";
+      if (rel === "foster_parent") return "Foster parent";
       if (rel === "guardian") return "Guardian";
+      if (rel === "chosen_parent") return "Chosen parent";
+      if (rel === "community_parent") return "Community parent";
+      if (rel === "spiritual_parent") return "Spiritual parent";
       return rel.replaceAll("_", " ");
     }
 
     if (context === "children") {
+      if (rel === "parent_unspecified") return "Child";
       if (rel === "biological_parent") return "Biological child";
+      if (rel === "gestational_parent") return "Gestational child";
+      if (rel === "donor_parent") return "Donor-conceived child";
+      if (rel === "intended_parent") return "Intended child";
       if (rel === "step_parent") return "Step-child";
       if (rel === "adoptive_parent") return "Adopted child";
+      if (rel === "foster_parent") return "Foster child";
       if (rel === "guardian") return "Ward";
+      if (rel === "chosen_parent") return "Chosen child";
+      if (rel === "community_parent") return "Community child";
+      if (rel === "spiritual_parent") return "Spiritual child";
       return rel.replaceAll("_", " ");
     }
 
     if (context === "spouses") {
       if (rel === "former_spouse") return "Former spouse";
+      if (rel === "domestic_partner") return "Domestic partner";
+      if (rel === "former_partner") return "Former partner";
+      if (rel === "co_parent") return "Co-parent";
       return "Spouse";
     }
 
@@ -861,7 +906,7 @@
     );
 
     const nodeWidth = 190;
-    const nodeHeight = 104;
+    const nodeHeight = 165;
     const coupleGap = 28;
     const itemGap = 80;
     const rowGap = 200;
@@ -1406,8 +1451,19 @@
 
     const name = getDisplayName(member);
     const birth = getBirthYear(member);
+    const portraitUrl = String(member.portrait_url || "").trim();
+    const portrait = portraitUrl
+      ? `<img
+          class="tree-node-portrait"
+          src="${escapeHtml(apiAssetUrl(portraitUrl))}"
+          alt="${escapeHtml(name)} approved portrait"
+          loading="lazy"
+          style="width: 52px; height: 52px; border-radius: 50%; object-fit: cover; margin: 0 auto 0.55rem; display: block;"
+        />`
+      : "";
 
     card.innerHTML = `
+      ${portrait}
       <div class="tree-node-name">${escapeHtml(name)}</div>
       <div class="tree-node-meta">Born: ${escapeHtml(birth)}</div>
     `;
@@ -1430,6 +1486,16 @@
     wrapper.appendChild(card);
   }
 
+  function apiAssetUrl(path) {
+    if (!path) return "";
+    if (/^https?:\/\//i.test(path)) return path;
+    const base =
+      window.TOLAuth && typeof window.TOLAuth.getApiBaseUrl === "function"
+        ? window.TOLAuth.getApiBaseUrl()
+        : "";
+    return `${base}${path.startsWith("/") ? "" : "/"}${path}`;
+  }
+
   function renderDetailPanel(
     member,
     memberMap,
@@ -1448,8 +1514,7 @@
     const spouses = relationships
       .filter(
         (rel) =>
-          (rel.relationship_type === "spouse" ||
-            rel.relationship_type === "former_spouse") &&
+          PARTNER_TYPES.has(rel.relationship_type) &&
           (rel.source_member_id === member.id ||
             rel.target_member_id === member.id),
       )
@@ -1688,8 +1753,8 @@
     const memberById = new Map();
     members.forEach((member) => memberById.set(member.id, member));
 
-    const spouseLinks = relationships.filter(
-      (rel) => rel.relationship_type === "spouse",
+    const spouseLinks = relationships.filter((rel) =>
+      PARTNER_TYPES.has(rel.relationship_type),
     );
     const spouseGraph = new Map();
 
@@ -1764,8 +1829,7 @@
     relationships
       .filter(
         (rel) =>
-          rel.relationship_type === "spouse" ||
-          rel.relationship_type === "former_spouse",
+          PARTNER_TYPES.has(rel.relationship_type),
       )
       .forEach((rel) => {
         const source = memberMap.get(rel.source_member_id);

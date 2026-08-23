@@ -24,6 +24,9 @@
     }
 
     await loadFamiliesIntoSelect(familySelect, statusNode);
+    familySelect.addEventListener('change', function () {
+      loadExistingMembers(form, familySelect.value, statusNode);
+    });
 
     form.addEventListener('submit', async function (event) {
       event.preventDefault();
@@ -40,17 +43,24 @@
       const formData = new FormData(form);
 
       const birthYearRaw = String(formData.get('birth_year') || '').trim();
-      const generationRaw = String(formData.get('generation') || '').trim();
-
       const payload = {
         family_id: String(formData.get('family_id') || '').trim(),
         first_name: String(formData.get('first_name') || '').trim(),
         last_name: String(formData.get('last_name') || '').trim(),
         birth_year: birthYearRaw ? Number(birthYearRaw) : null,
-        generation: generationRaw ? Number(generationRaw) : 0,
+        generation: null,
         father_id: String(formData.get('father_id') || '').trim() || null,
         mother_id: String(formData.get('mother_id') || '').trim() || null,
         spouse_id: String(formData.get('spouse_id') || '').trim() || null,
+        father_relationship_type: String(formData.get('father_relationship_type') || 'biological_parent').trim(),
+        mother_relationship_type: String(formData.get('mother_relationship_type') || 'biological_parent').trim(),
+        partner_relationship_type: String(formData.get('partner_relationship_type') || 'spouse').trim(),
+        relationship_mode: 'narrative',
+        privacy_scope: 'household_private',
+        identity_matching_consent: Boolean(formData.get('identity_matching_consent')),
+        account_required: Boolean(formData.get('account_required')),
+        invite_email: String(formData.get('invite_email') || '').trim().toLowerCase() || null,
+        account_member_role: String(formData.get('account_member_role') || 'viewer').trim(),
         bio: String(formData.get('bio') || '').trim() || null
       };
 
@@ -59,13 +69,13 @@
         return;
       }
 
-      if (!Number.isInteger(payload.generation) || payload.generation < 0) {
-        showStatus(statusNode, 'Generation must be 0 or greater.', 'error');
+      if (payload.birth_year !== null && !Number.isInteger(payload.birth_year)) {
+        showStatus(statusNode, 'Birth year must be a valid number.', 'error');
         return;
       }
 
-      if (payload.birth_year !== null && !Number.isInteger(payload.birth_year)) {
-        showStatus(statusNode, 'Birth year must be a valid number.', 'error');
+      if (payload.account_required && !payload.invite_email) {
+        showStatus(statusNode, 'Enter the email for the family member who needs an account.', 'error');
         return;
       }
 
@@ -97,6 +107,66 @@
         submitBtn.textContent = 'Add Family Member';
       }
     });
+  }
+
+  async function loadExistingMembers(form, familyId, statusNode) {
+    const selects = [
+      form.querySelector('[name="father_id"]'),
+      form.querySelector('[name="mother_id"]'),
+      form.querySelector('[name="spouse_id"]')
+    ].filter(Boolean);
+    const placeholder = familyId
+      ? '<option value="">Loading family members...</option>'
+      : '<option value="">Select a family first</option>';
+    selects.forEach(function (select) {
+      select.innerHTML = placeholder;
+    });
+    if (!familyId) return;
+
+    try {
+      const graph = await window.TOLAuth.apiRequest(
+        `/families/${encodeURIComponent(familyId)}/graph`,
+        { method: 'GET' }
+      );
+      const members = Array.isArray(graph.members) ? graph.members : [];
+      const options = members
+        .slice()
+        .sort(function (a, b) {
+          const generationA = Number.isFinite(Number(a.generation)) ? Number(a.generation) : 999;
+          const generationB = Number.isFinite(Number(b.generation)) ? Number(b.generation) : 999;
+          if (generationA !== generationB) return generationA - generationB;
+          return displayName(a).localeCompare(displayName(b));
+        })
+        .map(function (member) {
+          return `<option value="${escapeHtml(member.id)}">${escapeHtml(displayName(member))} — generation ${escapeHtml(member.generation ?? 'unplaced')}</option>`;
+        })
+        .join('');
+      selects.forEach(function (select) {
+        select.innerHTML = `<option value="">None / not yet known</option>${options}`;
+      });
+    } catch (error) {
+      selects.forEach(function (select) {
+        select.innerHTML = '<option value="">Unable to load members</option>';
+      });
+      showStatus(statusNode, error.message || 'Unable to load existing family members.', 'error');
+    }
+  }
+
+  function displayName(member) {
+    return String(
+      member.full_name ||
+      member.display_name ||
+      `${member.first_name || ''} ${member.last_name || ''}`
+    ).trim() || 'Unnamed family member';
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#039;');
   }
 
   async function loadFamiliesIntoSelect(selectNode, statusNode, preservePlaceholder) {

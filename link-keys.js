@@ -14,6 +14,7 @@
   let currentProjectId = "";
   let currentKey = null;
   let currentRequests = [];
+  let currentMembers = [];
 
   function normalizeValue(value) {
     return String(value || "")
@@ -51,6 +52,58 @@
     if (normalized === "revoked") return "Handshake Revoked";
     if (normalized === "rejected") return "Handshake Rejected";
     return "Handshake Pending";
+  }
+
+  function memberDisplayName(member) {
+    return String(
+      member?.full_name ||
+      member?.display_name ||
+      `${member?.first_name || ""} ${member?.last_name || ""}`,
+    ).trim() || "Unnamed family member";
+  }
+
+  function memberOptions(placeholder) {
+    return `<option value="">${escapeHtml(placeholder)}</option>${currentMembers
+      .slice()
+      .sort(function (a, b) {
+        const generationA = Number.isFinite(Number(a.generation)) ? Number(a.generation) : 999;
+        const generationB = Number.isFinite(Number(b.generation)) ? Number(b.generation) : 999;
+        if (generationA !== generationB) return generationA - generationB;
+        return memberDisplayName(a).localeCompare(memberDisplayName(b));
+      })
+      .map(function (member) {
+        return `<option value="${escapeHtml(member.id)}">${escapeHtml(memberDisplayName(member))} — generation ${escapeHtml(member.generation ?? "unplaced")}</option>`;
+      })
+      .join("")}`;
+  }
+
+  async function loadCurrentMembers() {
+    const familyId = getFamilyIdFromContext(currentContext);
+    if (!familyId) {
+      throw new Error("This workspace has no family record for link placement.");
+    }
+    const graph = await app.apiRequest(
+      `/families/${encodeURIComponent(familyId)}/graph`,
+      { method: "GET" },
+    );
+    currentMembers = Array.isArray(graph.members)
+      ? graph.members.filter(function (member) {
+          return ["placed", "root"].includes(
+            normalizeValue(member.placement_status),
+          );
+        })
+      : [];
+    const sourceSelect = document.querySelector(
+      '[data-link-request-form] [name="source_anchor_member_id"]',
+    );
+    if (sourceSelect) {
+      sourceSelect.innerHTML = memberOptions("Select your connecting family member");
+    }
+    if (!currentMembers.length) {
+      throw new Error(
+        "Place at least one family member through validated relationships before linking households.",
+      );
+    }
   }
 
   function setStatus(node, message, type) {
@@ -124,7 +177,7 @@
   }
 
   function canUseLinkKeyTools(resolved) {
-    return Boolean(resolved?.can_use_link_keys || resolved?.can_manage_link_keys);
+    return Boolean(resolved?.can_link_households);
   }
 
   function updateNav(context) {
@@ -209,7 +262,9 @@
 
     if (keyInput) {
       keyInput.value = currentKey?.key_value || "";
-      keyInput.placeholder = currentKey ? "" : "No active key yet";
+      keyInput.placeholder = currentKey
+        ? "Active key is stored securely; raw value was shown once"
+        : "No active key yet";
     }
 
     if (generateBtn) {
@@ -250,6 +305,8 @@
       `<p class="card-copy"><strong>Trust Handshake:</strong> ${escapeHtml(handshakeLabel(item))}</p>`,
       `<p class="card-copy"><strong>Requested By:</strong> ${escapeHtml(item.requested_by || "—")}</p>`,
       `<p class="card-copy"><strong>Created:</strong> ${escapeHtml(item.created_at || "—")}</p>`,
+      `<p class="card-copy"><strong>Tree Connection:</strong> ${escapeHtml(humanizeStatus(item.bridge_relationship_type || "unplaced legacy link"))}</p>`,
+      `<p class="card-copy"><strong>Alignment:</strong> ${escapeHtml(humanizeStatus(item.alignment_status || "pending"))}</p>`,
     ];
 
     if (item.source_handshake_at) {
@@ -326,6 +383,12 @@
             <div class="card-number">${index + 1}</div>
             <h3>Incoming Request</h3>
             ${requestMeta(item)}
+            <label>
+              Their Connecting Family Member
+              <select data-link-target-anchor-for="${escapeHtml(item.id)}">
+                ${memberOptions("Select the receiving family member")}
+              </select>
+            </label>
             <div class="inline-actions" style="margin-top: 1rem">
               <button class="btn btn-primary" type="button" data-link-action="approve" data-request-id="${escapeHtml(item.id)}">
                 Approve
@@ -403,6 +466,13 @@
     }
 
     renderCurrentKey();
+    if (currentKey && !currentKey.key_value) {
+      setStatus(
+        statusNode,
+        "An active link key exists. Its raw value was shown only when generated; regenerate if you need to copy and share it again.",
+        "info",
+      );
+    }
   }
 
   async function loadRequests() {
@@ -482,7 +552,7 @@
 
   async function copyCurrentKey() {
     const statusNode = document.querySelector("[data-link-key-status]");
-    if (!currentKey?.key_value) {
+    if (!currentKey) {
       setStatus(statusNode, "Generate a link key first.", "error");
       return;
     }
@@ -516,10 +586,20 @@
     }
 
     const targetKey = String(form.target_key.value || "").trim();
+    const sourceAnchorMemberId = String(
+      form.source_anchor_member_id.value || "",
+    ).trim();
+    const bridgeRelationshipType = String(
+      form.bridge_relationship_type.value || "",
+    ).trim();
     const notes = String(form.notes.value || "").trim();
 
-    if (!targetKey) {
-      setStatus(statusNode, "Target link key is required.", "error");
+    if (!targetKey || !sourceAnchorMemberId || !bridgeRelationshipType) {
+      setStatus(
+        statusNode,
+        "Choose your connecting family member, the relationship, and the target key.",
+        "error",
+      );
       return;
     }
 
@@ -530,6 +610,8 @@
         method: "POST",
         body: JSON.stringify({
           source_project_id: currentProjectId,
+          source_anchor_member_id: sourceAnchorMemberId,
+          bridge_relationship_type: bridgeRelationshipType,
           target_key: targetKey,
           notes: notes || null,
         }),
@@ -558,6 +640,20 @@
     } else if (action === "approve") {
       notes = window.prompt("Optional approval note:", "") || "";
     }
+    const targetAnchorSelect = document.querySelector(
+      `[data-link-target-anchor-for="${CSS.escape(requestId)}"]`,
+    );
+    const targetAnchorMemberId = String(
+      targetAnchorSelect?.value || "",
+    ).trim();
+    if (action === "approve" && !targetAnchorMemberId) {
+      setStatus(
+        statusNode,
+        "Select the receiving family member before approving this link.",
+        "error",
+      );
+      return;
+    }
 
     setStatus(statusNode, "Updating link request...", "info");
 
@@ -566,7 +662,11 @@
         `/link-requests/${encodeURIComponent(requestId)}/${action}`,
         {
           method: "POST",
-          body: JSON.stringify({ notes: notes || null }),
+          body: JSON.stringify({
+            notes: notes || null,
+            target_anchor_member_id:
+              action === "approve" ? targetAnchorMemberId : null,
+          }),
         },
       );
 
@@ -709,6 +809,7 @@
       });
 
       await loadCurrentKey();
+      await loadCurrentMembers();
       await loadRequests();
       bindActions();
     } catch (error) {
