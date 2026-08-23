@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from app.dependencies.auth import (
     get_current_user,
     has_internal_admin_access,
+    resolve_access_context,
 )
 from app.schemas.link_key import LinkKeyResponse, build_link_key_response
 from app.services.link_key_service import (
@@ -42,7 +43,14 @@ def _current_user_email(user: dict[str, Any]) -> str:
 
 
 def _is_admin(user: dict[str, Any]) -> bool:
-    return has_internal_admin_access(user)
+    if not has_internal_admin_access(user):
+        return False
+    context = resolve_access_context(
+        _current_user_id(user),
+        user_email=_current_user_email(user),
+    )
+    permissions = set(context.get("permissions") or [])
+    return "*" in permissions or "admin.intake.write" in permissions
 
 
 @router.get("/my-list")

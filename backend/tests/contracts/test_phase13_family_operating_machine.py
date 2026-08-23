@@ -21,6 +21,8 @@ def test_relationships_are_guided_and_automatically_placed():
 
 def test_household_links_are_anchored_aligned_and_privacy_filtered():
     request_service = _read("backend/app/services/link_request_service.py")
+    key_routes = _read("backend/app/routes/link_keys.py")
+    request_routes = _read("backend/app/routes/link_requests.py")
     network = _read("backend/app/services/linked_network_service.py")
     tree_route = _read("backend/app/routes/tree.py")
     assert "source_anchor_member_id" in request_service
@@ -29,6 +31,8 @@ def test_household_links_are_anchored_aligned_and_privacy_filtered():
     assert "alignment_conflicts" in network
     assert "Death never overrides" in network
     assert "get_authorized_linked_family_tree" in tree_route
+    assert '"admin.intake.write" in permissions' in key_routes
+    assert 'require_permission("admin.intake.write")' in request_routes
 
 
 def test_portrait_pipeline_is_clean_consented_and_master_approved():

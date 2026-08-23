@@ -9,6 +9,7 @@ from app.dependencies.auth import (
     get_current_user,
     has_internal_admin_access,
     require_permission,
+    resolve_access_context,
 )
 from app.schemas.link_request import (
     LinkRequestCreate,
@@ -53,12 +54,19 @@ def _current_user_display(user: dict[str, Any]) -> str:
 
 
 def _is_admin(user: dict[str, Any]) -> bool:
-    return has_internal_admin_access(user)
+    if not has_internal_admin_access(user):
+        return False
+    context = resolve_access_context(
+        _current_user_id(user),
+        user_email=_current_user_email(user),
+    )
+    permissions = set(context.get("permissions") or [])
+    return "*" in permissions or "admin.intake.write" in permissions
 
 
 @router.get("/", response_model=list[LinkRequestResponse])
 def get_link_requests(
-    current_user: dict[str, Any] = Depends(require_permission("admin.control.view")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.intake.write")),
 ):
     requests = list_link_requests()
     return [build_link_request_response(item) for item in requests]
