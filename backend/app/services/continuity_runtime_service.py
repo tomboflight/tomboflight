@@ -39,11 +39,12 @@ from app.services.auth_service import admin_issue_password_reset
 from app.services.audit_log_service import write_audit_log
 
 
-RUNTIME_VERSION = "10.1.0"
+RUNTIME_VERSION = "11.0.0"
 OPERATIONS_COLLECTION = "continuity_operations"
 EVENTS_COLLECTION = "continuity_events"
 EXECUTION_KILL_SWITCH = "CONTINUITY_EXECUTION_KILL_SWITCH"
 MAX_OPERATION_LIST_LIMIT = 200
+STALE_EXECUTION_RETRY_MINUTES = 15
 
 
 @dataclass(frozen=True)
@@ -96,6 +97,9 @@ SUPER_ADMIN_ACTION_SPECS: dict[str, ActionSpec] = {
     "account_lifecycle": ActionSpec("admin_repair_safety", "high", "user", ("user_id",)),
     "account_permanent_delete": ActionSpec("admin_repair_safety", "high", "user", ("user_id",)),
     "case_repair": ActionSpec("admin_repair_safety", "high", "customer_case", ("case_id",)),
+    "legacy_admin_remediation": ActionSpec(
+        "admin_repair_safety", "high", "user", ("user_id",)
+    ),
 }
 
 
@@ -226,9 +230,7 @@ def canonical_officer_role(actor: dict[str, Any] | None) -> str:
     role_values.update(_normalize(item).lower() for item in (actor.get("role_codes") or []))
     role_values.update(_normalize(item).lower() for item in (access_context.get("role_codes") or []))
 
-    if email == CEO_MASTER_ADMIN_EMAIL.lower() or role_values.intersection(
-        {"ceo", "ceo_master_admin", "ceo_super_admin", "super_admin", "superadmin"}
-    ):
+    if email == CEO_MASTER_ADMIN_EMAIL.lower():
         return "SUPERADMIN"
     if role_values.intersection({"executive_tech_admin", "cto", "technical_admin"}):
         return "EXECUTIVE_TECH_ADMIN"
@@ -675,6 +677,25 @@ def _preview_action(action: str, target: dict[str, Any], parameters: dict[str, A
         return admin_control_service.super_admin_preview_customer_create(
             payload=dict(parameters.get("user_payload") or parameters)
         )
+    if action == "legacy_admin_remediation":
+        review = admin_control_service.legacy_admin_security_review()
+        if not review.get("found"):
+            return {
+                **review,
+                "blocked": True,
+                "warnings": ["The legacy privileged account no longer exists."],
+            }
+        if _normalize(review.get("user_id")) != _normalize(target.get("user_id")):
+            raise ValueError("Legacy administrator remediation target does not match the reviewed identity.")
+        return {
+            **review,
+            "blocked": not bool(review.get("safe_to_suspend")),
+            "warnings": (
+                []
+                if review.get("safe_to_suspend")
+                else ["Legacy administrator remediation requires manual dependency review."]
+            ),
+        }
     return {
         "action": action,
         "target": target,
@@ -1343,6 +1364,7 @@ def _invoke_action(
             _normalize(target.get("user_id")),
             admin_user_id=_actor_id(actor),
             admin_display=_actor_name(actor) or _actor_email(actor),
+            admin_email=_actor_email(actor),
         )
     if action == "project_ownership_transfer":
         return admin_control_service.super_admin_transfer_project_ownership(
@@ -1360,6 +1382,17 @@ def _invoke_action(
     if action == "impersonation_stop":
         return admin_control_service.stop_admin_impersonation(
             session_id=_normalize(target.get("session_id")),
+            reason=reason,
+            actor=actor,
+        )
+    if action == "legacy_admin_remediation":
+        review = admin_control_service.legacy_admin_security_review()
+        if not review.get("found"):
+            raise ValueError("The legacy privileged account no longer exists.")
+        if _normalize(review.get("user_id")) != _normalize(target.get("user_id")):
+            raise ValueError("Legacy administrator remediation target does not match the reviewed identity.")
+        return admin_control_service.legacy_admin_security_review(
+            apply=True,
             reason=reason,
             actor=actor,
         )
@@ -1452,13 +1485,56 @@ def execute_operation(operation_id: str, *, actor: dict[str, Any] | None) -> dic
     operation = _get_operation_document(operation_id)
     if operation.get("state") in {"apply_executed", "audit_closed"}:
         return _serialize_operation(operation) or {}
-    if operation.get("state") != "approved_for_apply":
-        raise ValueError("Operation must be approved_for_apply before execution.")
-
     action = _normalize(operation.get("action"))
     _assert_action_actor_scope(action, actor)
     spec = ACTION_SPECS[action]
     _assert_action_allowed_for_actor(spec, actor)
+    if operation.get("state") == "apply_failed":
+        operation = _transition(
+            operation_id,
+            expected_state="apply_failed",
+            next_state="approved_for_apply",
+            actor=actor,
+            action="retry_failed_operation",
+            reason_codes=["RETRY_SAME_IDEMPOTENT_OPERATION"],
+            extra_set={
+                "execution_retry_count": int(operation.get("execution_retry_count") or 0) + 1,
+                "execution_retry_requested_at": _now(),
+                "execution_error": None,
+                "execution_failed_at": None,
+            },
+        )
+        _record_event(
+            operation,
+            event_type="operation_retry_requested",
+            actor=actor,
+            details={"previous_state": "apply_failed"},
+        )
+    elif operation.get("state") == "apply_scheduled":
+        started_at = operation.get("execution_started_at")
+        if isinstance(started_at, str):
+            try:
+                started_at = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+            except Exception:
+                started_at = None
+        stale_before = _now() - timedelta(minutes=STALE_EXECUTION_RETRY_MINUTES)
+        if not isinstance(started_at, datetime) or started_at > stale_before:
+            raise ValueError("Operation execution is already in progress and is not stale.")
+        operation = _transition(
+            operation_id,
+            expected_state="apply_scheduled",
+            next_state="approved_for_apply",
+            actor=actor,
+            action="recover_stale_execution",
+            reason_codes=["STALE_EXECUTION_RECOVERY"],
+            extra_set={
+                "execution_retry_count": int(operation.get("execution_retry_count") or 0) + 1,
+                "execution_retry_requested_at": _now(),
+            },
+        )
+    if operation.get("state") != "approved_for_apply":
+        raise ValueError("Operation must be approved_for_apply before execution.")
+
     packet = _evidence_packet(operation, actor or {})
     authorization = _authorization_decision(operation)
     transition = _scheduled_transition(operation, actor or {})
@@ -1639,6 +1715,8 @@ def execute_governed_action(
             solo_founder_override_acknowledged=solo_founder_override_acknowledged,
         )
     if operation.get("state") == "approved_for_apply":
+        operation = execute_operation(operation_id, actor=actor)
+    elif operation.get("state") in {"apply_failed", "apply_scheduled"}:
         operation = execute_operation(operation_id, actor=actor)
     return operation
 

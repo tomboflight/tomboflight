@@ -1,6 +1,9 @@
-from fastapi import APIRouter, Response, status
+from typing import Any
+
+from fastapi import APIRouter, Depends, Response, status
 
 from app.database import get_service_state
+from app.dependencies.auth import require_super_admin
 
 router = APIRouter(tags=["Health"])
 
@@ -43,6 +46,26 @@ def readiness_check(response: Response):
     )
     return {
         "status": "ok" if service_state["ready"] else "unavailable",
+        "service": "Tomb of Light API",
+        **service_state,
+    }
+
+
+@router.get("/health/operational")
+def operational_readiness_check(
+    response: Response,
+    current_user: dict[str, Any] = Depends(require_super_admin),
+):
+    del current_user
+    service_state = get_service_state(include_operational_details=True)
+    operational_ready = bool(service_state.get("operational_ready"))
+    response.status_code = (
+        status.HTTP_200_OK
+        if operational_ready
+        else status.HTTP_503_SERVICE_UNAVAILABLE
+    )
+    return {
+        "status": "ok" if operational_ready else "unavailable",
         "service": "Tomb of Light API",
         **service_state,
     }

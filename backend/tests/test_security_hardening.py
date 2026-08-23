@@ -7,11 +7,14 @@ from unittest.mock import patch
 
 from bson import ObjectId
 from fastapi import HTTPException
+from starlette.requests import Request
 
-from app.core import security as security_core
+from app.core import continuity_route_guard, security as security_core
 from app.core.security import create_csrf_token, verify_csrf_token
 from app.database import DatabaseUnavailableError
+from app.routes import auth as auth_routes
 from app.routes import uploads as upload_routes
+from app.schemas.auth import UserCreate as AuthUserCreate
 from app.services import auth_service, link_key_service, rate_limit_service, upload_scan_service
 
 
@@ -20,9 +23,21 @@ class FakeInsertResult:
         self.inserted_id = inserted_id
 
 
+class FakeUpdateResult:
+    def __init__(self, matched_count=0, modified_count=0):
+        self.matched_count = matched_count
+        self.modified_count = modified_count
+
+
 class FakeCollection:
     def __init__(self, documents=None):
         self.documents = list(documents or [])
+        self.indexes = {}
+
+    def create_index(self, keys, **options):
+        name = options.get("name") or str(keys)
+        self.indexes[name] = {"keys": keys, **options}
+        return name
 
     def find_one(self, query=None, sort=None):
         query = query or {}
@@ -45,8 +60,11 @@ class FakeCollection:
     def update_one(self, query, update):
         item = self.find_one(query)
         if not item:
-            return
+            return FakeUpdateResult()
         item.update(update.get("$set", {}))
+        for key in update.get("$unset", {}):
+            item.pop(key, None)
+        return FakeUpdateResult(matched_count=1, modified_count=1)
 
     def update_many(self, query, update):
         for item in self.find(query):
@@ -126,6 +144,27 @@ class RateLimitAndLockoutTests(unittest.TestCase):
             self.assertTrue(locked)
             with self.assertRaises(HTTPException):
                 rate_limit_service.enforce_lockout(scope="login", key=key)
+
+    def test_rate_limit_identity_does_not_trust_spoofed_forwarded_address(self):
+        request = Request(
+            {
+                "type": "http",
+                "http_version": "1.1",
+                "method": "POST",
+                "path": "/auth/login",
+                "headers": [(b"x-forwarded-for", b"198.51.100.44")],
+                "query_string": b"",
+                "client": ("203.0.113.25", 50000),
+                "scheme": "https",
+                "server": ("testserver", 443),
+            }
+        )
+        self.assertEqual(
+            auth_routes._rate_key_from_request(
+                request, principal="Customer@Example.com"
+            ),
+            "203.0.113.25:customer@example.com",
+        )
 
 
 class AuthMfaTests(unittest.TestCase):
@@ -212,6 +251,172 @@ class AuthMfaTests(unittest.TestCase):
         stored = db.users.find_one({"_id": user_id})
         self.assertFalse(stored.get("mfa_enabled"))
         self.assertIsNone(stored.get("mfa_secret_encrypted"))
+
+
+class AccountActivationSecurityTests(unittest.TestCase):
+    def _payload(self, *, email: str, activation_token: str | None = None) -> AuthUserCreate:
+        return AuthUserCreate(
+            email=email,
+            password="StrongActivationPass!123",
+            full_name="Activation Customer",
+            terms_accepted=True,
+            privacy_accepted=True,
+            eligibility_attested=True,
+            policy_version="2026-03-26",
+            activation_token=activation_token,
+        )
+
+    def test_new_public_signup_stays_passwordless_until_email_activation(self):
+        db = FakeDatabase({"users": []})
+        raw_token = "activation-token-that-is-never-stored-raw"
+        with (
+            patch.object(auth_service, "get_database", return_value=db),
+            patch.object(auth_service.secrets, "token_urlsafe", return_value=raw_token),
+            patch.object(
+                auth_service,
+                "send_account_activation_email",
+                return_value={"sent": True, "provider": "postmark"},
+            ) as send_activation,
+            patch.object(auth_service, "create_audit_log"),
+        ):
+            user = auth_service.register_user(
+                self._payload(email="new.activation@example.com")
+            )
+
+        self.assertIsNotNone(user)
+        assert user is not None
+        self.assertEqual(user["status"], "pending_activation")
+        self.assertTrue(user["requires_account_activation"])
+        self.assertIsNone(user["password_hash"])
+        self.assertNotIn(raw_token, str(db.users.documents))
+        self.assertEqual(
+            user["account_activation_token_hash"],
+            auth_service._hash_account_activation_token(raw_token),
+        )
+        activation_url = send_activation.call_args.kwargs["activation_url"]
+        self.assertIn("#activation_token=", activation_url)
+        self.assertNotIn("?activation_token=", activation_url)
+
+    def test_identity_startup_indexes_enforce_unique_email_and_live_activation_token(self):
+        db = FakeDatabase({"users": []})
+        with patch.object(auth_service, "get_database", return_value=db):
+            auth_service.ensure_auth_indexes()
+
+        email_index = db.users.indexes["idx_users_email_unique"]
+        activation_index = db.users.indexes[
+            "idx_users_activation_token_hash_unique"
+        ]
+        self.assertTrue(email_index["unique"])
+        self.assertTrue(activation_index["unique"])
+        self.assertEqual(
+            activation_index["partialFilterExpression"],
+            {"account_activation_token_hash": {"$type": "string"}},
+        )
+
+    def test_pending_account_cannot_be_claimed_without_the_live_activation_token(self):
+        user_id = ObjectId()
+        raw_token = "valid-activation-token-value"
+        db = FakeDatabase(
+            {
+                "users": [
+                    {
+                        "_id": user_id,
+                        "email": "pending@example.com",
+                        "full_name": "Pending Customer",
+                        "role": "user",
+                        "account_type": "customer",
+                        "status": "pending_activation",
+                        "password_hash": None,
+                        "session_token_version": 0,
+                        "account_activation_token_hash": auth_service._hash_account_activation_token(
+                            raw_token
+                        ),
+                        "account_activation_expires_at": (
+                            datetime.now(UTC) + timedelta(hours=1)
+                        ).isoformat(),
+                        "created_at": datetime.now(UTC).isoformat(),
+                    }
+                ]
+            }
+        )
+
+        with patch.object(auth_service, "get_database", return_value=db):
+            missing = auth_service.register_user(
+                self._payload(email="pending@example.com")
+            )
+            invalid = auth_service.register_user(
+                self._payload(
+                    email="pending@example.com",
+                    activation_token="invalid-activation-token",
+                )
+            )
+            activated = auth_service.register_user(
+                self._payload(
+                    email="pending@example.com",
+                    activation_token=raw_token,
+                )
+            )
+            replay = auth_service.register_user(
+                self._payload(
+                    email="pending@example.com",
+                    activation_token=raw_token,
+                )
+            )
+
+        self.assertIsNone(missing)
+        self.assertIsNone(invalid)
+        self.assertIsNotNone(activated)
+        assert activated is not None
+        self.assertEqual(activated["status"], "active")
+        self.assertTrue(
+            auth_service.verify_password(
+                "StrongActivationPass!123", activated["password_hash"]
+            )
+        )
+        self.assertIsNone(activated["account_activation_token_hash"])
+        self.assertIsNone(replay)
+
+    def test_signup_browser_consumes_activation_from_fragment_and_clears_it(self):
+        repository_root = Path(__file__).resolve().parents[2]
+        auth_source = (repository_root / "auth.js").read_text(encoding="utf-8")
+        signup_source = (repository_root / "signup.html").read_text(encoding="utf-8")
+        self.assertIn("window.location.hash", auth_source)
+        self.assertIn("activation_token", auth_source)
+        self.assertIn("window.history.replaceState", auth_source)
+        self.assertNotIn("Email verified. Enter your account details", auth_source)
+        self.assertIn("auth.js?v=20260822-phase11", signup_source)
+
+
+class ContinuityLegacyRouteGuardTests(unittest.TestCase):
+    def test_covered_legacy_mutations_require_kernel_execution(self):
+        for method, path in (
+            ("POST", "/admin/control-center/super-admin/users"),
+            ("POST", "/admin/control-center/super-admin/legacy-admin-review"),
+            ("PATCH", "/admin/control-center/super-admin/users/user-1"),
+            ("POST", "/admin/stripe-ops/subscriptions/cancel"),
+            ("POST", "/auth/admin/users/user-1/password-reset"),
+            ("POST", "/orders/admin/manual-order"),
+            ("POST", "/orders/admin/repair-paid-package-access"),
+            ("POST", "/project-entitlements/apply"),
+            ("POST", "/users"),
+        ):
+            with self.subTest(method=method, path=path):
+                self.assertTrue(
+                    continuity_route_guard.requires_continuity_kernel(method, path)
+                )
+
+    def test_reads_previews_and_kernel_execution_remain_available(self):
+        for method, path in (
+            ("GET", "/admin/control-center/super-admin/users"),
+            ("POST", "/admin/control-center/super-admin/users/preview"),
+            ("POST", "/admin/control-center/kernel/execute"),
+            ("GET", "/admin/stripe-ops/customers/history"),
+            ("PATCH", "/users/me/profile"),
+        ):
+            with self.subTest(method=method, path=path):
+                self.assertFalse(
+                    continuity_route_guard.requires_continuity_kernel(method, path)
+                )
 
 
 class AuthDatabaseFailClosedTests(unittest.TestCase):

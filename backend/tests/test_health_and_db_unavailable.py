@@ -1,6 +1,7 @@
 import asyncio
 import io
 import json
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -9,6 +10,7 @@ from starlette.datastructures import Headers, UploadFile
 from starlette.requests import Request
 
 from app import main as main_module
+from app import database as database_module
 from app.database import DatabaseUnavailableError
 from app.routes import health as health_routes
 from app.routes import uploads as upload_routes
@@ -102,6 +104,116 @@ class HealthAndDbUnavailableTests(unittest.TestCase):
         self.assertEqual(health["status"], "degraded")
         self.assertEqual(root["service_mode"], "degraded")
         self.assertEqual(root["degraded_reasons"], ["database_unavailable"])
+
+    def test_production_operational_readiness_reports_controls_only_to_ceo_surface(self):
+        with tempfile.TemporaryDirectory() as mount_path:
+            with (
+                patch.object(database_module, "db", object()),
+                patch.object(database_module.settings, "environment", "production"),
+                patch.object(database_module.settings, "secret_key", "s" * 48),
+                patch.object(database_module.settings, "stripe_secret_key", "sk_live_configured"),
+                patch.object(database_module.settings, "stripe_publishable_key", "pk_live_configured"),
+                patch.object(database_module.settings, "stripe_webhook_secret", "whsec_configured"),
+                patch.object(database_module.settings, "postmark_server_token", "postmark-configured"),
+                patch.object(database_module.settings, "postmark_server_token_file", ""),
+                patch.object(database_module.settings, "postmark_from_email", "security@tomboflight.com"),
+                patch.object(database_module.settings, "upload_scan_hook", "scanner.module:scan"),
+                patch.object(database_module.settings, "upload_scan_command", ""),
+                patch.object(database_module.settings, "upload_scan_fail_closed", True),
+                patch.object(database_module.settings, "render_disk_mount_path", mount_path),
+                patch.dict(
+                    database_module.os.environ,
+                    {
+                        "RENDER_GIT_COMMIT": "phase11commit",
+                        "CONTINUITY_EXECUTION_KILL_SWITCH": "",
+                    },
+                ),
+            ):
+                public_state = database_module.get_service_state()
+                detailed_state = database_module.get_service_state(
+                    include_operational_details=True
+                )
+
+        self.assertTrue(public_state["operational_ready"])
+        self.assertNotIn("components", public_state)
+        self.assertNotIn("operational_degraded_reasons", public_state)
+        self.assertNotIn("release", public_state)
+        self.assertTrue(detailed_state["operational_ready"])
+        self.assertEqual(detailed_state["operational_degraded_reasons"], [])
+        self.assertEqual(detailed_state["release"]["commit"], "phase11commit")
+        self.assertTrue(detailed_state["components"]["production_signing_key"]["configured"])
+        self.assertTrue(detailed_state["components"]["stripe_webhooks"]["configured"])
+        self.assertEqual(detailed_state["components"]["upload_scanner"]["mode"], "active")
+        self.assertTrue(detailed_state["components"]["private_upload_storage"]["persistent"])
+
+    def test_production_operational_readiness_fails_closed_on_missing_controls(self):
+        release_env = {
+            "RENDER_GIT_COMMIT": "",
+            "RELEASE_SHA": "",
+            "GIT_COMMIT": "",
+            "COMMIT_SHA": "",
+            "VERCEL_GIT_COMMIT_SHA": "",
+            "CONTINUITY_EXECUTION_KILL_SWITCH": "true",
+        }
+        with (
+            patch.object(database_module, "db", object()),
+            patch.object(database_module.settings, "environment", "production"),
+            patch.object(database_module.settings, "secret_key", "change-me"),
+            patch.object(database_module.settings, "stripe_secret_key", ""),
+            patch.object(database_module.settings, "stripe_publishable_key", ""),
+            patch.object(database_module.settings, "stripe_webhook_secret", ""),
+            patch.object(database_module.settings, "postmark_server_token", ""),
+            patch.object(database_module.settings, "postmark_server_token_file", ""),
+            patch.object(database_module.settings, "upload_scan_hook", ""),
+            patch.object(database_module.settings, "upload_scan_command", "legacy-command"),
+            patch.object(database_module.settings, "render_disk_mount_path", ""),
+            patch.dict(database_module.os.environ, release_env),
+        ):
+            detailed_state = database_module.get_service_state(
+                include_operational_details=True
+            )
+
+        reasons = set(detailed_state["operational_degraded_reasons"])
+        self.assertFalse(detailed_state["operational_ready"])
+        self.assertTrue(
+            {
+                "production_signing_key_invalid",
+                "stripe_configuration_incomplete",
+                "postmark_configuration_incomplete",
+                "upload_scanner_unavailable_quarantine_only",
+                "private_upload_storage_not_persistent",
+                "deployment_revision_unavailable",
+                "continuity_execution_disabled",
+            }.issubset(reasons)
+        )
+        self.assertTrue(
+            detailed_state["components"]["upload_scanner"][
+                "legacy_command_ignored"
+            ]
+        )
+
+    def test_operational_readiness_route_sets_503_for_ceo_when_degraded(self):
+        state = {
+            **_ready_service_state(),
+            "operational_ready": False,
+            "operational_degraded_reasons": ["continuity_execution_disabled"],
+            "components": {},
+            "release": {"version": "1.0.0", "commit": "abc123"},
+        }
+        with patch.object(health_routes, "get_service_state", return_value=state) as get_state:
+            response = Response()
+            payload = health_routes.operational_readiness_check(
+                response,
+                {"email": "l.robinson@tomboflight.com"},
+            )
+
+        get_state.assert_called_once_with(include_operational_details=True)
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(payload["status"], "unavailable")
+        self.assertEqual(
+            payload["operational_degraded_reasons"],
+            ["continuity_execution_disabled"],
+        )
 
     def test_db_down_upload_route_returns_structured_503(self):
         upload = UploadFile(

@@ -13,6 +13,7 @@ from app.dependencies.auth import (
     resolve_access_context,
 )
 from app.schemas.auth import (
+    AccountActivationRequest,
     MfaDisableRequest,
     MfaEnrollmentBeginRequest,
     MfaEnrollmentVerifyRequest,
@@ -38,6 +39,7 @@ from app.services.auth_service import (
     get_user_by_id,
     get_user_by_email,
     register_user,
+    request_account_activation,
     revoke_user_sessions,
     request_password_reset,
     reset_password_with_token,
@@ -121,7 +123,10 @@ def _clear_auth_cookie(response: Response, request: Request) -> None:
 def _rate_key_from_request(request: Request, *, principal: str = "") -> str:
     forwarded_for = str(request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
     client_host = str((request.client.host if request.client else "") or "").strip()
-    base = forwarded_for or client_host or "unknown"
+    # request.client is normalized by the trusted ASGI proxy boundary. A raw
+    # X-Forwarded-For value is attacker-controlled when the application is
+    # reached directly and must never override the connected client address.
+    base = client_host or forwarded_for or "unknown"
     normalized_principal = str(principal or "").strip().lower()
     return f"{base}:{normalized_principal}" if normalized_principal else base
 
@@ -151,7 +156,14 @@ def _enforce_rate_limit_with_audit(
 
 
 @router.post("/signup", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-def signup(payload: UserCreate, response: Response):
+def signup(payload: UserCreate, request: Request, response: Response):
+    _enforce_rate_limit_with_audit(
+        scope="auth_signup",
+        key=_rate_key_from_request(request, principal=payload.email),
+        limit=max(1, int(settings.auth_password_reset_request_rate_limit or 5)),
+        window_seconds=max(1, int(settings.auth_rate_limit_window_seconds or 60)),
+        audit_action="signup_throttled",
+    )
     try:
         user = register_user(payload)
     except ValueError as exc:
@@ -477,6 +489,24 @@ def _current_user_display(user: dict) -> str:
     )
 
 
+@router.post("/account-activation/request", response_model=PasswordResetResponse)
+def account_activation_request_route(
+    payload: AccountActivationRequest,
+    request: Request,
+    response: Response,
+):
+    _enforce_rate_limit_with_audit(
+        scope="auth_account_activation_request",
+        key=_rate_key_from_request(request, principal=payload.email),
+        limit=max(1, int(settings.auth_password_reset_request_rate_limit or 5)),
+        window_seconds=max(1, int(settings.auth_rate_limit_window_seconds or 60)),
+        audit_action="account_activation_request_throttled",
+    )
+    result = request_account_activation(payload.email)
+    _apply_no_store(response)
+    return result
+
+
 @router.post("/password-reset/request", response_model=PasswordResetResponse)
 def password_reset_request_route(payload: PasswordResetRequest, response: Response):
     _enforce_rate_limit_with_audit(
@@ -553,6 +583,7 @@ def admin_issue_password_reset_route(
             user_id,
             admin_user_id=_current_user_id(current_user),
             admin_display=_current_user_display(current_user),
+            admin_email=str(current_user.get("email") or ""),
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -571,6 +602,7 @@ def admin_security_reset_route(
         admin_reset_user_security(
             target_user_id=user_id,
             actor_user_id=_current_user_id(current_user),
+            actor_email=str(current_user.get("email") or ""),
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

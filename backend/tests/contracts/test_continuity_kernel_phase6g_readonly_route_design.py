@@ -123,9 +123,12 @@ class TestContinuityKernelPhase6GReadonlyRouteDesign(unittest.TestCase):
         scripts_paths = list((REPO_ROOT / "backend" / "scripts").glob("**/*.py"))
         self._assert_no_kernel_token_in_paths(scripts_paths)
 
-    def test_30_main_does_not_import_continuity_kernel_modules_yet(self) -> None:
+    def test_30_main_now_wires_the_later_governed_runtime_boundary(self) -> None:
         main_path = REPO_ROOT / "backend" / "app" / "main.py"
-        self._assert_no_kernel_token_in_paths([main_path])
+        main_source = main_path.read_text(encoding="utf-8")
+        self.assertIn("admin_continuity_runtime_router", main_source)
+        self.assertIn("requires_continuity_kernel", main_source)
+        self.assertIn("continuity_kernel_required", main_source)
 
 
 if __name__ == "__main__":

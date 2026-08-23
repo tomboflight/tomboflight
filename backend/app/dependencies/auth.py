@@ -12,13 +12,13 @@ from app.core.admin_permission_registry import (
     CAPABILITY_PERMISSIONS,
     ROLE_CAPABILITIES,
     ROLE_PERMISSION_MAP,
+    is_canonical_ceo_email,
 )
 from app.core.package_catalog import get_package
 from app.core.role_catalog import (
     INTERNAL_ADMIN_ROLE_CODES,
     SUPER_ADMIN_ROLE_CODES,
     collect_role_codes,
-    has_internal_admin_role,
     normalize_role_code,
 )
 from app.core.security import decode_access_token, verify_csrf_token
@@ -89,6 +89,7 @@ def _is_unsafe_method(method: str) -> bool:
 def _is_public_password_reset_route(request: Request) -> bool:
     path = str(request.url.path or "").rstrip("/")
     return path in {
+        "/auth/account-activation/request",
         "/auth/password-reset/request",
         "/auth/password-reset/confirm",
     }
@@ -98,6 +99,7 @@ def _is_cookie_csrf_exempt_route(request: Request) -> bool:
     path = str(request.url.path or "").rstrip("/")
     return path in {
         "/auth/logout",
+        "/auth/account-activation/request",
         "/auth/mfa/enroll/begin",
         "/auth/mfa/enroll/verify",
         "/auth/mfa/login/verify",
@@ -191,13 +193,20 @@ def _get_token_from_request(
 
 
 def _has_internal_admin_access(user: dict[str, Any]) -> bool:
-    return has_internal_admin_role(
+    if is_canonical_ceo_email(user.get("email")):
+        # The canonical CEO remains an administrator even if a stale database
+        # row temporarily loses its role labels. resolve_access_context applies
+        # the same singleton invariant to capabilities and permissions.
+        return True
+    role_codes = collect_role_codes(
         (
             user.get("role"),
             user.get("access_tier"),
             user.get("department_role"),
         )
     )
+    role_codes.difference_update(SUPER_ADMIN_KEYS)
+    return any(role_code in INTERNAL_ADMIN_KEYS for role_code in role_codes)
 
 
 def has_internal_admin_access(user: dict[str, Any]) -> bool:
@@ -516,7 +525,10 @@ def require_super_admin(
             )
         )
     )
-    if role_codes.intersection(SUPER_ADMIN_KEYS):
+    if (
+        is_canonical_ceo_email(current_user.get("email"))
+        and role_codes.intersection(SUPER_ADMIN_KEYS)
+    ):
         return current_user
 
     raise HTTPException(
@@ -792,9 +804,22 @@ def resolve_access_context(
         )
 
     role_codes = _collect_role_codes_for_user(user)
+    canonical_ceo = is_canonical_ceo_email(user.get("email"))
+    if canonical_ceo:
+        # The CEO singleton cannot be demoted by a stale role assignment or a
+        # compromised legacy row. Startup reconciliation persists the same
+        # invariant, while this read-time rule fails safe immediately.
+        role_codes.add("ceo_master_admin")
+    else:
+        role_codes.difference_update(SUPER_ADMIN_KEYS)
     capabilities = _collect_capabilities_for_roles(role_codes)
     permissions = _collect_permissions_for_roles(role_codes, capabilities)
     permissions.update(_collect_user_permission_overrides(user_id))
+    if not canonical_ceo:
+        # A database override must never manufacture wildcard authority for a
+        # non-CEO identity.
+        capabilities.discard("*")
+        permissions.discard("*")
 
     entitlements = list_user_project_entitlements(
         user_id,

@@ -15,9 +15,13 @@ def list_users() -> list[dict]:
 def create_user(payload: UserCreate) -> dict:
     db = get_database()
     data = payload.model_dump()
+    data["role"] = "user"
+    data["account_type"] = "customer"
     data["created_at"] = datetime.now(UTC).isoformat()
     data["full_name"] = f"{payload.first_name} {payload.last_name}".strip()
-    data["status"] = data.get("status") or "active"
+    data["status"] = "pending_activation"
+    data["password_hash"] = None
+    data["requires_account_activation"] = True
     data["last_login_at"] = None
     data["password_reset_requested_at"] = None
     data["password_reset_expires_at"] = None

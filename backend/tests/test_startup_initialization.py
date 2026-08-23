@@ -14,6 +14,7 @@ class StartupInitializationTests(unittest.TestCase):
         with (
             patch.object(main_module, "validate_nft_runtime_configuration_on_startup") as validate_mock,
             patch.object(main_module, "connect_to_mongo", return_value={"db": "ok"}) as connect_mock,
+            patch.object(main_module, "ensure_auth_indexes") as auth_index_mock,
             patch.object(main_module, "initialize_order_indexes") as order_init_mock,
             patch.object(main_module, "ensure_project_entitlement_indexes") as entitlement_init_mock,
             patch.object(main_module, "initialize_mint_record_indexes") as mint_record_init_mock,
@@ -29,6 +30,7 @@ class StartupInitializationTests(unittest.TestCase):
 
         validate_mock.assert_called_once()
         connect_mock.assert_called_once()
+        auth_index_mock.assert_called_once()
         order_init_mock.assert_called_once()
         entitlement_init_mock.assert_called_once()
         mint_record_init_mock.assert_called_once()
@@ -48,6 +50,7 @@ class StartupInitializationTests(unittest.TestCase):
         with (
             patch.object(main_module, "validate_nft_runtime_configuration_on_startup") as validate_mock,
             patch.object(main_module, "connect_to_mongo", return_value=None) as connect_mock,
+            patch.object(main_module, "ensure_auth_indexes") as auth_index_mock,
             patch.object(main_module, "initialize_order_indexes") as order_init_mock,
             patch.object(main_module, "ensure_project_entitlement_indexes") as entitlement_init_mock,
             patch.object(main_module, "initialize_mint_record_indexes") as mint_record_init_mock,
@@ -63,6 +66,7 @@ class StartupInitializationTests(unittest.TestCase):
 
         validate_mock.assert_called_once()
         connect_mock.assert_called_once()
+        auth_index_mock.assert_not_called()
         order_init_mock.assert_not_called()
         entitlement_init_mock.assert_not_called()
         mint_record_init_mock.assert_not_called()

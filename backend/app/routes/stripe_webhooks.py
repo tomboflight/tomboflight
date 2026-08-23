@@ -144,6 +144,7 @@ def _mark_event_processed(
             "$set": {
                 "processed_at": now,
                 "processing_finished_at": now,
+                "processing_status": "completed",
                 "order_result": {
                     "order_id": order_result.get("order_id"),
                     "error": order_result.get("error"),
@@ -155,9 +156,93 @@ def _mark_event_processed(
                     "type": maintenance_result.get("type"),
                 },
             },
-            "$unset": {"processing_claim": ""},
+            "$unset": {
+                "processing_claim": "",
+                "retryable_failures": "",
+                "processing_failed_at": "",
+            },
         },
     )
+
+
+def _mark_event_failed(
+    events_col: Collection[dict[str, Any]],
+    *,
+    event_id: str,
+    claim_token: str,
+    failures: list[str],
+    order_result: dict[str, Any],
+    maintenance_result: dict[str, Any],
+    now: datetime,
+) -> None:
+    if not event_id:
+        return
+    events_col.update_one(
+        {"event_id": event_id, "processing_claim": claim_token},
+        {
+            "$set": {
+                "processing_failed_at": now,
+                "processing_finished_at": now,
+                "processing_status": "retryable_failure",
+                "retryable_failures": list(failures),
+                "order_result": {
+                    "order_id": order_result.get("order_id"),
+                    "error": order_result.get("error"),
+                    "reason": order_result.get("reason"),
+                    "type": order_result.get("type"),
+                },
+                "maintenance_result": {
+                    "updated": bool(maintenance_result.get("updated")),
+                    "error": maintenance_result.get("error"),
+                    "type": maintenance_result.get("type"),
+                },
+            },
+            "$unset": {"processing_claim": "", "processed_at": ""},
+        },
+    )
+
+
+def _downstream_failures(
+    *,
+    event_type: str,
+    order_result: dict[str, Any],
+    maintenance_result: dict[str, Any],
+) -> list[str]:
+    failures: list[str] = []
+    if event_type == "checkout.session.completed":
+        # A checkout may represent either a package purchase or a maintenance
+        # subscription. The event is complete when the relevant handler wins;
+        # an expected rejection by the non-relevant handler is not a failure.
+        checkout_persisted = bool(
+            order_result.get("order_id")
+            or order_result.get("duplicate")
+            or maintenance_result.get("updated")
+        )
+        if not checkout_persisted:
+            failures.append(
+                str(
+                    order_result.get("error")
+                    or maintenance_result.get("error")
+                    or order_result.get("reason")
+                    or maintenance_result.get("reason")
+                    or "checkout_not_persisted"
+                )
+            )
+    elif event_type in {
+        "customer.subscription.created",
+        "customer.subscription.updated",
+        "customer.subscription.deleted",
+        "invoice.paid",
+        "invoice.payment_failed",
+    } and not maintenance_result.get("updated"):
+        failures.append(
+            str(
+                maintenance_result.get("error")
+                or maintenance_result.get("reason")
+                or "maintenance_event_not_persisted"
+            )
+        )
+    return list(dict.fromkeys(failure for failure in failures if failure))
 
 
 @router.post("/stripe", status_code=status.HTTP_200_OK)
@@ -245,13 +330,35 @@ async def stripe_webhook(request: Request) -> Dict[str, Any]:
             logger.error("Stripe invoice maintenance sync failed", exc_info=True)
             maintenance_result = {"updated": False, "error": "maintenance_invoice_sync_failed", "type": event_type}
 
+    failures = _downstream_failures(
+        event_type=event_type,
+        order_result=order_result,
+        maintenance_result=maintenance_result,
+    )
+    finished_at = datetime.now(timezone.utc)
+    if failures:
+        _mark_event_failed(
+            events_col,
+            event_id=event_id,
+            claim_token=claim_token,
+            failures=failures,
+            order_result=order_result,
+            maintenance_result=maintenance_result,
+            now=finished_at,
+        )
+        logger.error("Stripe webhook processing failed and was released for retry")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Stripe event processing failed; delivery is safe to retry.",
+        )
+
     _mark_event_processed(
         events_col,
         event_id=event_id,
         claim_token=claim_token,
         order_result=order_result,
         maintenance_result=maintenance_result,
-        now=datetime.now(timezone.utc),
+        now=finished_at,
     )
 
     logger.info("Stripe webhook processed")

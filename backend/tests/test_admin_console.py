@@ -187,6 +187,81 @@ class AdminPermissionContextTests(unittest.TestCase):
         self.assertNotIn("admin.control.mint", permissions)
         self.assertNotIn("uploads.admin.review", permissions)
 
+    def test_noncanonical_super_admin_label_never_grants_admin_or_wildcard_access(self):
+        user_id = ObjectId()
+        user = {
+            "_id": user_id,
+            "email": "legacy-super@example.com",
+            "role": "super_admin",
+            "status": "active",
+        }
+        db = FakeDatabase(
+            {
+                "user_role_assignments": [
+                    {
+                        "user_id": str(user_id),
+                        "role_code": "super_admin",
+                        "status": "active",
+                    }
+                ],
+                "role_capabilities": [],
+                "role_permissions": [],
+                "user_permission_overrides": [
+                    {
+                        "user_id": str(user_id),
+                        "permission_code": "*",
+                        "status": "active",
+                    }
+                ],
+                "projects": [],
+                "workflow_events": [],
+            }
+        )
+
+        with (
+            patch.object(auth_dependencies, "_load_user_by_id", return_value=user),
+            patch.object(auth_dependencies, "_db", return_value=db),
+            patch.object(auth_dependencies, "list_user_project_entitlements", return_value=[]),
+            patch.object(auth_dependencies, "list_accessible_project_ids", return_value=[]),
+        ):
+            context = auth_dependencies.resolve_access_context(str(user_id))
+
+        self.assertFalse(auth_dependencies.has_internal_admin_access(user))
+        self.assertNotIn("super_admin", context["role_codes"])
+        self.assertNotIn("*", context["capabilities"])
+        self.assertNotIn("*", context["permissions"])
+
+    def test_canonical_ceo_remains_the_single_wildcard_admin_identity(self):
+        user_id = ObjectId()
+        user = {
+            "_id": user_id,
+            "email": "l.robinson@tomboflight.com",
+            "role": "user",
+            "status": "active",
+        }
+        db = FakeDatabase(
+            {
+                "user_role_assignments": [],
+                "role_capabilities": [],
+                "role_permissions": [],
+                "user_permission_overrides": [],
+                "projects": [],
+                "workflow_events": [],
+            }
+        )
+
+        with (
+            patch.object(auth_dependencies, "_load_user_by_id", return_value=user),
+            patch.object(auth_dependencies, "_db", return_value=db),
+            patch.object(auth_dependencies, "list_user_project_entitlements", return_value=[]),
+        ):
+            context = auth_dependencies.resolve_access_context(str(user_id))
+
+        self.assertTrue(auth_dependencies.has_internal_admin_access(user))
+        self.assertIn("ceo_master_admin", context["role_codes"])
+        self.assertIn("*", context["capabilities"])
+        self.assertIn("*", context["permissions"])
+
 
 class AdminControlAccessProfileTests(unittest.TestCase):
     def test_overview_payload_is_reduced_to_each_officers_authorized_domain(self):
@@ -1180,7 +1255,16 @@ class SuperAdminControlsTests(unittest.TestCase):
                         "maintenance_status": "active",
                         "maintenance_stripe_status": "active",
                         "maintenance_stripe_subscription_id": "sub_permanent_delete_test",
-                    }
+                    },
+                    {
+                        "_id": ObjectId(),
+                        "project_id": project_id,
+                        "user_id": user_id,
+                        "status": "archived",
+                        "maintenance_status": "active",
+                        "maintenance_stripe_status": "active",
+                        "maintenance_stripe_subscription_id": "sub_permanent_delete_second",
+                    },
                 ],
                 "project_members": [
                     {"_id": ObjectId(), "project_id": str(project_id), "user_id": str(user_id), "status": "inactive"}
@@ -1255,6 +1339,7 @@ class SuperAdminControlsTests(unittest.TestCase):
 
         with (
             patch.object(admin_control_service, "get_database", return_value=db),
+            patch.object(admin_control_service, "write_audit_log", return_value="audit-delete-1"),
             patch.object(
                 admin_control_service.stripe_admin_operations_service,
                 "cancel_subscription",
@@ -1280,13 +1365,26 @@ class SuperAdminControlsTests(unittest.TestCase):
                     user_id=str(user_id), payload={"status": "active"}
                 )
 
-        cancel_subscription.assert_called_once()
+        self.assertEqual(cancel_subscription.call_count, 2)
         self.assertEqual(
-            cancel_subscription.call_args.kwargs["subscription_id"],
-            "sub_permanent_delete_test",
+            {
+                call.kwargs["subscription_id"]
+                for call in cancel_subscription.call_args_list
+            },
+            {"sub_permanent_delete_test", "sub_permanent_delete_second"},
         )
-        self.assertFalse(cancel_subscription.call_args.kwargs["at_period_end"])
-        self.assertTrue(cancel_subscription.call_args.kwargs["confirm"])
+        self.assertEqual(
+            len(
+                {
+                    call.kwargs["idempotency_key"]
+                    for call in cancel_subscription.call_args_list
+                }
+            ),
+            2,
+        )
+        for call in cancel_subscription.call_args_list:
+            self.assertFalse(call.kwargs["at_period_end"])
+            self.assertTrue(call.kwargs["confirm"])
 
         user = db["users"].documents[0]
         tombstone = db["account_deletion_tombstones"].documents[0]
@@ -1426,7 +1524,7 @@ class SuperAdminControlsTests(unittest.TestCase):
         self.assertEqual(db["users"].documents[1]["status"], "active")
         self.assertEqual(db["account_deletion_tombstones"].documents, [])
 
-    def test_permanent_deletion_fails_before_mongodb_changes_when_subscription_cancel_fails(self):
+    def test_permanent_deletion_failure_leaves_resumable_identity_lock_and_tombstone(self):
         user_id = ObjectId()
         project_id = ObjectId()
         db = FakeDatabase(
@@ -1486,10 +1584,83 @@ class SuperAdminControlsTests(unittest.TestCase):
                     actor={"_id": ObjectId(), "email": "l.robinson@tomboflight.com"},
                 )
 
-        self.assertEqual(db["users"].documents[0]["status"], "active")
-        self.assertTrue(db["users"].documents[0]["login_enabled"])
+        self.assertEqual(db["users"].documents[0]["status"], "deletion_in_progress")
+        self.assertFalse(db["users"].documents[0]["login_enabled"])
         self.assertEqual(db["projects"].documents[0]["status"], "active")
-        self.assertEqual(db["account_deletion_tombstones"].documents, [])
+        tombstone = db["account_deletion_tombstones"].documents[0]
+        self.assertEqual(tombstone["status"], "failed_retryable")
+        self.assertEqual(tombstone["phase"], "subscription_cancellation")
+        self.assertEqual(tombstone["continuity_operation_id"], "ckop_stripe_failure")
+
+    def test_permanent_deletion_resumes_audit_closure_without_recreating_identity(self):
+        user_id = ObjectId()
+        original_email = "audit-resume@example.com"
+        db = FakeDatabase(
+            {
+                "users": [
+                    {
+                        "_id": user_id,
+                        "email": original_email,
+                        "full_name": "Audit Resume",
+                        "role": "user",
+                        "status": "active",
+                        "login_enabled": True,
+                        "session_token_version": 2,
+                    }
+                ],
+                "projects": [],
+                "families": [],
+                "households": [],
+                "account_deletion_tombstones": [],
+            }
+        )
+        common = {
+            "user_id": str(user_id),
+            "reason_category": "customer_request",
+            "reason": "Verified written deletion request",
+            "confirmation_email": original_email,
+            "initial_confirmation": True,
+            "final_confirmation": "PERMANENTLY DELETE",
+            "final_acknowledgement": True,
+            "continuity_operation_id": "ckop_audit_resume",
+            "actor": {
+                "_id": ObjectId(),
+                "email": "l.robinson@tomboflight.com",
+            },
+        }
+
+        with (
+            patch.object(admin_control_service, "get_database", return_value=db),
+            patch.object(
+                admin_control_service,
+                "write_audit_log",
+                side_effect=[RuntimeError("audit unavailable"), "audit-delete-resumed"],
+            ) as write_audit,
+            patch.object(
+                admin_control_service.stripe_admin_operations_service,
+                "cancel_subscription",
+            ) as cancel_subscription,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "audit evidence is still pending"):
+                admin_control_service.super_admin_apply_account_permanent_deletion(
+                    **common
+                )
+            deletion_id = db["account_deletion_tombstones"].documents[0]["deletion_id"]
+            resumed = admin_control_service.super_admin_apply_account_permanent_deletion(
+                **common
+            )
+
+        user = db["users"].documents[0]
+        tombstone = db["account_deletion_tombstones"].documents[0]
+        self.assertEqual(user["status"], "permanently_deleted")
+        self.assertEqual(user["permanent_deletion_id"], deletion_id)
+        self.assertNotEqual(user["email"], original_email)
+        self.assertTrue(resumed["resumed"])
+        self.assertEqual(resumed["deletion_receipt"]["deletion_id"], deletion_id)
+        self.assertEqual(tombstone["status"], "completed")
+        self.assertTrue(tombstone["audit_event_created"])
+        self.assertEqual(write_audit.call_count, 2)
+        cancel_subscription.assert_not_called()
 
     def test_super_admin_update_user_updates_profile_fields(self):
         user_id = ObjectId()
@@ -1527,7 +1698,7 @@ class SuperAdminControlsTests(unittest.TestCase):
         self.assertEqual(result["after"]["full_name"], "After Name")
         self.assertEqual(result["after"]["status"], "suspended")
 
-    def test_super_admin_can_promote_existing_admin_to_super_admin(self):
+    def test_non_ceo_identity_cannot_be_promoted_to_super_admin(self):
         user_id = ObjectId()
         db = FakeDatabase(
             {
@@ -1543,12 +1714,13 @@ class SuperAdminControlsTests(unittest.TestCase):
             }
         )
         with patch.object(admin_control_service, "get_database", return_value=db):
-            result = admin_control_service.super_admin_update_user(
-                user_id=str(user_id),
-                payload={"role": "super_admin"},
-                actor={"_id": ObjectId(), "email": "ceo@tomboflight.com"},
-            )
-        self.assertEqual(result["after"]["role"], "super_admin")
+            with self.assertRaisesRegex(ValueError, "Wildcard administrator roles"):
+                admin_control_service.super_admin_update_user(
+                    user_id=str(user_id),
+                    payload={"role": "super_admin"},
+                    actor={"_id": ObjectId(), "email": "l.robinson@tomboflight.com"},
+                )
+        self.assertEqual(db["users"].documents[0]["role"], "operations_admin")
 
     def test_super_admin_cannot_promote_customer_to_super_admin(self):
         user_id = ObjectId()
@@ -1566,7 +1738,7 @@ class SuperAdminControlsTests(unittest.TestCase):
             }
         )
         with patch.object(admin_control_service, "get_database", return_value=db):
-            with self.assertRaisesRegex(ValueError, "super_admin role can only be granted to existing internal admin accounts"):
+            with self.assertRaisesRegex(ValueError, "Wildcard administrator roles"):
                 admin_control_service.super_admin_update_user(
                     user_id=str(user_id),
                     payload={"role": "super_admin"},
@@ -1591,13 +1763,54 @@ class SuperAdminControlsTests(unittest.TestCase):
         with patch.object(admin_control_service, "get_database", return_value=db):
             with self.assertRaisesRegex(
                 ValueError,
-                "ceo_master_admin role can only be assigned to Larry Robinson's canonical identity",
+                "Wildcard administrator roles can only be assigned to Larry Robinson's canonical identity",
             ):
                 admin_control_service.super_admin_update_user(
                     user_id=str(user_id),
                     payload={"role": "ceo_master_admin"},
                     actor={"_id": ObjectId(), "email": "ceo@tomboflight.com"},
                 )
+
+    def test_canonical_ceo_identity_and_master_roles_are_immutable(self):
+        user_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "users": [
+                    {
+                        "_id": user_id,
+                        "email": "l.robinson@tomboflight.com",
+                        "full_name": "Larry Robinson",
+                        "role": "ceo_master_admin",
+                        "access_tier": "ceo_master_admin",
+                        "department_role": "executive_tech_admin",
+                        "status": "active",
+                    }
+                ]
+            }
+        )
+        with patch.object(admin_control_service, "get_database", return_value=db):
+            for field, value in (
+                ("email", "attacker@example.com"),
+                ("status", "suspended"),
+                ("role", "user"),
+                ("access_tier", "operations_admin"),
+                ("department_role", "finance_admin"),
+            ):
+                with self.subTest(field=field):
+                    with self.assertRaisesRegex(ValueError, "immutable"):
+                        admin_control_service.super_admin_update_user(
+                            user_id=str(user_id),
+                            payload={field: value},
+                            actor={
+                                "_id": user_id,
+                                "email": "l.robinson@tomboflight.com",
+                            },
+                        )
+
+        user = db["users"].documents[0]
+        self.assertEqual(user["email"], "l.robinson@tomboflight.com")
+        self.assertEqual(user["status"], "active")
+        self.assertEqual(user["role"], "ceo_master_admin")
 
     def test_impersonation_session_lifecycle_readonly_to_editing_to_stop(self):
         actor_id = ObjectId()

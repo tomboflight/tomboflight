@@ -2038,10 +2038,38 @@
 
     const statusNode = document.querySelector("[data-signup-status]");
     const submitBtn = form.querySelector("[data-submit-btn]");
-    const defaultSubmitLabel =
-      (submitBtn && submitBtn.textContent
-        ? submitBtn.textContent.trim()
-        : "") || "Create Private Account";
+    const activationParams = new URLSearchParams(
+      String(window.location.hash || "").replace(/^#/, ""),
+    );
+    const activationToken = String(
+      activationParams.get("activation_token") || "",
+    ).trim();
+    const activationEmail = String(
+      activationParams.get("email") || "",
+    )
+      .trim()
+      .toLowerCase();
+    const defaultSubmitLabel = activationToken
+      ? "Activate Private Account"
+      : (submitBtn && submitBtn.textContent
+          ? submitBtn.textContent.trim()
+          : "") || "Create Private Account";
+
+    if (activationToken) {
+      window.history.replaceState(
+        {},
+        document.title,
+        `${window.location.pathname}${window.location.search}`,
+      );
+      const emailInput = form.querySelector("input[name=email]");
+      if (emailInput && activationEmail) emailInput.value = activationEmail;
+      if (submitBtn) submitBtn.textContent = "Activate Private Account";
+      app.setStatus(
+        statusNode,
+        "Activation link received. Enter your account details to finish secure activation.",
+        "success",
+      );
+    }
 
     form.addEventListener("submit", async function (event) {
       event.preventDefault();
@@ -2126,7 +2154,7 @@
       }
 
       try {
-        await app.apiRequest("/auth/signup", {
+        const signupResult = await app.apiRequest("/auth/signup", {
           method: "POST",
           body: JSON.stringify({
             full_name: fullName,
@@ -2136,8 +2164,21 @@
             privacy_accepted: privacyAccepted,
             eligibility_attested: eligibilityAttested,
             policy_version: SIGNUP_POLICY_VERSION,
+            activation_token: activationToken || undefined,
           }),
         });
+
+        if (signupResult?.requires_account_activation) {
+          const activationMessage = signupResult.activation_delivery_sent
+            ? "Check your email for the secure activation link. Your account cannot be used until the email address is verified."
+            : "Your account is awaiting email verification, but the activation email was not confirmed as delivered. Contact support@tomboflight.com for assistance.";
+          app.setStatus(
+            statusNode,
+            activationMessage,
+            signupResult.activation_delivery_sent ? "success" : "error",
+          );
+          return;
+        }
 
         app.setStatus(
           statusNode,

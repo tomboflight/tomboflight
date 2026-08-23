@@ -120,9 +120,10 @@ class AccountSeparationTests(unittest.TestCase):
                 auth_dependencies.require_super_admin(request=cast(Any, object()), current_user=current_user)
         self.assertEqual(error.exception.status_code, 403)
 
-    def test_require_super_admin_allows_super_admin_role(self):
+    def test_require_super_admin_allows_only_canonical_ceo_super_admin(self):
         current_user = {
             "id": "user-1",
+            "email": "l.robinson@tomboflight.com",
             "role": "super_admin",
             "_access_context": {
                 "project_id": None,

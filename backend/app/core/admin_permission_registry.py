@@ -6,6 +6,11 @@ from app.core.role_catalog import normalize_role_code
 
 CEO_MASTER_ADMIN_EMAIL = "l.robinson@tomboflight.com"
 
+
+def is_canonical_ceo_email(value: Any) -> bool:
+    """Return True only for the immutable CEO Master Administrator mailbox."""
+    return str(value or "").strip().lower() == CEO_MASTER_ADMIN_EMAIL
+
 # Job-scoped roles that the canonical CEO may assign to an active officer.
 # The CEO singleton is intentionally excluded from this collection.
 ASSIGNABLE_OFFICER_ROLE_CODES: tuple[str, ...] = (
@@ -65,7 +70,10 @@ CAPABILITY_PERMISSIONS: dict[str, set[str]] = {
 ROLE_CAPABILITIES: dict[str, set[str]] = {
     # Deprecated generic admin role: no implicit capability grants.
     "admin": set(),
-    "super_admin": {"*"},
+    # Generic super_admin is retained only as a legacy data label. Wildcard
+    # authority belongs exclusively to the canonical CEO identity and is
+    # granted through ceo_master_admin after the identity invariant is checked.
+    "super_admin": set(),
     "ceo_master_admin": {"*"},
     "ceo_super_admin": {"*"},
     "executive_tech_admin": {
@@ -106,7 +114,7 @@ ROLE_CAPABILITIES: dict[str, set[str]] = {
 ROLE_PERMISSION_MAP: dict[str, set[str]] = {
     # Deprecated generic admin role: no implicit permission grants.
     "admin": set(),
-    "super_admin": {"*"},
+    "super_admin": set(),
     "ceo_master_admin": {"*"},
     "ceo_super_admin": {"*"},
     "executive_tech_admin": {
@@ -160,8 +168,8 @@ ROLE_PERMISSION_MAP: dict[str, set[str]] = {
 
 ROLE_METADATA: dict[str, dict[str, str]] = {
     "super_admin": {
-        "name": "Super Admin",
-        "description": "Break-glass emergency full override controls.",
+        "name": "Legacy Super Admin Label",
+        "description": "Deprecated data label with no standalone authority.",
     },
     "ceo_super_admin": {
         "name": "CEO Super Admin",

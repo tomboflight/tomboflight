@@ -368,6 +368,43 @@ def send_password_reset_email(
     )
 
 
+def send_account_activation_email(
+    *,
+    to_email: str,
+    activation_url: str,
+    expires_at: str,
+) -> dict[str, Any]:
+    """Send a mailbox-verification link without exposing the token in logs."""
+    safe_activation_url = escape(_normalize_text(activation_url), quote=True)
+    safe_expires_at = escape(_normalize_text(expires_at), quote=True)
+    subject = "Activate your Tomb of Light account"
+    text_body = (
+        "Hello,\n\n"
+        "Confirm this email address before creating credentials for your Tomb of Light account.\n\n"
+        f"Activate your account using this secure link:\n{activation_url}\n\n"
+        f"This link expires at {expires_at}.\n\n"
+        "If you did not request or expect this account, ignore this email. No one can activate it without this link.\n\n"
+        "Tomb of Light Security\n"
+    )
+    html_body = (
+        "<p>Hello,</p>"
+        "<p>Confirm this email address before creating credentials for your "
+        "Tomb of Light account.</p>"
+        f'<p><a href="{safe_activation_url}">Activate your account</a></p>'
+        f"<p>This link expires at {safe_expires_at}.</p>"
+        "<p>If you did not request or expect this account, ignore this email. "
+        "No one can activate it without this link.</p>"
+        "<p>Tomb of Light Security</p>"
+    )
+    return _send_email(
+        to_email=to_email,
+        subject=subject,
+        text_body=text_body,
+        html_body=html_body,
+        email_type="account_activation",
+    )
+
+
 def send_password_changed_email(*, to_email: str) -> None:
     """Send a password-change confirmation email to *to_email*."""
     changed_at = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
