@@ -341,6 +341,13 @@ class LegacySnapshotUploadBoundariesTests(unittest.TestCase):
             "family_id": "family-1",
             "member_id": "member-1",
             "relative_path": "uploads/member-1.jpg",
+            "scan_status": "clean",
+            "quarantined": False,
+            "approved_for_cinematic": True,
+            "verification_status": "approved",
+            "consent_status": "approved",
+            "consent_attested": True,
+            "authority_attested": True,
         }
         db = _FakeUploadDB([upload_foreign, upload_valid])
 

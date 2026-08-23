@@ -69,6 +69,9 @@ class FakeCollection:
             return []
         return [{"_id": None, "total": total}]
 
+    def create_index(self, _keys, **kwargs):
+        return kwargs.get("name", "test_index")
+
     def _matches(self, document, query):
         for key, expected in query.items():
             if key == "$or":

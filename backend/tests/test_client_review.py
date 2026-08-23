@@ -226,7 +226,12 @@ class TestGetClientReview(unittest.TestCase):
             "category": "member_photo",
             "customer_visible": True,
             "approved_for_cinematic": True,
+            "scan_status": "clean",
             "quarantined": False,
+            "verification_status": "approved",
+            "consent_status": "approved",
+            "consent_attested": True,
+            "authority_attested": True,
         }
         private_upload = {
             "_id": ObjectId(),

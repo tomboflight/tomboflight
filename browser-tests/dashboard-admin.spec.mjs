@@ -132,7 +132,7 @@ test("[dashboard-bootstrap-error] failed bootstrap shows actionable error with r
   await expect(page.locator("[data-admin-tools-panel]")).toContainText("Retry");
 });
 
-test("[asset-versioning] dashboard and control center include cache-busting livefix revision", async ({ page }) => {
+test("[asset-versioning] dashboard and control center include current cache-busting revisions", async ({ page }) => {
   await seedInternalSession(page);
   await installDashboardRoutes(page);
   await page.goto("/dashboard.html", { waitUntil: "domcontentloaded" });
@@ -155,5 +155,5 @@ test("[asset-versioning] dashboard and control center include cache-busting live
   );
   expect(controlCenterStyles.some((href) => href.includes("styles.css?v=20260821-phase10"))).toBeTruthy();
   expect(controlCenterScripts.some((src) => src.includes("app.js?v=20260821-phase10"))).toBeTruthy();
-  expect(controlCenterScripts.some((src) => src.includes("admin-control-center.js?v=20260823-phase12"))).toBeTruthy();
+  expect(controlCenterScripts.some((src) => src.includes("admin-control-center.js?v=20260823-phase13-1"))).toBeTruthy();
 });
