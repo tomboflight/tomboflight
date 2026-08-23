@@ -4,6 +4,7 @@ import importlib
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from app.config import settings
 
@@ -11,6 +12,12 @@ from app.config import settings
 @dataclass
 class UploadScanResult:
     status: str
+    detail: str = ""
+
+
+@dataclass
+class UploadScannerConfiguration:
+    configured: bool
     detail: str = ""
 
 
@@ -43,6 +50,51 @@ def _resolve_hook() -> Callable[[str], object] | None:
     return hook
 
 
+def get_upload_scanner_configuration() -> UploadScannerConfiguration:
+    hook_path = str(settings.upload_scan_hook or "").strip()
+    if not hook_path:
+        return UploadScannerConfiguration(False, "scanner_not_configured")
+
+    module_name, separator, function_name = hook_path.partition(":")
+    if not separator or not module_name.strip() or not function_name.strip():
+        return UploadScannerConfiguration(False, "scanner_hook_format_invalid")
+
+    try:
+        module = importlib.import_module(module_name.strip())
+        hook = getattr(module, function_name.strip())
+    except Exception:
+        return UploadScannerConfiguration(False, "scanner_hook_unavailable")
+
+    if not callable(hook):
+        return UploadScannerConfiguration(False, "scanner_hook_not_callable")
+
+    configuration_check = getattr(module, "configuration_ready", None)
+    if configuration_check is None:
+        return UploadScannerConfiguration(True, "scanner_hook_loaded")
+    if not callable(configuration_check):
+        return UploadScannerConfiguration(False, "scanner_configuration_check_invalid")
+
+    try:
+        result: Any = configuration_check()
+    except Exception:
+        return UploadScannerConfiguration(False, "scanner_provider_configuration_error")
+
+    if isinstance(result, tuple):
+        ready = bool(result[0]) if result else False
+        detail = str(result[1] if len(result) > 1 else "")
+    elif isinstance(result, dict):
+        ready = bool(result.get("configured") or result.get("ready"))
+        detail = str(result.get("detail") or "")
+    else:
+        ready = bool(result)
+        detail = ""
+
+    return UploadScannerConfiguration(
+        ready,
+        detail or ("scanner_provider_configured" if ready else "scanner_provider_not_configured"),
+    )
+
+
 def _coerce_result(result: object) -> UploadScanResult:
     if isinstance(result, UploadScanResult):
         return result
@@ -66,7 +118,13 @@ def scan_uploaded_file(path: str) -> UploadScanResult:
     if not _within_upload_root(Path(file_path)):
         return UploadScanResult(status="error", detail="invalid_upload_path")
 
-    hook = _resolve_hook()
+    try:
+        hook = _resolve_hook()
+    except Exception as exc:
+        detail = f"scanner_configuration_error:{type(exc).__name__}"
+        if _must_fail_closed():
+            return UploadScanResult(status="error", detail=detail)
+        return UploadScanResult(status="skipped", detail=detail)
     if hook is None:
         if bool(settings.upload_scan_command):
             detail = "scanner_command_execution_disabled_use_upload_scan_hook"

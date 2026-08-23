@@ -51,6 +51,10 @@ def get_database() -> Database:
 
 
 def get_service_state(*, include_operational_details: bool = False) -> dict[str, Any]:
+    # Import lazily so the services package can import get_database during
+    # application startup without creating a database/services import cycle.
+    from app.services.upload_scan_service import get_upload_scanner_configuration
+
     database_connected = db is not None
     degraded_reasons = [] if database_connected else ["database_unavailable"]
     ready = database_connected
@@ -87,13 +91,8 @@ def get_service_state(*, include_operational_details: bool = False) -> dict[str,
         postmark_token_configured
         and str(settings.postmark_from_email or "").strip()
     )
-    scanner_hook = str(settings.upload_scan_hook or "").strip()
-    scanner_configured = bool(
-        scanner_hook
-        and ":" in scanner_hook
-        and scanner_hook.partition(":")[0].strip()
-        and scanner_hook.partition(":")[2].strip()
-    )
+    scanner_configuration = get_upload_scanner_configuration()
+    scanner_configured = scanner_configuration.configured
     mount_path_value = str(settings.render_disk_mount_path or "").strip()
     mount_path = Path(mount_path_value) if mount_path_value else None
     persistent_private_storage = bool(
@@ -164,6 +163,7 @@ def get_service_state(*, include_operational_details: bool = False) -> dict[str,
                 "configured": scanner_configured,
                 "fail_closed": bool(settings.upload_scan_fail_closed),
                 "mode": "active" if scanner_configured else "quarantine_only",
+                "configuration_detail": scanner_configuration.detail,
                 "legacy_command_ignored": bool(
                     str(settings.upload_scan_command or "").strip()
                 ),

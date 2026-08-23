@@ -571,7 +571,7 @@ def _absolute_upload_path(relative_path: str) -> Path:
 
 
 def _quarantine_path_for_upload(relative_path: str) -> Path:
-    quarantine_root = Path(settings.upload_quarantine_dir).resolve()
+    quarantine_root = Path(settings.upload_quarantine_root_path).resolve()
     quarantine_root.mkdir(parents=True, exist_ok=True)
     safe_name = "".join(
         character
