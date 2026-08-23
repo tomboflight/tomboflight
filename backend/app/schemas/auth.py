@@ -18,6 +18,11 @@ class UserCreate(BaseModel):
         min_length=1,
         max_length=32,
     )
+    activation_token: Optional[str] = Field(default=None, min_length=16, max_length=512)
+
+
+class AccountActivationRequest(BaseModel):
+    email: EmailStr
 
 
 class UserLogin(BaseModel):
@@ -98,6 +103,9 @@ class UserResponse(BaseModel):
     access_tier: Optional[str] = None
     department_role: Optional[str] = None
     status: str
+    requires_account_activation: bool = False
+    activation_delivery_sent: Optional[bool] = None
+    activation_delivery_error: Optional[str] = None
     mfa_enabled: bool = False
     mfa_enrolled_at: Optional[str] = None
     created_at: str

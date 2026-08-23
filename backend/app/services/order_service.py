@@ -522,86 +522,11 @@ def create_order_for_user(user: dict[str, Any], payload: Any) -> dict[str, Any]:
 
 
 def create_manual_order_for_admin(admin_user: dict[str, Any], payload: Any) -> dict[str, Any]:
-    customer_email = _normalize_email(getattr(payload, "customer_email", ""))
-    if not customer_email:
-        raise ValueError("customer_email is required.")
-    reason = _normalize(getattr(payload, "reason", ""))
-    authorization_source = _normalize(getattr(payload, "authorization_source", ""))
-    idempotency_key = _normalize(getattr(payload, "idempotency_key", ""))
-    if not reason:
-        raise ValueError("reason is required.")
-    if not authorization_source:
-        raise ValueError("authorization_source is required.")
-    if not idempotency_key:
-        raise ValueError("idempotency_key is required.")
-
-    package_code = _normalize_package_code(
-        getattr(payload, "package_code", None) or getattr(payload, "package_slug", None)
+    del admin_user, payload
+    raise ValueError(
+        "Manual paid-order creation is disabled. Record real payment through Stripe, "
+        "or use the CEO package-grant action, which creates no paid order."
     )
-    if package_code == "unknown" or not get_package(package_code):
-        raise ValueError("Unknown package.")
-
-    customer_user = _get_user_by_email(customer_email) or create_pending_checkout_user(customer_email)
-    if not customer_user:
-        raise ValueError("Customer account could not be resolved.")
-
-    orders = _get_orders_collection()
-    existing = orders.find_one({"manual_idempotency_key": idempotency_key})
-    if existing:
-        return _serialize_order(existing)
-
-    package = get_package(package_code) or {}
-    package_name = _normalize(package.get("display_name")) or package_code.replace("_", " ").title()
-    order_doc = {
-        "user_id": _validated_user_object_id(customer_user),
-        "email": customer_email,
-        "package_code": package_code,
-        "package_slug": package_code,
-        "lane": _package_lane_for_code(package_code),
-        "package_lane": _package_lane_for_code(package_code),
-        "package_name": package_name,
-        "price_label": _format_price_label(_base_package_price_cents(package_code), "one_time"),
-        "item_type": "package",
-        "billing_plan": "one_time",
-        "source": "admin_manual",
-        "status": "paid",
-        "manual_reason": reason,
-        "manual_authorization_source": authorization_source,
-        "manual_idempotency_key": idempotency_key,
-        "created_at": datetime.now(UTC),
-    }
-    result = orders.insert_one(order_doc)
-    order_doc["_id"] = result.inserted_id
-
-    order_doc = _attach_project_to_paid_package_order(
-        order_id=result.inserted_id,
-        order_doc=order_doc,
-        user=customer_user,
-        package_code=package_code,
-        package_name=package_name,
-        target_project_id=_normalize(getattr(payload, "project_id", "")),
-    )
-    _trigger_package_provisioning()
-
-    from app.services.audit_log_service import write_audit_log
-
-    write_audit_log(
-        actor_user_id=_normalize(str(admin_user.get("_id") or admin_user.get("id") or admin_user.get("user_id") or "")) or None,
-        actor_email=_normalize_email(admin_user.get("email")),
-        actor_name=_normalize(admin_user.get("full_name") or admin_user.get("name")),
-        action="admin_manual_order_recorded",
-        target_type="order",
-        target_id=str(result.inserted_id),
-        details={
-            "customer_email": customer_email,
-            "package_code": package_code,
-            "reason": reason,
-            "authorization_source": authorization_source,
-            "idempotency_key": idempotency_key,
-        },
-    )
-
-    return _serialize_order(order_doc)
 
 
 def get_orders_for_user(user: dict[str, Any]) -> list[dict[str, Any]]:

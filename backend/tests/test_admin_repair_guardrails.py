@@ -478,7 +478,7 @@ class PaymentStateGuardrailTests(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 class RoleEscalationGuardrailTests(unittest.TestCase):
-    """Super admin role must not be granted to customer accounts."""
+    """Wildcard authority must remain exclusive to the canonical CEO."""
 
     def test_cannot_promote_customer_role_user_to_super_admin(self):
         user_id = ObjectId()
@@ -496,14 +496,14 @@ class RoleEscalationGuardrailTests(unittest.TestCase):
             }
         )
         with patch.object(admin_control_service, "get_database", return_value=db):
-            with self.assertRaisesRegex(ValueError, "super_admin role can only be granted"):
+            with self.assertRaisesRegex(ValueError, "canonical identity"):
                 admin_control_service.super_admin_update_user(
                     user_id=str(user_id),
                     payload={"role": "super_admin"},
                     actor={"_id": ObjectId(), "email": "ceo@tomboflight.com"},
                 )
 
-    def test_can_promote_existing_operations_admin_to_super_admin(self):
+    def test_cannot_promote_existing_operations_admin_to_super_admin(self):
         user_id = ObjectId()
         db = FakeDatabase(
             {
@@ -519,14 +519,15 @@ class RoleEscalationGuardrailTests(unittest.TestCase):
             }
         )
         with patch.object(admin_control_service, "get_database", return_value=db):
-            result = admin_control_service.super_admin_update_user(
-                user_id=str(user_id),
-                payload={"role": "super_admin"},
-                actor={"_id": ObjectId(), "email": "ceo@tomboflight.com"},
-            )
-        self.assertEqual(result["after"]["role"], "super_admin")
+            with self.assertRaisesRegex(ValueError, "canonical identity"):
+                admin_control_service.super_admin_update_user(
+                    user_id=str(user_id),
+                    payload={"role": "super_admin"},
+                    actor={"_id": ObjectId(), "email": "l.robinson@tomboflight.com"},
+                )
+        self.assertEqual(db["users"].documents[0]["role"], "operations_admin")
 
-    def test_can_promote_business_admin_account_type_user_to_super_admin(self):
+    def test_cannot_promote_business_admin_account_type_user_to_super_admin(self):
         user_id = ObjectId()
         db = FakeDatabase(
             {
@@ -543,12 +544,13 @@ class RoleEscalationGuardrailTests(unittest.TestCase):
             }
         )
         with patch.object(admin_control_service, "get_database", return_value=db):
-            result = admin_control_service.super_admin_update_user(
-                user_id=str(user_id),
-                payload={"role": "super_admin"},
-                actor={"_id": ObjectId(), "email": "ceo@tomboflight.com"},
-            )
-        self.assertEqual(result["after"]["role"], "super_admin")
+            with self.assertRaisesRegex(ValueError, "canonical identity"):
+                admin_control_service.super_admin_update_user(
+                    user_id=str(user_id),
+                    payload={"role": "super_admin"},
+                    actor={"_id": ObjectId(), "email": "l.robinson@tomboflight.com"},
+                )
+        self.assertEqual(db["users"].documents[0]["role"], "admin")
 
 
 # ---------------------------------------------------------------------------

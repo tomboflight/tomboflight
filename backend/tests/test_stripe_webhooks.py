@@ -156,6 +156,71 @@ class StripeWebhookPersistenceTests(unittest.TestCase):
         self.assertTrue(should_process)
         self.assertNotEqual(claim_token, "old-claim")
 
+    def test_failed_processing_releases_claim_for_stripe_retry(self):
+        events = FakeStripeEventsCollection()
+        now = datetime.now(timezone.utc)
+        event = {"id": "evt_retry", "type": "checkout.session.completed"}
+
+        should_process, first_claim = stripe_webhooks._claim_event_processing(
+            cast(Any, events),
+            event=event,
+            now=now,
+        )
+        self.assertTrue(should_process)
+        stripe_webhooks._mark_event_failed(
+            cast(Any, events),
+            event_id="evt_retry",
+            claim_token=first_claim,
+            failures=["order_upsert_failed"],
+            order_result={"order_id": None, "error": "order_upsert_failed"},
+            maintenance_result={"updated": False},
+            now=now,
+        )
+
+        stored = events.docs["evt_retry"]
+        self.assertEqual(stored["processing_status"], "retryable_failure")
+        self.assertNotIn("processed_at", stored)
+        self.assertNotIn("processing_claim", stored)
+
+        retry_process, retry_claim = stripe_webhooks._claim_event_processing(
+            cast(Any, events),
+            event=event,
+            now=now,
+        )
+        self.assertTrue(retry_process)
+        self.assertTrue(retry_claim)
+        self.assertNotEqual(retry_claim, first_claim)
+
+    def test_checkout_succeeds_when_either_authoritative_handler_persists_it(self):
+        package_failures = stripe_webhooks._downstream_failures(
+            event_type="checkout.session.completed",
+            order_result={"order_id": "order-1"},
+            maintenance_result={"updated": False, "reason": "not_subscription_checkout"},
+        )
+        maintenance_failures = stripe_webhooks._downstream_failures(
+            event_type="checkout.session.completed",
+            order_result={"order_id": None, "error": "not_an_approved_package"},
+            maintenance_result={"updated": True, "project_id": "project-1"},
+        )
+
+        self.assertEqual(package_failures, [])
+        self.assertEqual(maintenance_failures, [])
+
+    def test_unpersisted_relevant_events_are_retryable_failures(self):
+        checkout_failures = stripe_webhooks._downstream_failures(
+            event_type="checkout.session.completed",
+            order_result={"order_id": None, "reason": "no_matching_user"},
+            maintenance_result={"updated": False, "reason": "not_subscription_checkout"},
+        )
+        subscription_failures = stripe_webhooks._downstream_failures(
+            event_type="customer.subscription.updated",
+            order_result={"order_id": None},
+            maintenance_result={"updated": False, "reason": "missing_project_id"},
+        )
+
+        self.assertEqual(checkout_failures, ["no_matching_user"])
+        self.assertEqual(subscription_failures, ["missing_project_id"])
+
 
 if __name__ == "__main__":
     unittest.main()

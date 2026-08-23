@@ -6,7 +6,7 @@ from app.dependencies.auth import get_current_user, require_capability, require_
 from app.schemas.experience import UserProfileResponse, UserProfileUpdate
 from app.schemas.user import UserCreate, UserResponse, build_user_response
 from app.services.auth_service import get_user_by_id
-from app.services.user_service import create_user, list_users, update_user_profile
+from app.services.user_service import list_users, update_user_profile
 from app.services.workspace_access_service import build_workspace_context_snapshot
 
 router = APIRouter(prefix="/users", tags=["Users"])
@@ -33,8 +33,14 @@ def create_user_route(
     payload: UserCreate,
     current_user: dict[str, Any] = Depends(require_capability("manage_users_full")),
 ):
-    user = create_user(payload)
-    return build_user_response(user)
+    del payload, current_user
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=(
+            "Direct account creation is retired. Use the Continuity Kernel "
+            "customer_account_create action so approval, activation, and evidence are recorded."
+        ),
+    )
 
 
 @router.get("/me/profile", response_model=UserProfileResponse)

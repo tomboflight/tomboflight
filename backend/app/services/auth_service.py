@@ -6,12 +6,14 @@ import secrets
 import struct
 from datetime import UTC, datetime, timedelta
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit, urlunsplit
 
 from bson import ObjectId
 from cryptography.fernet import Fernet, InvalidToken
+from pymongo import ASCENDING
 
 from app.config import settings
+from app.core.admin_permission_registry import is_canonical_ceo_email
 from app.core.password_policy import validate_password_strength
 from app.core.security import (
     create_access_token,
@@ -22,9 +24,31 @@ from app.core.security import (
 from app.database import get_database
 from app.schemas.auth import UserCreate
 from app.services.audit_log_service import create_audit_log
-from app.services.email_service import send_password_changed_email, send_password_reset_email
+from app.services.email_service import (
+    send_account_activation_email,
+    send_password_changed_email,
+    send_password_reset_email,
+)
 
 PUBLIC_SIGNUP_ROLE = "user"
+
+
+def ensure_auth_indexes() -> None:
+    """Fail closed on ambiguous email identities or duplicate live tokens."""
+    users = get_database()["users"]
+    users.create_index(
+        [("email", ASCENDING)],
+        name="idx_users_email_unique",
+        unique=True,
+    )
+    users.create_index(
+        [("account_activation_token_hash", ASCENDING)],
+        name="idx_users_activation_token_hash_unique",
+        unique=True,
+        partialFilterExpression={
+            "account_activation_token_hash": {"$type": "string"}
+        },
+    )
 
 
 def _now_iso() -> str:
@@ -58,8 +82,22 @@ def _password_reset_expiry_iso() -> str:
     return expire_at.isoformat()
 
 
+def _account_activation_expiry_iso() -> str:
+    expire_at = _now() + timedelta(
+        hours=max(1, int(settings.account_activation_token_expire_hours or 24))
+    )
+    return expire_at.isoformat()
+
+
 def _hash_password_reset_token(token: str) -> str:
     payload = f"{settings.secret_key}:{_normalize_text(token)}".encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _hash_account_activation_token(token: str) -> str:
+    payload = f"{settings.secret_key}:account-activation:{_normalize_text(token)}".encode(
+        "utf-8"
+    )
     return hashlib.sha256(payload).hexdigest()
 
 
@@ -160,6 +198,25 @@ def _build_password_reset_url(token: str) -> str:
     return f"{base_url}{joiner}mode=reset&token={encoded_token}"
 
 
+def _build_account_activation_url(token: str, *, email: str) -> str:
+    source = (
+        settings.password_reset_base_url_clean
+        or settings.stripe_billing_portal_return_url_clean
+        or "https://tomboflight.com"
+    )
+    parsed = urlsplit(source)
+    scheme = parsed.scheme or "https"
+    netloc = parsed.netloc or "tomboflight.com"
+    base_url = urlunsplit((scheme, netloc, "/signup.html", "", ""))
+    # The token stays in the URL fragment so it is not sent in HTTP requests,
+    # proxy logs, or Referer headers. The signup script removes the fragment
+    # immediately after reading it.
+    return (
+        f"{base_url}#activation_token={quote(_normalize_text(token), safe='')}"
+        f"&email={quote(_normalize_text(email).lower(), safe='')}"
+    )
+
+
 def _clear_password_reset_fields() -> dict[str, object]:
     return {
         "password_reset_token_hash": None,
@@ -168,6 +225,16 @@ def _clear_password_reset_fields() -> dict[str, object]:
         "password_reset_requested_via": None,
         "password_reset_requested_by": None,
         "password_reset_requested_by_user_id": None,
+    }
+
+
+def _clear_account_activation_fields() -> dict[str, object]:
+    return {
+        "account_activation_token_hash": None,
+        "account_activation_expires_at": None,
+        "account_activation_requested_at": None,
+        "activation_delivery_sent": None,
+        "activation_delivery_error": None,
     }
 
 
@@ -196,6 +263,13 @@ def build_user_response(user: dict) -> dict:
         "access_tier": user.get("access_tier"),
         "department_role": user.get("department_role"),
         "status": user.get("status", "active"),
+        "requires_account_activation": bool(user.get("requires_account_activation")),
+        "activation_delivery_sent": user.get("activation_delivery_sent"),
+        "activation_delivery_error": (
+            "activation_delivery_failed"
+            if user.get("activation_delivery_error")
+            else None
+        ),
         "mfa_enabled": bool(user.get("mfa_enabled")),
         "mfa_enrolled_at": user.get("mfa_enrolled_at"),
         "created_at": user["created_at"],
@@ -217,6 +291,153 @@ def build_user_response(user: dict) -> dict:
     }
 
 
+def _activation_token_matches(user: dict[str, Any], token: str) -> bool:
+    normalized_token = _normalize_text(token)
+    expected_hash = _normalize_text(user.get("account_activation_token_hash"))
+    if not normalized_token or not expected_hash:
+        return False
+    supplied_hash = _hash_account_activation_token(normalized_token)
+    if not hmac.compare_digest(expected_hash, supplied_hash):
+        return False
+    expires_at = _normalize_text(user.get("account_activation_expires_at"))
+    if not expires_at:
+        return False
+    try:
+        expires_dt = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+    except Exception:
+        return False
+    return expires_dt >= _now()
+
+
+def _pending_activation_has_live_token(user: dict[str, Any]) -> bool:
+    if not _normalize_text(user.get("account_activation_token_hash")):
+        return False
+    expires_at = _normalize_text(user.get("account_activation_expires_at"))
+    if not expires_at:
+        return False
+    try:
+        return datetime.fromisoformat(expires_at.replace("Z", "+00:00")) >= _now()
+    except Exception:
+        return False
+
+
+def request_account_activation(
+    email: str,
+    *,
+    include_delivery_status: bool = False,
+) -> dict[str, object]:
+    normalized_email = _normalize_text(email).lower()
+    generic: dict[str, object] = {
+        "success": True,
+        "message": (
+            "If this account is awaiting activation, a new activation link has been sent."
+        ),
+        "delivery_mode": "email",
+    }
+    db = _get_database_or_none()
+    if db is None:
+        if include_delivery_status:
+            generic.update(
+                {
+                    "success": False,
+                    "delivery_sent": False,
+                    "delivery_error": "identity_store_unavailable",
+                }
+            )
+        return generic
+
+    user = db.users.find_one({"email": normalized_email})
+    pending_statuses = {"pending_activation", "checkout_pending_activation"}
+    if (
+        user is None
+        or _normalize_text(user.get("status")).lower() not in pending_statuses
+        or _normalize_text(user.get("account_type")).lower() == "deleted_tombstone"
+    ):
+        if include_delivery_status:
+            generic.update(
+                {
+                    "success": False,
+                    "delivery_sent": False,
+                    "delivery_error": "account_not_pending_activation",
+                }
+            )
+        return generic
+
+    token = secrets.token_urlsafe(32)
+    expires_at = _account_activation_expiry_iso()
+    now_iso = _now_iso()
+    db.users.update_one(
+        {"_id": user["_id"], "status": {"$in": list(pending_statuses)}},
+        {
+            "$set": {
+                "account_activation_token_hash": _hash_account_activation_token(token),
+                "account_activation_expires_at": expires_at,
+                "account_activation_requested_at": now_iso,
+                "requires_account_activation": True,
+                "activation_delivery_sent": None,
+                "activation_delivery_error": None,
+            }
+        },
+    )
+    activation_url = _build_account_activation_url(token, email=normalized_email)
+    try:
+        delivery = send_account_activation_email(
+            to_email=normalized_email,
+            activation_url=activation_url,
+            expires_at=expires_at,
+        )
+    except Exception as exc:
+        delivery = {
+            "sent": False,
+            "provider": "postmark",
+            "error": type(exc).__name__,
+        }
+    delivery = delivery if isinstance(delivery, dict) else {}
+    delivery_sent = bool(delivery.get("sent"))
+    delivery_error = (
+        None
+        if delivery_sent
+        else _normalize_text(delivery.get("error")) or "delivery_not_confirmed"
+    )
+    db.users.update_one(
+        {"_id": user["_id"]},
+        {
+            "$set": {
+                "activation_delivery_sent": delivery_sent,
+                "activation_delivery_error": delivery_error,
+                "activation_delivery_provider": _normalize_text(delivery.get("provider"))
+                or "postmark",
+                "activation_delivery_updated_at": _now_iso(),
+            }
+        },
+    )
+    try:
+        create_audit_log(
+            "account_activation_requested",
+            _current_user_id_from_doc(user) or None,
+            "user",
+            _current_user_id_from_doc(user),
+            {
+                "email": normalized_email,
+                "delivery_sent": delivery_sent,
+                "delivery_provider": _normalize_text(delivery.get("provider")) or "postmark",
+            },
+        )
+    except Exception:
+        pass
+    if include_delivery_status:
+        generic.update(
+            {
+                "success": delivery_sent,
+                "delivery_sent": delivery_sent,
+                "delivery_provider": _normalize_text(delivery.get("provider")) or "postmark",
+                "delivery_error": delivery_error,
+                "expires_at": expires_at,
+            }
+        )
+    return generic
+
+
 def register_user(payload: UserCreate) -> dict | None:
     if not payload.terms_accepted:
         raise ValueError("You must accept the Terms of Service.")
@@ -226,6 +447,8 @@ def register_user(payload: UserCreate) -> dict | None:
         raise ValueError(
             "You must confirm your eligibility and authority to create the account."
         )
+
+    validate_password_strength(payload.password)
 
     # Account creation must never claim success unless the account was
     # persisted. DatabaseUnavailableError is mapped to a 503 by the app.
@@ -240,6 +463,11 @@ def register_user(payload: UserCreate) -> dict | None:
             and str(existing.get("status") or "").strip().lower()
             in {"pending_activation", "checkout_pending_activation"}
         ):
+            if not _activation_token_matches(existing, payload.activation_token or ""):
+                return None
+            expected_activation_hash = _normalize_text(
+                existing.get("account_activation_token_hash")
+            )
             update_fields = {
                 "full_name": payload.full_name.strip(),
                 "role": existing.get("role") or PUBLIC_SIGNUP_ROLE,
@@ -255,31 +483,46 @@ def register_user(payload: UserCreate) -> dict | None:
                 "privacy_accepted_at": now_iso,
                 "eligibility_attested_at": now_iso,
                 **_clear_password_reset_fields(),
+                **_clear_account_activation_fields(),
                 **(
                     {}
                     if existing.get("mfa_secret_encrypted") is not None
                     else _clear_mfa_fields()
                 ),
             }
-            db.users.update_one({"_id": existing["_id"]}, {"$set": update_fields})
+            activation_result = db.users.update_one(
+                {
+                    "_id": existing["_id"],
+                    "status": {
+                        "$in": ["pending_activation", "checkout_pending_activation"]
+                    },
+                    "password_hash": {"$in": [None, ""]},
+                    "account_activation_token_hash": expected_activation_hash,
+                },
+                {"$set": update_fields},
+            )
+            if int(getattr(activation_result, "matched_count", 0)) != 1:
+                # Another request already consumed or replaced this link. A
+                # token is single-use even when two submissions race.
+                return None
             existing.update(update_fields)
             return existing
 
         return None
-
-    validate_password_strength(payload.password)
 
     user = {
         "email": normalized_email,
         "full_name": payload.full_name.strip(),
         "role": PUBLIC_SIGNUP_ROLE,
         "account_type": "customer",
-        "status": "active",
-        "password_hash": hash_password(payload.password),
-        "password_updated_at": now_iso,
+        "status": "pending_activation",
+        "password_hash": None,
+        "password_updated_at": None,
         "created_at": now_iso,
         "last_login_at": None,
         "session_token_version": 0,
+        "requires_account_activation": True,
+        **_clear_account_activation_fields(),
         **_clear_password_reset_fields(),
         "password_reset_used_at": None,
         **_clear_mfa_fields(),
@@ -291,7 +534,8 @@ def register_user(payload: UserCreate) -> dict | None:
 
     result = db.users.insert_one(user)
     user["_id"] = result.inserted_id
-    return user
+    request_account_activation(normalized_email, include_delivery_status=True)
+    return db.users.find_one({"_id": result.inserted_id}) or user
 
 
 def create_pending_checkout_user(
@@ -309,6 +553,13 @@ def create_pending_checkout_user(
 
     existing = db.users.find_one({"email": normalized_email})
     if existing is not None:
+        if (
+            _normalize_text(existing.get("status")).lower()
+            in {"pending_activation", "checkout_pending_activation"}
+            and not _pending_activation_has_live_token(existing)
+        ):
+            request_account_activation(normalized_email, include_delivery_status=True)
+            return db.users.find_one({"_id": existing["_id"]}) or existing
         return existing
 
     now_iso = _now_iso()
@@ -337,7 +588,8 @@ def create_pending_checkout_user(
 
     result = db.users.insert_one(user)
     user["_id"] = result.inserted_id
-    return user
+    request_account_activation(normalized_email, include_delivery_status=True)
+    return db.users.find_one({"_id": result.inserted_id}) or user
 
 
 def authenticate_user(email: str, password: str) -> dict[str, Any] | None:
@@ -633,10 +885,13 @@ def admin_reset_user_security(
     *,
     target_user_id: str,
     actor_user_id: str,
+    actor_email: str = "",
 ) -> None:
     user = get_user_by_id(target_user_id)
     if not user:
         raise ValueError("User account not found.")
+    if is_canonical_ceo_email(user.get("email")) and not is_canonical_ceo_email(actor_email):
+        raise ValueError("Only the canonical CEO can reset CEO account security.")
     next_version = _session_version(user) + 1
     db = get_database()
     db.users.update_one(
@@ -977,10 +1232,13 @@ def admin_issue_password_reset(
     *,
     admin_user_id: str,
     admin_display: str,
+    admin_email: str = "",
 ) -> dict[str, object]:
     user = get_user_by_id(user_id)
     if user is None:
         raise ValueError("User account not found.")
+    if is_canonical_ceo_email(user.get("email")) and not is_canonical_ceo_email(admin_email):
+        raise ValueError("Only the canonical CEO can issue a CEO password reset.")
     if (
         _normalize_text(user.get("status")).lower() == "permanently_deleted"
         or _normalize_text(user.get("account_type")).lower() == "deleted_tombstone"

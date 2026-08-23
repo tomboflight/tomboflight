@@ -1,15 +1,13 @@
 from datetime import datetime, UTC
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class UserCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     first_name: str = Field(..., min_length=1, max_length=100)
     last_name: str = Field(..., min_length=1, max_length=100)
     email: EmailStr
-    role: str = "user"
-    access_tier: str | None = None
-    department_role: str | None = None
-    status: str | None = "active"
 
 
 class UserResponse(BaseModel):

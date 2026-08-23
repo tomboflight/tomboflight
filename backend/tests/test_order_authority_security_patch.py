@@ -411,7 +411,7 @@ class OrderAuthoritySecurityTests(unittest.TestCase):
                 )
         self.assertEqual(exc.exception.status_code, 403)
 
-    def test_manual_order_requires_permission_reason_idempotency_and_audit_event(self):
+    def test_manual_paid_order_creation_is_disabled_even_with_finance_permission(self):
         dependency = require_any_permission(["admin.control.billing", "admin.orders.repair"])
         request = SimpleNamespace(path_params={}, query_params={})
         with patch.object(
@@ -462,17 +462,17 @@ class OrderAuthoritySecurityTests(unittest.TestCase):
             patch.object(order_service, "_trigger_package_provisioning"),
             patch("app.services.audit_log_service.write_audit_log") as audit_mock,
         ):
-            result = order_service.create_manual_order_for_admin(
-                {
-                    "_id": "507f1f77bcf86cd799439001",
-                    "email": "finance@example.com",
-                    "full_name": "Finance Admin",
-                },
-                payload,
-            )
-        self.assertEqual(result["status"], "paid")
-        self.assertEqual(audit_mock.call_count, 1)
-        self.assertEqual(len(orders.docs), 1)
+            with self.assertRaisesRegex(ValueError, "Manual paid-order creation is disabled"):
+                order_service.create_manual_order_for_admin(
+                    {
+                        "_id": "507f1f77bcf86cd799439001",
+                        "email": "finance@example.com",
+                        "full_name": "Finance Admin",
+                    },
+                    payload,
+                )
+        self.assertEqual(audit_mock.call_count, 0)
+        self.assertEqual(len(orders.docs), 0)
 
     def test_admin_manual_schema_forbids_administrative_metadata_outside_contract(self):
         with self.assertRaises(ValidationError):

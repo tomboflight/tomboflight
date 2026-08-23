@@ -6,6 +6,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import settings
+from app.core.continuity_route_guard import (
+    KERNEL_EXECUTION_PATH,
+    requires_continuity_kernel,
+)
 from app.database import (
     DatabaseUnavailableError,
     close_mongo_connection,
@@ -101,6 +105,7 @@ from app.routes.workspace_access import (
 from app.services.nft_runtime_validation_service import (
     validate_nft_runtime_configuration_on_startup,
 )
+from app.services.auth_service import ensure_auth_indexes
 
 
 logger = logging.getLogger(__name__)
@@ -153,6 +158,7 @@ async def lifespan(app: FastAPI):
     db = connect_to_mongo()
     app.state.db = db
     if db is not None:
+        ensure_auth_indexes()
         initialize_order_indexes()
         ensure_project_entitlement_indexes()
         initialize_mint_record_indexes()
@@ -190,7 +196,22 @@ app.add_middleware(
 
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
-    response = await call_next(request)
+    if requires_continuity_kernel(request.method, request.url.path):
+        response = JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "error": {
+                    "code": "continuity_kernel_required",
+                    "message": (
+                        "This legacy mutation route is read-only. Submit the action "
+                        "through the Continuity Kernel."
+                    ),
+                    "kernel_execution_path": KERNEL_EXECUTION_PATH,
+                }
+            },
+        )
+    else:
+        response = await call_next(request)
 
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
@@ -343,6 +364,7 @@ def root():
             "/health",
             "/health/live",
             "/health/ready",
+            "/health/operational",
             "/auth/signup",
             "/auth/login",
             "/auth/logout",

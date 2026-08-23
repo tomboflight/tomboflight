@@ -696,6 +696,7 @@ def super_admin_patch_user(
     payload: SuperAdminUserUpdatePayload,
     current_user: dict[str, Any] = Depends(require_super_admin),
 ):
+    _assert_canonical_ceo(current_user)
     try:
         return super_admin_update_user(
             user_id=user_id,
@@ -765,11 +766,13 @@ def super_admin_user_password_reset(
     user_id: str,
     current_user: dict[str, Any] = Depends(require_super_admin),
 ):
+    _assert_canonical_ceo(current_user)
     try:
         return admin_issue_password_reset(
             user_id,
             admin_user_id=_current_user_id(current_user),
             admin_display=_current_user_display(current_user),
+            admin_email=_string_value(current_user.get("email")),
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc

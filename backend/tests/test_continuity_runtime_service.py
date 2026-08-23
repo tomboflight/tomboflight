@@ -204,6 +204,26 @@ class TestContinuityRuntimeService(unittest.TestCase):
         self.assertEqual(operations[0]["state"], "apply_failed")
         self.assertEqual(operations[0]["execution_error"], "domain adapter failed")
 
+    def test_failed_execution_retries_the_same_persisted_idempotent_operation(self) -> None:
+        self.executor.side_effect = RuntimeError("temporary adapter failure")
+        with self.assertRaisesRegex(RuntimeError, "temporary adapter failure"):
+            self._execute(idempotency_key="kernel-idempotency-retry")
+
+        failed = deepcopy(self.database[runtime.OPERATIONS_COLLECTION].documents[0])
+        self.executor.side_effect = None
+        self.executor.return_value = {"changed": True, "resumed": True}
+        retried = self._execute(idempotency_key="kernel-idempotency-retry")
+
+        self.assertEqual(retried["operation_id"], failed["operation_id"])
+        self.assertEqual(retried["state"], "apply_executed")
+        self.assertEqual(retried["execution_retry_count"], 1)
+        self.assertIsNone(retried["execution_error"])
+        self.assertEqual(self.executor.call_count, 2)
+        self.assertIn(
+            "retry_failed_operation",
+            [item["action"] for item in retried["transitions"]],
+        )
+
     def test_post_execution_evidence_failure_does_not_relabel_the_domain_write(self) -> None:
         operation = runtime.request_operation(
             action="package_change",
@@ -393,9 +413,10 @@ class TestContinuityRuntimeControlSurfaceAdapters(unittest.TestCase):
             "project_ownership_transfer",
             "impersonation_start",
             "impersonation_stop",
+            "legacy_admin_remediation",
         }
-        self.assertEqual(runtime.RUNTIME_VERSION, "10.1.0")
-        self.assertEqual(len(runtime.ACTION_SPECS), 36)
+        self.assertEqual(runtime.RUNTIME_VERSION, "11.0.0")
+        self.assertEqual(len(runtime.ACTION_SPECS), 37)
         self.assertTrue(expected.issubset(runtime.ACTION_SPECS))
 
     def test_permanent_deletion_adapter_passes_both_irreversible_confirmations(self) -> None:
@@ -507,6 +528,7 @@ class TestContinuityRuntimeControlSurfaceAdapters(unittest.TestCase):
             "user-1",
             admin_user_id="ceo-1",
             admin_display="CEO Operator",
+            admin_email=CEO_MASTER_ADMIN_EMAIL,
         )
 
     def test_delivery_failure_marks_execution_as_partial_failure(self) -> None:
@@ -515,6 +537,34 @@ class TestContinuityRuntimeControlSurfaceAdapters(unittest.TestCase):
                 {"delivery_sent": False, "failure_count": 1}
             ),
             1,
+        )
+
+    def test_legacy_privileged_account_remediation_executes_only_for_reviewed_target(self) -> None:
+        actor = {"_id": "ceo-1", "email": CEO_MASTER_ADMIN_EMAIL}
+        review = {
+            "found": True,
+            "user_id": "legacy-admin-1",
+            "safe_to_suspend": True,
+        }
+        applied = {**review, "applied": True, "disposition": "suspended"}
+        with patch.object(
+            runtime.admin_control_service,
+            "legacy_admin_security_review",
+            side_effect=[review, applied],
+        ) as remediate:
+            result = runtime._invoke_action(
+                "legacy_admin_remediation",
+                {"user_id": "legacy-admin-1"},
+                {"reason": "Remove deprecated wildcard access"},
+                actor,
+            )
+
+        self.assertTrue(result["applied"])
+        self.assertEqual(remediate.call_count, 2)
+        remediate.assert_called_with(
+            apply=True,
+            reason="Remove deprecated wildcard access",
+            actor=actor,
         )
 
 

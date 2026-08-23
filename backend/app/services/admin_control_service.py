@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import os
 import re
 import secrets
@@ -17,6 +18,7 @@ from app.core.admin_permission_registry import (
     PERMISSION_REGISTRY,
     ROLE_METADATA,
     ROLE_PERMISSION_MAP,
+    is_canonical_ceo_email,
 )
 from app.core.package_catalog import (
     canonicalize_package_identifier,
@@ -691,7 +693,7 @@ def _write_admin_action_audit(
     after: dict[str, Any] | None = None,
     context: dict[str, Any] | None = None,
     details: dict[str, Any] | None = None,
-) -> None:
+) -> bool:
     actor_fields = _actor_snapshot(actor)
     try:
         write_audit_log(
@@ -707,9 +709,9 @@ def _write_admin_action_audit(
             details=details or {},
             result=result,
         )
+        return True
     except Exception:
-        # Admin repairs should not fail solely because audit persistence is unavailable.
-        return
+        return False
 
 
 def _db():
@@ -2160,7 +2162,7 @@ def super_admin_apply_package_revocation(
         "stripe_payment_mutated": False,
     }
     db["admin_package_assignments"].insert_one(history)
-    _write_admin_action_audit(
+    audit_event_created = _write_admin_action_audit(
         actor=actor,
         action="super_admin.package_revoke",
         target_type="project",
@@ -2169,7 +2171,12 @@ def super_admin_apply_package_revocation(
         after={"package_status": "revoked", "services_active": False},
         context={"surface": "admin_control_center.restricted_actions", "reason": _normalize(reason)},
     )
-    return {**preview, "revoked": True, "audit_event_created": True, "stripe_payment_mutated": False}
+    return {
+        **preview,
+        "revoked": True,
+        "audit_event_created": audit_event_created,
+        "stripe_payment_mutated": False,
+    }
 
 
 def super_admin_restore_package(
@@ -5053,30 +5060,17 @@ def _validated_role_value(role_value: str) -> str:
     return normalized_role
 
 
-def _is_internal_admin_account(user: dict[str, Any]) -> bool:
-    """Return True if the user is an internal admin account.
-
-    Used to guard super_admin role escalation: only users who are already
-    internal team members (identified by an existing admin role or explicit
-    business_admin account type) may be promoted to super_admin.
-    """
-    existing_role = normalize_role_code(_normalize(user.get("role"))) or "user"
-    if existing_role in INTERNAL_ROLE_KEYS:
-        return True
-    if _normalize(user.get("account_type")).lower() == "business_admin":
-        return True
-    return False
-
-
 def _is_canonical_ceo_master_admin_identity(user: dict[str, Any]) -> bool:
-    return _normalize_email(user.get("email")) == CEO_MASTER_ADMIN_EMAIL
+    return is_canonical_ceo_email(user.get("email"))
 
 
 def _enforce_ceo_master_admin_singleton(*, target_user: dict[str, Any], new_role: str) -> None:
-    if new_role != "ceo_master_admin":
+    if new_role not in SUPER_ADMIN_ROLE_CODES:
         return
     if not _is_canonical_ceo_master_admin_identity(target_user):
-        raise ValueError("ceo_master_admin role can only be assigned to Larry Robinson's canonical identity.")
+        raise ValueError(
+            "Wildcard administrator roles can only be assigned to Larry Robinson's canonical identity."
+        )
 
 
 def super_admin_update_user(
@@ -5090,6 +5084,19 @@ def super_admin_update_user(
         raise ValueError("User not found.")
     if _normalize(user.get("status")).lower() == "permanently_deleted" or _normalize(user.get("account_type")).lower() == "deleted_tombstone":
         raise ValueError("A permanently deleted account cannot be edited or restored.")
+    canonical_ceo_target = _is_canonical_ceo_master_admin_identity(user)
+    if canonical_ceo_target:
+        immutable_ceo_fields = {
+            "email",
+            "status",
+            "role",
+            "access_tier",
+            "department_role",
+        }.intersection(payload)
+        if immutable_ceo_fields:
+            raise ValueError(
+                "The canonical CEO identity, active status, and master administrator roles are immutable."
+            )
     db = _db()
     current_user_id = _normalize_object_id(user.get("_id")) or _normalize(user_id)
     updates: dict[str, Any] = {"updated_at": _now()}
@@ -5115,15 +5122,6 @@ def super_admin_update_user(
     if "role" in payload:
         new_role = _validated_role_value(_normalize(payload.get("role")))
         _enforce_ceo_master_admin_singleton(target_user=user, new_role=new_role)
-        # Granting super_admin role is high-impact.  Require that the target
-        # user is already an internal admin account (not a customer account).
-        # This prevents accidental or malicious escalation of customer accounts
-        # to the highest privilege level.
-        if new_role in SUPER_ADMIN_ROLE_CODES and not _is_internal_admin_account(user):
-            raise ValueError(
-                "super_admin role can only be granted to existing internal admin accounts. "
-                "The target user's current role must already be an internal admin role."
-            )
         updates["role"] = new_role
     if "access_tier" in payload:
         access_tier = normalize_role_code(_normalize(payload.get("access_tier"))) or None
@@ -5368,6 +5366,16 @@ def super_admin_create_customer(
             db["users"].delete_one({"_id": document["_id"]})
         raise
 
+    # Credentials are never handed to an administrator. The customer proves
+    # control of the mailbox through a short-lived, single-use activation link.
+    from app.services.auth_service import request_account_activation
+
+    activation_delivery = request_account_activation(
+        email,
+        include_delivery_status=True,
+    )
+    activation_sent = bool(activation_delivery.get("delivery_sent"))
+
     _write_admin_action_audit(
         actor=actor,
         action="super_admin.customer_create",
@@ -5382,7 +5390,11 @@ def super_admin_create_customer(
             "project_id": project_id,
             "package_code": package_code or None,
         },
-        context={"surface": "admin_control_center.account_360", "package_granted": bool(package_code)},
+        context={
+            "surface": "admin_control_center.account_360",
+            "package_granted": bool(package_code),
+            "activation_delivery_sent": activation_sent,
+        },
     )
     return {
         "user_id": user_id,
@@ -5395,6 +5407,16 @@ def super_admin_create_customer(
         "entitlement_status": _normalize((entitlement or {}).get("status")) or None,
         "payment_record_created": False,
         "stripe_payment_mutated": False,
+        "activation_delivery_sent": activation_sent,
+        "activation_delivery_provider": _normalize(
+            activation_delivery.get("delivery_provider")
+        )
+        or "postmark",
+        "activation_delivery_error": _normalize(
+            activation_delivery.get("delivery_error")
+        )
+        or None,
+        "failure_count": 0 if activation_sent else 1,
     }
 
 
@@ -5671,7 +5693,7 @@ def super_admin_apply_account_lifecycle(
             actor=actor,
             now_value=now_value,
         )
-    _write_admin_action_audit(
+    audit_event_created = _write_admin_action_audit(
         actor=actor,
         action=f"super_admin.account_{normalized_action}",
         target_type="user",
@@ -5690,7 +5712,7 @@ def super_admin_apply_account_lifecycle(
         "applied": True,
         "sessions_revoked": True,
         "archive_results": archive_results,
-        "audit_event_created": True,
+        "audit_event_created": audit_event_created,
     }
 
 
@@ -6258,10 +6280,122 @@ def super_admin_apply_account_permanent_deletion(
     user = _user_by_id(user_id)
     if user is None:
         raise ValueError("User not found.")
+    resolved_identity_id = _normalize_object_id(user.get("_id")) or _normalize(user_id)
+    db = _db()
+    tombstone_collection = db[ACCOUNT_DELETION_TOMBSTONES_COLLECTION]
+    existing_tombstone = tombstone_collection.find_one(
+        {"user_id": resolved_identity_id}
+    )
+    confirmation_email_value = _normalize_email(confirmation_email)
+
+    # A process may stop after identity erasure but before audit/tombstone
+    # closure. Re-entering the same governed operation resumes evidence
+    # closure without restoring credentials or repeating destructive writes.
+    if _normalize(user.get("status")).lower() == "permanently_deleted":
+        if not existing_tombstone:
+            raise RuntimeError(
+                "The identity is permanently deleted but its deletion tombstone is missing."
+            )
+        confirmation_hash = hashlib.sha256(
+            confirmation_email_value.encode("utf-8")
+        ).hexdigest()
+        if not hmac.compare_digest(
+            confirmation_hash,
+            _normalize(existing_tombstone.get("original_email_sha256")),
+        ):
+            raise ValueError(
+                "The confirmation email does not match the deletion evidence."
+            )
+        deletion_id = _normalize(existing_tombstone.get("deletion_id"))
+        if not deletion_id or _normalize(user.get("permanent_deletion_id")) != deletion_id:
+            raise RuntimeError("Permanent deletion evidence does not match the identity tombstone.")
+        records_closed = dict(existing_tombstone.get("records_closed") or {})
+        records_preserved = list(existing_tombstone.get("records_preserved") or [])
+        audit_created = bool(existing_tombstone.get("audit_event_created"))
+        if not audit_created:
+            audit_created = _write_admin_action_audit(
+                actor=actor,
+                action="super_admin.account_permanently_deleted",
+                target_type="user",
+                target_id=resolved_identity_id,
+                before={"status": "deletion_in_progress"},
+                after={
+                    "status": "permanently_deleted",
+                    "login_enabled": False,
+                    "restorable": False,
+                    "personal_profile_erased": True,
+                },
+                context={
+                    "surface": "admin_control_center.permanent_deletion.resume",
+                    "deletion_id": deletion_id,
+                    "reason_category": normalized_reason_category,
+                    "records_closed": records_closed,
+                    "records_preserved": records_preserved,
+                },
+            )
+        if not audit_created:
+            tombstone_collection.update_one(
+                {"user_id": resolved_identity_id, "deletion_id": deletion_id},
+                {
+                    "$set": {
+                        "status": "audit_pending",
+                        "phase": "identity_erased",
+                        "audit_event_created": False,
+                        "updated_at": _now(),
+                    }
+                },
+            )
+            raise RuntimeError(
+                "Identity erasure completed, but audit evidence is still pending. Retry the same Kernel operation."
+            )
+        completed_at = _now()
+        tombstone_collection.update_one(
+            {"user_id": resolved_identity_id, "deletion_id": deletion_id},
+            {
+                "$set": {
+                    "status": "completed",
+                    "phase": "completed",
+                    "audit_event_created": True,
+                    "completed_at": existing_tombstone.get("completed_at") or completed_at,
+                    "updated_at": completed_at,
+                }
+            },
+        )
+        return {
+            "user_id": resolved_identity_id,
+            "blocked": False,
+            "warnings": [],
+            "records_preserved": records_preserved,
+            "applied": True,
+            "permanent": True,
+            "restorable": False,
+            "sessions_revoked": True,
+            "audit_event_created": True,
+            "failure_count": 0,
+            "resumed": True,
+            "deletion_receipt": {
+                "deletion_id": deletion_id,
+                "continuity_operation_id": existing_tombstone.get(
+                    "continuity_operation_id"
+                ),
+                "user_id": resolved_identity_id,
+                "status": "permanently_deleted",
+                "deleted_at": _serialize_datetime(
+                    user.get("permanently_deleted_at") or completed_at
+                ),
+                "deleted_by": user.get("permanently_deleted_by"),
+                "reason_category": normalized_reason_category,
+                "personal_profile_erased": True,
+                "login_enabled": False,
+                "restorable": False,
+                "records_closed": records_closed,
+                "records_preserved": records_preserved,
+            },
+        }
     original_email = _normalize_email(user.get("email"))
     if not original_email or "@" not in original_email:
         raise ValueError("Permanent deletion requires a valid target account email for confirmation.")
-    if _normalize_email(confirmation_email) != original_email:
+    if confirmation_email_value != original_email:
         raise ValueError("The confirmation email does not match the account being permanently deleted.")
 
     preview = super_admin_preview_account_permanent_deletion(
@@ -6274,26 +6408,136 @@ def super_admin_apply_account_permanent_deletion(
     resolved_user_id = _normalize(preview.get("user_id"))
     now_value = _now()
     actor_id = _normalize((actor or {}).get("_id") or (actor or {}).get("id")) or None
-    deletion_id = f"acctdel_{secrets.token_hex(16)}"
-    deleted_email = f"deleted-{resolved_user_id}@deleted.tomboflight.invalid"
     email_sha256 = hashlib.sha256(original_email.encode("utf-8")).hexdigest()
+    reason_sha256 = hashlib.sha256(normalized_reason.encode("utf-8")).hexdigest()
+    operation_id_value = _normalize(continuity_operation_id) or None
+    existing_tombstone = tombstone_collection.find_one({"user_id": resolved_user_id})
+    if existing_tombstone:
+        if _normalize(existing_tombstone.get("status")) == "completed":
+            raise RuntimeError("Deletion evidence is completed but the user identity is not finalized.")
+        if not hmac.compare_digest(
+            email_sha256,
+            _normalize(existing_tombstone.get("original_email_sha256")),
+        ):
+            raise RuntimeError("An existing deletion attempt is bound to different identity evidence.")
+        if not hmac.compare_digest(
+            reason_sha256,
+            _normalize(existing_tombstone.get("reason_sha256")),
+        ):
+            raise ValueError("Retry the existing deletion with its original reason.")
+        existing_operation_id = _normalize(
+            existing_tombstone.get("continuity_operation_id")
+        )
+        if existing_operation_id and operation_id_value and existing_operation_id != operation_id_value:
+            raise ValueError("The deletion tombstone is bound to a different Continuity operation.")
+        deletion_id = _normalize(existing_tombstone.get("deletion_id"))
+    else:
+        deletion_id = f"acctdel_{secrets.token_hex(16)}"
+    if not deletion_id:
+        raise RuntimeError("Permanent deletion could not establish a stable deletion id.")
+
+    deleted_email = f"deleted-{resolved_user_id}@deleted.tomboflight.invalid"
+    tombstone_collection.update_one(
+        {"user_id": resolved_user_id},
+        {
+            "$set": {
+                "deletion_id": deletion_id,
+                "continuity_operation_id": operation_id_value,
+                "original_email_sha256": email_sha256,
+                "status": "started",
+                "phase": "planned",
+                "irreversible": True,
+                "restorable": False,
+                "reason_category": normalized_reason_category,
+                "reason_sha256": reason_sha256,
+                "requested_by": _actor_snapshot(actor),
+                "records_preserved": list(preview.get("records_preserved") or []),
+                "started_at": (existing_tombstone or {}).get("started_at") or now_value,
+                "updated_at": now_value,
+            },
+            "$setOnInsert": {"created_at": now_value},
+        },
+        upsert=True,
+    )
+
+    # Revoke active authentication before the first external side effect. This
+    # lock is idempotent and preserves the original email solely until final
+    # identity erasure can compare-and-set the intended account.
+    if _normalize(user.get("status")).lower() != "deletion_in_progress":
+        oid = _to_object_id(resolved_user_id)
+        lock_result = db["users"].update_one(
+            {
+                "_id": oid or resolved_user_id,
+                "email": original_email,
+                "status": {"$nin": ["permanently_deleted", "deletion_in_progress"]},
+            },
+            {
+                "$set": {
+                    "status": "deletion_in_progress",
+                    "login_enabled": False,
+                    "permanent_deletion_id": deletion_id,
+                    "session_token_version": int(user.get("session_token_version") or 0) + 1,
+                    "updated_at": now_value,
+                }
+            },
+        )
+        if int(getattr(lock_result, "matched_count", 0)) != 1:
+            raise RuntimeError("The target account changed before deletion could be locked.")
+        user = _user_by_id(resolved_user_id) or user
+    elif _normalize(user.get("permanent_deletion_id")) != deletion_id:
+        raise RuntimeError("The account is locked by a different deletion attempt.")
+    tombstone_collection.update_one(
+        {"user_id": resolved_user_id, "deletion_id": deletion_id},
+        {"$set": {"phase": "identity_locked", "updated_at": _now()}},
+    )
+
     ownership_records = _all_owned_records(user_id=resolved_user_id, user_email=original_email)
     active_subscription_ids = _active_maintenance_subscription_ids(
         ownership_records=ownership_records
     )
 
     subscription_results: list[dict[str, Any]] = []
-    for subscription_id in active_subscription_ids:
-        subscription_results.append(
-            stripe_admin_operations_service.cancel_subscription(
-                actor or {},
-                subscription_id=subscription_id,
-                at_period_end=False,
-                confirm=True,
-                reason=f"Permanent account deletion: {normalized_reason}",
-                idempotency_key=_normalize(continuity_operation_id) or deletion_id,
+    try:
+        for subscription_id in active_subscription_ids:
+            subscription_results.append(
+                stripe_admin_operations_service.cancel_subscription(
+                    actor or {},
+                    subscription_id=subscription_id,
+                    at_period_end=False,
+                    confirm=True,
+                    reason=f"Permanent account deletion: {normalized_reason}",
+                    # One deletion can own more than one subscription. Stripe
+                    # idempotency keys must therefore be stable per external
+                    # subscription, not merely per deletion operation.
+                    idempotency_key=(
+                        f"{operation_id_value or deletion_id}:{subscription_id}"
+                    ),
+                )
             )
+    except Exception as exc:
+        tombstone_collection.update_one(
+            {"user_id": resolved_user_id, "deletion_id": deletion_id},
+            {
+                "$set": {
+                    "status": "failed_retryable",
+                    "phase": "subscription_cancellation",
+                    "last_error_type": type(exc).__name__,
+                    "updated_at": _now(),
+                }
+            },
         )
+        raise
+    tombstone_collection.update_one(
+        {"user_id": resolved_user_id, "deletion_id": deletion_id},
+        {
+            "$set": {
+                "status": "started",
+                "phase": "subscriptions_cancelled",
+                "updated_at": _now(),
+            },
+            "$unset": {"last_error_type": ""},
+        },
+    )
 
     updates: dict[str, Any] = {
         "email": deleted_email,
@@ -6324,6 +6568,12 @@ def super_admin_apply_account_permanent_deletion(
         "password_reset_requested_by": None,
         "password_reset_requested_by_user_id": None,
         "password_reset_used_at": None,
+        "account_activation_token_hash": None,
+        "account_activation_expires_at": None,
+        "account_activation_requested_at": None,
+        "activation_delivery_sent": None,
+        "activation_delivery_error": None,
+        "requires_account_activation": False,
         "mfa_enabled": False,
         "mfa_secret_encrypted": None,
         "mfa_backup_code_hashes": [],
@@ -6356,33 +6606,9 @@ def super_admin_apply_account_permanent_deletion(
         "permanently_deleted_at": now_value,
         "permanently_deleted_by": actor_id,
         "permanent_deletion_reason_category": normalized_reason_category,
-        "session_token_version": int(user.get("session_token_version") or 0) + 1,
+        "session_token_version": int(user.get("session_token_version") or 0),
         "updated_at": now_value,
     }
-    db = _db()
-    tombstone_collection = db[ACCOUNT_DELETION_TOMBSTONES_COLLECTION]
-    tombstone_collection.update_one(
-        {"user_id": resolved_user_id},
-        {
-            "$set": {
-                "deletion_id": deletion_id,
-                "continuity_operation_id": _normalize(continuity_operation_id) or None,
-                "original_email_sha256": email_sha256,
-                "status": "started",
-                "irreversible": True,
-                "restorable": False,
-                "reason_category": normalized_reason_category,
-                "reason_sha256": hashlib.sha256(normalized_reason.encode("utf-8")).hexdigest(),
-                "requested_by": _actor_snapshot(actor),
-                "records_preserved": list(preview.get("records_preserved") or []),
-                "started_at": now_value,
-                "updated_at": now_value,
-            },
-            "$setOnInsert": {"created_at": now_value},
-        },
-        upsert=True,
-    )
-
     role_result = db["user_role_assignments"].update_many(
         {"user_id": {"$in": _project_id_candidates(resolved_user_id)}, "status": {"$nin": ["revoked", "deleted"]}},
         {"$set": {"status": "revoked", "revoked_at": now_value, "updated_at": now_value}},
@@ -6404,6 +6630,17 @@ def super_admin_apply_account_permanent_deletion(
     closure_results["user_role_assignments"] = int(role_result.modified_count)
     closure_results["user_permission_overrides"] = int(permission_result.modified_count)
     closure_results["stripe_subscriptions_cancelled"] = len(subscription_results)
+    tombstone_collection.update_one(
+        {"user_id": resolved_user_id, "deletion_id": deletion_id},
+        {
+            "$set": {
+                "status": "started",
+                "phase": "records_closed",
+                "records_closed": closure_results,
+                "updated_at": _now(),
+            }
+        },
+    )
 
     # Destroy the authentication identity only after linked access records are
     # closed.  The exact original email in this compare-and-set prevents a
@@ -6413,32 +6650,32 @@ def super_admin_apply_account_permanent_deletion(
         {
             "_id": oid or resolved_user_id,
             "email": original_email,
-            "status": {"$nin": ["permanently_deleted"]},
+            "status": "deletion_in_progress",
+            "permanent_deletion_id": deletion_id,
         },
         {"$set": updates},
     )
     if int(getattr(update_result, "matched_count", 0)) != 1:
         raise RuntimeError("The target account changed before permanent deletion could be applied.")
 
-    tombstone_result = tombstone_collection.update_one(
+    tombstone_collection.update_one(
         {"user_id": resolved_user_id, "deletion_id": deletion_id},
         {
             "$set": {
-                "status": "completed",
+                "status": "audit_pending",
+                "phase": "identity_erased",
                 "records_closed": closure_results,
-                "completed_at": now_value,
+                "identity_erased_at": now_value,
                 "updated_at": now_value,
             }
         },
     )
-    if int(getattr(tombstone_result, "matched_count", 0)) != 1:
-        raise RuntimeError("Permanent deletion completed, but its MongoDB tombstone could not be finalized.")
 
     refreshed = _user_by_id(resolved_user_id) or {}
     if _normalize(refreshed.get("status")).lower() != "permanently_deleted" or bool(refreshed.get("login_enabled", True)):
         raise RuntimeError("Permanent deletion verification failed after the MongoDB write.")
 
-    _write_admin_action_audit(
+    audit_event_created = _write_admin_action_audit(
         actor=actor,
         action="super_admin.account_permanently_deleted",
         target_type="user",
@@ -6458,17 +6695,50 @@ def super_admin_apply_account_permanent_deletion(
             "records_preserved": list(preview.get("records_preserved") or []),
         },
     )
+    if not audit_event_created:
+        tombstone_collection.update_one(
+            {"user_id": resolved_user_id, "deletion_id": deletion_id},
+            {
+                "$set": {
+                    "status": "audit_pending",
+                    "phase": "identity_erased",
+                    "audit_event_created": False,
+                    "updated_at": _now(),
+                }
+            },
+        )
+        raise RuntimeError(
+            "Identity erasure completed, but audit evidence is still pending. Retry the same Kernel operation."
+        )
+
+    tombstone_result = tombstone_collection.update_one(
+        {"user_id": resolved_user_id, "deletion_id": deletion_id},
+        {
+            "$set": {
+                "status": "completed",
+                "phase": "completed",
+                "audit_event_created": True,
+                "records_closed": closure_results,
+                "completed_at": now_value,
+                "updated_at": now_value,
+            }
+        },
+    )
+    if int(getattr(tombstone_result, "matched_count", 0)) != 1:
+        raise RuntimeError(
+            "Permanent deletion completed, but its MongoDB tombstone could not be finalized."
+        )
     return {
         **preview,
         "applied": True,
         "permanent": True,
         "restorable": False,
         "sessions_revoked": True,
-        "audit_event_created": True,
+        "audit_event_created": audit_event_created,
         "failure_count": 0,
         "deletion_receipt": {
             "deletion_id": deletion_id,
-            "continuity_operation_id": _normalize(continuity_operation_id) or None,
+            "continuity_operation_id": operation_id_value,
             "user_id": resolved_user_id,
             "status": "permanently_deleted",
             "deleted_at": _serialize_datetime(now_value),
@@ -6514,7 +6784,7 @@ def super_admin_transfer_project_ownership(
         {"$set": {"role": "owner", "status": "active", "updated_at": _now()}, "$setOnInsert": {"created_at": _now()}},
         upsert=True,
     )
-    _write_admin_action_audit(
+    audit_event_created = _write_admin_action_audit(
         actor=actor,
         action="super_admin.project_ownership_transfer",
         target_type="project",
@@ -6523,7 +6793,12 @@ def super_admin_transfer_project_ownership(
         after=after,
         context={"surface": "admin_control_center.account_360", "reason": _normalize(reason)},
     )
-    return {"project_id": resolved_project_id, "before": before, "after": after, "audit_event_created": True}
+    return {
+        "project_id": resolved_project_id,
+        "before": before,
+        "after": after,
+        "audit_event_created": audit_event_created,
+    }
 
 
 def legacy_admin_security_review(

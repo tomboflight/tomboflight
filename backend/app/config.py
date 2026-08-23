@@ -151,6 +151,10 @@ class Settings(BaseSettings):
         default=30,
         validation_alias=AliasChoices("PASSWORD_RESET_TOKEN_EXPIRE_MINUTES"),
     )
+    account_activation_token_expire_hours: int = Field(
+        default=24,
+        validation_alias=AliasChoices("ACCOUNT_ACTIVATION_TOKEN_EXPIRE_HOURS"),
+    )
     password_reset_base_url: str = Field(
         default="https://tomboflight.com/account-security.html",
         validation_alias=AliasChoices("PASSWORD_RESET_BASE_URL"),

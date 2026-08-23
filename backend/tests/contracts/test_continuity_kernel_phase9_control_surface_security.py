@@ -25,7 +25,7 @@ class TestContinuityKernelPhase9ControlSurfaceSecurity(unittest.TestCase):
         cls.auth_js = AUTH_JS_PATH.read_text(encoding="utf-8")
 
     def test_01_runtime_registers_complete_control_surface_actions(self) -> None:
-        self.assertIn('RUNTIME_VERSION = "10.1.0"', self.runtime)
+        self.assertIn('RUNTIME_VERSION = "11.0.0"', self.runtime)
         for action in (
             "manual_fulfillment",
             "stripe_operation",
