@@ -57,6 +57,7 @@ from app.services.admin_control_service import (
     super_admin_preview_customer_create,
     super_admin_preview_account_lifecycle,
     super_admin_preview_account_permanent_deletion,
+    super_admin_preview_orphan_identity_reconciliation,
     super_admin_preview_officer_permissions,
     super_admin_preview_package_change,
     super_admin_preview_package_revocation,
@@ -159,6 +160,12 @@ class SuperAdminUserStateActionPayload(BaseModel):
 
 
 class SuperAdminPermanentDeletionPreviewPayload(BaseModel):
+    reason_category: str = Field(default="")
+
+
+class SuperAdminOrphanReconciliationPreviewPayload(BaseModel):
+    identity_email: str = Field(min_length=3)
+    known_user_id: str = Field(default="")
     reason_category: str = Field(default="")
 
 
@@ -302,8 +309,9 @@ def get_admin_control_access_profile(
 
 @router.get("/diagnostics")
 def get_admin_control_diagnostics(
-    current_user: dict[str, Any] = Depends(require_any_permission(["admin.control.view", "admin.analytics.read"])),
+    current_user: dict[str, Any] = Depends(require_super_admin),
 ):
+    _assert_canonical_ceo(current_user)
     return admin_control_diagnostics(current_user)
 
 
@@ -759,6 +767,25 @@ def super_admin_user_permanent_deletion_preview(
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/super-admin/orphan-identity/reconciliation/preview")
+def super_admin_orphan_identity_reconciliation_preview(
+    payload: SuperAdminOrphanReconciliationPreviewPayload,
+    current_user: dict[str, Any] = Depends(require_super_admin),
+):
+    _assert_canonical_ceo(current_user)
+    try:
+        return super_admin_preview_orphan_identity_reconciliation(
+            identity_email=payload.identity_email,
+            known_user_id=payload.known_user_id,
+            reason_category=payload.reason_category,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
 
 
 @router.post("/super-admin/users/{user_id}/password-reset")

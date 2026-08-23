@@ -151,6 +151,55 @@ class TestContinuityRuntimeService(unittest.TestCase):
         self.assertEqual(second["state"], "apply_executed")
         self.assertEqual(self.executor.call_count, 1)
 
+    def test_request_evidence_failure_is_resumable_without_duplicate_event(self) -> None:
+        runtime.write_audit_log.side_effect = RuntimeError("audit unavailable")
+        with self.assertRaisesRegex(RuntimeError, "request evidence is incomplete"):
+            runtime.request_operation(
+                action="package_change",
+                target={"project_id": "project-1"},
+                parameters={"package_code": "legacy_portrait"},
+                reason="Reconcile the canonical package state",
+                idempotency_key="kernel-idempotency-request-evidence",
+                actor=self.actor,
+            )
+
+        stored = self.database[runtime.OPERATIONS_COLLECTION].documents[0]
+        self.assertEqual(stored["request_evidence_status"], "incomplete")
+        self.assertEqual(len(self.database[runtime.EVENTS_COLLECTION].documents), 1)
+
+        runtime.write_audit_log.side_effect = None
+        runtime.write_audit_log.return_value = "audit-replayed"
+        resumed = runtime.request_operation(
+            action="package_change",
+            target={"project_id": "project-1"},
+            parameters={"package_code": "legacy_portrait"},
+            reason="Reconcile the canonical package state",
+            idempotency_key="kernel-idempotency-request-evidence",
+            actor=self.actor,
+        )
+
+        self.assertEqual(resumed["request_evidence_status"], "complete")
+        self.assertEqual(len(self.database[runtime.EVENTS_COLLECTION].documents), 1)
+
+    def test_closure_evidence_failure_is_repaired_on_idempotent_replay(self) -> None:
+        operation = self._execute(idempotency_key="kernel-idempotency-close-replay")
+        prior_side_effect = runtime.write_audit_log.side_effect
+
+        def fail_closure_once(**kwargs):
+            if kwargs.get("action") == "continuity_runtime.operation_audit_closed":
+                raise RuntimeError("audit unavailable")
+            return "audit-ok"
+
+        runtime.write_audit_log.side_effect = fail_closure_once
+        with self.assertRaisesRegex(RuntimeError, "closure evidence is incomplete"):
+            runtime.close_operation(operation["operation_id"], actor=self.actor)
+
+        runtime.write_audit_log.side_effect = prior_side_effect
+        runtime.write_audit_log.return_value = "audit-replayed"
+        closed = runtime.close_operation(operation["operation_id"], actor=self.actor)
+        self.assertEqual(closed["state"], "audit_closed")
+        self.assertEqual(closed["closure_evidence_status"], "complete")
+
     def test_successful_execution_can_be_audit_closed(self) -> None:
         operation = self._execute(idempotency_key="kernel-idempotency-close")
         closed = runtime.close_operation(operation["operation_id"], actor=self.actor)
@@ -414,9 +463,10 @@ class TestContinuityRuntimeControlSurfaceAdapters(unittest.TestCase):
             "impersonation_start",
             "impersonation_stop",
             "legacy_admin_remediation",
+            "orphan_identity_reconciliation",
         }
-        self.assertEqual(runtime.RUNTIME_VERSION, "11.0.0")
-        self.assertEqual(len(runtime.ACTION_SPECS), 37)
+        self.assertEqual(runtime.RUNTIME_VERSION, "12.0.0")
+        self.assertEqual(len(runtime.ACTION_SPECS), 38)
         self.assertTrue(expected.issubset(runtime.ACTION_SPECS))
 
     def test_permanent_deletion_adapter_passes_both_irreversible_confirmations(self) -> None:
@@ -451,6 +501,46 @@ class TestContinuityRuntimeControlSurfaceAdapters(unittest.TestCase):
             final_confirmation="PERMANENTLY DELETE",
             final_acknowledgement=True,
             continuity_operation_id="ckop-adapter-test",
+            actor=actor,
+        )
+
+    def test_orphan_identity_reconciliation_adapter_preserves_post_hoc_semantics(self) -> None:
+        actor = {"_id": "ceo-1", "email": CEO_MASTER_ADMIN_EMAIL}
+        with patch.object(
+            runtime.admin_control_service,
+            "super_admin_apply_orphan_identity_reconciliation",
+            return_value={
+                "reconciliation_receipt": {"status": "completed"},
+                "governed_deletion_observed": False,
+            },
+        ) as execute:
+            result = runtime._invoke_action(
+                "orphan_identity_reconciliation",
+                {"identity_email": "former.officer@example.com"},
+                {
+                    "known_user_id": "former-user-1",
+                    "reason_category": "manual_database_removal",
+                    "confirmation_email": "former.officer@example.com",
+                    "initial_confirmation": True,
+                    "final_confirmation": "RECONCILE MANUAL REMOVAL",
+                    "final_acknowledgement": True,
+                    "continuity_operation_id": "ckop-orphan-test",
+                    "reason": "Reconcile the prior manual identity removal",
+                },
+                actor,
+            )
+
+        self.assertFalse(result["governed_deletion_observed"])
+        execute.assert_called_once_with(
+            identity_email="former.officer@example.com",
+            known_user_id="former-user-1",
+            reason_category="manual_database_removal",
+            reason="Reconcile the prior manual identity removal",
+            confirmation_email="former.officer@example.com",
+            initial_confirmation=True,
+            final_confirmation="RECONCILE MANUAL REMOVAL",
+            final_acknowledgement=True,
+            continuity_operation_id="ckop-orphan-test",
             actor=actor,
         )
 

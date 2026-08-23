@@ -106,6 +106,7 @@ from app.services.nft_runtime_validation_service import (
     validate_nft_runtime_configuration_on_startup,
 )
 from app.services.auth_service import ensure_auth_indexes
+from app.services.rate_limit_service import ensure_rate_limit_indexes
 
 
 logger = logging.getLogger(__name__)
@@ -159,6 +160,7 @@ async def lifespan(app: FastAPI):
     app.state.db = db
     if db is not None:
         ensure_auth_indexes()
+        ensure_rate_limit_indexes()
         initialize_order_indexes()
         ensure_project_entitlement_indexes()
         initialize_mint_record_indexes()
@@ -170,7 +172,10 @@ async def lifespan(app: FastAPI):
         try:
             bootstrap_admin_access_controls()
         except Exception as exc:
-            logger.warning("Admin access bootstrap sync skipped: %s", exc)
+            if settings.is_production_environment:
+                logger.error("Admin access bootstrap failed closed: %s", exc)
+                raise
+            logger.warning("Admin access bootstrap sync skipped outside production: %s", exc)
         logger.info("Connected to MongoDB database.")
     else:
         logger.warning("MongoDB unavailable at startup; running in degraded mode.")

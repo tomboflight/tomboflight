@@ -83,6 +83,8 @@ def ensure_public_manifest_indexes() -> None:
         try:
             collection.create_index(keys, **options)
         except OperationFailure:
+            if unique:
+                raise
             continue
 
 

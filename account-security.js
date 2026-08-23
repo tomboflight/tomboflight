@@ -1,6 +1,27 @@
 (function () {
   "use strict";
 
+  function readAndScrubResetLink() {
+    let mode = "";
+    let token = "";
+    try {
+      const fragment = new URLSearchParams(
+        String(window.location.hash || "").replace(/^#/, ""),
+      );
+      const query = new URLSearchParams(window.location.search);
+      mode = String(fragment.get("mode") || query.get("mode") || "").trim();
+      token = String(fragment.get("token") || query.get("token") || "").trim();
+      if (mode || token) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    } catch (_error) {
+      mode = "";
+      token = "";
+    }
+    return { mode: mode.toLowerCase(), token };
+  }
+
+  const resetState = readAndScrubResetLink();
   const app = window.TOLApp || window.TOLAuth;
   if (!app || typeof app.apiRequest !== "function") {
     return;
@@ -8,20 +29,6 @@
 
   const PASSWORD_POLICY_MESSAGE =
     "Password must be at least 12 characters and include at least one uppercase letter, one lowercase letter, one number, and one special character.";
-
-  function query(name) {
-    try {
-      const params = new URLSearchParams(window.location.search);
-      return String(params.get(name) || "").trim();
-    } catch (_error) {
-      return "";
-    }
-  }
-
-  const resetState = {
-    mode: query("mode").toLowerCase(),
-    token: query("token"),
-  };
   let signedInUser = null;
 
   function hasResetTokenFromEmailLink() {

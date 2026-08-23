@@ -15,7 +15,7 @@ router = APIRouter(prefix="/identity-links", tags=["Identity Links"])
 
 
 @router.get("/", response_model=list[IdentityLinkResponse])
-def get_identity_links(current_user: dict = Depends(require_permission("admin.access"))):
+def get_identity_links(current_user: dict = Depends(require_permission("admin.control.view"))):
     links = list_identity_links()
     return [build_identity_link_response(link) for link in links]
 
@@ -23,7 +23,7 @@ def get_identity_links(current_user: dict = Depends(require_permission("admin.ac
 @router.post("/", response_model=IdentityLinkResponse)
 def create_identity_link_route(
     payload: IdentityLinkCreate,
-    current_user: dict = Depends(require_permission("admin.access")),
+    current_user: dict = Depends(require_permission("admin.control.write")),
 ):
     link = create_identity_link(payload)
     return build_identity_link_response(link)

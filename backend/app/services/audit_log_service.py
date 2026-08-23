@@ -1,5 +1,8 @@
 from datetime import UTC, datetime
+import hashlib
 from typing import Any, Dict, List, Optional
+
+from pymongo.errors import DuplicateKeyError
 
 from app.core.metadata import apply_create_metadata
 from app.database import get_database
@@ -23,6 +26,7 @@ def write_audit_log(
     context: Optional[Dict[str, Any]] = None,
     details: Optional[Dict[str, Any]] = None,
     result: str = "success",
+    idempotency_key: str | None = None,
 ) -> str:
     db = get_database()
     if db is None:
@@ -42,9 +46,29 @@ def write_audit_log(
         "result": _normalize(result, "success").lower(),
         "timestamp": datetime.now(UTC).isoformat(),
     }
+    normalized_idempotency_key = _normalize(idempotency_key)
+    if normalized_idempotency_key:
+        payload["audit_idempotency_key"] = normalized_idempotency_key
+        payload["_id"] = (
+            "audit_"
+            + hashlib.sha256(normalized_idempotency_key.encode("utf-8")).hexdigest()
+        )
+
     payload = apply_create_metadata(payload, _normalize(actor_user_id) or None)
-    result_doc = db.audit_logs.insert_one(payload)
-    return str(result_doc.inserted_id)
+    try:
+        result_doc = db.audit_logs.insert_one(payload)
+        return str(result_doc.inserted_id)
+    except DuplicateKeyError:
+        if normalized_idempotency_key:
+            # A prior attempt committed the audit row but lost the response or
+            # failed while checkpointing the parent operation. Treat the
+            # deterministic duplicate as a successful idempotent replay.
+            existing = db.audit_logs.find_one(
+                {"audit_idempotency_key": normalized_idempotency_key}
+            )
+            if existing is not None:
+                return str(existing.get("_id") or payload["_id"])
+        raise
 
 
 def create_audit_log(

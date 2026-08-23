@@ -155,7 +155,7 @@ def list_admin_mint_overview(
     search: str = "",
     status_filter: str = "",
     mintable_only: bool = False,
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.mint.readiness")),
 ):
     del current_user
 
@@ -205,7 +205,7 @@ def list_admin_mint_overview(
 @router.post("/admin/mint-records/maintenance/backfill")
 def backfill_admin_mint_records(
     payload: MintMaintenancePayload,
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.mint")),
 ):
     del current_user
     try:
@@ -227,7 +227,7 @@ def backfill_admin_mint_records(
 def prepare_project_mint_record(
     project_id: str,
     payload: PrepareMintRecordPayload,
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.mint")),
 ):
     _project_for_request(current_user, project_id)
 
@@ -260,7 +260,7 @@ def approve_project_mint_record_admin(
     project_id: str,
     mint_record_id: str,
     payload: AdminMintApprovalPayload,
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.mint")),
 ):
     _project_for_request(current_user, project_id)
     _require_project_match(project_id, mint_record_id)
@@ -312,7 +312,7 @@ def approve_project_mint_record_customer_admin(
     project_id: str,
     mint_record_id: str,
     payload: CustomerMintApprovalPayload,
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.mint")),
 ):
     _project_for_request(current_user, project_id)
     _require_project_match(project_id, mint_record_id)
@@ -342,7 +342,7 @@ def approve_project_mint_record_customer_admin(
 def prepare_project_digital_collectible(
     project_id: str,
     payload: PrepareMintRecordPayload,
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.mint")),
 ):
     return prepare_project_mint_record(project_id, payload, current_user)
 
@@ -351,7 +351,7 @@ def prepare_project_digital_collectible(
 def queue_project_mint_record(
     project_id: str,
     mint_record_id: str,
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.mint")),
 ):
     project = _project_for_request(current_user, project_id)
     _require_project_match(project_id, mint_record_id)
@@ -413,7 +413,7 @@ def get_project_mint_status(
 @router.post("/mint-records/{mint_record_id}/sync")
 def sync_project_mint_record(
     mint_record_id: str,
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.mint")),
 ):
     del current_user
 

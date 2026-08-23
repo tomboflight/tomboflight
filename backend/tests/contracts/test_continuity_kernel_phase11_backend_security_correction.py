@@ -29,8 +29,8 @@ class TestContinuityKernelPhase11BackendSecurityCorrection(unittest.TestCase):
         cls.auth_js = AUTH_JS_PATH.read_text(encoding="utf-8")
         cls.doc = DOC_PATH.read_text(encoding="utf-8")
 
-    def test_01_runtime_is_phase11_and_registers_legacy_remediation(self) -> None:
-        self.assertIn('RUNTIME_VERSION = "11.0.0"', self.runtime)
+    def test_01_runtime_preserves_phase11_and_registers_legacy_remediation(self) -> None:
+        self.assertIn('RUNTIME_VERSION = "12.0.0"', self.runtime)
         self.assertIn('"legacy_admin_remediation": ActionSpec(', self.runtime)
         self.assertIn("retry_failed_operation", self.runtime)
         self.assertIn("RETRY_SAME_IDEMPOTENT_OPERATION", self.runtime)

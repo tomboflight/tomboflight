@@ -16,7 +16,7 @@ def initialize_mint_job_indexes() -> None:
 @router.post("/run-next")
 def run_next_mint_job(
     payload: RunNextMintJobPayload,
-    current_user: dict = Depends(require_permission("admin.access")),
+    current_user: dict = Depends(require_permission("admin.control.mint")),
 ):
     del current_user
     return run_next_job(payload.worker_id)

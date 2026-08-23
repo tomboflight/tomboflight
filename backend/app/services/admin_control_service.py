@@ -34,7 +34,7 @@ from app.core.role_catalog import (
     resolve_primary_role_code,
 )
 from app.core.relationship_catalog import normalize_relationship_type
-from app.database import get_database
+from app.database import get_database, get_service_state
 from app.services.audit_log_service import write_audit_log
 from app.services.mint_job_service import sync_receipt_for_mint_record
 from app.services.mint_policy_service import describe_project_mint_eligibility
@@ -74,6 +74,12 @@ PERMANENT_DELETE_REASON_CODES = {
     "customer_request",
     "policy_violation",
     "security_incident",
+    "company_authorized",
+}
+ORPHAN_RECONCILIATION_CONFIRMATION_PHRASE = "RECONCILE MANUAL REMOVAL"
+ORPHAN_RECONCILIATION_REASON_CODES = {
+    "manual_database_removal",
+    "security_cleanup",
     "company_authorized",
 }
 ACCOUNT_DELETION_TOMBSTONES_COLLECTION = "account_deletion_tombstones"
@@ -613,7 +619,7 @@ def admin_control_bulk_action_allowed(
 # Bumped alongside the static frontend cache-busting query string
 # (see admin-control-center.html / dashboard.html `?v=` suffix) whenever a
 # hotfix ships to the admin control center or dashboard assets.
-FRONTEND_ASSET_REVISION = "20260821-phase10-1"
+FRONTEND_ASSET_REVISION = "20260823-phase12"
 
 
 def _backend_release_identifier() -> str:
@@ -649,6 +655,7 @@ def admin_control_diagnostics(current_user: dict[str, Any]) -> dict[str, Any]:
         bootstrap_endpoint_status = "unavailable"
         search_endpoint_status = "unavailable"
 
+    operational = get_service_state(include_operational_details=True)
     return {
         "user_id": user_id or None,
         "role_key": role_key,
@@ -659,6 +666,12 @@ def admin_control_diagnostics(current_user: dict[str, Any]) -> dict[str, Any]:
         "search_endpoint_status": search_endpoint_status,
         "frontend_revision": FRONTEND_ASSET_REVISION,
         "backend_revision": _backend_release_identifier(),
+        "operational_ready": bool(operational.get("operational_ready")),
+        "operational_degraded_reasons": list(
+            operational.get("operational_degraded_reasons") or []
+        ),
+        "operational_components": dict(operational.get("components") or {}),
+        "operational_release": dict(operational.get("release") or {}),
     }
 
 
@@ -726,10 +739,12 @@ def ensure_finance_event_indexes() -> None:
     collection = db["finance_events"]
     if not hasattr(collection, "create_index"):
         return
-    try:
-        collection.create_index([("event_key", 1)], name="event_key_1", unique=True, sparse=True)
-    except Exception:
-        pass
+    collection.create_index(
+        [("event_key", 1)],
+        name="event_key_1",
+        unique=True,
+        sparse=True,
+    )
     try:
         collection.create_index([("occurred_at", -1)], name="occurred_at_-1")
     except Exception:
@@ -6758,6 +6773,605 @@ def super_admin_apply_account_permanent_deletion(
         },
     }
 
+
+
+def _orphan_identity_candidate_ids(
+    *,
+    known_user_id: str,
+    ownership_records: dict[str, list[dict[str, Any]]],
+) -> list[str]:
+    candidates: list[str] = []
+
+    def add(value: Any) -> None:
+        normalized = _normalize_object_id(value) or _normalize(value)
+        if normalized and normalized not in candidates:
+            candidates.append(normalized)
+
+    add(known_user_id)
+    for records in ownership_records.values():
+        for record in records:
+            for field in ("owner_user_id", "user_id"):
+                add(record.get(field))
+    return candidates
+
+
+def _orphan_identity_access_filter(
+    *,
+    candidate_user_ids: list[str],
+    identity_email: str,
+) -> dict[str, Any]:
+    filters: list[dict[str, Any]] = []
+    id_candidates: list[Any] = []
+    for user_id in candidate_user_ids:
+        for candidate in _project_id_candidates(user_id):
+            if candidate not in id_candidates:
+                id_candidates.append(candidate)
+    if id_candidates:
+        filters.append({"user_id": {"$in": id_candidates}})
+    if identity_email:
+        filters.extend(
+            [
+                {"email": identity_email},
+                {"user_email": identity_email},
+                {"officer_email": identity_email},
+            ]
+        )
+    return {"$or": filters or [{"_id": None}]}
+
+
+def super_admin_preview_orphan_identity_reconciliation(
+    *,
+    identity_email: str,
+    known_user_id: str = "",
+    reason_category: str = "",
+) -> dict[str, Any]:
+    normalized_email = _normalize_email(identity_email)
+    if not normalized_email or "@" not in normalized_email:
+        raise ValueError("A valid manually removed identity email is required.")
+
+    normalized_reason_category = _normalize(reason_category).lower()
+    if (
+        normalized_reason_category
+        and normalized_reason_category not in ORPHAN_RECONCILIATION_REASON_CODES
+    ):
+        raise ValueError("A supported manual-removal reconciliation category is required.")
+
+    db = _db()
+    live_user = db["users"].find_one(
+        {
+            "email": {
+                "$regex": f"^{re.escape(normalized_email)}$",
+                "$options": "i",
+            }
+        }
+    )
+    email_sha256 = hashlib.sha256(normalized_email.encode("utf-8")).hexdigest()
+    existing_evidence = db[ACCOUNT_DELETION_TOMBSTONES_COLLECTION].find_one(
+        {"original_email_sha256": email_sha256}
+    )
+    existing_evidence_type = _normalize(
+        (existing_evidence or {}).get("evidence_type")
+    ).lower()
+    existing_status = _normalize((existing_evidence or {}).get("status")).lower()
+    governed_deletion_already_recorded = bool(
+        existing_evidence
+        and existing_evidence_type != "post_hoc_manual_identity_reconciliation"
+    )
+    already_reconciled = bool(
+        existing_evidence
+        and existing_evidence_type == "post_hoc_manual_identity_reconciliation"
+        and existing_status == "completed"
+    )
+
+    provisional_user_id = (
+        _normalize_object_id(known_user_id)
+        or _normalize(known_user_id)
+        or f"orphan_{email_sha256[:24]}"
+    )
+    ownership_records = _all_owned_records(
+        user_id=provisional_user_id,
+        user_email=normalized_email,
+    )
+    candidate_user_ids = _orphan_identity_candidate_ids(
+        known_user_id=known_user_id,
+        ownership_records=ownership_records,
+    )
+    resolved_user_id = candidate_user_ids[0] if candidate_user_ids else provisional_user_id
+    ownership_records = _all_owned_records(
+        user_id=resolved_user_id,
+        user_email=normalized_email,
+    )
+    candidate_user_ids = _orphan_identity_candidate_ids(
+        known_user_id=resolved_user_id,
+        ownership_records=ownership_records,
+    )
+    live_identity_candidates: list[Any] = []
+    for candidate_user_id in candidate_user_ids:
+        for candidate in _project_id_candidates(candidate_user_id):
+            if candidate not in live_identity_candidates:
+                live_identity_candidates.append(candidate)
+    if live_identity_candidates:
+        live_user = live_user or db["users"].find_one(
+            {"_id": {"$in": live_identity_candidates}}
+        )
+    ownership = {
+        collection_name: len(records)
+        for collection_name, records in ownership_records.items()
+    }
+    active_subscription_ids = _active_maintenance_subscription_ids(
+        ownership_records=ownership_records
+    )
+    access_filter = _orphan_identity_access_filter(
+        candidate_user_ids=candidate_user_ids,
+        identity_email=normalized_email,
+    )
+    role_assignment_count = int(
+        db["user_role_assignments"].count_documents(access_filter)
+    )
+    permission_override_count = int(
+        db["user_permission_overrides"].count_documents(access_filter)
+    )
+
+    is_canonical_ceo = (
+        normalized_email == str(CEO_MASTER_ADMIN_EMAIL).strip().lower()
+    )
+    blocked = bool(
+        is_canonical_ceo
+        or live_user
+        or governed_deletion_already_recorded
+        or already_reconciled
+    )
+    warnings = [
+        (
+            "This operation records a post-hoc reconciliation. It does not claim "
+            "that the earlier manual database removal was a governed deletion."
+        ),
+        (
+            "Orders, billing history, corporate ownership, certificates, delivery "
+            "records, security evidence, and audit evidence remain preserved."
+        ),
+    ]
+    if live_user:
+        warnings.insert(
+            0,
+            "A live user document still exists. Use the governed account lifecycle or permanent-deletion workflow instead.",
+        )
+    if is_canonical_ceo:
+        warnings.insert(
+            0,
+            "The canonical CEO Master Administrator cannot be reconciled as a removed identity.",
+        )
+    if governed_deletion_already_recorded:
+        warnings.insert(
+            0,
+            "Governed deletion evidence already exists for this identity hash.",
+        )
+    if already_reconciled:
+        warnings.insert(0, "This manually removed identity has already been reconciled.")
+    if existing_evidence and existing_status != "completed" and not governed_deletion_already_recorded:
+        warnings.append(
+            "An incomplete post-hoc reconciliation exists and must be resumed with its original Kernel operation."
+        )
+    if active_subscription_ids:
+        warnings.append(
+            f"{len(active_subscription_ids)} active Stripe maintenance subscription(s) will be cancelled before linked access records are closed."
+        )
+
+    return {
+        "action": "orphan_identity_reconciliation",
+        "identity_email": normalized_email,
+        "identity_email_sha256": email_sha256,
+        "identity_document_present": bool(live_user),
+        "governed_deletion_observed": governed_deletion_already_recorded,
+        "already_reconciled": already_reconciled,
+        "resolved_user_id": resolved_user_id,
+        "candidate_user_ids": candidate_user_ids,
+        "reason_category": normalized_reason_category or None,
+        "ownership_dependencies": ownership,
+        "direct_access_dependencies": {
+            "user_role_assignments": role_assignment_count,
+            "user_permission_overrides": permission_override_count,
+        },
+        "external_service_impact": {
+            "stripe_subscriptions_cancelled_immediately": len(
+                active_subscription_ids
+            ),
+        },
+        "records_to_close": [
+            "role_assignments",
+            "permission_overrides",
+            "projects",
+            "families",
+            "households",
+            "entitlements",
+            "memberships",
+            "invites",
+            "intake_access",
+            "vault_access",
+            "uploads",
+            "impersonation_sessions",
+            "mint_jobs",
+            "mint_approvals",
+        ],
+        "records_preserved": [
+            "orders",
+            "billing_history",
+            "corporate_ownership_records",
+            "issued_certificates",
+            "delivery_records",
+            "security_evidence",
+            "audit_logs",
+            "continuity_evidence",
+        ],
+        "blocked": blocked,
+        "warnings": warnings,
+        "confirmation_phrase": ORPHAN_RECONCILIATION_CONFIRMATION_PHRASE,
+        "post_hoc": True,
+        "irreversible_source_event_already_occurred": True,
+    }
+
+
+def super_admin_apply_orphan_identity_reconciliation(
+    *,
+    identity_email: str,
+    known_user_id: str,
+    reason_category: str,
+    reason: str,
+    confirmation_email: str,
+    initial_confirmation: bool,
+    final_confirmation: str,
+    final_acknowledgement: bool,
+    continuity_operation_id: str = "",
+    actor: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if (
+        _normalize_email((actor or {}).get("email"))
+        != str(CEO_MASTER_ADMIN_EMAIL).strip().lower()
+    ):
+        raise PermissionError(
+            "Manual identity reconciliation is restricted to the canonical CEO Master Administrator."
+        )
+    normalized_email = _normalize_email(identity_email)
+    if not normalized_email or "@" not in normalized_email:
+        raise ValueError("A valid manually removed identity email is required.")
+    if _normalize_email(confirmation_email) != normalized_email:
+        raise ValueError(
+            "The confirmation email does not match the manually removed identity."
+        )
+    normalized_reason = _normalize(reason)
+    if len(normalized_reason) < 3:
+        raise ValueError("A reconciliation reason of at least 3 characters is required.")
+    normalized_reason_category = _normalize(reason_category).lower()
+    if normalized_reason_category not in ORPHAN_RECONCILIATION_REASON_CODES:
+        raise ValueError("A supported manual-removal reconciliation category is required.")
+    if initial_confirmation is not True:
+        raise ValueError(
+            "Confirm that the post-hoc reconciliation scope and preserved records were reviewed."
+        )
+    if (
+        _normalize(final_confirmation)
+        != ORPHAN_RECONCILIATION_CONFIRMATION_PHRASE
+    ):
+        raise ValueError(
+            f'Type "{ORPHAN_RECONCILIATION_CONFIRMATION_PHRASE}" to authorize reconciliation.'
+        )
+    if final_acknowledgement is not True:
+        raise ValueError("The final manual-removal reconciliation acknowledgement is required.")
+
+    preview = super_admin_preview_orphan_identity_reconciliation(
+        identity_email=normalized_email,
+        known_user_id=known_user_id,
+        reason_category=normalized_reason_category,
+    )
+    if preview.get("blocked"):
+        raise ValueError("Manual identity reconciliation is blocked for this identity.")
+
+    db = _db()
+    email_sha256 = _normalize(preview.get("identity_email_sha256"))
+    resolved_user_id = _normalize(preview.get("resolved_user_id"))
+    candidate_user_ids = [
+        _normalize(value)
+        for value in list(preview.get("candidate_user_ids") or [])
+        if _normalize(value)
+    ]
+    if resolved_user_id and resolved_user_id not in candidate_user_ids:
+        candidate_user_ids.insert(0, resolved_user_id)
+    if not candidate_user_ids:
+        candidate_user_ids = [f"orphan_{email_sha256[:24]}"]
+        resolved_user_id = candidate_user_ids[0]
+
+    live_identity_filters: list[dict[str, Any]] = [
+        {
+            "email": {
+                "$regex": f"^{re.escape(normalized_email)}$",
+                "$options": "i",
+            }
+        }
+    ]
+    live_identity_candidates: list[Any] = []
+    for candidate_user_id in candidate_user_ids:
+        for candidate in _project_id_candidates(candidate_user_id):
+            if candidate not in live_identity_candidates:
+                live_identity_candidates.append(candidate)
+    if live_identity_candidates:
+        live_identity_filters.append({"_id": {"$in": live_identity_candidates}})
+    if db["users"].find_one({"$or": live_identity_filters}):
+        raise RuntimeError(
+            "A live user document appeared before reconciliation could start."
+        )
+
+    tombstones = db[ACCOUNT_DELETION_TOMBSTONES_COLLECTION]
+    existing = tombstones.find_one({"original_email_sha256": email_sha256})
+    if existing and _normalize(existing.get("evidence_type")).lower() not in {
+        "",
+        "post_hoc_manual_identity_reconciliation",
+    }:
+        raise RuntimeError("Existing governed deletion evidence conflicts with reconciliation.")
+
+    reason_sha256 = hashlib.sha256(normalized_reason.encode("utf-8")).hexdigest()
+    operation_id_value = _normalize(continuity_operation_id) or None
+    if existing:
+        existing_reason_hash = _normalize(existing.get("reason_sha256"))
+        if existing_reason_hash and not hmac.compare_digest(
+            existing_reason_hash,
+            reason_sha256,
+        ):
+            raise ValueError("Retry the reconciliation with its original reason.")
+        existing_operation_id = _normalize(existing.get("continuity_operation_id"))
+        if (
+            existing_operation_id
+            and operation_id_value
+            and existing_operation_id != operation_id_value
+        ):
+            raise ValueError(
+                "The reconciliation evidence is bound to a different Continuity operation."
+            )
+        reconciliation_id = _normalize(existing.get("reconciliation_id"))
+    else:
+        reconciliation_id = ""
+    reconciliation_id = reconciliation_id or f"orphanrec_{secrets.token_hex(16)}"
+    now_value = _now()
+    actor_id = (
+        _normalize((actor or {}).get("_id") or (actor or {}).get("id")) or None
+    )
+    records_preserved = list(preview.get("records_preserved") or [])
+
+    tombstones.update_one(
+        {"original_email_sha256": email_sha256},
+        {
+            "$set": {
+                "user_id": resolved_user_id,
+                "deletion_id": reconciliation_id,
+                "reconciliation_id": reconciliation_id,
+                "continuity_operation_id": operation_id_value,
+                "original_email_sha256": email_sha256,
+                "status": "started",
+                "phase": "planned",
+                "evidence_type": "post_hoc_manual_identity_reconciliation",
+                "deletion_origin": "manual_external_to_kernel",
+                "governed_deletion_observed": False,
+                "identity_document_present": False,
+                "irreversible": True,
+                "restorable": False,
+                "reason_category": normalized_reason_category,
+                "reason_sha256": reason_sha256,
+                "candidate_user_ids": candidate_user_ids,
+                "requested_by": _actor_snapshot(actor),
+                "records_preserved": records_preserved,
+                "started_at": (existing or {}).get("started_at") or now_value,
+                "updated_at": now_value,
+            },
+            "$setOnInsert": {"created_at": now_value},
+        },
+        upsert=True,
+    )
+
+    ownership_records = _all_owned_records(
+        user_id=resolved_user_id,
+        user_email=normalized_email,
+    )
+    active_subscription_ids = _active_maintenance_subscription_ids(
+        ownership_records=ownership_records
+    )
+    subscription_results: list[dict[str, Any]] = []
+    try:
+        for subscription_id in active_subscription_ids:
+            subscription_results.append(
+                stripe_admin_operations_service.cancel_subscription(
+                    actor or {},
+                    subscription_id=subscription_id,
+                    at_period_end=False,
+                    confirm=True,
+                    reason=f"Post-hoc manual identity reconciliation: {normalized_reason}",
+                    idempotency_key=(
+                        f"{operation_id_value or reconciliation_id}:{subscription_id}"
+                    ),
+                )
+            )
+    except Exception as exc:
+        tombstones.update_one(
+            {
+                "original_email_sha256": email_sha256,
+                "reconciliation_id": reconciliation_id,
+            },
+            {
+                "$set": {
+                    "status": "failed_retryable",
+                    "phase": "subscription_cancellation",
+                    "last_error_type": type(exc).__name__,
+                    "updated_at": _now(),
+                }
+            },
+        )
+        raise
+
+    access_filter = _orphan_identity_access_filter(
+        candidate_user_ids=candidate_user_ids,
+        identity_email=normalized_email,
+    )
+    role_result = db["user_role_assignments"].update_many(
+        {
+            **access_filter,
+            "status": {"$nin": ["revoked", "deleted"]},
+        },
+        {
+            "$set": {
+                "status": "revoked",
+                "revoked_at": now_value,
+                "reconciliation_id": reconciliation_id,
+                "updated_at": now_value,
+            }
+        },
+    )
+    permission_result = db["user_permission_overrides"].update_many(
+        {
+            **access_filter,
+            "status": {"$nin": ["revoked", "deleted"]},
+        },
+        {
+            "$set": {
+                "status": "revoked",
+                "revoked_at": now_value,
+                "reconciliation_id": reconciliation_id,
+                "updated_at": now_value,
+            }
+        },
+    )
+
+    deleted_email = f"reconciled-{email_sha256[:20]}@deleted.tomboflight.invalid"
+    closure_results: dict[str, int] = {}
+    for candidate_user_id in candidate_user_ids:
+        partial_results = _permanently_close_owned_account_records(
+            user_id=candidate_user_id,
+            original_email=normalized_email,
+            deleted_email=deleted_email,
+            deletion_id=reconciliation_id,
+            reason_category=normalized_reason_category,
+            ownership_records=ownership_records,
+            actor=actor,
+            now_value=now_value,
+        )
+        for collection_name, count in partial_results.items():
+            closure_results[collection_name] = (
+                int(closure_results.get(collection_name) or 0) + int(count or 0)
+            )
+    closure_results["user_role_assignments"] = int(role_result.modified_count)
+    closure_results["user_permission_overrides"] = int(
+        permission_result.modified_count
+    )
+    closure_results["stripe_subscriptions_cancelled"] = len(subscription_results)
+
+    tombstones.update_one(
+        {
+            "original_email_sha256": email_sha256,
+            "reconciliation_id": reconciliation_id,
+        },
+        {
+            "$set": {
+                "status": "audit_pending",
+                "phase": "records_closed",
+                "records_closed": closure_results,
+                "updated_at": _now(),
+            },
+            "$unset": {"last_error_type": ""},
+        },
+    )
+
+    audit_event_created = _write_admin_action_audit(
+        actor=actor,
+        action="super_admin.orphan_identity_reconciled",
+        target_type="removed_identity",
+        target_id=resolved_user_id,
+        before={
+            "identity_document_present": False,
+            "governed_deletion_observed": False,
+            "manual_removal_reconciled": False,
+        },
+        after={
+            "identity_document_present": False,
+            "governed_deletion_observed": False,
+            "manual_removal_reconciled": True,
+            "linked_access_closed": True,
+        },
+        context={
+            "surface": "admin_control_center.orphan_identity_reconciliation",
+            "reconciliation_id": reconciliation_id,
+            "identity_email_sha256": email_sha256,
+            "reason_category": normalized_reason_category,
+            "records_closed": closure_results,
+            "records_preserved": records_preserved,
+        },
+    )
+    if not audit_event_created:
+        tombstones.update_one(
+            {
+                "original_email_sha256": email_sha256,
+                "reconciliation_id": reconciliation_id,
+            },
+            {
+                "$set": {
+                    "status": "audit_pending",
+                    "phase": "records_closed",
+                    "audit_event_created": False,
+                    "updated_at": _now(),
+                }
+            },
+        )
+        raise RuntimeError(
+            "Linked access was closed, but reconciliation audit evidence is pending. Retry the same Kernel operation."
+        )
+
+    completed_at = _now()
+    finalize_result = tombstones.update_one(
+        {
+            "original_email_sha256": email_sha256,
+            "reconciliation_id": reconciliation_id,
+        },
+        {
+            "$set": {
+                "status": "completed",
+                "phase": "completed",
+                "audit_event_created": True,
+                "records_closed": closure_results,
+                "completed_at": completed_at,
+                "updated_at": completed_at,
+            }
+        },
+    )
+    if int(getattr(finalize_result, "matched_count", 0)) != 1:
+        raise RuntimeError(
+            "Reconciliation completed, but its MongoDB evidence record could not be finalized."
+        )
+
+    return {
+        **preview,
+        "applied": True,
+        "post_hoc": True,
+        "manual_removal_reconciled": True,
+        "governed_deletion_observed": False,
+        "audit_event_created": True,
+        "failure_count": 0,
+        "reconciliation_receipt": {
+            "reconciliation_id": reconciliation_id,
+            "continuity_operation_id": operation_id_value,
+            "resolved_user_id": resolved_user_id,
+            "identity_email_sha256": email_sha256,
+            "status": "manual_removal_reconciled",
+            "completed_at": _serialize_datetime(completed_at),
+            "completed_by": actor_id,
+            "reason_category": normalized_reason_category,
+            "identity_document_present": False,
+            "governed_deletion_observed": False,
+            "records_closed": closure_results,
+            "records_preserved": records_preserved,
+            "mongo_evidence": {
+                "tombstone_collection": ACCOUNT_DELETION_TOMBSTONES_COLLECTION,
+                "audit_collection": "audit_logs",
+                "continuity_operation_collection": "continuity_operations",
+                "continuity_event_collection": "continuity_events",
+            },
+        },
+    }
 
 def super_admin_transfer_project_ownership(
     *,

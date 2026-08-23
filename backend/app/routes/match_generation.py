@@ -38,7 +38,7 @@ def _validate_family_id_if_present(family_id: Optional[str]) -> None:
 @router.post("/scan")
 def run_match_scan(
     family_id: Optional[str] = Query(default=None),
-    current_user: dict = Depends(require_permission("admin.access")),
+    current_user: dict = Depends(require_permission("admin.control.write")),
 ):
     _validate_family_id_if_present(family_id)
     return scan_database_for_matches(family_id=family_id)
@@ -48,7 +48,7 @@ def run_match_scan(
 def preview_match_scan(
     family_id: Optional[str] = Query(default=None),
     limit: int = Query(default=25, ge=1, le=100),
-    current_user: dict = Depends(require_permission("admin.access")),
+    current_user: dict = Depends(require_permission("admin.control.view")),
 ):
     _validate_family_id_if_present(family_id)
     return preview_matches(family_id=family_id, limit=limit)

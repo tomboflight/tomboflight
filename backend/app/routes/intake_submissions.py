@@ -92,7 +92,7 @@ def my_submission_list(
 def admin_list_submissions(
     limit: int = Query(default=50, ge=1, le=200),
     status_filter: Optional[str] = Query(default=None, alias="status"),
-    _admin_user: dict = Depends(require_permission("admin.access")),
+    _admin_user: dict = Depends(require_permission("admin.intake.review")),
 ):
     return list_all(limit=limit, status=status_filter)
 
@@ -118,7 +118,7 @@ def get_submission(
 def admin_update_submission_status(
     submission_id: str,
     payload: IntakeSubmissionStatusUpdate,
-    admin_user: dict = Depends(require_permission("admin.access")),
+    admin_user: dict = Depends(require_permission("admin.intake.write")),
 ):
     try:
         return update_status(

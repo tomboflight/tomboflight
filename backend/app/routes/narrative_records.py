@@ -17,7 +17,7 @@ router = APIRouter(prefix="/narrative-records", tags=["Narrative Records"])
 
 
 @router.get("/", response_model=list[NarrativeRecordResponse])
-def get_narrative_records(current_user: dict[str, Any] = Depends(require_permission("admin.access"))):
+def get_narrative_records(current_user: dict[str, Any] = Depends(require_permission("admin.control.view"))):
     records = list_narrative_records()
     return [build_narrative_record_response(record) for record in records]
 
@@ -25,7 +25,7 @@ def get_narrative_records(current_user: dict[str, Any] = Depends(require_permiss
 @router.post("/", response_model=NarrativeRecordResponse)
 def create_narrative_record_route(
     payload: NarrativeRecordCreate,
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.write")),
 ):
     record = create_narrative_record(payload)
     return build_narrative_record_response(record)

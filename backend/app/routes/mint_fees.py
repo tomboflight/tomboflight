@@ -40,7 +40,7 @@ def get_mint_fees(project_id: str, current_user: dict[str, Any] = Depends(get_cu
 def quote_project_mint_fees(
     project_id: str,
     payload: MintFeeQuotePayload,
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.mint")),
 ):
     try:
         return quote_mint_fee(project_id, current_user, payload.model_dump())
@@ -52,7 +52,7 @@ def quote_project_mint_fees(
 def mark_project_mint_fees_paid(
     project_id: str,
     payload: MintFeeMarkPaidPayload,
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.mint")),
 ):
     try:
         return mark_mint_fee_paid(project_id, current_user, payload.mint_fee_notes)

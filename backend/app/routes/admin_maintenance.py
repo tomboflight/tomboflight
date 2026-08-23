@@ -30,7 +30,7 @@ router = APIRouter(
     response_model=DropLegacyIndexesResponse,
 )
 def run_drop_legacy_indexes(
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.write")),
 ):
     del current_user
     try:
@@ -53,7 +53,7 @@ def run_drop_legacy_indexes(
 )
 def run_backfill_project_members(
     limit: int = Query(default=500, ge=1, le=5000),
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.write")),
 ):
     del current_user
     try:
@@ -78,7 +78,7 @@ def run_backfill_project_members(
 )
 def run_backfill_workspace_anchors(
     limit: int = Query(default=100, ge=1, le=1000),
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.write")),
 ):
     del current_user
     db = get_database()

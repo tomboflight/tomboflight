@@ -14,7 +14,7 @@ router = APIRouter(prefix="/households", tags=["Households"])
 
 
 @router.get("/", response_model=list[HouseholdResponse])
-def get_households(current_user: dict[str, Any] = Depends(require_permission("admin.access"))):
+def get_households(current_user: dict[str, Any] = Depends(require_permission("admin.control.view"))):
     households = list_households()
     return [build_household_response(household) for household in households]
 
@@ -22,7 +22,7 @@ def get_households(current_user: dict[str, Any] = Depends(require_permission("ad
 @router.post("/", response_model=HouseholdResponse)
 def create_household_route(
     payload: HouseholdCreate,
-    current_user: dict[str, Any] = Depends(require_permission("admin.access")),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.write")),
 ):
     household = create_household(payload)
     return build_household_response(household)

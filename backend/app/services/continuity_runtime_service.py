@@ -18,6 +18,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from importlib import import_module
+import hashlib
 import os
 from pathlib import Path
 import sys
@@ -39,7 +40,7 @@ from app.services.auth_service import admin_issue_password_reset
 from app.services.audit_log_service import write_audit_log
 
 
-RUNTIME_VERSION = "11.0.0"
+RUNTIME_VERSION = "12.0.0"
 OPERATIONS_COLLECTION = "continuity_operations"
 EVENTS_COLLECTION = "continuity_events"
 EXECUTION_KILL_SWITCH = "CONTINUITY_EXECUTION_KILL_SWITCH"
@@ -96,6 +97,12 @@ SUPER_ADMIN_ACTION_SPECS: dict[str, ActionSpec] = {
     "officer_permissions": ActionSpec("admin_repair_safety", "high", "officer", ("officer_email",)),
     "account_lifecycle": ActionSpec("admin_repair_safety", "high", "user", ("user_id",)),
     "account_permanent_delete": ActionSpec("admin_repair_safety", "high", "user", ("user_id",)),
+    "orphan_identity_reconciliation": ActionSpec(
+        "admin_repair_safety",
+        "high",
+        "removed_identity",
+        ("identity_email",),
+    ),
     "case_repair": ActionSpec("admin_repair_safety", "high", "customer_case", ("case_id",)),
     "legacy_admin_remediation": ActionSpec(
         "admin_repair_safety", "high", "user", ("user_id",)
@@ -286,10 +293,20 @@ def _assert_action_allowed_for_actor(spec: ActionSpec, actor: dict[str, Any] | N
 
 
 def _assert_action_actor_scope(action: str, actor: dict[str, Any] | None) -> None:
-    if _normalize(action) != "account_permanent_delete":
+    normalized_action = _normalize(action)
+    if normalized_action not in {
+        "account_permanent_delete",
+        "orphan_identity_reconciliation",
+    }:
         return
     if _actor_email(actor) != str(CEO_MASTER_ADMIN_EMAIL).strip().lower():
-        raise PermissionError("Permanent account deletion is restricted to the canonical CEO Master Administrator.")
+        if normalized_action == "account_permanent_delete":
+            raise PermissionError(
+                "Permanent account deletion is restricted to the canonical CEO Master Administrator."
+            )
+        raise PermissionError(
+            "Manual identity reconciliation is restricted to the canonical CEO Master Administrator."
+        )
 
 
 def _require_text(value: Any, field: str, *, minimum: int = 1) -> str:
@@ -310,12 +327,34 @@ def _require_permanent_deletion_confirmations(parameters: dict[str, Any]) -> Non
         raise ValueError("The final permanent-closure acknowledgement is required.")
 
 
+def _require_orphan_reconciliation_confirmations(
+    parameters: dict[str, Any],
+) -> None:
+    if parameters.get("initial_confirmation") is not True:
+        raise ValueError(
+            "The post-hoc manual-removal reconciliation confirmation is required."
+        )
+    if (
+        _normalize(parameters.get("final_confirmation"))
+        != admin_control_service.ORPHAN_RECONCILIATION_CONFIRMATION_PHRASE
+    ):
+        raise ValueError(
+            f'Type "{admin_control_service.ORPHAN_RECONCILIATION_CONFIRMATION_PHRASE}" '
+            "to authorize reconciliation."
+        )
+    if parameters.get("final_acknowledgement") is not True:
+        raise ValueError(
+            "The final manual-removal reconciliation acknowledgement is required."
+        )
+
+
 def _target_id(spec: ActionSpec, action: str, target: dict[str, Any]) -> str:
     for field in (
         "case_id",
         "project_id",
         "order_id",
         "user_id",
+        "identity_email",
         "officer_email",
         "customer_email",
         "session_id",
@@ -580,6 +619,27 @@ def _snapshot_for_action(action: str, target: dict[str, Any]) -> dict[str, Any]:
         except ValueError:
             return {"target": target, "snapshot_status": "project_not_resolved"}
     db = get_database()
+    identity_email = _normalize(target.get("identity_email")).lower()
+    if identity_email:
+        email_sha256 = hashlib.sha256(identity_email.encode("utf-8")).hexdigest()
+        return {
+            "identity_document_present": bool(
+                db["users"].find_one({"email": identity_email})
+            ),
+            "reconciliation_evidence": _safe_document(
+                db[admin_control_service.ACCOUNT_DELETION_TOMBSTONES_COLLECTION].find_one(
+                    {"original_email_sha256": email_sha256}
+                ),
+                (
+                    "reconciliation_id",
+                    "status",
+                    "phase",
+                    "evidence_type",
+                    "governed_deletion_observed",
+                    "completed_at",
+                ),
+            ),
+        }
     user_id = _normalize(target.get("user_id"))
     customer_email = _normalize(target.get("customer_email")).lower()
     if user_id:
@@ -673,6 +733,12 @@ def _preview_action(action: str, target: dict[str, Any], parameters: dict[str, A
             user_id=_normalize(target.get("user_id")),
             reason_category=_normalize(parameters.get("reason_category")),
         )
+    if action == "orphan_identity_reconciliation":
+        return admin_control_service.super_admin_preview_orphan_identity_reconciliation(
+            identity_email=_normalize(target.get("identity_email")),
+            known_user_id=_normalize(parameters.get("known_user_id")),
+            reason_category=_normalize(parameters.get("reason_category")),
+        )
     if action == "customer_account_create":
         return admin_control_service.super_admin_preview_customer_create(
             payload=dict(parameters.get("user_payload") or parameters)
@@ -750,29 +816,59 @@ def _operation_audit_context(operation: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _evidence_attempt(operation: dict[str, Any]) -> int:
+    return int(operation.get("execution_retry_count") or 0)
+
+
 def _write_audit(
-    *, operation: dict[str, Any], actor: dict[str, Any] | None, action: str, result: str, before: Any = None, after: Any = None
+    *,
+    operation: dict[str, Any],
+    actor: dict[str, Any] | None,
+    action: str,
+    result: str,
+    before: Any = None,
+    after: Any = None,
 ) -> None:
+    operation_id = _normalize(operation.get("operation_id"))
+    audit_idempotency_key = (
+        f"continuity:{operation_id}:{action}:{_evidence_attempt(operation)}"
+    )
     write_audit_log(
         actor_user_id=_actor_id(actor) or None,
         actor_email=_actor_email(actor) or None,
         actor_name=_actor_name(actor) or None,
         action=f"continuity_runtime.{action}",
         target_type=_normalize(operation.get("target_type")) or "continuity_operation",
-        target_id=_normalize(operation.get("target_id")) or _normalize(operation.get("operation_id")),
+        target_id=_normalize(operation.get("target_id")) or operation_id,
         before=_serialize(before) if isinstance(before, dict) else {},
         after=_serialize(after) if isinstance(after, dict) else {},
         context=_operation_audit_context(operation),
         result=result,
+        idempotency_key=audit_idempotency_key,
     )
 
 
 def _record_event(
-    operation: dict[str, Any], *, event_type: str, actor: dict[str, Any] | None, details: dict[str, Any] | None = None
+    operation: dict[str, Any],
+    *,
+    event_type: str,
+    actor: dict[str, Any] | None,
+    details: dict[str, Any] | None = None,
 ) -> None:
+    operation_id = _normalize(operation.get("operation_id"))
+    event_identity = (
+        f"{operation_id}:{event_type}:{_evidence_attempt(operation)}"
+    )
+    event_id = (
+        "ckevt_"
+        + hashlib.sha256(event_identity.encode("utf-8")).hexdigest()[:32]
+    )
+    events = _events_collection()
+    if events.find_one({"event_id": event_id}) is not None:
+        return
     event = {
-        "event_id": f"ckevt_{uuid4().hex}",
-        "operation_id": operation.get("operation_id"),
+        "event_id": event_id,
+        "operation_id": operation_id,
         "event_type": event_type,
         "state": operation.get("state"),
         "target_type": operation.get("target_type"),
@@ -782,7 +878,74 @@ def _record_event(
         "details": _serialize(details or {}),
         "created_at": _now(),
     }
-    _events_collection().insert_one(event)
+    try:
+        events.insert_one(event)
+    except DuplicateKeyError:
+        # A prior attempt committed the same deterministic event but failed
+        # before the operation checkpoint could be updated.
+        return
+
+
+def _record_stage_evidence(
+    operation: dict[str, Any],
+    *,
+    stage: str,
+    event_type: str,
+    actor: dict[str, Any] | None,
+    audit_action: str,
+    audit_result: str,
+    details: dict[str, Any] | None = None,
+    before: Any = None,
+    after: Any = None,
+) -> dict[str, Any]:
+    status_field = f"{stage}_evidence_status"
+    errors_field = f"{stage}_evidence_errors"
+    if _normalize(operation.get(status_field)) == "complete":
+        return operation
+
+    errors: list[str] = []
+    try:
+        _record_event(
+            operation,
+            event_type=event_type,
+            actor=actor,
+            details=details,
+        )
+    except Exception as exc:
+        errors.append(
+            f"continuity_event:{_normalize(exc) or exc.__class__.__name__}"
+        )
+    try:
+        _write_audit(
+            operation=operation,
+            actor=actor,
+            action=audit_action,
+            result=audit_result,
+            before=before,
+            after=after,
+        )
+    except Exception as exc:
+        errors.append(f"audit_log:{_normalize(exc) or exc.__class__.__name__}")
+
+    status_value = "incomplete" if errors else "complete"
+    _operations_collection().update_one(
+        {"operation_id": operation.get("operation_id")},
+        {
+            "$set": {
+                status_field: status_value,
+                errors_field: errors,
+                "updated_at": _now(),
+            }
+        },
+    )
+    updated = _get_operation_document(_normalize(operation.get("operation_id")))
+    if errors:
+        raise RuntimeError(
+            f"Continuity {stage} evidence is incomplete; retry the same "
+            "idempotent operation to resume evidence recording: "
+            + ", ".join(errors)
+        )
+    return updated
 
 
 def _serialize_operation(document: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -873,6 +1036,8 @@ def request_operation(
     )
     if normalized_action == "account_permanent_delete":
         _require_permanent_deletion_confirmations(clean_parameters)
+    if normalized_action == "orphan_identity_reconciliation":
+        _require_orphan_reconciliation_confirmations(clean_parameters)
 
     existing = _operations_collection().find_one({"idempotency_key": idempotency_value})
     if existing is not None:
@@ -883,6 +1048,17 @@ def request_operation(
             parameters=clean_parameters,
         ):
             raise ValueError("Idempotency key is already bound to a different Continuity operation.")
+        existing = _record_stage_evidence(
+            existing,
+            stage="request",
+            event_type="operation_requested",
+            actor=actor,
+            audit_action="operation_requested",
+            audit_result="success",
+            details={"reason": existing.get("reason")},
+            before=existing.get("before_snapshot"),
+            after=existing.get("proposed_after_snapshot"),
+        )
         return _serialize_operation(existing) or {}
 
     before_snapshot = _snapshot_for_action(normalized_action, clean_target)
@@ -906,6 +1082,14 @@ def request_operation(
             "restoration_prohibited": True,
             "evidence_only": True,
         }
+    if normalized_action == "orphan_identity_reconciliation":
+        rollback_plan = {
+            "strategy": "post_hoc_manual_removal_evidence_and_access_closure",
+            "before_snapshot_ref": f"operation:{operation_id}:before_snapshot",
+            "automatic": False,
+            "restoration_prohibited": True,
+            "evidence_only": True,
+        }
     operation = {
         "operation_id": operation_id,
         "evidence_packet_id": f"ckevidence_{uuid4().hex}",
@@ -921,6 +1105,8 @@ def request_operation(
         "reason": reason_value,
         "idempotency_key": idempotency_value,
         "state": "review_requested",
+        "request_evidence_status": "pending",
+        "request_evidence_errors": [],
         "requested_by": actor_snapshot,
         "approved_by": None,
         "executed_by": None,
@@ -953,19 +1139,32 @@ def request_operation(
                 parameters=clean_parameters,
             ):
                 raise ValueError("Idempotency key is already bound to a different Continuity operation.")
+            existing = _record_stage_evidence(
+                existing,
+                stage="request",
+                event_type="operation_requested",
+                actor=actor,
+                audit_action="operation_requested",
+                audit_result="success",
+                details={"reason": existing.get("reason")},
+                before=existing.get("before_snapshot"),
+                after=existing.get("proposed_after_snapshot"),
+            )
             return _serialize_operation(existing) or {}
         raise
 
-    _record_event(operation, event_type="operation_requested", actor=actor, details={"reason": reason_value})
-    _write_audit(
-        operation=operation,
+    operation = _record_stage_evidence(
+        operation,
+        stage="request",
+        event_type="operation_requested",
         actor=actor,
-        action="operation_requested",
-        result="success",
+        audit_action="operation_requested",
+        audit_result="success",
+        details={"reason": reason_value},
         before=before_snapshot,
         after=proposed_after_snapshot,
     )
-    return _serialize_operation(_get_operation_document(operation_id)) or {}
+    return _serialize_operation(operation) or {}
 
 
 def _structured_override(operation: dict[str, Any], actor: dict[str, Any], reason: str) -> dict[str, Any]:
@@ -999,6 +1198,15 @@ def approve_operation(
 ) -> dict[str, Any]:
     operation = _get_operation_document(operation_id)
     if operation.get("state") in {"approved_for_apply", "apply_scheduled", "apply_executed", "audit_closed"}:
+        operation = _record_stage_evidence(
+            operation,
+            stage="approval",
+            event_type="operation_approved",
+            actor=actor,
+            audit_action="operation_approved",
+            audit_result="success",
+            details={"approval_reason": operation.get("approval_reason")},
+        )
         return _serialize_operation(operation) or {}
     if operation.get("state") != "review_requested":
         raise ValueError("Operation must be in review_requested state before approval.")
@@ -1044,16 +1252,34 @@ def approve_operation(
             "approval_reason": reason_value,
             "approved_at": approved_at,
             "structured_override": structured_override,
+            "approval_evidence_status": "pending",
+            "approval_evidence_errors": [],
         },
     )
-    _record_event(operation, event_type="operation_approved", actor=actor, details={"approval_reason": reason_value})
-    _write_audit(operation=operation, actor=actor, action="operation_approved", result="success")
+    operation = _record_stage_evidence(
+        operation,
+        stage="approval",
+        event_type="operation_approved",
+        actor=actor,
+        audit_action="operation_approved",
+        audit_result="success",
+        details={"approval_reason": reason_value},
+    )
     return _serialize_operation(operation) or {}
 
 
 def reject_operation(operation_id: str, *, rejection_reason: str, actor: dict[str, Any] | None) -> dict[str, Any]:
     operation = _get_operation_document(operation_id)
     if operation.get("state") == "rejected":
+        operation = _record_stage_evidence(
+            operation,
+            stage="rejection",
+            event_type="operation_rejected",
+            actor=actor,
+            audit_action="operation_rejected",
+            audit_result="success",
+            details={"rejection_reason": operation.get("rejection_reason")},
+        )
         return _serialize_operation(operation) or {}
     if operation.get("state") not in {"review_requested", "officer_reviewing"}:
         raise ValueError("Only an operation under review can be rejected.")
@@ -1079,10 +1305,22 @@ def reject_operation(operation_id: str, *, rejection_reason: str, actor: dict[st
         actor=actor,
         action="reject_operation",
         reason_codes=["OFFICER_REJECTED"],
-        extra_set={"rejection_reason": reason, "rejected_at": _now()},
+        extra_set={
+            "rejection_reason": reason,
+            "rejected_at": _now(),
+            "rejection_evidence_status": "pending",
+            "rejection_evidence_errors": [],
+        },
     )
-    _record_event(operation, event_type="operation_rejected", actor=actor, details={"rejection_reason": reason})
-    _write_audit(operation=operation, actor=actor, action="operation_rejected", result="success")
+    operation = _record_stage_evidence(
+        operation,
+        stage="rejection",
+        event_type="operation_rejected",
+        actor=actor,
+        audit_action="operation_rejected",
+        audit_result="success",
+        details={"rejection_reason": reason},
+    )
     return _serialize_operation(operation) or {}
 
 
@@ -1467,6 +1705,19 @@ def _invoke_action(
             continuity_operation_id=_normalize(parameters.get("continuity_operation_id")),
             actor=actor,
         )
+    if action == "orphan_identity_reconciliation":
+        return admin_control_service.super_admin_apply_orphan_identity_reconciliation(
+            identity_email=_normalize(target.get("identity_email")),
+            known_user_id=_normalize(parameters.get("known_user_id")),
+            reason_category=_normalize(parameters.get("reason_category")),
+            reason=reason,
+            confirmation_email=_normalize(parameters.get("confirmation_email")),
+            initial_confirmation=parameters.get("initial_confirmation") is True,
+            final_confirmation=_normalize(parameters.get("final_confirmation")),
+            final_acknowledgement=parameters.get("final_acknowledgement") is True,
+            continuity_operation_id=_normalize(parameters.get("continuity_operation_id")),
+            actor=actor,
+        )
     if action == "case_repair":
         payload = dict(parameters.get("repair_payload") or parameters)
         payload["reason"] = reason
@@ -1483,13 +1734,40 @@ def execute_operation(operation_id: str, *, actor: dict[str, Any] | None) -> dic
     if not execution_enabled():
         raise RuntimeError("Continuity execution is disabled by the emergency kill switch.")
     operation = _get_operation_document(operation_id)
-    if operation.get("state") in {"apply_executed", "audit_closed"}:
+    if operation.get("state") == "apply_executed":
+        operation = _record_post_execution_evidence(
+            operation,
+            actor=actor,
+            execution_result=dict(operation.get("execution_result") or {}),
+            after_snapshot=dict(operation.get("after_snapshot") or {}),
+            execution_outcome=_normalize(operation.get("execution_outcome")) or "success",
+            failure_count=int(operation.get("execution_failure_count") or 0),
+        )
+        return _serialize_operation(operation) or {}
+    if operation.get("state") == "audit_closed":
+        operation = _record_stage_evidence(
+            operation,
+            stage="closure",
+            event_type="operation_audit_closed",
+            actor=actor,
+            audit_action="operation_audit_closed",
+            audit_result="success",
+        )
         return _serialize_operation(operation) or {}
     action = _normalize(operation.get("action"))
     _assert_action_actor_scope(action, actor)
     spec = ACTION_SPECS[action]
     _assert_action_allowed_for_actor(spec, actor)
     if operation.get("state") == "apply_failed":
+        operation = _record_stage_evidence(
+            operation,
+            stage="failure",
+            event_type="operation_failed",
+            actor=actor,
+            audit_action="operation_failed",
+            audit_result="failed",
+            details={"error": operation.get("execution_error")},
+        )
         operation = _transition(
             operation_id,
             expected_state="apply_failed",
@@ -1511,29 +1789,65 @@ def execute_operation(operation_id: str, *, actor: dict[str, Any] | None) -> dic
             details={"previous_state": "apply_failed"},
         )
     elif operation.get("state") == "apply_scheduled":
-        started_at = operation.get("execution_started_at")
-        if isinstance(started_at, str):
-            try:
-                started_at = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
-            except Exception:
-                started_at = None
-        stale_before = _now() - timedelta(minutes=STALE_EXECUTION_RETRY_MINUTES)
-        if not isinstance(started_at, datetime) or started_at > stale_before:
-            raise ValueError("Operation execution is already in progress and is not stale.")
-        operation = _transition(
-            operation_id,
-            expected_state="apply_scheduled",
-            next_state="approved_for_apply",
-            actor=actor,
-            action="recover_stale_execution",
-            reason_codes=["STALE_EXECUTION_RECOVERY"],
-            extra_set={
-                "execution_retry_count": int(operation.get("execution_retry_count") or 0) + 1,
-                "execution_retry_requested_at": _now(),
-            },
-        )
+        action_started_at = operation.get("business_action_started_at")
+        if action_started_at is None:
+            operation = _transition(
+                operation_id,
+                expected_state="apply_scheduled",
+                next_state="approved_for_apply",
+                actor=actor,
+                action="recover_pre_execution_evidence",
+                reason_codes=["PRE_EXECUTION_EVIDENCE_RECOVERY"],
+                extra_set={
+                    "execution_retry_count": int(operation.get("execution_retry_count") or 0) + 1,
+                    "execution_retry_requested_at": _now(),
+                },
+            )
+        else:
+            started_at = operation.get("execution_started_at")
+            if isinstance(started_at, str):
+                try:
+                    started_at = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
+                except Exception:
+                    started_at = None
+            stale_before = _now() - timedelta(minutes=STALE_EXECUTION_RETRY_MINUTES)
+            if not isinstance(started_at, datetime) or started_at > stale_before:
+                raise ValueError("Operation execution is already in progress and is not stale.")
+            operation = _transition(
+                operation_id,
+                expected_state="apply_scheduled",
+                next_state="approved_for_apply",
+                actor=actor,
+                action="recover_stale_execution",
+                reason_codes=["STALE_EXECUTION_RECOVERY"],
+                extra_set={
+                    "execution_retry_count": int(operation.get("execution_retry_count") or 0) + 1,
+                    "execution_retry_requested_at": _now(),
+                },
+            )
     if operation.get("state") != "approved_for_apply":
         raise ValueError("Operation must be approved_for_apply before execution.")
+
+    operation = _record_stage_evidence(
+        operation,
+        stage="request",
+        event_type="operation_requested",
+        actor=actor,
+        audit_action="operation_requested",
+        audit_result="success",
+        details={"reason": operation.get("reason")},
+        before=operation.get("before_snapshot"),
+        after=operation.get("proposed_after_snapshot"),
+    )
+    operation = _record_stage_evidence(
+        operation,
+        stage="approval",
+        event_type="operation_approved",
+        actor=actor,
+        audit_action="operation_approved",
+        audit_result="success",
+        details={"approval_reason": operation.get("approval_reason")},
+    )
 
     packet = _evidence_packet(operation, actor or {})
     authorization = _authorization_decision(operation)
@@ -1572,16 +1886,34 @@ def execute_operation(operation_id: str, *, actor: dict[str, Any] | None) -> dic
             "authorization_decision": _serialize(authorization),
             "validator_result": _serialize(validator_result),
             "rollback_verification": _serialize(rollback_verification),
+            "scheduling_evidence_status": "pending",
+            "scheduling_evidence_errors": [],
+            "business_action_started_at": None,
         },
     )
-    _record_event(operation, event_type="operation_scheduled", actor=actor, details={"validator_result": validator_result})
-    _write_audit(
-        operation=operation,
+    operation = _record_stage_evidence(
+        operation,
+        stage="scheduling",
+        event_type="operation_scheduled",
         actor=actor,
-        action="operation_execution_started",
-        result="started",
+        audit_action="operation_execution_started",
+        audit_result="started",
+        details={"validator_result": validator_result},
         before=operation.get("before_snapshot"),
     )
+    action_start = _operations_collection().update_one(
+        {
+            "operation_id": operation_id,
+            "state": "apply_scheduled",
+            "business_action_started_at": {"$in": [None, ""]},
+        },
+        {"$set": {"business_action_started_at": _now(), "updated_at": _now()}},
+    )
+    if int(getattr(action_start, "matched_count", 0)) != 1:
+        raise RuntimeError(
+            "Continuity business action start could not be claimed idempotently."
+        )
+    operation = _get_operation_document(operation_id)
 
     try:
         execution_parameters = dict(operation.get("parameters") or {})
@@ -1625,20 +1957,23 @@ def execute_operation(operation_id: str, *, actor: dict[str, Any] | None) -> dic
             extra_set={
                 "execution_error": _normalize(exc) or exc.__class__.__name__,
                 "execution_failed_at": _now(),
+                "failure_evidence_status": "pending",
+                "failure_evidence_errors": [],
             },
         )
         try:
-            _record_event(
+            _record_stage_evidence(
                 operation,
+                stage="failure",
                 event_type="operation_failed",
                 actor=actor,
+                audit_action="operation_failed",
+                audit_result="failed",
                 details={"error": _normalize(exc) or exc.__class__.__name__},
             )
         except Exception:
-            pass
-        try:
-            _write_audit(operation=operation, actor=actor, action="operation_failed", result="failed")
-        except Exception:
+            # Preserve the domain execution exception. The evidence checkpoint
+            # remains incomplete and is repaired before an execution retry.
             pass
         raise
 
@@ -1656,6 +1991,14 @@ def execute_operation(operation_id: str, *, actor: dict[str, Any] | None) -> dic
 def close_operation(operation_id: str, *, actor: dict[str, Any] | None) -> dict[str, Any]:
     operation = _get_operation_document(operation_id)
     if operation.get("state") == "audit_closed":
+        operation = _record_stage_evidence(
+            operation,
+            stage="closure",
+            event_type="operation_audit_closed",
+            actor=actor,
+            audit_action="operation_audit_closed",
+            audit_result="success",
+        )
         return _serialize_operation(operation) or {}
     if operation.get("state") not in {"apply_executed", "rollback_completed"}:
         raise ValueError("Only executed or rolled-back operations can be audit-closed.")
@@ -1675,10 +2018,20 @@ def close_operation(operation_id: str, *, actor: dict[str, Any] | None) -> dict[
         actor=actor,
         action="close_operation_audit",
         reason_codes=["AUDIT_CLOSED"],
-        extra_set={"audit_closed_at": _now()},
+        extra_set={
+            "audit_closed_at": _now(),
+            "closure_evidence_status": "pending",
+            "closure_evidence_errors": [],
+        },
     )
-    _record_event(operation, event_type="operation_audit_closed", actor=actor)
-    _write_audit(operation=operation, actor=actor, action="operation_audit_closed", result="success")
+    operation = _record_stage_evidence(
+        operation,
+        stage="closure",
+        event_type="operation_audit_closed",
+        actor=actor,
+        audit_action="operation_audit_closed",
+        audit_result="success",
+    )
     return _serialize_operation(operation) or {}
 
 
@@ -1716,7 +2069,12 @@ def execute_governed_action(
         )
     if operation.get("state") == "approved_for_apply":
         operation = execute_operation(operation_id, actor=actor)
-    elif operation.get("state") in {"apply_failed", "apply_scheduled"}:
+    elif operation.get("state") in {
+        "apply_failed",
+        "apply_scheduled",
+        "apply_executed",
+        "audit_closed",
+    }:
         operation = execute_operation(operation_id, actor=actor)
     return operation
 
