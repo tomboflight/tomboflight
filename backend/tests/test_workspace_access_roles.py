@@ -10,6 +10,7 @@ from fastapi import HTTPException
 from app.routes import family_members as family_member_routes
 from app.routes import relationships as relationship_routes
 from app.routes import uploads as upload_routes
+from app.schemas.family_member import FamilyMemberCreate
 from app.schemas.relationship import RelationshipCreate
 from app.services import access_context_service
 from app.services.auth_service import build_user_response
@@ -97,7 +98,11 @@ class WorkspaceAccessRoleTests(unittest.TestCase):
         self.assertEqual(error.exception.status_code, 403)
 
     def test_family_member_create_blocks_read_only_role(self):
-        payload = {"family_id": "507f1f77bcf86cd799439011", "first_name": "Test"}
+        payload = FamilyMemberCreate(
+            family_id="507f1f77bcf86cd799439011",
+            first_name="Test",
+            last_name="Viewer",
+        )
         context = {
             "family": {"_id": "507f1f77bcf86cd799439011"},
             "member_role": "viewer",

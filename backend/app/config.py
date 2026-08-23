@@ -103,6 +103,28 @@ class Settings(BaseSettings):
         default="",
         validation_alias=AliasChoices("UPLOAD_SCAN_HOOK"),
     )
+    upload_clamav_host: str = Field(
+        default="",
+        validation_alias=AliasChoices("UPLOAD_CLAMAV_HOST", "CLAMAV_HOST"),
+    )
+    upload_clamav_port: int = Field(
+        default=3310,
+        validation_alias=AliasChoices("UPLOAD_CLAMAV_PORT", "CLAMAV_PORT"),
+    )
+    upload_clamav_timeout_seconds: float = Field(
+        default=10.0,
+        validation_alias=AliasChoices(
+            "UPLOAD_CLAMAV_TIMEOUT_SECONDS",
+            "CLAMAV_TIMEOUT_SECONDS",
+        ),
+    )
+    upload_clamav_require_private_network: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "UPLOAD_CLAMAV_REQUIRE_PRIVATE_NETWORK",
+            "CLAMAV_REQUIRE_PRIVATE_NETWORK",
+        ),
+    )
     upload_scan_fail_closed: bool = Field(
         # Files must enter quarantine when malware scanning is unavailable or
         # errors. Production can only accept a file after an explicit clean
@@ -482,6 +504,13 @@ class Settings(BaseSettings):
         if mount_path:
             return str(Path(mount_path) / "uploads")
         return str(Path(self.upload_storage_dir))
+
+    @property
+    def upload_quarantine_root_path(self) -> str:
+        mount_path = str(self.render_disk_mount_path or "").strip().rstrip("/")
+        if mount_path:
+            return str(Path(mount_path) / "quarantine")
+        return str(Path(self.upload_quarantine_dir))
 
     @property
     def r2_resolved_endpoint_url(self) -> str:

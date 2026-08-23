@@ -117,7 +117,12 @@ class HealthAndDbUnavailableTests(unittest.TestCase):
                 patch.object(database_module.settings, "postmark_server_token", "postmark-configured"),
                 patch.object(database_module.settings, "postmark_server_token_file", ""),
                 patch.object(database_module.settings, "postmark_from_email", "security@tomboflight.com"),
-                patch.object(database_module.settings, "upload_scan_hook", "scanner.module:scan"),
+                patch.object(
+                    database_module.settings,
+                    "upload_scan_hook",
+                    "app.services.clamav_upload_scanner:scan",
+                ),
+                patch.object(database_module.settings, "upload_clamav_host", "127.0.0.1"),
                 patch.object(database_module.settings, "upload_scan_command", ""),
                 patch.object(database_module.settings, "upload_scan_fail_closed", True),
                 patch.object(database_module.settings, "render_disk_mount_path", mount_path),

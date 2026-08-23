@@ -84,7 +84,7 @@ Before treating Phase 11 as operationally ready:
 1. Set a unique production `SECRET_KEY` of at least 32 bytes and do not reuse the value in another environment.
 2. Configure `STRIPE_PUBLISHABLE_KEY`, `STRIPE_SECRET_KEY`, and `STRIPE_WEBHOOK_SECRET`.
 3. Configure a verified Postmark server token and sender.
-4. Configure `UPLOAD_SCAN_HOOK` as a callable `module:function`; the legacy scanner command setting is intentionally not executed.
+4. Deploy ClamAV on a private network, set `UPLOAD_SCAN_HOOK=app.services.clamav_upload_scanner:scan`, and configure `UPLOAD_CLAMAV_HOST` plus `UPLOAD_CLAMAV_PORT`. The adapter uses ClamAV's framed `INSTREAM` protocol and refuses public-network scanner peers by default. The legacy scanner command setting is intentionally not executed.
 5. Mount a readable and writable persistent disk through `RENDER_DISK_MOUNT_PATH` for private uploads.
 6. Keep `CONTINUITY_EXECUTION_KILL_SWITCH` unset for normal execution and set it only for emergency shutdown.
 7. Confirm a deployment commit identifier is present. Render normally supplies `RENDER_GIT_COMMIT`.
@@ -92,4 +92,3 @@ Before treating Phase 11 as operationally ready:
 9. Run an authenticated production walkthrough after deployment. Engineering verification in this pull request performs no production customer mutation and does not permanently delete Marquis or any other account.
 
 Provider encryption, backup, restore, edge-header, and independent penetration-test evidence remain separate launch evidence. Phase 11 does not claim SOC 2, ISO 27001, HIPAA, PCI DSS certification, end-to-end encryption, or an external penetration test.
-
