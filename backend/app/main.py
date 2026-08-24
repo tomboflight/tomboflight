@@ -113,6 +113,9 @@ from app.services.mint_worker_service import (
 )
 from app.services.auth_service import ensure_auth_indexes
 from app.services.rate_limit_service import ensure_rate_limit_indexes
+from app.services.cinematic_version_service import (
+    ensure_cinematic_manifest_indexes,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -177,6 +180,7 @@ async def lifespan(app: FastAPI):
         ensure_finance_event_indexes()
         ensure_continuity_runtime_indexes()
         ensure_organization_indexes()
+        ensure_cinematic_manifest_indexes()
         try:
             bootstrap_admin_access_controls()
         except Exception as exc:

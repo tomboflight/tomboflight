@@ -24,6 +24,7 @@ class StartupInitializationTests(unittest.TestCase):
             patch.object(main_module, "ensure_finance_event_indexes") as finance_init_mock,
             patch.object(main_module, "ensure_continuity_runtime_indexes") as continuity_init_mock,
             patch.object(main_module, "ensure_organization_indexes") as organization_init_mock,
+            patch.object(main_module, "ensure_cinematic_manifest_indexes") as cinematic_init_mock,
             patch.object(main_module, "bootstrap_admin_access_controls") as admin_access_bootstrap_mock,
             patch.object(main_module, "close_mongo_connection") as close_mock,
         ):
@@ -41,6 +42,7 @@ class StartupInitializationTests(unittest.TestCase):
         finance_init_mock.assert_called_once()
         continuity_init_mock.assert_called_once()
         organization_init_mock.assert_called_once()
+        cinematic_init_mock.assert_called_once()
         admin_access_bootstrap_mock.assert_called_once()
         close_mock.assert_called_once()
 
@@ -62,6 +64,7 @@ class StartupInitializationTests(unittest.TestCase):
             patch.object(main_module, "ensure_finance_event_indexes") as finance_init_mock,
             patch.object(main_module, "ensure_continuity_runtime_indexes") as continuity_init_mock,
             patch.object(main_module, "ensure_organization_indexes") as organization_init_mock,
+            patch.object(main_module, "ensure_cinematic_manifest_indexes") as cinematic_init_mock,
             patch.object(main_module, "bootstrap_admin_access_controls") as admin_access_bootstrap_mock,
             patch.object(main_module, "close_mongo_connection") as close_mock,
         ):
@@ -79,6 +82,7 @@ class StartupInitializationTests(unittest.TestCase):
         finance_init_mock.assert_not_called()
         continuity_init_mock.assert_not_called()
         organization_init_mock.assert_not_called()
+        cinematic_init_mock.assert_not_called()
         admin_access_bootstrap_mock.assert_not_called()
         close_mock.assert_called_once()
 

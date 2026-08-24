@@ -15,8 +15,13 @@ from app.core.relationship_catalog import (
 )
 from app.database import get_database
 from app.dependencies.auth import has_internal_admin_access
+from app.services.cinematic_version_service import (
+    publish_private_cinematic_manifest,
+)
 from app.services.entitlement_service import resolve_project_entitlements
 from app.services.family_placement_service import rebuild_family_placement
+from app.services.lineage_cinema_compiler import compile_lineage_cinema
+from app.services.linked_network_service import build_linked_network
 from app.services.project_entitlement_service import get_project_entitlement
 from app.services.project_service import list_projects
 
@@ -750,6 +755,8 @@ def _upload_is_cinematic_ready(
         and _normalize_value(upload.get("relative_path"))
         and _normalize_value(upload.get("scan_status")).lower() == "clean"
         and not bool(upload.get("quarantined"))
+        and _normalize_value(upload.get("deletion_status")).lower()
+        not in {"pending", "failed", "deleted"}
         and bool(upload.get("approved_for_cinematic"))
         and _normalize_value(upload.get("verification_status")).lower() == "approved"
         and _normalize_value(upload.get("consent_status")).lower() == "approved"
@@ -821,8 +828,13 @@ def build_viewer_manifest(
     resolved_entitlements = _resolve_viewer_entitlements(project)
     max_zoom_layers = _coerce_int(resolved_entitlements.get("max_zoom_layers")) or 0
     can_use_narration = bool(resolved_entitlements.get("can_use_narration"))
-    family_id_value = _normalize_value((family_doc or {}).get("_id") or project.get("family_id"))
+    project_id_value = _normalize_value(project.get("_id") or project.get("id"))
+    family_id_value = _normalize_value(
+        (family_doc or {}).get("_id") or project.get("family_id")
+    )
     members: list[dict[str, Any]] = []
+    linked_network: dict[str, Any] | None = None
+    network_alignment: dict[str, Any] | None = None
     if lane == "organization":
         organization_id = _normalize_value(project.get("organization_id")) or _normalize_value(
             project.get("_id") or project.get("id")
@@ -838,6 +850,91 @@ def build_viewer_manifest(
             ),
         )
 
+    if (
+        lane == "network"
+        and project_id_value
+        and bool(resolved_entitlements.get("can_link_households"))
+    ):
+        candidate_network = build_linked_network(
+            project_id_value,
+            _current_user_id(current_user),
+            workspace_context={
+                "project": project,
+                "resolved_entitlements": resolved_entitlements,
+            },
+        )
+        alignment_conflicts = list(candidate_network.get("alignment_conflicts") or [])
+        candidate_nodes = list(candidate_network.get("nodes") or [])
+        network_nodes = [
+            node
+            for node in candidate_nodes
+            if _normalize_value(node.get("source_project_id")) == project_id_value
+            or node.get("aligned_generation") is not None
+        ]
+        excluded_unaligned_member_count = len(candidate_nodes) - len(network_nodes)
+        if alignment_conflicts:
+            network_alignment = {
+                "status": "blocked_conflict",
+                "conflict_count": len(alignment_conflicts),
+                "excluded_unaligned_member_count": len(candidate_nodes),
+            }
+        elif network_nodes:
+            visible_network_member_ids = {
+                _normalize_value(node.get("id"))
+                for node in network_nodes
+                if _normalize_value(node.get("id"))
+            }
+            linked_network = {
+                **candidate_network,
+                "nodes": network_nodes,
+                "edges": [
+                    edge
+                    for edge in candidate_network.get("edges") or []
+                    if _normalize_value(edge.get("source_member_id"))
+                    in visible_network_member_ids
+                    and _normalize_value(edge.get("target_member_id"))
+                    in visible_network_member_ids
+                ],
+            }
+            network_alignment = {
+                "status": (
+                    "partial_unaligned_excluded"
+                    if excluded_unaligned_member_count
+                    else "aligned"
+                ),
+                "conflict_count": 0,
+                "excluded_unaligned_member_count": excluded_unaligned_member_count,
+            }
+            members = [
+                {
+                    "_id": _normalize_value(node.get("id")),
+                    "first_name": node.get("first_name"),
+                    "last_name": node.get("last_name"),
+                    "display_name": node.get("display_name"),
+                    "generation": (
+                        node.get("aligned_generation")
+                        if node.get("aligned_generation") is not None
+                        else node.get("local_generation")
+                    ),
+                    "placement_status": node.get("placement_status") or "unplaced",
+                    "approved_photo_upload_id": node.get(
+                        "approved_photo_upload_id"
+                    ),
+                    "_cinematic_upload_id": node.get("approved_photo_upload_id"),
+                    "_source_household_id": node.get("source_household_id"),
+                    "_source_household_name": node.get("source_household_name"),
+                    "_source_project_id": node.get("source_project_id"),
+                    "_visibility_scope": node.get("visibility_scope"),
+                }
+                for node in network_nodes
+            ]
+        else:
+            network_alignment = {
+                "status": "empty",
+                "conflict_count": 0,
+                "excluded_unaligned_member_count": excluded_unaligned_member_count,
+            }
+
     ordered_members = _sequence_members_for_viewer(
         lane=lane,
         members=members,
@@ -848,11 +945,19 @@ def build_viewer_manifest(
     anchor_generation = _coerce_int((primary_member or {}).get("generation"))
 
     states: list[dict[str, Any]] = []
+    cinema_compilation: dict[str, Any] | None = None
+    family_relationships: list[dict[str, Any]] = []
     if ordered_members:
-        project_id_value = _normalize_value(project.get("_id") or project.get("id"))
         valid_member_views: list[tuple[dict[str, Any], dict[str, Any]]] = []
         for member in ordered_members:
-            if lane == "organization":
+            if linked_network is not None:
+                approved_upload_id = _normalize_value(
+                    member.get("_cinematic_upload_id")
+                )
+                upload_record = (
+                    {"_id": approved_upload_id} if approved_upload_id else None
+                )
+            elif lane == "organization":
                 upload_record = None
                 upload_id = _normalize_value(member.get("photo_upload_id"))
                 if upload_id and ObjectId.is_valid(upload_id):
@@ -883,11 +988,22 @@ def build_viewer_manifest(
             _normalize_value(member.get("_id"))
             for member, _upload in valid_member_views
         }
-        family_relationships = (
-            list(db["relationships"].find({"family_id": family_id_value}))
-            if family_id_value
-            else []
-        )
+        if linked_network is not None:
+            family_relationships = list(linked_network.get("edges") or [])
+        else:
+            family_relationships = (
+                list(
+                    db["relationships"].find(
+                        {
+                            "family_id": {
+                                "$in": _family_id_candidates(family_id_value)
+                            }
+                        }
+                    )
+                )
+                if family_id_value
+                else []
+            )
         relationship_navigation = _relationship_navigation(
             family_relationships,
             visible_member_ids,
@@ -918,7 +1034,18 @@ def build_viewer_manifest(
                 {
                     "id": f"member-{member_id}",
                     "member_id": member_id,
-                    "image": f"/uploads/{upload_id}/download" if upload_id else "",
+                    "image": (
+                        f"/uploads/{upload_id}/download?viewer_project_id={project_id_value}"
+                        if (
+                            upload_id
+                            and linked_network is not None
+                            and _normalize_value(member.get("_source_project_id"))
+                            != project_id_value
+                        )
+                        else f"/uploads/{upload_id}/download"
+                        if upload_id
+                        else ""
+                    ),
                     "title": title,
                     "status": status,
                     "node": title,
@@ -928,6 +1055,22 @@ def build_viewer_manifest(
                     "placement_status": _normalize_value(
                         member.get("placement_status")
                     ) or "unplaced",
+                    "source_household_id": _normalize_value(
+                        member.get("_source_household_id")
+                    )
+                    or None,
+                    "source_household_name": _normalize_value(
+                        member.get("_source_household_name")
+                    )
+                    or None,
+                    "source_project_id": _normalize_value(
+                        member.get("_source_project_id")
+                    )
+                    or project_id_value,
+                    "privacy_scope": _normalize_value(
+                        member.get("_visibility_scope")
+                    )
+                    or "household",
                     "left_state_id": (
                         f"member-{relationship_navigation.get(member_id, {}).get('parents', [])[0]}"
                         if relationship_navigation.get(member_id, {}).get("parents")
@@ -965,6 +1108,78 @@ def build_viewer_manifest(
                     "eye_targets": DEFAULT_EYE_TARGETS,
                 }
             )
+
+        if lane in {"household", "network"} and states:
+            anchor_state_id = (
+                f"member-{primary_member_id}" if primary_member_id else ""
+            )
+            cinema_compilation = compile_lineage_cinema(
+                states=states,
+                relationships=family_relationships,
+                anchor_state_id=anchor_state_id,
+            )
+            states_by_id = {
+                _normalize_value(state.get("id")): state for state in states
+            }
+            ordered_state_ids = [
+                state_id
+                for state_id in cinema_compilation.get("ordered_state_ids") or []
+                if state_id in states_by_id
+            ]
+            if ordered_state_ids:
+                states = [states_by_id[state_id] for state_id in ordered_state_ids]
+
+            navigation_by_state = (
+                cinema_compilation.get("navigation_by_state") or {}
+            )
+            relationship_edges = cinema_compilation.get("relationship_edges") or []
+            for index, state in enumerate(states):
+                state_id = _normalize_value(state.get("id"))
+                navigation = navigation_by_state.get(state_id) or {}
+                parents = list(navigation.get("parents") or [])
+                children = list(navigation.get("children") or [])
+                partners = list(navigation.get("partners") or [])
+                siblings = list(navigation.get("siblings") or [])
+                branches = list(navigation.get("branches") or [])
+                previous_state_id = (
+                    _normalize_value(states[index - 1].get("id"))
+                    if index > 0
+                    else None
+                )
+                next_state_id = (
+                    _normalize_value(states[index + 1].get("id"))
+                    if index + 1 < len(states)
+                    else None
+                )
+                state["left_state_id"] = parents[0] if parents else previous_state_id
+                state["right_state_id"] = (
+                    children[0]
+                    if children
+                    else siblings[0]
+                    if siblings
+                    else next_state_id
+                )
+                state["parent_state_ids"] = parents
+                state["child_state_ids"] = children
+                state["partner_state_ids"] = partners
+                state["sibling_state_ids"] = siblings
+                state["branch_state_ids"] = [
+                    *siblings,
+                    *[branch for branch in branches if branch not in siblings],
+                ]
+                state["relationship_edges"] = [
+                    edge
+                    for edge in relationship_edges
+                    if state_id
+                    in {edge.get("source_state_id"), edge.get("target_state_id")}
+                ]
+
+    if lane in {"household", "network"} and cinema_compilation is None:
+        cinema_compilation = compile_lineage_cinema(
+            states=[],
+            relationships=[],
+            anchor_state_id="",
+        )
 
     if not states:
         states.append(
@@ -1013,9 +1228,13 @@ def build_viewer_manifest(
             path_title = "Portrait Flow"
             nav_labels = {"left": "Origins", "right": "Forward View"}
 
-    path_items = [
-        f"{state['title']} — {state['status']}"
-        for state in states[:6]
+    compiled_path_items = (
+        list(cinema_compilation.get("path_items") or [])
+        if cinema_compilation
+        else []
+    )
+    path_items = compiled_path_items or [
+        f"{state['title']} — {state['status']}" for state in states
     ]
 
     mode = "secure_share" if secure_share_only else "dynamic"
@@ -1027,6 +1246,11 @@ def build_viewer_manifest(
         "allow_zoom": (not secure_share_only) and max_zoom_layers > 0,
         "allow_branch_navigation": not secure_share_only,
         "allow_gaze_navigation": not secure_share_only,
+        "allow_auto_advance": bool(
+            not secure_share_only
+            and cinema_compilation
+            and len(cinema_compilation.get("auto_advance_state_ids") or []) > 1
+        ),
         "allow_narration_auto_advance": (not secure_share_only) and can_use_narration,
         "max_zoom_layers": max(0, max_zoom_layers),
     }
@@ -1035,13 +1259,23 @@ def build_viewer_manifest(
             "allow_command_navigation": True,
             "allow_zoom": max_zoom_layers > 0,
             "allow_role_navigation": True,
+            "allow_auto_advance": False,
             "allow_narration_auto_advance": False,
             "max_zoom_layers": max(0, max_zoom_layers),
         }
 
     manifest = {
         "mode": mode,
-        "navigation_mode": "sequence",
+        "navigation_mode": (
+            "graph"
+            if cinema_compilation
+            and bool(
+                (cinema_compilation.get("validation") or {}).get(
+                    "eligible_state_count"
+                )
+            )
+            else "sequence"
+        ),
         "hero_kicker": package_name,
         "hero_title": hero_title,
         "hero_body": hero_body,
@@ -1058,12 +1292,30 @@ def build_viewer_manifest(
         "controls": controls,
         "states": states,
         "initial_state_id": states[0]["id"] if states else "",
-        "branch_options_by_state": {},
+        "branch_options_by_state": (
+            cinema_compilation.get("branch_options_by_state") or {}
+            if cinema_compilation
+            else {}
+        ),
         "project": _serialize_project_summary(project),
         "family": _serialize_family_summary(family_doc) if family_doc else None,
         "primary_member_id": primary_member_id or None,
         "has_uploaded_portraits": any(_normalize_value(state.get("image")) for state in states),
     }
+    if network_alignment is not None:
+        manifest["network_alignment"] = network_alignment
+    if cinema_compilation:
+        manifest["auto_advance_state_ids"] = list(
+            cinema_compilation.get("auto_advance_state_ids") or []
+        )
+        manifest["tour_steps"] = list(cinema_compilation.get("tour_steps") or [])
+        manifest["relationship_edges"] = list(
+            cinema_compilation.get("relationship_edges") or []
+        )
+        manifest["cinema_compiler"] = {
+            "version": cinema_compilation.get("compiler_version"),
+            "validation": cinema_compilation.get("validation") or {},
+        }
     if lane == "organization":
         manifest["viewer_modes"] = [
             {"id": "current_command_view", "available": True},
@@ -1077,5 +1329,11 @@ def build_viewer_manifest(
         manifest["instructions"] = (
             "Navigate protected organization command portraits. "
             "Historical command snapshots, succession timeline, and officer wall are available."
+        )
+    if cinema_compilation:
+        manifest = publish_private_cinematic_manifest(
+            manifest,
+            project_id=_normalize_value(project.get("_id") or project.get("id")),
+            family_id=family_id_value,
         )
     return manifest

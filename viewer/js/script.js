@@ -72,7 +72,7 @@
     path_items: ["Private project content is not loaded on public routes."],
     nav_labels: { left: "Origins", right: "Future Line" },
     initial_state_id: "unavailable",
-    controls: { allow_lineage_navigation: false, allow_zoom: false, allow_reset: true, allow_narration_auto_advance: false, allow_gaze_navigation: false, allow_branch_navigation: false },
+    controls: { allow_lineage_navigation: false, allow_zoom: false, allow_reset: true, allow_auto_advance: false, allow_narration_auto_advance: false, allow_gaze_navigation: false, allow_branch_navigation: false },
     states: [{ id: "unavailable", image: "", title: "Private viewer locked", status: "Private Viewer", node: "Private viewer", description: "This family viewer is protected. Open it from your Tomb of Light workspace after your project has been approved and provisioned.", narration: "", left_state_id: "", right_state_id: "", eye_targets: DEFAULT_DYNAMIC_EYE_TARGETS }],
   };
 
@@ -316,8 +316,33 @@
     return String(manifest?.mode || "").trim() === "secure_share";
   }
 
-  function isGraphDemoMode() {
-    return currentManifest?.mode === "demo" && currentManifest?.navigationMode === "graph";
+  function isGraphNavigationMode() {
+    return currentManifest?.navigationMode === "graph";
+  }
+
+  function isAutoAdvanceEnabled() {
+    const controls = currentManifest?.controls || {};
+    if (Object.prototype.hasOwnProperty.call(controls, "allow_auto_advance")) {
+      return Boolean(controls.allow_auto_advance);
+    }
+    return isControlEnabled("allow_narration_auto_advance", true);
+  }
+
+  function playbackControlLabel() {
+    const hasNarration = isControlEnabled(
+      "allow_narration_auto_advance",
+      true,
+    );
+    if (isPlaying) {
+      return hasNarration ? "Narration: ON" : "Slideshow: ON";
+    }
+    return hasNarration ? "Resume Narration" : "Resume Slideshow";
+  }
+
+  function syncPlaybackControlLabel() {
+    if (narrationToggleBtn) {
+      narrationToggleBtn.textContent = playbackControlLabel();
+    }
   }
 
   function getAutoAdvanceStateIds() {
@@ -427,15 +452,19 @@
     const canNarration =
       !isSecureShareMode(manifest) &&
       isControlEnabled("allow_narration_auto_advance", true);
+    const canAutoAdvance =
+      !isSecureShareMode(manifest) && isAutoAdvanceEnabled();
 
     if (navLeftBtn) navLeftBtn.style.display = canLineageNavigate ? "" : "none";
     if (navRightBtn) navRightBtn.style.display = canLineageNavigate ? "" : "none";
     if (zoomOutBtn) zoomOutBtn.style.display = canZoom ? "" : "none";
     if (zoomInBtn) zoomInBtn.style.display = canZoom ? "" : "none";
     if (resetViewerBtn) resetViewerBtn.style.display = canReset ? "" : "none";
-    if (narrationToggleBtn) narrationToggleBtn.style.display = canNarration ? "" : "none";
+    if (narrationToggleBtn) {
+      narrationToggleBtn.style.display = canAutoAdvance ? "" : "none";
+    }
     const hasVisibleControls = Boolean(
-      canLineageNavigate || canZoom || canReset || canNarration,
+      canLineageNavigate || canZoom || canReset || canAutoAdvance,
     );
     if (controlsContainer) {
       controlsContainer.classList.toggle("is-hidden", !hasVisibleControls);
@@ -443,9 +472,12 @@
     if (viewerLine) {
       viewerLine.classList.toggle("is-hidden", !hasVisibleControls);
     }
-    if (!canNarration) {
+    syncPlaybackControlLabel();
+    if (!canAutoAdvance) {
       isPlaying = false;
       stopNarrationAutoAdvance();
+    }
+    if (!canNarration) {
       showNarration("");
     }
     if (!isControlEnabled("allow_gaze_navigation", true)) {
@@ -586,7 +618,7 @@
 
   function startNarrationAutoAdvance() {
     if (EMBED_MODE) return;
-    if (!isControlEnabled("allow_narration_auto_advance", true)) return;
+    if (!isPlaying || !isAutoAdvanceEnabled()) return;
     if (narrationInterval) clearInterval(narrationInterval);
 
     narrationInterval = setInterval(function () {
@@ -613,13 +645,9 @@
 
   function toggleNarration() {
     if (EMBED_MODE) return;
-    if (!isControlEnabled("allow_narration_auto_advance", true)) return;
+    if (!isAutoAdvanceEnabled()) return;
     isPlaying = !isPlaying;
-    if (narrationToggleBtn) {
-      narrationToggleBtn.textContent = isPlaying
-        ? "Narration: ON"
-        : "Resume Narration";
-    }
+    syncPlaybackControlLabel();
     if (isPlaying) {
       showNarration(statesById[state]?.narration || "");
       startNarrationAutoAdvance();
@@ -630,11 +658,9 @@
 
   function pauseNarrationForManualControl() {
     if (EMBED_MODE || !isPlaying) return;
-    if (!isControlEnabled("allow_narration_auto_advance", true)) return;
+    if (!isAutoAdvanceEnabled()) return;
     isPlaying = false;
-    if (narrationToggleBtn) {
-      narrationToggleBtn.textContent = "Resume Narration";
-    }
+    syncPlaybackControlLabel();
     stopNarrationAutoAdvance();
   }
 
@@ -985,7 +1011,7 @@
     if (!isControlEnabled("allow_zoom", true)) return;
     markInteraction();
     pauseNarrationForManualControl();
-    if (isGraphDemoMode()) {
+    if (isGraphNavigationMode()) {
       const next = resolveRightTarget();
       if (next) {
         animatePortalTransition("right", next);
@@ -1002,7 +1028,7 @@
     if (!isControlEnabled("allow_zoom", true)) return;
     markInteraction();
     pauseNarrationForManualControl();
-    if (isGraphDemoMode()) {
+    if (isGraphNavigationMode()) {
       const next = resolveLeftTarget();
       if (next) {
         animatePortalTransition("left", next);
@@ -1014,7 +1040,7 @@
 
   function resetViewer() {
     if (EMBED_MODE) return;
-    if (!isControlEnabled("allow_zoom", true)) return;
+    if (!isControlEnabled("allow_reset", true)) return;
     setZoom(1, false);
     applyState(currentManifest?.initialStateId || stateOrder[0] || "");
     if (isPlaying) startNarrationAutoAdvance();
@@ -1029,7 +1055,7 @@
   function syncControlStates() {
     const leftTarget = resolveLeftTarget();
     const rightTarget = resolveRightTarget();
-    if (isGraphDemoMode()) {
+    if (isGraphNavigationMode()) {
       setButtonDisabled(zoomOutBtn, !leftTarget);
       setButtonDisabled(zoomInBtn, !rightTarget);
     } else {

@@ -50,6 +50,7 @@ from app.services.privacy_access_service import (
     normalize_privacy_scope,
 )
 from app.services.tree_service import list_linked_family_ids
+from app.services.linked_network_service import build_linked_network
 from app.services.workspace_access_service import (
     count_workspace_uploads,
     family_is_visible_to_user,
@@ -490,6 +491,62 @@ def _require_upload_management_access(
             detail="Not authorized to manage this upload.",
         )
 
+    return upload_record, context
+
+
+def _require_linked_cinematic_upload_access(
+    upload_id: str,
+    viewer_project_id: str,
+    db: Any,
+    current_user: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Authorize one portrait through the requesting user's linked viewer graph."""
+
+    if not ObjectId.is_valid(upload_id):
+        raise HTTPException(status_code=400, detail="Invalid upload id.")
+    normalized_viewer_project_id = _normalize_value(viewer_project_id)
+    if not normalized_viewer_project_id:
+        raise HTTPException(status_code=400, detail="Viewer project id is required.")
+
+    context = require_workspace_capability(
+        current_user,
+        project_id=normalized_viewer_project_id,
+        capabilities=("can_use_viewer",),
+        detail="Your active package does not include linked family viewer access.",
+    )
+    network = build_linked_network(
+        normalized_viewer_project_id,
+        _current_user_id(current_user),
+        workspace_context=context,
+    )
+    matching_node = next(
+        (
+            node
+            for node in network.get("nodes") or []
+            if _normalize_value(node.get("approved_photo_upload_id")) == upload_id
+        ),
+        None,
+    )
+    if matching_node is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This portrait is not shared with the requested linked family viewer.",
+        )
+
+    upload_record = db["uploaded_files"].find_one({"_id": ObjectId(upload_id)})
+    if upload_record is None:
+        raise HTTPException(status_code=404, detail="Upload not found.")
+    if not (
+        _normalize_value(upload_record.get("category")) == "member_photo"
+        and _normalize_value(upload_record.get("member_id"))
+        == _normalize_value(matching_node.get("id"))
+        and _normalize_value(upload_record.get("project_id"))
+        == _normalize_value(matching_node.get("source_project_id"))
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Linked portrait provenance does not match the approved family graph.",
+        )
     return upload_record, context
 
 
@@ -2004,18 +2061,32 @@ def list_cinematic_assets(
 def download_upload(
     upload_id: str,
     admin_override: bool = Query(default=False),
+    viewer_project_id: str = Query(default=""),
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
     db = get_database()
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")
 
-    upload_record, _context = _require_upload_access(
-        upload_id,
-        db,
-        current_user,
-        detail="Your active package does not include upload access.",
+    normalized_viewer_project_id = (
+        _normalize_value(viewer_project_id)
+        if isinstance(viewer_project_id, str)
+        else ""
     )
+    if normalized_viewer_project_id:
+        upload_record, _context = _require_linked_cinematic_upload_access(
+            upload_id,
+            normalized_viewer_project_id,
+            db,
+            current_user,
+        )
+    else:
+        upload_record, _context = _require_upload_access(
+            upload_id,
+            db,
+            current_user,
+            detail="Your active package does not include upload access.",
+        )
     deletion_status = _normalize_value(upload_record.get("deletion_status")).lower()
     if deletion_status in {"pending", "failed"}:
         raise HTTPException(
