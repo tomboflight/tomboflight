@@ -12,6 +12,10 @@ TRANSFER_EVENT_SIGNATURE = (
 )
 EVM_WALLET_PATTERN = re.compile(r"^0x[a-fA-F0-9]{40}$")
 HEX_PRIVATE_KEY_PATTERN = re.compile(r"^(0x)?[a-fA-F0-9]{64}$")
+SUPPORTED_NFT_CHAIN_IDS = {
+    "base-mainnet": 8453,
+    "base-sepolia": 84532,
+}
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +73,25 @@ def _web3_client() -> Any:
     if not client.is_connected():
         raise RuntimeError("Unable to connect to the configured NFT RPC endpoint.")
     return client
+
+
+def _expected_chain_id() -> int:
+    configured_chain = _normalize(settings.nft_chain).lower()
+    expected_chain_id = SUPPORTED_NFT_CHAIN_IDS.get(configured_chain)
+    if expected_chain_id is None:
+        supported = ", ".join(sorted(SUPPORTED_NFT_CHAIN_IDS))
+        raise RuntimeError(
+            f"NFT_CHAIN '{configured_chain or 'missing'}' is unsupported. "
+            f"Supported values: {supported}."
+        )
+    return expected_chain_id
+
+
+def _connected_chain_id(client: Any) -> int:
+    try:
+        return int(client.eth.chain_id)
+    except Exception as exc:
+        raise RuntimeError("Unable to resolve the configured NFT RPC chain ID.") from exc
 
 
 def _contract_abi() -> list[dict[str, Any]]:
@@ -239,14 +262,65 @@ def _contract_owner(contract: Any) -> str | None:
         raise RuntimeError("Unable to resolve the NFT contract owner.") from exc
 
 
-def _assert_contract_owner(contract: Any, signer_address: str) -> None:
+def _assert_contract_owner(contract: Any, signer_address: str) -> str:
     owner_address = _contract_owner(contract)
     if owner_address is None:
-        return
+        raise RuntimeError(
+            "NFT contract does not expose owner(); signer ownership cannot be verified."
+        )
     if owner_address.lower() != signer_address.lower():
         raise RuntimeError(
             "Configured NFT minter wallet is not the owner of the NFT contract."
         )
+    return owner_address
+
+
+def validate_mint_signer_contract_owner() -> dict[str, Any]:
+    """Verify the configured signer against the live contract without signing.
+
+    This startup preflight performs read-only RPC calls only. It never builds,
+    signs, stores, or broadcasts a transaction.
+    """
+
+    _require_mint_runtime()
+    client = _web3_client()
+    expected_chain_id = _expected_chain_id()
+    connected_chain_id = _connected_chain_id(client)
+    if connected_chain_id != expected_chain_id:
+        raise RuntimeError(
+            "Configured NFT RPC is connected to the wrong chain: "
+            f"expected {expected_chain_id}, received {connected_chain_id}."
+        )
+
+    contract_address = _checksum_address(
+        settings.nft_contract_address,
+        field_name="NFT contract address",
+    )
+    contract = client.eth.contract(
+        address=contract_address,
+        abi=_contract_abi(),
+    )
+    signer = _account()
+    owner_address = _assert_contract_owner(contract, signer.address)
+
+    result = {
+        "chain": _normalize(settings.nft_chain).lower(),
+        "chain_id": connected_chain_id,
+        "contract_address": contract_address,
+        "contract_owner": owner_address,
+        "signer_address": signer.address,
+        "verified": True,
+    }
+    logger.info(
+        "NFT mint signer ownership preflight passed: "
+        "signer=%s owner=%s contract=%s chain_id=%s",
+        signer.address,
+        owner_address,
+        contract_address,
+        connected_chain_id,
+        extra=result,
+    )
+    return result
 
 
 def _gas_fields(client: Any) -> dict[str, int]:
