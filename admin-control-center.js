@@ -202,6 +202,9 @@
     refresh_entitlement: ["project_id"],
     run_readiness_check: ["project_id"],
     queue_for_mint_review: ["project_id"],
+    prepare_legacy_anchor: ["project_id"],
+    approve_legacy_anchor: ["project_id"],
+    queue_approved_legacy_anchor: ["project_id"],
     repair_record: ["project_id"],
     refresh_case_data: [],
   };
@@ -210,6 +213,9 @@
     sync_package: "primary",
     repair_record: "primary",
     queue_for_mint_review: "primary",
+    prepare_legacy_anchor: "primary",
+    approve_legacy_anchor: "primary",
+    queue_approved_legacy_anchor: "primary",
     normalize_package: "secondary",
     assign_lane: "secondary",
     link_order_to_project: "secondary",
@@ -1856,6 +1862,10 @@
           <div class="admin-card-header"><span class="admin-card-badge">R</span><h3 class="admin-card-title">Readiness Gates</h3></div>
           ${renderFieldGrid([
             { label: "Eligibility", value: tabData.eligibility, chip: true },
+            { label: "Profile Complete", value: tabData.profile_complete, chip: true },
+            { label: "Required NFT Add-On", value: tabData.required_nft_addon_code, chip: true },
+            { label: "Paid NFT Credit", value: tabData.paid_nft_credit, chip: true },
+            { label: "NFT Add-On Order", value: tabData.nft_addon_order_id, mono: true },
             { label: "Runtime", value: tabData.runtime, chip: true },
             { label: "Review Ready", value: tabData.approvals && tabData.approvals.mint_review_ready, chip: true },
             { label: "Public Approval Required", value: tabData.approvals && tabData.approvals.customer_public_safe_approval_required, chip: true },

@@ -464,9 +464,12 @@ class TestContinuityRuntimeControlSurfaceAdapters(unittest.TestCase):
             "impersonation_stop",
             "legacy_admin_remediation",
             "orphan_identity_reconciliation",
+            "prepare_legacy_anchor",
+            "approve_legacy_anchor",
+            "queue_approved_legacy_anchor",
         }
         self.assertEqual(runtime.RUNTIME_VERSION, "12.0.0")
-        self.assertEqual(len(runtime.ACTION_SPECS), 38)
+        self.assertEqual(len(runtime.ACTION_SPECS), 41)
         self.assertTrue(expected.issubset(runtime.ACTION_SPECS))
 
     def test_permanent_deletion_adapter_passes_both_irreversible_confirmations(self) -> None:

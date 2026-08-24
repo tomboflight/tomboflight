@@ -165,6 +165,18 @@ class Settings(BaseSettings):
         default=3,
         validation_alias=AliasChoices("STRIPE_PAYMENT_METHOD_MAX_CARDS"),
     )
+    stripe_nft_lineage_record_price_id: str = Field(
+        default="",
+        validation_alias=AliasChoices("STRIPE_NFT_LINEAGE_RECORD_PRICE_ID"),
+    )
+    stripe_additional_nft_mint_price_id: str = Field(
+        default="",
+        validation_alias=AliasChoices("STRIPE_ADDITIONAL_NFT_MINT_PRICE_ID"),
+    )
+    stripe_nft_metadata_revision_price_id: str = Field(
+        default="",
+        validation_alias=AliasChoices("STRIPE_NFT_METADATA_REVISION_PRICE_ID"),
+    )
     manual_fulfillment_mode: bool = Field(
         default=True,
         validation_alias=AliasChoices("MANUAL_FULFILLMENT_MODE"),
@@ -198,7 +210,7 @@ class Settings(BaseSettings):
         ),
     )
     nft_mint_function_name: str = Field(
-        default="mintAnchor",
+        default="safeMint",
         validation_alias=AliasChoices("NFT_MINT_FUNCTION_NAME"),
     )
     nft_minter_private_key: str = Field(
@@ -224,6 +236,20 @@ class Settings(BaseSettings):
     nft_auto_mint_on_review_enabled: bool = Field(
         default=False,
         validation_alias=AliasChoices("NFT_AUTO_MINT_ON_REVIEW_ENABLED"),
+    )
+    nft_mint_worker_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("NFT_MINT_WORKER_ENABLED"),
+    )
+    nft_mint_worker_poll_seconds: int = Field(
+        default=15,
+        ge=2,
+        le=300,
+        validation_alias=AliasChoices("NFT_MINT_WORKER_POLL_SECONDS"),
+    )
+    nft_legacy_payment_links_disabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("NFT_LEGACY_PAYMENT_LINKS_DISABLED"),
     )
     nft_token_name_prefix: str = Field(
         default="Tomb of Light Legacy Anchor",

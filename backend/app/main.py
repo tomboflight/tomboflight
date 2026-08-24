@@ -1,4 +1,5 @@
-from contextlib import asynccontextmanager
+import asyncio
+from contextlib import asynccontextmanager, suppress
 import logging
 
 from fastapi import FastAPI, Request, status
@@ -106,6 +107,10 @@ from app.routes.workspace_access import (
 from app.services.nft_runtime_validation_service import (
     validate_nft_runtime_configuration_on_startup,
 )
+from app.services.mint_worker_service import (
+    mint_worker_enabled,
+    run_controlled_mint_worker,
+)
 from app.services.auth_service import ensure_auth_indexes
 from app.services.rate_limit_service import ensure_rate_limit_indexes
 
@@ -159,6 +164,8 @@ async def lifespan(app: FastAPI):
     validate_nft_runtime_configuration_on_startup()
     db = connect_to_mongo()
     app.state.db = db
+    mint_worker_stop = asyncio.Event()
+    mint_worker_task: asyncio.Task | None = None
     if db is not None:
         ensure_auth_indexes()
         ensure_rate_limit_indexes()
@@ -178,9 +185,18 @@ async def lifespan(app: FastAPI):
                 raise
             logger.warning("Admin access bootstrap sync skipped outside production: %s", exc)
         logger.info("Connected to MongoDB database.")
+        if mint_worker_enabled():
+            mint_worker_task = asyncio.create_task(
+                run_controlled_mint_worker(mint_worker_stop),
+                name="controlled-nft-mint-worker",
+            )
     else:
         logger.warning("MongoDB unavailable at startup; running in degraded mode.")
     yield
+    if mint_worker_task is not None:
+        mint_worker_stop.set()
+        with suppress(asyncio.CancelledError):
+            await mint_worker_task
     close_mongo_connection()
     logger.info("MongoDB connection closed.")
 

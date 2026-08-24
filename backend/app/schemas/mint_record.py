@@ -11,10 +11,17 @@ class MintPolicyItem(BaseModel):
     package_lane: str
     token_type: str | None = None
     product_includes_onchain_anchor: bool
+    onchain_anchor_available_as_addon: bool = False
+    requires_paid_nft_addon: bool = True
+    profile_completion_required_before_purchase: bool = True
+    checkout_never_triggers_mint: bool = True
     auto_mint_enabled: bool
     opt_in_only: bool = False
     requires_customer_public_safe_approval: bool = False
     included_anchor_count: int = 0
+    initial_mint_addon_code: str = "nft_lineage_record"
+    additional_mint_addon_code: str = "additional_nft_copy_mint"
+    metadata_revision_addon_code: str = "nft_metadata_revision"
     runtime_enabled: bool = False
 
 
@@ -27,6 +34,10 @@ class MintEligibilityResponse(BaseModel):
     reasons: list[str] = Field(default_factory=list)
     latest_mint_record_id: str | None = None
     missing_approvals: list[str] = Field(default_factory=list)
+    profile_complete: bool = False
+    purchase_eligible: bool = False
+    ready_for_mint_preparation: bool = False
+    nft_addon: dict = Field(default_factory=dict)
 
 
 class PrepareMintRecordPayload(BaseModel):
@@ -67,6 +78,8 @@ class MintRecordResponse(BaseModel):
     package_code: str
     package_lane: str
     token_type: str | None = None
+    nft_addon_order_id: str | None = None
+    nft_addon_code: str | None = None
     chain: str
     contract_address: str
     token_id: str | None = None

@@ -147,6 +147,10 @@ class HealthAndDbUnavailableTests(unittest.TestCase):
                     r2_secret_access_key="configured-secret-key",
                     r2_endpoint_url="https://account.r2.cloudflarestorage.com",
                     r2_private_bucket="private-bucket",
+                    nft_mint_enabled=True,
+                    nft_mint_worker_enabled=True,
+                    nft_auto_mint_on_review_enabled=False,
+                    nft_legacy_payment_links_disabled=True,
                 ),
                 patch(
                     "app.services.upload_scan_service.get_upload_scanner_health",

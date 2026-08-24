@@ -1,6 +1,6 @@
 # Tomb of Light On-Chain Anchor Backend Spec
 
-Status: Proposed production backend spec
+Status: Implemented architecture; Phase 15 add-on policy below is binding
 
 Purpose: Define the exact backend architecture for public-safe NFT anchor issuance, metadata generation, poster generation, mint jobs, and dashboard display without exposing private family archive data.
 
@@ -22,34 +22,33 @@ Core rule:
 
 This means the live operational flow is:
 
-1. payment confirmed
-2. workspace provisioned
-3. intake completed
-4. uploads and build completed
-5. admin final approval
-6. customer public-safe approval when required
-7. metadata and poster generated
-8. mint job executed
-9. mint record stored
-10. dashboard updated
+1. base package payment confirmed and workspace provisioned
+2. intake, uploads, profile build, and delivery completed
+3. customer purchases the exact NFT add-on valid for the current mint state
+4. Stripe verifies a project-scoped paid credit without creating a mint
+5. Tomb of Light prepares an approval record and atomically claims one credit
+6. customer records their public Base wallet and approves public-safe metadata
+7. CEO master account gives separate final approval
+8. CEO master account queues the approved record
+9. controlled worker generates metadata/poster, mints, and syncs the receipt
+10. dashboard updates from the canonical on-chain result
 
 ## 2. Package mint policy
 
-Launch v1 policy:
+Phase 15 policy:
 
-- `legacy_snapshot`: no automatic mint
-- `legacy_portrait_intro`: no automatic mint
-- `digital_legacy_portrait`: automatic `portrait_anchor`
-- `household_foundation`: automatic `household_anchor`
-- `heirloom_legacy_tree`: automatic `household_anchor`
-- `legacy_plus`: automatic `household_anchor`
-- `family_estate_concierge`: automatic `branch_anchor`, up to 3 included
-- `command_structure_network`: opt-in only for launch, `organization_anchor`
+- No base package includes an NFT or an automatic mint.
+- The completed-profile gate applies to every package.
+- The first mint requires `nft_lineage_record` ($499).
+- Every later mint requires `additional_nft_copy_mint` ($399).
+- `nft_metadata_revision` ($149) can revise public-safe metadata but never authorizes a new mint.
+- Checkout creates a paid credit only. It cannot prepare, approve, queue, or execute minting.
+- Customer wallet/public-safe consent and CEO final approval are always separate authenticated acts.
 
 Policy rules:
 
-- Lowest two portrait packages stay off-chain by default.
-- Organization minting is disabled by default until public-title and privacy handling is finalized.
+- Every package stays off-chain unless the customer later purchases the correct NFT add-on.
+- Organization mint execution also requires the organization runtime flag.
 - Customer opt-in is required before using an approved portrait as public poster art.
 - Public title is opt-in only.
 
@@ -360,7 +359,8 @@ Add these backend services under `backend/app/services/`:
 
 Responsibilities:
 
-- decide whether a package auto-mints
+- expose the add-on-only policy and token type for each package
+- require a completed profile and paid project-scoped mint credit
 - decide token type from package
 - enforce launch toggles
 - enforce org opt-in behavior
@@ -517,12 +517,21 @@ Response:
   "package_code": "digital_legacy_portrait",
   "package_lane": "portrait",
   "mint_policy": {
-    "auto_mint_enabled": true,
+    "product_includes_onchain_anchor": false,
+    "onchain_anchor_available_as_addon": true,
+    "requires_paid_nft_addon": true,
+    "auto_mint_enabled": false,
     "token_type": "portrait_anchor",
     "requires_customer_public_safe_approval": true
   },
-  "eligible": true,
-  "reasons": [],
+  "profile_complete": true,
+  "nft_addon": {
+    "required_mint_addon_code": "nft_lineage_record",
+    "mint_credit_satisfied": false,
+    "checkout_never_triggers_mint": true
+  },
+  "eligible": false,
+  "reasons": ["nft_addon_not_purchased"],
   "latest_mint_record_id": "string|null"
 }
 ```
@@ -633,8 +642,9 @@ Suggested front-end API source:
 
 UI states:
 
-- `not_included`
-- `eligible_waiting_for_build`
+- `profile_not_complete`
+- `nft_addon_not_purchased`
+- `paid_waiting_for_preparation`
 - `waiting_for_approval`
 - `queued`
 - `minting`
@@ -654,7 +664,8 @@ Use these version rules:
 
 Required rules:
 
-- admin final approval required before queueing mint
+- no package inclusion, manual fee flag, or waiver can satisfy the paid add-on gate
+- CEO master-account final approval and queue action are required
 - customer public-safe approval required when public title, poster opt-in, or wallet assignment is involved
 - customer cannot mint without an entitled project
 - customer cannot mint another customer’s project
@@ -698,7 +709,8 @@ Build order:
 This spec is complete when:
 
 - metadata generation is public-safe by allowlist
-- approved packages mint only according to policy
+- only a verified paid NFT add-on credit can create a mint approval record
+- checkout cannot invoke preparation, approval, queueing, or execution
 - no private archive fields appear in public metadata
 - minting is versioned and auditable
 - dashboard shows mint state and history correctly

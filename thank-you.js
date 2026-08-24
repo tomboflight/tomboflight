@@ -72,6 +72,11 @@
     "nft_metadata_revision",
     "rush_delivery_estate_command_minimum",
   ]);
+  const NFT_ADDON_CODES = new Set([
+    "nft_lineage_record",
+    "additional_nft_copy_mint",
+    "nft_metadata_revision",
+  ]);
 
   function getParam(name) {
     const params = new URLSearchParams(window.location.search);
@@ -208,6 +213,9 @@
     }
 
     if (normalizedType === "addon" || normalizedType === "extra") {
+      if (NFT_ADDON_CODES.has(basePackageCode(packageCode))) {
+        return "Your NFT add-on payment was received for verification. Payment does not mint an NFT. Return to your dashboard for the separate wallet-consent and Tomb of Light approval steps.";
+      }
       if (lane === "organization") {
         return "Your organization add-on purchase was received. It will be applied to the correct command structure workspace after payment confirmation.";
       }

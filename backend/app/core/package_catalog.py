@@ -37,6 +37,16 @@ PACKAGE_CODE_ALIASES: dict[str, str] = {
 }
 
 ADDON_CODE_ALIASES: dict[str, str] = {
+    "nft-lineage-record": "nft_lineage_record",
+    "nft_lineage_record": "nft_lineage_record",
+    "nft lineage record": "nft_lineage_record",
+    "additional-nft-copy-mint": "additional_nft_copy_mint",
+    "additional_nft_copy_mint": "additional_nft_copy_mint",
+    "additional nft copy / mint": "additional_nft_copy_mint",
+    "additional nft copy mint": "additional_nft_copy_mint",
+    "nft-metadata-revision": "nft_metadata_revision",
+    "nft_metadata_revision": "nft_metadata_revision",
+    "nft metadata revision": "nft_metadata_revision",
     "extra-upload-pack": "extra_upload_pack",
     "extra_upload_pack": "extra_upload_pack",
     "extra-storage": "extra_storage",
@@ -571,9 +581,34 @@ PACKAGE_CATALOG: dict[str, dict[str, Any]] = {
     },
 }
 
-PACKAGE_CONTROL_POLICY: dict[str, dict[str, Any]] = {
-    "legacy_snapshot": {
-        "anchor_type": None,
+NFT_ADDON_CODES = (
+    "nft_lineage_record",
+    "additional_nft_copy_mint",
+    "nft_metadata_revision",
+)
+
+PACKAGE_ANCHOR_TYPES: dict[str, str] = {
+    "legacy_snapshot": "portrait_anchor",
+    "legacy_portrait_intro": "portrait_anchor",
+    "digital_legacy_portrait": "portrait_anchor",
+    "household_foundation": "household_anchor",
+    "heirloom_legacy_tree": "household_anchor",
+    "legacy_plus": "household_anchor",
+    "family_estate_concierge": "branch_anchor",
+    "command_structure_network": "organization_anchor",
+}
+
+
+def _addon_only_mint_control(anchor_type: str) -> dict[str, Any]:
+    """Return the single canonical NFT rule shared by every base package.
+
+    A base package never includes or automatically creates an NFT.  A completed
+    profile can purchase a verified NFT add-on, after which customer wallet
+    consent and the controlled approval queue still have to complete.
+    """
+
+    return {
+        "anchor_type": anchor_type,
         "launch_policy": {
             "allows_automatic_anchor": False,
             "requires_runtime_flag_for_auto_mint": True,
@@ -581,184 +616,69 @@ PACKAGE_CONTROL_POLICY: dict[str, dict[str, Any]] = {
         "maintenance_default": "monthly",
         "mint_policy": {
             "product_includes_onchain_anchor": False,
-            "auto_mint_enabled": False,
-            "opt_in_only": False,
-            "token_type": None,
-            "included_anchor_count": 0,
-            "requires_customer_public_safe_approval": False,
-            "mint_fee_model": "service_plus_network",
-            "minting_included": False,
-            "minting_service_fee_usd": 199,
-            "default_network_fee_policy": "quoted_variable",
-            "additional_mint_service_fee_usd": 199,
-            "remint_service_fee_usd": 149,
-            "network_fee_quote_usd": 0,
-        },
-    },
-    "legacy_portrait_intro": {
-        "anchor_type": None,
-        "launch_policy": {
-            "allows_automatic_anchor": False,
-            "requires_runtime_flag_for_auto_mint": True,
-        },
-        "maintenance_default": "monthly",
-        "mint_policy": {
-            "product_includes_onchain_anchor": False,
-            "auto_mint_enabled": False,
-            "opt_in_only": False,
-            "token_type": None,
-            "included_anchor_count": 0,
-            "requires_customer_public_safe_approval": False,
-            "mint_fee_model": "service_plus_network",
-            "minting_included": False,
-            "minting_service_fee_usd": 199,
-            "default_network_fee_policy": "quoted_variable",
-            "additional_mint_service_fee_usd": 199,
-            "remint_service_fee_usd": 149,
-            "network_fee_quote_usd": 0,
-        },
-    },
-    "digital_legacy_portrait": {
-        "anchor_type": "portrait_anchor",
-        "launch_policy": {
-            "allows_automatic_anchor": True,
-            "requires_runtime_flag_for_auto_mint": True,
-        },
-        "maintenance_default": "monthly",
-        "mint_policy": {
-            "product_includes_onchain_anchor": True,
-            "auto_mint_enabled": True,
-            "opt_in_only": False,
-            "token_type": "portrait_anchor",
-            "included_anchor_count": 1,
-            "requires_customer_public_safe_approval": True,
-            "mint_fee_model": "flat_included",
-            "minting_included": True,
-            "minting_service_fee_usd": 199,
-            "default_network_fee_policy": "quoted_variable",
-            "additional_mint_service_fee_usd": 199,
-            "remint_service_fee_usd": 149,
-            "network_fee_quote_usd": 0,
-        },
-    },
-    "household_foundation": {
-        "anchor_type": "household_anchor",
-        "launch_policy": {
-            "allows_automatic_anchor": True,
-            "requires_runtime_flag_for_auto_mint": True,
-        },
-        "maintenance_default": "monthly",
-        "mint_policy": {
-            "product_includes_onchain_anchor": True,
-            "auto_mint_enabled": True,
-            "opt_in_only": False,
-            "token_type": "household_anchor",
-            "included_anchor_count": 1,
-            "requires_customer_public_safe_approval": True,
-            "mint_fee_model": "flat_included",
-            "minting_included": True,
-            "minting_service_fee_usd": 199,
-            "default_network_fee_policy": "quoted_variable",
-            "additional_mint_service_fee_usd": 199,
-            "remint_service_fee_usd": 149,
-            "network_fee_quote_usd": 0,
-        },
-    },
-    "heirloom_legacy_tree": {
-        "anchor_type": "household_anchor",
-        "launch_policy": {
-            "allows_automatic_anchor": True,
-            "requires_runtime_flag_for_auto_mint": True,
-        },
-        "maintenance_default": "monthly",
-        "mint_policy": {
-            "product_includes_onchain_anchor": True,
-            "auto_mint_enabled": True,
-            "opt_in_only": False,
-            "token_type": "household_anchor",
-            "included_anchor_count": 1,
-            "requires_customer_public_safe_approval": True,
-            "mint_fee_model": "flat_included",
-            "minting_included": True,
-            "minting_service_fee_usd": 199,
-            "default_network_fee_policy": "quoted_variable",
-            "additional_mint_service_fee_usd": 199,
-            "remint_service_fee_usd": 149,
-            "network_fee_quote_usd": 0,
-        },
-    },
-    "legacy_plus": {
-        "anchor_type": "household_anchor",
-        "launch_policy": {
-            "allows_automatic_anchor": True,
-            "requires_runtime_flag_for_auto_mint": True,
-        },
-        "maintenance_default": "monthly",
-        "mint_policy": {
-            "product_includes_onchain_anchor": True,
-            "auto_mint_enabled": True,
-            "opt_in_only": False,
-            "token_type": "household_anchor",
-            "included_anchor_count": 1,
-            "requires_customer_public_safe_approval": True,
-            "mint_fee_model": "flat_included",
-            "minting_included": True,
-            "minting_service_fee_usd": 199,
-            "default_network_fee_policy": "quoted_variable",
-            "additional_mint_service_fee_usd": 199,
-            "remint_service_fee_usd": 149,
-            "network_fee_quote_usd": 0,
-        },
-    },
-    "family_estate_concierge": {
-        "anchor_type": "branch_anchor",
-        "launch_policy": {
-            "allows_automatic_anchor": True,
-            "requires_runtime_flag_for_auto_mint": True,
-        },
-        "maintenance_default": "monthly",
-        "mint_policy": {
-            "product_includes_onchain_anchor": True,
-            "auto_mint_enabled": True,
-            "opt_in_only": False,
-            "token_type": "branch_anchor",
-            "included_anchor_count": 3,
-            "requires_customer_public_safe_approval": True,
-            "mint_fee_model": "flat_included",
-            "minting_included": True,
-            "minting_service_fee_usd": 199,
-            "default_network_fee_policy": "quoted_variable",
-            "additional_mint_service_fee_usd": 199,
-            "remint_service_fee_usd": 149,
-            "network_fee_quote_usd": 0,
-        },
-    },
-    "command_structure_network": {
-        "anchor_type": "organization_anchor",
-        "launch_policy": {
-            "allows_automatic_anchor": True,
-            "requires_runtime_flag_for_auto_mint": True,
-        },
-        "maintenance_default": "monthly",
-        "mint_policy": {
-            "product_includes_onchain_anchor": True,
+            "onchain_anchor_available_as_addon": True,
+            "requires_paid_nft_addon": True,
+            "profile_completion_required_before_purchase": True,
+            "checkout_never_triggers_mint": True,
             "auto_mint_enabled": False,
             "opt_in_only": True,
-            "token_type": "organization_anchor",
-            "included_anchor_count": 1,
+            "token_type": anchor_type,
+            "included_anchor_count": 0,
             "requires_customer_public_safe_approval": True,
-            "mint_fee_model": "service_plus_network",
+            "requires_admin_final_approval": True,
+            "mint_fee_model": "verified_addon_purchase",
             "minting_included": False,
-            "minting_service_fee_usd": 299,
-            "default_network_fee_policy": "quoted_variable",
-            "additional_mint_service_fee_usd": 199,
+            "minting_service_fee_usd": 499,
+            "default_network_fee_policy": "included_in_addon",
+            "additional_mint_service_fee_usd": 399,
             "remint_service_fee_usd": 149,
             "network_fee_quote_usd": 0,
+            "initial_mint_addon_code": "nft_lineage_record",
+            "additional_mint_addon_code": "additional_nft_copy_mint",
+            "metadata_revision_addon_code": "nft_metadata_revision",
         },
-    },
+    }
+
+
+PACKAGE_CONTROL_POLICY: dict[str, dict[str, Any]] = {
+    package_code: _addon_only_mint_control(anchor_type)
+    for package_code, anchor_type in PACKAGE_ANCHOR_TYPES.items()
 }
 
 ADDON_CATALOG: dict[str, dict[str, Any]] = {
+    "nft_lineage_record": {
+        "addon_code": "nft_lineage_record",
+        "display_name": "NFT Lineage Record",
+        "price_usd": 499,
+        "billing_type": "one_time",
+        "allowed_lanes": ["portrait", "household", "network", "organization"],
+        "fulfillment_type": "initial_nft_mint_credit",
+        "requires_completed_profile": True,
+        "status": "active",
+    },
+    "additional_nft_copy_mint": {
+        "addon_code": "additional_nft_copy_mint",
+        "display_name": "Additional NFT Copy / Mint",
+        "price_usd": 399,
+        "billing_type": "one_time",
+        "allowed_lanes": ["portrait", "household", "network", "organization"],
+        "fulfillment_type": "additional_nft_mint_credit",
+        "requires_completed_profile": True,
+        "requires_existing_mint": True,
+        "status": "active",
+    },
+    "nft_metadata_revision": {
+        "addon_code": "nft_metadata_revision",
+        "display_name": "NFT Metadata Revision",
+        "price_usd": 149,
+        "billing_type": "one_time",
+        "allowed_lanes": ["portrait", "household", "network", "organization"],
+        "fulfillment_type": "metadata_revision_credit",
+        "requires_completed_profile": True,
+        "requires_existing_mint": True,
+        "authorizes_new_mint": False,
+        "status": "active",
+    },
     "extra_upload_pack": {
         "addon_code": "extra_upload_pack",
         "display_name": "Extra Upload Pack",
@@ -893,6 +813,9 @@ ADDON_CATALOG: dict[str, dict[str, Any]] = {
 def _copy_package(value: dict[str, Any]) -> dict[str, Any]:
     package = deepcopy(value)
     package["package_lane"] = normalize_package_type(package.get("package_lane"))
+    package["allowed_addons"] = list(
+        dict.fromkeys([*(package.get("allowed_addons") or []), *NFT_ADDON_CODES])
+    )
     package_code = str(package.get("package_code") or "").strip()
     return _with_vault_entitlements(package_code, package)
 
@@ -999,12 +922,25 @@ def get_package_control_profile(package_code: str) -> dict[str, Any] | None:
             "product_includes_onchain_anchor": bool(
                 mint_policy.get("product_includes_onchain_anchor")
             ),
+            "onchain_anchor_available_as_addon": bool(
+                mint_policy.get("onchain_anchor_available_as_addon")
+            ),
+            "requires_paid_nft_addon": bool(mint_policy.get("requires_paid_nft_addon")),
+            "profile_completion_required_before_purchase": bool(
+                mint_policy.get("profile_completion_required_before_purchase")
+            ),
+            "checkout_never_triggers_mint": bool(
+                mint_policy.get("checkout_never_triggers_mint", True)
+            ),
             "auto_mint_enabled": bool(mint_policy.get("auto_mint_enabled")),
             "opt_in_only": bool(mint_policy.get("opt_in_only")),
             "token_type": mint_policy.get("token_type"),
             "included_anchor_count": int(mint_policy.get("included_anchor_count") or 0),
             "requires_customer_public_safe_approval": bool(
                 mint_policy.get("requires_customer_public_safe_approval")
+            ),
+            "requires_admin_final_approval": bool(
+                mint_policy.get("requires_admin_final_approval")
             ),
             "mint_fee_model": str(mint_policy.get("mint_fee_model") or "service_plus_network"),
             "minting_included": bool(mint_policy.get("minting_included", int(mint_policy.get("included_anchor_count") or 0) > 0)),
@@ -1013,6 +949,15 @@ def get_package_control_profile(package_code: str) -> dict[str, Any] | None:
             "additional_mint_service_fee_usd": float(mint_policy.get("additional_mint_service_fee_usd") or 0),
             "remint_service_fee_usd": float(mint_policy.get("remint_service_fee_usd") or 0),
             "network_fee_quote_usd": float(mint_policy.get("network_fee_quote_usd") or 0),
+            "initial_mint_addon_code": str(
+                mint_policy.get("initial_mint_addon_code") or ""
+            ),
+            "additional_mint_addon_code": str(
+                mint_policy.get("additional_mint_addon_code") or ""
+            ),
+            "metadata_revision_addon_code": str(
+                mint_policy.get("metadata_revision_addon_code") or ""
+            ),
         },
     }
 
@@ -1071,7 +1016,10 @@ def get_public_package_catalog() -> list[dict[str, Any]]:
             ],
         }
         package["verification_meaning"] = "Verification is a private evidence and review path used to support trusted lineage records."
-        package["minting_available"] = bool(mint_policy.get("product_includes_onchain_anchor"))
+        package["minting_available"] = bool(
+            mint_policy.get("onchain_anchor_available_as_addon")
+        )
+        package["minting_requires_addon"] = bool(mint_policy.get("requires_paid_nft_addon"))
         package["minting_included"] = bool(mint_policy.get("minting_included", False))
         package["included_anchor_count"] = int(mint_policy.get("included_anchor_count") or 0)
         package["mint_fee_model"] = str(mint_policy.get("mint_fee_model") or "service_plus_network")
@@ -1080,8 +1028,9 @@ def get_public_package_catalog() -> list[dict[str, Any]]:
         package["remint_service_fee_usd"] = float(mint_policy.get("remint_service_fee_usd") or 0)
         package["default_network_fee_policy"] = str(mint_policy.get("default_network_fee_policy") or "quoted_variable")
         package["minting_copy"] = (
-            "Blockchain / NFT minting is a separate one-time production step unless explicitly included in your package. "
-            "This fee covers collectible preparation, metadata creation, mint execution, and applicable blockchain network costs. "
+            "No base package includes an NFT. After the profile is complete, the customer may purchase the required NFT add-on. "
+            "That purchase covers collectible preparation, metadata creation, mint execution, and applicable blockchain network costs, but never starts minting automatically. "
+            "Customer wallet consent and Tomb of Light final approval are still required. "
             "Private vault materials are not minted by default. "
             "Only approved delivery-safe collectible assets are eligible for blockchain minting."
         )

@@ -56,6 +56,19 @@ def _validate_contract_abi() -> None:
         raise RuntimeError("NFT_CONTRACT_ABI_JSON is not valid JSON.") from exc
     if not isinstance(parsed, list):
         raise RuntimeError("NFT_CONTRACT_ABI_JSON must be a JSON array.")
+    preferred = _normalize(settings.nft_mint_function_name)
+    allowed_names = [name for name in (preferred, "mintAnchor", "safeMint") if name]
+    supported = []
+    for item in parsed:
+        if item.get("type") != "function" or item.get("name") not in allowed_names:
+            continue
+        input_types = [_normalize(value.get("type")).lower() for value in item.get("inputs", [])]
+        if "address" in input_types and "string" in input_types:
+            supported.append(item.get("name"))
+    if not supported:
+        raise RuntimeError(
+            "NFT_CONTRACT_ABI_JSON must expose mintAnchor or safeMint with recipient address and metadata URI inputs."
+        )
 
 
 def _validate_r2_configuration() -> None:
@@ -79,6 +92,14 @@ def _validate_r2_configuration() -> None:
 
 
 def validate_nft_runtime_configuration_on_startup() -> None:
+    if settings.nft_auto_mint_on_review_enabled:
+        raise RuntimeError(
+            "NFT_AUTO_MINT_ON_REVIEW_ENABLED is not supported. Checkout and review must never auto-mint."
+        )
+    if settings.nft_mint_worker_enabled and not settings.nft_mint_enabled:
+        raise RuntimeError(
+            "NFT_MINT_WORKER_ENABLED requires NFT_MINT_ENABLED and the complete validated mint configuration."
+        )
     if not settings.nft_mint_enabled:
         return
 

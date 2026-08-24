@@ -568,7 +568,7 @@
               <div class="admin-record-list" data-intake-history-list></div>
             </div>
 
-            <div class="form-panel portal-anchor-panel portal-secondary-panel" data-dashboard-customer-only data-legacy-anchor-proof>
+            <div class="form-panel portal-anchor-panel portal-secondary-panel" id="legacy-anchor" data-dashboard-customer-only data-legacy-anchor-proof>
               <div class="anchor-status-row">
                 <span class="eyebrow">Legacy Anchor</span>
                 <span class="presence-badge anchor-status-badge" data-anchor-status-badge>
@@ -587,6 +587,46 @@
               <p class="card-copy anchor-proof-copy" data-anchor-proof-copy>
                 Public-safe proof confirms the anchor while private family archive details remain protected.
               </p>
+
+              <div class="family-record-card" data-nft-addon-purchase-panel>
+                <div class="card-number">$</div>
+                <h3>NFT add-on purchase</h3>
+                <p class="card-copy" data-nft-addon-status>
+                  Checking profile completion and NFT add-on eligibility.
+                </p>
+                <p class="card-copy">
+                  No base package includes an NFT. Checkout only records a paid credit; it never starts minting.
+                </p>
+                <div class="inline-actions">
+                  <a class="btn btn-primary" href="dashboard.html#legacy-anchor" data-nft-addon-checkout="nft_lineage_record" aria-disabled="true">NFT Lineage Record · $499</a>
+                  <a class="btn btn-secondary" href="dashboard.html#legacy-anchor" data-nft-addon-checkout="additional_nft_copy_mint" aria-disabled="true">Additional NFT Copy / Mint · $399</a>
+                  <a class="btn btn-secondary" href="dashboard.html#legacy-anchor" data-nft-addon-checkout="nft_metadata_revision" aria-disabled="true">NFT Metadata Revision · $149</a>
+                </div>
+              </div>
+
+              <form class="family-record-card" data-nft-customer-consent-form hidden>
+                <div class="card-number">✓</div>
+                <h3>Customer wallet and public-safe consent</h3>
+                <p class="card-copy">
+                  Enter only the public Base wallet that should receive the NFT. Never enter a private key or recovery phrase.
+                </p>
+                <label class="field-label" for="nft-customer-wallet">Recipient Base wallet</label>
+                <input id="nft-customer-wallet" name="wallet_address" type="text" inputmode="text" autocomplete="off" placeholder="0x..." pattern="0x[a-fA-F0-9]{40}" required data-nft-customer-wallet />
+                <label class="checkbox-row">
+                  <input type="checkbox" required data-nft-public-safe-consent />
+                  <span>I approve the public-safe NFT metadata and understand that private vault files stay off-chain.</span>
+                </label>
+                <label class="checkbox-row">
+                  <input type="checkbox" data-nft-public-title-opt-in />
+                  <span>Include the approved public title in NFT metadata.</span>
+                </label>
+                <label class="field-label" for="nft-public-title">Approved public title (optional)</label>
+                <input id="nft-public-title" name="public_title" type="text" maxlength="120" data-nft-public-title />
+                <div class="inline-actions">
+                  <button class="btn btn-primary" type="submit" data-nft-consent-submit>Approve wallet and public-safe mint</button>
+                </div>
+                <p class="card-copy" data-nft-consent-status></p>
+              </form>
 
               <div class="grid-3 anchor-proof-grid">
                 <div class="anchor-proof-item">

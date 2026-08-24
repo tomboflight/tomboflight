@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 from fastapi import HTTPException
 
-from app.core.package_catalog import get_package, get_package_control_profile
+from app.core.package_catalog import NFT_ADDON_CODES, get_package, get_package_control_profile
 from app.routes import family_graph, workspace_access
 from app.services.entitlement_service import can_purchase_addon, resolve_project_entitlements
 
@@ -159,7 +159,7 @@ class HouseholdFoundationPackageContractTests(unittest.TestCase):
         self.assertFalse(bool(package.get("maintenance_starts_on_delivery")))
         self.assertCountEqual(
             list(package.get("allowed_addons") or []),
-            ["rush_delivery", "on_site_photo_scanning"],
+            ["rush_delivery", "on_site_photo_scanning", *NFT_ADDON_CODES],
         )
 
     def test_household_foundation_maintenance_default_is_monthly(self):
@@ -200,7 +200,7 @@ class HeirloomLegacyTreePackageContractTests(unittest.TestCase):
         self.assertFalse(bool(package.get("maintenance_starts_on_delivery")))
         self.assertCountEqual(
             list(package.get("allowed_addons") or []),
-            ["rush_delivery", "on_site_photo_scanning"],
+            ["rush_delivery", "on_site_photo_scanning", *NFT_ADDON_CODES],
         )
 
     def test_heirloom_legacy_tree_maintenance_default_is_monthly(self):
@@ -242,7 +242,7 @@ class LegacyPlusPackageContractTests(unittest.TestCase):
         self.assertFalse(bool(package.get("maintenance_starts_on_delivery")))
         self.assertCountEqual(
             list(package.get("allowed_addons") or []),
-            ["rush_delivery", "on_site_photo_scanning", "additional_narration_minute"],
+            ["rush_delivery", "on_site_photo_scanning", "additional_narration_minute", *NFT_ADDON_CODES],
         )
 
     def test_legacy_plus_maintenance_default_is_monthly(self):
@@ -302,6 +302,7 @@ class FamilyEstateConciergePackageContractTests(unittest.TestCase):
                 "on_site_photo_scanning",
                 "additional_narration_minute",
                 "white_glove_archive_support",
+                *NFT_ADDON_CODES,
             ],
         )
 
@@ -371,6 +372,7 @@ class CommandStructureNetworkPackageContractTests(unittest.TestCase):
                 "extra_storage",
                 "rush_delivery",
                 "command_report_addon",
+                *NFT_ADDON_CODES,
             ],
         )
         self.assertNotIn("family_estate_concierge", list(package.get("upgrade_targets") or []))

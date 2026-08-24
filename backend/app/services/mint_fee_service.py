@@ -1,27 +1,18 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 from bson import ObjectId
 from pymongo.database import Database
 
 from app.database import get_database
-from app.services.audit_log_service import write_audit_log
 from app.services.mint_policy_service import (
     READINESS_REASON_DETAILS,
     describe_project_mint_eligibility,
 )
 
-TERMINAL_STATUSES = {"paid", "waived", "included", "executed"}
-
-
 def _normalize(value: Any) -> str:
     return str(value or "").strip()
-
-
-def _now() -> datetime:
-    return datetime.now(UTC)
 
 
 def _db() -> Database:
@@ -57,6 +48,7 @@ def _as_int(value: Any, default: int = 0) -> int:
 def _base_mint_fee_state(project: dict[str, Any]) -> dict[str, Any]:
     eligibility = describe_project_mint_eligibility(project)
     policy = dict(eligibility.get("mint_policy") or {})
+    addon_status = dict(eligibility.get("nft_addon") or {})
     included_anchor_count = _as_int(policy.get("included_anchor_count"), 0)
     minting_included = bool(policy.get("minting_included", included_anchor_count > 0))
     mint_fee_model = _normalize(policy.get("mint_fee_model") or ("flat_included" if minting_included else "service_plus_network"))
@@ -73,7 +65,16 @@ def _base_mint_fee_state(project: dict[str, Any]) -> dict[str, Any]:
         "remint_service_fee_usd": _as_float(policy.get("remint_service_fee_usd"), 0.0),
         "network_fee_quote_usd": _as_float(project.get("network_fee_quote_usd") or policy.get("network_fee_quote_usd"), 0.0),
         "network_fee_quote_expires_at": project.get("network_fee_quote_expires_at"),
-        "mint_fee_status": _normalize(project.get("mint_fee_status")) or "not_required",
+        "mint_fee_status": (
+            "paid_addon_claimed"
+            if addon_status.get("active_mint_credit")
+            else "paid_addon_available"
+            if addon_status.get("mint_credit_satisfied")
+            else "nft_addon_required"
+        ),
+        "required_nft_addon_code": addon_status.get("required_mint_addon_code"),
+        "verified_paid_addon_credit": bool(addon_status.get("mint_credit_satisfied")),
+        "checkout_never_triggers_mint": True,
         "mint_fee_paid_at": project.get("mint_fee_paid_at"),
         "network_fee_locked_at": project.get("network_fee_locked_at"),
         "mint_fee_notes": _normalize(project.get("mint_fee_notes")),
@@ -82,177 +83,42 @@ def _base_mint_fee_state(project: dict[str, Any]) -> dict[str, Any]:
 
 def get_project_mint_fee(project_id: str) -> dict[str, Any]:
     project = _project(project_id)
-    state = _base_mint_fee_state(project)
-
-    if not bool(describe_project_mint_eligibility(project).get("mint_policy", {}).get("product_includes_onchain_anchor")):
-        state["mint_fee_status"] = "not_required"
-
-    return state
-
-
-def _create_order_line_item(
-    *,
-    project_id: str,
-    package_code: str,
-    item_type: str,
-    amount_usd: float,
-    status: str,
-    quote_expires_at: datetime | None,
-    notes: str,
-) -> None:
-    _db()["order_line_items"].insert_one(
-        {
-            "project_id": project_id,
-            "package_code": package_code,
-            "item_type": item_type,
-            "amount_usd": amount_usd,
-            "status": status,
-            "quote_expires_at": quote_expires_at,
-            "mint_fee_notes": notes,
-            "created_at": _now(),
-            "updated_at": _now(),
-        }
-    )
-
-
-def _write_fee_audit(action: str, project_id: str, actor: dict[str, Any], before: dict[str, Any], after: dict[str, Any]) -> None:
-    write_audit_log(
-        actor_user_id=_normalize(actor.get("id") or actor.get("_id") or actor.get("user_id")) or None,
-        actor_email=_normalize(actor.get("email")).lower() or None,
-        actor_name=_normalize(actor.get("name") or actor.get("full_name")) or None,
-        action=action,
-        target_type="project",
-        target_id=project_id,
-        before=before,
-        after=after,
-        details={"mint_fee_billing": True},
-    )
+    return _base_mint_fee_state(project)
 
 
 def quote_mint_fee(project_id: str, actor: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
-    project = _project(project_id)
-    before = _base_mint_fee_state(project)
-    fee_notes = _normalize(payload.get("mint_fee_notes"))
-    expires_at = _now() + timedelta(minutes=max(5, int(payload.get("quote_ttl_minutes") or 60)))
-
-    update = {
-        "minting_service_fee_usd": _as_float(payload.get("minting_service_fee_usd"), before["minting_service_fee_usd"]),
-        "blockchain_network_fee_usd": _as_float(payload.get("blockchain_network_fee_usd"), before["blockchain_network_fee_usd"]),
-        "network_fee_quote_usd": _as_float(payload.get("network_fee_quote_usd"), before["network_fee_quote_usd"]),
-        "network_fee_quote_expires_at": expires_at,
-        "mint_fee_status": "quoted",
-        "mint_fee_notes": fee_notes,
-        "updated_at": _now(),
-    }
-    _db()["projects"].update_one({"_id": project["_id"]}, {"$set": update})
-
-    package_code = _normalize(project.get("package_code") or project.get("package_slug"))
-    _create_order_line_item(
-        project_id=project_id,
-        package_code=package_code,
-        item_type="minting_service_fee",
-        amount_usd=update["minting_service_fee_usd"],
-        status="quoted",
-        quote_expires_at=expires_at,
-        notes=fee_notes,
+    del project_id, actor, payload
+    raise ValueError(
+        "Separate mint-fee quotes are disabled. Use the exact verified NFT add-on price."
     )
-    _create_order_line_item(
-        project_id=project_id,
-        package_code=package_code,
-        item_type="blockchain_network_fee",
-        amount_usd=update["blockchain_network_fee_usd"],
-        status="quoted",
-        quote_expires_at=expires_at,
-        notes=fee_notes,
-    )
-
-    after = get_project_mint_fee(project_id)
-    _write_fee_audit("project_mint_fee_quoted", project_id, actor, before, after)
-    return after
 
 
 def mark_mint_fee_paid(project_id: str, actor: dict[str, Any], notes: str = "") -> dict[str, Any]:
-    project = _project(project_id)
-    before = _base_mint_fee_state(project)
-    now = _now()
-    _db()["projects"].update_one(
-        {"_id": project["_id"]},
-        {
-            "$set": {
-                "mint_fee_status": "paid",
-                "mint_fee_paid_at": now,
-                "network_fee_locked_at": now,
-                "mint_fee_notes": _normalize(notes) or before.get("mint_fee_notes") or "",
-                "updated_at": now,
-            }
-        },
+    del project_id, actor, notes
+    raise ValueError(
+        "Manual fee status cannot authorize minting. The customer must purchase the verified NFT add-on."
     )
-    _db()["order_line_items"].update_many(
-        {"project_id": project_id, "item_type": {"$in": ["minting_service_fee", "blockchain_network_fee", "remint_fee"]}},
-        {"$set": {"status": "paid", "updated_at": now}},
-    )
-    after = get_project_mint_fee(project_id)
-    _write_fee_audit("project_mint_fee_marked_paid", project_id, actor, before, after)
-    return after
 
 
 def waive_mint_fee(project_id: str, actor: dict[str, Any], notes: str = "") -> dict[str, Any]:
-    project = _project(project_id)
-    before = _base_mint_fee_state(project)
-    now = _now()
-    _db()["projects"].update_one(
-        {"_id": project["_id"]},
-        {
-            "$set": {
-                "mint_fee_status": "waived",
-                "mint_fee_notes": _normalize(notes) or "Admin waived mint fee.",
-                "updated_at": now,
-            }
-        },
+    del project_id, actor, notes
+    raise ValueError(
+        "NFT add-on purchases cannot be waived into existence. A verified paid add-on is required."
     )
-    _db()["order_line_items"].update_many(
-        {"project_id": project_id, "item_type": {"$in": ["minting_service_fee", "blockchain_network_fee", "remint_fee"]}},
-        {"$set": {"status": "waived", "updated_at": now}},
-    )
-    after = get_project_mint_fee(project_id)
-    _write_fee_audit("project_mint_fee_waived", project_id, actor, before, after)
-    return after
 
 
 def refresh_network_quote(project_id: str, actor: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
-    project = _project(project_id)
-    before = _base_mint_fee_state(project)
-    expires_at = _now() + timedelta(minutes=max(5, int(payload.get("quote_ttl_minutes") or 60)))
-    _db()["projects"].update_one(
-        {"_id": project["_id"]},
-        {
-            "$set": {
-                "network_fee_quote_usd": _as_float(payload.get("network_fee_quote_usd"), before["network_fee_quote_usd"]),
-                "network_fee_quote_expires_at": expires_at,
-                "mint_fee_status": "quoted",
-                "mint_fee_notes": _normalize(payload.get("mint_fee_notes")) or before.get("mint_fee_notes") or "",
-                "updated_at": _now(),
-            }
-        },
+    del project_id, actor, payload
+    raise ValueError(
+        "Separate network-fee quotes are disabled. Network execution is fulfilled through the verified NFT add-on."
     )
-    after = get_project_mint_fee(project_id)
-    _write_fee_audit("project_mint_fee_network_quote_refreshed", project_id, actor, before, after)
-    return after
 
 
 def mint_fee_satisfied(project: dict[str, Any]) -> tuple[bool, str | None]:
     state = _base_mint_fee_state(project)
-    status = _normalize(state.get("mint_fee_status")).lower()
-    included = bool(state.get("minting_included")) and _as_int(state.get("mints_used_count"), 0) < _as_int(state.get("included_anchor_count"), 0)
-    model = _normalize(state.get("mint_fee_model"))
-
-    if model == "flat_included" and included:
+    if bool(state.get("verified_paid_addon_credit")):
         return True, None
-    if status in TERMINAL_STATUSES:
-        return True, None
-    if included and model in {"flat_included", "flat_fee"}:
-        return True, None
-    return False, "mint_fee_unpaid_or_unwaived"
+    return False, "nft_addon_not_purchased"
 
 
 def get_project_mint_readiness(project_id: str) -> dict[str, Any]:
@@ -261,8 +127,13 @@ def get_project_mint_readiness(project_id: str) -> dict[str, Any]:
     fee_ok, fee_reason = mint_fee_satisfied(project)
     reasons = list(eligibility.get("reasons") or [])
     blocking_details = list(eligibility.get("blocking_details") or [])
-    if not fee_ok and fee_reason:
+    if not fee_ok and fee_reason and fee_reason not in reasons:
         reasons.append(fee_reason)
+    if (
+        not fee_ok
+        and fee_reason
+        and not any(detail.get("code") == fee_reason for detail in blocking_details)
+    ):
         blocking_details.append(
             {
                 "code": fee_reason,
@@ -276,7 +147,9 @@ def get_project_mint_readiness(project_id: str) -> dict[str, Any]:
         "mint_eligible": bool(eligibility.get("eligible")),
         "mint_policy": eligibility.get("mint_policy") or {},
         "mint_fee": _base_mint_fee_state(project),
-        "ready_for_mint_preparation": bool(eligibility.get("eligible")),
+        "ready_for_mint_preparation": bool(
+            eligibility.get("ready_for_mint_preparation")
+        ),
         "ready_for_mint_execution": bool(eligibility.get("eligible")) and fee_ok,
         "blocking_reasons": reasons,
         "blocking_details": blocking_details,

@@ -24,7 +24,8 @@ class MintFeeCatalogTests(unittest.TestCase):
         packages = {item["package_code"]: item for item in get_public_package_catalog()}
         sample = packages["digital_legacy_portrait"]
         self.assertIn("minting_copy", sample)
-        self.assertIn("separate one-time production step", sample["minting_copy"])
+        self.assertIn("No base package includes an NFT", sample["minting_copy"])
+        self.assertIn("never starts minting automatically", sample["minting_copy"])
         self.assertIn("Private vault materials are not minted by default", sample["minting_copy"])
 
 
@@ -49,7 +50,7 @@ class MintReadinessTests(unittest.TestCase):
         self.assertTrue(any(item["code"] == "public_safe_approval_incomplete" for item in payload["blocking_details"]))
         self.assertIn("public_safe_approved", payload["missing_readiness_flags"])
 
-    def test_mint_fee_satisfied_for_included_credit(self):
+    def test_package_inclusion_cannot_satisfy_nft_addon_gate(self):
         project = {
             "_id": "p1",
             "package_code": "digital_legacy_portrait",
@@ -58,8 +59,8 @@ class MintReadinessTests(unittest.TestCase):
         }
         with patch.object(mint_fee_service, "describe_project_mint_eligibility", return_value={"mint_policy": {"included_anchor_count": 1, "minting_included": True, "mint_fee_model": "flat_included"}}):
             ok, reason = mint_fee_service.mint_fee_satisfied(project)
-        self.assertTrue(ok)
-        self.assertIsNone(reason)
+        self.assertFalse(ok)
+        self.assertEqual(reason, "nft_addon_not_purchased")
 
 
 class MintQueueFeeGateTests(unittest.TestCase):
@@ -71,13 +72,13 @@ class MintQueueFeeGateTests(unittest.TestCase):
         ), patch.object(
             mint_records, "describe_project_mint_eligibility", return_value={"eligible": True, "reasons": []}
         ), patch.object(
-            mint_records, "get_project_mint_readiness", return_value={"ready_for_mint_execution": False, "blocking_reasons": ["mint_fee_unpaid_or_unwaived"]}
+            mint_records, "get_project_mint_readiness", return_value={"ready_for_mint_execution": False, "blocking_reasons": ["nft_addon_not_purchased"]}
         ):
             with self.assertRaises(HTTPException) as ctx:
                 mint_records.queue_project_mint_record("p1", "m1", {"email": "admin@test.com"})
 
         self.assertEqual(ctx.exception.status_code, 409)
-        self.assertIn("mint_fee_unpaid_or_unwaived", str(ctx.exception.detail))
+        self.assertIn("nft_addon_not_purchased", str(ctx.exception.detail))
 
     def test_mint_readiness_returns_human_blocking_details(self):
         project = {
@@ -103,14 +104,14 @@ class MintQueueFeeGateTests(unittest.TestCase):
                 },
             ),
             patch.object(mint_fee_service, "_base_mint_fee_state", return_value={"mint_fee_status": "quoted"}),
-            patch.object(mint_fee_service, "mint_fee_satisfied", return_value=(False, "mint_fee_unpaid_or_unwaived")),
+            patch.object(mint_fee_service, "mint_fee_satisfied", return_value=(False, "nft_addon_not_purchased")),
         ):
             readiness = mint_fee_service.get_project_mint_readiness("p1")
 
         self.assertFalse(readiness["ready_for_mint_execution"])
-        self.assertIn("mint_fee_unpaid_or_unwaived", readiness["blocking_reasons"])
-        self.assertTrue(any(item["code"] == "mint_fee_unpaid_or_unwaived" for item in readiness["blocking_details"]))
-        self.assertIn("mint_fee_satisfied", readiness["missing_readiness_flags"])
+        self.assertIn("nft_addon_not_purchased", readiness["blocking_reasons"])
+        self.assertTrue(any(item["code"] == "nft_addon_not_purchased" for item in readiness["blocking_details"]))
+        self.assertIn("paid_nft_addon_credit", readiness["missing_readiness_flags"])
 
 
 if __name__ == "__main__":
