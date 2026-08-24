@@ -162,6 +162,11 @@ class LegacySnapshotViewerBoundariesTests(unittest.TestCase):
                 "load_project_workspace_anchor",
                 return_value=(family, primary_member, project),
             ),
+            patch.object(
+                viewer_manifest_service,
+                "publish_private_cinematic_manifest",
+                side_effect=lambda manifest, **_kwargs: manifest,
+            ),
         ):
             manifest = viewer_manifest_service.build_viewer_manifest(
                 current_user={"id": "user-1", "email": "owner@example.com"},
@@ -204,6 +209,11 @@ class LegacySnapshotViewerBoundariesTests(unittest.TestCase):
                 viewer_manifest_service,
                 "load_project_workspace_anchor",
                 return_value=(family, primary_member, project),
+            ),
+            patch.object(
+                viewer_manifest_service,
+                "publish_private_cinematic_manifest",
+                side_effect=lambda manifest, **_kwargs: manifest,
             ),
         ):
             manifest = viewer_manifest_service.build_viewer_manifest(

@@ -216,6 +216,11 @@ def test_household_manifest_keeps_family_viewer_controls():
             "load_project_workspace_anchor",
             return_value=(family, primary_member, project),
         ),
+        patch.object(
+            viewer_manifest_service,
+            "publish_private_cinematic_manifest",
+            side_effect=lambda manifest, **_kwargs: manifest,
+        ),
     ):
         manifest = viewer_manifest_service.build_viewer_manifest(
             current_user={"id": "user-1", "email": "owner@example.com"},

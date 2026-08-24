@@ -65,8 +65,13 @@ def _approved_portrait_for_network(
 
     for upload in candidates:
         ready = bool(
-            _str_id(upload.get("scan_status")).lower() == "clean"
+            _str_id(upload.get("category")).lower() == "member_photo"
+            and _str_id(upload.get("family_id")) == family_id
+            and _str_id(upload.get("member_id")) == member_id
+            and _str_id(upload.get("scan_status")).lower() == "clean"
             and not bool(upload.get("quarantined"))
+            and _str_id(upload.get("deletion_status")).lower()
+            not in {"pending", "failed", "deleted"}
             and bool(upload.get("approved_for_cinematic"))
             and _str_id(upload.get("verification_status")).lower() == "approved"
             and _str_id(upload.get("consent_status")).lower() == "approved"
@@ -76,9 +81,16 @@ def _approved_portrait_for_network(
         if not ready:
             continue
         if not is_own_household and not (
-            bool(upload.get("share_with_linked_families"))
-            or _str_id(upload.get("visibility_scope")).lower()
-            in {"linked_family_shared", "public_memorial"}
+            not bool(upload.get("internal_only"))
+            and bool(upload.get("customer_visible", True))
+            and (
+                bool(upload.get("share_with_linked_families"))
+                or _str_id(
+                    upload.get("privacy_scope")
+                    or upload.get("visibility_scope")
+                ).lower()
+                in {"branch_shared", "linked_family_shared", "public_memorial"}
+            )
         ):
             continue
         return upload
