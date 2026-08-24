@@ -6,6 +6,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from app.config import settings
+from app.services.blockchain_mint_service import validate_mint_signer_contract_owner
 from app.services.r2_storage_service import r2_is_configured
 
 EVM_WALLET_PATTERN = re.compile(r"^0x[a-fA-F0-9]{40}$")
@@ -143,3 +144,4 @@ def validate_nft_runtime_configuration_on_startup() -> None:
     _validate_private_key()
     _validate_contract_abi()
     _validate_r2_configuration()
+    validate_mint_signer_contract_owner()
