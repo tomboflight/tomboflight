@@ -8,10 +8,10 @@ import stripe
 from bson import ObjectId
 from pymongo.collection import Collection
 from pymongo.database import Database
-from pymongo.errors import OperationFailure
+from pymongo.errors import DuplicateKeyError, OperationFailure
 
 from app.config import settings
-from app.core.package_catalog import get_package
+from app.core.package_catalog import get_addon, get_package, normalize_addon_code
 from app.core.package_mapping import normalize_package_code as normalize_mapped_package_code
 from app.database import get_database
 from app.services.auth_service import create_pending_checkout_user
@@ -25,6 +25,10 @@ from app.services.project_entitlement_service import (
     update_project_entitlement_maintenance,
 )
 from app.services.project_entitlement_service import MAINTENANCE_START_DELAY_DAYS
+from app.services.nft_addon_service import (
+    NFT_ADDON_CODES,
+    validate_nft_addon_purchase_target,
+)
 
 AUTHORITATIVE_ORDER_SOURCES = {
     "stripe_webhook",
@@ -353,6 +357,8 @@ def _serialize_order(order: dict[str, Any]) -> dict[str, Any]:
         "lane": order.get("lane") or order.get("package_lane") or _package_lane_for_code(package_code),
         "package_lane": order.get("package_lane") or order.get("lane") or _package_lane_for_code(package_code),
         "package_name": order.get("package_name", ""),
+        "addon_code": order.get("addon_code"),
+        "purchase_code": order.get("purchase_code"),
         "price_label": order.get("price_label", ""),
         "item_type": order.get("item_type", "package"),
         "billing_plan": order.get("billing_plan", "one_time"),
@@ -362,6 +368,8 @@ def _serialize_order(order: dict[str, Any]) -> dict[str, Any]:
         "stripe_session_id": order.get("stripe_session_id"),
         "stripe_payment_link_id": order.get("stripe_payment_link_id"),
         "fulfillment_status": order.get("fulfillment_status"),
+        "nft_credit_status": order.get("nft_credit_status"),
+        "nft_credit_slot": order.get("nft_credit_slot"),
         "created_at": order["created_at"],
     }
 
@@ -732,11 +740,25 @@ def ensure_order_indexes() -> None:
     _ensure_index([("package_code", 1)], name="package_code_1")
     _ensure_index([("package_slug", 1)], name="package_slug_1")
     _ensure_index([("item_type", 1)], name="item_type_1")
+    _ensure_index([("addon_code", 1)], name="addon_code_1")
     _ensure_index([("billing_plan", 1)], name="billing_plan_1")
     _ensure_index([("created_at", -1)], name="created_at_-1")
     # project_id is queried on every workspace access check; index is required to
     # avoid full collection scans that cause request timeouts.
     _ensure_index([("project_id", 1)], name="project_id_1")
+    _ensure_index(
+        [("project_id", 1), ("addon_code", 1), ("nft_credit_status", 1)],
+        name="project_id_1_addon_code_1_nft_credit_status_1",
+    )
+    # The value combines project id and mint sequence (for example mint:1).
+    # A sparse unique index closes concurrent duplicate-checkout races without
+    # constraining metadata-revision purchases.
+    _ensure_index(
+        [("nft_credit_slot_key", 1)],
+        name="nft_credit_slot_key_1",
+        unique=True,
+        sparse=True,
+    )
     _ensure_index(
         [("stripe_session_id", 1)],
         name="stripe_session_id_1",
@@ -873,10 +895,15 @@ def _extract_checkout_context(session: dict[str, Any]) -> dict[str, str]:
         context["user_id"] = _normalize(parsed.get("u"))
     if parsed.get("p"):
         context["project_id"] = _normalize(parsed.get("p"))
-    if parsed.get("k"):
-        context["package_code"] = _normalize_package_code(parsed.get("k"))
     if parsed.get("t"):
         context["item_type"] = _normalize(parsed.get("t")).lower()
+    if parsed.get("k"):
+        raw_code = _normalize(parsed.get("k")).lower().replace("-", "_").replace(" ", "_")
+        context["package_code"] = (
+            normalize_addon_code(raw_code)
+            if context.get("item_type") == "addon"
+            else _normalize_package_code(raw_code)
+        )
     if parsed.get("b"):
         context["billing_interval"] = _normalize(parsed.get("b")).lower()
     if parsed.get("c"):
@@ -1006,6 +1033,108 @@ def _extract_verified_package_purchase_from_session(session: dict[str, Any]) -> 
     }
 
 
+def _normalized_catalog_product_name(value: Any) -> str:
+    normalized = _normalize(value).lower().replace("—", "-").replace("–", "-")
+    normalized = re.sub(r"\s+", " ", normalized)
+    normalized = re.sub(r"^add\s*-?\s*on\s*-\s*", "", normalized)
+    return normalized.strip()
+
+
+def _match_nft_addon_code_from_product(
+    *,
+    raw_code: str,
+    product_name: str,
+) -> str:
+    candidate = normalize_addon_code(raw_code)
+    if candidate not in NFT_ADDON_CODES:
+        candidate = ""
+
+    normalized_name = _normalized_catalog_product_name(product_name)
+    name_matches = [
+        code
+        for code in NFT_ADDON_CODES
+        if normalized_name
+        == _normalized_catalog_product_name((get_addon(code) or {}).get("display_name"))
+    ]
+    if len(name_matches) != 1:
+        return ""
+    if candidate and candidate != name_matches[0]:
+        return ""
+    return candidate or name_matches[0]
+
+
+def _extract_verified_catalog_purchase_from_session(session: dict[str, Any]) -> dict[str, Any]:
+    """Verify a base-package or NFT add-on purchase against the server catalog."""
+
+    metadata = session.get("metadata") or {}
+    context = _extract_checkout_context(session)
+    requested_type = _normalize(metadata.get("item_type") or context.get("item_type")).lower()
+
+    line_items = ((session.get("line_items") or {}).get("data")) or []
+    first_item = line_items[0] if line_items else {}
+    price_obj = (first_item or {}).get("price") or {}
+    product_obj = price_obj.get("product") or {}
+    product_name = _normalize(
+        product_obj.get("name")
+        or (first_item or {}).get("description")
+        or metadata.get("package_name")
+    )
+    raw_code = _normalize(
+        metadata.get("addon_code")
+        or metadata.get("package_code")
+        or metadata.get("package_slug")
+        or (product_obj.get("metadata") or {}).get("addon_code")
+        or (product_obj.get("metadata") or {}).get("package_code")
+        or context.get("package_code")
+    )
+    addon_code = _match_nft_addon_code_from_product(
+        raw_code=raw_code,
+        product_name=product_name,
+    )
+    if requested_type == "addon" or addon_code:
+        session_status = _normalize(session.get("status")).lower()
+        if session_status == "expired":
+            raise ValueError("Checkout session has expired.")
+        if _normalize(session.get("payment_status")).lower() != "paid":
+            raise ValueError("Checkout session is not paid.")
+        if not line_items or not price_obj or not product_obj:
+            raise ValueError("Checkout session is missing expanded product and price data.")
+        if len(line_items) != 1 or int((first_item or {}).get("quantity") or 1) != 1:
+            raise ValueError("NFT add-on checkout must contain exactly one item.")
+        if not addon_code:
+            raise ValueError("Checkout product is not an approved Tomb of Light NFT add-on.")
+
+        addon = get_addon(addon_code) or {}
+        amount_cents = price_obj.get("unit_amount")
+        expected_cents = int(round(float(addon.get("price_usd") or 0) * 100))
+        currency = _normalize_currency(price_obj.get("currency") or session.get("currency"))
+        if expected_cents <= 0 or currency != "usd" or amount_cents != expected_cents:
+            raise ValueError("Checkout product and price do not match the approved NFT add-on catalog.")
+        amount_total = session.get("amount_total")
+        if isinstance(amount_total, int) and amount_total != expected_cents:
+            raise ValueError("Checkout session amount does not match expected NFT add-on total.")
+
+        price_id = _normalize(price_obj.get("id"))
+        product_id = _normalize(product_obj.get("id"))
+        if not price_id or not product_id:
+            raise ValueError("Checkout session NFT add-on has unknown Stripe catalog identifiers.")
+        return {
+            "package_code": addon_code,
+            "addon_code": addon_code,
+            "package_name": _normalize(addon.get("display_name")),
+            "price_label": _format_price_label(expected_cents, "one_time"),
+            "item_type": "addon",
+            "billing_plan": "one_time",
+            "currency": currency,
+            "amount_cents": expected_cents,
+            "stripe_payment_link_id": _normalize(session.get("payment_link")) or None,
+            "price_id": price_id,
+            "product_id": product_id,
+        }
+
+    return _extract_verified_package_purchase_from_session(session)
+
+
 def _ensure_session_belongs_to_user(
     *,
     user: dict[str, Any],
@@ -1017,7 +1146,8 @@ def _ensure_session_belongs_to_user(
         raise ValueError("Checkout session email does not match authenticated customer.")
 
     metadata = session.get("metadata") or {}
-    metadata_user_id = _normalize(metadata.get("user_id"))
+    context = _extract_checkout_context(session)
+    metadata_user_id = _normalize(metadata.get("user_id") or context.get("user_id"))
     current_user_id = _normalize(str(user.get("_id") or user.get("id") or user.get("user_id") or ""))
     if metadata_user_id and current_user_id and metadata_user_id != current_user_id:
         raise ValueError("Checkout session user association mismatch.")
@@ -1246,6 +1376,66 @@ def _get_email_from_event(event: dict[str, Any]) -> Optional[str]:
     return _normalize_email(email)
 
 
+def _record_escalated_nft_addon_payment(
+    *,
+    user: dict[str, Any],
+    email: str,
+    session: dict[str, Any],
+    purchase: dict[str, Any],
+    reason: str,
+    project_id: str = "",
+) -> dict[str, Any]:
+    """Preserve a paid but ineligible add-on without granting a mint credit."""
+
+    orders = _get_orders_collection()
+    session_id = _normalize(session.get("id"))
+    existing = orders.find_one({"stripe_session_id": session_id})
+    if existing:
+        return {
+            "order_id": str(existing["_id"]),
+            "existing": True,
+            "reason": "nft_addon_payment_escalated",
+            "error": reason,
+            "session_id": session_id,
+        }
+
+    addon_code = normalize_addon_code(purchase.get("addon_code"))
+    document: dict[str, Any] = {
+        "user_id": ObjectId(str(user["_id"])),
+        "email": email,
+        "package_code": addon_code,
+        "package_slug": addon_code,
+        "addon_code": addon_code,
+        "purchase_code": addon_code,
+        "package_name": purchase.get("package_name"),
+        "price_label": purchase.get("price_label"),
+        "item_type": "addon",
+        "billing_plan": "one_time",
+        "source": "stripe_webhook",
+        "status": "paid",
+        "fulfillment_status": FULFILLMENT_ESCALATED,
+        "fulfillment_error": reason,
+        "nft_addon_verified": False,
+        "nft_credit_status": "blocked",
+        "nft_addon_checkout_does_not_auto_mint": True,
+        "stripe_session_id": session_id,
+        "stripe_payment_link_id": _normalize(session.get("payment_link")) or None,
+        "created_at": datetime.now(UTC),
+    }
+    project_oid = _to_object_id(project_id)
+    if project_oid is not None:
+        document["project_id"] = project_oid
+    result = orders.insert_one(document)
+    return {
+        "order_id": str(result.inserted_id),
+        "existing": False,
+        "reason": "nft_addon_payment_escalated",
+        "error": reason,
+        "session_id": session_id,
+        "project_id": str(project_oid) if project_oid is not None else None,
+    }
+
+
 def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
     event_type = event.get("type", "")
     data = _event_object(event)
@@ -1274,7 +1464,7 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
         }
 
     try:
-        purchase = _extract_verified_package_purchase_from_session(session)
+        purchase = _extract_verified_catalog_purchase_from_session(session)
     except ValueError as exc:
         return {
             "order_id": None,
@@ -1318,6 +1508,92 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
             "email": email,
         }
 
+    item_type = purchase["item_type"]
+    addon_code = normalize_addon_code(purchase.get("addon_code"))
+    orders = _get_orders_collection()
+    existing_session_order = orders.find_one({"stripe_session_id": session_id})
+    if item_type == "addon" and existing_session_order:
+        existing_user_id = _normalize(str(existing_session_order.get("user_id") or ""))
+        incoming_user_id = _normalize(
+            str(user.get("_id") or user.get("id") or user.get("user_id") or "")
+        )
+        existing_email = _normalize_email(existing_session_order.get("email"))
+        if (
+            (existing_user_id and incoming_user_id and existing_user_id != incoming_user_id)
+            or (existing_email and existing_email != email)
+        ):
+            return {
+                "order_id": None,
+                "reason": "session_already_associated_with_another_customer",
+                "type": event_type,
+                "session_id": session_id,
+                "email": email,
+            }
+        existing_addon_code = normalize_addon_code(
+            existing_session_order.get("addon_code")
+            or existing_session_order.get("purchase_code")
+        )
+        if existing_addon_code != addon_code:
+            return {
+                "order_id": None,
+                "reason": "session_already_associated_with_another_product",
+                "type": event_type,
+                "session_id": session_id,
+                "email": email,
+            }
+        return {
+            "order_id": str(existing_session_order["_id"]),
+            "existing": True,
+            "type": event_type,
+            "session_id": session_id,
+            "email": email,
+            "package_code": existing_session_order.get("package_code"),
+            "addon_code": existing_addon_code,
+            "item_type": "addon",
+            "billing_plan": existing_session_order.get("billing_plan") or "one_time",
+            "project_id": (
+                str(existing_session_order["project_id"])
+                if existing_session_order.get("project_id")
+                else None
+            ),
+            "nft_credit_status": existing_session_order.get("nft_credit_status"),
+        }
+
+    target_project_id = _extract_target_project_id(session)
+    target_project: dict[str, Any] | None = None
+    if item_type == "addon":
+        if addon_code not in NFT_ADDON_CODES:
+            return _record_escalated_nft_addon_payment(
+                user=user,
+                email=email,
+                session=session,
+                purchase=purchase,
+                reason="Checkout did not resolve to an approved NFT add-on.",
+            )
+        if not target_project_id:
+            return _record_escalated_nft_addon_payment(
+                user=user,
+                email=email,
+                session=session,
+                purchase=purchase,
+                reason="NFT add-on payment is missing required customer project context.",
+            )
+        try:
+            target_project = validate_nft_addon_purchase_target(
+                user=user,
+                project_id=target_project_id,
+                addon_code=addon_code,
+            )
+        except ValueError as exc:
+            return _record_escalated_nft_addon_payment(
+                user=user,
+                email=email,
+                session=session,
+                purchase=purchase,
+                reason=str(exc),
+                project_id=target_project_id,
+            )
+
     customer_id = _normalize(session.get("customer"))
     if customer_id:
         try:
@@ -1329,12 +1605,17 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
         except Exception:
             pass
 
-    orders = _get_orders_collection()
     checkout_context = _extract_checkout_context(session)
     campaign = _normalize((session.get("metadata") or {}).get("campaign") or checkout_context.get("campaign")).upper()
 
-    item_type = purchase["item_type"]
-    package_code = purchase["package_code"]
+    purchase_code = purchase["package_code"]
+    package_code = purchase_code
+    if target_project is not None:
+        package_code = _normalize_package_code(
+            target_project.get("package_code")
+            or target_project.get("package_slug")
+            or target_project.get("package_type")
+        )
     package_name = purchase["package_name"]
     price_label = purchase["price_label"]
     billing_plan = purchase["billing_plan"]
@@ -1370,6 +1651,28 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
             "status": "paid",
             "stripe_session_id": session_id,
         }
+        if item_type == "addon" and target_project is not None:
+            update_fields.update(
+                {
+                    "project_id": target_project["_id"],
+                    "addon_code": addon_code,
+                    "purchase_code": purchase_code,
+                    "nft_addon_verified": True,
+                    "nft_addon_checkout_does_not_auto_mint": True,
+                }
+            )
+            _set_if_present(
+                update_fields,
+                "nft_credit_slot",
+                target_project.get("_nft_credit_slot"),
+            )
+            _set_if_present(
+                update_fields,
+                "nft_credit_slot_key",
+                target_project.get("_nft_credit_slot_key"),
+            )
+            if not _normalize(existing.get("nft_credit_status")):
+                update_fields["nft_credit_status"] = "available"
         _set_if_present(update_fields, "stripe_payment_link_id", stripe_payment_link_id)
         _set_if_present(update_fields, "campaign", campaign)
         _set_if_present(update_fields, "stripe_payment_intent_id", _normalize(session.get("payment_intent")) or None)
@@ -1429,6 +1732,27 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
         "stripe_session_id": session_id,
         "created_at": datetime.now(UTC),
     }
+    if item_type == "addon" and target_project is not None:
+        order_doc.update(
+            {
+                "project_id": target_project["_id"],
+                "addon_code": addon_code,
+                "purchase_code": purchase_code,
+                "nft_addon_verified": True,
+                "nft_addon_checkout_does_not_auto_mint": True,
+                "nft_credit_status": "available",
+            }
+        )
+        _set_if_present(
+            order_doc,
+            "nft_credit_slot",
+            target_project.get("_nft_credit_slot"),
+        )
+        _set_if_present(
+            order_doc,
+            "nft_credit_slot_key",
+            target_project.get("_nft_credit_slot_key"),
+        )
     manual_mode = manual_fulfillment_mode_enabled()
     if manual_mode and item_type == "package":
         order_doc["fulfillment_status"] = FULFILLMENT_PENDING
@@ -1436,7 +1760,52 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
     _set_if_present(order_doc, "campaign", campaign)
     _set_if_present(order_doc, "stripe_payment_intent_id", _normalize(session.get("payment_intent")) or None)
 
-    result = orders.insert_one(order_doc)
+    try:
+        result = orders.insert_one(order_doc)
+    except DuplicateKeyError:
+        raced = orders.find_one({"stripe_session_id": session_id})
+        if raced is not None:
+            return {
+                "order_id": str(raced["_id"]),
+                "existing": True,
+                "type": event_type,
+                "session_id": session_id,
+                "email": email,
+                "package_code": raced.get("package_code"),
+                "item_type": raced.get("item_type"),
+                "billing_plan": raced.get("billing_plan"),
+                "project_id": str(raced["project_id"]) if raced.get("project_id") else None,
+            }
+        if item_type != "addon":
+            raise
+        order_doc.pop("nft_credit_slot", None)
+        order_doc.pop("nft_credit_slot_key", None)
+        order_doc.update(
+            {
+                "nft_addon_verified": False,
+                "nft_credit_status": "blocked",
+                "fulfillment_status": FULFILLMENT_ESCALATED,
+                "fulfillment_error": (
+                    "A paid NFT mint credit already exists for this project and mint sequence."
+                ),
+            }
+        )
+        result = orders.insert_one(order_doc)
+        order_doc["_id"] = result.inserted_id
+        return {
+            "order_id": str(result.inserted_id),
+            "existing": False,
+            "reason": "duplicate_nft_mint_credit_payment_escalated",
+            "error": order_doc["fulfillment_error"],
+            "type": event_type,
+            "session_id": session_id,
+            "email": email,
+            "package_code": package_code,
+            "addon_code": addon_code,
+            "item_type": item_type,
+            "billing_plan": billing_plan,
+            "project_id": str(order_doc["project_id"]),
+        }
     order_doc["_id"] = result.inserted_id
 
     if item_type == "package" and not manual_mode:

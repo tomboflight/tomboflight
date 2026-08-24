@@ -324,7 +324,7 @@
         slug: "nft_lineage_record",
         type: "addon",
         priceLabel: "$499 one-time",
-        checkoutUrl: "https://buy.stripe.com/28E5kDgUSbIzcTs8xnbEA1N",
+        checkoutUrl: "",
         successUrl:
           "/thank-you.html?session_id={CHECKOUT_SESSION_ID}&type=addon&package=nft_lineage_record",
       },
@@ -334,7 +334,7 @@
         slug: "additional_nft_copy_mint",
         type: "addon",
         priceLabel: "$399 one-time",
-        checkoutUrl: "https://buy.stripe.com/dRm14n5ca7sjf1AbJzbEA1O",
+        checkoutUrl: "",
         successUrl:
           "/thank-you.html?session_id={CHECKOUT_SESSION_ID}&type=addon&package=additional_nft_copy_mint",
       },
@@ -344,7 +344,7 @@
         slug: "nft_metadata_revision",
         type: "addon",
         priceLabel: "$149 one-time",
-        checkoutUrl: "https://buy.stripe.com/cNiaEX1ZYaEvaLkfZPbEA1P",
+        checkoutUrl: "",
         successUrl:
           "/thank-you.html?session_id={CHECKOUT_SESSION_ID}&type=addon&package=nft_metadata_revision",
       },

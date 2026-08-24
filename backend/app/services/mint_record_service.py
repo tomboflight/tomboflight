@@ -9,9 +9,16 @@ from pymongo.collection import Collection
 from pymongo.errors import OperationFailure
 
 from app.config import settings
+from app.core.admin_permission_registry import is_canonical_ceo_email
 from app.core.package_catalog import get_package
 from app.database import get_database
 from app.services.mint_policy_service import get_package_mint_policy
+from app.services.nft_addon_service import (
+    finalize_mint_addon_reservation,
+    get_nft_addon_status,
+    release_mint_addon_reservation,
+    reserve_paid_mint_addon,
+)
 from app.services.public_manifest_service import (
     build_public_manifest,
     compute_build_hash,
@@ -180,6 +187,7 @@ def ensure_mint_record_indexes() -> None:
         ([("mint_status", 1), ("created_at", -1)], "mint_status_1_created_at_-1"),
         ([("tx_hash", 1)], "tx_hash_1"),
         ([("token_id", 1), ("contract_address", 1)], "token_id_1_contract_address_1"),
+        ([("nft_addon_order_id", 1)], "nft_addon_order_id_1"),
     ]
     approval_definitions = [
         ([("project_id", 1), ("approval_type", 1), ("status", 1)], "project_id_1_approval_type_1_status_1"),
@@ -259,6 +267,8 @@ def _serialize_record(document: dict[str, Any]) -> dict[str, Any]:
         "user_id": _normalize(document.get("user_id")),
         "package_code": _normalize(document.get("package_code")),
         "package_lane": _normalize(document.get("package_lane")),
+        "nft_addon_order_id": _normalize(document.get("nft_addon_order_id")) or None,
+        "nft_addon_code": _normalize(document.get("nft_addon_code")) or None,
         "token_type": _normalize(document.get("token_type")) or None,
         "chain": _normalize(document.get("chain")) or settings.nft_chain,
         "contract_address": _normalize(document.get("contract_address"))
@@ -761,8 +771,8 @@ def create_mint_record(
     package_code, package_lane = _package_fields(project)
     policy = get_package_mint_policy(package_code)
 
-    if not policy.get("product_includes_onchain_anchor"):
-        raise ValueError("This package does not include an on-chain legacy anchor.")
+    if not policy.get("onchain_anchor_available_as_addon"):
+        raise ValueError("This project does not support the NFT add-on workflow.")
 
     existing_summary = resolve_canonical_mint_status(project_id, include_history=False)
     existing = existing_summary.get("current_record")
@@ -782,6 +792,15 @@ def create_mint_record(
             raise ValueError("Canonical mint summary is missing the current mint record.")
         return existing
 
+    addon_status = get_nft_addon_status(project_id, project=project)
+    if not addon_status.get("profile_complete"):
+        raise ValueError("The customer profile must be complete before NFT preparation.")
+    required_addon_code = _normalize(addon_status.get("required_mint_addon_code"))
+    reservation = reserve_paid_mint_addon(
+        project_id,
+        required_addon_code=required_addon_code,
+    )
+
     version_number = _next_version_number(project_id)
     project_doc_id = _normalize(project.get("_id"))
     now = _now()
@@ -793,6 +812,9 @@ def create_mint_record(
         "user_id": _object_id_or_text(project.get("owner_user_id")),
         "package_code": package_code,
         "package_lane": package_lane,
+        "nft_addon_order_id": _object_id_or_text(reservation["order_id"]),
+        "nft_addon_code": reservation["addon_code"],
+        "checkout_triggered_mint": False,
         "token_type": _normalize(policy.get("token_type")) or None,
         "chain": settings.nft_chain,
         "contract_address": settings.nft_contract_address,
@@ -821,8 +843,18 @@ def create_mint_record(
         "updated_at": now,
     }
 
-    result = _records_collection().insert_one(document)
-    mint_record_id = _normalize(result.inserted_id)
+    try:
+        result = _records_collection().insert_one(document)
+        mint_record_id = _normalize(result.inserted_id)
+        finalize_mint_addon_reservation(
+            reservation,
+            mint_record_id=mint_record_id,
+        )
+    except Exception:
+        release_mint_addon_reservation(reservation)
+        if "result" in locals():
+            _records_collection().delete_one({"_id": result.inserted_id})
+        raise
     _supersede_active_records(
         project_doc_id,
         keep_mint_record_id=mint_record_id,
@@ -898,6 +930,11 @@ def approve_admin_mint_record(
     approved_by_email: str,
     notes: str = "",
 ) -> dict[str, Any]:
+    normalized_approver = _normalize(approved_by_email).lower()
+    if not is_canonical_ceo_email(normalized_approver):
+        raise ValueError(
+            "Only the CEO master account can give final NFT approval."
+        )
     record = get_mint_record(mint_record_id)
     if record is None:
         raise ValueError("Mint record not found.")
@@ -907,7 +944,7 @@ def approve_admin_mint_record(
         mint_record_id=mint_record_id,
         approval_type=ADMIN_APPROVAL_TYPE,
         status="approved",
-        approved_by_email=approved_by_email,
+        approved_by_email=normalized_approver,
         notes=notes,
     )
     return _recompute_mint_approval_state(mint_record_id)
@@ -971,6 +1008,10 @@ def mark_mint_queued(mint_record_id: str) -> dict[str, Any]:
         raise ValueError("Mint record not found.")
     if record["mint_status"] not in {"approved", "queued"}:
         raise ValueError("Mint record must be approved before queueing.")
+    if not record.get("nft_addon_order_id") or not record.get("nft_addon_code"):
+        raise ValueError("A verified paid NFT add-on must be attached before queueing.")
+    if not record.get("customer_wallet"):
+        raise ValueError("Customer wallet consent is required before queueing.")
     canonical = resolve_canonical_mint_status(record["project_id"], include_history=False)
     if canonical.get("is_minted"):
         mark_obsolete_mint_jobs_for_project(
@@ -1092,7 +1133,9 @@ def build_mint_status(project_id: str) -> dict[str, Any]:
 
     return {
         "project_id": _normalize(project_id),
-        "mint_enabled": bool(mint_policy.get("product_includes_onchain_anchor")),
+        "mint_enabled": bool(mint_policy.get("onchain_anchor_available_as_addon")),
+        "minting_included_in_package": False,
+        "nft_addon": get_nft_addon_status(project_id, project=project),
         "current_status": canonical["current_status"],
         "canonical_status": canonical["canonical_status"],
         "current_mint_record_id": canonical["current_mint_record_id"],

@@ -15,6 +15,7 @@ from app.schemas.mint_record import (
 from app.services.mint_job_service import queue_mint_pipeline, sync_receipt_for_mint_record
 from app.services.mint_maintenance_service import run_mint_maintenance
 from app.services.mint_fee_service import get_project_mint_readiness
+from app.services.nft_checkout_service import create_nft_addon_checkout_session
 from app.services.mint_policy_service import describe_project_mint_eligibility
 from app.services.mint_record_service import (
     approve_admin_mint_record,
@@ -111,7 +112,7 @@ def _require_mint_fee_ready(project_id: str) -> None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                "Mint fee and readiness requirements are not satisfied: "
+                "Paid NFT add-on and readiness requirements are not satisfied: "
                 + ", ".join(readiness.get("blocking_reasons") or ["mint_not_ready"])
             ),
         )
@@ -170,6 +171,30 @@ def get_project_mint_eligibility(
     return eligibility
 
 
+@router.post("/projects/{project_id}/nft-addons/{addon_code}/checkout-session")
+def create_project_nft_addon_checkout(
+    project_id: str,
+    addon_code: str,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    try:
+        return create_nft_addon_checkout_session(
+            user=current_user,
+            project_id=project_id,
+            addon_code=addon_code,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+
+
 @router.get("/admin/mint-records/overview")
 def list_admin_mint_overview(
     limit: int = 100,
@@ -213,7 +238,11 @@ def list_admin_mint_overview(
         if normalized_status and latest_status != normalized_status:
             continue
 
-        if mintable_only and not bool((item.get("eligibility") or {}).get("mint_policy", {}).get("product_includes_onchain_anchor")):
+        if mintable_only and not bool(
+            (item.get("eligibility") or {})
+            .get("mint_policy", {})
+            .get("onchain_anchor_available_as_addon")
+        ):
             continue
 
         items.append(item)

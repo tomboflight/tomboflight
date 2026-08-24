@@ -12,37 +12,27 @@ from app.core.package_catalog import (
 from app.core.package_mapping import resolve_package_identity
 from app.database import get_database
 
-BUILD_READY_STATUSES = {
-    "build_ready",
-    "in_production",
-    "qa_review",
-    "client_review",
-    "delivered",
-    "archived",
-}
-BUILD_READY_PHASES = {
-    "intake_approved",
-    "in_production",
-    "qa_review",
-    "client_review",
-    "delivered",
-    "archived",
-}
+COMPLETE_PROFILE_STATUSES = {"delivered", "archived"}
+COMPLETE_PROFILE_PHASES = {"delivery_complete", "delivered", "archived"}
 
 MINT_FEE_STATUS_READY = {"paid", "waived", "included", "executed"}
 
 READINESS_REASON_DETAILS: dict[str, dict[str, str]] = {
-    "package_not_included": {
-        "message": "This package does not include on-chain minting.",
-        "flag": "product_includes_onchain_anchor",
+    "nft_addon_not_purchased": {
+        "message": "A verified paid NFT mint add-on is required.",
+        "flag": "paid_nft_addon_credit",
     },
-    "build_not_ready": {
-        "message": "Project workflow state is not build-ready.",
-        "flag": "build_ready_state",
+    "profile_not_complete": {
+        "message": "The customer profile must be delivered before an NFT add-on can be purchased or prepared.",
+        "flag": "profile_complete",
     },
     "mint_runtime_disabled": {
         "message": "Mint runtime flags are disabled for this token type.",
         "flag": "runtime_enabled",
+    },
+    "controlled_mint_worker_disabled": {
+        "message": "The controlled mint worker is disabled.",
+        "flag": "nft_mint_worker_enabled",
     },
     "public_safe_approval_incomplete": {
         "message": "Public-safe approval is incomplete.",
@@ -55,10 +45,6 @@ READINESS_REASON_DETAILS: dict[str, dict[str, str]] = {
     "collectible_not_preparing": {
         "message": "Collectible preparation has not started.",
         "flag": "mint_collectible_preparing",
-    },
-    "mint_fee_unpaid_or_unwaived": {
-        "message": "Mint fee requirements are not yet satisfied.",
-        "flag": "mint_fee_satisfied",
     },
 }
 
@@ -104,9 +90,7 @@ def _runtime_enabled(token_type: str | None) -> bool:
 def _project_has_build_state(project: dict[str, Any]) -> bool:
     status_value = _normalize(project.get("status")).lower()
     phase_value = _normalize(project.get("phase")).lower()
-    return (
-        status_value in BUILD_READY_STATUSES or phase_value in BUILD_READY_PHASES
-    )
+    return status_value in COMPLETE_PROFILE_STATUSES or phase_value in COMPLETE_PROFILE_PHASES
 
 
 
@@ -150,10 +134,23 @@ def get_package_mint_policy(package_code: str) -> dict[str, Any]:
         "product_includes_onchain_anchor": bool(
             base_policy.get("product_includes_onchain_anchor")
         ),
+        "onchain_anchor_available_as_addon": bool(
+            base_policy.get("onchain_anchor_available_as_addon")
+        ),
+        "requires_paid_nft_addon": bool(base_policy.get("requires_paid_nft_addon")),
+        "profile_completion_required_before_purchase": bool(
+            base_policy.get("profile_completion_required_before_purchase")
+        ),
+        "checkout_never_triggers_mint": bool(
+            base_policy.get("checkout_never_triggers_mint", True)
+        ),
         "auto_mint_enabled": bool(base_policy.get("auto_mint_enabled")),
         "opt_in_only": bool(base_policy.get("opt_in_only")),
         "requires_customer_public_safe_approval": bool(
             base_policy.get("requires_customer_public_safe_approval")
+        ),
+        "requires_admin_final_approval": bool(
+            base_policy.get("requires_admin_final_approval")
         ),
         "included_anchor_count": int(base_policy.get("included_anchor_count") or 0),
         "mint_fee_model": str(base_policy.get("mint_fee_model") or "service_plus_network"),
@@ -163,6 +160,9 @@ def get_package_mint_policy(package_code: str) -> dict[str, Any]:
         "remint_service_fee_usd": float(base_policy.get("remint_service_fee_usd") or 0),
         "network_fee_quote_usd": float(base_policy.get("network_fee_quote_usd") or 0),
         "default_network_fee_policy": str(base_policy.get("default_network_fee_policy") or "quoted_variable"),
+        "initial_mint_addon_code": str(base_policy.get("initial_mint_addon_code") or ""),
+        "additional_mint_addon_code": str(base_policy.get("additional_mint_addon_code") or ""),
+        "metadata_revision_addon_code": str(base_policy.get("metadata_revision_addon_code") or ""),
         "runtime_enabled": _runtime_enabled(token_type),
     }
 
@@ -185,25 +185,40 @@ def describe_project_mint_eligibility(project: dict[str, Any]) -> dict[str, Any]
     policy = get_package_mint_policy(package_code)
     reasons: list[str] = []
 
-    if not policy.get("product_includes_onchain_anchor"):
-        reasons.append("package_not_included")
+    profile_complete = _project_has_build_state(project)
+    if not profile_complete:
+        reasons.append("profile_not_complete")
 
-    if not _project_has_build_state(project):
-        reasons.append("build_not_ready")
+    project_id = _normalize(project.get("_id") or project.get("id"))
+    try:
+        from app.services.nft_addon_service import get_nft_addon_status
 
-    if (
-        policy.get("product_includes_onchain_anchor")
-        and not policy.get("runtime_enabled")
-    ):
+        addon_status = get_nft_addon_status(project_id, project=project)
+    except (RuntimeError, ValueError):
+        addon_status = {
+            "project_id": project_id,
+            "profile_complete": profile_complete,
+            "required_mint_addon_code": policy.get("initial_mint_addon_code"),
+            "mint_credit_satisfied": False,
+            "checkout_never_triggers_mint": True,
+            "purchase_options": {},
+        }
+
+    if policy.get("requires_paid_nft_addon") and not addon_status.get("mint_credit_satisfied"):
+        reasons.append("nft_addon_not_purchased")
+
+    if not policy.get("runtime_enabled"):
         reasons.append("mint_runtime_disabled")
+    elif not settings.nft_mint_worker_enabled:
+        reasons.append("controlled_mint_worker_disabled")
 
-    if policy.get("product_includes_onchain_anchor") and not _project_public_safe_approved(project):
+    if not _project_public_safe_approved(project):
         reasons.append("public_safe_approval_incomplete")
 
-    if policy.get("product_includes_onchain_anchor") and not _delivery_manifest_finalized(project):
+    if not _delivery_manifest_finalized(project):
         reasons.append("delivery_manifest_not_finalized")
 
-    if policy.get("product_includes_onchain_anchor") and not bool(project.get("mint_collectible_preparing") or project.get("mint_preparation_started")):
+    if not bool(project.get("mint_collectible_preparing") or project.get("mint_preparation_started")):
         reasons.append("collectible_not_preparing")
 
     blocking_details = [
@@ -216,10 +231,23 @@ def describe_project_mint_eligibility(project: dict[str, Any]) -> dict[str, Any]
         for reason in reasons
     ]
     return {
-        "project_id": _normalize(project.get("_id") or project.get("id")),
+        "project_id": project_id,
         "package_code": package_code,
         "package_lane": package_lane,
         "mint_policy": policy,
+        "nft_addon": addon_status,
+        "profile_complete": profile_complete,
+        "purchase_eligible": bool(
+            profile_complete
+            and addon_status.get("purchase_runtime_ready")
+            and any(
+                bool((option or {}).get("eligible"))
+                for option in (addon_status.get("purchase_options") or {}).values()
+            )
+        ),
+        "ready_for_mint_preparation": bool(
+            profile_complete and addon_status.get("mint_credit_satisfied")
+        ),
         "eligible": len(reasons) == 0,
         "reasons": reasons,
         "blocking_details": blocking_details,

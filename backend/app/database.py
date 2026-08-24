@@ -181,6 +181,14 @@ def get_service_state(*, include_operational_details: bool = False) -> dict[str,
             operational_degraded_reasons.append("deployment_revision_unavailable")
         if not continuity_execution_enabled:
             operational_degraded_reasons.append("continuity_execution_disabled")
+        if not settings.nft_mint_enabled:
+            operational_degraded_reasons.append("nft_mint_runtime_disabled")
+        elif not settings.nft_mint_worker_enabled:
+            operational_degraded_reasons.append("nft_controlled_worker_disabled")
+        if settings.nft_auto_mint_on_review_enabled:
+            operational_degraded_reasons.append("unsafe_nft_auto_mint_on_review_enabled")
+        if not settings.nft_legacy_payment_links_disabled:
+            operational_degraded_reasons.append("legacy_nft_payment_links_not_confirmed_disabled")
 
     operational_ready = ready and not operational_degraded_reasons
     service_state: dict[str, Any] = {
@@ -234,6 +242,22 @@ def get_service_state(*, include_operational_details: bool = False) -> dict[str,
             },
             "nft_runtime": {
                 "enabled": bool(settings.nft_mint_enabled),
+                "controlled_worker_enabled": bool(settings.nft_mint_worker_enabled),
+                "checkout_auto_mint_disabled": not bool(
+                    settings.nft_auto_mint_on_review_enabled
+                ),
+                "legacy_payment_links_confirmed_disabled": bool(
+                    settings.nft_legacy_payment_links_disabled
+                ),
+                "purchase_accepting": bool(
+                    settings.nft_mint_enabled
+                    and settings.nft_mint_worker_enabled
+                    and not settings.nft_auto_mint_on_review_enabled
+                    and (
+                        not settings.is_production_environment
+                        or settings.nft_legacy_payment_links_disabled
+                    )
+                ),
             },
         },
     })

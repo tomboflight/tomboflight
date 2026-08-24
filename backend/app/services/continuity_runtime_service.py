@@ -68,6 +68,9 @@ CASE_ACTION_SPECS: dict[str, ActionSpec] = {
         "admin_repair_safety", "low", "customer_case", ("case_id",), mutates_business_data=False
     ),
     "queue_for_mint_review": ActionSpec("mint_readiness_repair", "high", "customer_case", ("case_id",)),
+    "prepare_legacy_anchor": ActionSpec("mint_readiness_repair", "high", "customer_case", ("case_id",)),
+    "approve_legacy_anchor": ActionSpec("mint_readiness_repair", "high", "customer_case", ("case_id",)),
+    "queue_approved_legacy_anchor": ActionSpec("mint_readiness_repair", "high", "customer_case", ("case_id",)),
     "repair_record": ActionSpec("admin_repair_safety", "high", "customer_case", ("case_id",)),
     "repair_mint_status": ActionSpec("mint_readiness_repair", "high", "customer_case", ("case_id",)),
     "rebuild_mint_summary": ActionSpec("mint_readiness_repair", "high", "customer_case", ("case_id",)),

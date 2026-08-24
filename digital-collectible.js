@@ -292,7 +292,7 @@
       (mintStatus && mintStatus.mint_enabled) ||
         (mintEligibility &&
           mintEligibility.mint_policy &&
-          mintEligibility.mint_policy.product_includes_onchain_anchor),
+          mintEligibility.mint_policy.onchain_anchor_available_as_addon),
     );
     const isMinted = normalizeValue(mintStatusValue) === "minted";
     const isMintPending =

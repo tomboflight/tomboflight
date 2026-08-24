@@ -932,9 +932,10 @@
 
   function reasonLabel(reason) {
     const normalized = normalizeValue(reason);
-    if (normalized === "build_not_ready") return "Build completion is still pending.";
-    if (normalized === "package_not_included") return "This package does not include on-chain minting.";
+    if (normalized === "profile_not_complete") return "Profile completion and delivery are still pending.";
+    if (normalized === "nft_addon_not_purchased") return "The required NFT add-on has not been purchased.";
     if (normalized === "mint_runtime_disabled") return "Minting is temporarily offline.";
+    if (normalized === "controlled_mint_worker_disabled") return "The controlled mint worker is temporarily offline.";
     return humanizeStatus(normalized || "unavailable");
   }
 
@@ -1007,6 +1008,128 @@
     }
   }
 
+  function configureNftAddonCheckout(projectId, eligibility) {
+    const addonStatus = eligibility && eligibility.nft_addon ? eligibility.nft_addon : {};
+    const options = addonStatus.purchase_options || {};
+    const statusNode = document.querySelector("[data-nft-addon-status]");
+
+    if (!addonStatus.profile_complete) {
+      text(
+        statusNode,
+        "NFT add-ons unlock only after Tomb of Light marks the profile delivered. Finish the profile first; no payment is needed yet.",
+      );
+    } else if (!addonStatus.purchase_runtime_ready && !addonStatus.mint_credit_satisfied) {
+      text(
+        statusNode,
+        "Your profile is complete, but NFT checkout is temporarily paused until the controlled Base mint runtime is fully ready.",
+      );
+    } else if (addonStatus.active_mint_credit) {
+      text(
+        statusNode,
+        "Your paid NFT add-on is attached to the controlled approval flow. No second purchase is needed for this mint.",
+      );
+    } else if (addonStatus.mint_credit_satisfied) {
+      text(
+        statusNode,
+        "Payment verified. Tomb of Light can now prepare the NFT approval record; checkout has not started minting.",
+      );
+    } else {
+      const required = humanizeStatus(addonStatus.required_mint_addon_code || "nft_lineage_record");
+      text(statusNode, `Profile complete. Purchase ${required} to begin the separate approval process.`);
+    }
+
+    document.querySelectorAll("[data-nft-addon-checkout]").forEach(function (button) {
+      const code = String(button.dataset.nftAddonCheckout || "").trim();
+      const option = options[code] || {};
+      const enabled = Boolean(projectId && option.eligible);
+      button.dataset.checkoutEnabled = enabled ? "true" : "false";
+      button.setAttribute("aria-disabled", enabled ? "false" : "true");
+      button.classList.toggle("is-disabled", !enabled);
+      if (enabled) {
+        button.href = "dashboard.html#legacy-anchor";
+        button.removeAttribute("target");
+        button.removeAttribute("rel");
+        button.title = "Open authenticated Stripe checkout. Payment does not start minting.";
+      } else {
+        button.href = "dashboard.html#legacy-anchor";
+        button.removeAttribute("target");
+        button.removeAttribute("rel");
+        button.title = option.reason
+          ? humanizeStatus(option.reason)
+          : "This add-on is not available for the current NFT state.";
+      }
+    });
+  }
+
+  function configureNftCustomerConsent(projectId, mintStatus) {
+    const form = document.querySelector("[data-nft-customer-consent-form]");
+    if (!form) return;
+    const latest = mintStatus && mintStatus.latest ? mintStatus.latest : null;
+    const pending = Array.isArray(latest && latest.pending_approvals)
+      ? latest.pending_approvals
+      : [];
+    const needsCustomerConsent = Boolean(
+      projectId && latest && pending.includes("customer_public_safe"),
+    );
+    form.hidden = !needsCustomerConsent;
+    form.dataset.projectId = needsCustomerConsent ? projectId : "";
+    form.dataset.mintRecordId = needsCustomerConsent ? String(latest.id || "") : "";
+  }
+
+  async function submitNftCustomerConsent(form) {
+    const projectId = String(form.dataset.projectId || "").trim();
+    const mintRecordId = String(form.dataset.mintRecordId || "").trim();
+    const wallet = String(form.querySelector("[data-nft-customer-wallet]")?.value || "").trim();
+    const publicSafeConsent = Boolean(
+      form.querySelector("[data-nft-public-safe-consent]")?.checked,
+    );
+    const publicTitleOptIn = Boolean(
+      form.querySelector("[data-nft-public-title-opt-in]")?.checked,
+    );
+    const publicTitle = String(
+      form.querySelector("[data-nft-public-title]")?.value || "",
+    ).trim();
+    const statusNode = form.querySelector("[data-nft-consent-status]");
+    const submitButton = form.querySelector("[data-nft-consent-submit]");
+
+    if (!projectId || !mintRecordId || !/^0x[a-fA-F0-9]{40}$/.test(wallet)) {
+      text(statusNode, "Enter a valid public Base wallet address beginning with 0x.");
+      return;
+    }
+    if (!publicSafeConsent) {
+      text(statusNode, "Confirm the public-safe metadata consent before continuing.");
+      return;
+    }
+
+    if (submitButton) submitButton.disabled = true;
+    text(statusNode, "Recording your wallet and public-safe consent...");
+    try {
+      await app.apiRequest(
+        `/projects/${encodeURIComponent(projectId)}/mint-records/${encodeURIComponent(mintRecordId)}/approve-customer`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            wallet_address: wallet,
+            approved_poster_opt_in: false,
+            public_title_opt_in: publicTitleOptIn,
+            public_title: publicTitleOptIn ? publicTitle : null,
+            public_title_kind: publicTitleOptIn ? "approved_title" : "none",
+            notes: "Customer approved the recipient wallet and public-safe NFT metadata from the dashboard.",
+          }),
+        },
+      );
+      text(statusNode, "Consent recorded. Tomb of Light final approval is still required before queueing.");
+      await updateLegacyAnchorPanel({ activeProject: { id: projectId } });
+    } catch (error) {
+      text(
+        statusNode,
+        `Consent was not recorded: ${String(error && error.message ? error.message : error)}`,
+      );
+    } finally {
+      if (submitButton) submitButton.disabled = false;
+    }
+  }
+
   function resolveAnchorPresentation(hasProject, eligibility, mintStatus) {
     const latest = mintStatus && mintStatus.latest ? mintStatus.latest : null;
     const latestStatus = normalizeValue(latest && latest.mint_status);
@@ -1024,14 +1147,6 @@
         badge: "Awaiting setup",
         copy: "A provisioned workspace is required before Tomb of Light can prepare your Legacy Anchor.",
         note: "Once your project is provisioned, this panel will show live mint status, public proof links, and wallet verification.",
-      };
-    }
-
-    if (!policy.product_includes_onchain_anchor) {
-      return {
-        badge: "Package-gated",
-        copy: "This package does not include an on-chain Legacy Anchor.",
-        note: "Upgrade into an eligible package to unlock Base Mainnet anchor minting and public-safe proof records.",
       };
     }
 
@@ -1091,11 +1206,19 @@
       };
     }
 
-    if (reasons.includes("build_not_ready")) {
+    if (reasons.includes("profile_not_complete")) {
       return {
-        badge: "Waiting for Build",
-        copy: "Your package is eligible, but the build is not complete enough to mint yet.",
+        badge: "Finish Profile First",
+        copy: "NFT add-on checkout unlocks only after your Tomb of Light profile is complete and delivered.",
         note: reasons.map(reasonLabel).join(" "),
+      };
+    }
+
+    if (reasons.includes("nft_addon_not_purchased")) {
+      return {
+        badge: "Add-On Required",
+        copy: "Your profile is complete. Purchase the required NFT add-on below to start the separate approval process.",
+        note: "No base package includes an NFT, and payment never starts minting automatically.",
       };
     }
 
@@ -1151,6 +1274,20 @@
     setAnchorCopyButton("[data-anchor-copy-public-token]", "", "public token id");
     const verifyButton = document.querySelector("[data-anchor-verify-wallet]");
     if (verifyButton) verifyButton.disabled = true;
+    text(
+      document.querySelector("[data-nft-addon-status]"),
+      "A delivered customer profile is required before any NFT add-on purchase.",
+    );
+    document.querySelectorAll("[data-nft-addon-checkout]").forEach(function (button) {
+      button.dataset.checkoutEnabled = "false";
+      button.setAttribute("aria-disabled", "true");
+      button.classList.add("is-disabled");
+      button.href = "dashboard.html#legacy-anchor";
+      button.removeAttribute("target");
+      button.removeAttribute("rel");
+    });
+    const consentForm = document.querySelector("[data-nft-customer-consent-form]");
+    if (consentForm) consentForm.hidden = true;
   }
 
   async function copyAnchorValue(button) {
@@ -1248,6 +1385,64 @@
         verifyLegacyAnchorWallet();
       });
     }
+
+    document.querySelectorAll("[data-nft-addon-checkout]").forEach(function (button) {
+      if (button.dataset.bound === "true") return;
+      button.dataset.bound = "true";
+      button.addEventListener("click", async function (event) {
+        event.preventDefault();
+        if (button.dataset.checkoutEnabled !== "true") {
+          return;
+        }
+        const code = String(button.dataset.nftAddonCheckout || "").trim();
+        const projectId = String(
+          (legacyAnchorState && legacyAnchorState.projectId) || "",
+        ).trim();
+        const statusNode = document.querySelector("[data-nft-addon-status]");
+        button.dataset.checkoutEnabled = "false";
+        button.setAttribute("aria-busy", "true");
+        button.setAttribute("aria-disabled", "true");
+        text(statusNode, "Opening authenticated Stripe checkout...");
+        try {
+          const checkout = await app.apiRequest(
+            `/projects/${encodeURIComponent(projectId)}/nft-addons/${encodeURIComponent(code)}/checkout-session`,
+            { method: "POST" },
+          );
+          const checkoutUrl = String(checkout && checkout.checkout_url ? checkout.checkout_url : "").trim();
+          if (!/^https:\/\/checkout\.stripe\.com\//i.test(checkoutUrl)) {
+            throw new Error("Stripe did not return a valid checkout page.");
+          }
+          if (typeof app.savePendingCheckout === "function") {
+            app.savePendingCheckout({
+              packageCode: code,
+              purchaseType: "addon",
+              projectId,
+              paymentLink: checkoutUrl,
+              selectedAt: new Date().toISOString(),
+            });
+          }
+          window.location.assign(checkoutUrl);
+        } catch (error) {
+          button.dataset.checkoutEnabled = "true";
+          button.setAttribute("aria-disabled", "false");
+          text(
+            statusNode,
+            `Checkout could not open: ${String(error && error.message ? error.message : error)}`,
+          );
+        } finally {
+          button.removeAttribute("aria-busy");
+        }
+      });
+    });
+
+    const consentForm = document.querySelector("[data-nft-customer-consent-form]");
+    if (consentForm && consentForm.dataset.bound !== "true") {
+      consentForm.dataset.bound = "true";
+      consentForm.addEventListener("submit", function (event) {
+        event.preventDefault();
+        submitNftCustomerConsent(consentForm);
+      });
+    }
   }
 
   async function getMintEligibility(projectId) {
@@ -1291,6 +1486,7 @@
       });
 
       legacyAnchorState = {
+        projectId,
         chain: latest && latest.chain ? latest.chain : "base-mainnet",
         contractAddress: latest && latest.contract_address ? latest.contract_address : "",
         tokenId: latest && latest.token_id ? latest.token_id : "",
@@ -1304,6 +1500,9 @@
             : "",
         explorerUrl: explorerLink,
       };
+
+      configureNftAddonCheckout(projectId, eligibility);
+      configureNftCustomerConsent(projectId, mintStatus);
 
       text(document.querySelector("[data-anchor-status-badge]"), presentation.badge);
       text(document.querySelector("[data-anchor-status-copy]"), presentation.copy);

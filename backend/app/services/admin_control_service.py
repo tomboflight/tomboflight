@@ -36,9 +36,13 @@ from app.core.role_catalog import (
 from app.core.relationship_catalog import normalize_relationship_type
 from app.database import get_database, get_service_state
 from app.services.audit_log_service import write_audit_log
-from app.services.mint_job_service import sync_receipt_for_mint_record
+from app.services.mint_fee_service import get_project_mint_readiness
+from app.services.mint_job_service import queue_mint_pipeline, sync_receipt_for_mint_record
 from app.services.mint_policy_service import describe_project_mint_eligibility
 from app.services.mint_record_service import (
+    approve_admin_mint_record,
+    create_mint_record,
+    get_latest_mint_record,
     rebuild_mint_summary_for_project,
     resolve_canonical_mint_status,
 )
@@ -142,6 +146,9 @@ CASE_ACTION_PERMISSIONS: dict[str, set[str]] = {
     "run_readiness_check": {"admin.control.view"},
     "refresh_case_data": {"admin.control.view"},
     "queue_for_mint_review": {"admin.control.mint.readiness"},
+    "prepare_legacy_anchor": {"admin.control.mint"},
+    "approve_legacy_anchor": {"admin.control.mint"},
+    "queue_approved_legacy_anchor": {"admin.control.mint"},
     "repair_mint_status": {"admin.control.mint"},
     "rebuild_mint_summary": {"admin.control.mint"},
     "resync_mint_receipt": {"admin.control.mint"},
@@ -282,6 +289,9 @@ OPERATIONS_ACTION_ALLOWLIST = [
     "repair_record",
     "run_readiness_check",
     "queue_for_mint_review",
+    "prepare_legacy_anchor",
+    "approve_legacy_anchor",
+    "queue_approved_legacy_anchor",
     "refresh_case_data",
 ]
 OPERATIONS_BULK_ACTION_ALLOWLIST = [
@@ -408,9 +418,30 @@ OPERATOR_GUIDANCE_RULES = {
     },
     "mint_runtime_disabled": {
         "title": "Mint runtime is disabled",
-        "rule": "The runtime flag is off, so this case can be prepared but cannot execute automatic minting.",
-        "next_action": "Queue for Mint Review",
-        "recommended_action": "queue_for_mint_review",
+        "rule": "The runtime flag is off, so an approved case cannot execute its controlled mint queue.",
+        "next_action": "Keep the approved NFT unqueued until runtime is configured",
+        "recommended_action": "run_readiness_check",
+        "severity": "warning",
+    },
+    "controlled_mint_worker_disabled": {
+        "title": "Controlled mint worker is disabled",
+        "rule": "Approved NFT jobs cannot execute until the controlled worker is enabled.",
+        "next_action": "Keep the approved NFT unqueued until the worker is ready",
+        "recommended_action": "run_readiness_check",
+        "severity": "warning",
+    },
+    "profile_not_complete": {
+        "title": "Customer profile is not complete",
+        "rule": "NFT add-on checkout is locked until the customer profile is delivered.",
+        "next_action": "Complete and deliver the customer profile",
+        "recommended_action": "run_readiness_check",
+        "severity": "warning",
+    },
+    "nft_addon_not_purchased": {
+        "title": "Paid NFT add-on is required",
+        "rule": "No package includes an NFT. The customer must purchase the correct add-on after profile completion.",
+        "next_action": "Customer purchases the required NFT add-on",
+        "recommended_action": "run_readiness_check",
         "severity": "warning",
     },
     "project_not_build_ready": {
@@ -2637,13 +2668,18 @@ def run_readiness_check(*, project_id: str, order_id: str = "") -> dict[str, Any
     phase_ready = _normalize(project.get("phase")).lower() in INTAKE_APPROVED_PHASES
     mint_eligibility = describe_project_mint_eligibility(project)
     canonical_mint = resolve_canonical_mint_status(project_id_str, include_history=False)
-    mint_already_completed = bool(canonical_mint.get("is_minted"))
-
-    control_profile = get_package_control_profile(package_fields["package_code"]) or {}
-    launch_policy = dict(control_profile.get("launch_policy") or {})
-    allows_automatic_anchor = bool(launch_policy.get("allows_automatic_anchor"))
+    addon_status = dict(mint_eligibility.get("nft_addon") or {})
+    additional_mint_requested = bool(
+        canonical_mint.get("is_minted")
+        and addon_status.get("required_mint_addon_code") == "additional_nft_copy_mint"
+        and addon_status.get("available_mint_credit_count", 0)
+    )
+    mint_already_completed = bool(
+        canonical_mint.get("is_minted") and not additional_mint_requested
+    )
     mint_review_ready = bool(
-        allows_automatic_anchor
+        addon_status.get("profile_complete")
+        and addon_status.get("mint_credit_satisfied")
         and status_ready
         and phase_ready
         and package_synced
@@ -2704,6 +2740,7 @@ def run_readiness_check(*, project_id: str, order_id: str = "") -> dict[str, Any
             "canonical_mint_status": canonical_mint.get("current_status") or "none",
         },
         "mint_policy": mint_eligibility.get("mint_policy"),
+        "nft_addon": addon_status,
         "mint_reasons": mint_eligibility.get("reasons") or [],
         "blocking_reasons": blocking_reasons,
         "package": package_fields,
@@ -2722,6 +2759,7 @@ def enable_mint_review(*, project_id: str, order_id: str = "", actor: dict[str, 
             "auto_mint_executed": False,
             "skipped_reason": "canonical_mint_already_minted",
             "canonical_mint": readiness.get("canonical_mint"),
+            "nft_addon": readiness.get("nft_addon") or {},
         }
     if not readiness.get("mint_review_ready"):
         raise ValueError("Project is not ready for mint review.")
@@ -2737,11 +2775,15 @@ def enable_mint_review(*, project_id: str, order_id: str = "", actor: dict[str, 
                 "mint_review_ready": True,
                 "mint_review_ready_at": _now(),
                 "mint_review_state": "ready",
+                "mint_collectible_preparing": True,
+                "mint_preparation_started": True,
+                "mint_preparation_started_at": _now(),
             }
         },
     )
 
-    auto_mint_allowed = bool(settings.nft_auto_mint_on_review_enabled)
+    # Checkout and review never auto-mint. A separate CEO queue action is required.
+    auto_mint_allowed = False
     _write_admin_action_audit(
         actor=actor,
         action="mint_readiness.enable_mint_review",
@@ -2756,6 +2798,91 @@ def enable_mint_review(*, project_id: str, order_id: str = "", actor: dict[str, 
         "mint_review_ready": True,
         "auto_mint_allowed": auto_mint_allowed,
         "auto_mint_executed": False,
+        "nft_addon": readiness.get("nft_addon") or {},
+    }
+
+
+def prepare_legacy_anchor(
+    *,
+    project_id: str,
+    actor: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    readiness = enable_mint_review(project_id=project_id, actor=actor)
+    addon_status = dict((readiness or {}).get("nft_addon") or {})
+    version_strategy = (
+        "new_version"
+        if (
+            readiness.get("skipped_reason") == "canonical_mint_already_minted"
+            or addon_status.get("required_mint_addon_code")
+            == "additional_nft_copy_mint"
+        )
+        else "new_version_if_needed"
+    )
+    record = create_mint_record(project_id, version_strategy=version_strategy)
+    return {
+        "project_id": _normalize(project_id),
+        "checkout_triggered_mint": False,
+        "mint_record": record,
+        "next_step": "customer_wallet_and_public_safe_consent",
+    }
+
+
+def _require_ceo_mint_actor(actor: dict[str, Any] | None) -> str:
+    email = _normalize_email((actor or {}).get("email"))
+    if not email or not is_canonical_ceo_email(email):
+        raise ValueError(
+            "Only the CEO master account can give final NFT approval or queue minting."
+        )
+    return email
+
+
+def approve_legacy_anchor(
+    *,
+    project_id: str,
+    actor: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    approved_by_email = _require_ceo_mint_actor(actor)
+    record = get_latest_mint_record(project_id)
+    if not record:
+        raise ValueError("Prepare the NFT approval record before final CEO approval.")
+    approved = approve_admin_mint_record(
+        record["id"],
+        approved_by_email=approved_by_email,
+        notes="CEO final approval from the governed Admin Control Center.",
+    )
+    return {
+        "project_id": _normalize(project_id),
+        "mint_record": approved,
+        "next_step": (
+            "queue_approved_legacy_anchor"
+            if approved.get("mint_status") == "approved"
+            else "customer_wallet_and_public_safe_consent"
+        ),
+    }
+
+
+def queue_approved_legacy_anchor(
+    *,
+    project_id: str,
+    actor: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    queued_by = _require_ceo_mint_actor(actor)
+    record = get_latest_mint_record(project_id)
+    if not record:
+        raise ValueError("Prepare the NFT approval record before queueing.")
+    readiness = get_project_mint_readiness(project_id)
+    if not readiness.get("ready_for_mint_execution"):
+        raise ValueError(
+            "NFT is not ready to queue: "
+            + ", ".join(readiness.get("blocking_reasons") or ["unknown_reason"])
+        )
+    jobs = queue_mint_pipeline(project_id, record["id"], queued_by=queued_by)
+    return {
+        "project_id": _normalize(project_id),
+        "mint_record_id": record["id"],
+        "jobs": jobs,
+        "checkout_triggered_mint": False,
+        "next_step": "controlled_mint_worker",
     }
 
 
@@ -4239,7 +4366,7 @@ def _operator_guidance_items(
         codes.extend([_normalize(value) for value in readiness.get("blocking_reasons") or []])
         if readiness.get("mint_review_ready") and not readiness.get("mint_eligible"):
             codes.append("mint_blocked")
-        if include_mint_runtime and not settings.nft_auto_mint_on_review_enabled and not readiness.get("mint_already_completed"):
+        if include_mint_runtime and not settings.nft_mint_enabled and not readiness.get("mint_already_completed"):
             codes.append("mint_runtime_disabled")
 
     codes.extend([_normalize(value) for value in alerts or []])
@@ -8097,6 +8224,9 @@ def _mint_record_snapshot(project_id: str) -> dict[str, Any]:
         "error_state": canonical.get("error_message") if canonical.get("is_current_failed") else None,
         "error_code": canonical.get("error_code") if canonical.get("is_current_failed") else None,
         "mint_queue_status": canonical.get("current_status") or "not_queued",
+        "pending_approvals": current.get("pending_approvals") or [],
+        "nft_addon_code": current.get("nft_addon_code"),
+        "nft_addon_order_id": current.get("nft_addon_order_id"),
         "historical_attempt_count": canonical.get("historical_attempt_count", 0),
         "historical_attempts": [
             {
@@ -8606,6 +8736,9 @@ def list_customer_cases(
                     "refresh_entitlement",
                     "run_readiness_check",
                     "queue_for_mint_review",
+                    "prepare_legacy_anchor",
+                    "approve_legacy_anchor",
+                    "queue_approved_legacy_anchor",
                     "repair_record",
                     "refresh_case_data",
                 ],
@@ -8763,15 +8896,31 @@ def _build_case_workspace_payload(
         warnings=package_fields.get("warnings") or [],
         include_mint_runtime=True,
     )
-    next_mint_action = (
-        "No mint action required"
-        if readiness.get("mint_already_completed")
-        else (
-        "Queue for Mint Review"
-        if readiness.get("mint_review_ready")
-        else ((mint_guidance[0] or {}).get("next_action") if mint_guidance else "Run Readiness Check")
+    addon_status = dict(readiness.get("nft_addon") or {})
+    current_mint_state = _normalize(mint_record.get("current_status")).lower()
+    pending_mint_approvals = set(mint_record.get("pending_approvals") or [])
+    if readiness.get("mint_already_completed"):
+        next_mint_action = "No mint action required"
+    elif not addon_status.get("profile_complete"):
+        next_mint_action = "Complete and deliver the customer profile"
+    elif not addon_status.get("mint_credit_satisfied"):
+        next_mint_action = "Customer purchases the required NFT add-on"
+    elif current_mint_state in {"", "none"}:
+        next_mint_action = "Prepare Legacy Anchor"
+    elif "customer_public_safe" in pending_mint_approvals:
+        next_mint_action = "Customer records wallet and public-safe consent"
+    elif "admin_final" in pending_mint_approvals:
+        next_mint_action = "CEO Final Approve"
+    elif current_mint_state == "approved":
+        next_mint_action = "Queue Approved Legacy Anchor"
+    elif current_mint_state in {"queued", "processing"}:
+        next_mint_action = "Controlled mint worker in progress"
+    else:
+        next_mint_action = (
+            (mint_guidance[0] or {}).get("next_action")
+            if mint_guidance
+            else "Run Readiness Check"
         )
-    )
 
     display_name = (
         identity.get("full_name")
@@ -8819,6 +8968,8 @@ def _build_case_workspace_payload(
                     "anchor_type": control_profile.get("anchor_type"),
                     "allows_automatic_anchor": (control_profile.get("launch_policy") or {}).get("allows_automatic_anchor"),
                     "auto_mint_enabled": (control_profile.get("mint_policy") or {}).get("auto_mint_enabled"),
+                    "requires_paid_nft_addon": (control_profile.get("mint_policy") or {}).get("requires_paid_nft_addon"),
+                    "checkout_never_triggers_mint": (control_profile.get("mint_policy") or {}).get("checkout_never_triggers_mint"),
                 },
                 "maintenance_defaults": control_profile.get("maintenance_default"),
                 "package_normalization_status": package_fields.get("normalization_status"),
@@ -8883,8 +9034,13 @@ def _build_case_workspace_payload(
             },
             "mint_readiness": {
                 "package_mint_policy": readiness.get("mint_policy") or (control_profile.get("mint_policy") or {}),
+                "nft_addon": readiness.get("nft_addon") or {},
+                "profile_complete": (readiness.get("nft_addon") or {}).get("profile_complete"),
+                "required_nft_addon_code": (readiness.get("nft_addon") or {}).get("required_mint_addon_code"),
+                "paid_nft_credit": (readiness.get("nft_addon") or {}).get("mint_credit_satisfied"),
+                "nft_addon_order_id": mint_record.get("nft_addon_order_id"),
                 "eligibility": "minted" if readiness.get("mint_already_completed") else "eligible" if readiness.get("mint_eligible") else "blocked",
-                "runtime": "enabled" if settings.nft_auto_mint_on_review_enabled else "disabled",
+                "runtime": "enabled" if settings.nft_mint_enabled else "disabled",
                 "current_state": mint_record.get("current_status") or ("mint_ready" if readiness.get("mint_eligible") else "blocked"),
                 "decision": "Minted successfully" if readiness.get("mint_already_completed") else "Ready for mint review" if readiness.get("mint_review_ready") else "Readiness gates are still blocking mint review",
                 "next_admin_action": next_mint_action,
@@ -9192,6 +9348,9 @@ def execute_case_action(
         "refresh_entitlement": lambda: generate_entitlement(project_id=project_id, order_id=order_id, force=True),
         "run_readiness_check": lambda: run_readiness_check(project_id=project_id, order_id=order_id),
         "queue_for_mint_review": lambda: enable_mint_review(project_id=project_id, order_id=order_id),
+        "prepare_legacy_anchor": lambda: prepare_legacy_anchor(project_id=project_id, actor=actor),
+        "approve_legacy_anchor": lambda: approve_legacy_anchor(project_id=project_id, actor=actor),
+        "queue_approved_legacy_anchor": lambda: queue_approved_legacy_anchor(project_id=project_id, actor=actor),
         "repair_record": lambda: repair_record(project_id=project_id, order_id=order_id),
         "repair_mint_status": lambda: repair_project_mint_status(project_id=project_id),
         "rebuild_mint_summary": lambda: repair_project_mint_status(project_id=project_id),

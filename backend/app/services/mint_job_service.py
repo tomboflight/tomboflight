@@ -10,6 +10,7 @@ from pymongo import ReturnDocument
 from pymongo.collection import Collection
 from pymongo.errors import DuplicateKeyError, OperationFailure
 
+from app.core.admin_permission_registry import is_canonical_ceo_email
 from app.database import get_database
 from app.services.blockchain_mint_service import (
     mint_anchor,
@@ -330,7 +331,11 @@ def queue_mint_pipeline(
     *,
     queued_by: str = "system",
 ) -> list[dict[str, Any]]:
-    del queued_by
+    normalized_queued_by = _normalize(queued_by).lower()
+    if not is_canonical_ceo_email(normalized_queued_by):
+        raise ValueError(
+            "Only the CEO master account can queue an approved NFT."
+        )
     now = _now()
 
     record = get_mint_record(mint_record_id)

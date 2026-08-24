@@ -43,6 +43,8 @@ class OrderResponse(BaseModel):
     package_code: str
     package_slug: str
     package_name: str
+    addon_code: Optional[str] = None
+    purchase_code: Optional[str] = None
     price_label: str
     item_type: str
     billing_plan: str
@@ -52,6 +54,8 @@ class OrderResponse(BaseModel):
     stripe_session_id: Optional[str] = None
     stripe_payment_link_id: Optional[str] = None
     fulfillment_status: Optional[str] = None
+    nft_credit_status: Optional[str] = None
+    nft_credit_slot: Optional[str] = None
     created_at: datetime
 
 
