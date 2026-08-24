@@ -104,6 +104,7 @@
   let statesById = {};
   let stateOrder = [];
   let state = "";
+  let autoAdvanceIndex = -1;
   let isPlaying = true;
   let narrationInterval = null;
   let narrationFadeTimeout = null;
@@ -325,6 +326,28 @@
       : [];
   }
 
+  function findNextAutoAdvanceIndex(stateId, fromIndex = -1) {
+    const orderedStates = getAutoAdvanceStateIds();
+    if (!orderedStates.length || !stateId) return -1;
+
+    for (let offset = 1; offset <= orderedStates.length; offset += 1) {
+      const index = (fromIndex + offset + orderedStates.length) % orderedStates.length;
+      if (orderedStates[index] === stateId) return index;
+    }
+
+    return -1;
+  }
+
+  function alignAutoAdvanceIndex(stateId) {
+    const orderedStates = getAutoAdvanceStateIds();
+    if (!orderedStates.length) {
+      autoAdvanceIndex = -1;
+      return;
+    }
+    if (orderedStates[autoAdvanceIndex] === stateId) return;
+    autoAdvanceIndex = findNextAutoAdvanceIndex(stateId, autoAdvanceIndex);
+  }
+
   function renderPathList(manifest) {
     if (!pathList) return;
 
@@ -350,6 +373,7 @@
       if (canNavigate) {
         row.type = "button";
         row.setAttribute("data-path-state", targetStateId);
+        row.setAttribute("data-path-index", String(index));
       }
       pathList.appendChild(row);
     });
@@ -443,6 +467,8 @@
     statesById = currentManifest.stateMap;
     stateOrder = currentManifest.stateOrder;
     state = currentManifest.initialStateId || stateOrder[0] || "";
+    autoAdvanceIndex = -1;
+    alignAutoAdvanceIndex(state);
 
     updateHeaderCopy(currentManifest);
     updateNavLabels();
@@ -539,11 +565,13 @@
   function getNextAutoAdvanceStateId() {
     const orderedStates = getAutoAdvanceStateIds();
     if (orderedStates.length > 0) {
-      const currentIndex = orderedStates.indexOf(state);
-      if (currentIndex !== -1) {
-        return orderedStates[(currentIndex + 1) % orderedStates.length] || "";
-      }
-      return orderedStates[0] || "";
+      alignAutoAdvanceIndex(state);
+      const nextIndex =
+        autoAdvanceIndex === -1
+          ? 0
+          : (autoAdvanceIndex + 1) % orderedStates.length;
+      autoAdvanceIndex = nextIndex;
+      return orderedStates[nextIndex] || "";
     }
 
     const currentState = statesById[state];
@@ -899,6 +927,7 @@
 
     transitionLock = true;
     state = nextState;
+    alignAutoAdvanceIndex(state);
     setZoom(1, false);
 
     const imageLoaded = await swapViewerImage(config.image, config.node);
@@ -1014,7 +1043,12 @@
   function syncPathListState() {
     if (!pathList) return;
     pathList.querySelectorAll("[data-path-state]").forEach(function (item) {
-      const isCurrent = item.getAttribute("data-path-state") === state;
+      const itemIndex = Number(item.getAttribute("data-path-index"));
+      const isCurrent =
+        item.getAttribute("data-path-state") === state &&
+        (!Number.isInteger(autoAdvanceIndex) ||
+          autoAdvanceIndex < 0 ||
+          itemIndex === autoAdvanceIndex);
       item.classList.toggle("is-current", isCurrent);
       if (isCurrent) {
         item.setAttribute("aria-current", "true");
@@ -1024,7 +1058,7 @@
     });
   }
 
-  function navigatePathState(targetStateId) {
+  function navigatePathState(targetStateId, targetPathIndex = null) {
     if (EMBED_MODE) return;
     const resolved = String(targetStateId || "").trim();
     if (!resolved || !statesById[resolved]) {
@@ -1032,6 +1066,14 @@
         "That demo step is unavailable. Use Parents, Descendants, Zoom In, or Zoom Out to continue.",
       );
       return;
+    }
+    const resolvedPathIndex = Number(targetPathIndex);
+    const orderedStates = getAutoAdvanceStateIds();
+    if (
+      Number.isInteger(resolvedPathIndex) &&
+      orderedStates[resolvedPathIndex] === resolved
+    ) {
+      autoAdvanceIndex = resolvedPathIndex;
     }
     markInteraction();
     pauseNarrationForManualControl();
@@ -1163,7 +1205,10 @@
       pathList.addEventListener("click", function (event) {
         const button = event.target.closest("[data-path-state]");
         if (!button) return;
-        navigatePathState(button.getAttribute("data-path-state"));
+        navigatePathState(
+          button.getAttribute("data-path-state"),
+          button.getAttribute("data-path-index"),
+        );
       });
     }
 
