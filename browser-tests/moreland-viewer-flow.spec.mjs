@@ -57,7 +57,12 @@ test("customer family manifests autoplay every approved portrait without requiri
       return intervalId;
     };
     window.__runFamilyAutoAdvance = () => {
-      const entry = callbacks.find((candidate) => candidate.delay === 5000);
+      // app.js also owns a five-second housekeeping timer. The viewer boots
+      // after app.js, so its slideshow timer is the most recently registered
+      // five-second interval.
+      const entry = callbacks
+        .filter((candidate) => candidate.delay === 5000)
+        .at(-1);
       if (!entry) throw new Error("Customer family autoplay interval was not registered.");
       entry.callback(...entry.args);
     };
