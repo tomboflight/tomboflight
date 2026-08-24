@@ -26,7 +26,9 @@ test.describe("Phase 15 NFT add-on mint flow", () => {
     await expect(page.locator("[data-nft-addon-checkout='nft_metadata_revision']")).toHaveCount(1);
     await expect(page.locator("[data-nft-customer-wallet]")).toHaveAttribute("placeholder", "0x...");
     await expect(page.locator("[data-nft-public-safe-consent]")).toHaveCount(1);
-    await expect(page.getByText("No base package includes an NFT.", { exact: false })).toBeVisible();
+    await expect(page.locator("[data-nft-addon-purchase-panel]")).toContainText(
+      "No base package includes an NFT.",
+    );
   });
 
   test("CEO console exposes separate governed preparation approval and queue steps", async ({ page }) => {
