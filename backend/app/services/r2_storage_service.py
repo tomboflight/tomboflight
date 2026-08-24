@@ -68,6 +68,21 @@ def r2_is_configured() -> bool:
     )
 
 
+def private_storage_is_configured() -> bool:
+    """Return whether the dedicated private-object-storage zone is usable."""
+
+    return all(
+        (
+            _normalize(settings.r2_access_key_id),
+            _normalize(settings.r2_secret_access_key),
+            _normalize(settings.r2_resolved_endpoint_url),
+            # Private customer files must never silently share the generic or
+            # public metadata/poster bucket. Require the dedicated setting.
+            _normalize(settings.r2_private_bucket),
+        )
+    )
+
+
 def _allow_local_fallback() -> bool:
     environment = _normalize(settings.environment).lower()
     if _has_any_r2_config():
@@ -86,7 +101,7 @@ def _bucket_for_zone(zone: str) -> str:
     return _normalize(settings.r2_bucket)
 
 
-def _lazy_s3_client():
+def _lazy_s3_client(*, healthcheck: bool = False):
     try:
         import boto3 # type: ignore
         from botocore.config import Config # type: ignore
@@ -109,8 +124,47 @@ def _lazy_s3_client():
         config=Config(
             signature_version="s3v4",
             s3={"addressing_style": "path" if settings.r2_force_path_style else "virtual"},
+            connect_timeout=3 if healthcheck else 5,
+            read_timeout=5 if healthcheck else 30,
+            retries={
+                "max_attempts": 1 if healthcheck else 3,
+                "mode": "standard",
+            },
         ),
     )
+
+
+def get_private_storage_health(*, check_provider: bool = False) -> dict[str, Any]:
+    """Return minimized private R2 configuration and provider availability."""
+
+    configured = private_storage_is_configured()
+    if not configured:
+        return {
+            "configured": False,
+            "available": False,
+            "detail": "private_object_storage_not_configured",
+        }
+    if not check_provider:
+        return {
+            "configured": True,
+            "available": True,
+            "detail": "private_object_storage_configured",
+        }
+
+    try:
+        client = _lazy_s3_client(healthcheck=True)
+        client.head_bucket(Bucket=_private_bucket())
+    except Exception as exc:
+        return {
+            "configured": True,
+            "available": False,
+            "detail": f"private_object_storage_unavailable:{type(exc).__name__}",
+        }
+    return {
+        "configured": True,
+        "available": True,
+        "detail": "private_object_storage_ready",
+    }
 
 
 def _local_fallback_write(
@@ -174,6 +228,90 @@ def upload_bytes(
     }
 
 
+def upload_private_file(
+    *,
+    key: str,
+    path: str | Path,
+    content_type: str,
+    metadata: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Stream one malware-clean private file into the dedicated R2 bucket."""
+
+    source = Path(path)
+    if not source.is_file():
+        raise RuntimeError("Private upload source file is unavailable.")
+    if not private_storage_is_configured():
+        raise RuntimeError("Private object storage is not fully configured.")
+
+    storage_key = key.lstrip("/")
+    if not storage_key:
+        raise RuntimeError("Private object key is missing.")
+    bucket = _private_bucket()
+    size_bytes = source.stat().st_size
+    client = _lazy_s3_client()
+    with source.open("rb") as file_handle:
+        client.put_object(
+            Bucket=bucket,
+            Key=storage_key,
+            Body=file_handle,
+            ContentLength=size_bytes,
+            ContentType=content_type or "application/octet-stream",
+            CacheControl="private, no-store",
+            Metadata=metadata or {},
+        )
+
+    return {
+        "storage_provider": "r2",
+        "bucket": bucket,
+        "key": storage_key,
+        "size_bytes": size_bytes,
+        "content_type": content_type or "application/octet-stream",
+    }
+
+
+def delete_private_object(*, key: str) -> None:
+    """Idempotently remove one object from the dedicated private R2 bucket."""
+
+    storage_key = key.lstrip("/")
+    if not storage_key:
+        raise RuntimeError("Private object key is missing.")
+    if not private_storage_is_configured():
+        raise RuntimeError("Private object storage is not fully configured.")
+    client = _lazy_s3_client()
+    client.delete_object(Bucket=_private_bucket(), Key=storage_key)
+
+
+def download_private_bytes(*, key: str, max_bytes: int) -> bytes:
+    """Read a bounded private object for an authorized server-side derivative."""
+
+    storage_key = key.lstrip("/")
+    if not storage_key:
+        raise RuntimeError("Private object key is missing.")
+    if max_bytes < 1:
+        raise RuntimeError("Private object read limit must be positive.")
+    if not private_storage_is_configured():
+        raise RuntimeError("Private object storage is not fully configured.")
+
+    client = _lazy_s3_client()
+    response = client.get_object(Bucket=_private_bucket(), Key=storage_key)
+    content_length = int(response.get("ContentLength") or 0)
+    if content_length and content_length > max_bytes:
+        raise RuntimeError("Private object exceeds the authorized read limit.")
+
+    body = response.get("Body")
+    if body is None or not hasattr(body, "read"):
+        raise RuntimeError("Private object response body is unavailable.")
+    try:
+        payload = body.read(max_bytes + 1)
+    finally:
+        close = getattr(body, "close", None)
+        if callable(close):
+            close()
+    if len(payload) > max_bytes:
+        raise RuntimeError("Private object exceeds the authorized read limit.")
+    return bytes(payload)
+
+
 def upload_json(
     *,
     zone: str,
@@ -212,7 +350,7 @@ def upload_text(
 
 def generate_private_download_url(*, key: str, expires_seconds: int = 120) -> str | None:
     bucket = _private_bucket()
-    if not r2_is_configured() or not bucket:
+    if not private_storage_is_configured() or not bucket:
         return None
     client = _lazy_s3_client()
     return str(

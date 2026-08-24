@@ -7,7 +7,11 @@ from pymongo.collection import Collection
 
 from app.config import settings
 from app.database import get_database
-from app.services.r2_storage_service import ZONE_POSTER, upload_bytes
+from app.services.r2_storage_service import (
+    ZONE_POSTER,
+    download_private_bytes,
+    upload_bytes,
+)
 
 ALLOWED_POSTER_STYLES = {
     "abstract_cover",
@@ -192,6 +196,33 @@ def _read_local_upload_bytes(upload_record: dict[str, Any]) -> tuple[bytes, str,
     return absolute_path.read_bytes(), content_type, suffix
 
 
+def _read_approved_upload_bytes(
+    upload_record: dict[str, Any],
+) -> tuple[bytes, str, str] | None:
+    storage_provider = _normalize(upload_record.get("storage_provider")).lower()
+    if storage_provider != "r2":
+        if settings.is_production_environment:
+            return None
+        return _read_local_upload_bytes(upload_record)
+
+    storage_key = _normalize(upload_record.get("storage_key"))
+    if not storage_key:
+        return None
+    try:
+        body = download_private_bytes(
+            key=storage_key,
+            max_bytes=settings.upload_max_image_bytes,
+        )
+    except Exception:
+        return None
+
+    content_type = _normalize(upload_record.get("content_type"))
+    if content_type not in set(settings.upload_image_content_types_list):
+        return None
+    suffix = Path(_normalize(upload_record.get("stored_filename"))).suffix or ".bin"
+    return body, content_type, suffix
+
+
 def export_approved_public_poster(
     project_id: str,
     version_number: int,
@@ -201,20 +232,14 @@ def export_approved_public_poster(
 ) -> dict[str, Any]:
     upload_record = _best_uploaded_portrait(project_id)
     if upload_record is None:
-        return generate_abstract_cover(
-            project_id,
-            version_number,
-            public_token_id,
-            publish=publish,
+        raise RuntimeError(
+            "Approved poster was requested, but no eligible approved portrait exists."
         )
 
-    source = _read_local_upload_bytes(upload_record)
+    source = _read_approved_upload_bytes(upload_record)
     if source is None:
-        return generate_abstract_cover(
-            project_id,
-            version_number,
-            public_token_id,
-            publish=publish,
+        raise RuntimeError(
+            "Approved poster was requested, but its private source is unavailable."
         )
 
     body, content_type, suffix = source

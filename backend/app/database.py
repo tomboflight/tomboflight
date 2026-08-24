@@ -53,7 +53,11 @@ def get_database() -> Database:
 def get_service_state(*, include_operational_details: bool = False) -> dict[str, Any]:
     # Import lazily so the services package can import get_database during
     # application startup without creating a database/services import cycle.
-    from app.services.upload_scan_service import get_upload_scanner_configuration
+    from app.services.r2_storage_service import get_private_storage_health
+    from app.services.upload_scan_service import (
+        get_upload_scanner_configuration,
+        get_upload_scanner_health,
+    )
 
     database_connected = db is not None
     degraded_reasons = [] if database_connected else ["database_unavailable"]
@@ -93,6 +97,37 @@ def get_service_state(*, include_operational_details: bool = False) -> dict[str,
     )
     scanner_configuration = get_upload_scanner_configuration()
     scanner_configured = scanner_configuration.configured
+    if include_operational_details:
+        scanner_health = get_upload_scanner_health()
+        private_object_storage = get_private_storage_health(check_provider=True)
+    else:
+        scanner_health = {
+            "configured": scanner_configured,
+            "available": scanner_configured,
+            "detail": scanner_configuration.detail,
+        }
+        private_object_storage = get_private_storage_health(check_provider=False)
+    scanner_available = bool(scanner_health.get("available"))
+    private_object_storage_configured = bool(
+        private_object_storage.get("configured")
+    )
+    private_object_storage_available = bool(
+        private_object_storage.get("available")
+    )
+    legacy_clean_local_uploads: int | None = None
+    if include_operational_details and database_connected:
+        try:
+            legacy_clean_local_uploads = int(
+                db["uploaded_files"].count_documents(
+                    {
+                        "scan_status": "clean",
+                        "quarantined": {"$ne": True},
+                        "storage_provider": {"$ne": "r2"},
+                    }
+                )
+            )
+        except Exception:
+            legacy_clean_local_uploads = None
     mount_path_value = str(settings.render_disk_mount_path or "").strip()
     mount_path = Path(mount_path_value) if mount_path_value else None
     persistent_private_storage = bool(
@@ -125,10 +160,23 @@ def get_service_state(*, include_operational_details: bool = False) -> dict[str,
             operational_degraded_reasons.append("stripe_configuration_incomplete")
         if not postmark_configured:
             operational_degraded_reasons.append("postmark_configuration_incomplete")
-        if not scanner_configured:
+        if not scanner_configured or not scanner_available:
             operational_degraded_reasons.append("upload_scanner_unavailable_quarantine_only")
         if not persistent_private_storage:
             operational_degraded_reasons.append("private_upload_storage_not_persistent")
+        if not private_object_storage_configured:
+            operational_degraded_reasons.append("private_object_storage_not_configured")
+        elif not private_object_storage_available:
+            operational_degraded_reasons.append("private_object_storage_unavailable")
+        if include_operational_details:
+            if legacy_clean_local_uploads is None:
+                operational_degraded_reasons.append(
+                    "legacy_private_upload_inventory_unavailable"
+                )
+            elif legacy_clean_local_uploads:
+                operational_degraded_reasons.append(
+                    "legacy_private_uploads_pending_r2_migration"
+                )
         if not release_sha:
             operational_degraded_reasons.append("deployment_revision_unavailable")
         if not continuity_execution_enabled:
@@ -161,16 +209,25 @@ def get_service_state(*, include_operational_details: bool = False) -> dict[str,
             "transactional_email": {"configured": postmark_configured},
             "upload_scanner": {
                 "configured": scanner_configured,
+                "available": scanner_available,
                 "fail_closed": bool(settings.upload_scan_fail_closed),
-                "mode": "active" if scanner_configured else "quarantine_only",
+                "mode": "active" if scanner_available else "quarantine_only",
                 "configuration_detail": scanner_configuration.detail,
+                "health_detail": str(scanner_health.get("detail") or ""),
                 "legacy_command_ignored": bool(
                     str(settings.upload_scan_command or "").strip()
                 ),
             },
             "private_upload_storage": {
                 "persistent": persistent_private_storage,
-                "mode": "persistent_disk" if persistent_private_storage else "local_runtime",
+                "mode": "staging_disk" if persistent_private_storage else "local_runtime",
+            },
+            "private_object_storage": {
+                "configured": private_object_storage_configured,
+                "available": private_object_storage_available,
+                "mode": "private_r2" if private_object_storage_available else "unavailable",
+                "health_detail": str(private_object_storage.get("detail") or ""),
+                "legacy_clean_local_uploads": legacy_clean_local_uploads,
             },
             "continuity_kernel": {
                 "execution_enabled": continuity_execution_enabled,

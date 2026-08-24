@@ -50,6 +50,24 @@ def _upload_workspace_context():
     }
 
 
+class ReadinessUploadCollection:
+    def __init__(self, legacy_clean_local_uploads=0):
+        self.legacy_clean_local_uploads = legacy_clean_local_uploads
+
+    def count_documents(self, _query):
+        return self.legacy_clean_local_uploads
+
+
+class ReadinessDatabase:
+    def __init__(self, legacy_clean_local_uploads=0):
+        self.uploaded_files = ReadinessUploadCollection(legacy_clean_local_uploads)
+
+    def __getitem__(self, name):
+        if name != "uploaded_files":
+            raise KeyError(name)
+        return self.uploaded_files
+
+
 class HealthAndDbUnavailableTests(unittest.TestCase):
     def _request(self, path: str, method: str = "GET") -> Request:
         return Request(
@@ -107,25 +125,45 @@ class HealthAndDbUnavailableTests(unittest.TestCase):
 
     def test_production_operational_readiness_reports_controls_only_to_ceo_surface(self):
         with tempfile.TemporaryDirectory() as mount_path:
+            readiness_db = ReadinessDatabase()
             with (
-                patch.object(database_module, "db", object()),
-                patch.object(database_module.settings, "environment", "production"),
-                patch.object(database_module.settings, "secret_key", "s" * 48),
-                patch.object(database_module.settings, "stripe_secret_key", "sk_live_configured"),
-                patch.object(database_module.settings, "stripe_publishable_key", "pk_live_configured"),
-                patch.object(database_module.settings, "stripe_webhook_secret", "whsec_configured"),
-                patch.object(database_module.settings, "postmark_server_token", "postmark-configured"),
-                patch.object(database_module.settings, "postmark_server_token_file", ""),
-                patch.object(database_module.settings, "postmark_from_email", "security@tomboflight.com"),
-                patch.object(
+                patch.object(database_module, "db", readiness_db),
+                patch.multiple(
                     database_module.settings,
-                    "upload_scan_hook",
-                    "app.services.clamav_upload_scanner:scan",
+                    environment="production",
+                    secret_key="s" * 48,
+                    stripe_secret_key="sk_live_configured",
+                    stripe_publishable_key="pk_live_configured",
+                    stripe_webhook_secret="whsec_configured",
+                    postmark_server_token="postmark-configured",
+                    postmark_server_token_file="",
+                    postmark_from_email="security@tomboflight.com",
+                    upload_scan_hook="app.services.clamav_upload_scanner:scan",
+                    upload_clamav_host="127.0.0.1",
+                    upload_scan_command="",
+                    upload_scan_fail_closed=True,
+                    render_disk_mount_path=mount_path,
+                    r2_access_key_id="configured-access-key",
+                    r2_secret_access_key="configured-secret-key",
+                    r2_endpoint_url="https://account.r2.cloudflarestorage.com",
+                    r2_private_bucket="private-bucket",
                 ),
-                patch.object(database_module.settings, "upload_clamav_host", "127.0.0.1"),
-                patch.object(database_module.settings, "upload_scan_command", ""),
-                patch.object(database_module.settings, "upload_scan_fail_closed", True),
-                patch.object(database_module.settings, "render_disk_mount_path", mount_path),
+                patch(
+                    "app.services.upload_scan_service.get_upload_scanner_health",
+                    return_value={
+                        "configured": True,
+                        "available": True,
+                        "detail": "clamav_ready",
+                    },
+                ),
+                patch(
+                    "app.services.r2_storage_service.get_private_storage_health",
+                    return_value={
+                        "configured": True,
+                        "available": True,
+                        "detail": "private_object_storage_ready",
+                    },
+                ),
                 patch.dict(
                     database_module.os.environ,
                     {
@@ -136,6 +174,14 @@ class HealthAndDbUnavailableTests(unittest.TestCase):
             ):
                 public_state = database_module.get_service_state()
                 detailed_state = database_module.get_service_state(
+                    include_operational_details=True
+                )
+                readiness_db.uploaded_files.legacy_clean_local_uploads = 2
+                migration_state = database_module.get_service_state(
+                    include_operational_details=True
+                )
+                readiness_db.uploaded_files.legacy_clean_local_uploads = None
+                inventory_unavailable_state = database_module.get_service_state(
                     include_operational_details=True
                 )
 
@@ -150,6 +196,23 @@ class HealthAndDbUnavailableTests(unittest.TestCase):
         self.assertTrue(detailed_state["components"]["stripe_webhooks"]["configured"])
         self.assertEqual(detailed_state["components"]["upload_scanner"]["mode"], "active")
         self.assertTrue(detailed_state["components"]["private_upload_storage"]["persistent"])
+        self.assertTrue(detailed_state["components"]["private_object_storage"]["available"])
+        self.assertEqual(
+            detailed_state["components"]["private_object_storage"][
+                "legacy_clean_local_uploads"
+            ],
+            0,
+        )
+        self.assertFalse(migration_state["operational_ready"])
+        self.assertIn(
+            "legacy_private_uploads_pending_r2_migration",
+            migration_state["operational_degraded_reasons"],
+        )
+        self.assertFalse(inventory_unavailable_state["operational_ready"])
+        self.assertIn(
+            "legacy_private_upload_inventory_unavailable",
+            inventory_unavailable_state["operational_degraded_reasons"],
+        )
 
     def test_production_operational_readiness_fails_closed_on_missing_controls(self):
         release_env = {
@@ -187,6 +250,7 @@ class HealthAndDbUnavailableTests(unittest.TestCase):
                 "postmark_configuration_incomplete",
                 "upload_scanner_unavailable_quarantine_only",
                 "private_upload_storage_not_persistent",
+                "private_object_storage_not_configured",
                 "deployment_revision_unavailable",
                 "continuity_execution_disabled",
             }.issubset(reasons)

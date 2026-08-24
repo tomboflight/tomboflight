@@ -95,6 +95,71 @@ def get_upload_scanner_configuration() -> UploadScannerConfiguration:
     )
 
 
+def get_upload_scanner_health() -> dict[str, Any]:
+    """Return minimized configuration and live-provider availability details."""
+
+    configuration = get_upload_scanner_configuration()
+    if not configuration.configured:
+        return {
+            "configured": False,
+            "available": False,
+            "detail": configuration.detail or "scanner_not_configured",
+        }
+
+    hook_path = str(settings.upload_scan_hook or "").strip()
+    module_name, separator, _function_name = hook_path.partition(":")
+    if not separator or not module_name.strip():
+        return {
+            "configured": False,
+            "available": False,
+            "detail": "scanner_hook_format_invalid",
+        }
+
+    try:
+        module = importlib.import_module(module_name.strip())
+        healthcheck = getattr(module, "healthcheck")
+    except Exception:
+        return {
+            "configured": True,
+            "available": False,
+            "detail": "scanner_healthcheck_unavailable",
+        }
+    if not callable(healthcheck):
+        return {
+            "configured": True,
+            "available": False,
+            "detail": "scanner_healthcheck_not_callable",
+        }
+
+    try:
+        result: Any = healthcheck()
+    except Exception as exc:
+        return {
+            "configured": True,
+            "available": False,
+            "detail": f"scanner_healthcheck_error:{type(exc).__name__}",
+        }
+
+    if isinstance(result, dict):
+        configured = bool(result.get("configured", True))
+        available = bool(result.get("available") or result.get("ready"))
+        detail = str(result.get("detail") or "")
+    elif isinstance(result, tuple):
+        available = bool(result[0]) if result else False
+        configured = True
+        detail = str(result[1] if len(result) > 1 else "")
+    else:
+        configured = True
+        available = bool(result)
+        detail = ""
+
+    return {
+        "configured": configured,
+        "available": available,
+        "detail": detail or ("scanner_ready" if available else "scanner_unavailable"),
+    }
+
+
 def _coerce_result(result: object) -> UploadScanResult:
     if isinstance(result, UploadScanResult):
         return result
@@ -137,9 +202,10 @@ def scan_uploaded_file(path: str) -> UploadScanResult:
     try:
         result = _coerce_result(hook(file_path))
     except Exception as exc:
+        detail = f"scanner_error:{type(exc).__name__}"
         if _must_fail_closed():
-            return UploadScanResult(status="error", detail=f"scanner_error:{exc}")
-        return UploadScanResult(status="skipped", detail=f"scanner_error:{exc}")
+            return UploadScanResult(status="error", detail=detail)
+        return UploadScanResult(status="skipped", detail=detail)
 
     normalized_status = str(result.status or "").strip().lower()
     if normalized_status == "skipped" and _must_fail_closed():

@@ -36,7 +36,12 @@ from app.services.upload_service import (
     store_private_media_upload,
     store_verification_evidence_upload,
 )
-from app.services.r2_storage_service import generate_private_download_url
+from app.services.r2_storage_service import (
+    delete_private_object,
+    generate_private_download_url,
+    private_storage_is_configured,
+    upload_private_file,
+)
 from app.services.upload_scan_service import scan_uploaded_file
 from app.services.audit_log_service import create_audit_log
 from app.services.privacy_access_service import (
@@ -497,6 +502,8 @@ def _public_upload_record(record: dict[str, Any]) -> dict[str, Any]:
     serialized.pop("master_review_notes", None)
     serialized.pop("verification_review_notes", None)
     serialized.pop("verified_by", None)
+    serialized.pop("scan_detail", None)
+    serialized.pop("quarantine_reason", None)
     return serialized
 
 
@@ -588,41 +595,296 @@ def _quarantine_path_for_upload(relative_path: str) -> Path:
     return candidate
 
 
+def _absolute_quarantine_path(quarantine_path: str) -> Path:
+    quarantine_root = Path(settings.upload_quarantine_root_path).resolve()
+    candidate = Path(quarantine_path).resolve()
+    try:
+        candidate.relative_to(quarantine_root)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Stored quarantine path is invalid.",
+        )
+    return candidate
+
+
+def _safe_storage_token(value: Any, *, fallback: str) -> str:
+    token = "".join(
+        character
+        for character in _normalize_value(value)
+        if character.isalnum() or character in {"-", "_"}
+    ).strip("_-")
+    return token or fallback
+
+
+def _private_storage_key(upload_record: dict[str, Any], upload_id: str) -> str:
+    category = _safe_storage_token(upload_record.get("category"), fallback="upload")
+    family_id = _safe_storage_token(upload_record.get("family_id"), fallback="family")
+    member_id = _safe_storage_token(upload_record.get("member_id"), fallback="member")
+    stored_filename = _safe_storage_token(
+        upload_record.get("stored_filename"),
+        fallback="private-object",
+    )
+    upload_token = _safe_storage_token(upload_id, fallback=secrets.token_hex(12))
+    return (
+        f"private-uploads/v1/{category}/{family_id}/{member_id}/"
+        f"{upload_token}/{stored_filename}"
+    )
+
+
+def _update_member_photo_scan_status(
+    *,
+    db: Any,
+    upload_record: dict[str, Any],
+    upload_id: str,
+    photo_submission_status: str,
+) -> None:
+    if _normalize_value(upload_record.get("category")) != "member_photo":
+        return
+    member_id = _normalize_value(upload_record.get("member_id"))
+    if not ObjectId.is_valid(member_id):
+        return
+    try:
+        db["family_members"].update_one(
+            {
+                "_id": ObjectId(member_id),
+                "pending_photo_upload_id": upload_id,
+            },
+            {
+                "$set": {
+                    "photo_submission_status": photo_submission_status,
+                    "updated_at": datetime.now(UTC).isoformat(),
+                }
+            },
+        )
+    except Exception:
+        # The upload record remains authoritative if auxiliary member-state
+        # bookkeeping needs reconciliation.
+        pass
+
+
+def _quarantine_upload(
+    *,
+    db: Any,
+    upload_record: dict[str, Any],
+    upload_id: str,
+    absolute_path: Path,
+    status_value: str,
+    detail: str,
+) -> None:
+    relative_path = _normalize_value(upload_record.get("relative_path"))
+    quarantine_path = _quarantine_path_for_upload(relative_path)
+    quarantined = False
+    quarantine_detail = detail[:500] or status_value
+    if absolute_path.exists():
+        try:
+            quarantine_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(absolute_path), str(quarantine_path))
+            quarantined = True
+        except OSError:
+            quarantine_detail = f"{quarantine_detail}; move_failed"
+    now = datetime.now(UTC).isoformat()
+    db["uploaded_files"].update_one(
+        {"_id": ObjectId(upload_id)},
+        {
+            "$set": {
+                "scan_status": status_value,
+                "scan_detail": quarantine_detail,
+                "quarantined": quarantined,
+                "quarantine_reason": quarantine_detail,
+                "quarantine_path": str(quarantine_path) if quarantined else "",
+                "storage_promotion_status": "blocked",
+                "updated_at": now,
+            }
+        },
+    )
+    _update_member_photo_scan_status(
+        db=db,
+        upload_record=upload_record,
+        upload_id=upload_id,
+        photo_submission_status="quarantined",
+    )
+
+
+def _promote_clean_upload_to_private_storage(
+    *,
+    db: Any,
+    upload_record: dict[str, Any],
+    upload_id: str,
+    absolute_path: Path,
+    scan_detail: str,
+) -> None:
+    storage_key = _private_storage_key(upload_record, upload_id)
+    started_at = datetime.now(UTC).isoformat()
+    start_result = db["uploaded_files"].update_one(
+        {"_id": ObjectId(upload_id)},
+        {
+            "$set": {
+                "storage_promotion_status": "in_progress",
+                "storage_key_candidate": storage_key,
+                "storage_promotion_started_at": started_at,
+                "updated_at": started_at,
+            }
+        },
+    )
+    if getattr(start_result, "matched_count", 1) != 1:
+        raise RuntimeError("Upload record disappeared before storage promotion.")
+    try:
+        storage_result = upload_private_file(
+            key=storage_key,
+            path=absolute_path,
+            content_type=_normalize_value(upload_record.get("content_type"))
+            or "application/octet-stream",
+            metadata={
+                "upload-id": upload_id,
+                "category": _safe_storage_token(
+                    upload_record.get("category"),
+                    fallback="upload",
+                ),
+            },
+        )
+    except Exception:
+        # The provider may have accepted the object before a connection error.
+        # A deterministic key makes this cleanup safe and idempotent.
+        try:
+            delete_private_object(key=storage_key)
+        except Exception:
+            pass
+        raise
+    now = datetime.now(UTC).isoformat()
+    try:
+        update_result = db["uploaded_files"].update_one(
+            {"_id": ObjectId(upload_id)},
+            {
+                "$set": {
+                    "scan_status": "clean",
+                    "scan_detail": scan_detail[:500],
+                    "quarantined": False,
+                    "quarantine_reason": "",
+                    "quarantine_path": "",
+                    "storage_provider": "r2",
+                    "storage_bucket": storage_result.get("bucket"),
+                    "storage_key": storage_key,
+                    "storage_key_candidate": "",
+                    "storage_promotion_status": "complete",
+                    "storage_promoted_at": now,
+                    "local_staging_deleted": False,
+                    "updated_at": now,
+                }
+            },
+        )
+        if getattr(update_result, "matched_count", 1) != 1:
+            raise RuntimeError("Upload record disappeared during storage promotion.")
+    except Exception:
+        try:
+            delete_private_object(key=storage_key)
+        except Exception:
+            pass
+        raise
+
+    local_staging_deleted = False
+    try:
+        absolute_path.unlink(missing_ok=True)
+        local_staging_deleted = True
+    except OSError:
+        local_staging_deleted = False
+    try:
+        db["uploaded_files"].update_one(
+            {"_id": ObjectId(upload_id)},
+            {
+                "$set": {
+                    "local_staging_deleted": local_staging_deleted,
+                    "local_staging_cleanup_pending": not local_staging_deleted,
+                    "updated_at": datetime.now(UTC).isoformat(),
+                }
+            },
+        )
+    except Exception:
+        # R2 and the first database update are already authoritative. A later
+        # maintenance pass can reconcile any leftover staging file.
+        pass
+    _update_member_photo_scan_status(
+        db=db,
+        upload_record=upload_record,
+        upload_id=upload_id,
+        photo_submission_status="pending_master_review",
+    )
+
+
 def _scan_and_quarantine_upload(*, db: Any, upload_record: dict[str, Any]) -> dict[str, Any]:
     upload_id = str(upload_record.get("id") or upload_record.get("_id") or "")
     relative_path = _normalize_value(upload_record.get("relative_path"))
     if not upload_id or not relative_path:
         return upload_record
+    stored_record = db["uploaded_files"].find_one({"_id": ObjectId(upload_id)})
+    if stored_record:
+        upload_record = stored_record
+        relative_path = _normalize_value(upload_record.get("relative_path"))
     absolute_path = _absolute_upload_path(relative_path)
     result = scan_uploaded_file(str(absolute_path))
-    if result.status in {"infected", "error"}:
-        quarantine_path = _quarantine_path_for_upload(relative_path)
-        quarantined = False
-        quarantine_detail = result.detail[:500] or result.status
-        if absolute_path.exists():
-            try:
-                quarantine_path.parent.mkdir(parents=True, exist_ok=True)
-                shutil.move(str(absolute_path), str(quarantine_path))
-                quarantined = True
-            except OSError as exc:
-                del exc
-                quarantine_detail = f"{quarantine_detail}; move_failed"
+    if result.status in {"infected", "error", "skipped"}:
+        _quarantine_upload(
+            db=db,
+            upload_record=upload_record,
+            upload_id=upload_id,
+            absolute_path=absolute_path,
+            status_value=result.status,
+            detail=result.detail,
+        )
+    elif result.status == "clean" and private_storage_is_configured():
+        try:
+            _promote_clean_upload_to_private_storage(
+                db=db,
+                upload_record=upload_record,
+                upload_id=upload_id,
+                absolute_path=absolute_path,
+                scan_detail=result.detail,
+            )
+        except Exception as exc:
+            _quarantine_upload(
+                db=db,
+                upload_record=upload_record,
+                upload_id=upload_id,
+                absolute_path=absolute_path,
+                status_value="error",
+                detail=f"private_storage_promotion_failed:{type(exc).__name__}",
+            )
+    elif result.status == "clean" and settings.is_production_environment:
+        _quarantine_upload(
+            db=db,
+            upload_record=upload_record,
+            upload_id=upload_id,
+            absolute_path=absolute_path,
+            status_value="error",
+            detail="private_storage_not_configured",
+        )
+    elif result.status == "clean":
         db["uploaded_files"].update_one(
             {"_id": ObjectId(upload_id)},
             {
                 "$set": {
                     "scan_status": result.status,
-                    "scan_detail": quarantine_detail,
-                    "quarantined": quarantined,
-                    "quarantine_reason": quarantine_detail,
-                    "quarantine_path": str(quarantine_path) if quarantined else "",
+                    "scan_detail": result.detail[:500],
+                    "quarantined": False,
+                    "storage_promotion_status": "local_development_only",
+                    "updated_at": datetime.now(UTC).isoformat(),
                 }
             },
         )
+        _update_member_photo_scan_status(
+            db=db,
+            upload_record=upload_record,
+            upload_id=upload_id,
+            photo_submission_status="pending_master_review",
+        )
     else:
-        db["uploaded_files"].update_one(
-            {"_id": ObjectId(upload_id)},
-            {"$set": {"scan_status": result.status, "scan_detail": result.detail[:500], "quarantined": False}},
+        _quarantine_upload(
+            db=db,
+            upload_record=upload_record,
+            upload_id=upload_id,
+            absolute_path=absolute_path,
+            status_value="error",
+            detail="scanner_returned_non_clean_verdict",
         )
     refreshed = db["uploaded_files"].find_one({"_id": ObjectId(upload_id)})
     return refreshed or upload_record
@@ -630,12 +892,99 @@ def _scan_and_quarantine_upload(*, db: Any, upload_record: dict[str, Any]) -> di
 
 def _upload_scan_blocks_download(upload_record: dict[str, Any]) -> bool:
     scan_status = _normalize_value(upload_record.get("scan_status")).lower()
-    return bool(upload_record.get("quarantined")) or scan_status in {
+    deletion_status = _normalize_value(upload_record.get("deletion_status")).lower()
+    return deletion_status in {"pending", "failed"} or bool(
+        upload_record.get("quarantined")
+    ) or scan_status in {
         "infected",
         "error",
         "skipped",
         "pending",
     }
+
+
+def _upload_has_durable_private_storage(upload_record: dict[str, Any]) -> bool:
+    if not settings.is_production_environment:
+        return True
+    return bool(
+        _normalize_value(upload_record.get("storage_provider")).lower() == "r2"
+        and _normalize_value(upload_record.get("storage_key"))
+    )
+
+
+def _clear_deleted_member_photo_references(
+    *,
+    db: Any,
+    upload_record: dict[str, Any],
+    upload_id: str,
+    current_user: dict[str, Any],
+) -> None:
+    if _normalize_value(upload_record.get("category")) != "member_photo":
+        return
+    member_id = _normalize_value(upload_record.get("member_id"))
+    if not ObjectId.is_valid(member_id):
+        return
+
+    member = db["family_members"].find_one({"_id": ObjectId(member_id)})
+    if not member:
+        return
+
+    pending_matches = (
+        _normalize_value(member.get("pending_photo_upload_id")) == upload_id
+    )
+    approved_matches = (
+        _normalize_value(member.get("approved_photo_upload_id")) == upload_id
+    )
+    active_matches = _normalize_value(member.get("photo_upload_id")) == upload_id
+    if not (pending_matches or approved_matches or active_matches):
+        return
+
+    member_update: dict[str, Any] = {
+        "updated_at": datetime.now(UTC).isoformat(),
+        "updated_by": _actor_label(current_user),
+        "updated_by_user_id": _current_user_id(current_user),
+    }
+    if pending_matches:
+        member_update["pending_photo_upload_id"] = None
+    if approved_matches:
+        member_update["approved_photo_upload_id"] = None
+        member_update["portrait_approved_at"] = None
+    if active_matches:
+        member_update.update(
+            {
+                "photo_upload_id": None,
+                "photo_path": None,
+                "photo_original_filename": None,
+                "photo_content_type": None,
+                "photo_size_bytes": 0,
+            }
+        )
+
+    other_active = bool(
+        (
+            _normalize_value(member.get("approved_photo_upload_id"))
+            and not approved_matches
+        )
+        or (
+            _normalize_value(member.get("photo_upload_id"))
+            and not active_matches
+        )
+    )
+    other_pending = bool(
+        _normalize_value(member.get("pending_photo_upload_id"))
+        and not pending_matches
+    )
+    if other_active:
+        member_update["photo_submission_status"] = "approved"
+    elif not other_pending:
+        member_update["photo_submission_status"] = "not_submitted"
+
+    result = db["family_members"].update_one(
+        {"_id": ObjectId(member_id)},
+        {"$set": member_update},
+    )
+    if getattr(result, "matched_count", 1) != 1:
+        raise RuntimeError("Family member disappeared during upload deletion.")
 
 
 def _file_extension(filename: str) -> str:
@@ -1452,6 +1801,19 @@ def update_upload_cinematic_approval(
             status_code=status.HTTP_409_CONFLICT,
             detail="Portrait must pass malware scanning before master approval.",
         )
+    if approving and not _upload_has_durable_private_storage(upload_record):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Portrait must be stored in durable private storage before master approval.",
+        )
+    if approving and _normalize_value(upload_record.get("deletion_status")).lower() in {
+        "pending",
+        "failed",
+    }:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Portrait deletion is pending and cannot be approved.",
+        )
     if approving and not (
         bool(upload_record.get("consent_attested"))
         and bool(upload_record.get("authority_attested"))
@@ -1562,6 +1924,21 @@ def update_upload_verification_review(
             status_code=status.HTTP_409_CONFLICT,
             detail="Verification evidence must pass malware scanning before approval.",
         )
+    if decision == "approved" and not _upload_has_durable_private_storage(upload_record):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Verification evidence must be stored in durable private storage "
+                "before approval."
+            ),
+        )
+    if decision == "approved" and _normalize_value(
+        upload_record.get("deletion_status")
+    ).lower() in {"pending", "failed"}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Verification evidence deletion is pending and cannot be approved.",
+        )
 
     now = datetime.now(UTC).isoformat()
     db["uploaded_files"].update_one(
@@ -1639,6 +2016,17 @@ def download_upload(
         current_user,
         detail="Your active package does not include upload access.",
     )
+    deletion_status = _normalize_value(upload_record.get("deletion_status")).lower()
+    if deletion_status in {"pending", "failed"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This file is unavailable while deletion is pending reconciliation.",
+        )
+    if not _upload_has_durable_private_storage(upload_record):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="This file is unavailable until private storage migration completes.",
+        )
     if _upload_scan_blocks_download(upload_record):
         is_admin = _is_admin(current_user)
         if not (
@@ -1665,11 +2053,22 @@ def download_upload(
             )
 
     if _normalize_value(upload_record.get("storage_provider")).lower() == "r2":
-        storage_key = _normalize_value(upload_record.get("storage_key") or upload_record.get("relative_path"))
-        signed_url = generate_private_download_url(key=storage_key, expires_seconds=120)
+        storage_key = _normalize_value(upload_record.get("storage_key"))
+        if not storage_key:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Private object storage key is missing for this upload.",
+            )
+        try:
+            signed_url = generate_private_download_url(
+                key=storage_key,
+                expires_seconds=120,
+            )
+        except Exception:
+            signed_url = None
         if not signed_url:
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Private object storage is unavailable for this upload.",
             )
         response = RedirectResponse(url=signed_url, status_code=status.HTTP_307_TEMPORARY_REDIRECT)
@@ -1715,33 +2114,113 @@ def delete_upload(
     )
 
     relative_path = _normalize_value(upload_record.get("relative_path"))
-    if relative_path:
-        absolute_path = _absolute_upload_path(relative_path)
-        if absolute_path.exists():
-            absolute_path.unlink()
+    absolute_path = _absolute_upload_path(relative_path) if relative_path else None
+    quarantine_path = _normalize_value(upload_record.get("quarantine_path"))
+    absolute_quarantine_path = (
+        _absolute_quarantine_path(quarantine_path) if quarantine_path else None
+    )
 
-    db["uploaded_files"].delete_one({"_id": ObjectId(upload_id)})
+    now = datetime.now(UTC).isoformat()
+    db["uploaded_files"].update_one(
+        {"_id": ObjectId(upload_id)},
+        {
+            "$set": {
+                "deletion_status": "pending",
+                "deletion_requested_at": now,
+                "deletion_requested_by_user_id": _current_user_id(current_user),
+                "updated_at": now,
+            }
+        },
+    )
 
-    if _normalize_value(upload_record.get("category")) == "member_photo":
-        member_id = _normalize_value(upload_record.get("member_id"))
-        if ObjectId.is_valid(member_id):
-            db["family_members"].update_one(
-                {
-                    "_id": ObjectId(member_id),
-                    "photo_upload_id": upload_id,
-                },
+    if _normalize_value(upload_record.get("storage_provider")).lower() == "r2":
+        storage_key = _normalize_value(upload_record.get("storage_key"))
+        if not storage_key:
+            db["uploaded_files"].update_one(
+                {"_id": ObjectId(upload_id)},
                 {
                     "$set": {
-                        "photo_upload_id": "",
-                        "photo_path": "",
-                        "photo_original_filename": "",
-                        "photo_content_type": "",
-                        "photo_size_bytes": 0,
-                        "updated_by": _actor_label(current_user),
-                        "updated_by_user_id": _current_user_id(current_user),
+                        "deletion_status": "failed",
+                        "deletion_detail": "private_storage_key_missing",
+                        "updated_at": datetime.now(UTC).isoformat(),
                     }
                 },
             )
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Private object storage key is missing; deletion was stopped safely.",
+            )
+        try:
+            delete_private_object(key=storage_key)
+        except Exception as exc:
+            db["uploaded_files"].update_one(
+                {"_id": ObjectId(upload_id)},
+                {
+                    "$set": {
+                        "deletion_status": "failed",
+                        "deletion_detail": (
+                            f"private_storage_delete_failed:{type(exc).__name__}"
+                        ),
+                        "updated_at": datetime.now(UTC).isoformat(),
+                    }
+                },
+            )
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Private object storage deletion failed; the record was retained for retry.",
+            )
+
+    try:
+        if absolute_path:
+            absolute_path.unlink(missing_ok=True)
+
+        if absolute_quarantine_path:
+            absolute_quarantine_path.unlink(missing_ok=True)
+    except OSError as exc:
+        db["uploaded_files"].update_one(
+            {"_id": ObjectId(upload_id)},
+            {
+                "$set": {
+                    "deletion_status": "failed",
+                    "deletion_detail": f"local_cleanup_failed:{type(exc).__name__}",
+                    "updated_at": datetime.now(UTC).isoformat(),
+                }
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Upload cleanup failed; the record was retained for retry.",
+        )
+
+    try:
+        _clear_deleted_member_photo_references(
+            db=db,
+            upload_record=upload_record,
+            upload_id=upload_id,
+            current_user=current_user,
+        )
+    except Exception as exc:
+        db["uploaded_files"].update_one(
+            {"_id": ObjectId(upload_id)},
+            {
+                "$set": {
+                    "deletion_status": "failed",
+                    "deletion_detail": (
+                        f"member_reference_cleanup_failed:{type(exc).__name__}"
+                    ),
+                    "updated_at": datetime.now(UTC).isoformat(),
+                }
+            },
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=(
+                "Member portrait references could not be cleared; "
+                "the upload record was retained for retry."
+            ),
+        )
+
+    db["uploaded_files"].delete_one({"_id": ObjectId(upload_id)})
 
     return {
         "status": "deleted",
