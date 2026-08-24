@@ -58,11 +58,15 @@ test("customer family manifests autoplay every approved portrait without requiri
     };
     window.__runFamilyAutoAdvance = () => {
       // app.js also owns a five-second housekeeping timer. The viewer boots
-      // after app.js, so its slideshow timer is the most recently registered
-      // five-second interval.
-      const entry = callbacks
-        .filter((candidate) => candidate.delay === 5000)
-        .at(-1);
+      // after app.js; select the callback that owns lineage progression and
+      // retain registration order only as a compatibility fallback.
+      const fiveSecondEntries = callbacks.filter(
+        (candidate) => candidate.delay === 5000,
+      );
+      const entry =
+        fiveSecondEntries.find((candidate) =>
+          String(candidate.callback).includes("getNextAutoAdvanceStateId"),
+        ) || fiveSecondEntries.at(-1);
       if (!entry) throw new Error("Customer family autoplay interval was not registered.");
       entry.callback(...entry.args);
     };
@@ -142,6 +146,9 @@ test("customer family manifests autoplay every approved portrait without requiri
     await expect(page.locator("#viewerTitle")).toHaveText(expectedTitles[index]);
     await expect(page.locator(`[data-path-index="${index}"]`)).toHaveClass(/is-current/);
     await expect(page.locator("#narrationDisplay")).toHaveCSS("opacity", "0");
+    // Real autoplay waits five seconds; leave the initial 140 ms image-state
+    // transition lock before manually invoking the captured timer.
+    await page.waitForTimeout(200);
     if (index < expectedTitles.length - 1) {
       await page.evaluate(() => window.__runFamilyAutoAdvance());
       await page.waitForTimeout(200);
