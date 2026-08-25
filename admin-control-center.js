@@ -47,6 +47,7 @@
     cases: [],
     workspace: null,
     packageOptions: [],
+    financeSections: {},
     marketingSections: {},
     operationsSections: {},
     activeImpersonation: null,
@@ -148,8 +149,8 @@
     subscriptions_maintenance: ["Subscriptions & Maintenance", "Active plans, renewals due, past-due subscriptions, and recovery signals."],
     package_revenue: ["Package Revenue", "Lane package sales volume with upgrade and downgrade visibility."],
     finance_integrity: ["Finance Integrity", "Unlinked payments, order/entitlement mismatch, override, and duplicate-risk signals."],
-    payroll: ["Payroll", "Read-only payroll snapshot (totals, due dates, history, pending review)."],
-    reports_exports: ["Reports & Exports", "Export generation is not yet live; section shows current availability status only."],
+    payroll: ["Payroll", "Governed CEO payroll ledger controls, review, approval, and external processing evidence."],
+    reports_exports: ["Reports & Exports", "Live protected finance, tax-review, refund, subscription, payroll, and product exports."],
     customer_cases: ["Customer Cases", "Search and open the full case workspace."],
     orders: ["Orders", "Paid orders that need project linkage or billing review."],
     projects: ["Projects", "Active project records, lanes, phases, and source state."],
@@ -707,7 +708,7 @@
         ? window.crypto.randomUUID()
         : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const targetId = normalizeValue(
-      target && (target.project_id || target.case_id || target.user_id || target.identity_email || target.officer_email || target.target_id),
+      target && (target.project_id || target.case_id || target.user_id || target.order_id || target.payroll_run_id || target.identity_email || target.officer_email || target.target_id),
     );
     return `kernel-${normalizeLower(action).replaceAll("-", "_")}-${targetId || "bulk"}-${suffix}`;
   }
@@ -1055,6 +1056,7 @@
     verify_payment: "Verify Payment",
     start_fulfillment: "Mark Fulfillment In Progress",
     assign_package: "Assign Purchased Package",
+    activate_paid_addon: "Activate Verified Paid Add-On",
     complete_fulfillment: "Mark Fulfillment Complete",
     escalate_mismatch: "Escalate Payment Mismatch",
   };
@@ -1069,7 +1071,10 @@
     }
     list.innerHTML = items
       .map(function (item) {
-        const actionButtons = Object.keys(FULFILLMENT_ACTION_LABELS)
+        const allowedActions = item.item_type === "addon"
+          ? ["verify_payment", "start_fulfillment", "activate_paid_addon", "escalate_mismatch"]
+          : ["verify_payment", "start_fulfillment", "assign_package", "complete_fulfillment", "escalate_mismatch"];
+        const actionButtons = allowedActions
           .map(function (action) {
             return `<button class="btn btn-secondary" type="button" data-fulfillment-action="${action}" data-fulfillment-order="${escapeHtml(item.order_id)}">${escapeHtml(FULFILLMENT_ACTION_LABELS[action])}</button>`;
           })
@@ -1084,6 +1089,8 @@
               <div><dt>Payment intent</dt><dd>${escapeHtml(item.stripe_payment_intent_id || "none")}</dd></div>
               <div><dt>Payment status</dt><dd>${escapeHtml(item.payment_status || "unknown")}${item.payment_verified ? " (verified)" : " (not verified)"}</dd></div>
               <div><dt>Billing plan</dt><dd>${escapeHtml(item.billing_plan || "one_time")}</dd></div>
+              <div><dt>Purchase type</dt><dd>${escapeHtml(item.item_type || "package")}</dd></div>
+              <div><dt>Add-on</dt><dd>${escapeHtml(item.addon_code || "none")}</dd></div>
               <div><dt>Coupon</dt><dd>${escapeHtml(item.coupon || "none")}</dd></div>
               <div><dt>Payment date</dt><dd>${escapeHtml(item.payment_date || "unknown")}</dd></div>
               <div><dt>Fulfillment status</dt><dd>${escapeHtml(item.fulfillment_status || "pending_manual_fulfillment")}</dd></div>
@@ -1140,7 +1147,20 @@
   function renderStripeOpsCard(workspace, tabData) {
     const identity = (workspace && workspace.tabs && workspace.tabs.identity) || {};
     const email = identity.email || "";
-    const subscriptionId = (tabData && (tabData.subscription || (tabData.primary_order || {}).subscription_id)) || "";
+    const subscription = (tabData && tabData.subscription) || {};
+    const subscriptionId =
+      (typeof subscription === "string" ? subscription : (subscription.id || subscription.subscription_id)) ||
+      (tabData && tabData.primary_order && tabData.primary_order.subscription_id) ||
+      "";
+    const primaryOrderId = (tabData && tabData.primary_order && (tabData.primary_order.id || tabData.primary_order.order_id)) || "";
+    const workspaceProject = (workspace && workspace.project) || {};
+    const selectedCase = state.cases.find(function (item) { return item.case_id === state.selectedCaseId; }) || {};
+    const projectId =
+      (workspace && workspace.project_id) ||
+      workspaceProject.project_id ||
+      workspaceProject.id ||
+      selectedCase.project_id ||
+      "";
     return `
       <article class="admin-dossier-card admin-dossier-card--wide" data-stripe-ops-card>
         <div class="admin-card-header"><span class="admin-card-badge">$</span><h3 class="admin-card-title">Stripe Operations</h3></div>
@@ -1153,11 +1173,18 @@
           <label class="admin-field"><span>Invoice ID (retry)</span><input type="text" data-stripe-ops-field="invoice_id" placeholder="in_..." /></label>
           <label class="admin-field"><span>Invoice Amount (cents)</span><input type="number" min="1" data-stripe-ops-field="amount_cents" placeholder="e.g. 250000" /></label>
           <label class="admin-field"><span>Invoice Description</span><input type="text" data-stripe-ops-field="description" placeholder="What is being invoiced" /></label>
+          <label class="admin-field"><span>Refund / Credit Amount (cents; 0 = full refund)</span><input type="number" min="0" data-stripe-ops-field="adjustment_amount_cents" value="0" /></label>
+          <label class="admin-field"><span>Stripe Refund Reason</span><select data-stripe-ops-field="refund_reason"><option value="requested_by_customer">requested by customer</option><option value="duplicate">duplicate</option><option value="fraudulent">fraudulent</option></select></label>
+          <label class="admin-field"><span>Approved Stripe Coupon ID</span><input type="text" data-stripe-ops-field="coupon_id" placeholder="Existing Stripe coupon ID" /></label>
+          <label class="admin-field"><span>Target Order ID</span><input type="text" data-stripe-ops-field="order_id" value="${escapeHtml(primaryOrderId)}" placeholder="Required for governed billing adjustments" /></label>
+          <label class="admin-field"><span>Add-On Project ID</span><input type="text" data-stripe-ops-field="project_id" value="${escapeHtml(projectId)}" placeholder="Customer project receiving the paid add-on" /></label>
+          <label class="admin-field"><span>Add-On Code</span><input type="text" data-stripe-ops-field="addon_code" placeholder="extra_storage, tribute_narration, etc." /></label>
         </div>
         <div class="inline-actions" style="margin-top: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
           <button class="btn btn-secondary" type="button" data-stripe-ops-action="ensure_customer">Ensure Stripe Customer</button>
           <button class="btn btn-secondary" type="button" data-stripe-ops-action="open_customer">Open in Stripe</button>
           <button class="btn btn-secondary" type="button" data-stripe-ops-action="payment_link">Create Payment Link</button>
+          <button class="btn btn-secondary" type="button" data-stripe-ops-action="addon_checkout">Create Verified Add-On Checkout</button>
           <button class="btn btn-secondary" type="button" data-stripe-ops-action="invoice">Create + Send Invoice</button>
           <button class="btn btn-secondary" type="button" data-stripe-ops-action="invoice_retry">Retry Invoice</button>
           <button class="btn btn-secondary" type="button" data-stripe-ops-action="subscription_create">Create Subscription</button>
@@ -1168,6 +1195,13 @@
           <button class="btn btn-secondary" type="button" data-stripe-ops-action="payment_method_link">Send Payment-Method Update Link</button>
           <button class="btn btn-secondary" type="button" data-stripe-ops-action="history">Payment History</button>
         </div>
+        ${state.isSuperAdmin ? `
+          <div class="notice" style="margin-top:0.75rem;"><strong>CEO billing adjustments:</strong> Refunds are blocked after production begins. Credits affect Stripe customer balance and discounts require an existing approved Stripe coupon.</div>
+          <div class="inline-actions" style="margin-top:0.75rem; display:flex; gap:0.5rem; flex-wrap:wrap;">
+            <button class="btn btn-danger" type="button" data-billing-adjustment-action="refund">Issue Governed Refund</button>
+            <button class="btn btn-secondary" type="button" data-billing-adjustment-action="customer_credit">Create Customer Credit</button>
+            <button class="btn btn-secondary" type="button" data-billing-adjustment-action="subscription_discount">Apply Subscription Discount</button>
+          </div>` : ""}
         <div class="admin-record-list" data-stripe-ops-result style="margin-top: 0.75rem;"></div>
       </article>
     `;
@@ -1216,12 +1250,15 @@
           invoice_id: stripeOpsField(card, "invoice_id"),
           amount_cents: Number(stripeOpsField(card, "amount_cents")) || 0,
           description: stripeOpsField(card, "description"),
+          project_id: stripeOpsField(card, "project_id"),
+          addon_code: stripeOpsField(card, "addon_code"),
           at_period_end: true,
           confirm: action === "subscription_cancel",
         };
         const targetId =
           parameters.subscription_id ||
           parameters.invoice_id ||
+          parameters.project_id ||
           email ||
           parameters.price_id ||
           action;
@@ -1244,6 +1281,54 @@
       }
     } catch (error) {
       setPageStatus(error.message || "Stripe operation failed.", "error");
+    }
+  }
+
+  async function runBillingAdjustment(card, billingAction) {
+    if (!state.isSuperAdmin) {
+      setPageStatus("Billing adjustments are restricted to the CEO Master Administrator.", "error");
+      return;
+    }
+    const orderId = stripeOpsField(card, "order_id");
+    const reason = stripeOpsField(card, "reason");
+    if (!orderId || reason.length < 3) {
+      setPageStatus("A target order and reason of at least 3 characters are required.", "error");
+      return;
+    }
+    const parameters = {
+      billing_action: billingAction,
+      amount_cents: Number(stripeOpsField(card, "adjustment_amount_cents")) || 0,
+      refund_reason: stripeOpsField(card, "refund_reason") || "requested_by_customer",
+      description: stripeOpsField(card, "description") || reason,
+      subscription_id: stripeOpsField(card, "subscription_id"),
+      coupon_id: stripeOpsField(card, "coupon_id"),
+      confirmed: true,
+    };
+    const warning = billingAction === "refund"
+      ? "Issue this Stripe refund? The server will block it if production work has begun."
+      : billingAction === "customer_credit"
+        ? "Create this non-cash Stripe customer balance credit?"
+        : "Apply this approved Stripe coupon to the customer subscription?";
+    if (!window.confirm(warning)) return;
+    setPageStatus("Submitting governed billing adjustment...", "info");
+    try {
+      const operation = await submitGovernedOperation(
+        "billing_adjustment",
+        { order_id: orderId },
+        parameters,
+        reason,
+      );
+      const resultPayload = operation.execution_result || operation.proposed_after_snapshot || operation;
+      renderStripeOpsResult(card, resultPayload);
+      await Promise.allSettled([loadKernelStatus(), loadOverview(), loadCaseWorkspace(state.selectedCaseId)]);
+      const refreshedCard = document.querySelector("[data-stripe-ops-card]");
+      if (refreshedCard) renderStripeOpsResult(refreshedCard, resultPayload);
+      setPageStatus(
+        kernelOperationMessage(operation, "Billing adjustment completed."),
+        kernelOperationStatusType(operation),
+      );
+    } catch (error) {
+      setPageStatus(error.message || "Billing adjustment failed.", "error");
     }
   }
 
@@ -1489,19 +1574,23 @@
     try {
       const payload = await fetchJson("/admin/control-center/overview?limit=24");
       state.overviewLoadFailed = false;
+      state.financeSections = payload.finance_sections || {};
       state.marketingSections = payload.marketing_sections || {};
       state.operationsSections = payload.operations_sections || {};
       renderTopSummary(payload.summary || {}, payload.finance_sections || {}, payload.marketing_sections || {});
       renderPriorityRepairs(payload.priority_repairs || {}, payload.finance_sections || {}, payload.marketing_sections || {});
       if (isMarketingRole()) renderMarketingQueuePanel();
+      if (["payroll", "reports_exports"].includes(state.queue)) renderCaseList();
     } catch (error) {
       console.error("Overview load failed:", error);
       state.overviewLoadFailed = true;
+      state.financeSections = {};
       state.marketingSections = {};
       state.operationsSections = {};
       renderTopSummary({}, {}, {});
       renderPriorityRepairs({}, {}, {});
       if (isMarketingRole()) renderMarketingQueuePanel();
+      if (["payroll", "reports_exports"].includes(state.queue)) renderCaseList();
     }
   }
 
@@ -1599,16 +1688,106 @@
     `;
   }
 
+  function renderFinanceQueuePanel() {
+    const sections = state.financeSections || {};
+    if (state.queue === "payroll") {
+      const payroll = sections.payroll || {};
+      const recentRuns = Array.isArray(payroll.recent_runs) ? payroll.recent_runs : [];
+      const controls = state.isSuperAdmin
+        ? `
+          <article class="admin-dossier-card admin-dossier-card--wide" data-payroll-create-card>
+            <div class="admin-card-header"><span class="admin-card-badge">$</span><h3 class="admin-card-title">Create Payroll Draft</h3></div>
+            <p class="card-copy">This governed ledger records payroll approval and external payment evidence. It never initiates a bank transfer.</p>
+            <div class="admin-field-grid">
+              <label class="admin-field"><span>Run ID</span><input type="text" data-payroll-field="payroll_run_id" placeholder="payroll-2026-08-31" /></label>
+              <label class="admin-field"><span>Period Start</span><input type="date" data-payroll-field="period_start" /></label>
+              <label class="admin-field"><span>Period End</span><input type="date" data-payroll-field="period_end" /></label>
+              <label class="admin-field"><span>Total Amount (cents)</span><input type="number" min="0" step="1" data-payroll-field="total_amount_cents" /></label>
+              <label class="admin-field"><span>Notes</span><input type="text" data-payroll-field="notes" placeholder="Payroll scope or provider note" /></label>
+            </div>
+            <div class="inline-actions" style="margin-top:0.75rem;"><button class="btn btn-primary" type="button" data-payroll-create>Submit Draft Through Kernel</button></div>
+          </article>`
+        : "";
+      const history = recentRuns.length
+        ? recentRuns
+            .map(function (run) {
+              const runId = run.payroll_run_id || run._id || "";
+              const runStatus = String(run.status || "").trim().toLowerCase();
+              const actionButtons = [];
+              if (runStatus === "draft") {
+                actionButtons.push(`<button class="btn btn-secondary" type="button" data-payroll-action="submit_for_review" data-payroll-run-id="${escapeHtml(runId)}">Submit for Review</button>`);
+              }
+              if (runStatus === "review") {
+                actionButtons.push(`<button class="btn btn-secondary" type="button" data-payroll-action="approve" data-payroll-run-id="${escapeHtml(runId)}">Approve</button>`);
+              }
+              if (runStatus === "approved") {
+                actionButtons.push(`<button class="btn btn-primary" type="button" data-payroll-action="mark_processed" data-payroll-run-id="${escapeHtml(runId)}">Record External Processing</button>`);
+              }
+              if (!["processed", "completed", "void"].includes(runStatus)) {
+                actionButtons.push(`<button class="btn btn-secondary" type="button" data-payroll-action="void" data-payroll-run-id="${escapeHtml(runId)}">Void</button>`);
+              }
+              const writeActions = state.isSuperAdmin && actionButtons.length
+                ? `
+                  <div class="inline-actions" style="margin-top:0.75rem; display:flex; gap:0.5rem; flex-wrap:wrap;">
+                    ${actionButtons.join("")}
+                  </div>`
+                : "";
+              return `
+                <article class="admin-dossier-card">
+                  <div class="admin-card-header"><span class="admin-card-badge">P</span><h3 class="admin-card-title">${escapeHtml(runId || "Payroll Run")}</h3></div>
+                  <dl class="admin-diagnostics-grid">
+                    <div><dt>Status</dt><dd>${escapeHtml(run.status || "unknown")}</dd></div>
+                    <div><dt>Period</dt><dd>${escapeHtml(run.period_start || "—")} – ${escapeHtml(run.period_end || "—")}</dd></div>
+                    <div><dt>Total</dt><dd>$${escapeHtml(String(Number(run.total_amount || 0).toFixed(2)))}</dd></div>
+                    <div><dt>External Reference</dt><dd>${escapeHtml(run.external_reference || "not recorded")}</dd></div>
+                  </dl>
+                  ${writeActions}
+                </article>`;
+            })
+            .join("")
+        : '<div class="admin-empty-state"><h3>No payroll runs yet</h3><p class="card-copy">Create the first governed payroll draft above.</p></div>';
+      return `${controls}<div class="admin-ops-metrics-grid">${history}</div>`;
+    }
+
+    if (state.queue === "reports_exports") {
+      const reports = sections.reports_exports || {};
+      const types = Array.isArray(reports.available_exports) ? reports.available_exports : [];
+      return `
+        <article class="admin-dossier-card admin-dossier-card--wide" data-finance-export-card>
+          <div class="admin-card-header"><span class="admin-card-badge">E</span><h3 class="admin-card-title">Protected Finance Exports</h3></div>
+          <p class="card-copy">${escapeHtml(reports.status_note || "Generate a current protected finance export.")}</p>
+          <div class="admin-field-grid">
+            <label class="admin-field"><span>Period Start (optional)</span><input type="date" data-finance-export-field="period_start" /></label>
+            <label class="admin-field"><span>Period End (optional)</span><input type="date" data-finance-export-field="period_end" /></label>
+          </div>
+          <div class="inline-actions" style="margin-top:0.75rem; display:flex; gap:0.5rem; flex-wrap:wrap;">
+            ${types
+              .map(function (type) {
+                return `<button class="btn btn-secondary" type="button" data-finance-export-type="${escapeHtml(type)}">${escapeHtml(titleize(type))}</button>`;
+              })
+              .join("")}
+          </div>
+          <p class="card-copy" style="margin-top:0.75rem;">Tax exports are operational datasets and must be reviewed by the company tax professional before filing.</p>
+        </article>`;
+    }
+    return "";
+  }
+
   function renderCaseList() {
     const node = document.querySelector("[data-admin-case-list]");
     if (!node) return;
     const operationsPanel = isOperationsRole() ? renderOperationsQueuePanel() : "";
+    const financePanel = ["payroll", "reports_exports"].includes(state.queue) ? renderFinanceQueuePanel() : "";
     if (isMarketingRole()) {
       renderMarketingQueuePanel();
       return;
     }
     if (isOperationsRole() && state.queue === "ops_reports") {
       node.innerHTML = operationsPanel;
+      return;
+    }
+    if (financePanel) {
+      node.innerHTML = financePanel;
       return;
     }
     const cases = Array.isArray(state.cases) ? state.cases : [];
@@ -2013,8 +2192,6 @@
                     <option value="internal_validation_account">internal validation account</option>
                   </select>
                 </label>
-                <label class="admin-field"><span>Add Operational Add-ons (comma separated)</span><input type="text" data-super-admin-service-field="add_addons" placeholder="extra_storage, tribute_narration" /></label>
-                <label class="admin-field"><span>Remove Operational Add-ons (comma separated)</span><input type="text" data-super-admin-service-field="remove_addons" placeholder="extra_upload_pack" /></label>
                 <label class="admin-field"><span>Storage Adjustment (GB)</span><input type="number" step="0.1" data-super-admin-service-field="storage_adjustment_gb" value="0" /></label>
                 <label class="admin-field"><span>Upload Adjustment</span><input type="number" step="1" data-super-admin-service-field="upload_adjustment" value="0" /></label>
                 <label class="admin-field"><span>Member Allowance Adjustment</span><input type="number" step="1" data-super-admin-service-field="member_allowance_adjustment" value="0" /></label>
@@ -2026,7 +2203,7 @@
                 <label class="admin-field" style="display: inline-flex; align-items: center; gap: 0.45rem;"><input type="checkbox" data-super-admin-service-field="certificate_access_enabled" /><span>Certificate Access</span></label>
                 <label class="admin-field" style="display: inline-flex; align-items: center; gap: 0.45rem;"><input type="checkbox" data-super-admin-service-field="viewer_access_enabled" /><span>Viewer Access</span></label>
               </div>
-              <div class="notice" style="margin-top:0.75rem;"><strong>Paid NFT boundary:</strong> NFT Lineage Record, Additional NFT Copy / Mint, and NFT Metadata Revision credits appear automatically only after an authoritative paid Stripe order. They cannot be manually granted or removed here.</div>
+              <div class="notice" style="margin-top:0.75rem;"><strong>Payment boundary:</strong> Every catalog add-on is activated only from an authoritative paid Stripe order. NFT credits stay in the mint workflow; service add-ons appear through Paid — Manual Fulfillment. None can be manually granted or removed here.</div>
               <div class="inline-actions" style="margin-top: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
                 <button class="btn btn-secondary" type="button" data-super-admin-package-preview="${escapeHtml(projectId)}">Preview Package Assignment / Change</button>
                 <button class="btn btn-primary" type="button" data-super-admin-package-apply="${escapeHtml(projectId)}">Apply Package Assignment / Change</button>
@@ -2454,6 +2631,18 @@
       await loadFulfillmentQueue();
       return;
     }
+    if (["payroll", "reports_exports"].includes(state.queue)) {
+      state.cases = [];
+      state.selectedCaseId = "";
+      state.workspace = null;
+      renderCaseList();
+      renderCaseHeader();
+      renderCaseContext();
+      updateActionAvailability();
+      updateBulkActionAvailability();
+      clearPageStatus();
+      return;
+    }
     if (isMarketingRole()) {
       state.cases = [];
       state.selectedCaseId = "";
@@ -2682,6 +2871,96 @@
       setPageStatus("Operations report exported.", "success");
     } catch (error) {
       setPageStatus(error.message || "Unable to export operations report.", "error");
+    }
+  }
+
+  function payrollField(card, name) {
+    const input = card && card.querySelector(`[data-payroll-field="${name}"]`);
+    return input ? String(input.value || "").trim() : "";
+  }
+
+  async function submitPayrollControl(payrollRunId, payrollAction, parameters) {
+    if (!state.isSuperAdmin) {
+      setPageStatus("Payroll ledger writes are restricted to the CEO Master Administrator.", "error");
+      return;
+    }
+    const reason = window.prompt(`${titleize(payrollAction)}: enter the operational reason.`);
+    if (reason === null) return;
+    if (!reason || reason.trim().length < 3) {
+      setPageStatus("A reason of at least 3 characters is required.", "error");
+      return;
+    }
+    const payload = { ...(parameters || {}), payroll_action: payrollAction, confirmed: true };
+    if (payrollAction === "mark_processed") {
+      const externalReference = window.prompt("Enter the bank or payroll-provider processing reference. No transfer will be initiated by Tomb of Light.");
+      if (!externalReference || externalReference.trim().length < 3) {
+        setPageStatus("An external processing reference is required.", "error");
+        return;
+      }
+      payload.external_reference = externalReference.trim();
+    }
+    if (!window.confirm(`Submit ${titleize(payrollAction)} through the Continuity Kernel?`)) return;
+    setPageStatus("Submitting governed payroll action...", "info");
+    try {
+      const operation = await submitGovernedOperation(
+        "payroll_control",
+        { payroll_run_id: payrollRunId },
+        payload,
+        reason.trim(),
+      );
+      await Promise.allSettled([loadKernelStatus(), loadOverview()]);
+      renderCaseList();
+      setPageStatus(
+        kernelOperationMessage(operation, "Payroll ledger action completed."),
+        kernelOperationStatusType(operation),
+      );
+    } catch (error) {
+      setPageStatus(error.message || "Payroll ledger action failed.", "error");
+    }
+  }
+
+  async function createPayrollDraft(card) {
+    const requestedId = payrollField(card, "payroll_run_id");
+    const payrollRunId = requestedId || `payroll-${new Date().toISOString().slice(0, 10)}-${Date.now()}`;
+    const periodStart = payrollField(card, "period_start");
+    const periodEnd = payrollField(card, "period_end");
+    const totalAmountCents = Number(payrollField(card, "total_amount_cents"));
+    if (!periodStart || !periodEnd || !Number.isFinite(totalAmountCents) || totalAmountCents < 0) {
+      setPageStatus("Payroll period and a non-negative total amount are required.", "error");
+      return;
+    }
+    await submitPayrollControl(payrollRunId, "create_draft", {
+      period_start: periodStart,
+      period_end: periodEnd,
+      total_amount_cents: Math.round(totalAmountCents),
+      notes: payrollField(card, "notes"),
+    });
+  }
+
+  async function exportFinanceReport(card, reportType) {
+    const field = function (name) {
+      const input = card && card.querySelector(`[data-finance-export-field="${name}"]`);
+      return input ? String(input.value || "").trim() : "";
+    };
+    const params = new URLSearchParams();
+    if (field("period_start")) params.set("period_start", field("period_start"));
+    if (field("period_end")) params.set("period_end", field("period_end"));
+    setPageStatus(`Generating ${titleize(reportType)}...`, "info");
+    try {
+      const query = params.toString();
+      const payload = await fetchJson(`/admin/control-center/finance/reports/${encodeURIComponent(reportType)}/export${query ? `?${query}` : ""}`);
+      const blob = new Blob([JSON.stringify(payload || {}, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `tomb-of-light-${reportType}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setPageStatus(`${titleize(reportType)} generated.`, "success");
+    } catch (error) {
+      setPageStatus(error.message || "Finance export failed.", "error");
     }
   }
 
@@ -4472,6 +4751,37 @@
         const card = stripeOpsButton.closest("[data-stripe-ops-card]");
         const action = stripeOpsButton.getAttribute("data-stripe-ops-action") || "";
         if (card && action) runStripeOpsAction(card, action);
+        return;
+      }
+
+      const billingAdjustmentButton = target.closest("[data-billing-adjustment-action]");
+      if (billingAdjustmentButton) {
+        const card = billingAdjustmentButton.closest("[data-stripe-ops-card]");
+        const action = billingAdjustmentButton.getAttribute("data-billing-adjustment-action") || "";
+        if (card && action) runBillingAdjustment(card, action);
+        return;
+      }
+
+      const payrollCreateButton = target.closest("[data-payroll-create]");
+      if (payrollCreateButton) {
+        const card = payrollCreateButton.closest("[data-payroll-create-card]");
+        if (card) createPayrollDraft(card);
+        return;
+      }
+
+      const payrollActionButton = target.closest("[data-payroll-action]");
+      if (payrollActionButton) {
+        const action = payrollActionButton.getAttribute("data-payroll-action") || "";
+        const payrollRunId = payrollActionButton.getAttribute("data-payroll-run-id") || "";
+        if (action && payrollRunId) submitPayrollControl(payrollRunId, action, {});
+        return;
+      }
+
+      const financeExportButton = target.closest("[data-finance-export-type]");
+      if (financeExportButton) {
+        const card = financeExportButton.closest("[data-finance-export-card]");
+        const reportType = financeExportButton.getAttribute("data-finance-export-type") || "";
+        if (card && reportType) exportFinanceReport(card, reportType);
         return;
       }
 

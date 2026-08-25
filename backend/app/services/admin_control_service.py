@@ -61,6 +61,7 @@ ALLOWED_LANES = {"portrait", "household", "network", "organization"}
 BUILD_READY_STATUSES = {"build_ready", "in_production", "qa_review", "client_review", "delivered", "archived"}
 INTAKE_APPROVED_PHASES = {"intake_approved", "build_started", "quality_review", "client_review", "delivery_complete", "delivered", "archived"}
 PAID_ORDER_STATUSES = {"paid", "succeeded", "complete", "completed"}
+AUTHORITATIVE_PAYMENT_SOURCES = {"stripe_webhook", "stripe_verified"}
 OBJECT_ID_WRAPPER_PATTERN = re.compile(r"""^ObjectId\((["']?)([0-9a-fA-F]{24})\1\)$""")
 MAX_BULK_ACTION_LIMIT = 5000
 INTERNAL_ROLE_KEYS = set(INTERNAL_ADMIN_ROLE_CODES) | {"admin"}
@@ -813,6 +814,10 @@ def _coerce_amount(value: Any) -> float:
 
 
 def _order_amount_value(order: dict[str, Any]) -> float:
+    for key in ("amount_total_cents", "amount_cents", "subtotal_cents"):
+        value = order.get(key)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return round(float(value) / 100, 2)
     for key in ("amount", "amount_total", "total_amount", "subtotal", "price"):
         amount = _coerce_amount(order.get(key))
         if amount:
@@ -906,7 +911,7 @@ def _record_order_finance_events(order: dict[str, Any], *, source: str) -> None:
     order_package = normalize_package_code(_normalize(order.get("package_code") or order.get("package_slug")))
     order_lane = _normalize(order.get("lane") or order.get("package_lane")).lower() or _package_lane_for_code(order_package)
 
-    if _is_paid_package_order(order):
+    if _is_authoritative_paid_order(order):
         _write_finance_event(
             event_type="payment_captured",
             order_id=order_id,
@@ -1177,6 +1182,15 @@ def _is_paid_package_order(order: dict[str, Any] | None) -> bool:
     item_type = _normalize(order.get("item_type") or "package").lower()
     status_value = _normalize(order.get("status")).lower()
     return item_type == "package" and status_value in PAID_ORDER_STATUSES
+
+
+def _is_authoritative_paid_order(order: dict[str, Any] | None) -> bool:
+    if not isinstance(order, dict):
+        return False
+    return (
+        _normalize(order.get("status")).lower() in PAID_ORDER_STATUSES
+        and _normalize(order.get("source")).lower() in AUTHORITATIVE_PAYMENT_SOURCES
+    )
 
 
 def _latest_linked_order(project_id: str) -> dict[str, Any] | None:
@@ -2324,7 +2338,6 @@ def _service_entitlement_view(*, package_code: str, entitlement: dict[str, Any] 
         "service_operations_supported": sorted(
             SERVICE_CONTROL_OPERATIONS
             | {
-                "add_on_grant_removal",
                 "storage_adjustment",
                 "upload_adjustment",
                 "member_allowance_adjustment",
@@ -2396,12 +2409,12 @@ def _apply_service_control_payload_to_preview(
         for addon in (payload.get("remove_addons") or [])
         if normalize_addon_code(addon)
     }
-    paid_nft_addon_overrides = sorted((add_addons | remove_addons) & set(NFT_ADDON_CODES))
-    if paid_nft_addon_overrides:
+    paid_addon_overrides = sorted(add_addons | remove_addons)
+    if paid_addon_overrides:
         raise ValueError(
-            "Paid NFT add-ons cannot be granted or removed through service controls. "
-            "They are activated only from an authoritative paid Stripe order: "
-            + ", ".join(paid_nft_addon_overrides)
+            "Catalog add-ons cannot be granted or removed through service controls. "
+            "They are activated only from an authoritative paid Stripe order and revoked only by the governed refund/cancellation workflow: "
+            + ", ".join(paid_addon_overrides)
         )
     for addon_code in add_addons:
         if not get_addon(addon_code):
@@ -3467,7 +3480,7 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
         amount = _order_amount_value(order)
         order_dt = _coerce_datetime(order.get("created_at") or order.get("updated_at"))
 
-        if _is_paid_package_order(order):
+        if _is_authoritative_paid_order(order):
             successful_payments += 1
             gross_revenue += amount
             if order_dt and order_dt.date() == now.date():
@@ -3477,25 +3490,41 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
             if not _normalize(order.get("project_id")):
                 unlinked_payments += 1
 
-            lane_value = _normalize(order.get("lane") or order.get("package_lane")).lower()
-            if lane_value not in lane_sales:
-                lane_value = _normalize(
-                    canonicalize_package_identifier(
-                        order.get("package_code") or order.get("package_slug")
-                    ).get("package_lane")
-                ).lower()
-            if lane_value in lane_sales:
-                lane_sales[lane_value] += 1
+            if _is_paid_package_order(order):
+                lane_value = _normalize(order.get("lane") or order.get("package_lane")).lower()
+                if lane_value not in lane_sales:
+                    lane_value = _normalize(
+                        canonicalize_package_identifier(
+                            order.get("package_code") or order.get("package_slug")
+                        ).get("package_lane")
+                    ).lower()
+                if lane_value in lane_sales:
+                    lane_sales[lane_value] += 1
         elif status_value in {"failed", "payment_failed", "declined"}:
             failed_payments += 1
         elif status_value in {"pending", "open", "unpaid", "past_due", "incomplete"}:
             unpaid_balances += 1
 
         refund_value = _coerce_amount(order.get("refund_amount") or order.get("refunded_amount"))
-        if refund_value > 0 and order_dt and order_dt >= month_start:
+        refund_dt = _coerce_datetime(
+            order.get("refunded_at") or order.get("updated_at") or order.get("created_at")
+        )
+        if refund_value > 0 and refund_dt and refund_dt >= month_start:
             refunds_this_month += refund_value
-        elif status_value in {"refunded", "refund"} and order_dt and order_dt >= month_start:
+        elif status_value in {"refunded", "refund"} and refund_dt and refund_dt >= month_start:
             refunds_this_month += amount
+
+    for event in db["finance_events"].find({"event_type": "payment_captured"}).sort("occurred_at", -1).limit(5000):
+        if not _normalize(event.get("stripe_invoice_id")):
+            continue
+        amount = _coerce_amount(event.get("amount"))
+        occurred_at = _coerce_datetime(event.get("occurred_at"))
+        successful_payments += 1
+        gross_revenue += amount
+        if occurred_at and occurred_at.date() == now.date():
+            collected_today += amount
+        if occurred_at and occurred_at >= month_start:
+            collected_month += amount
 
     for project in db["projects"].find({}).sort("updated_at", -1).limit(500):
         project_id = _normalize(project.get("_id"))
@@ -3756,16 +3785,17 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
                 "payroll_total_this_period": round(_coerce_amount(payroll_current.get("total_amount")), 2),
                 "processed_payroll_history": processed_payroll_history,
                 "pending_payroll_review": pending_payroll_review,
-                "snapshot_mode": "read_only",
-                "write_pipeline_live": False,
-                "workflow_actions_enabled": False,
-                "status_note": "Payroll is currently a read-only snapshot; write workflows are not yet live.",
+                "snapshot_mode": "governed_ledger",
+                "write_pipeline_live": True,
+                "workflow_actions_enabled": True,
+                "bank_transfer_integration": False,
+                "status_note": "Governed payroll ledger writes are live. Processing requires an external payment reference and does not initiate a bank transfer.",
+                "recent_runs": [_serialize_admin_document(item) for item in payroll_runs],
             },
             "reports_exports": {
-                "export_generation_live": False,
-                "status_note": "Finance export generation is not yet live.",
-                "available_exports": [],
-                "unavailable_exports": [
+                "export_generation_live": True,
+                "status_note": "Protected JSON exports are generated on demand from current finance records.",
+                "available_exports": [
                     "monthly_finance_export",
                     "tax_export",
                     "refund_report",
@@ -3773,6 +3803,7 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
                     "payroll_report",
                     "package_performance_report",
                 ],
+                "unavailable_exports": [],
             },
             "finance_history": {
                 "refund_records": refund_event_count,
@@ -4104,6 +4135,18 @@ def repair_missing_entitlements(*, limit: int = 500) -> dict[str, Any]:
 def _serialize_datetime(value: Any) -> Any:
     if isinstance(value, datetime):
         return value.isoformat()
+    return value
+
+
+def _serialize_admin_document(value: Any) -> Any:
+    if isinstance(value, ObjectId):
+        return str(value)
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {str(key): _serialize_admin_document(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_serialize_admin_document(item) for item in value]
     return value
 
 

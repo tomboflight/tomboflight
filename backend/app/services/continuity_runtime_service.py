@@ -33,6 +33,7 @@ from app.core.admin_permission_registry import CEO_MASTER_ADMIN_EMAIL
 from app.database import get_database
 from app.services import (
     admin_control_service,
+    finance_control_service,
     manual_fulfillment_service,
     stripe_admin_operations_service,
 )
@@ -40,7 +41,7 @@ from app.services.auth_service import admin_issue_password_reset
 from app.services.audit_log_service import write_audit_log
 
 
-RUNTIME_VERSION = "12.0.0"
+RUNTIME_VERSION = "13.0.0"
 OPERATIONS_COLLECTION = "continuity_operations"
 EVENTS_COLLECTION = "continuity_events"
 EXECUTION_KILL_SWITCH = "CONTINUITY_EXECUTION_KILL_SWITCH"
@@ -149,6 +150,12 @@ CONTROL_SURFACE_ACTION_SPECS: dict[str, ActionSpec] = {
     ),
     "evidence_review": ActionSpec(
         "admin_repair_safety", "high", "upload", ("upload_id",)
+    ),
+    "billing_adjustment": ActionSpec(
+        "billing_order_payment_repair", "high", "order", ("order_id",)
+    ),
+    "payroll_control": ActionSpec(
+        "admin_repair_safety", "high", "payroll_run", ("payroll_run_id",)
     ),
 }
 
@@ -313,6 +320,8 @@ def _assert_action_actor_scope(action: str, actor: dict[str, Any] | None) -> Non
         "account_permanent_delete",
         "orphan_identity_reconciliation",
         "customer_package_provision",
+        "billing_adjustment",
+        "payroll_control",
     }:
         return
     if _actor_email(actor) == str(CEO_MASTER_ADMIN_EMAIL).strip().lower():
@@ -324,6 +333,14 @@ def _assert_action_actor_scope(action: str, actor: dict[str, Any] | None) -> Non
     if normalized_action == "orphan_identity_reconciliation":
         raise PermissionError(
             "Manual identity reconciliation is restricted to the canonical CEO Master Administrator."
+        )
+    if normalized_action == "billing_adjustment":
+        raise PermissionError(
+            "Refunds, credits, and discounts are restricted to the canonical CEO Master Administrator."
+        )
+    if normalized_action == "payroll_control":
+        raise PermissionError(
+            "Payroll ledger writes are restricted to the canonical CEO Master Administrator."
         )
     raise PermissionError(
         "First-project package provisioning is restricted to the canonical CEO Master Administrator."
@@ -704,6 +721,35 @@ def _snapshot_for_action(action: str, target: dict[str, Any]) -> dict[str, Any]:
                     "project_id",
                     "package_code",
                     "package_name",
+                    "item_type",
+                    "amount_total_cents",
+                    "stripe_payment_intent_id",
+                    "refund_status",
+                    "refund_amount_cents",
+                ),
+            )
+        }
+    payroll_run_id = _normalize(target.get("payroll_run_id"))
+    if payroll_run_id:
+        run = db["payroll_runs"].find_one(
+            {
+                "$or": [
+                    {"payroll_run_id": payroll_run_id},
+                    {"_id": ObjectId(payroll_run_id)} if ObjectId.is_valid(payroll_run_id) else {"payroll_run_id": payroll_run_id},
+                ]
+            }
+        )
+        return {
+            "payroll_run": _safe_document(
+                run,
+                (
+                    "payroll_run_id",
+                    "period_start",
+                    "period_end",
+                    "status",
+                    "total_amount",
+                    "total_amount_cents",
+                    "external_reference",
                 ),
             )
         }
@@ -799,6 +845,16 @@ def _preview_action(action: str, target: dict[str, Any], parameters: dict[str, A
     if action == "customer_package_provision":
         return admin_control_service.super_admin_preview_customer_package_provision(
             user_id=_normalize(target.get("user_id")),
+            payload=dict(parameters),
+        )
+    if action == "billing_adjustment":
+        return finance_control_service.preview_billing_adjustment(
+            order_id=_normalize(target.get("order_id")),
+            payload=dict(parameters),
+        )
+    if action == "payroll_control":
+        return finance_control_service.preview_payroll_control(
+            payroll_run_id=_normalize(target.get("payroll_run_id")),
             payload=dict(parameters),
         )
     if action == "legacy_admin_remediation":
@@ -1146,6 +1202,23 @@ def request_operation(
             "before_snapshot_ref": f"operation:{operation_id}:before_snapshot",
             "automatic": False,
             "restoration_prohibited": True,
+            "evidence_only": True,
+        }
+    billing_adjustment_action = _normalize(
+        (proposed_after_snapshot.get("proposed_after") or {}).get("billing_action")
+    )
+    if normalized_action == "billing_adjustment" and billing_adjustment_action:
+        rollback_plan = {
+            "strategy": (
+                "stripe_refund_is_irreversible_provider_evidence"
+                if billing_adjustment_action == "refund"
+                else "stripe_provider_compensating_action_required"
+            ),
+            "before_snapshot_ref": f"operation:{operation_id}:before_snapshot",
+            "automatic": False,
+            "restoration_prohibited": billing_adjustment_action == "refund",
+            "provider_side_effect": True,
+            "compensating_action_required": billing_adjustment_action != "refund",
             "evidence_only": True,
         }
     operation = {
@@ -1514,6 +1587,14 @@ def _invoke_stripe_operation(
             price_id=_normalize(parameters.get("price_id")),
             quantity=max(1, int(parameters.get("quantity") or 1)),
         )
+    if action == "addon_checkout":
+        return stripe_admin_operations_service.create_paid_addon_checkout(
+            **common,
+            customer_email=_normalize(parameters.get("customer_email")),
+            project_id=_normalize(parameters.get("project_id")),
+            addon_code=_normalize(parameters.get("addon_code")),
+            price_id=_normalize(parameters.get("price_id")),
+        )
     if action == "invoice":
         return stripe_admin_operations_service.create_and_send_invoice(
             **common,
@@ -1640,6 +1721,22 @@ def _invoke_action(
         return _invoke_stripe_operation(
             stripe_action=_normalize(parameters.get("stripe_action")),
             parameters=parameters,
+            actor=actor,
+        )
+    if action == "billing_adjustment":
+        payload = dict(parameters)
+        payload["reason"] = reason
+        return finance_control_service.apply_billing_adjustment(
+            order_id=_normalize(target.get("order_id")),
+            payload=payload,
+            actor=actor,
+        )
+    if action == "payroll_control":
+        payload = dict(parameters)
+        payload["reason"] = reason
+        return finance_control_service.apply_payroll_control(
+            payroll_run_id=_normalize(target.get("payroll_run_id")),
+            payload=payload,
             actor=actor,
         )
     if action == "customer_account_create":

@@ -47,12 +47,12 @@ class TestPhase18CeoFulfillmentReviewControl(unittest.TestCase):
         self.assertIn("Provision First Customer Project + Package", control)
         self.assertIn("does not create a payment record", control)
 
-    def test_paid_nft_addons_remain_bound_to_authoritative_stripe_orders(self):
+    def test_catalog_addons_remain_bound_to_authoritative_stripe_orders(self):
         service = _read("backend/app/services/admin_control_service.py")
         control = _read("admin-control-center.js")
-        self.assertIn("Paid NFT add-ons cannot be granted or removed", service)
+        self.assertIn("Catalog add-ons cannot be granted or removed", service)
         self.assertIn("authoritative paid Stripe order", service)
-        self.assertIn("Paid NFT boundary", control)
+        self.assertIn("Every catalog add-on is activated only from an authoritative paid Stripe order", control)
 
     def test_active_read_only_preview_can_return_to_its_exact_customer_case(self):
         control = _read("admin-control-center.js")
@@ -70,7 +70,8 @@ class TestPhase18CeoFulfillmentReviewControl(unittest.TestCase):
         }
         for html_path, asset in expected.items():
             with self.subTest(html_path=html_path):
-                self.assertIn(f'{asset}?v=20260824-phase18', _read(html_path))
+                expected_version = "20260824-phase19" if asset == "admin-control-center.js" else "20260824-phase18"
+                self.assertIn(f'{asset}?v={expected_version}', _read(html_path))
 
 
 if __name__ == "__main__":

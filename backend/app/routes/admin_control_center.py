@@ -14,6 +14,7 @@ from app.services.manual_fulfillment_service import (
     execute_fulfillment_action,
     list_manual_fulfillment_queue,
 )
+from app.services.finance_control_service import generate_finance_export
 from app.services.admin_control_service import (
     MAX_BULK_ACTION_LIMIT,
     admin_control_access_profile,
@@ -347,6 +348,31 @@ def get_operations_report_export(
             detail="Operations report export is not permitted for this role.",
         )
     return export_operations_report()
+
+
+@router.get("/finance/reports/{report_type}/export")
+def get_finance_report_export(
+    report_type: str,
+    period_start: str = Query(default=""),
+    period_end: str = Query(default=""),
+    limit: int = Query(default=5000, ge=1, le=5000),
+    current_user: dict[str, Any] = Depends(require_permission("admin.control.billing")),
+):
+    if not admin_control_queue_allowed(current_user, "reports_exports"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Finance report export is not permitted for this role.",
+        )
+    try:
+        return generate_finance_export(
+            report_type=report_type,
+            period_start=period_start,
+            period_end=period_end,
+            limit=limit,
+            actor=current_user,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 @router.get("/cases")

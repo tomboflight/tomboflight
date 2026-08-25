@@ -2419,6 +2419,7 @@ class AdminConsoleOverviewTests(unittest.TestCase):
                         "status": "paid",
                         "item_type": "package",
                         "package_code": "legacy_snapshot",
+                        "source": "stripe_webhook",
                         "amount": 10,
                         "created_at": naive_month_boundary,
                     },
@@ -2429,6 +2430,7 @@ class AdminConsoleOverviewTests(unittest.TestCase):
                         "status": "paid",
                         "item_type": "package",
                         "package_code": "legacy_snapshot",
+                        "source": "stripe_webhook",
                         "amount": 20,
                         "created_at": aware_month_boundary,
                     },
@@ -2439,6 +2441,7 @@ class AdminConsoleOverviewTests(unittest.TestCase):
                         "status": "paid",
                         "item_type": "package",
                         "package_code": "legacy_snapshot",
+                        "source": "stripe_webhook",
                         "amount": 30,
                         "created_at": z_boundary,
                     },
@@ -2449,6 +2452,7 @@ class AdminConsoleOverviewTests(unittest.TestCase):
                         "status": "paid",
                         "item_type": "package",
                         "package_code": "legacy_snapshot",
+                        "source": "stripe_webhook",
                         "amount": 40,
                         "created_at": offset_boundary,
                     },
@@ -2459,6 +2463,7 @@ class AdminConsoleOverviewTests(unittest.TestCase):
                         "status": "paid",
                         "item_type": "package",
                         "package_code": "legacy_snapshot",
+                        "source": "stripe_webhook",
                         "amount": 50,
                         "created_at": before_month,
                     },
@@ -2469,6 +2474,7 @@ class AdminConsoleOverviewTests(unittest.TestCase):
                         "status": "paid",
                         "item_type": "package",
                         "package_code": "legacy_snapshot",
+                        "source": "stripe_webhook",
                         "amount": 60,
                         "created_at": malformed_value,
                     },
@@ -2577,10 +2583,11 @@ class AdminConsoleOverviewTests(unittest.TestCase):
         self.assertIn("reports_exports", sections)
         self.assertNotIn("subscriptions_and_maintenance", sections)
         self.assertNotIn("reports_and_exports", sections)
-        self.assertFalse(sections["payroll"]["write_pipeline_live"])
-        self.assertEqual(sections["payroll"]["snapshot_mode"], "read_only")
-        self.assertFalse(sections["reports_exports"]["export_generation_live"])
-        self.assertNotIn("monthly_finance_export", sections["reports_exports"])
+        self.assertTrue(sections["payroll"]["write_pipeline_live"])
+        self.assertEqual(sections["payroll"]["snapshot_mode"], "governed_ledger")
+        self.assertFalse(sections["payroll"]["bank_transfer_integration"])
+        self.assertTrue(sections["reports_exports"]["export_generation_live"])
+        self.assertIn("monthly_finance_export", sections["reports_exports"]["available_exports"])
 
     def test_overview_does_not_backfill_typed_finance_events(self):
         order_id = ObjectId()
@@ -3186,7 +3193,7 @@ class MasterAdminCompletionTests(unittest.TestCase):
         self.assertTrue(by_stripe["items"])
         self.assertTrue(by_workflow["items"])
 
-    def test_service_controls_preview_and_apply_preserve_stripe_purchase_record(self):
+    def test_service_controls_reject_catalog_addon_toggles_and_preserve_stripe_purchase_record(self):
         project_id = ObjectId()
         order_id = ObjectId()
         db = FakeDatabase(
@@ -3224,32 +3231,32 @@ class MasterAdminCompletionTests(unittest.TestCase):
             patch.object(admin_control_service, "get_project_entitlement", return_value=None),
         ):
             before_order = dict(db["orders"].find_one({"_id": order_id}) or {})
-            preview = admin_control_service.super_admin_preview_service_controls(
-                project_id=str(project_id),
-                payload={
-                    "operation": "upgrade",
-                    "package_code": "legacy_plus",
-                    "add_addons": ["extra_storage"],
-                    "storage_adjustment_gb": 1.0,
-                    "maintenance_state": "active",
-                },
-            )
+            with self.assertRaisesRegex(ValueError, "authoritative paid Stripe order"):
+                admin_control_service.super_admin_preview_service_controls(
+                    project_id=str(project_id),
+                    payload={
+                        "operation": "upgrade",
+                        "package_code": "legacy_plus",
+                        "add_addons": ["extra_storage"],
+                        "storage_adjustment_gb": 1.0,
+                        "maintenance_state": "active",
+                    },
+                )
             after_preview_order = dict(db["orders"].find_one({"_id": order_id}) or {})
-            applied = admin_control_service.super_admin_apply_service_controls(
-                project_id=str(project_id),
-                payload={
-                    "operation": "upgrade",
-                    "package_code": "legacy_plus",
-                    "add_addons": ["extra_storage"],
-                    "storage_adjustment_gb": 1.0,
-                    "maintenance_state": "active",
-                },
-                actor={"_id": ObjectId(), "email": "l.robinson@tomboflight.com", "role": "ceo_master_admin"},
-            )
+            with self.assertRaisesRegex(ValueError, "authoritative paid Stripe order"):
+                admin_control_service.super_admin_apply_service_controls(
+                    project_id=str(project_id),
+                    payload={
+                        "operation": "upgrade",
+                        "package_code": "legacy_plus",
+                        "add_addons": ["extra_storage"],
+                        "storage_adjustment_gb": 1.0,
+                        "maintenance_state": "active",
+                    },
+                    actor={"_id": ObjectId(), "email": "l.robinson@tomboflight.com", "role": "ceo_master_admin"},
+                )
         self.assertEqual(before_order.get("status"), after_preview_order.get("status"))
         self.assertEqual(before_order.get("stripe_session_id"), after_preview_order.get("stripe_session_id"))
-        self.assertTrue(preview["validation"]["stripe_purchase_record_preserved"])
-        self.assertTrue(applied["stripe_purchase_record_preserved"])
         stored_order = db["orders"].find_one({"_id": order_id}) or {}
         self.assertEqual(stored_order.get("status"), "paid")
         self.assertEqual(stored_order.get("stripe_session_id"), "cs_test_preserve")

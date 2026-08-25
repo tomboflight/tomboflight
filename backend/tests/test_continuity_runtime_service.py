@@ -489,9 +489,11 @@ class TestContinuityRuntimeControlSurfaceAdapters(unittest.TestCase):
             "upload_rescan",
             "portrait_review",
             "evidence_review",
+            "billing_adjustment",
+            "payroll_control",
         }
-        self.assertEqual(runtime.RUNTIME_VERSION, "12.0.0")
-        self.assertEqual(len(runtime.ACTION_SPECS), 45)
+        self.assertEqual(runtime.RUNTIME_VERSION, "13.0.0")
+        self.assertEqual(len(runtime.ACTION_SPECS), 47)
         self.assertTrue(expected.issubset(runtime.ACTION_SPECS))
 
     def test_permanent_deletion_adapter_passes_both_irreversible_confirmations(self) -> None:

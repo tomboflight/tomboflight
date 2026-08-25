@@ -36,7 +36,7 @@ class TestContinuityKernelPhase12ProductionSecurityClosure(unittest.TestCase):
         cls.doc = DOC_PATH.read_text(encoding="utf-8")
 
     def test_01_runtime_registers_truthful_orphan_reconciliation(self) -> None:
-        self.assertIn('RUNTIME_VERSION = "12.0.0"', self.runtime)
+        self.assertIn('RUNTIME_VERSION = "13.0.0"', self.runtime)
         self.assertIn('"orphan_identity_reconciliation": ActionSpec(', self.runtime)
         for marker in (
             'ORPHAN_RECONCILIATION_CONFIRMATION_PHRASE = "RECONCILE MANUAL REMOVAL"',
