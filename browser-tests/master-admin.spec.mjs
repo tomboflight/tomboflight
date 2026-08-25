@@ -997,14 +997,14 @@ test("[phase19.1 acquisition] renders governed grants without unpaid-order or ma
   await search.fill("internal validation account");
   await page.keyboard.press("Enter");
   await expect(page.locator("[data-admin-case-list]")).toContainText("Internal Validation Account");
-  await page.locator("[data-open-case]").click();
+  await page.locator('[data-open-case="case-internal-validation"]').click();
   await page.getByRole("tab", { name: "Billing" }).click();
 
   const workspace = page.locator("[data-admin-case-workspace]");
   await expect(workspace).toContainText("Package Acquisition");
-  await expect(workspace).toContainText("internal_validation_account");
-  await expect(workspace).toContainText("not_required_non_payment_grant");
-  await expect(workspace).toContainText("not_applicable_to_non_payment_grant");
+  await expect(workspace).toContainText("Internal Validation Account");
+  await expect(workspace).toContainText("Not Required Non Payment Grant");
+  await expect(workspace).toContainText("Not Applicable To Non Payment Grant");
   await expect(workspace).not.toContainText("Paid order is not linked");
 });
 
