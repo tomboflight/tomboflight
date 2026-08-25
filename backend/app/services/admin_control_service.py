@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, Callable
 
 from bson import ObjectId
+from pymongo.errors import DuplicateKeyError
 
 from app.config import settings
 from app.core.admin_permission_registry import (
@@ -653,7 +654,7 @@ def admin_control_bulk_action_allowed(
 # Bumped alongside the static frontend cache-busting query string
 # (see admin-control-center.html / dashboard.html `?v=` suffix) whenever a
 # hotfix ships to the admin control center or dashboard assets.
-FRONTEND_ASSET_REVISION = "20260823-phase13-1"
+FRONTEND_ASSET_REVISION = "20260824-phase19-1"
 
 
 def _backend_release_identifier() -> str:
@@ -1406,6 +1407,34 @@ def _project_lane_value(project: dict[str, Any]) -> str:
     return ""
 
 
+def _project_payment_required(project: dict[str, Any] | None) -> bool:
+    """Return False only when the project explicitly records a non-payment grant.
+
+    Legacy projects predate the field, so an absent or unrecognized value stays
+    fail-closed on the paid-order path. This prevents a missing flag from being
+    interpreted as CEO authorization to bypass Stripe-backed package truth.
+    """
+
+    if not isinstance(project, dict):
+        return True
+    value = project.get("payment_required")
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    normalized = _normalize(value).lower()
+    if normalized in {"false", "no", "0"}:
+        return False
+    return True
+
+
+def _project_acquisition_source(project: dict[str, Any] | None) -> str:
+    if _project_payment_required(project):
+        return "paid_order"
+    source = _normalize((project or {}).get("package_assignment_source")).lower()
+    return source or "governed_non_payment_grant"
+
+
 def _package_fields_from_context(
     project: dict[str, Any],
     order: dict[str, Any] | None,
@@ -1494,6 +1523,8 @@ def _package_fields_from_context(
         "raw_value": (chosen.get("raw_values") or [None])[0],
         "normalization_status": normalization_status,
         "is_known": bool(chosen.get("is_known")),
+        "payment_required": _project_payment_required(project),
+        "acquisition_source": _project_acquisition_source(project),
         "warnings": list(dict.fromkeys(warnings)),
         "sources": sources,
     }
@@ -1557,6 +1588,8 @@ def _serialize_project(project: dict[str, Any]) -> dict[str, Any]:
         "status": _normalize(project.get("status")) or None,
         "phase": _normalize(project.get("phase")) or None,
         "source": _normalize(project.get("source") or project.get("provisioning_source")) or None,
+        "package_assignment_source": _normalize(project.get("package_assignment_source")) or None,
+        "payment_required": _project_payment_required(project),
         "intake_status": _normalize(project.get("intake_status") or project.get("intake_readiness")) or None,
         "family_id": _normalize(project.get("family_id")) or None,
         "household_id": _normalize(project.get("household_id")) or None,
@@ -2671,9 +2704,17 @@ def run_readiness_check(*, project_id: str, order_id: str = "") -> dict[str, Any
     order_ref = order or {}
     order_package_code = normalize_package_code(_normalize(order_ref.get("package_code") or order_ref.get("package_slug")))
     entitlement_package_code = normalize_package_code(_normalize((entitlement or {}).get("package_code")))
-    package_synced = bool(project_package_code and order_package_code and project_package_code == order_package_code == package_fields["package_code"])
+    payment_required = _project_payment_required(project)
+    canonical_package_code = _normalize(package_fields.get("package_code"))
+    package_synced = bool(
+        project_package_code
+        and canonical_package_code
+        and project_package_code == canonical_package_code
+        and (not payment_required or order_package_code == canonical_package_code)
+        and (not order or order_package_code == canonical_package_code)
+    )
     if entitlement:
-        package_synced = package_synced and entitlement_package_code == package_fields["package_code"]
+        package_synced = package_synced and entitlement_package_code == canonical_package_code
 
     lane_value = _normalize(project.get("project_lane")).lower()
     entitlement_lane = _normalize((entitlement or {}).get("package_lane")).lower()
@@ -2681,6 +2722,12 @@ def run_readiness_check(*, project_id: str, order_id: str = "") -> dict[str, Any
 
     linked_project_id = _normalize_object_id((order or {}).get("project_id"))
     order_linked = bool(order and linked_project_id and linked_project_id == _normalize_object_id(project_id_str))
+    acquisition_satisfied = bool(
+        (order_linked and _is_paid_package_order(order))
+        if payment_required
+        else True
+    )
+    acquisition_source = _project_acquisition_source(project)
     entitlement_exists = entitlement is not None
 
     upload_count = count_workspace_uploads(project_id=project_id_str)
@@ -2706,7 +2753,7 @@ def run_readiness_check(*, project_id: str, order_id: str = "") -> dict[str, Any
         and phase_ready
         and package_synced
         and lane_assigned
-        and order_linked
+        and acquisition_satisfied
         and entitlement_exists
     )
     mint_eligible = bool(mint_eligibility.get("eligible") and mint_review_ready and uploads_present)
@@ -2720,7 +2767,7 @@ def run_readiness_check(*, project_id: str, order_id: str = "") -> dict[str, Any
         blocking_reasons.append("package_not_synced")
     if not mint_already_completed and not lane_assigned:
         blocking_reasons.append("lane_not_assigned")
-    if not mint_already_completed and not order_linked:
+    if not mint_already_completed and not acquisition_satisfied:
         blocking_reasons.append("order_not_linked")
     if not mint_already_completed and not entitlement_exists:
         blocking_reasons.append("missing_entitlement")
@@ -2745,6 +2792,9 @@ def run_readiness_check(*, project_id: str, order_id: str = "") -> dict[str, Any
         "package_synced": package_synced,
         "lane_assigned": lane_assigned,
         "order_linked": order_linked,
+        "payment_required": payment_required,
+        "acquisition_source": acquisition_source,
+        "acquisition_satisfied": acquisition_satisfied,
         "entitlement_exists": entitlement_exists,
         "uploads_present": uploads_present,
         "build_ready": status_ready,
@@ -2757,6 +2807,9 @@ def run_readiness_check(*, project_id: str, order_id: str = "") -> dict[str, Any
             "package_synced": "yes" if package_synced else "no",
             "lane_assigned": "yes" if lane_assigned else "no",
             "order_linked": "yes" if order_linked else "no",
+            "payment_required": "yes" if payment_required else "no",
+            "acquisition_source": acquisition_source,
+            "acquisition_satisfied": "yes" if acquisition_satisfied else "no",
             "entitlement_exists": "yes" if entitlement_exists else "no",
             "mint_eligible": "yes" if mint_eligible else "no",
             "canonical_mint_status": canonical_mint.get("current_status") or "none",
@@ -2955,6 +3008,11 @@ def project_workspace_snapshot(
         "package_synced": bool(filtered_readiness.get("package_synced")),
         "lane_assigned": bool(filtered_readiness.get("lane_assigned")),
         "order_linked": bool(filtered_readiness.get("order_linked")),
+        "payment_required": bool(filtered_readiness.get("payment_required", True)),
+        "acquisition_source": _normalize(filtered_readiness.get("acquisition_source")) or "paid_order",
+        "acquisition_satisfied": bool(
+            filtered_readiness.get("acquisition_satisfied", filtered_readiness.get("order_linked"))
+        ),
         "entitlement_exists": bool(filtered_readiness.get("entitlement_exists")),
         "summary": _normalize(filtered_readiness.get("summary")) or "Finance scope snapshot",
     }
@@ -3562,7 +3620,11 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
                 executive_escalations += 1
         if readiness.get("mint_review_ready"):
             mint_ready_count += 1
-        if not readiness.get("package_synced") or not readiness.get("lane_assigned") or not readiness.get("order_linked") or not readiness.get("entitlement_exists"):
+        acquisition_satisfied = readiness.get(
+            "acquisition_satisfied",
+            readiness.get("order_linked"),
+        )
+        if not readiness.get("package_synced") or not readiness.get("lane_assigned") or not acquisition_satisfied or not readiness.get("entitlement_exists"):
             mismatches.append(
                 {
                     "project_id": project_id,
@@ -4368,7 +4430,11 @@ def _case_alerts(
         alerts.append("mint_blocked")
 
     maintenance_status = _normalize((entitlement or {}).get("maintenance_status")).lower()
-    if entitlement and maintenance_status in {"", "not_started"}:
+    if (
+        entitlement
+        and _project_payment_required(project)
+        and maintenance_status in {"", "not_started"}
+    ):
         alerts.append("maintenance_not_started")
 
     if duplicate_identity:
@@ -5394,7 +5460,15 @@ def super_admin_apply_user_state_action(
 
 
 def super_admin_preview_customer_create(*, payload: dict[str, Any]) -> dict[str, Any]:
-    email = _validate_super_admin_email(_normalize(payload.get("email")), user_id="")
+    requested_email = _normalize_email(payload.get("email"))
+    if requested_email and "@" in requested_email:
+        existing_user = _db()["users"].find_one({"email": requested_email}, {"_id": 1})
+        if existing_user is not None:
+            raise ValueError(
+                "A customer account already exists for this email. Open the existing "
+                "customer case and use Provision First Customer Project + Package."
+            )
+    email = _validate_super_admin_email(requested_email, user_id="")
     full_name = _normalize(payload.get("full_name"))
     if not full_name:
         raise ValueError("full_name is required.")
@@ -5473,7 +5547,13 @@ def super_admin_create_customer(
         "source": "ceo_master_admin",
     }
     db = _db()
-    db["users"].insert_one(document)
+    try:
+        db["users"].insert_one(document)
+    except DuplicateKeyError as exc:
+        raise ValueError(
+            "A customer account already exists for this email. Open the existing "
+            "customer case and use Provision First Customer Project + Package."
+        ) from exc
     user_id = str(document["_id"])
 
     project_id: str | None = None
@@ -8846,6 +8926,9 @@ def _build_user_workspace_payload(user: dict[str, Any]) -> dict[str, Any]:
                 "warnings": [],
                 "package_normalization_status": "not_applicable",
                 "package_normalized": True,
+                "payment_required": bool(primary_project.get("payment_required", True)),
+                "acquisition_source": primary_project.get("package_assignment_source")
+                or ("paid_order" if primary_order else "unassigned"),
             },
             "orders_billing": {
                 "package_slug": package_code,
@@ -8854,8 +8937,26 @@ def _build_user_workspace_payload(user: dict[str, Any]) -> dict[str, Any]:
                 "lane": package_lane,
                 "order_status": primary_order.get("status"),
                 "paid": bool(primary_order and primary_order.get("status") in PAID_ORDER_STATUSES),
-                "project_link_status": "linked" if primary_order.get("project_id") else "not_linked",
-                "maintenance_state": primary_entitlement.get("maintenance_status"),
+                "payment_required": bool(primary_project.get("payment_required", True)),
+                "acquisition_source": primary_project.get("package_assignment_source")
+                or ("paid_order" if primary_order else "unassigned"),
+                "acquisition_satisfied": bool(primary_order)
+                if bool(primary_project.get("payment_required", True))
+                else True,
+                "project_link_status": (
+                    "linked"
+                    if primary_order.get("project_id")
+                    else "not_required_non_payment_grant"
+                    if primary_project and not bool(primary_project.get("payment_required", True))
+                    else "not_linked"
+                ),
+                "maintenance_state": (
+                    "not_applicable_to_non_payment_grant"
+                    if primary_project
+                    and not bool(primary_project.get("payment_required", True))
+                    and _normalize(primary_entitlement.get("maintenance_status")).lower() in {"", "not_started"}
+                    else primary_entitlement.get("maintenance_status")
+                ),
                 "primary_order": primary_order,
                 "related_orders": related_orders,
             },
@@ -9259,6 +9360,8 @@ def _build_case_workspace_payload(
                 "maintenance_defaults": control_profile.get("maintenance_default"),
                 "package_normalization_status": package_fields.get("normalization_status"),
                 "package_normalized": package_fields.get("normalization_status") != "unknown",
+                "payment_required": readiness.get("payment_required", True),
+                "acquisition_source": readiness.get("acquisition_source") or "paid_order",
                 "source": package_fields.get("source"),
                 "raw_value": package_fields.get("raw_value"),
                 "sources": package_fields.get("sources") or {},
@@ -9271,11 +9374,28 @@ def _build_case_workspace_payload(
                 "warnings": package_fields.get("warnings") or [],
                 "order_status": (order_snapshot or {}).get("status"),
                 "paid": bool(order and _is_paid_package_order(order)),
+                "payment_required": readiness.get("payment_required", True),
+                "acquisition_source": readiness.get("acquisition_source") or "paid_order",
+                "acquisition_satisfied": readiness.get(
+                    "acquisition_satisfied",
+                    readiness.get("order_linked"),
+                ),
                 "stripe_session_id": (order_snapshot or {}).get("stripe_session_id"),
                 "payment_link_id": (order_snapshot or {}).get("payment_link_id"),
-                "project_link_status": "linked" if (order_snapshot or {}).get("project_id") else "not_linked",
+                "project_link_status": (
+                    "linked"
+                    if (order_snapshot or {}).get("project_id")
+                    else "not_required_non_payment_grant"
+                    if not readiness.get("payment_required", True)
+                    else "not_linked"
+                ),
                 "subscription": (order_snapshot or {}).get("subscription_id"),
-                "maintenance_state": (entitlement or {}).get("maintenance_status"),
+                "maintenance_state": (
+                    "not_applicable_to_non_payment_grant"
+                    if not readiness.get("payment_required", True)
+                    and _normalize((entitlement or {}).get("maintenance_status")).lower() in {"", "not_started"}
+                    else (entitlement or {}).get("maintenance_status")
+                ),
                 "next_charge_date": (order_snapshot or {}).get("next_charge_date")
                 or _serialize_datetime((entitlement or {}).get("maintenance_renews_at")),
                 "primary_order": order_snapshot,
@@ -9375,6 +9495,11 @@ def _filter_workspace_for_access(workspace: dict[str, Any], current_user: dict[s
         "package_synced": bool(readiness.get("package_synced")),
         "lane_assigned": bool(readiness.get("lane_assigned")),
         "order_linked": bool(readiness.get("order_linked")),
+        "payment_required": bool(readiness.get("payment_required", True)),
+        "acquisition_source": _normalize(readiness.get("acquisition_source")) or "paid_order",
+        "acquisition_satisfied": bool(
+            readiness.get("acquisition_satisfied", readiness.get("order_linked"))
+        ),
         "entitlement_exists": bool(readiness.get("entitlement_exists")),
         "summary": _normalize(readiness.get("summary")) or "Finance scope snapshot",
     }

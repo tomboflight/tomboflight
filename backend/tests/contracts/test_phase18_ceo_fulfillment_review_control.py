@@ -70,7 +70,15 @@ class TestPhase18CeoFulfillmentReviewControl(unittest.TestCase):
         }
         for html_path, asset in expected.items():
             with self.subTest(html_path=html_path):
-                expected_version = "20260824-phase19" if asset == "admin-control-center.js" else "20260824-phase18"
+                expected_version = (
+                    "20260824-phase19-1"
+                    if asset in {
+                        "admin-control-center.js",
+                        "admin-portrait-review.js",
+                        "admin-verification-review.js",
+                    }
+                    else "20260824-phase18"
+                )
                 self.assertIn(f'{asset}?v={expected_version}', _read(html_path))
 
 

@@ -1031,6 +1031,130 @@ class AdminUserQueueTests(unittest.TestCase):
 
 
 class SuperAdminControlsTests(unittest.TestCase):
+    def test_non_payment_grant_readiness_uses_entitlement_truth_without_fabricating_an_order(self):
+        project_id = ObjectId()
+        project = {
+            "_id": project_id,
+            "owner_email": "grant.customer@example.com",
+            "package_code": "digital_legacy_portrait",
+            "project_lane": "portrait",
+            "status": "intake_pending",
+            "phase": "intake_pending",
+            "package_assignment_source": "complimentary_package",
+            "payment_required": False,
+        }
+        entitlement = {
+            "project_id": project_id,
+            "package_code": "digital_legacy_portrait",
+            "package_lane": "portrait",
+            "maintenance_status": "not_started",
+        }
+        db = FakeDatabase({"projects": [project], "orders": []})
+        with (
+            patch.object(admin_control_service, "get_database", return_value=db),
+            patch.object(admin_control_service, "get_project_entitlement", return_value=entitlement),
+            patch.object(admin_control_service, "count_workspace_uploads", return_value=0),
+            patch.object(
+                admin_control_service,
+                "describe_project_mint_eligibility",
+                return_value={"eligible": False, "reasons": [], "nft_addon": {}},
+            ),
+            patch.object(
+                admin_control_service,
+                "resolve_canonical_mint_status",
+                return_value={"is_minted": False, "current_status": "none"},
+            ),
+        ):
+            readiness = admin_control_service.run_readiness_check(
+                project_id=str(project_id)
+            )
+
+        self.assertTrue(readiness["package_synced"])
+        self.assertFalse(readiness["order_linked"])
+        self.assertFalse(readiness["payment_required"])
+        self.assertTrue(readiness["acquisition_satisfied"])
+        self.assertEqual(readiness["acquisition_source"], "complimentary_package")
+        self.assertNotIn("order_not_linked", readiness["blocking_reasons"])
+        self.assertNotIn("package_not_synced", readiness["blocking_reasons"])
+
+        alerts = admin_control_service._case_alerts(
+            project=project,
+            order=None,
+            entitlement=entitlement,
+            readiness=readiness,
+            upload_count=0,
+            duplicate_identity=False,
+        )
+        self.assertNotIn("paid_order_not_linked", alerts)
+        self.assertNotIn("maintenance_not_started", alerts)
+
+    def test_legacy_or_paid_project_still_fails_closed_without_a_paid_order(self):
+        project_id = ObjectId()
+        project = {
+            "_id": project_id,
+            "package_code": "digital_legacy_portrait",
+            "project_lane": "portrait",
+            "status": "intake_pending",
+            "phase": "intake_pending",
+        }
+        entitlement = {
+            "project_id": project_id,
+            "package_code": "digital_legacy_portrait",
+            "package_lane": "portrait",
+        }
+        db = FakeDatabase({"projects": [project], "orders": []})
+        with (
+            patch.object(admin_control_service, "get_database", return_value=db),
+            patch.object(admin_control_service, "get_project_entitlement", return_value=entitlement),
+            patch.object(admin_control_service, "count_workspace_uploads", return_value=0),
+            patch.object(
+                admin_control_service,
+                "describe_project_mint_eligibility",
+                return_value={"eligible": False, "reasons": [], "nft_addon": {}},
+            ),
+            patch.object(
+                admin_control_service,
+                "resolve_canonical_mint_status",
+                return_value={"is_minted": False, "current_status": "none"},
+            ),
+        ):
+            readiness = admin_control_service.run_readiness_check(
+                project_id=str(project_id)
+            )
+
+        self.assertTrue(readiness["payment_required"])
+        self.assertFalse(readiness["acquisition_satisfied"])
+        self.assertFalse(readiness["package_synced"])
+        self.assertIn("order_not_linked", readiness["blocking_reasons"])
+
+    def test_new_customer_preview_routes_existing_email_to_existing_customer_provisioning(self):
+        user_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "users": [
+                    {
+                        "_id": user_id,
+                        "email": "existing.customer@example.com",
+                        "role": "user",
+                    }
+                ]
+            }
+        )
+        with patch.object(admin_control_service, "get_database", return_value=db):
+            with self.assertRaisesRegex(
+                ValueError,
+                "Provision First Customer Project \\+ Package",
+            ):
+                admin_control_service.super_admin_preview_customer_create(
+                    payload={
+                        "email": "Existing.Customer@example.com",
+                        "full_name": "Existing Customer",
+                        "package_code": "digital_legacy_portrait",
+                    }
+                )
+
+        self.assertEqual(len(db["users"].documents), 1)
+
     def test_existing_customer_without_project_can_receive_ceo_granted_first_package(self):
         user_id = ObjectId()
         db = FakeDatabase(

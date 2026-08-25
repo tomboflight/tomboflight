@@ -368,6 +368,62 @@ class PrivateUploadAccessTests(unittest.TestCase):
         self.assertIs(records[0], first)
         self.assertIs(records[1], separate)
 
+    def test_distinct_duplicate_looking_uploads_remain_visible_and_are_flagged(self):
+        first = self._record()
+        first.update(
+            {
+                "member_id": "member-1",
+                "original_filename": "government-id.pdf",
+                "file_size": 12345,
+            }
+        )
+        second_id = ObjectId()
+        second = {
+            **first,
+            "_id": second_id,
+            "id": str(second_id),
+            "storage_key": f"private-uploads/v1/evidence/{second_id}/government-id",
+        }
+
+        records, suppressed = upload_routes._deduplicate_admin_review_records(
+            [first, second]
+        )
+
+        self.assertEqual(len(records), 2)
+        self.assertEqual(suppressed, 0)
+        self.assertEqual(first["_possible_duplicate_count"], 2)
+        self.assertEqual(second["_possible_duplicate_count"], 2)
+
+    def test_admin_review_serialization_explains_preview_blockers_before_open(self):
+        record = self._record()
+        record.update(
+            {
+                "scan_status": "pending",
+                "storage_provider": "local_disk",
+                "storage_key": "",
+            }
+        )
+        db = FakeDatabase(
+            {"projects": [], "families": [], "family_members": []}
+        )
+
+        with patch.object(upload_routes.settings, "environment", "production"):
+            serialized = upload_routes._serialize_admin_upload_review(
+                record,
+                db=db,
+            )
+
+        self.assertFalse(serialized["preview_available"])
+        self.assertEqual(
+            serialized["preview_blockers"],
+            ["security_scan_not_clean", "durable_private_storage_missing"],
+        )
+        self.assertIn("clean verdict", serialized["preview_blocker_message"])
+        self.assertIn("Private storage migration", serialized["preview_blocker_message"])
+
+    def test_unknown_scan_state_fails_closed_for_admin_preview(self):
+        self.assertTrue(upload_routes._upload_scan_blocks_download({}))
+
     def test_admin_rescan_recovers_pending_private_r2_upload(self):
         record = self._record()
         record.update(

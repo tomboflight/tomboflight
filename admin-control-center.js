@@ -1930,20 +1930,24 @@
     if (backendTab === "orders_billing") {
       const primaryOrder = tabData && tabData.primary_order ? tabData.primary_order : {};
       const related = Array.isArray(tabData && tabData.related_orders) ? tabData.related_orders : [];
+      const paymentRequired = tabData.payment_required !== false;
       node.innerHTML = `
         ${warningMarkup}
         <article class="admin-dossier-card admin-dossier-card--wide">
-          <div class="admin-card-header"><span class="admin-card-badge">O</span><h3 class="admin-card-title">Primary Order</h3></div>
+          <div class="admin-card-header"><span class="admin-card-badge">O</span><h3 class="admin-card-title">${paymentRequired ? "Primary Order" : "Package Acquisition"}</h3></div>
           ${renderFieldGrid([
             { label: "Package", value: tabData.package_name || primaryOrder.package_name },
             { label: "Package Code", value: tabData.package_code || primaryOrder.package_code, mono: true },
             { label: "Lane", value: tabData.lane || primaryOrder.lane, chip: true },
-            { label: "Order Status", value: tabData.order_status || primaryOrder.status, chip: true },
-            { label: "Paid", value: tabData.paid, chip: true },
-            { label: "Stripe Session", value: tabData.stripe_session_id || primaryOrder.stripe_session_id, mono: true },
-            { label: "Payment Link", value: tabData.payment_link_id || primaryOrder.payment_link_id, mono: true },
+            { label: "Acquisition Source", value: tabData.acquisition_source, chip: true },
+            { label: "Payment Required", value: paymentRequired, chip: true },
+            { label: "Acquisition Satisfied", value: tabData.acquisition_satisfied, chip: true },
+            { label: "Order Status", value: paymentRequired ? (tabData.order_status || primaryOrder.status) : "not_applicable", chip: true },
+            { label: "Paid", value: paymentRequired ? tabData.paid : "not_applicable", chip: true },
+            { label: "Stripe Session", value: paymentRequired ? (tabData.stripe_session_id || primaryOrder.stripe_session_id) : "not_applicable", mono: true },
+            { label: "Payment Link", value: paymentRequired ? (tabData.payment_link_id || primaryOrder.payment_link_id) : "not_applicable", mono: true },
             { label: "Project Link", value: tabData.project_link_status, chip: true },
-            { label: "Subscription", value: tabData.subscription || primaryOrder.subscription_id, mono: true },
+            { label: "Subscription", value: paymentRequired ? (tabData.subscription || primaryOrder.subscription_id) : "not_applicable", mono: true },
             { label: "Maintenance", value: tabData.maintenance_state, chip: true },
             { label: "Next Charge", value: formatDate(tabData.next_charge_date) },
           ])}
@@ -2161,6 +2165,8 @@
             { label: "Package Code", value: tabData.package_code, mono: true },
             { label: "Lane", value: tabData.project_lane || tabData.lane, chip: true },
             { label: "Normalization", value: tabData.package_normalization_status, chip: true },
+            { label: "Acquisition Source", value: tabData.acquisition_source || "paid_order", chip: true },
+            { label: "Payment Required", value: tabData.payment_required !== false, chip: true },
             { label: "Source", value: tabData.source || "—" },
             { label: "Raw Value", value: tabData.raw_value || "—" },
           ])}

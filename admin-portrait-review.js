@@ -18,10 +18,10 @@
   }
 
   const BLOCKER_LABELS = {
-    security_scan_not_clean: "security scan has not returned clean",
+    security_scan_not_clean: "Run the security scan and obtain a clean verdict before previewing this file.",
     customer_consent_attestation_missing: "customer consent attestation is missing",
     upload_authority_attestation_missing: "upload-authority attestation is missing",
-    durable_private_storage_missing: "durable private storage is incomplete",
+    durable_private_storage_missing: "Private storage migration must complete before preview.",
     orphaned_project_reference: "the project record was removed and must be reconciled",
     orphaned_family_reference: "the family record was removed and must be reconciled",
     orphaned_member_reference: "the family-member record was removed and must be reconciled",
@@ -124,6 +124,14 @@
         !item.quarantined &&
         item.durable_private_storage
       );
+      const previewBlockers = Array.isArray(item.preview_blockers)
+        ? item.preview_blockers
+        : approvalBlockers(item).filter(function (code) {
+            return ["security_scan_not_clean", "durable_private_storage_missing"].includes(code);
+          });
+      const previewAvailable = item.preview_available === true || (
+        item.preview_available == null && previewBlockers.length === 0
+      );
       const customerRecoveryUrl = item.family_id
         ? `portrait-upload.html?family_id=${encodeURIComponent(item.family_id)}`
         : "portrait-upload.html";
@@ -146,9 +154,19 @@
               ? `<div class="notice" data-review-blockers><strong>Approval blocked:</strong> ${escapeHtml(blockerText(blockers))}.</div>`
               : '<div class="notice"><strong>Ready:</strong> clean scan and required attestations are recorded.</div>'
           }
+          ${
+            item.possible_duplicate
+              ? `<div class="notice"><strong>Possible duplicate:</strong> ${escapeHtml(item.possible_duplicate_count)} distinct upload records share the same customer, file, and review identity. Review each record before reconciliation.</div>`
+              : ""
+          }
+          ${
+            previewAvailable
+              ? ""
+              : `<div class="notice" data-preview-blockers><strong>Preview blocked:</strong> ${escapeHtml(item.preview_blocker_message || blockerText(previewBlockers))}</div>`
+          }
           <div data-review-preview style="margin: 0.75rem 0"></div>
           <div class="inline-actions">
-            <button class="btn btn-secondary" type="button" data-preview-id="${escapeHtml(item.id)}">Preview</button>
+            <button class="btn btn-secondary" type="button" data-preview-id="${escapeHtml(item.id)}" ${previewAvailable ? "" : "disabled"}>${previewAvailable ? "Preview" : "Preview Blocked"}</button>
             ${
               scanReady || orphaned
                 ? ""

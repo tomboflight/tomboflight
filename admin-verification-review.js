@@ -17,6 +17,18 @@
     if (node) node.textContent = message;
   }
 
+  const PREVIEW_BLOCKER_LABELS = {
+    security_scan_not_clean: "Run the security scan and obtain a clean verdict before previewing this file.",
+    durable_private_storage_missing: "Private storage migration must complete before preview.",
+  };
+
+  function previewBlockerText(item, blockers) {
+    if (item.preview_blocker_message) return item.preview_blocker_message;
+    return blockers.map(function (code) {
+      return PREVIEW_BLOCKER_LABELS[code] || String(code).replaceAll("_", " ");
+    }).join(" ");
+  }
+
   function reviewIdempotencyKey(action, uploadId) {
     const suffix = window.crypto && typeof window.crypto.randomUUID === "function"
       ? window.crypto.randomUUID()
@@ -88,6 +100,17 @@
         item.durable_private_storage
       );
       const approvalReady = canApprove(item);
+      const previewBlockers = Array.isArray(item.preview_blockers)
+        ? item.preview_blockers
+        : [
+            ...(String(item.scan_status || "").toLowerCase() === "clean" && !item.quarantined
+              ? []
+              : ["security_scan_not_clean"]),
+            ...(item.durable_private_storage ? [] : ["durable_private_storage_missing"]),
+          ];
+      const previewAvailable = item.preview_available === true || (
+        item.preview_available == null && previewBlockers.length === 0
+      );
       return `
         <article class="family-record-card" data-evidence-card="${escapeHtml(item.id)}">
           <span class="eyebrow">${escapeHtml(item.scan_status || "pending scan")}</span>
@@ -106,8 +129,18 @@
               ? '<div class="notice"><strong>Ready:</strong> clean scan and durable private storage are required for approval.</div>'
               : `<div class="notice" data-evidence-blockers><strong>Approval blocked:</strong> ${escapeHtml(orphaned ? "orphaned project or family reference requires reconciliation" : (!item.durable_private_storage ? "durable private storage is incomplete" : "security scan has not returned clean"))}.</div>`
           }
+          ${
+            item.possible_duplicate
+              ? `<div class="notice"><strong>Possible duplicate:</strong> ${escapeHtml(item.possible_duplicate_count)} distinct upload records share the same customer, file, and review identity. Review each record before reconciliation.</div>`
+              : ""
+          }
+          ${
+            previewAvailable
+              ? ""
+              : `<div class="notice" data-evidence-preview-blockers><strong>Preview blocked:</strong> ${escapeHtml(previewBlockerText(item, previewBlockers))}</div>`
+          }
           <div class="inline-actions">
-            <button class="btn btn-secondary" type="button" data-evidence-preview="${escapeHtml(item.id)}">Open Secure Preview</button>
+            <button class="btn btn-secondary" type="button" data-evidence-preview="${escapeHtml(item.id)}" ${previewAvailable ? "" : "disabled"}>${previewAvailable ? "Open Secure Preview" : "Preview Blocked"}</button>
             ${
               securityReady || orphaned
                 ? ""
