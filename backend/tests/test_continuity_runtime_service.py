@@ -395,6 +395,24 @@ class TestContinuityRuntimeService(unittest.TestCase):
                 },
             )
 
+    def test_first_project_package_grant_is_restricted_to_canonical_ceo(self) -> None:
+        with self.assertRaisesRegex(PermissionError, "canonical CEO"):
+            runtime.request_operation(
+                action="customer_package_provision",
+                target={"user_id": "customer-without-project"},
+                parameters={
+                    "package_code": "digital_legacy_portrait",
+                    "package_grant_type": "complimentary_package",
+                },
+                reason="CEO package grant is required",
+                idempotency_key="kernel-idempotency-non-ceo-package-grant",
+                actor={
+                    "_id": "technical-admin-1",
+                    "email": "technical@example.com",
+                    "role_codes": ["executive_tech_admin"],
+                },
+            )
+
     def test_permanent_deletion_request_requires_both_server_side_acknowledgements(self) -> None:
         with self.assertRaisesRegex(ValueError, "target-account"):
             runtime.request_operation(
@@ -467,9 +485,13 @@ class TestContinuityRuntimeControlSurfaceAdapters(unittest.TestCase):
             "prepare_legacy_anchor",
             "approve_legacy_anchor",
             "queue_approved_legacy_anchor",
+            "customer_package_provision",
+            "upload_rescan",
+            "portrait_review",
+            "evidence_review",
         }
         self.assertEqual(runtime.RUNTIME_VERSION, "12.0.0")
-        self.assertEqual(len(runtime.ACTION_SPECS), 41)
+        self.assertEqual(len(runtime.ACTION_SPECS), 45)
         self.assertTrue(expected.issubset(runtime.ACTION_SPECS))
 
     def test_permanent_deletion_adapter_passes_both_irreversible_confirmations(self) -> None:

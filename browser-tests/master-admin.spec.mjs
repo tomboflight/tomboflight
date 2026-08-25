@@ -172,6 +172,22 @@ function createMockEnvironment() {
       tags: ["suspended account"],
       search_index: ["suspended account", "suspended.fixture@tomboflight.test"],
     }),
+    makeCase({
+      case_id: "case-rakim-no-project",
+      project_id: "",
+      order_id: "",
+      name: "Rakim Robinson",
+      email: "rakim.j.robinson@gmail.com",
+      role: "customer",
+      project: "",
+      package: "",
+      package_name: "",
+      package_code: "",
+      lane: "",
+      status: "active",
+      tags: ["customer", "no project"],
+      search_index: ["rakim robinson", "rakim.j.robinson@gmail.com", "user-rakim-no-project"],
+    }),
   ];
 
   const stats = {
@@ -257,6 +273,7 @@ async function installApiRoutes(page, env) {
           active: true,
           session_id: "imp-session-1",
           banner: "Viewing Tomb of Light as Customer",
+          case_id: body.target.case_id,
           project_id: "proj-customer",
           editing_enabled: false,
           expires_at: new Date(Date.now() + 30 * 60_000).toISOString(),
@@ -342,6 +359,28 @@ async function installApiRoutes(page, env) {
           ? ["users", "projects", "project_members", "project_entitlements", "audit_logs"]
           : ["users", "audit_logs"],
         warnings: body.package_code ? ["This grant does not create or alter a Stripe transaction."] : [],
+      });
+    }
+    if (
+      method === "POST" &&
+      /\/admin\/control-center\/super-admin\/users\/[^/]+\/package-provision\/preview$/.test(path)
+    ) {
+      const body = JSON.parse(request.postData() || "{}");
+      return json({
+        before: { account_exists: true, active_project_count: 0, entitlement_exists: false },
+        proposed_after: {
+          customer_name: "Rakim Robinson",
+          customer_email: "rakim.j.robinson@gmail.com",
+          package_code: body.package_code,
+          package_name: body.package_code === "legacy_plus" ? "Legacy Plus" : body.package_code,
+          project_name: body.project_name,
+          project_lane: body.package_code === "legacy_plus" ? "household" : "portrait",
+          package_grant_type: body.package_grant_type,
+        },
+        blocked: false,
+        blocked_reasons: [],
+        payment_record_created: false,
+        stripe_payment_mutated: false,
       });
     }
     if (method === "POST" && path.includes("/status-action/preview")) {
@@ -949,6 +988,26 @@ test("[package-service] validates preview/cancel/apply/idempotent and no Stripe 
   expect(env.stats.blockchainOps).toBe(0);
 });
 
+test("[first package] provisions an existing no-project customer only through the CEO Kernel grant path", async ({ page }) => {
+  const env = page.__env;
+  page.on("dialog", async (dialog) => dialog.accept());
+  await page.locator('[data-open-case="case-rakim-no-project"]').click();
+  await page.getByRole("tab", { name: "Package & Services" }).click();
+  await expect(page.locator("[data-customer-package-provision-card]")).toBeVisible();
+  await page.locator('[data-super-admin-provision-field="package_code"]').selectOption("legacy_plus");
+  await page.locator('[data-super-admin-provision-field="project_name"]').fill("Rakim Robinson Legacy Project");
+  await page.locator('[data-super-admin-provision-field="reason"]').fill("CEO-approved complimentary package grant");
+  await page.locator("[data-super-admin-provision-preview]").click();
+  await expect(page.locator("[data-super-admin-package-preview-output]")).toContainText("Ready for governed execution");
+  await page.locator("[data-super-admin-provision-apply]").click();
+  await expect.poll(() => env.stats.kernelExecutions.length).toBe(1);
+  expect(env.stats.kernelExecutions[0].action).toBe("customer_package_provision");
+  expect(env.stats.kernelExecutions[0].target.user_id).toBe("user-rakim-no-project");
+  expect(env.stats.kernelExecutions[0].parameters.package_code).toBe("legacy_plus");
+  expect(env.stats.kernelExecutions[0].parameters.package_grant_type).toBe("complimentary_package");
+  expect(env.stats.stripeMutations).toBe(0);
+});
+
 test("[officer] applies an exact job template through the visible CEO Team Access workflow", async ({ page }) => {
   const env = page.__env;
   await page.locator("[data-super-admin-manage-team-access]").click();
@@ -997,6 +1056,11 @@ test("[impersonation] validates read-only start, reason requirements, banner, st
   await page.locator("[data-admin-impersonation-start-reason]").fill("Read-only customer verification");
   await page.locator("[data-admin-impersonation-start]").click();
   await expect(page.locator("[data-admin-impersonation-banner]")).toContainText("read-only");
+  await page.locator('[data-open-case="case-rakim-no-project"]').click();
+  await expect(page.locator("[data-admin-case-context]")).toContainText("Different Customer Preview Active");
+  await page.locator("[data-admin-open-impersonated-case]").click();
+  await expect(page.locator("[data-admin-case-heading]")).toContainText("Customer Fixture");
+  await expect(page.locator("[data-admin-control-action-status]")).toContainText("preview remains read-only");
   const nested = await page.evaluate(async () => {
     const res = await fetch(`${window.location.origin}/admin/control-center/super-admin/impersonation/start`, {
       method: "POST",

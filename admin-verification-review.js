@@ -17,10 +17,55 @@
     if (node) node.textContent = message;
   }
 
+  function reviewIdempotencyKey(action, uploadId) {
+    const suffix = window.crypto && typeof window.crypto.randomUUID === "function"
+      ? window.crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    return `kernel-${action}-${uploadId}-${suffix}`;
+  }
+
+  async function executeGoverned(action, uploadId, parameters, reason) {
+    const runtime = await app.apiRequest(
+      "/admin/control-center/kernel/status",
+      { method: "GET" },
+    );
+    if (!runtime || !runtime.execution_enabled) {
+      throw new Error("Continuity Kernel execution is unavailable.");
+    }
+    const idempotencyKey = reviewIdempotencyKey(action, uploadId);
+    const payload = {
+      action,
+      target: { upload_id: uploadId },
+      parameters: {
+        ...(parameters || {}),
+        continuity_idempotency_key: idempotencyKey,
+      },
+      reason,
+      idempotency_key: idempotencyKey,
+    };
+    if (runtime.one_step_execution_allowed) {
+      return app.apiRequest("/admin/control-center/kernel/execute", {
+        method: "POST",
+        body: JSON.stringify({
+          ...payload,
+          confirmed: true,
+          solo_founder_override_acknowledged: true,
+        }),
+      });
+    }
+    return app.apiRequest("/admin/control-center/kernel/operations", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  }
+
   function canApprove(item) {
     return (
       String(item.scan_status || "").toLowerCase() === "clean" &&
-      !item.quarantined
+      !item.quarantined &&
+      item.durable_private_storage &&
+      !item.orphaned_project_reference &&
+      !item.orphaned_family_reference
     );
   }
 
@@ -34,6 +79,15 @@
     }
     empty.style.display = "none";
     list.innerHTML = items.map(function (item) {
+      const orphaned = Boolean(
+        item.orphaned_project_reference || item.orphaned_family_reference
+      );
+      const securityReady = (
+        String(item.scan_status || "").toLowerCase() === "clean" &&
+        !item.quarantined &&
+        item.durable_private_storage
+      );
+      const approvalReady = canApprove(item);
       return `
         <article class="family-record-card" data-evidence-card="${escapeHtml(item.id)}">
           <span class="eyebrow">${escapeHtml(item.scan_status || "pending scan")}</span>
@@ -42,11 +96,26 @@
           <p class="card-copy"><strong>Evidence:</strong> ${escapeHtml(item.verification_type || item.evidence_kind || "Family record")}</p>
           <p class="card-copy"><strong>File:</strong> ${escapeHtml(item.original_filename || "—")}</p>
           <p class="card-copy"><strong>Status:</strong> ${escapeHtml(item.verification_status || "pending")}</p>
+          ${
+            orphaned
+              ? '<div class="notice"><strong>Orphaned record:</strong> use Reconcile Manual Removal in the Control Center before approval.</div>'
+              : ""
+          }
+          ${
+            approvalReady
+              ? '<div class="notice"><strong>Ready:</strong> clean scan and durable private storage are required for approval.</div>'
+              : `<div class="notice" data-evidence-blockers><strong>Approval blocked:</strong> ${escapeHtml(orphaned ? "orphaned project or family reference requires reconciliation" : (!item.durable_private_storage ? "durable private storage is incomplete" : "security scan has not returned clean"))}.</div>`
+          }
           <div class="inline-actions">
             <button class="btn btn-secondary" type="button" data-evidence-preview="${escapeHtml(item.id)}">Open Secure Preview</button>
-            <button class="btn btn-primary" type="button" data-evidence-decision="approved" data-upload-id="${escapeHtml(item.id)}" ${canApprove(item) ? "" : "disabled"}>Approve</button>
-            <button class="btn btn-secondary" type="button" data-evidence-decision="needs_correction" data-upload-id="${escapeHtml(item.id)}">Needs Correction</button>
-            <button class="btn btn-secondary" type="button" data-evidence-decision="rejected" data-upload-id="${escapeHtml(item.id)}">Reject</button>
+            ${
+              securityReady || orphaned
+                ? ""
+                : `<button class="btn btn-secondary" type="button" data-evidence-rescan="${escapeHtml(item.id)}">Run Security Scan</button>`
+            }
+            <button class="btn btn-primary" type="button" data-evidence-decision="approved" data-upload-id="${escapeHtml(item.id)}" ${approvalReady ? "" : "disabled"}>Approve</button>
+            <button class="btn btn-secondary" type="button" data-evidence-decision="needs_correction" data-upload-id="${escapeHtml(item.id)}" ${orphaned ? "disabled" : ""}>Needs Correction</button>
+            <button class="btn btn-secondary" type="button" data-evidence-decision="rejected" data-upload-id="${escapeHtml(item.id)}" ${orphaned ? "disabled" : ""}>Reject</button>
           </div>
         </article>`;
     }).join("");
@@ -58,6 +127,9 @@
       "/uploads/admin/review?category=verification_evidence&limit=500",
       { method: "GET" },
     );
+    const duplicatesSuppressed = Number(
+      (payload && payload.duplicates_suppressed) || 0,
+    );
     const items = (Array.isArray(payload.items) ? payload.items : []).filter(
       function (item) {
         return !["approved", "rejected"].includes(
@@ -66,7 +138,13 @@
       },
     );
     render(items);
-    setStatus(`${items.length} verification submission(s) need a decision.`);
+    setStatus(
+      `${items.length} verification submission(s) need a decision.${
+        duplicatesSuppressed
+          ? ` ${duplicatesSuppressed} duplicate storage record(s) safely suppressed.`
+          : ""
+      }`,
+    );
   }
 
   async function preview(uploadId) {
@@ -74,7 +152,7 @@
     const token = app.getToken ? app.getToken() : "";
     const base = typeof app.getApiBaseUrl === "function" ? app.getApiBaseUrl() : "";
     const response = await fetch(
-      `${base}/uploads/${encodeURIComponent(uploadId)}/download`,
+      `${base}/uploads/${encodeURIComponent(uploadId)}/admin-preview`,
       {
         credentials: "include",
         headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -82,7 +160,14 @@
     );
     if (!response.ok) {
       if (previewWindow) previewWindow.close();
-      throw new Error("Unable to open this evidence record.");
+      let detail = "Unable to open this evidence record.";
+      try {
+        const payload = await response.json();
+        detail = payload.detail || detail;
+      } catch (_error) {
+        // Keep the safe fallback message.
+      }
+      throw new Error(detail);
     }
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
@@ -104,12 +189,52 @@
       decision === "approved" ? "Optional verification note:" : "Review note:",
       "",
     ) || "";
-    await app.apiRequest(
-      `/uploads/${encodeURIComponent(uploadId)}/verification-review`,
-      {
-        method: "POST",
-        body: JSON.stringify({ decision, review_notes: notes }),
-      },
+    const reason = window.prompt(
+      "Operational reason for the Continuity Kernel evidence packet:",
+      `Evidence marked ${decision.replaceAll("_", " ")}`,
+    );
+    if (reason === null) return;
+    if (reason.trim().length < 3) {
+      throw new Error("A reason of at least 3 characters is required.");
+    }
+    if (!window.confirm(`Record the ${decision.replaceAll("_", " ")} evidence decision through the Continuity Kernel?`)) {
+      return;
+    }
+    const operation = await executeGoverned(
+      "evidence_review",
+      uploadId,
+      { decision, review_notes: notes },
+      reason.trim(),
+    );
+    setStatus(
+      operation && operation.state === "audit_closed"
+        ? "Evidence review completed through the Continuity Kernel."
+        : "Evidence review operation submitted for governed approval.",
+    );
+    await loadQueue();
+  }
+
+  async function rescan(uploadId) {
+    const reason = window.prompt(
+      "Reason for the governed security re-scan:",
+      "Resolve pending evidence security scan",
+    );
+    if (reason === null) return;
+    if (reason.trim().length < 3) {
+      throw new Error("A reason of at least 3 characters is required.");
+    }
+    if (!window.confirm("Run this private evidence file through the configured security scanner?")) return;
+    setStatus("Running the private security scan…");
+    const operation = await executeGoverned(
+      "upload_rescan",
+      uploadId,
+      {},
+      reason.trim(),
+    );
+    setStatus(
+      operation && operation.state === "audit_closed"
+        ? "Security scan completed. Refreshing the review queue…"
+        : "Security scan operation submitted for governed approval.",
     );
     await loadQueue();
   }
@@ -123,10 +248,13 @@
         .addEventListener("click", loadQueue);
       document.addEventListener("click", async function (event) {
         const previewButton = event.target.closest("[data-evidence-preview]");
+        const rescanButton = event.target.closest("[data-evidence-rescan]");
         const decisionButton = event.target.closest("[data-evidence-decision]");
         try {
           if (previewButton) {
             await preview(previewButton.getAttribute("data-evidence-preview"));
+          } else if (rescanButton) {
+            await rescan(rescanButton.getAttribute("data-evidence-rescan"));
           } else if (decisionButton) {
             await decide(
               decisionButton.getAttribute("data-upload-id"),

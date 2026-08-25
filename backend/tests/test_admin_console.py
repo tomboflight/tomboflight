@@ -1031,6 +1031,103 @@ class AdminUserQueueTests(unittest.TestCase):
 
 
 class SuperAdminControlsTests(unittest.TestCase):
+    def test_existing_customer_without_project_can_receive_ceo_granted_first_package(self):
+        user_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "users": [
+                    {
+                        "_id": user_id,
+                        "email": "rakim@example.com",
+                        "full_name": "Rakim Robinson",
+                        "role": "user",
+                        "status": "active",
+                    }
+                ],
+                "projects": [],
+                "orders": [],
+                "project_entitlements": [],
+                "project_members": [],
+                "admin_package_assignments": [],
+                "audit_logs": [],
+            }
+        )
+        with (
+            patch.object(admin_control_service, "get_database", return_value=db),
+            patch.object(
+                admin_control_service,
+                "ensure_project_owner_membership",
+                return_value={"status": "active"},
+            ) as membership,
+            patch.object(
+                admin_control_service,
+                "upsert_project_entitlement",
+                return_value={
+                    "status": "active",
+                    "package_code": "digital_legacy_portrait",
+                },
+            ) as entitlement,
+        ):
+            preview = admin_control_service.super_admin_preview_customer_package_provision(
+                user_id=str(user_id),
+                payload={
+                    "package_code": "digital_legacy_portrait",
+                    "project_name": "Rakim Robinson Legacy Project",
+                    "package_grant_type": "complimentary_package",
+                },
+            )
+            result = admin_control_service.super_admin_provision_customer_package(
+                user_id=str(user_id),
+                payload={
+                    "package_code": "digital_legacy_portrait",
+                    "project_name": "Rakim Robinson Legacy Project",
+                    "package_grant_type": "complimentary_package",
+                    "reason": "CEO-approved customer package grant",
+                },
+                actor={"_id": ObjectId(), "email": "l.robinson@tomboflight.com"},
+            )
+
+        self.assertFalse(preview["blocked"])
+        self.assertTrue(result["project_created"])
+        self.assertTrue(result["owner_membership_created"])
+        self.assertFalse(result["payment_record_created"])
+        self.assertFalse(result["stripe_payment_mutated"])
+        self.assertEqual(len(db["projects"].documents), 1)
+        self.assertEqual(len(db["orders"].documents), 0)
+        self.assertEqual(
+            db["admin_package_assignments"].documents[0]["billing_classification"],
+            "complimentary_package",
+        )
+        membership.assert_called_once()
+        entitlement.assert_called_once()
+
+    def test_paid_nft_addons_cannot_be_fabricated_through_service_controls(self):
+        project_id = ObjectId()
+        db = FakeDatabase(
+            {
+                "projects": [
+                    {
+                        "_id": project_id,
+                        "owner_email": "customer@example.com",
+                        "owner_user_id": str(ObjectId()),
+                        "package_code": "digital_legacy_portrait",
+                        "project_lane": "portrait",
+                    }
+                ],
+                "orders": [],
+                "project_entitlements": [],
+            }
+        )
+        with (
+            patch.object(admin_control_service, "get_database", return_value=db),
+            patch.object(admin_control_service, "get_project_entitlement", return_value=None),
+        ):
+            with self.assertRaisesRegex(ValueError, "authoritative paid Stripe order"):
+                admin_control_service.super_admin_preview_service_controls(
+                    project_id=str(project_id),
+                    payload={"add_addons": ["nft_lineage_record"]},
+                )
+
     def test_create_customer_can_provision_complimentary_package_atomically(self):
         db = FakeDatabase({"users": [], "projects": [], "admin_package_assignments": [], "audit_logs": []})
         with (

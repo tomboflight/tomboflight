@@ -1272,6 +1272,7 @@
     const statusLabel = session.editing_enabled ? "editing enabled" : "read-only";
     const project = session.project_id ? shortId(session.project_id) : "no linked project";
     const expires = formatExpirationCountdown(session.expires_at);
+    const caseId = normalizeValue(session.case_id);
     node.innerHTML = `
       <div class="admin-warning-strip" style="margin-top:0.75rem;">
         <span>Impersonation Active</span>
@@ -1280,9 +1281,57 @@
           <span class="admin-id-ref" style="margin-left:0.5rem;">project ${escapeHtml(project)}</span>
           <span style="margin-left:0.5rem;">${escapeHtml(statusLabel)}</span>
           <span style="margin-left:0.5rem;">${escapeHtml(expires)}</span>
+          ${
+            caseId
+              ? `<button class="btn btn-secondary" type="button" data-admin-open-impersonated-case="${escapeHtml(caseId)}" style="margin-left:0.75rem;">Open Previewed Customer Case</button>`
+              : ""
+          }
         </div>
       </div>
     `;
+  }
+
+  async function openImpersonatedCustomerCase(caseId) {
+    const normalizedCaseId = normalizeValue(caseId);
+    if (!normalizedCaseId) {
+      setPageStatus("The active read-only preview is missing its customer case reference.", "error");
+      return;
+    }
+    const session = state.activeImpersonation || {};
+    let injectedCase = false;
+    if (!state.cases.some(function (item) { return item.case_id === normalizedCaseId; })) {
+      state.cases.unshift({
+        case_id: normalizedCaseId,
+        project_id: session.project_id || "",
+        name: session.impersonated_customer_name || "Previewed Customer",
+        email: "",
+        project: "",
+        package: "",
+        package_name: "",
+        package_code: "",
+        lane: "",
+        status: "active",
+        tags: ["read-only preview"],
+      });
+      injectedCase = true;
+    }
+    state.queue = "customer_cases";
+    state.selectedTab = "overview";
+    applyRailSelection();
+    setPageStatus("Opening the customer case attached to the active read-only preview…", "info");
+    await loadCaseWorkspace(normalizedCaseId);
+    if (state.workspace && state.workspace.case_id === normalizedCaseId) {
+      setPageStatus("Previewed customer case opened. The preview remains read-only.", "success");
+      return;
+    }
+    if (injectedCase) {
+      state.cases = state.cases.filter(function (item) {
+        return item.case_id !== normalizedCaseId;
+      });
+      renderCaseList();
+      renderCaseHeader();
+      renderCaseContext();
+    }
   }
 
   function startImpersonationTicker() {
@@ -1919,6 +1968,11 @@
         ? `<option value="${escapeHtml(packageCode)}">${escapeHtml(packageCode)}</option>`
         : `<option value="" selected="selected">Select package</option>`;
       const showSuperAdminControls = Boolean(state.isSuperAdmin && projectId);
+      const identityTab = (workspace.tabs && workspace.tabs.identity) || {};
+      const userId = identityTab.user_id || "";
+      const showPackageProvisionControls = Boolean(
+        state.isSuperAdmin && !projectId && userId,
+      );
       node.innerHTML = `
         ${warningMarkup}
         <article class="admin-dossier-card admin-dossier-card--wide">
@@ -1959,8 +2013,8 @@
                     <option value="internal_validation_account">internal validation account</option>
                   </select>
                 </label>
-                <label class="admin-field"><span>Add Add-ons (comma separated)</span><input type="text" data-super-admin-service-field="add_addons" placeholder="extra_storage, tribute_narration" /></label>
-                <label class="admin-field"><span>Remove Add-ons (comma separated)</span><input type="text" data-super-admin-service-field="remove_addons" placeholder="extra_upload_pack" /></label>
+                <label class="admin-field"><span>Add Operational Add-ons (comma separated)</span><input type="text" data-super-admin-service-field="add_addons" placeholder="extra_storage, tribute_narration" /></label>
+                <label class="admin-field"><span>Remove Operational Add-ons (comma separated)</span><input type="text" data-super-admin-service-field="remove_addons" placeholder="extra_upload_pack" /></label>
                 <label class="admin-field"><span>Storage Adjustment (GB)</span><input type="number" step="0.1" data-super-admin-service-field="storage_adjustment_gb" value="0" /></label>
                 <label class="admin-field"><span>Upload Adjustment</span><input type="number" step="1" data-super-admin-service-field="upload_adjustment" value="0" /></label>
                 <label class="admin-field"><span>Member Allowance Adjustment</span><input type="number" step="1" data-super-admin-service-field="member_allowance_adjustment" value="0" /></label>
@@ -1972,6 +2026,7 @@
                 <label class="admin-field" style="display: inline-flex; align-items: center; gap: 0.45rem;"><input type="checkbox" data-super-admin-service-field="certificate_access_enabled" /><span>Certificate Access</span></label>
                 <label class="admin-field" style="display: inline-flex; align-items: center; gap: 0.45rem;"><input type="checkbox" data-super-admin-service-field="viewer_access_enabled" /><span>Viewer Access</span></label>
               </div>
+              <div class="notice" style="margin-top:0.75rem;"><strong>Paid NFT boundary:</strong> NFT Lineage Record, Additional NFT Copy / Mint, and NFT Metadata Revision credits appear automatically only after an authoritative paid Stripe order. They cannot be manually granted or removed here.</div>
               <div class="inline-actions" style="margin-top: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
                 <button class="btn btn-secondary" type="button" data-super-admin-package-preview="${escapeHtml(projectId)}">Preview Package Assignment / Change</button>
                 <button class="btn btn-primary" type="button" data-super-admin-package-apply="${escapeHtml(projectId)}">Apply Package Assignment / Change</button>
@@ -1983,6 +2038,41 @@
                 <button class="btn btn-secondary" type="button" data-super-admin-preview-cancel>Cancel Preview</button>
               </div>
               <div data-super-admin-package-preview-output class="helper" style="margin-top: 0.75rem;"></div>
+            </article>
+            `
+            : ""
+        }
+        ${
+          showPackageProvisionControls
+            ? `
+            <article class="admin-dossier-card admin-dossier-card--wide" data-customer-package-provision-card>
+              <div class="admin-card-header"><span class="admin-card-badge">P+</span><h3 class="admin-card-title">Provision First Customer Project + Package</h3></div>
+              <p class="card-copy">Use this only for an existing customer with no project. One governed operation creates the project, owner membership, package lane, entitlement, assignment history, and audit evidence. It does not create a payment record.</p>
+              <div class="admin-field-grid">
+                <label class="admin-field">
+                  <span>Package</span>
+                  <select data-super-admin-provision-field="package_code">
+                    <option value="">Select package</option>
+                    ${packageOptions}
+                  </select>
+                </label>
+                <label class="admin-field"><span>Project Name</span><input type="text" data-super-admin-provision-field="project_name" value="${escapeHtml(`${identityTab.full_name || "Customer"} Legacy Project`)}" /></label>
+                <label class="admin-field">
+                  <span>Grant Classification</span>
+                  <select data-super-admin-provision-field="package_grant_type">
+                    <option value="complimentary_package">Complimentary package</option>
+                    <option value="promotional_package">Promotional package</option>
+                    <option value="internal_validation_account">Internal validation account</option>
+                  </select>
+                </label>
+                <label class="admin-field"><span>Reason</span><input type="text" data-super-admin-provision-field="reason" placeholder="Required for governed execution" /></label>
+              </div>
+              <div class="notice" style="margin-top:0.75rem;"><strong>Payment boundary:</strong> choose one of the grant classifications above only when CEO-authorized. A purchased package must come from a verified paid order instead.</div>
+              <div class="inline-actions" style="margin-top:1rem; display:flex; gap:0.5rem; flex-wrap:wrap;">
+                <button class="btn btn-secondary" type="button" data-super-admin-provision-preview="${escapeHtml(userId)}">Preview Project + Package</button>
+                <button class="btn btn-primary" type="button" data-super-admin-provision-apply="${escapeHtml(userId)}">Provision Through Kernel</button>
+              </div>
+              <div data-super-admin-package-preview-output class="helper" style="margin-top:0.75rem;"></div>
             </article>
             `
             : ""
@@ -2139,12 +2229,17 @@
     const context = getWorkspaceContext(selected);
     const impersonation = state.activeImpersonation;
     const isImpersonating = Boolean(impersonation && impersonation.active);
+    const isPreviewedCase = Boolean(
+      isImpersonating &&
+      normalizeValue(impersonation.case_id) &&
+      normalizeValue(impersonation.case_id) === normalizeValue(context.caseId),
+    );
     const canStartImpersonation = Boolean(state.isSuperAdmin && context.caseId && !isImpersonating);
     const canStopImpersonation = Boolean(state.isSuperAdmin && isImpersonating);
     node.innerHTML = `
       <div class="admin-context-card">
         ${
-          isImpersonating
+          isPreviewedCase
             ? `<div class="admin-warning-strip"><span>Customer Preview Active</span><div><strong>${escapeHtml(impersonation.banner || "Read-only customer context")}</strong></div></div>
                <div class="admin-diagnostics-grid" style="margin-top:0.75rem;">
                  <div><dt>Customer-visible package</dt><dd>${escapeHtml(context.packageName || "No package")}</dd></div>
@@ -2153,6 +2248,8 @@
                  <div><dt>Access lane</dt><dd>${escapeHtml(context.lane || "unknown")}</dd></div>
                </div>
                <p class="card-copy">This is an audited, read-only customer-context preview. It does not replace the administrator identity or authorize hidden customer-session writes.</p>`
+            : isImpersonating
+              ? `<div class="admin-warning-strip"><span>Different Customer Preview Active</span><div><strong>${escapeHtml(impersonation.banner || "Read-only customer context")}</strong><p class="card-copy">The case currently open below is not the customer attached to the active preview. Use Open Previewed Customer Case before relying on customer-visible package or project information.</p></div></div>`
             : ""
         }
         <h3>${escapeHtml(context.name || "Selected Case")}</h3>
@@ -2168,6 +2265,16 @@
           <span>Mint Blocking Reasons</span>
           <div>${renderStatusStack(context.blocking, "none")}</div>
         </div>
+        ${
+          state.isSuperAdmin
+            ? `<div class="inline-actions" style="margin-top:0.85rem; display:flex; gap:0.5rem; flex-wrap:wrap;">
+                <button class="btn btn-secondary" type="button" data-admin-case-tab="package_services">Open Package &amp; Services</button>
+                <button class="btn btn-secondary" type="button" data-admin-case-tab="uploads">Open Customer Upload Summary</button>
+                <a class="btn btn-secondary" href="admin-portrait-review.html">Open Portrait Review</a>
+                <a class="btn btn-secondary" href="admin-verification-review.html">Open Evidence Review</a>
+              </div>`
+            : ""
+        }
         ${
           state.isSuperAdmin
             ? `<div class="inline-actions" style="margin-top: 0.85rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
@@ -3886,6 +3993,98 @@
     return payload;
   }
 
+  function collectCustomerPackageProvisionPayload() {
+    const payload = {
+      package_code: "",
+      project_name: "",
+      package_grant_type: "complimentary_package",
+      reason: "",
+    };
+    document.querySelectorAll("[data-super-admin-provision-field]").forEach(function (node) {
+      const key = node.getAttribute("data-super-admin-provision-field");
+      if (!key) return;
+      payload[key] = normalizeValue(node.value);
+    });
+    return payload;
+  }
+
+  async function runCustomerPackageProvisionPreview(userId) {
+    if (!state.isSuperAdmin) {
+      setPageStatus("Super Admin access is required.", "error");
+      return;
+    }
+    const payload = collectCustomerPackageProvisionPayload();
+    if (!payload.package_code) {
+      setPageStatus("Select a package before previewing provisioning.", "error");
+      return;
+    }
+    setPageStatus("Generating first-project package preview...", "info");
+    try {
+      const preview = await postJson(
+        `/admin/control-center/super-admin/users/${encodeURIComponent(userId)}/package-provision/preview`,
+        payload,
+      );
+      const node = document.querySelector("[data-super-admin-package-preview-output]");
+      if (node) {
+        const proposed = (preview && preview.proposed_after) || {};
+        const blocked = Array.isArray(preview && preview.blocked_reasons)
+          ? preview.blocked_reasons
+          : [];
+        node.innerHTML = `
+          <strong>${escapeHtml(proposed.project_name || "Project")}</strong><br />
+          ${escapeHtml(proposed.package_name || proposed.package_code || "Package")} · ${escapeHtml(proposed.project_lane || "lane pending")}<br />
+          ${blocked.length ? `<span>Blocked: ${escapeHtml(blocked.join(", "))}</span>` : "Ready for governed execution. No Stripe record will be created."}
+        `;
+      }
+      setPageStatus(
+        preview && preview.blocked
+          ? "Provisioning preview found a blocker; no write was made."
+          : "First-project package preview is ready; no write was made.",
+        preview && preview.blocked ? "error" : "success",
+      );
+    } catch (error) {
+      setPageStatus(error.message || "Unable to preview package provisioning.", "error");
+    }
+  }
+
+  async function runCustomerPackageProvisionApply(userId) {
+    if (!state.isSuperAdmin) {
+      setPageStatus("Super Admin access is required.", "error");
+      return;
+    }
+    const parameters = collectCustomerPackageProvisionPayload();
+    const reason = normalizeValue(parameters.reason);
+    if (!parameters.package_code) {
+      setPageStatus("Select a package before provisioning.", "error");
+      return;
+    }
+    if (reason.length < 3) {
+      setPageStatus("A reason of at least 3 characters is required.", "error");
+      return;
+    }
+    if (!window.confirm("Create this customer's first project, package lane, owner membership, and entitlement through the Continuity Kernel? This does not create a payment record.")) return;
+    const button = document.querySelector("[data-super-admin-provision-apply]");
+    setButtonEnabled(button, false);
+    setPageStatus("Provisioning the first customer project and package...", "info");
+    try {
+      const operation = await submitGovernedOperation(
+        "customer_package_provision",
+        { user_id: userId },
+        parameters,
+        reason,
+      );
+      await Promise.allSettled([loadOverview(), loadCases(), loadKernelStatus()]);
+      if (state.selectedCaseId) await loadCaseWorkspace(state.selectedCaseId);
+      setPageStatus(
+        kernelOperationMessage(operation, "Customer project, package lane, membership, and entitlement provisioned."),
+        kernelOperationStatusType(operation),
+      );
+    } catch (error) {
+      setButtonEnabled(button, true);
+      setPageStatus(error.message || "Unable to provision the customer package.", "error");
+    }
+  }
+
   function collectSuperAdminServicePayload() {
     const payload = {};
     document.querySelectorAll("[data-super-admin-service-field]").forEach(function (node) {
@@ -4361,6 +4560,20 @@
         return;
       }
 
+      const customerPackageProvisionPreview = target.closest("[data-super-admin-provision-preview]");
+      if (customerPackageProvisionPreview) {
+        const userId = customerPackageProvisionPreview.getAttribute("data-super-admin-provision-preview");
+        if (userId) runCustomerPackageProvisionPreview(userId);
+        return;
+      }
+
+      const customerPackageProvisionApply = target.closest("[data-super-admin-provision-apply]");
+      if (customerPackageProvisionApply) {
+        const userId = customerPackageProvisionApply.getAttribute("data-super-admin-provision-apply");
+        if (userId) runCustomerPackageProvisionApply(userId);
+        return;
+      }
+
       const superAdminPackagePreview = target.closest("[data-super-admin-package-preview]");
       if (superAdminPackagePreview) {
         const projectId = superAdminPackagePreview.getAttribute("data-super-admin-package-preview");
@@ -4434,6 +4647,13 @@
         state.selectedTab = tab;
         applyTabSelection();
         renderWorkspaceTab();
+        return;
+      }
+
+      const openImpersonatedCase = target.closest("[data-admin-open-impersonated-case]");
+      if (openImpersonatedCase) {
+        const caseId = openImpersonatedCase.getAttribute("data-admin-open-impersonated-case");
+        if (caseId) openImpersonatedCustomerCase(caseId);
         return;
       }
 

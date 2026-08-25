@@ -306,8 +306,30 @@
 
                 <div class="helper">
                   Upload portrait images for family members. Allowed: JPG, PNG,
-                  WEBP.
+                  WEBP. An administrator may upload only after obtaining and
+                  recording the customer's consent and the uploader's lawful
+                  authority.
                 </div>
+
+                <label style="display: flex; gap: 0.65rem; align-items: flex-start">
+                  <input
+                    type="checkbox"
+                    name="authority_attested"
+                    required
+                    style="margin-top: 0.2rem"
+                  />
+                  <span>I confirm that lawful upload authority has been verified and recorded.</span>
+                </label>
+
+                <label style="display: flex; gap: 0.65rem; align-items: flex-start">
+                  <input
+                    type="checkbox"
+                    name="consent_attested"
+                    required
+                    style="margin-top: 0.2rem"
+                  />
+                  <span>I confirm that the required customer or subject consent has been obtained and recorded.</span>
+                </label>
 
                 <div class="inline-actions" style="margin-top: 1rem">
                   <button
@@ -475,6 +497,6 @@
     <script src="config.js?v=20260325-5"></script>
     <script src="app.js?v=20260821-phase9"></script>
     <script src="auth.js?v=20260410-2"></script>
-    <script src="admin-family-manager.js?v=20260410-1"></script>
+    <script src="admin-family-manager.js?v=20260824-phase18"></script>
   </body>
 </html>

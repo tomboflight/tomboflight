@@ -54,7 +54,9 @@ from app.services.admin_control_service import (
     super_admin_repair_case_action,
     super_admin_list_users,
     super_admin_create_customer,
+    super_admin_provision_customer_package,
     super_admin_preview_customer_create,
+    super_admin_preview_customer_package_provision,
     super_admin_preview_account_lifecycle,
     super_admin_preview_account_permanent_deletion,
     super_admin_preview_orphan_identity_reconciliation,
@@ -178,6 +180,14 @@ class SuperAdminCustomerCreatePayload(BaseModel):
     package_code: str | None = None
     project_name: str | None = None
     package_grant_type: str | None = None
+    reason: str = Field(default="")
+    confirmed: bool = False
+
+
+class SuperAdminCustomerPackageProvisionPayload(BaseModel):
+    package_code: str = Field(min_length=1)
+    project_name: str = Field(default="")
+    package_grant_type: str = Field(default="complimentary_package")
     reason: str = Field(default="")
     confirmed: bool = False
 
@@ -707,6 +717,44 @@ def super_admin_patch_user(
     _assert_canonical_ceo(current_user)
     try:
         return super_admin_update_user(
+            user_id=user_id,
+            payload=payload.model_dump(exclude_none=True),
+            actor=current_user,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/super-admin/users/{user_id}/package-provision/preview")
+def super_admin_customer_package_provision_preview(
+    user_id: str,
+    payload: SuperAdminCustomerPackageProvisionPayload,
+    current_user: dict[str, Any] = Depends(require_super_admin),
+):
+    _assert_canonical_ceo(current_user)
+    try:
+        return super_admin_preview_customer_package_provision(
+            user_id=user_id,
+            payload=payload.model_dump(exclude_none=True),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.post("/super-admin/users/{user_id}/package-provision/apply")
+def super_admin_customer_package_provision_apply(
+    user_id: str,
+    payload: SuperAdminCustomerPackageProvisionPayload,
+    current_user: dict[str, Any] = Depends(require_super_admin),
+):
+    _assert_canonical_ceo(current_user)
+    if not payload.confirmed or len(payload.reason.strip()) < 3:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Reason and confirmation are required for package provisioning.",
+        )
+    try:
+        return super_admin_provision_customer_package(
             user_id=user_id,
             payload=payload.model_dump(exclude_none=True),
             actor=current_user,
