@@ -447,6 +447,40 @@
     }
   }
 
+  function isSameOriginApiGatewayBaseUrl(value) {
+    try {
+      const parsed = new URL(String(value || "").trim());
+      const pathname = parsed.pathname.replace(/\/+$/, "") || "/";
+      return (
+        parsed.origin === window.location.origin &&
+        (pathname === "/api-gateway" || pathname.startsWith("/api-gateway/"))
+      );
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  function isJsonApiResponse(response) {
+    const contentType = String(
+      response && response.headers
+        ? response.headers.get("content-type") || ""
+        : "",
+    ).toLowerCase();
+    return (
+      contentType.includes("application/json") ||
+      contentType.includes("+json")
+    );
+  }
+
+  function isRecoverableGatewayRouteFailure(response, apiBaseUrl) {
+    return Boolean(
+      response &&
+        (response.status === 404 || response.status === 405) &&
+        !isJsonApiResponse(response) &&
+        isSameOriginApiGatewayBaseUrl(apiBaseUrl),
+    );
+  }
+
   function getConfiguredApiBaseUrls() {
     const configuredList =
       window.TOL_CONFIG && Array.isArray(window.TOL_CONFIG.API_BASE_URLS)
@@ -547,11 +581,15 @@
           headers: { Accept: "application/json" },
           credentials: "include",
         });
-        if (response && response.ok) {
+        if (response && response.ok && isJsonApiResponse(response)) {
           saveApiBaseUrl(apiBaseUrl);
           return apiBaseUrl;
         }
-        failures.push(`${apiBaseUrl} returned ${response.status}`);
+        failures.push(
+          `${apiBaseUrl} returned ${response.status}${
+            response.ok && !isJsonApiResponse(response) ? " with non-JSON content" : ""
+          }`,
+        );
       } catch (_error) {
         failures.push(`${apiBaseUrl} could not be reached`);
       }
@@ -1095,19 +1133,26 @@
             normalizedPath.startsWith("/workspace_access/") ||
             normalizedPath.startsWith("/household-access/") ||
             normalizedPath.startsWith("/admin/control-center/");
+          const shouldRecoverGatewayRoute =
+            hasFallbackCandidate &&
+            isRecoverableGatewayRouteFailure(response, apiBaseUrl);
           // Some deployments can expose mixed-version backends behind different
           // API domains where `/health` passes but specific routes lag behind.
           // For these known cross-host-sensitive routes, retry 404s against the
           // next configured API base URL before surfacing an error.
           if (
             response &&
-            response.status === 404 &&
             hasFallbackCandidate &&
-            shouldRetry404Fallback
+            ((response.status === 404 && shouldRetry404Fallback) ||
+              shouldRecoverGatewayRoute)
           ) {
-            console.warn("Tomb of Light API fallback retry after 404.", {
+            console.warn("Tomb of Light API fallback retry.", {
               requestPath: normalizedPath,
               failedApiBaseUrl: apiBaseUrl,
+              failedStatus: response.status,
+              reason: shouldRecoverGatewayRoute
+                ? "same-origin gateway returned a non-JSON route rejection"
+                : "known route returned 404",
             });
             response = null;
             break;
