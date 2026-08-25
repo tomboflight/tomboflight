@@ -23,7 +23,7 @@ class TestContinuityKernelPhase10CommandCenter(unittest.TestCase):
 
     def test_01_control_center_assets_preserve_phase10_base_and_current_control_revision(self) -> None:
         self.assertIn("styles.css?v=20260821-phase10-1", self.html)
-        self.assertIn("app.js?v=20260821-phase10-1", self.html)
+        self.assertIn("app.js?v=20260825-phase20-1", self.html)
         self.assertIn("admin-control-center.js?v=20260824-phase19-1", self.html)
         self.assertIn('FRONTEND_ASSET_REVISION = "20260824-phase19-1"', self.service)
 

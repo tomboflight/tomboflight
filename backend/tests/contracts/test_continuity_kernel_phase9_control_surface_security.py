@@ -114,7 +114,7 @@ class TestContinuityKernelPhase9ControlSurfaceSecurity(unittest.TestCase):
             if path.name in separately_managed_commercial_pages:
                 continue
             app_pages.append(path.name)
-            expected_revision = "20260821-phase10-1" if path.name == "admin-control-center.html" else "20260821-phase9"
+            expected_revision = "20260825-phase20-1"
             self.assertIn(f"app.js?v={expected_revision}", source, path.name)
             csp_match = re.search(
                 r'http-equiv="Content-Security-Policy"\s+content="([^"]+)"',
