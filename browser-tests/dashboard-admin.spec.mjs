@@ -142,8 +142,9 @@ test("[asset-versioning] dashboard and control center include current cache-bust
   const dashboardStyles = await page.locator("link[rel='stylesheet']").evaluateAll((nodes) =>
     nodes.map((node) => node.getAttribute("href") || ""),
   );
-  expect(dashboardStyles.some((href) => href.includes("styles.css?v=20260713-livefix3"))).toBeTruthy();
+  expect(dashboardStyles.some((href) => href.includes("styles.css?v=20260824-phase20"))).toBeTruthy();
   expect(dashboardScripts.some((src) => src.includes("app.js?v=20260821-phase9"))).toBeTruthy();
+  expect(dashboardScripts.some((src) => src.includes("dashboard-intake.js?v=20260824-phase20"))).toBeTruthy();
   expect(dashboardScripts.some((src) => src.includes("dashboard-admin.js?v=20260713-livefix3"))).toBeTruthy();
 
   await page.goto("/admin-control-center.html", { waitUntil: "domcontentloaded" });

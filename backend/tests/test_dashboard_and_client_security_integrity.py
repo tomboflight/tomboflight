@@ -12,9 +12,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 AUDIT_CACHE_VERSION = "20260509-audit"
 PORTAL_CACHE_OVERRIDES = {
     "dashboard.html": {
-        "styles.css": "20260713-livefix3",
+        "styles.css": "20260824-phase20",
         "auth.js": "20260713-livefix3",
-        "dashboard-intake.js": "20260713-livefix2",
+        "dashboard-intake.js": "20260824-phase20",
     },
     "link-keys.html": {"link-keys.js": "20260823-phase13-1"},
     "portrait-upload.html": {"portrait-upload.js": "20260824-phase18"},
@@ -70,8 +70,8 @@ class CustomerDashboardIntegrityTests(unittest.TestCase):
 
     def test_customer_dashboard_upload_center_and_next_step_are_present(self):
         source = (REPO_ROOT / "dashboard.html").read_text(encoding="utf-8")
-        self.assertIn("Tomb of Light Continuity OS", source)
-        self.assertIn("What To Do Next", source)
+        self.assertIn("Private Legacy Workspace", source)
+        self.assertIn("Your Next Step", source)
         self.assertIn("Upload Hub", source)
         self.assertIn("Upload Photos &amp; Family Records", source)
         self.assertIn("Upload Verification Documents", source)
@@ -86,6 +86,17 @@ class CustomerDashboardIntegrityTests(unittest.TestCase):
         self.assertIn("Billing &amp; Cards", source)
         self.assertIn("Account Security", source)
         self.assertIn("Help Center", source)
+
+    def test_customer_dashboard_uses_progressive_disclosure_without_removing_controls(self):
+        source = (REPO_ROOT / "dashboard.html").read_text(encoding="utf-8")
+        self.assertIn("data-dashboard-first-name", source)
+        self.assertIn("portal-workspace-overview-disclosure", source)
+        self.assertGreaterEqual(source.count("details class="), 9)
+        self.assertEqual(source.count("data-dashboard-hero-action"), 1)
+        self.assertIn('id="dashboard-primary-actions"', source)
+        self.assertIn('id="legacy-anchor"', source)
+        self.assertIn("data-project-progress-list", source)
+        self.assertIn("data-package-access-panel", source)
 
     def test_customer_dashboard_link_keys_follow_resolved_entitlements(self):
         source = (REPO_ROOT / "dashboard-intake.js").read_text(encoding="utf-8")

@@ -119,6 +119,12 @@
       .join(" ");
   }
 
+  function getFirstName(user) {
+    const fullName = String(user?.full_name || user?.name || "").trim();
+    if (!fullName) return "Member";
+    return fullName.split(/\s+/)[0] || "Member";
+  }
+
   function isLockedStatus(status) {
     return LOCKED_STATUSES.has(normalizeStatus(status));
   }
@@ -319,13 +325,13 @@
     if (state === "complete") {
       item.classList.add("is-complete");
       chip.classList.add("is-complete");
-      chip.textContent = "Open";
+      chip.textContent = "Complete";
       return;
     }
     if (state === "live") {
       item.classList.add("is-live");
       chip.classList.add("is-live");
-      chip.textContent = "Open";
+      chip.textContent = "Current";
       return;
     }
     if (state === "attention") {
@@ -465,33 +471,37 @@
 
     text(
       document.querySelector("[data-health-package]"),
-      context?.hasPackageAccess ? "Open" : "Awaiting setup",
+      context?.hasPackageAccess ? "Active" : "Not connected",
     );
     text(
       document.querySelector("[data-health-intake]"),
       !latestSubmission
-        ? "Awaiting setup"
+        ? "Not started"
         : needsAttention || status === "rejected"
           ? "Needs attention"
-          : "Open",
+          : status
+            ? humanizeStatus(status)
+            : "Started",
     );
     text(
       document.querySelector("[data-health-uploads]"),
       !latestSubmission
-        ? "Awaiting setup"
+        ? "Not started"
         : PRODUCTION_OR_BEYOND_STATUSES.has(status)
-          ? "Open"
+          ? "In workflow"
           : uploadsPlanned || UPLOAD_PENDING_REVIEW_STATUSES.has(status)
-            ? "Check access"
-            : "Awaiting setup",
+            ? "Planned"
+            : "Not started",
     );
     text(
       document.querySelector("[data-health-verification]"),
       needsAttention || status === "rejected"
         ? "Needs attention"
-        : PRODUCTION_OR_BEYOND_STATUSES.has(status)
-          ? "Open"
-          : "Check access",
+        : status === "qa_review" || status === "client_review"
+          ? "In review"
+          : PRODUCTION_OR_BEYOND_STATUSES.has(status)
+            ? "In workflow"
+            : "Not started",
     );
 
     const viewerReady = Boolean(
@@ -505,21 +515,20 @@
     text(
       document.querySelector("[data-health-viewer]"),
       viewerReady
-        ? "Open"
-        : PRODUCTION_OR_BEYOND_STATUSES.has(status)
-          ? "Awaiting setup"
-          : "Awaiting setup",
+        ? "Ready"
+        : "Awaiting production",
     );
     text(
       document.querySelector("[data-health-certificate]"),
-      Boolean(resolved.can_use_lineage_certificate) &&
-        (viewerReady || status === "client_review")
-        ? "Open"
-        : "Package-gated",
+      Boolean(resolved.can_use_lineage_certificate)
+        ? viewerReady || status === "client_review"
+          ? "Ready"
+          : "Available after production"
+        : "Not included",
     );
     text(
       document.querySelector("[data-health-vault]"),
-      Boolean(resolved.premium_archive_structure) ? "Open" : "Package-gated",
+      Boolean(resolved.premium_archive_structure) ? "Available" : "Not included",
     );
     text(document.querySelector("[data-health-privacy]"), "Private by default");
   }
@@ -528,7 +537,7 @@
     const node = document.querySelector(selector);
     if (!node) return;
     node.dataset.unlockState = isIncluded ? "included" : "locked";
-    node.textContent = isIncluded ? "Open" : "Package-gated";
+    node.textContent = isIncluded ? "Available" : "Not included";
   }
 
   function hasResolvedFlag(resolved, key) {
@@ -652,7 +661,7 @@
     const stateLabels = {
       awaiting: "Awaiting setup",
       check: "Check access",
-      locked: "Package-gated",
+      locked: "Not included",
       open: "Open",
     };
     const stateKinds = {
@@ -750,24 +759,24 @@
     text(
       document.querySelector("[data-received-portraits]"),
       PRODUCTION_OR_BEYOND_STATUSES.has(status)
-        ? "Open"
+        ? "In workflow"
         : hasPortraitPlan
-          ? "Check access"
-          : "Awaiting setup",
+          ? "Planned"
+          : "Not yet submitted",
     );
     text(
       document.querySelector("[data-received-verification]"),
       PRODUCTION_OR_BEYOND_STATUSES.has(status)
-        ? "Open"
+        ? "In workflow"
         : hasVerificationPlan
-          ? "Check access"
-          : "Awaiting setup",
+          ? "Planned"
+          : "Not yet submitted",
     );
     text(
       document.querySelector("[data-received-vault]"),
       hasVerificationPlan || PRODUCTION_OR_BEYOND_STATUSES.has(status)
-        ? "Check access"
-        : "Awaiting setup",
+        ? "Check workspace"
+        : "Not yet submitted",
     );
     text(
       document.querySelector("[data-received-review]"),
@@ -777,10 +786,10 @@
 
   function getReceivedReviewStatusLabel(status) {
     if (status === "rejected") return "Needs attention";
-    if (REVIEW_PHASE_STATUSES.has(status)) return "Check access";
-    if (status === "delivered" || status === "archived") return "Open";
-    if (PRODUCTION_OR_BEYOND_STATUSES.has(status)) return "Open";
-    return "Awaiting setup";
+    if (REVIEW_PHASE_STATUSES.has(status)) return "Under review";
+    if (status === "delivered" || status === "archived") return "Complete";
+    if (PRODUCTION_OR_BEYOND_STATUSES.has(status)) return "In workflow";
+    return "Not started";
   }
 
   function text(node, value) {
@@ -1646,7 +1655,7 @@
     return "Household Build Scope";
   }
 
-  function applyPortalTheme(context, config) {
+  function applyPortalTheme(context, config, user) {
     const body = document.body;
     const dashboard = document.querySelector("[data-dashboard]");
     const packageName = context.packageName || "Active Package";
@@ -1666,11 +1675,15 @@
 
     text(document.querySelector("[data-dashboard-hero-eyebrow]"), laneLabel);
     text(document.querySelector("[data-dashboard-hero-title]"), getPortalHeroTitle(config.lane));
+    text(document.querySelector("[data-dashboard-first-name]"), getFirstName(user || context?.user));
     text(document.querySelector("[data-dashboard-lane-chip]"), laneLabel);
     text(document.querySelector("[data-dashboard-package-chip]"), packageName);
     text(document.querySelector("[data-dashboard-scope-chip]"), getPortalScopeLabel(config));
     text(document.querySelector("[data-dashboard-core-label]"), laneLabel);
-    text(document.querySelector("[data-dashboard-core-subtitle]"), config.presenceBadge);
+    text(document.querySelector("[data-dashboard-core-subtitle]"), packageName);
+    text(document.querySelector("[data-dashboard-identity-node]"), "Identity Protected");
+    text(document.querySelector("[data-dashboard-package-node]"), "Package Active");
+    text(document.querySelector("[data-dashboard-records-node]"), "Records Private");
     text(document.querySelector("[data-dashboard-lane-summary]"), laneLabel);
     text(
       document.querySelector("[data-dashboard-lane-description]"),
@@ -2564,7 +2577,7 @@
 
     const config = getEntitlementConfig(contextWithMembership);
     updateLaneUi(contextWithMembership, config, null);
-    applyPortalTheme(contextWithMembership, config);
+    applyPortalTheme(contextWithMembership, config, me);
     applyDashboardHierarchy(contextWithMembership, []);
     updatePackageUnlocksPanel(contextWithMembership);
     updateDashboardToolCardStates(contextWithMembership);
@@ -2707,10 +2720,55 @@
     }
   }
 
+  function syncDisclosureLabel(disclosure) {
+    if (!(disclosure instanceof HTMLDetailsElement)) return;
+    const action = disclosure.querySelector("summary .portal-disclosure-action");
+    if (!action) return;
+    if (!action.dataset.closedLabel) {
+      action.dataset.closedLabel = action.textContent || "View details";
+    }
+    action.textContent = disclosure.open
+      ? "Close"
+      : action.dataset.closedLabel;
+  }
+
+  function revealHashDisclosure() {
+    const hash = String(window.location.hash || "").replace(/^#/, "");
+    if (!hash) return;
+    let targetId = hash;
+    try {
+      targetId = decodeURIComponent(hash);
+    } catch (_error) {
+      targetId = hash;
+    }
+    const target = document.getElementById(targetId);
+    if (!target) return;
+    const disclosure = target instanceof HTMLDetailsElement
+      ? target
+      : target.closest("details");
+    if (disclosure instanceof HTMLDetailsElement) {
+      disclosure.open = true;
+      syncDisclosureLabel(disclosure);
+    }
+  }
+
+  function bindDashboardDisclosures() {
+    document.querySelectorAll("details.portal-disclosure").forEach(function (disclosure) {
+      syncDisclosureLabel(disclosure);
+      disclosure.addEventListener("toggle", function () {
+        syncDisclosureLabel(disclosure);
+      });
+    });
+    revealHashDisclosure();
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
+    bindDashboardDisclosures();
     bindLegacyAnchorInteractions();
     applyDashboardIntake();
   });
+
+  window.addEventListener("hashchange", revealHashDisclosure);
 
   window.addEventListener("tol:dashboard-context-ready", function () {
     applyDashboardIntake();
