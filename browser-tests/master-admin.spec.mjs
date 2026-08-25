@@ -32,11 +32,12 @@ function makeCase(seed) {
 
 function workspacePayload(seed) {
   const now = new Date().toISOString();
+  const isNonPaymentGrant = seed.case_id === "case-internal-validation";
   return {
     case_id: seed.case_id,
-    project: { id: seed.project_id, project_id: seed.project_id, name: seed.project, status: seed.status },
-    package: { package_code: seed.package_code, package_name: seed.package_name, package_lane: seed.lane },
-    readiness: { mint_review_ready: false, mint_eligible: false, blocking_reasons: ["upload_review_pending"] },
+    project: { id: seed.project_id, project_id: seed.project_id, name: seed.project, status: seed.status, payment_required: !isNonPaymentGrant, package_assignment_source: isNonPaymentGrant ? "internal_validation_account" : null },
+    package: { package_code: seed.package_code, package_name: seed.package_name, package_lane: seed.lane, payment_required: !isNonPaymentGrant, acquisition_source: isNonPaymentGrant ? "internal_validation_account" : "paid_order" },
+    readiness: { mint_review_ready: false, mint_eligible: false, payment_required: !isNonPaymentGrant, acquisition_source: isNonPaymentGrant ? "internal_validation_account" : "paid_order", acquisition_satisfied: true, order_linked: !isNonPaymentGrant, blocking_reasons: ["upload_review_pending"] },
     alerts: seed.alerts || [],
     tabs: {
       overview: { customer_type: seed.role, workflow_state: seed.status, warnings: [] },
@@ -56,7 +57,7 @@ function workspacePayload(seed) {
         status: seed.status,
         admin_user_relationship: seed.role,
       },
-      package_lane: { package_name: seed.package_name, package_code: seed.package_code, project_lane: seed.lane, package_normalization_status: "normalized", source: "fixture", raw_value: seed.package_code },
+      package_lane: { package_name: seed.package_name, package_code: seed.package_code, project_lane: seed.lane, package_normalization_status: "normalized", payment_required: !isNonPaymentGrant, acquisition_source: isNonPaymentGrant ? "internal_validation_account" : "paid_order", source: "fixture", raw_value: seed.package_code },
       project: {
         project_name: seed.project,
         project_id: seed.project_id,
@@ -67,7 +68,9 @@ function workspacePayload(seed) {
       },
       uploads_verification: { uploaded_files: 2, review_status: "pending", verification_readiness: "waiting_for_uploads", file_categories: ["verification"], items: [{ id: "upload-1", filename: "lineage.pdf", category: "verification", status: "pending", created_at: now }] },
       entitlements: { maintenance_status: "active", access_scope: "standard", private_vault_contents: "hidden" },
-      orders_billing: { order_status: "paid", package_name: seed.package_name, package_code: seed.package_code, lane: seed.lane, paid: true, stripe_session_id: "cs_test_fixture_only", payment_link_id: "plink_fixture", project_link_status: "linked", maintenance_state: "active", next_charge_date: now, primary_order: { id: seed.order_id, status: "paid", package_name: seed.package_name }, related_orders: [] },
+      orders_billing: isNonPaymentGrant
+        ? { order_status: null, package_name: seed.package_name, package_code: seed.package_code, lane: seed.lane, paid: false, payment_required: false, acquisition_source: "internal_validation_account", acquisition_satisfied: true, stripe_session_id: null, payment_link_id: null, project_link_status: "not_required_non_payment_grant", maintenance_state: "not_applicable_to_non_payment_grant", next_charge_date: null, primary_order: null, related_orders: [] }
+        : { order_status: "paid", package_name: seed.package_name, package_code: seed.package_code, lane: seed.lane, paid: true, payment_required: true, acquisition_source: "paid_order", acquisition_satisfied: true, stripe_session_id: "cs_test_fixture_only", payment_link_id: "plink_fixture", project_link_status: "linked", maintenance_state: "active", next_charge_date: now, primary_order: { id: seed.order_id, status: "paid", package_name: seed.package_name }, related_orders: [] },
       mint_readiness: { current_state: "blocked", eligibility: "blocked", approvals: { mint_review_ready: false }, queue_status: "pending", blocking_reasons: ["upload_review_pending"], guidance: [{ severity: "warning", title: "Uploads pending", next_action: "Review uploads" }] },
       audit_timeline: [{ action: "workspace_opened", target_type: "project", target_id: seed.project_id, actor_email: OFFICER_A.email, result: "success", timestamp: now }],
     },
@@ -987,6 +990,22 @@ test("[account360] validates all tabs + loading/empty/denied/error states and se
   await expect(page.locator("body")).not.toContainText("token=");
   await expect(page.locator("body")).not.toContainText("password_hash");
   await expect(page.locator("body")).not.toContainText("password=");
+});
+
+test("[phase19.1 acquisition] renders governed grants without unpaid-order or maintenance claims", async ({ page }) => {
+  const search = page.getByPlaceholder("Name, email, birthday, package, project, family, last4, order, session, wallet, token, certificate");
+  await search.fill("internal validation account");
+  await page.keyboard.press("Enter");
+  await expect(page.locator("[data-admin-case-list]")).toContainText("Internal Validation Account");
+  await page.locator("[data-open-case]").click();
+  await page.getByRole("tab", { name: "Billing" }).click();
+
+  const workspace = page.locator("[data-admin-case-workspace]");
+  await expect(workspace).toContainText("Package Acquisition");
+  await expect(workspace).toContainText("internal_validation_account");
+  await expect(workspace).toContainText("not_required_non_payment_grant");
+  await expect(workspace).toContainText("not_applicable_to_non_payment_grant");
+  await expect(workspace).not.toContainText("Paid order is not linked");
 });
 
 test("[errors] backend case-search failures include actionable code + retry guidance", async ({ page }) => {

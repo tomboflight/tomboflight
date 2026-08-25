@@ -619,6 +619,12 @@ def _serialize_admin_upload_review(
     if member_id:
         member = _find_reference_record(db, "family_members", member_id)
 
+    preview_blockers = _admin_preview_blockers(record)
+    preview_messages = {
+        "security_scan_not_clean": "Run the security scan and obtain a clean verdict before previewing this file.",
+        "durable_private_storage_missing": "Private storage migration must complete before preview.",
+    }
+
     return {
         **serialized,
         "project_id": project_id or None,
@@ -632,6 +638,15 @@ def _serialize_admin_upload_review(
         "orphaned_family_reference": bool(family_id and family is None),
         "orphaned_member_reference": bool(member_id and member is None),
         "durable_private_storage": _upload_has_durable_private_storage(record),
+        "preview_available": not preview_blockers,
+        "preview_blockers": preview_blockers,
+        "preview_blocker_message": " ".join(
+            preview_messages[code]
+            for code in preview_blockers
+            if code in preview_messages
+        ) or None,
+        "possible_duplicate": int(record.get("_possible_duplicate_count") or 0) > 1,
+        "possible_duplicate_count": int(record.get("_possible_duplicate_count") or 0),
         "master_review_notes": _normalize_value(
             record.get("master_review_notes")
         ),
@@ -659,6 +674,36 @@ def _admin_review_record_identity(record: dict[str, Any]) -> str:
     return f"{category}:record:{record_id}"
 
 
+def _admin_review_semantic_identity(record: dict[str, Any]) -> str:
+    """Group duplicate-looking records without suppressing distinct uploads."""
+
+    filename = _normalize_value(record.get("original_filename")).lower()
+    if not filename:
+        return ""
+    scope = _normalize_value(
+        record.get("member_id")
+        or record.get("family_id")
+        or record.get("project_id")
+        or record.get("uploaded_by_user_id")
+        or record.get("uploaded_by")
+    ).lower()
+    if not scope:
+        return ""
+    return ":".join(
+        [
+            _normalize_value(record.get("category")).lower() or "upload",
+            scope,
+            _normalize_value(
+                record.get("verification_type") or record.get("evidence_kind")
+            ).lower(),
+            filename,
+            _normalize_value(
+                record.get("file_size") or record.get("size_bytes") or record.get("size")
+            ),
+        ]
+    )
+
+
 def _deduplicate_admin_review_records(
     records: list[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], int]:
@@ -670,6 +715,14 @@ def _deduplicate_admin_review_records(
             continue
         seen.add(identity)
         deduplicated.append(record)
+    semantic_counts: dict[str, int] = {}
+    for record in deduplicated:
+        semantic_identity = _admin_review_semantic_identity(record)
+        if semantic_identity:
+            semantic_counts[semantic_identity] = semantic_counts.get(semantic_identity, 0) + 1
+    for record in deduplicated:
+        semantic_identity = _admin_review_semantic_identity(record)
+        record["_possible_duplicate_count"] = semantic_counts.get(semantic_identity, 0)
     return deduplicated, len(records) - len(deduplicated)
 
 
@@ -1004,14 +1057,11 @@ def _scan_and_quarantine_upload(*, db: Any, upload_record: dict[str, Any]) -> di
 def _upload_scan_blocks_download(upload_record: dict[str, Any]) -> bool:
     scan_status = _normalize_value(upload_record.get("scan_status")).lower()
     deletion_status = _normalize_value(upload_record.get("deletion_status")).lower()
-    return deletion_status in {"pending", "failed"} or bool(
-        upload_record.get("quarantined")
-    ) or scan_status in {
-        "infected",
-        "error",
-        "skipped",
-        "pending",
-    }
+    return (
+        deletion_status in {"pending", "failed"}
+        or bool(upload_record.get("quarantined"))
+        or scan_status != "clean"
+    )
 
 
 def _upload_has_durable_private_storage(upload_record: dict[str, Any]) -> bool:
@@ -1021,6 +1071,15 @@ def _upload_has_durable_private_storage(upload_record: dict[str, Any]) -> bool:
         _normalize_value(upload_record.get("storage_provider")).lower() == "r2"
         and _normalize_value(upload_record.get("storage_key"))
     )
+
+
+def _admin_preview_blockers(upload_record: dict[str, Any]) -> list[str]:
+    blockers: list[str] = []
+    if _upload_scan_blocks_download(upload_record):
+        blockers.append("security_scan_not_clean")
+    if not _upload_has_durable_private_storage(upload_record):
+        blockers.append("durable_private_storage_missing")
+    return blockers
 
 
 def _upload_read_limit(upload_record: dict[str, Any]) -> int:

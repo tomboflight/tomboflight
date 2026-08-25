@@ -65,7 +65,7 @@ class TestPhase19CeoFinanceCompletion(unittest.TestCase):
 
     def test_phase19_control_center_asset_is_cache_busted(self):
         html = _read("admin-control-center.html")
-        self.assertIn("admin-control-center.js?v=20260824-phase19", html)
+        self.assertIn("admin-control-center.js?v=20260824-phase19-1", html)
 
 
 if __name__ == "__main__":
