@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 import re
 import secrets
 import shutil
+import tempfile
 from pathlib import Path
 from typing import Any, Literal, Optional
 
@@ -18,7 +19,7 @@ from fastapi import (
     UploadFile,
     status,
 )
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse, Response
 from pydantic import BaseModel, Field
 
 from app.config import settings
@@ -38,12 +39,13 @@ from app.services.upload_service import (
 )
 from app.services.r2_storage_service import (
     delete_private_object,
+    download_private_bytes,
     generate_private_download_url,
     private_storage_is_configured,
     upload_private_file,
 )
 from app.services.upload_scan_service import scan_uploaded_file
-from app.services.audit_log_service import create_audit_log
+from app.services.audit_log_service import create_audit_log, write_audit_log
 from app.services.privacy_access_service import (
     can_access_cinematic_asset,
     can_access_privacy_scope,
@@ -203,6 +205,11 @@ class UploadCinematicApprovalPayload(BaseModel):
 class UploadVerificationReviewPayload(BaseModel):
     decision: Literal["approved", "rejected", "needs_correction"]
     review_notes: str = Field(default="", max_length=1000)
+
+
+class UploadPortraitAttestationPayload(BaseModel):
+    consent_attested: bool = False
+    authority_attested: bool = False
 
 
 def _normalize_value(value: Any) -> str:
@@ -578,6 +585,18 @@ def _display_member_name(member: dict[str, Any] | None) -> str | None:
     return display_name or _normalize_value(member.get("display_name")) or None
 
 
+def _find_reference_record(db: Any, collection_name: str, value: Any) -> dict[str, Any] | None:
+    normalized = _normalize_value(value)
+    if not normalized:
+        return None
+    collection = db[collection_name]
+    if ObjectId.is_valid(normalized):
+        record = collection.find_one({"_id": ObjectId(normalized)})
+        if record is not None:
+            return record
+    return collection.find_one({"id": normalized})
+
+
 def _serialize_admin_upload_review(
     record: dict[str, Any],
     *,
@@ -593,12 +612,12 @@ def _serialize_admin_upload_review(
     family = None
     member = None
 
-    if ObjectId.is_valid(project_id):
-        project = db["projects"].find_one({"_id": ObjectId(project_id)})
-    if ObjectId.is_valid(family_id):
-        family = db["families"].find_one({"_id": ObjectId(family_id)})
-    if ObjectId.is_valid(member_id):
-        member = db["family_members"].find_one({"_id": ObjectId(member_id)})
+    if project_id:
+        project = _find_reference_record(db, "projects", project_id)
+    if family_id:
+        family = _find_reference_record(db, "families", family_id)
+    if member_id:
+        member = _find_reference_record(db, "family_members", member_id)
 
     return {
         **serialized,
@@ -609,6 +628,10 @@ def _serialize_admin_upload_review(
         "family_name": _normalize_value((family or {}).get("family_name")) or None,
         "member_id": member_id or None,
         "member_name": _display_member_name(member),
+        "orphaned_project_reference": bool(project_id and project is None),
+        "orphaned_family_reference": bool(family_id and family is None),
+        "orphaned_member_reference": bool(member_id and member is None),
+        "durable_private_storage": _upload_has_durable_private_storage(record),
         "master_review_notes": _normalize_value(
             record.get("master_review_notes")
         ),
@@ -617,6 +640,37 @@ def _serialize_admin_upload_review(
         ),
         "verified_by": _normalize_value(record.get("verified_by")) or None,
     }
+
+
+def _admin_review_record_identity(record: dict[str, Any]) -> str:
+    """Identify one physical review file without hiding distinct uploads.
+
+    Historical migrations can leave multiple Mongo documents pointing at the
+    same private object or staging file. Those records should render once, but
+    two uploads that merely share a person, filename, or size remain distinct.
+    """
+
+    category = _normalize_value(record.get("category")).lower() or "upload"
+    for field in ("storage_key", "relative_path", "stored_filename"):
+        value = _normalize_value(record.get(field))
+        if value:
+            return f"{category}:{field}:{value}"
+    record_id = _normalize_value(record.get("_id") or record.get("id"))
+    return f"{category}:record:{record_id}"
+
+
+def _deduplicate_admin_review_records(
+    records: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], int]:
+    deduplicated: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for record in records:
+        identity = _admin_review_record_identity(record)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        deduplicated.append(record)
+    return deduplicated, len(records) - len(deduplicated)
 
 
 def _absolute_upload_path(relative_path: str) -> Path:
@@ -967,6 +1021,226 @@ def _upload_has_durable_private_storage(upload_record: dict[str, Any]) -> bool:
         _normalize_value(upload_record.get("storage_provider")).lower() == "r2"
         and _normalize_value(upload_record.get("storage_key"))
     )
+
+
+def _upload_read_limit(upload_record: dict[str, Any]) -> int:
+    category = _normalize_value(upload_record.get("category")).lower()
+    if category == "member_photo":
+        return int(PHOTO_MAX_BYTES)
+    return int(EVIDENCE_MAX_BYTES)
+
+
+def _actor_audit_identity(current_user: dict[str, Any]) -> dict[str, str | None]:
+    return {
+        "user_id": _normalize_value(
+            current_user.get("_id")
+            or current_user.get("id")
+            or current_user.get("user_id")
+        )
+        or None,
+        "email": _normalize_email(current_user.get("email")) or None,
+        "name": _normalize_value(
+            current_user.get("full_name") or current_user.get("name")
+        )
+        or None,
+    }
+
+
+def preview_admin_upload_action(
+    *,
+    upload_id: str,
+    action: str,
+    decision: str = "",
+) -> dict[str, Any]:
+    if not ObjectId.is_valid(upload_id):
+        raise ValueError("Invalid upload id.")
+    db = get_database()
+    upload_record = db["uploaded_files"].find_one({"_id": ObjectId(upload_id)})
+    if upload_record is None:
+        raise ValueError("Upload not found.")
+
+    normalized_action = _normalize_value(action).lower()
+    normalized_decision = _normalize_value(decision).lower()
+    category = _normalize_value(upload_record.get("category")).lower()
+    scan_status = _normalize_value(upload_record.get("scan_status")).lower() or "pending"
+    blockers: list[str] = []
+    if normalized_action == "portrait_review":
+        if category != "member_photo":
+            blockers.append("not_a_member_portrait")
+        if _normalize_value(upload_record.get("project_id")) and not _find_reference_record(
+            db, "projects", upload_record.get("project_id")
+        ):
+            blockers.append("orphaned_project_reference")
+        if _normalize_value(upload_record.get("member_id")) and not _find_reference_record(
+            db, "family_members", upload_record.get("member_id")
+        ):
+            blockers.append("orphaned_member_reference")
+        if _normalize_value(upload_record.get("family_id")) and not _find_reference_record(
+            db, "families", upload_record.get("family_id")
+        ):
+            blockers.append("orphaned_family_reference")
+        if normalized_decision == "approved":
+            if scan_status != "clean" or bool(upload_record.get("quarantined")):
+                blockers.append("security_scan_not_clean")
+            if not bool(upload_record.get("consent_attested")):
+                blockers.append("customer_consent_attestation_missing")
+            if not bool(upload_record.get("authority_attested")):
+                blockers.append("upload_authority_attestation_missing")
+            if not _upload_has_durable_private_storage(upload_record):
+                blockers.append("durable_private_storage_missing")
+    elif normalized_action == "evidence_review":
+        if category != "verification_evidence":
+            blockers.append("not_verification_evidence")
+        if _normalize_value(upload_record.get("project_id")) and not _find_reference_record(
+            db, "projects", upload_record.get("project_id")
+        ):
+            blockers.append("orphaned_project_reference")
+        if _normalize_value(upload_record.get("family_id")) and not _find_reference_record(
+            db, "families", upload_record.get("family_id")
+        ):
+            blockers.append("orphaned_family_reference")
+        if normalized_decision == "approved":
+            if scan_status != "clean" or bool(upload_record.get("quarantined")):
+                blockers.append("security_scan_not_clean")
+            if not _upload_has_durable_private_storage(upload_record):
+                blockers.append("durable_private_storage_missing")
+    elif normalized_action == "upload_rescan":
+        if category not in ALLOWED_QUERY_CATEGORIES:
+            blockers.append("unsupported_upload_category")
+        if _normalize_value(upload_record.get("deletion_status")).lower() in {
+            "pending",
+            "failed",
+        }:
+            blockers.append("deletion_reconciliation_pending")
+        storage_provider = _normalize_value(upload_record.get("storage_provider")).lower()
+        if storage_provider == "r2" and not _normalize_value(upload_record.get("storage_key")):
+            blockers.append("private_storage_key_missing")
+        if storage_provider != "r2":
+            relative_path = _normalize_value(upload_record.get("relative_path"))
+            if not relative_path or not _absolute_upload_path(relative_path).exists():
+                blockers.append("staged_upload_file_missing")
+    else:
+        raise ValueError("Unsupported upload review action.")
+
+    return {
+        "upload_id": upload_id,
+        "action": normalized_action,
+        "decision": normalized_decision or None,
+        "category": category,
+        "scan_status": scan_status,
+        "quarantined": bool(upload_record.get("quarantined")),
+        "consent_attested": bool(upload_record.get("consent_attested")),
+        "authority_attested": bool(upload_record.get("authority_attested")),
+        "durable_private_storage": _upload_has_durable_private_storage(upload_record),
+        "blocked": bool(blockers),
+        "blocked_reasons": blockers,
+        "records_to_write": ["uploaded_files", "family_members", "audit_logs"],
+    }
+
+
+def admin_rescan_upload(
+    *,
+    upload_id: str,
+    current_user: dict[str, Any],
+) -> dict[str, Any]:
+    preview = preview_admin_upload_action(
+        upload_id=upload_id,
+        action="upload_rescan",
+    )
+    if preview.get("blocked"):
+        raise ValueError(
+            "Upload cannot be rescanned: "
+            + ", ".join(preview.get("blocked_reasons") or [])
+        )
+
+    db = get_database()
+    upload_record = db["uploaded_files"].find_one({"_id": ObjectId(upload_id)})
+    if upload_record is None:
+        raise ValueError("Upload not found.")
+
+    storage_provider = _normalize_value(upload_record.get("storage_provider")).lower()
+    if storage_provider == "r2":
+        storage_key = _normalize_value(upload_record.get("storage_key"))
+        payload = download_private_bytes(
+            key=storage_key,
+            max_bytes=_upload_read_limit(upload_record),
+        )
+        staging_root = Path(settings.upload_root_path).resolve() / "admin_rescan"
+        staging_root.mkdir(parents=True, exist_ok=True)
+        suffix = Path(_normalize_value(upload_record.get("original_filename"))).suffix[:10]
+        temporary_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="wb",
+                dir=staging_root,
+                prefix=f"{upload_id}-",
+                suffix=suffix or ".bin",
+                delete=False,
+            ) as handle:
+                handle.write(payload)
+                temporary_path = Path(handle.name)
+            result = scan_uploaded_file(str(temporary_path))
+        finally:
+            if temporary_path is not None:
+                temporary_path.unlink(missing_ok=True)
+
+        normalized_scan_status = _normalize_value(result.status).lower()
+        is_clean = normalized_scan_status == "clean"
+        now = datetime.now(UTC).isoformat()
+        actor = _actor_audit_identity(current_user)
+        db["uploaded_files"].update_one(
+            {"_id": ObjectId(upload_id)},
+            {
+                "$set": {
+                    "scan_status": normalized_scan_status or "error",
+                    "scan_detail": _normalize_value(result.detail)[:500],
+                    "quarantined": not is_clean,
+                    "quarantine_reason": ""
+                    if is_clean
+                    else _normalize_value(result.detail)[:500],
+                    "storage_promotion_status": "complete"
+                    if is_clean
+                    else "blocked",
+                    "last_admin_rescan_at": now,
+                    "last_admin_rescan_by_user_id": actor["user_id"],
+                    "updated_at": now,
+                }
+            },
+        )
+        _update_member_photo_scan_status(
+            db=db,
+            upload_record=upload_record,
+            upload_id=upload_id,
+            photo_submission_status=(
+                "pending_master_review" if is_clean else "quarantined"
+            ),
+        )
+    else:
+        refreshed = _scan_and_quarantine_upload(
+            db=db,
+            upload_record=upload_record,
+        )
+        normalized_scan_status = _normalize_value(
+            refreshed.get("scan_status")
+        ).lower()
+
+    actor = _actor_audit_identity(current_user)
+    write_audit_log(
+        actor_user_id=actor["user_id"],
+        actor_email=actor["email"],
+        actor_name=actor["name"],
+        action="uploads.admin.security_rescan",
+        target_type="upload",
+        target_id=upload_id,
+        before={
+            "scan_status": preview.get("scan_status"),
+            "quarantined": preview.get("quarantined"),
+        },
+        after={"scan_status": normalized_scan_status},
+        context={"surface": "admin_upload_review"},
+    )
+    updated = db["uploaded_files"].find_one({"_id": ObjectId(upload_id)}) or upload_record
+    return {"upload": _public_upload_record(updated)}
 
 
 def _clear_deleted_member_photo_references(
@@ -1365,12 +1639,15 @@ def list_admin_uploads(
             {"member_id": regex},
         ]
 
-    records = list(
+    raw_records = list(
         db["uploaded_files"].find(query).sort("created_at", -1).limit(limit)
     )
+    records, duplicates_suppressed = _deduplicate_admin_review_records(raw_records)
 
     return {
         "count": len(records),
+        "raw_count": len(raw_records),
+        "duplicates_suppressed": duplicates_suppressed,
         "items": [
             _serialize_admin_upload_review(record, db=db)
             for record in records
@@ -2055,6 +2332,141 @@ def list_cinematic_assets(
         )
     ]
     return {"family_id": family_id, "count": len(visible), "items": _serialize_uploads(visible)}
+
+
+@router.post("/{upload_id}/portrait-attestations")
+def attest_existing_portrait_upload(
+    upload_id: str,
+    payload: UploadPortraitAttestationPayload,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    if not payload.consent_attested or not payload.authority_attested:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Portrait consent and upload authority must both be confirmed.",
+        )
+    db = get_database()
+    upload_record, context = _require_upload_management_access(
+        upload_id,
+        db,
+        current_user,
+    )
+    if _normalize_value(upload_record.get("category")) != "member_photo":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Attestations can be recorded only for a member portrait.",
+        )
+
+    current_user_id = _current_user_id(current_user)
+    uploaded_by_user_id = _normalize_value(upload_record.get("uploaded_by_user_id"))
+    project_owner_user_id = _normalize_value(
+        (context.get("project") or {}).get("owner_user_id")
+    )
+    if context.get("is_admin") and current_user_id not in {
+        uploaded_by_user_id,
+        project_owner_user_id,
+    }:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "An administrator cannot provide customer consent or upload-authority "
+                "attestations on the customer's behalf."
+            ),
+        )
+
+    now = datetime.now(UTC).isoformat()
+    before = {
+        "consent_attested": bool(upload_record.get("consent_attested")),
+        "authority_attested": bool(upload_record.get("authority_attested")),
+    }
+    db["uploaded_files"].update_one(
+        {"_id": ObjectId(upload_id)},
+        {
+            "$set": {
+                "consent_attested": True,
+                "authority_attested": True,
+                "consent_attested_at": now,
+                "consent_attested_by_user_id": current_user_id,
+                "authority_attested_at": now,
+                "authority_attested_by_user_id": current_user_id,
+                "updated_at": now,
+            }
+        },
+    )
+    actor = _actor_audit_identity(current_user)
+    write_audit_log(
+        actor_user_id=actor["user_id"],
+        actor_email=actor["email"],
+        actor_name=actor["name"],
+        action="uploads.portrait_attestations_recorded",
+        target_type="upload",
+        target_id=upload_id,
+        before=before,
+        after={"consent_attested": True, "authority_attested": True},
+        context={"surface": "customer_portrait_upload"},
+    )
+    updated = db["uploaded_files"].find_one({"_id": ObjectId(upload_id)}) or upload_record
+    return {"upload": _public_upload_record(updated)}
+
+
+@router.get("/{upload_id}/admin-preview")
+def preview_upload_for_admin_review(
+    upload_id: str,
+    current_user: dict[str, Any] = Depends(
+        require_permission("uploads.admin.review")
+    ),
+):
+    db = get_database()
+    upload_record, _context = _require_upload_management_access(
+        upload_id,
+        db,
+        current_user,
+    )
+    if _upload_scan_blocks_download(upload_record):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Run the security scan and obtain a clean verdict before previewing this file.",
+        )
+    if not _upload_has_durable_private_storage(upload_record):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Private storage migration must complete before preview.",
+        )
+
+    content_type = _normalize_value(upload_record.get("content_type")) or "application/octet-stream"
+    filename = Path(
+        _normalize_value(upload_record.get("original_filename")) or "review-file"
+    ).name.replace('"', "")
+    if _normalize_value(upload_record.get("storage_provider")).lower() == "r2":
+        storage_key = _normalize_value(upload_record.get("storage_key"))
+        try:
+            body = download_private_bytes(
+                key=storage_key,
+                max_bytes=_upload_read_limit(upload_record),
+            )
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Private object storage is unavailable for this review file.",
+            ) from exc
+        response = Response(content=body, media_type=content_type)
+        response.headers["Content-Disposition"] = f'inline; filename="{filename}"'
+    else:
+        relative_path = _normalize_value(upload_record.get("relative_path"))
+        absolute_path = _absolute_upload_path(relative_path)
+        if not absolute_path.exists():
+            raise HTTPException(status_code=404, detail="Upload file not found on disk.")
+        response = FileResponse(
+            path=absolute_path,
+            media_type=content_type,
+            filename=filename,
+            content_disposition_type="inline",
+        )
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 @router.get("/{upload_id}/download")

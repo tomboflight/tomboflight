@@ -172,6 +172,22 @@ function createMockEnvironment() {
       tags: ["suspended account"],
       search_index: ["suspended account", "suspended.fixture@tomboflight.test"],
     }),
+    makeCase({
+      case_id: "case-rakim-no-project",
+      project_id: "",
+      order_id: "",
+      name: "Rakim Robinson",
+      email: "rakim.j.robinson@gmail.com",
+      role: "customer",
+      project: "",
+      package: "",
+      package_name: "",
+      package_code: "",
+      lane: "",
+      status: "active",
+      tags: ["customer", "no project"],
+      search_index: ["rakim robinson", "rakim.j.robinson@gmail.com", "user-rakim-no-project"],
+    }),
   ];
 
   const stats = {
@@ -183,6 +199,7 @@ function createMockEnvironment() {
     blockchainOps: 0,
     productionWrites: 0,
     impersonationAuditEvents: 0,
+    financeExports: [],
     kernelExecutions: [],
   };
 
@@ -224,7 +241,7 @@ async function installApiRoutes(page, env) {
       return json({
         role_key: "ceo_master_admin",
         is_super_admin: true,
-        allowed_queues: ["overview", "customer_cases", "users", "orders", "projects", "entitlements", "mint_queue", "upload_review", "billing_maintenance", "audit", "system_health"],
+        allowed_queues: ["overview", "manual_fulfillment", "money_now", "subscriptions_maintenance", "package_revenue", "finance_integrity", "payroll", "reports_exports", "customer_cases", "users", "orders", "projects", "entitlements", "mint_queue", "upload_review", "billing_maintenance", "audit", "system_health"],
         allowed_tabs: ["identity", "package_lane", "project", "uploads_verification", "entitlements", "orders_billing", "mint_readiness", "audit_timeline", "overview", "package_services", "family_household", "production", "uploads", "vault_metadata", "billing", "mint", "audit_history"],
         allowed_actions: ["sync_package", "repair_record", "run_readiness_check", "refresh_case_data"],
         allowed_bulk_actions: ["repair-selected-records", "repair-all-safe-records", "repair-missing-entitlements"],
@@ -234,12 +251,27 @@ async function installApiRoutes(page, env) {
       return json({
         summary: { total_users: 6, total_active_projects: 6, paid_orders: 6, missing_entitlements: 0, mint_ready_projects: 0, projects_with_data_mismatch: 0 },
         priority_repairs: { paid_order_without_project_link: [], project_without_entitlement: [], package_without_lane: [], mint_eligible_blocked: [] },
+        finance_sections: {
+          payroll: {
+            write_pipeline_live: true,
+            bank_transfer_integration: false,
+            recent_runs: [
+              { payroll_run_id: "payroll-fixture-review", status: "review", period_start: "2026-08-01", period_end: "2026-08-31", total_amount: 1250, external_reference: null },
+              { payroll_run_id: "payroll-fixture-approved", status: "approved", period_start: "2026-07-01", period_end: "2026-07-31", total_amount: 1100, external_reference: null },
+            ],
+          },
+          reports_exports: {
+            export_generation_live: true,
+            status_note: "Protected JSON exports are generated on demand from current finance records.",
+            available_exports: ["monthly_finance_export", "tax_export", "refund_report", "subscription_report", "payroll_report", "package_performance_report"],
+          },
+        },
       });
     }
     if (method === "GET" && path === "/admin/control-center/kernel/status") {
       return json({
-        runtime_version: "12.0.0",
-        action_count: 38,
+        runtime_version: "13.0.0",
+        action_count: 47,
         execution_enabled: true,
         one_step_execution_allowed: true,
       });
@@ -252,11 +284,13 @@ async function installApiRoutes(page, env) {
       env.stats.kernelExecutions.push(body);
       if (body.action === "service_controls") env.stats.serviceApplyWrites += 1;
       if (body.action === "package_change") env.stats.packageApplyWrites += 1;
+      if (body.action === "stripe_operation" || body.action === "billing_adjustment") env.stats.stripeMutations += 1;
       if (body.action === "impersonation_start") {
         env.state.activeImpersonation = {
           active: true,
           session_id: "imp-session-1",
           banner: "Viewing Tomb of Light as Customer",
+          case_id: body.target.case_id,
           project_id: "proj-customer",
           editing_enabled: false,
           expires_at: new Date(Date.now() + 30 * 60_000).toISOString(),
@@ -292,7 +326,7 @@ async function installApiRoutes(page, env) {
                 },
               },
             }
-          : body.action === "orphan_identity_reconciliation"
+            : body.action === "orphan_identity_reconciliation"
             ? {
                 applied: true,
                 governed_deletion_observed: false,
@@ -313,6 +347,27 @@ async function installApiRoutes(page, env) {
                   ],
                 },
               }
+            : body.action === "stripe_operation" && body.parameters.stripe_action === "addon_checkout"
+              ? {
+                  session_id: "cs_phase19_addon",
+                  checkout_url: "https://checkout.stripe.com/c/pay/cs_phase19_addon",
+                  project_id: body.parameters.project_id,
+                  addon_code: body.parameters.addon_code,
+                  payment_activation: "stripe_webhook_then_manual_fulfillment",
+                }
+              : body.action === "billing_adjustment"
+                ? {
+                    billing_action: body.parameters.billing_action,
+                    order_id: body.target.order_id,
+                    finance_event_id: "fin_phase19_fixture",
+                    access_result: { revoked: body.parameters.billing_action === "refund" },
+                  }
+                : body.action === "payroll_control"
+                  ? {
+                      payroll_action: body.parameters.payroll_action,
+                      payroll_run: { payroll_run_id: body.target.payroll_run_id, status: "draft" },
+                      bank_transfer_initiated: false,
+                    }
             : { applied: true },
       };
       if (body.action === "account_permanent_delete") env.state.lastDeletionOperation = operation;
@@ -342,6 +397,28 @@ async function installApiRoutes(page, env) {
           ? ["users", "projects", "project_members", "project_entitlements", "audit_logs"]
           : ["users", "audit_logs"],
         warnings: body.package_code ? ["This grant does not create or alter a Stripe transaction."] : [],
+      });
+    }
+    if (
+      method === "POST" &&
+      /\/admin\/control-center\/super-admin\/users\/[^/]+\/package-provision\/preview$/.test(path)
+    ) {
+      const body = JSON.parse(request.postData() || "{}");
+      return json({
+        before: { account_exists: true, active_project_count: 0, entitlement_exists: false },
+        proposed_after: {
+          customer_name: "Rakim Robinson",
+          customer_email: "rakim.j.robinson@gmail.com",
+          package_code: body.package_code,
+          package_name: body.package_code === "legacy_plus" ? "Legacy Plus" : body.package_code,
+          project_name: body.project_name,
+          project_lane: body.package_code === "legacy_plus" ? "household" : "portrait",
+          package_grant_type: body.package_grant_type,
+        },
+        blocked: false,
+        blocked_reasons: [],
+        payment_record_created: false,
+        stripe_payment_mutated: false,
       });
     }
     if (method === "POST" && path.includes("/status-action/preview")) {
@@ -434,6 +511,34 @@ async function installApiRoutes(page, env) {
         return item.search_index.some((entry) => normalize(entry).includes(search));
       });
       return json({ items });
+    }
+    if (method === "GET" && path === "/admin/control-center/fulfillment/queue") {
+      return json({
+        items: [{
+          order_id: "order-addon-fixture",
+          customer_name: "Customer Fixture",
+          email: "customer.fixture@tomboflight.test",
+          package_name: "Extra Storage",
+          package_code: "legacy_plus",
+          item_type: "addon",
+          addon_code: "extra_storage",
+          amount_label: "250.00",
+          currency: "usd",
+          stripe_session_id: "cs_phase19_addon",
+          stripe_payment_intent_id: "pi_phase19_addon",
+          payment_status: "paid",
+          payment_verified: true,
+          fulfillment_status: "pending_manual_fulfillment",
+          linked_project_id: "proj-customer",
+          entitlement_status: "active",
+          next_required_action: "activate_paid_addon",
+        }],
+      });
+    }
+    if (method === "GET" && /\/admin\/control-center\/finance\/reports\/[^/]+\/export$/.test(path)) {
+      const reportType = decodeURIComponent(path.split("/").at(-2) || "");
+      env.stats.financeExports.push(reportType);
+      return json({ generated_at: new Date().toISOString(), report_type: reportType, format: "json", summary: { record_count: 1 }, records: [{ fixture: true }], status: "live" });
     }
     if (method === "GET" && path.startsWith("/admin/control-center/cases/")) {
       const caseId = decodeURIComponent(path.split("/").pop() || "");
@@ -930,7 +1035,7 @@ test("[package-service] validates preview/cancel/apply/idempotent and no Stripe 
   await expect(page.locator("[data-super-admin-package-field='reason']")).toBeVisible();
   await page.locator("[data-super-admin-package-field='reason']").fill("Fixture package update");
   await page.locator("[data-super-admin-service-field='operation']").selectOption("upgrade");
-  await page.locator("[data-super-admin-service-field='add_addons']").fill("extra_storage");
+  await expect(page.locator("[data-super-admin-service-field='add_addons']")).toHaveCount(0);
   await page.locator("[data-super-admin-package-preview]").click();
   await expect(page.locator("[data-super-admin-package-preview-output]")).toContainText("Project");
   const beforeCancelWrites = env.stats.packageApplyWrites + env.stats.serviceApplyWrites;
@@ -947,6 +1052,124 @@ test("[package-service] validates preview/cancel/apply/idempotent and no Stripe 
   expect(env.stats.kernelExecutions.filter((item) => item.action === "package_change").length).toBeGreaterThanOrEqual(1);
   expect(env.stats.stripeMutations).toBe(0);
   expect(env.stats.blockchainOps).toBe(0);
+});
+
+test("[phase19 billing] binds add-ons to the selected project and governs refund, credit, and discount actions", async ({ page }) => {
+  const env = page.__env;
+  page.on("dialog", async (dialog) => dialog.accept());
+  await page.getByRole("tab", { name: "Billing" }).click();
+  await expect(page.locator("[data-stripe-ops-card]")).toBeVisible();
+  await expect(page.locator('[data-stripe-ops-field="project_id"]')).toHaveValue("proj-customer");
+
+  await page.locator('[data-stripe-ops-field="reason"]').fill("Customer approved paid storage add-on");
+  await page.locator('[data-stripe-ops-field="price_id"]').fill("price_extra_storage_fixture");
+  await page.locator('[data-stripe-ops-field="addon_code"]').fill("extra_storage");
+  await page.locator('[data-stripe-ops-action="addon_checkout"]').click();
+  await expect.poll(() => env.stats.kernelExecutions.length).toBe(1);
+  expect(env.stats.kernelExecutions[0].action).toBe("stripe_operation");
+  expect(env.stats.kernelExecutions[0].parameters.stripe_action).toBe("addon_checkout");
+  expect(env.stats.kernelExecutions[0].parameters.project_id).toBe("proj-customer");
+  expect(env.stats.kernelExecutions[0].parameters.addon_code).toBe("extra_storage");
+
+  await page.locator('[data-stripe-ops-field="reason"]').fill("Verified pre-production customer refund");
+  await page.locator('[data-billing-adjustment-action="refund"]').click();
+  await expect.poll(() => env.stats.kernelExecutions.length).toBe(2);
+  expect(env.stats.kernelExecutions[1].action).toBe("billing_adjustment");
+  expect(env.stats.kernelExecutions[1].parameters.billing_action).toBe("refund");
+  expect(env.stats.kernelExecutions[1].target.order_id).toBe("order-customer");
+
+  await page.locator('[data-stripe-ops-field="reason"]').fill("Approved customer balance credit");
+  await page.locator('[data-stripe-ops-field="adjustment_amount_cents"]').fill("5000");
+  await page.locator('[data-billing-adjustment-action="customer_credit"]').click();
+  await expect.poll(() => env.stats.kernelExecutions.length).toBe(3);
+  expect(env.stats.kernelExecutions[2].parameters.billing_action).toBe("customer_credit");
+  expect(env.stats.kernelExecutions[2].parameters.amount_cents).toBe(5000);
+
+  await page.locator('[data-stripe-ops-field="reason"]').fill("Approved retention discount");
+  await page.locator('[data-stripe-ops-field="subscription_id"]').fill("sub_customer_fixture");
+  await page.locator('[data-stripe-ops-field="coupon_id"]').fill("coupon_retention_fixture");
+  await page.locator('[data-billing-adjustment-action="subscription_discount"]').click();
+  await expect.poll(() => env.stats.kernelExecutions.length).toBe(4);
+  expect(env.stats.kernelExecutions[3].parameters.billing_action).toBe("subscription_discount");
+  expect(env.stats.kernelExecutions[3].parameters.coupon_id).toBe("coupon_retention_fixture");
+  expect(env.stats.stripeMutations).toBe(4);
+});
+
+test("[phase19 fulfillment] activates only the verified paid add-on action from the manual queue", async ({ page }) => {
+  const env = page.__env;
+  page.on("dialog", async (dialog) => {
+    if (dialog.type() === "prompt") return dialog.accept("Verified paid add-on fulfillment");
+    return dialog.accept();
+  });
+  await page.locator('[data-case-queue="manual_fulfillment"]').click();
+  await expect(page.locator("[data-admin-case-list]")).toContainText("extra_storage");
+  await expect(page.locator('[data-fulfillment-action="activate_paid_addon"]')).toBeVisible();
+  await expect(page.locator('[data-fulfillment-action="assign_package"]')).toHaveCount(0);
+  await page.locator('[data-fulfillment-action="activate_paid_addon"]').click();
+  await expect.poll(() => env.stats.kernelExecutions.length).toBe(1);
+  expect(env.stats.kernelExecutions[0].action).toBe("manual_fulfillment");
+  expect(env.stats.kernelExecutions[0].target.order_id).toBe("order-addon-fixture");
+  expect(env.stats.kernelExecutions[0].parameters.fulfillment_action).toBe("activate_paid_addon");
+});
+
+test("[phase19 finance] runs the governed payroll ledger and protected report exports without initiating transfers", async ({ page }) => {
+  const env = page.__env;
+  page.on("dialog", async (dialog) => {
+    if (dialog.type() === "prompt") {
+      const answer = dialog.message().includes("bank or payroll-provider")
+        ? "provider-batch-fixture-77"
+        : "CEO finance fixture approval";
+      return dialog.accept(answer);
+    }
+    return dialog.accept();
+  });
+  await page.locator('[data-admin-nav-group="finance"] summary').click();
+  await page.locator('[data-case-queue="payroll"]').click();
+  await expect(page.locator("[data-payroll-create-card]")).toBeVisible();
+  await expect(page.locator("[data-payroll-create-card]")).toContainText("never initiates a bank transfer");
+  await page.locator('[data-payroll-field="payroll_run_id"]').fill("payroll-phase19-browser");
+  await page.locator('[data-payroll-field="period_start"]').fill("2026-08-01");
+  await page.locator('[data-payroll-field="period_end"]').fill("2026-08-31");
+  await page.locator('[data-payroll-field="total_amount_cents"]').fill("125000");
+  await page.locator("[data-payroll-create]").click();
+  await expect.poll(() => env.stats.kernelExecutions.length).toBe(1);
+  expect(env.stats.kernelExecutions[0].action).toBe("payroll_control");
+  expect(env.stats.kernelExecutions[0].parameters.payroll_action).toBe("create_draft");
+
+  await page.locator('[data-payroll-action="mark_processed"][data-payroll-run-id="payroll-fixture-approved"]').click();
+  await expect.poll(() => env.stats.kernelExecutions.length).toBe(2);
+  expect(env.stats.kernelExecutions[1].parameters.payroll_action).toBe("mark_processed");
+  expect(env.stats.kernelExecutions[1].parameters.external_reference).toBe("provider-batch-fixture-77");
+
+  await page.locator('[data-case-queue="reports_exports"]').click();
+  await expect(page.locator("[data-finance-export-card]")).toBeVisible();
+  await expect(page.locator("[data-finance-export-type]")).toHaveCount(6);
+  await expect(page.locator("[data-finance-export-card]")).toContainText("reviewed by the company tax professional");
+  const downloadPromise = page.waitForEvent("download");
+  await page.locator('[data-finance-export-type="monthly_finance_export"]').click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe("tomb-of-light-monthly_finance_export.json");
+  await expect.poll(() => env.stats.financeExports).toContain("monthly_finance_export");
+});
+
+test("[first package] provisions an existing no-project customer only through the CEO Kernel grant path", async ({ page }) => {
+  const env = page.__env;
+  page.on("dialog", async (dialog) => dialog.accept());
+  await page.locator('[data-open-case="case-rakim-no-project"]').click();
+  await page.getByRole("tab", { name: "Package & Services" }).click();
+  await expect(page.locator("[data-customer-package-provision-card]")).toBeVisible();
+  await page.locator('[data-super-admin-provision-field="package_code"]').selectOption("legacy_plus");
+  await page.locator('[data-super-admin-provision-field="project_name"]').fill("Rakim Robinson Legacy Project");
+  await page.locator('[data-super-admin-provision-field="reason"]').fill("CEO-approved complimentary package grant");
+  await page.locator("[data-super-admin-provision-preview]").click();
+  await expect(page.locator("[data-super-admin-package-preview-output]")).toContainText("Ready for governed execution");
+  await page.locator("[data-super-admin-provision-apply]").click();
+  await expect.poll(() => env.stats.kernelExecutions.length).toBe(1);
+  expect(env.stats.kernelExecutions[0].action).toBe("customer_package_provision");
+  expect(env.stats.kernelExecutions[0].target.user_id).toBe("user-rakim-no-project");
+  expect(env.stats.kernelExecutions[0].parameters.package_code).toBe("legacy_plus");
+  expect(env.stats.kernelExecutions[0].parameters.package_grant_type).toBe("complimentary_package");
+  expect(env.stats.stripeMutations).toBe(0);
 });
 
 test("[officer] applies an exact job template through the visible CEO Team Access workflow", async ({ page }) => {
@@ -997,6 +1220,11 @@ test("[impersonation] validates read-only start, reason requirements, banner, st
   await page.locator("[data-admin-impersonation-start-reason]").fill("Read-only customer verification");
   await page.locator("[data-admin-impersonation-start]").click();
   await expect(page.locator("[data-admin-impersonation-banner]")).toContainText("read-only");
+  await page.locator('[data-open-case="case-rakim-no-project"]').click();
+  await expect(page.locator("[data-admin-case-context]")).toContainText("Different Customer Preview Active");
+  await page.locator("[data-admin-open-impersonated-case]").click();
+  await expect(page.locator("[data-admin-case-heading]")).toContainText("Customer Fixture");
+  await expect(page.locator("[data-admin-control-action-status]")).toContainText("preview remains read-only");
   const nested = await page.evaluate(async () => {
     const res = await fetch(`${window.location.origin}/admin/control-center/super-admin/impersonation/start`, {
       method: "POST",

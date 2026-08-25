@@ -792,6 +792,9 @@
 
     listNode.innerHTML = uploads
       .map(function (upload, index) {
+        const attestationsComplete = Boolean(
+          upload.consent_attested && upload.authority_attested,
+        );
         const downloadUrl =
           (typeof app.getApiBaseUrl === "function"
             ? app.getApiBaseUrl()
@@ -820,6 +823,8 @@
             <p class="card-copy"><strong>Size:</strong> ${escapeHtml(upload.size_bytes ?? "—")}</p>
             <p class="card-copy"><strong>Uploaded By:</strong> ${escapeHtml(upload.uploaded_by || "—")}</p>
             <p class="card-copy"><strong>Created:</strong> ${escapeHtml(formatDate(upload.created_at))}</p>
+            <p class="card-copy"><strong>Consent:</strong> ${upload.consent_attested ? "Recorded" : "Missing"}</p>
+            <p class="card-copy"><strong>Upload authority:</strong> ${upload.authority_attested ? "Recorded" : "Missing"}</p>
 
             <div class="inline-actions" style="margin-top: 1rem">
               <button
@@ -830,11 +835,66 @@
               >
                 Download
               </button>
+              ${
+                attestationsComplete
+                  ? ""
+                  : `<button
+                      class="btn btn-primary"
+                      type="button"
+                      data-attest-upload-id="${escapeHtml(upload.id || "")}"
+                    >
+                      Record Required Attestations
+                    </button>`
+              }
             </div>
           </div>
         `;
       })
       .join("");
+  }
+
+  async function attestExistingPortrait(uploadId) {
+    const actionStatus = document.querySelector("[data-portrait-action-status]");
+    const form = document.querySelector("[data-portrait-upload-form]");
+    const authorityAttested = Boolean(form?.elements?.authority_attested?.checked);
+    const consentAttested = Boolean(form?.elements?.consent_attested?.checked);
+    if (!authorityAttested || !consentAttested) {
+      setStatus(
+        actionStatus,
+        "Read and select both portrait consent confirmations before recording attestations.",
+        "error",
+      );
+      form?.elements?.authority_attested?.focus();
+      return;
+    }
+    if (!window.confirm("Record your consent and upload-authority attestations for this existing portrait?")) {
+      return;
+    }
+    try {
+      setStatus(actionStatus, "Recording portrait attestations...", "info");
+      await app.apiRequest(
+        `/uploads/${encodeURIComponent(uploadId)}/portrait-attestations`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            consent_attested: true,
+            authority_attested: true,
+          }),
+        },
+      );
+      setStatus(
+        actionStatus,
+        "Attestations recorded. The portrait can proceed after a clean security scan and master review.",
+        "success",
+      );
+      await loadUploads();
+    } catch (error) {
+      setStatus(
+        actionStatus,
+        error.message || "Unable to record portrait attestations.",
+        "error",
+      );
+    }
   }
 
   async function loadUploads() {
@@ -971,6 +1031,13 @@
       }
 
       document.addEventListener("click", function (event) {
+        const attestationButton = event.target.closest("[data-attest-upload-id]");
+        if (attestationButton) {
+          attestExistingPortrait(
+            attestationButton.getAttribute("data-attest-upload-id") || "",
+          );
+          return;
+        }
         const downloadButton = event.target.closest("[data-download-upload-id]");
         if (!downloadButton) return;
 

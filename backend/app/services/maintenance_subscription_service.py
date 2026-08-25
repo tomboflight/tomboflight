@@ -5,6 +5,10 @@ from typing import Any
 from urllib.parse import parse_qsl
 
 from app.database import get_database
+from app.services.paid_addon_service import (
+    sync_paid_addon_invoice_event,
+    sync_paid_addon_subscription_event,
+)
 from app.services.project_entitlement_service import (
     MAINTENANCE_START_DELAY_DAYS,
     update_project_entitlement_maintenance,
@@ -41,6 +45,29 @@ def _metadata_project_id(payload: dict[str, Any]) -> str:
         or metadata.get("target_project_id")
         or context_project_id
     )
+
+
+def _metadata_item_type(payload: dict[str, Any]) -> str:
+    metadata = payload.get("metadata") or {}
+    item_type = _normalize(metadata.get("item_type")).lower()
+    if item_type:
+        return item_type
+    parent_metadata = (
+        ((payload.get("parent") or {}).get("subscription_details") or {}).get("metadata")
+        or {}
+    )
+    item_type = _normalize(parent_metadata.get("item_type")).lower()
+    if item_type:
+        return item_type
+    client_reference_id = _normalize(payload.get("client_reference_id"))
+    if client_reference_id.startswith("tol:"):
+        try:
+            return _normalize(
+                dict(parse_qsl(client_reference_id[4:], keep_blank_values=False)).get("t")
+            ).lower()
+        except Exception:
+            return ""
+    return ""
 
 
 def _subscription_interval(payload: dict[str, Any]) -> str:
@@ -80,6 +107,8 @@ def sync_maintenance_checkout_event(event: dict[str, Any]) -> dict[str, Any]:
     mode = _normalize(payload.get("mode")).lower()
     if mode != "subscription":
         return {"updated": False, "reason": "not_subscription_checkout"}
+    if _metadata_item_type(payload) == "addon":
+        return {"updated": False, "reason": "paid_addon_checkout_not_maintenance"}
 
     project_id = _metadata_project_id(payload)
     if not project_id:
@@ -110,6 +139,8 @@ def sync_maintenance_subscription_event(event: dict[str, Any]) -> dict[str, Any]
     payload = ((event.get("data") or {}).get("object") or {}) if isinstance(event, dict) else {}
     if not isinstance(payload, dict):
         return {"updated": False, "reason": "invalid_payload"}
+    if _metadata_item_type(payload) == "addon":
+        return sync_paid_addon_subscription_event(event)
 
     subscription_id = _normalize(payload.get("id"))
     if not subscription_id:
@@ -161,8 +192,17 @@ def sync_maintenance_invoice_event(event: dict[str, Any]) -> dict[str, Any]:
     payload = ((event.get("data") or {}).get("object") or {}) if isinstance(event, dict) else {}
     if not isinstance(payload, dict):
         return {"updated": False, "reason": "invalid_payload"}
+    if _metadata_item_type(payload) == "addon":
+        return sync_paid_addon_invoice_event(event)
 
-    subscription_id = _normalize(payload.get("subscription"))
+    subscription = payload.get("subscription")
+    if not subscription:
+        subscription = (
+            ((payload.get("parent") or {}).get("subscription_details") or {}).get("subscription")
+        )
+    if isinstance(subscription, dict):
+        subscription = subscription.get("id")
+    subscription_id = _normalize(subscription)
     if not subscription_id:
         return {"updated": False, "reason": "missing_subscription_id"}
 

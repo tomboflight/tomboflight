@@ -25,6 +25,7 @@ from app.core.package_catalog import (
     get_addon,
     get_package,
     get_package_control_profile,
+    normalize_addon_code,
     normalize_package_code,
 )
 from app.core.role_catalog import (
@@ -37,6 +38,7 @@ from app.core.relationship_catalog import normalize_relationship_type
 from app.database import get_database, get_service_state
 from app.services.audit_log_service import write_audit_log
 from app.services.mint_fee_service import get_project_mint_readiness
+from app.services.nft_addon_service import NFT_ADDON_CODES
 from app.services.mint_job_service import queue_mint_pipeline, sync_receipt_for_mint_record
 from app.services.mint_policy_service import describe_project_mint_eligibility
 from app.services.mint_record_service import (
@@ -59,6 +61,7 @@ ALLOWED_LANES = {"portrait", "household", "network", "organization"}
 BUILD_READY_STATUSES = {"build_ready", "in_production", "qa_review", "client_review", "delivered", "archived"}
 INTAKE_APPROVED_PHASES = {"intake_approved", "build_started", "quality_review", "client_review", "delivery_complete", "delivered", "archived"}
 PAID_ORDER_STATUSES = {"paid", "succeeded", "complete", "completed"}
+AUTHORITATIVE_PAYMENT_SOURCES = {"stripe_webhook", "stripe_verified"}
 OBJECT_ID_WRAPPER_PATTERN = re.compile(r"""^ObjectId\((["']?)([0-9a-fA-F]{24})\1\)$""")
 MAX_BULK_ACTION_LIMIT = 5000
 INTERNAL_ROLE_KEYS = set(INTERNAL_ADMIN_ROLE_CODES) | {"admin"}
@@ -811,6 +814,10 @@ def _coerce_amount(value: Any) -> float:
 
 
 def _order_amount_value(order: dict[str, Any]) -> float:
+    for key in ("amount_total_cents", "amount_cents", "subtotal_cents"):
+        value = order.get(key)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return round(float(value) / 100, 2)
     for key in ("amount", "amount_total", "total_amount", "subtotal", "price"):
         amount = _coerce_amount(order.get(key))
         if amount:
@@ -904,7 +911,7 @@ def _record_order_finance_events(order: dict[str, Any], *, source: str) -> None:
     order_package = normalize_package_code(_normalize(order.get("package_code") or order.get("package_slug")))
     order_lane = _normalize(order.get("lane") or order.get("package_lane")).lower() or _package_lane_for_code(order_package)
 
-    if _is_paid_package_order(order):
+    if _is_authoritative_paid_order(order):
         _write_finance_event(
             event_type="payment_captured",
             order_id=order_id,
@@ -1175,6 +1182,15 @@ def _is_paid_package_order(order: dict[str, Any] | None) -> bool:
     item_type = _normalize(order.get("item_type") or "package").lower()
     status_value = _normalize(order.get("status")).lower()
     return item_type == "package" and status_value in PAID_ORDER_STATUSES
+
+
+def _is_authoritative_paid_order(order: dict[str, Any] | None) -> bool:
+    if not isinstance(order, dict):
+        return False
+    return (
+        _normalize(order.get("status")).lower() in PAID_ORDER_STATUSES
+        and _normalize(order.get("source")).lower() in AUTHORITATIVE_PAYMENT_SOURCES
+    )
 
 
 def _latest_linked_order(project_id: str) -> dict[str, Any] | None:
@@ -2322,7 +2338,6 @@ def _service_entitlement_view(*, package_code: str, entitlement: dict[str, Any] 
         "service_operations_supported": sorted(
             SERVICE_CONTROL_OPERATIONS
             | {
-                "add_on_grant_removal",
                 "storage_adjustment",
                 "upload_adjustment",
                 "member_allowance_adjustment",
@@ -2380,20 +2395,27 @@ def _apply_service_control_payload_to_preview(
         raise ValueError("package_code is required for package operation.")
 
     active_addons = {
-        _normalize(addon)
+        normalize_addon_code(addon)
         for addon in (proposed["service_controls"].get("active_addons") or [])
-        if _normalize(addon)
+        if normalize_addon_code(addon)
     }
     add_addons = {
-        _normalize(addon)
+        normalize_addon_code(addon)
         for addon in (payload.get("add_addons") or [])
-        if _normalize(addon)
+        if normalize_addon_code(addon)
     }
     remove_addons = {
-        _normalize(addon)
+        normalize_addon_code(addon)
         for addon in (payload.get("remove_addons") or [])
-        if _normalize(addon)
+        if normalize_addon_code(addon)
     }
+    paid_addon_overrides = sorted(add_addons | remove_addons)
+    if paid_addon_overrides:
+        raise ValueError(
+            "Catalog add-ons cannot be granted or removed through service controls. "
+            "They are activated only from an authoritative paid Stripe order and revoked only by the governed refund/cancellation workflow: "
+            + ", ".join(paid_addon_overrides)
+        )
     for addon_code in add_addons:
         if not get_addon(addon_code):
             raise ValueError(f"Unknown add-on code: {addon_code}")
@@ -3458,7 +3480,7 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
         amount = _order_amount_value(order)
         order_dt = _coerce_datetime(order.get("created_at") or order.get("updated_at"))
 
-        if _is_paid_package_order(order):
+        if _is_authoritative_paid_order(order):
             successful_payments += 1
             gross_revenue += amount
             if order_dt and order_dt.date() == now.date():
@@ -3468,25 +3490,41 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
             if not _normalize(order.get("project_id")):
                 unlinked_payments += 1
 
-            lane_value = _normalize(order.get("lane") or order.get("package_lane")).lower()
-            if lane_value not in lane_sales:
-                lane_value = _normalize(
-                    canonicalize_package_identifier(
-                        order.get("package_code") or order.get("package_slug")
-                    ).get("package_lane")
-                ).lower()
-            if lane_value in lane_sales:
-                lane_sales[lane_value] += 1
+            if _is_paid_package_order(order):
+                lane_value = _normalize(order.get("lane") or order.get("package_lane")).lower()
+                if lane_value not in lane_sales:
+                    lane_value = _normalize(
+                        canonicalize_package_identifier(
+                            order.get("package_code") or order.get("package_slug")
+                        ).get("package_lane")
+                    ).lower()
+                if lane_value in lane_sales:
+                    lane_sales[lane_value] += 1
         elif status_value in {"failed", "payment_failed", "declined"}:
             failed_payments += 1
         elif status_value in {"pending", "open", "unpaid", "past_due", "incomplete"}:
             unpaid_balances += 1
 
         refund_value = _coerce_amount(order.get("refund_amount") or order.get("refunded_amount"))
-        if refund_value > 0 and order_dt and order_dt >= month_start:
+        refund_dt = _coerce_datetime(
+            order.get("refunded_at") or order.get("updated_at") or order.get("created_at")
+        )
+        if refund_value > 0 and refund_dt and refund_dt >= month_start:
             refunds_this_month += refund_value
-        elif status_value in {"refunded", "refund"} and order_dt and order_dt >= month_start:
+        elif status_value in {"refunded", "refund"} and refund_dt and refund_dt >= month_start:
             refunds_this_month += amount
+
+    for event in db["finance_events"].find({"event_type": "payment_captured"}).sort("occurred_at", -1).limit(5000):
+        if not _normalize(event.get("stripe_invoice_id")):
+            continue
+        amount = _coerce_amount(event.get("amount"))
+        occurred_at = _coerce_datetime(event.get("occurred_at"))
+        successful_payments += 1
+        gross_revenue += amount
+        if occurred_at and occurred_at.date() == now.date():
+            collected_today += amount
+        if occurred_at and occurred_at >= month_start:
+            collected_month += amount
 
     for project in db["projects"].find({}).sort("updated_at", -1).limit(500):
         project_id = _normalize(project.get("_id"))
@@ -3747,16 +3785,17 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
                 "payroll_total_this_period": round(_coerce_amount(payroll_current.get("total_amount")), 2),
                 "processed_payroll_history": processed_payroll_history,
                 "pending_payroll_review": pending_payroll_review,
-                "snapshot_mode": "read_only",
-                "write_pipeline_live": False,
-                "workflow_actions_enabled": False,
-                "status_note": "Payroll is currently a read-only snapshot; write workflows are not yet live.",
+                "snapshot_mode": "governed_ledger",
+                "write_pipeline_live": True,
+                "workflow_actions_enabled": True,
+                "bank_transfer_integration": False,
+                "status_note": "Governed payroll ledger writes are live. Processing requires an external payment reference and does not initiate a bank transfer.",
+                "recent_runs": [_serialize_admin_document(item) for item in payroll_runs],
             },
             "reports_exports": {
-                "export_generation_live": False,
-                "status_note": "Finance export generation is not yet live.",
-                "available_exports": [],
-                "unavailable_exports": [
+                "export_generation_live": True,
+                "status_note": "Protected JSON exports are generated on demand from current finance records.",
+                "available_exports": [
                     "monthly_finance_export",
                     "tax_export",
                     "refund_report",
@@ -3764,6 +3803,7 @@ def admin_console_overview(*, limit: int = 20) -> dict[str, Any]:
                     "payroll_report",
                     "package_performance_report",
                 ],
+                "unavailable_exports": [],
             },
             "finance_history": {
                 "refund_records": refund_event_count,
@@ -4095,6 +4135,18 @@ def repair_missing_entitlements(*, limit: int = 500) -> dict[str, Any]:
 def _serialize_datetime(value: Any) -> Any:
     if isinstance(value, datetime):
         return value.isoformat()
+    return value
+
+
+def _serialize_admin_document(value: Any) -> Any:
+    if isinstance(value, ObjectId):
+        return str(value)
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {str(key): _serialize_admin_document(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_serialize_admin_document(item) for item in value]
     return value
 
 
@@ -5559,6 +5611,239 @@ def super_admin_create_customer(
         )
         or None,
         "failure_count": 0 if activation_sent else 1,
+    }
+
+
+def super_admin_preview_customer_package_provision(
+    *,
+    user_id: str,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    normalized_user_id = _normalize(user_id)
+    user = _find_case_user(user_id=normalized_user_id)
+    if user is None:
+        raise ValueError("Customer account not found.")
+    if _is_internal_user_document(user):
+        raise ValueError("Internal administrator identities cannot receive customer packages.")
+
+    requested_package = _normalize(payload.get("package_code"))
+    package_code = normalize_package_code(requested_package)
+    package = get_package(package_code)
+    if package is None:
+        raise ValueError("A known package_code is required for package provisioning.")
+    package_lane = _normalize(package.get("package_lane"))
+    if package_lane not in ALLOWED_LANES:
+        raise ValueError("The selected package does not have a valid operational lane.")
+
+    grant_type = _normalize(payload.get("package_grant_type")).lower() or "complimentary_package"
+    allowed_grant_types = {
+        "complimentary_package",
+        "promotional_package",
+        "internal_validation_account",
+    }
+    if grant_type not in allowed_grant_types:
+        raise ValueError(
+            "package_grant_type must be complimentary_package, promotional_package, or internal_validation_account."
+        )
+
+    related_projects = _related_projects_for_user(user)
+    active_projects = [
+        project
+        for project in related_projects
+        if _normalize(project.get("status")).lower()
+        not in {"deleted", "archived", "closed"}
+    ]
+    full_name = _user_display_name(user)
+    project_name = _normalize(payload.get("project_name")) or (
+        f"{full_name} {_normalize(package.get('display_name')) or package_code}"
+    )
+    blocked_reasons = ["customer_already_has_active_project"] if active_projects else []
+    return {
+        "user_id": normalized_user_id,
+        "before": {
+            "account_exists": True,
+            "active_project_count": len(active_projects),
+            "entitlement_exists": bool(
+                _related_entitlements_for_user(
+                    user,
+                    [
+                        _normalize(project.get("id") or project.get("_id"))
+                        for project in related_projects
+                    ],
+                )
+            ),
+        },
+        "proposed_after": {
+            "customer_name": full_name,
+            "customer_email": _normalize_email(user.get("email")) or None,
+            "package_code": package_code,
+            "package_name": _normalize(package.get("display_name")) or package_code,
+            "project_name": project_name,
+            "project_lane": package_lane,
+            "package_grant_type": grant_type,
+        },
+        "blocked": bool(blocked_reasons),
+        "blocked_reasons": blocked_reasons,
+        "records_to_write": [
+            "projects",
+            "project_members",
+            "project_entitlements",
+            "admin_package_assignments",
+            "audit_logs",
+        ],
+        "payment_record_created": False,
+        "stripe_payment_mutated": False,
+        "warnings": [
+            "This CEO-authorized grant does not create or alter a paid order or Stripe transaction.",
+            "Use package change instead if the customer already has an active project.",
+        ],
+    }
+
+
+def super_admin_provision_customer_package(
+    *,
+    user_id: str,
+    payload: dict[str, Any],
+    actor: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    normalized_reason = _normalize(payload.get("reason"))
+    if len(normalized_reason) < 3:
+        raise ValueError("A reason is required for package provisioning.")
+    preview = super_admin_preview_customer_package_provision(
+        user_id=user_id,
+        payload=payload,
+    )
+    if preview.get("blocked"):
+        raise ValueError(
+            "Package provisioning is blocked: "
+            + ", ".join(preview.get("blocked_reasons") or [])
+        )
+
+    proposed = dict(preview.get("proposed_after") or {})
+    user = _find_case_user(user_id=_normalize(user_id))
+    if user is None:
+        raise ValueError("Customer account not found.")
+    customer_user_id = _normalize_object_id(user.get("_id")) or _normalize(user_id)
+    customer_email = _normalize_email(user.get("email"))
+    now_value = _now()
+    project_oid = ObjectId()
+    project_id = str(project_oid)
+    package_code = _normalize(proposed.get("package_code"))
+    package_name = _normalize(proposed.get("package_name")) or package_code
+    project_name = _normalize(proposed.get("project_name"))
+    project_lane = _normalize(proposed.get("project_lane"))
+    grant_type = _normalize(proposed.get("package_grant_type"))
+    project_document = {
+        "_id": project_oid,
+        "name": project_name,
+        "project_name": project_name,
+        "project_lane": project_lane,
+        "owner_user_id": customer_user_id,
+        "owner_email": customer_email,
+        "package_code": package_code,
+        "package_slug": package_code,
+        "package_type": package_code,
+        "package_name": package_name,
+        "item_type": "package",
+        "billing_plan": "one_time",
+        "status": "intake_pending",
+        "phase": "intake_pending",
+        "source": "ceo_master_admin_grant",
+        "package_assignment_source": grant_type,
+        "payment_required": False,
+        "family_id": None,
+        "household_id": None,
+        "organization_id": None,
+        "intake_submission_id": None,
+        "created_at": now_value,
+        "updated_at": now_value,
+    }
+    db = _db()
+    entitlement: dict[str, Any] | None = None
+    try:
+        db["projects"].insert_one(project_document)
+        if ensure_project_owner_membership(project_document) is None:
+            raise ValueError("Unable to create the project owner membership.")
+        entitlement = upsert_project_entitlement(
+            project_id=project_id,
+            user_id=customer_user_id,
+            package_code=package_code,
+            active_addons=[],
+            maintenance_plan="not_started",
+            status="active",
+        )
+        if entitlement is None:
+            raise ValueError("Unable to create the project entitlement.")
+        db["admin_package_assignments"].insert_one(
+            {
+                "project_id": project_oid,
+                "customer_user_id": customer_user_id,
+                "previous_package": None,
+                "new_package": package_code,
+                "status": "active",
+                "source": "ceo_admin_assignment",
+                "billing_classification": grant_type,
+                "payment_required": False,
+                "authorization_source": "ceo_master_admin",
+                "reason": normalized_reason,
+                "assigned_by": _normalize(
+                    (actor or {}).get("_id")
+                    or (actor or {}).get("id")
+                    or (actor or {}).get("user_id")
+                )
+                or None,
+                "assigned_at": now_value,
+                "order_id": None,
+                "stripe_payment_mutated": False,
+            }
+        )
+        _write_admin_action_audit(
+            actor=actor,
+            action="super_admin.customer_package_provision",
+            target_type="user",
+            target_id=customer_user_id,
+            before=preview.get("before") or {},
+            after={
+                "project_id": project_id,
+                "package_code": package_code,
+                "project_lane": project_lane,
+                "entitlement_status": _normalize((entitlement or {}).get("status")),
+            },
+            context={
+                "surface": "admin_control_center.account_360",
+                "stripe_payment_mutated": False,
+            },
+        )
+    except Exception:
+        project_candidates = _project_id_candidates(project_id)
+        if hasattr(db["project_entitlements"], "delete_many"):
+            db["project_entitlements"].delete_many(
+                {"project_id": {"$in": project_candidates}}
+            )
+        if hasattr(db["project_members"], "delete_many"):
+            db["project_members"].delete_many(
+                {"project_id": {"$in": project_candidates}}
+            )
+        if hasattr(db["admin_package_assignments"], "delete_many"):
+            db["admin_package_assignments"].delete_many(
+                {"project_id": {"$in": project_candidates}}
+            )
+        if hasattr(db["projects"], "delete_one"):
+            db["projects"].delete_one({"_id": project_oid})
+        raise
+
+    return {
+        "user_id": customer_user_id,
+        "project_id": project_id,
+        "package_code": package_code,
+        "package_name": package_name,
+        "project_lane": project_lane,
+        "package_grant_type": grant_type,
+        "entitlement_status": _normalize((entitlement or {}).get("status")) or "active",
+        "payment_record_created": False,
+        "stripe_payment_mutated": False,
+        "project_created": True,
+        "owner_membership_created": True,
     }
 
 

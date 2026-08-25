@@ -18,6 +18,7 @@ from pymongo.database import Database
 from app.database import get_database
 from app.services.audit_log_service import write_audit_log
 from app.services import order_service
+from app.services import paid_addon_service
 from app.services.order_service import (
     AUTHORITATIVE_ORDER_SOURCES,
     FULFILLMENT_COMPLETE,
@@ -34,6 +35,7 @@ FULFILLMENT_ACTIONS = {
     "verify_payment",
     "start_fulfillment",
     "assign_package",
+    "activate_paid_addon",
     "complete_fulfillment",
     "escalate_mismatch",
 }
@@ -77,6 +79,8 @@ def _next_required_action(order: dict[str, Any]) -> str:
         return "resolve_payment_mismatch"
     if not order.get("payment_verified_at"):
         return "verify_payment"
+    if _normalize(order.get("item_type")).lower() == "addon":
+        return "activate_paid_addon"
     if not order.get("project_id"):
         return "assign_purchased_package"
     return "complete_fulfillment"
@@ -113,6 +117,7 @@ def _serialize_queue_item(order: dict[str, Any]) -> dict[str, Any]:
         "amount_label": _normalize(order.get("price_label")),
         "currency": _normalize(order.get("currency")) or "usd",
         "package_code": _normalize(order.get("package_code") or order.get("package_slug")),
+        "addon_code": _normalize(order.get("addon_code") or order.get("purchase_code")) or None,
         "package_name": _normalize(order.get("package_name")),
         "billing_plan": _normalize(order.get("billing_plan")) or "one_time",
         "item_type": _normalize(order.get("item_type")) or "package",
@@ -264,6 +269,8 @@ def _start_fulfillment(admin_user: dict[str, Any], order: dict[str, Any], reason
 
 
 def _assign_package(admin_user: dict[str, Any], order: dict[str, Any], reason: str, idempotency_key: str) -> dict[str, Any]:
+    if _normalize(order.get("item_type")).lower() == "addon":
+        raise ValueError("Use activate_paid_addon for a paid add-on order.")
     if not order.get("payment_verified_at"):
         raise ValueError("Verify payment before provisioning the purchased package.")
     if order.get("project_id"):
@@ -316,6 +323,20 @@ def _assign_package(admin_user: dict[str, Any], order: dict[str, Any], reason: s
         "package_code": package_code,
         "entitlement_status": _entitlement_status_for_project(project_id),
     }
+
+
+def _activate_paid_addon(
+    admin_user: dict[str, Any],
+    order: dict[str, Any],
+    reason: str,
+    idempotency_key: str,
+) -> dict[str, Any]:
+    return paid_addon_service.activate_paid_addon_order(
+        order=order,
+        actor=admin_user,
+        reason=reason,
+        idempotency_key=idempotency_key,
+    )
 
 
 def _complete_fulfillment(admin_user: dict[str, Any], order: dict[str, Any], reason: str, idempotency_key: str) -> dict[str, Any]:
@@ -393,6 +414,7 @@ def execute_fulfillment_action(
         "verify_payment": _verify_payment,
         "start_fulfillment": _start_fulfillment,
         "assign_package": _assign_package,
+        "activate_paid_addon": _activate_paid_addon,
         "complete_fulfillment": _complete_fulfillment,
         "escalate_mismatch": _escalate_mismatch,
     }

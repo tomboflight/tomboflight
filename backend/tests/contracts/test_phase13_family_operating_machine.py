@@ -65,17 +65,21 @@ class TestPhase13FamilyOperatingMachine(unittest.TestCase):
 
     def test_phase13_modified_scripts_are_cache_busted(self):
         revision = "20260823-phase13-1"
-        expected_assets = {
+        phase13_assets = {
             "add-member.html": "member.js",
             "create-relationship.html": "relationship.js",
             "link-keys.html": "link-keys.js",
-            "portrait-upload.html": "portrait-upload.js",
             "tree-view.html": "tree-view.js",
-            "admin-control-center.html": "admin-control-center.js",
         }
-        for html_path, asset in expected_assets.items():
+        for html_path, asset in phase13_assets.items():
             with self.subTest(html_path=html_path, asset=asset):
                 self.assertIn(f'{asset}?v={revision}', _read(html_path))
+        for html_path, asset, asset_revision in (
+            ("portrait-upload.html", "portrait-upload.js", "20260824-phase18"),
+            ("admin-control-center.html", "admin-control-center.js", "20260824-phase19"),
+        ):
+            with self.subTest(html_path=html_path, asset=asset):
+                self.assertIn(f'{asset}?v={asset_revision}', _read(html_path))
         self.assertIn(
             f'FRONTEND_ASSET_REVISION = "{revision}"',
             _read("backend/app/services/admin_control_service.py"),

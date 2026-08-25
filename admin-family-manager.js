@@ -944,10 +944,23 @@
       setStatus(actionNode, "Member and photo file are required.", "error");
       return;
     }
+    if (
+      !form.elements.authority_attested?.checked ||
+      !form.elements.consent_attested?.checked
+    ) {
+      setStatus(
+        actionNode,
+        "Confirm both recorded consent and upload authority before uploading.",
+        "error",
+      );
+      return;
+    }
 
     const body = new FormData();
     body.append("family_id", currentFamilyId);
     body.append("member_id", memberId);
+    body.append("authority_attested", "true");
+    body.append("consent_attested", "true");
     body.append("file", file);
 
     try {

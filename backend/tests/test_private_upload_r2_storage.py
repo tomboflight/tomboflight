@@ -339,6 +339,194 @@ class PrivateUploadAccessTests(unittest.TestCase):
                 )
             )
 
+    def test_admin_review_queue_deduplicates_only_shared_storage_records(self):
+        first = self._record()
+        duplicate_id = ObjectId()
+        duplicate = {
+            **first,
+            "_id": duplicate_id,
+            "id": str(duplicate_id),
+            "original_filename": "migration-copy.mp4",
+        }
+        separate_id = ObjectId()
+        separate = {
+            **first,
+            "_id": separate_id,
+            "id": str(separate_id),
+            "storage_key": (
+                "private-uploads/v1/private_media/family/member/"
+                f"{separate_id}/filemp4"
+            ),
+        }
+
+        records, suppressed = upload_routes._deduplicate_admin_review_records(
+            [first, duplicate, separate]
+        )
+
+        self.assertEqual(len(records), 2)
+        self.assertEqual(suppressed, 1)
+        self.assertIs(records[0], first)
+        self.assertIs(records[1], separate)
+
+    def test_admin_rescan_recovers_pending_private_r2_upload(self):
+        record = self._record()
+        record.update(
+            {
+                "scan_status": "pending",
+                "quarantined": True,
+                "storage_promotion_status": "blocked",
+            }
+        )
+        db = FakeDatabase({"uploaded_files": [record], "audit_logs": []})
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with (
+                patch.object(upload_routes.settings, "render_disk_mount_path", ""),
+                patch.object(upload_routes.settings, "upload_storage_dir", tmpdir),
+                patch.object(upload_routes, "get_database", return_value=db),
+                patch.object(
+                    upload_routes,
+                    "download_private_bytes",
+                    return_value=b"clean-private-file",
+                ) as download,
+                patch.object(
+                    upload_routes,
+                    "scan_uploaded_file",
+                    return_value=SimpleNamespace(status="clean", detail="clamav_clean"),
+                ) as scan,
+                patch.object(upload_routes, "write_audit_log") as audit,
+            ):
+                result = upload_routes.admin_rescan_upload(
+                    upload_id=str(record["_id"]),
+                    current_user={
+                        "_id": ObjectId(),
+                        "email": "l.robinson@tomboflight.com",
+                    },
+                )
+
+        self.assertEqual(result["upload"]["scan_status"], "clean")
+        self.assertFalse(record["quarantined"])
+        self.assertEqual(record["storage_promotion_status"], "complete")
+        download.assert_called_once_with(key=record["storage_key"], max_bytes=upload_routes.EVIDENCE_MAX_BYTES)
+        scan.assert_called_once()
+        audit.assert_called_once()
+
+    def test_admin_preview_proxies_private_r2_bytes_without_signed_redirect(self):
+        record = self._record()
+        db = FakeDatabase({"uploaded_files": [record]})
+        with (
+            patch.object(upload_routes, "get_database", return_value=db),
+            patch.object(
+                upload_routes,
+                "_require_upload_management_access",
+                return_value=(record, {"is_admin": True}),
+            ),
+            patch.object(
+                upload_routes,
+                "download_private_bytes",
+                return_value=b"private-preview",
+            ),
+        ):
+            response = upload_routes.preview_upload_for_admin_review(
+                str(record["_id"]),
+                current_user={"_id": ObjectId(), "email": "l.robinson@tomboflight.com"},
+            )
+
+        self.assertEqual(response.body, b"private-preview")
+        self.assertEqual(response.headers["cache-control"], "no-store")
+        self.assertTrue(response.headers["content-disposition"].startswith("inline;"))
+
+    def test_orphaned_upload_references_block_portrait_placement(self):
+        record = self._record()
+        record.update(
+            {
+                "category": "member_photo",
+                "project_id": str(ObjectId()),
+                "family_id": str(ObjectId()),
+                "member_id": str(ObjectId()),
+                "consent_attested": True,
+                "authority_attested": True,
+            }
+        )
+        db = FakeDatabase(
+            {
+                "uploaded_files": [record],
+                "projects": [],
+                "families": [],
+                "family_members": [],
+            }
+        )
+        with patch.object(upload_routes, "get_database", return_value=db):
+            preview = upload_routes.preview_admin_upload_action(
+                upload_id=str(record["_id"]),
+                action="portrait_review",
+                decision="approved",
+            )
+
+        self.assertTrue(preview["blocked"])
+        self.assertIn("orphaned_project_reference", preview["blocked_reasons"])
+        self.assertIn("orphaned_family_reference", preview["blocked_reasons"])
+        self.assertIn("orphaned_member_reference", preview["blocked_reasons"])
+
+    def test_customer_can_recover_old_portrait_attestations_but_admin_cannot_impersonate_consent(self):
+        record = self._record()
+        record.update(
+            {
+                "category": "member_photo",
+                "uploaded_by_user_id": "customer-1",
+                "consent_attested": False,
+                "authority_attested": False,
+            }
+        )
+        db = FakeDatabase({"uploaded_files": [record], "audit_logs": []})
+        owner_context = {
+            "is_admin": False,
+            "project": {"owner_user_id": "customer-1"},
+        }
+        with (
+            patch.object(upload_routes, "get_database", return_value=db),
+            patch.object(
+                upload_routes,
+                "_require_upload_management_access",
+                return_value=(record, owner_context),
+            ),
+            patch.object(upload_routes, "write_audit_log"),
+        ):
+            result = upload_routes.attest_existing_portrait_upload(
+                str(record["_id"]),
+                upload_routes.UploadPortraitAttestationPayload(
+                    consent_attested=True,
+                    authority_attested=True,
+                ),
+                current_user={"_id": "customer-1", "email": "customer@example.com"},
+            )
+
+        self.assertTrue(result["upload"]["consent_attested"])
+        self.assertTrue(result["upload"]["authority_attested"])
+
+        record["consent_attested"] = False
+        record["authority_attested"] = False
+        with (
+            patch.object(upload_routes, "get_database", return_value=db),
+            patch.object(
+                upload_routes,
+                "_require_upload_management_access",
+                return_value=(
+                    record,
+                    {"is_admin": True, "project": {"owner_user_id": "customer-1"}},
+                ),
+            ),
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                upload_routes.attest_existing_portrait_upload(
+                    str(record["_id"]),
+                    upload_routes.UploadPortraitAttestationPayload(
+                        consent_attested=True,
+                        authority_attested=True,
+                    ),
+                    current_user={"_id": "admin-1", "email": "admin@example.com"},
+                )
+        self.assertEqual(raised.exception.status_code, 403)
+
     def test_r2_download_uses_short_lived_redirect(self):
         record = self._record()
         db = FakeDatabase({"uploaded_files": [record]})
