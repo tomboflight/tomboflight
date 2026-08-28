@@ -879,9 +879,21 @@ test("[responsive] keeps the CEO command center compact and readable at 960px", 
   await expect(page.locator("[data-admin-control-title]")).toContainText("CEO Master Administrator");
   await expect(page.locator("[data-super-admin-create-account]")).toBeVisible();
   await expect(page.locator("[data-super-admin-manage-team-access]")).toBeVisible();
+  await expect(page.locator("[data-admin-rail-toggle]")).toBeVisible();
+  await expect(page.locator("[data-admin-rail-toggle]")).toHaveAttribute("aria-expanded", "false");
+  await expect(page.locator("#admin-operations-navigation")).not.toBeVisible();
   await expect(page.locator("[data-admin-nav-group]")).toHaveCount(4);
   await expect(page.locator('[data-admin-nav-group="workflow"]')).toHaveAttribute("open", "");
   await expect(page.locator('[data-admin-nav-group="finance"]')).not.toHaveAttribute("open", "");
+  const compactLayout = await page.evaluate(() => ({
+    railPosition: window.getComputedStyle(document.querySelector(".admin-case-rail")).position,
+    caseColumns: window.getComputedStyle(document.querySelector(".admin-case-center")).gridTemplateColumns,
+    railBottom: document.querySelector(".admin-case-rail").getBoundingClientRect().bottom,
+    caseTop: document.querySelector(".admin-case-center").getBoundingClientRect().top,
+  }));
+  expect(compactLayout.railPosition).toBe("static");
+  expect(compactLayout.caseColumns.trim().split(/\s+/)).toHaveLength(1);
+  expect(compactLayout.railBottom).toBeLessThanOrEqual(compactLayout.caseTop + 1);
   const overflow = await page.evaluate(() => ({
     viewport: document.documentElement.clientWidth,
     content: document.documentElement.scrollWidth,
@@ -889,6 +901,47 @@ test("[responsive] keeps the CEO command center compact and readable at 960px", 
   expect(overflow.content).toBeLessThanOrEqual(overflow.viewport + 1);
   await expect(page.locator("[data-open-case]").first()).toBeVisible();
   await expect(page.locator("[data-admin-case-workspace]")).toContainText("Identity");
+});
+
+test("[responsive] keeps portrait and landscape admin actions reachable", async ({ page }) => {
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 844, height: 390 },
+  ]) {
+    await page.setViewportSize(viewport);
+    const railToggle = page.locator("[data-admin-rail-toggle]");
+    await expect(railToggle).toHaveAttribute("aria-expanded", "false");
+    await expect(page.locator("#admin-operations-navigation")).not.toBeVisible();
+
+    await railToggle.click();
+    await expect(railToggle).toHaveAttribute("aria-expanded", "true");
+    await expect(page.locator("#admin-operations-navigation")).toBeVisible();
+    await page.locator('[data-admin-nav-group="finance"] summary').click();
+    await expect(page.locator('[data-admin-nav-group="workflow"]')).not.toHaveAttribute("open", "");
+    await expect(page.locator('[data-admin-nav-group="finance"]')).toHaveAttribute("open", "");
+    await page.locator('[data-admin-nav-group="workflow"] summary').click();
+
+    await page.locator('[data-case-queue="manual_fulfillment"]').click();
+    await expect(railToggle).toHaveAttribute("aria-expanded", "false");
+    await expect(page.locator("#admin-operations-navigation")).not.toBeVisible();
+    await expect(page.locator("[data-admin-active-queue]")).toContainText("Paid");
+
+    const layout = await page.evaluate(() => ({
+      viewportWidth: document.documentElement.clientWidth,
+      contentWidth: document.documentElement.scrollWidth,
+      railPosition: window.getComputedStyle(document.querySelector(".admin-case-rail")).position,
+      caseColumns: window.getComputedStyle(document.querySelector(".admin-case-center")).gridTemplateColumns,
+      pageScrollHeight: document.documentElement.scrollHeight,
+      viewportHeight: window.innerHeight,
+    }));
+    expect(layout.contentWidth).toBeLessThanOrEqual(layout.viewportWidth + 1);
+    expect(layout.railPosition).toBe("static");
+    expect(layout.caseColumns.trim().split(/\s+/)).toHaveLength(1);
+    expect(layout.pageScrollHeight).toBeGreaterThan(layout.viewportHeight);
+
+    await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" }));
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+  }
 });
 
 test("[contrast] validates WCAG AA contrast thresholds for key selectors", async ({ page }) => {
