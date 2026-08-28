@@ -1,0 +1,219 @@
+/* Phase 21.2 — mobile-first CEO Control Center navigation and workspace flow. */
+
+.admin-rail-heading-actions {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+  min-width: 0;
+}
+
+.admin-rail-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 1px solid var(--admin-border, #c7d5e3);
+  border-radius: 999px;
+  background: var(--admin-panel, #ffffff);
+  color: var(--admin-text, #132238);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 850;
+  line-height: 1.15;
+  cursor: pointer;
+}
+
+.admin-rail-toggle:hover,
+.admin-rail-toggle:focus-visible {
+  border-color: var(--admin-accent, #0a6597);
+  outline: 3px solid color-mix(in srgb, var(--admin-accent, #0a6597) 22%, transparent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 1180px) {
+  .admin-control-center-body {
+    overflow-x: hidden;
+  }
+
+  .admin-control-center-body .admin-case-console-shell {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .admin-control-center-body .admin-case-rail {
+    position: static;
+    inset: auto;
+    z-index: auto;
+    min-width: 0;
+  }
+
+  .admin-control-center-body .admin-rail-heading {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 0;
+  }
+
+  .admin-rail-heading-actions {
+    justify-items: end;
+  }
+
+  .admin-rail-toggle {
+    display: inline-flex;
+  }
+
+  .admin-control-center-body .admin-case-rail[data-mobile-nav="collapsed"] .admin-case-nav {
+    display: none;
+  }
+
+  .admin-control-center-body .admin-case-rail[data-mobile-nav="expanded"] .admin-case-nav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .admin-control-center-body .admin-nav-group summary,
+  .admin-control-center-body .admin-case-nav button {
+    min-height: 44px;
+  }
+
+  .admin-control-center-body .admin-case-list,
+  .admin-control-center-body .admin-case-tab-content {
+    max-height: none;
+    min-height: 0;
+  }
+}
+
+@media (max-width: 1024px) {
+  .admin-control-center-body .admin-case-center,
+  .admin-control-center-body .admin-case-context-panel {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-control-center-body .admin-case-context-panel {
+    display: grid;
+    grid-column: 1;
+  }
+
+  .admin-control-center-body .admin-case-rail[data-mobile-nav="expanded"] .admin-case-nav {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-control-center-body .admin-case-list-panel,
+  .admin-control-center-body .admin-case-workspace-panel,
+  .admin-control-center-body .admin-case-context-panel {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 700px) {
+  .admin-control-center-body .site-header-inner {
+    min-height: 60px;
+  }
+
+  .admin-control-center-body .brand {
+    font-size: clamp(1.28rem, 7vw, 1.65rem);
+  }
+
+  .admin-control-center-body .menu-toggle {
+    min-height: 44px;
+    padding: 8px 14px;
+    font-size: 0.95rem;
+  }
+
+  .admin-control-center-body .admin-ops-page {
+    padding: 10px 0 28px;
+  }
+
+  .admin-control-center-body .admin-ops-shell,
+  .admin-control-center-body .site-header-inner {
+    width: min(100% - 12px, 100%);
+  }
+
+  .admin-control-center-body .admin-case-rail,
+  .admin-control-center-body .admin-case-list-panel,
+  .admin-control-center-body .admin-case-workspace-panel,
+  .admin-control-center-body .admin-case-context-panel {
+    padding: 10px;
+  }
+
+  .admin-control-center-body .admin-rail-heading h3 {
+    font-size: 1rem;
+  }
+
+  .admin-control-center-body .admin-active-queue {
+    max-width: 10rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .admin-control-center-body .admin-case-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    padding-bottom: 4px;
+    scrollbar-width: thin;
+  }
+
+  .admin-control-center-body .admin-case-tabs button {
+    flex: 0 0 auto;
+    min-height: 44px;
+  }
+
+  .admin-control-center-body .admin-case-row {
+    grid-template-columns: 22px minmax(0, 1fr);
+  }
+
+  .admin-control-center-body .admin-open-case {
+    grid-column: 2;
+    grid-row: auto;
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .admin-control-center-body .admin-case-primary p,
+  .admin-control-center-body .admin-case-detail strong,
+  .admin-control-center-body .admin-case-guidance strong {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .admin-control-center-body .admin-field-grid,
+  .admin-control-center-body .admin-decision-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .admin-control-center-body .admin-priority-repair-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .admin-control-center-body .admin-priority-repair-item .btn,
+  .admin-control-center-body .admin-action-group .btn,
+  .admin-control-center-body .admin-context-card .inline-actions .btn {
+    width: 100%;
+    min-height: 44px;
+    white-space: normal;
+  }
+
+  .admin-control-center-body .admin-context-card .inline-actions .admin-field {
+    width: 100%;
+    min-width: 0 !important;
+  }
+}
+
+@media (max-width: 430px) {
+  .admin-control-center-body .admin-rail-heading {
+    grid-template-columns: minmax(0, 1fr) minmax(132px, auto);
+  }
+
+  .admin-control-center-body .admin-rail-toggle {
+    width: 100%;
+    padding-inline: 10px;
+  }
+}

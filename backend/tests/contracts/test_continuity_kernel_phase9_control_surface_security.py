@@ -10,6 +10,7 @@ RUNTIME_PATH = REPO_ROOT / "backend" / "app" / "services" / "continuity_runtime_
 AUTH_PATH = REPO_ROOT / "backend" / "app" / "services" / "auth_service.py"
 DEPENDENCY_PATH = REPO_ROOT / "backend" / "app" / "dependencies" / "auth.py"
 CONTROL_JS_PATH = REPO_ROOT / "admin-control-center.js"
+MOBILE_CONTROL_JS_PATH = REPO_ROOT / "admin-control-center-mobile.js"
 APP_JS_PATH = REPO_ROOT / "app.js"
 AUTH_JS_PATH = REPO_ROOT / "auth.js"
 
@@ -21,6 +22,7 @@ class TestContinuityKernelPhase9ControlSurfaceSecurity(unittest.TestCase):
         cls.auth = AUTH_PATH.read_text(encoding="utf-8")
         cls.dependencies = DEPENDENCY_PATH.read_text(encoding="utf-8")
         cls.control_js = CONTROL_JS_PATH.read_text(encoding="utf-8")
+        cls.mobile_control_js = MOBILE_CONTROL_JS_PATH.read_text(encoding="utf-8")
         cls.app_js = APP_JS_PATH.read_text(encoding="utf-8")
         cls.auth_js = AUTH_JS_PATH.read_text(encoding="utf-8")
 
@@ -85,7 +87,15 @@ class TestContinuityKernelPhase9ControlSurfaceSecurity(unittest.TestCase):
 
     def test_06_every_control_center_button_is_referenced_by_a_loaded_script(self) -> None:
         html = (REPO_ROOT / "admin-control-center.html").read_text(encoding="utf-8")
-        combined_scripts = self.control_js + "\n" + self.app_js + "\n" + self.auth_js
+        combined_scripts = (
+            self.control_js
+            + "\n"
+            + self.mobile_control_js
+            + "\n"
+            + self.app_js
+            + "\n"
+            + self.auth_js
+        )
         button_sources = html + "\n" + self.control_js
         buttons = re.findall(r"<button\b[^>]*>", button_sources, flags=re.IGNORECASE | re.DOTALL)
         self.assertGreaterEqual(len(buttons), 30)

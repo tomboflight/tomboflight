@@ -10,6 +10,7 @@
       content="Internal premium operations console for Tomb of Light customer cases, repairs, entitlements, mint readiness, and audit review."
     />
     <link rel="stylesheet" href="styles.css?v=20260828-phase21-1" />
+    <link rel="stylesheet" href="admin-control-center-mobile.css?v=20260828-phase21-2" />
   </head>
   <body class="admin-control-center-body">
     <div class="page-wrap">
@@ -103,15 +104,30 @@
           </div>
 
           <div class="admin-case-console-shell">
-              <aside class="admin-case-rail" aria-label="Operations rail">
+              <aside class="admin-case-rail" aria-label="Operations rail" data-mobile-nav="collapsed">
                 <div class="admin-rail-heading">
                   <div>
                     <span class="eyebrow">Command map</span>
                     <h3>Operations Rail</h3>
                   </div>
-                  <span class="admin-active-queue" data-admin-active-queue>Overview</span>
+                  <div class="admin-rail-heading-actions">
+                    <span class="admin-active-queue" data-admin-active-queue>Overview</span>
+                    <button
+                      class="admin-rail-toggle"
+                      type="button"
+                      aria-controls="admin-operations-navigation"
+                      aria-expanded="false"
+                      data-admin-rail-toggle
+                    >
+                      <span data-admin-rail-toggle-label>Browse operations</span>
+                    </button>
+                  </div>
                 </div>
-                <nav class="admin-case-nav" aria-label="Admin operations navigation">
+                <nav
+                  class="admin-case-nav"
+                  id="admin-operations-navigation"
+                  aria-label="Admin operations navigation"
+                >
                   <details class="admin-nav-group" data-admin-nav-group="workflow" open>
                     <summary>Customer Workflow</summary>
                     <div>
@@ -559,5 +575,6 @@
     <script src="app.js?v=20260828-phase21-1"></script>
     <script src="auth.js?v=20260828-phase21-1"></script>
     <script src="admin-control-center.js?v=20260824-phase19-1"></script>
+    <script src="admin-control-center-mobile.js?v=20260828-phase21-2"></script>
   </body>
 </html>
