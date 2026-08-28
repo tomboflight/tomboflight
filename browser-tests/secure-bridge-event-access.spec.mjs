@@ -117,7 +117,7 @@ test.describe("secure private event access", () => {
     );
     await expect(page.locator("[data-admin-event-send]")).toBeEnabled();
     await page.getByLabel("Invited Email Address").fill("invitee@example.test");
-    await page.getByLabel("Selected Package", { exact: true }).selectOption("legacy_snapshot");
+    await page.locator('select[name="package_code"]').selectOption("legacy_snapshot");
     await page.getByLabel("Internal Reason").fill("Verified Event 2 guest registration");
     await page.getByRole("checkbox").check();
     await page.getByRole("button", { name: "Send Secure Invitation" }).click();
