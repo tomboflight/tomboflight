@@ -14,6 +14,14 @@ CORE_COLLECTIONS: dict[str, list[tuple[list[tuple[str, int]], dict]]] = {
     "users": [
         ([("email", ASCENDING)], {"unique": True, "name": "idx_users_email_unique"}),
         ([("role", ASCENDING)], {"name": "idx_users_role"}),
+        (
+            [("pending_email_change_token_hash", ASCENDING)],
+            {
+                "unique": True,
+                "sparse": True,
+                "name": "idx_users_pending_email_change_token_unique",
+            },
+        ),
     ],
     "roles": [
         (

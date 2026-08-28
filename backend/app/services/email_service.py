@@ -439,6 +439,71 @@ def send_password_changed_email(*, to_email: str) -> None:
     )
 
 
+def send_email_change_verification_email(
+    *,
+    to_email: str,
+    verification_url: str,
+    expires_at: str,
+) -> dict[str, Any]:
+    """Verify ownership of a proposed new login email address."""
+    safe_url = escape(_normalize_text(verification_url), quote=True)
+    safe_expires_at = escape(_normalize_text(expires_at), quote=True)
+    subject = "Confirm your new Tomb of Light email"
+    text_body = (
+        "Hello,\n\n"
+        "A request was made to use this email address for a Tomb of Light account.\n\n"
+        f"Confirm the change using this secure link:\n{verification_url}\n\n"
+        f"This link expires at {expires_at}.\n\n"
+        "If you did not request this change, do not use the link and contact support.\n\n"
+        "Tomb of Light Security\n"
+    )
+    html_body = (
+        "<p>Hello,</p>"
+        "<p>A request was made to use this email address for a Tomb of Light account.</p>"
+        f'<p><a href="{safe_url}">Confirm new email address</a></p>'
+        f"<p>This link expires at {safe_expires_at}.</p>"
+        "<p>If you did not request this change, do not use the link and contact support.</p>"
+        "<p>Tomb of Light Security</p>"
+    )
+    return _send_email(
+        to_email=to_email,
+        subject=subject,
+        text_body=text_body,
+        html_body=html_body,
+        email_type="email_change_verification",
+    )
+
+
+def send_email_changed_notice(*, to_email: str, new_email: str) -> dict[str, Any]:
+    """Notify the former login mailbox after a verified email change."""
+    changed_at = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+    safe_new_email = escape(_normalize_email(new_email), quote=True)
+    safe_changed_at = escape(changed_at, quote=True)
+    subject = "Your Tomb of Light email was changed"
+    text_body = (
+        "Hello,\n\n"
+        f"The login email for your Tomb of Light account was changed to {new_email}.\n\n"
+        f"Security notice time: {changed_at}.\n\n"
+        "If you did not make this change, contact support immediately.\n\n"
+        "Tomb of Light Security\n"
+    )
+    html_body = (
+        "<p>Hello,</p>"
+        "<p>The login email for your Tomb of Light account was changed to "
+        f"<strong>{safe_new_email}</strong>.</p>"
+        f"<p><strong>Security notice time:</strong> {safe_changed_at}.</p>"
+        "<p>If you did not make this change, contact support immediately.</p>"
+        "<p>Tomb of Light Security</p>"
+    )
+    return _send_email(
+        to_email=to_email,
+        subject=subject,
+        text_body=text_body,
+        html_body=html_body,
+        email_type="email_changed_notice",
+    )
+
+
 def _public_app_base_url() -> str:
     source = (
         _normalize_text(settings.password_reset_base_url_clean)

@@ -5,7 +5,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from app.dependencies.auth import get_current_user
+from app.dependencies.auth import get_current_user, is_customer_account
 from app.schemas.billing import (
     BillingConfigResponse,
     BillingOverviewResponse,
@@ -27,18 +27,24 @@ from app.services.billing_service import (
 router = APIRouter(prefix="/billing", tags=["Billing"])
 
 
+def _require_customer_billing(user: dict[str, Any]) -> None:
+    if not is_customer_account(user):
+        raise HTTPException(status_code=403, detail="Billing is available only in customer accounts.")
+
+
 class BillingPortalRequest(BaseModel):
     return_url: str | None = Field(default=None, max_length=500)
 
 
 @router.get("/config", response_model=BillingConfigResponse)
 def billing_config_route(current_user: dict[str, Any] = Depends(get_current_user)):
-    del current_user
+    _require_customer_billing(current_user)
     return get_billing_config()
 
 
 @router.get("/overview", response_model=BillingOverviewResponse)
 def billing_overview_route(current_user: dict[str, Any] = Depends(get_current_user)):
+    _require_customer_billing(current_user)
     try:
         payload = get_billing_overview(current_user)
     except ValueError as exc:
@@ -72,6 +78,7 @@ def billing_overview_route(current_user: dict[str, Any] = Depends(get_current_us
 def create_setup_intent_route(
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
+    _require_customer_billing(current_user)
     try:
         return create_setup_intent_for_user(current_user)
     except ValueError as exc:
@@ -88,6 +95,7 @@ def set_default_payment_method_route(
     payment_method_id: str,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
+    _require_customer_billing(current_user)
     try:
         return set_default_payment_method_for_user(current_user, payment_method_id)
     except ValueError as exc:
@@ -104,6 +112,7 @@ def detach_payment_method_route(
     payment_method_id: str,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
+    _require_customer_billing(current_user)
     try:
         return detach_payment_method_for_user(current_user, payment_method_id)
     except ValueError as exc:
@@ -117,6 +126,7 @@ def create_billing_portal_session_route(
     payload: BillingPortalRequest | None = None,
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
+    _require_customer_billing(current_user)
     try:
         return create_billing_portal_session_for_user(
             current_user,

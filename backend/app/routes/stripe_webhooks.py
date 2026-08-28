@@ -23,6 +23,7 @@ from app.services.maintenance_subscription_service import (
     sync_maintenance_invoice_event,
     sync_maintenance_subscription_event,
 )
+from app.services.billing_service import sync_billing_customer_updated_event
 from app.services.order_service import upsert_order_from_stripe_event
 
 try:
@@ -204,6 +205,7 @@ def _downstream_failures(
     event_type: str,
     order_result: dict[str, Any],
     maintenance_result: dict[str, Any],
+    billing_customer_result: dict[str, Any] | None = None,
 ) -> list[str]:
     failures: list[str] = []
     if event_type == "checkout.session.completed":
@@ -239,6 +241,10 @@ def _downstream_failures(
                 or "maintenance_event_not_persisted"
             )
         )
+    elif event_type == "customer.updated" and (
+        billing_customer_result or {}
+    ).get("error") == "billing_customer_sync_failed":
+        failures.append("billing_customer_sync_failed")
     return list(dict.fromkeys(failure for failure in failures if failure))
 
 
@@ -295,6 +301,7 @@ async def stripe_webhook(request: Request) -> Dict[str, Any]:
 
     order_result: Dict[str, Any] = {"order_id": None}
     maintenance_result: Dict[str, Any] = {"updated": False}
+    billing_customer_result: Dict[str, Any] = {"updated": False}
 
     # Order upsert currently maps Stripe Checkout sessions to orders.
     if event_type == "checkout.session.completed":
@@ -327,10 +334,22 @@ async def stripe_webhook(request: Request) -> Dict[str, Any]:
             logger.error("Stripe invoice maintenance sync failed", exc_info=True)
             maintenance_result = {"updated": False, "error": "maintenance_invoice_sync_failed", "type": event_type}
 
+    if event_type == "customer.updated":
+        try:
+            billing_customer_result = sync_billing_customer_updated_event(event)
+        except Exception:
+            logger.error("Stripe billing customer sync failed", exc_info=True)
+            billing_customer_result = {
+                "updated": False,
+                "error": "billing_customer_sync_failed",
+                "type": event_type,
+            }
+
     failures = _downstream_failures(
         event_type=event_type,
         order_result=order_result,
         maintenance_result=maintenance_result,
+        billing_customer_result=billing_customer_result,
     )
     finished_at = datetime.now(timezone.utc)
     if failures:
@@ -358,6 +377,12 @@ async def stripe_webhook(request: Request) -> Dict[str, Any]:
         now=finished_at,
     )
 
+    if event_id and event_type == "customer.updated":
+        events_col.update_one(
+            {"event_id": event_id},
+            {"$set": {"billing_customer_result": billing_customer_result}},
+        )
+
     logger.info("Stripe webhook processed")
 
     return {
@@ -365,4 +390,5 @@ async def stripe_webhook(request: Request) -> Dict[str, Any]:
         "type": event_type,
         "order": order_result,
         "maintenance": maintenance_result,
+        "billing_customer": billing_customer_result,
     }

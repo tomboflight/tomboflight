@@ -2,11 +2,54 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field, model_validator
+
+
+class MailingAddress(BaseModel):
+    line1: str = Field(default="", max_length=150)
+    line2: str = Field(default="", max_length=150)
+    city: str = Field(default="", max_length=100)
+    region: str = Field(default="", max_length=100)
+    postal_code: str = Field(default="", max_length=20)
+    country: str = Field(default="US", min_length=2, max_length=2)
+
+    @model_validator(mode="after")
+    def validate_complete_address(self) -> "MailingAddress":
+        values = [
+            self.line1.strip(),
+            self.line2.strip(),
+            self.city.strip(),
+            self.region.strip(),
+            self.postal_code.strip(),
+        ]
+        if not any(values):
+            return self
+        if not all((self.line1.strip(), self.city.strip(), self.region.strip(), self.postal_code.strip())):
+            raise ValueError(
+                "Street address, city, state or region, and postal code are required."
+            )
+        return self
 
 
 class UserProfileUpdate(BaseModel):
     full_name: str = Field(..., min_length=1, max_length=150)
+    phone_number: str | None = Field(default=None, max_length=32)
+    mailing_address: MailingAddress | None = None
+
+
+class UserEmailChangeRequest(BaseModel):
+    new_email: EmailStr
+    current_password: str = Field(..., min_length=8, max_length=128)
+
+
+class UserEmailChangeConfirm(BaseModel):
+    token: str = Field(..., min_length=16, max_length=512)
+
+
+class UserEmailChangeResponse(BaseModel):
+    success: bool = True
+    message: str
+    expires_at: str | None = None
 
 
 class UserProfileResponse(BaseModel):
@@ -18,6 +61,10 @@ class UserProfileResponse(BaseModel):
     created_at: str
     last_login_at: str | None = None
     policy_version: str | None = None
+    phone_number: str | None = None
+    mailing_address: MailingAddress | None = None
+    pending_email: str | None = None
+    billing_sync_status: str | None = None
     legal_acceptance: dict[str, Any] = Field(default_factory=dict)
 
 
