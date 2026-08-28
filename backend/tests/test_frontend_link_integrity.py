@@ -219,20 +219,10 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
 
         bridge_page_text = html.unescape(bridge_page)
         pricing_page_text = html.unescape(pricing_page)
-        bridge_paint_codes = [
-            "BRIDGE-PAINT-SNAPSHOT",
-            "BRIDGE-PAINT-PORTRAIT",
-            "BRIDGE-PAINT-DIGITAL",
-            "BRIDGE-PAINT-HOUSEHOLD",
-            "BRIDGE-PAINT-HEIRLOOM",
-            "BRIDGE-PAINT-PLUS",
-            "BRIDGE-PAINT-ESTATE",
-            "BRIDGE-PAINT-COMMAND",
-        ]
-
-        for package_code in bridge_paint_codes:
-            self.assertIn(package_code, bridge_page)
-            self.assertNotIn(package_code, homepage)
+        self.assertNotRegex(
+            bridge_page,
+            r"BRIDGE-PAINT-[A-Z0-9][A-Z0-9-]{3,}",
+        )
 
         for expected_content in [
             "Sip & Paint",
@@ -243,38 +233,36 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
             "Norfolk, VA",
             "Private Event",
             "Invite Only",
-            "BRIDGE-PAINT",
+            "Open your secure invitation",
+            "One-time secure link",
         ]:
             self.assertIn(expected_content, bridge_page_text)
 
-        self.assertIn("Private Bridge Event Access", bridge_page)
+        self.assertIn("VERIFIED INVITED-GUEST ACCESS", bridge_page)
         self.assertIn(
-            "Use the standard Tomb of Light package checkout and enter your private Bridge Event code directly at",
+            "The offer is never displayed",
             bridge_page,
         )
+        self.assertIn("data-bridge-paint-access-form", bridge_page)
+        self.assertIn("bridge-paint.js?v=20260828-secure-event-access", bridge_page)
+        self.assertIn("Previously published event codes are retired", bridge_page)
         self.assertNotIn("Important: do not modify Stripe URLs", bridge_page)
         self.assertNotIn("Private Bridge Event Access", homepage)
         self.assertNotIn("BRIDGE-TASTE", homepage)
         self.assertNotIn("BRIDGE-PAINT", homepage)
         self.assertNotRegex(homepage, r"BRIDGE-(?:TASTE|PAINT)-")
         self.assertIn("bridge-paint.html", pricing_page)
-        self.assertIn("BRIDGE-PAINT", pricing_page)
+        self.assertNotIn("BRIDGE-PAINT", pricing_page)
+        self.assertIn("one-time access link", pricing_page)
         self.assertIn("Sip & Paint — Event 2 of 4", pricing_page_text)
         self.assertNotIn("BRIDGE-TASTE", pricing_page)
 
         self.assertIn("Bridge Event 1 Has Concluded", archived_bridge_page)
         self.assertIn('href="bridge-paint.html"', archived_bridge_page)
-        for package_code in [
-            "BRIDGE-TASTE-SNAPSHOT",
-            "BRIDGE-TASTE-PORTRAIT",
-            "BRIDGE-TASTE-DIGITAL",
-            "BRIDGE-TASTE-HOUSEHOLD",
-            "BRIDGE-TASTE-HEIRLOOM",
-            "BRIDGE-TASTE-PLUS",
-            "BRIDGE-TASTE-ESTATE",
-            "BRIDGE-TASTE-COMMAND",
-        ]:
-            self.assertNotIn(package_code, archived_bridge_page)
+        self.assertNotRegex(
+            archived_bridge_page,
+            r"BRIDGE-TASTE-[A-Z0-9][A-Z0-9-]{3,}",
+        )
 
         for inactive_campaign in ["BRIDGE-LINEAGE", "GRANDOPENING"]:
             self.assertNotIn(inactive_campaign, homepage)

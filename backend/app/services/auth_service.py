@@ -1128,6 +1128,90 @@ def request_password_reset(
     return generic_response
 
 
+def request_account_recovery(
+    email: str,
+    *,
+    include_delivery_status: bool = False,
+) -> dict[str, object]:
+    """Send the recovery email appropriate for the account's current state.
+
+    Public callers always receive the same response. Internally, an unfinished
+    account receives a fresh activation link and an active account receives a
+    password-reset link. Suspended, archived, deleted, and unknown identities
+    receive no credential path and remain indistinguishable to the caller.
+    """
+
+    normalized_email = _normalize_text(email).lower()
+    generic_response: dict[str, object] = {
+        "success": True,
+        "message": (
+            "If this email is connected to an account, the appropriate secure "
+            "access link has been sent."
+        ),
+        "delivery_mode": "email",
+    }
+
+    db = _get_database_or_none()
+    if db is None:
+        if include_delivery_status:
+            generic_response.update(
+                {
+                    "success": False,
+                    "delivery_sent": False,
+                    "delivery_error": "identity_store_unavailable",
+                    "recovery_mode": "none",
+                }
+            )
+        return generic_response
+
+    user = db.users.find_one({"email": normalized_email})
+    if user is None or _normalize_text(user.get("account_type")).lower() == "deleted_tombstone":
+        if include_delivery_status:
+            generic_response.update(
+                {
+                    "success": False,
+                    "delivery_sent": False,
+                    "delivery_error": "account_not_found",
+                    "recovery_mode": "none",
+                }
+            )
+        return generic_response
+
+    account_status = _normalize_text(user.get("status")).lower()
+    delivery: dict[str, object]
+    recovery_mode = "none"
+    if account_status in {"pending_activation", "checkout_pending_activation"}:
+        recovery_mode = "activation"
+        delivery = request_account_activation(
+            normalized_email,
+            include_delivery_status=include_delivery_status,
+        )
+    elif account_status in {"", "active"}:
+        recovery_mode = "password_reset"
+        delivery = request_password_reset(
+            normalized_email,
+            include_delivery_status=include_delivery_status,
+        )
+    else:
+        delivery = {
+            "success": False,
+            "delivery_sent": False,
+            "delivery_error": "account_not_active",
+        }
+
+    if include_delivery_status:
+        generic_response.update(
+            {
+                "success": bool(delivery.get("success")),
+                "delivery_sent": bool(delivery.get("delivery_sent")),
+                "delivery_provider": delivery.get("delivery_provider"),
+                "delivery_error": delivery.get("delivery_error"),
+                "recovery_mode": recovery_mode,
+            }
+        )
+    return generic_response
+
+
 def reset_password_with_token(token: str, new_password: str) -> dict[str, object]:
     normalized_token = _normalize_text(token)
     if not normalized_token:

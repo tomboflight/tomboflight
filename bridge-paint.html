@@ -3,6 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="referrer" content="no-referrer" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://tomboflight-api.onrender.com https://*.onrender.com http://127.0.0.1:* http://localhost:*; form-action 'self'; upgrade-insecure-requests" />
     <title>Tomb of Light | Sip &amp; Paint — Private Bridge Event</title>
     <meta
       name="description"
@@ -27,7 +29,7 @@
     <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png?v=20260508-1" />
     <link rel="apple-touch-icon" href="apple-touch-icon.png?v=20260508-1" />
     <link rel="manifest" href="site.webmanifest?v=20260508-1" />
-    <link rel="stylesheet" href="styles.css?v=20260518-founder-polish" />
+    <link rel="stylesheet" href="styles.css?v=20260828-phase21-1" />
   </head>
   <body class="homepage-body pricing-page-body">
     <a href="#main-content" class="skip-to-content">Skip to main content</a>
@@ -85,61 +87,57 @@
         <section class="section section-tight" aria-labelledby="bridge-access-title">
           <div class="container">
             <div class="section-head section-head-wide">
-              <span class="eyebrow">PRIVATE BRIDGE EVENT ACCESS</span>
-              <h2 id="bridge-access-title">Private Bridge Event Access</h2>
+              <span class="eyebrow">VERIFIED INVITED-GUEST ACCESS</span>
+              <h2 id="bridge-access-title">Open your secure invitation</h2>
               <p class="section-lead">
-                Invited Sip &amp; Paint guests may use their private BRIDGE-PAINT code for 50% off an eligible Tomb of
-                Light package purchase.
+                Private event offers are now issued through one-time links tied
+                to the invited guest's email address and selected package.
               </p>
             </div>
 
             <article class="cta-panel cta-panel-premium offer-panel offer-panel-private">
-              <div class="hero-meta" aria-label="Bridge offer details">
-                <span class="meta-pill">BRIDGE-PAINT</span>
+              <div class="hero-meta" aria-label="Private offer safeguards">
+                <span class="meta-pill">One invited mailbox</span>
+                <span class="meta-pill">One selected package</span>
+                <span class="meta-pill">One-time secure link</span>
                 <span class="meta-pill">50% off eligible package purchases</span>
                 <span class="meta-pill">Expires August 29, 2026 at 11:59 PM</span>
-                <span class="meta-pill">Limited to 25 redemptions per package code</span>
               </div>
-              <div class="offer-code-list bridge-access-grid">
-                <div class="offer-code-item">
-                  <strong>Legacy Snapshot</strong>
-                  <code class="offer-code">BRIDGE-PAINT-SNAPSHOT</code>
+
+              <form class="form-grid" data-bridge-paint-access-form novalidate>
+                <label>
+                  Invited Email Address
+                  <input
+                    type="email"
+                    name="email"
+                    autocomplete="email"
+                    maxlength="254"
+                    required
+                  />
+                </label>
+                <div class="inline-actions">
+                  <button class="btn btn-primary" type="submit" data-bridge-paint-access-submit>
+                    Request My Private Offer
+                  </button>
                 </div>
-                <div class="offer-code-item">
-                  <strong>Legacy Portrait Intro</strong>
-                  <code class="offer-code">BRIDGE-PAINT-PORTRAIT</code>
-                </div>
-                <div class="offer-code-item">
-                  <strong>Digital Legacy Portrait</strong>
-                  <code class="offer-code">BRIDGE-PAINT-DIGITAL</code>
-                </div>
-                <div class="offer-code-item">
-                  <strong>Household Foundation</strong>
-                  <code class="offer-code">BRIDGE-PAINT-HOUSEHOLD</code>
-                </div>
-                <div class="offer-code-item">
-                  <strong>Heirloom Legacy Tree</strong>
-                  <code class="offer-code">BRIDGE-PAINT-HEIRLOOM</code>
-                </div>
-                <div class="offer-code-item">
-                  <strong>Legacy Plus</strong>
-                  <code class="offer-code">BRIDGE-PAINT-PLUS</code>
-                </div>
-                <div class="offer-code-item">
-                  <strong>Family Estate Concierge</strong>
-                  <code class="offer-code">BRIDGE-PAINT-ESTATE</code>
-                </div>
-                <div class="offer-code-item">
-                  <strong>Command Structure Network</strong>
-                  <code class="offer-code">BRIDGE-PAINT-COMMAND</code>
-                </div>
-              </div>
+                <p
+                  class="status-message"
+                  data-bridge-paint-access-status
+                  role="status"
+                  aria-live="polite"
+                >
+                  Open the one-time link from your invitation email to continue.
+                </p>
+              </form>
+
               <p class="section-note">
-                Use the standard Tomb of Light package checkout and enter your private Bridge Event code directly at
-                Stripe checkout when prompted.
+                After verification, the private offer is delivered only to the
+                mailbox named on the invitation. The offer is never displayed
+                publicly or returned by this page.
               </p>
               <p class="section-note">
-                Bridge Event codes apply to eligible package purchases only. They do not apply to maintenance,
+                Previously published event codes are retired. Private offers
+                apply to eligible package purchases only and do not apply to maintenance,
                 subscriptions, add-ons, services, rush delivery, NFT services, white-glove support, taxes, or future
                 balances.
               </p>
@@ -184,7 +182,8 @@
         </div>
       </footer>
     </div>
-    <script src="config.js?v=20260331-2"></script>
-    <script src="app.js?v=20260825-phase20-1"></script>
+    <script src="config.js?v=20260828-phase21-1"></script>
+    <script src="app.js?v=20260828-phase21-1"></script>
+    <script src="bridge-paint.js?v=20260828-secure-event-access"></script>
   </body>
 </html>

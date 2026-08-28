@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://tomboflight-api.onrender.com https://*.onrender.com http://127.0.0.1:* http://localhost:*; form-action 'self'; upgrade-insecure-requests" />
+    <title>Private Event Access | Tomb of Light</title>
+    <meta
+      name="description"
+      content="CEO-only private event invitation and delivery controls for Tomb of Light."
+    />
+    <link rel="stylesheet" href="styles.css?v=20260828-phase21-1" />
+    <link rel="stylesheet" href="admin-event-access.css?v=20260828-secure-event-access" />
+  </head>
+  <body class="admin-control-center-body">
+    <div class="page-wrap">
+      <header class="site-header">
+        <div class="container site-header-inner">
+          <a class="brand" href="index.html" aria-label="Tomb of Light home">
+            <span>Tomb of Light<span class="brand-symbol">™</span></span>
+          </a>
+
+          <button
+            class="menu-toggle"
+            type="button"
+            aria-label="Toggle navigation menu"
+            aria-expanded="false"
+            aria-controls="site-nav"
+          >
+            Menu
+          </button>
+
+          <nav class="site-nav" id="site-nav" aria-label="Primary navigation">
+            <a href="dashboard.html">Dashboard</a>
+            <a href="admin-control-center.html">Control Center</a>
+            <a href="admin-event-access.html" aria-current="page">Event Access</a>
+            <a href="admin-portrait-review.html">Portrait Review</a>
+            <a href="admin-verification-review.html">Evidence Review</a>
+            <a href="faq.html">FAQ</a>
+          </nav>
+
+          <div class="header-actions">
+            <a class="btn btn-secondary" href="admin-control-center.html">Back to Control Center</a>
+            <button class="btn btn-secondary" type="button" data-logout-btn>Log Out</button>
+          </div>
+        </div>
+      </header>
+
+      <main data-admin-event-access-page>
+        <section class="page-hero">
+          <div class="container">
+            <div class="page-hero-panel">
+              <span class="eyebrow">CEO-Only Secure Delivery</span>
+              <h1>Private Event Access</h1>
+              <p data-admin-event-page-status>
+                Confirming authorization and protected event configuration…
+              </p>
+              <div class="hero-meta" aria-label="Private access safeguards">
+                <span class="meta-pill">No codes in source</span>
+                <span class="meta-pill">One invited mailbox</span>
+                <span class="meta-pill">One selected package</span>
+                <span class="meta-pill">Audited delivery</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="page-sections">
+          <div class="container form-shell">
+            <div class="form-panel">
+              <span class="eyebrow">Deployment Readiness</span>
+              <h2>Protected configuration</h2>
+              <p class="card-copy">
+                Promotion values live only in the backend runtime. This page receives package names and readiness
+                state, never the values themselves.
+              </p>
+              <div class="notice" data-admin-event-configuration role="status" aria-live="polite">
+                Checking protected configuration…
+              </div>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Issue One Invitation</span>
+              <h2>Recipient-bound event access</h2>
+              <p class="card-copy">
+                The recipient receives a one-time link. After the invited email is verified, the package-specific
+                offer is delivered to that same mailbox.
+              </p>
+
+              <form class="form-grid" data-admin-event-invitation-form novalidate>
+                <div class="form-grid two-col">
+                  <label>
+                    Invited Email Address
+                    <input
+                      type="email"
+                      name="email"
+                      autocomplete="off"
+                      maxlength="254"
+                      required
+                    />
+                  </label>
+
+                  <label>
+                    Selected Package
+                    <select name="package_code" required>
+                      <option value="">Select one package</option>
+                      <option value="legacy_snapshot">Legacy Snapshot</option>
+                      <option value="legacy_portrait_intro">Legacy Portrait Intro</option>
+                      <option value="digital_legacy_portrait">Digital Legacy Portrait</option>
+                      <option value="household_foundation">Household Foundation</option>
+                      <option value="heirloom_legacy_tree">Heirloom Legacy Tree</option>
+                      <option value="legacy_plus">Legacy Plus</option>
+                      <option value="family_estate_concierge">Family Estate Concierge</option>
+                      <option value="command_structure_network">Command Structure Network</option>
+                    </select>
+                  </label>
+                </div>
+
+                <label>
+                  Internal Reason
+                  <textarea
+                    name="reason"
+                    rows="3"
+                    maxlength="500"
+                    placeholder="Example: Verified Event 2 guest registration"
+                    required
+                  ></textarea>
+                </label>
+
+                <label class="notice admin-event-confirmation">
+                  <span>
+                    <input type="checkbox" name="confirmed" required />
+                    I verified the recipient email and selected package. Send one audited invitation.
+                  </span>
+                </label>
+
+                <div class="inline-actions">
+                  <button class="btn btn-primary" type="submit" data-admin-event-send disabled>
+                    Send Secure Invitation
+                  </button>
+                  <button class="btn btn-secondary" type="button" data-admin-event-refresh>
+                    Refresh Delivery History
+                  </button>
+                </div>
+
+                <p
+                  class="status-message"
+                  data-admin-event-action-status
+                  role="status"
+                  aria-live="polite"
+                ></p>
+              </form>
+            </div>
+
+            <div class="form-panel">
+              <span class="eyebrow">Audited Delivery History</span>
+              <h2>Event invitations</h2>
+              <p class="card-copy">
+                Revocation disables an unused invitation immediately. Fulfilled, expired, and already revoked
+                records remain visible as evidence.
+              </p>
+              <div class="grid-3" data-admin-event-invitation-list></div>
+              <p class="helper" data-admin-event-empty hidden>No invitations have been issued.</p>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <div class="container">
+          <div class="footer-card">
+            <div class="footer-bottom">
+              <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
+            </div>
+          </div>
+        </div>
+      </footer>
+    </div>
+
+    <script src="config.js?v=20260828-phase21-1"></script>
+    <script src="app.js?v=20260828-phase21-1"></script>
+    <script src="auth.js?v=20260828-phase21-1"></script>
+    <script src="admin-event-access.js?v=20260828-secure-event-access"></script>
+  </body>
+</html>

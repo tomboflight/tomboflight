@@ -40,6 +40,7 @@ from app.services.auth_service import (
     get_user_by_email,
     register_user,
     request_account_activation,
+    request_account_recovery,
     revoke_user_sessions,
     request_password_reset,
     reset_password_with_token,
@@ -517,6 +518,24 @@ def password_reset_request_route(payload: PasswordResetRequest, response: Respon
         audit_action="password_reset_request_throttled",
     )
     result = request_password_reset(payload.email)
+    _apply_no_store(response)
+    return result
+
+
+@router.post("/account-recovery/request", response_model=PasswordResetResponse)
+def account_recovery_request_route(
+    payload: PasswordResetRequest,
+    request: Request,
+    response: Response,
+):
+    _enforce_rate_limit_with_audit(
+        scope="auth_account_recovery_request",
+        key=_rate_key_from_request(request, principal=payload.email),
+        limit=max(1, int(settings.auth_password_reset_request_rate_limit or 5)),
+        window_seconds=max(1, int(settings.auth_rate_limit_window_seconds or 60)),
+        audit_action="account_recovery_request_throttled",
+    )
+    result = request_account_recovery(payload.email)
     _apply_no_store(response)
     return result
 

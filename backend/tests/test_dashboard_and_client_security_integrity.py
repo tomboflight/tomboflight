@@ -10,13 +10,11 @@ from app.services import household_access_service
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 AUDIT_CACHE_VERSION = "20260509-audit"
+SHARED_ASSET_CACHE_VERSION = "20260828-phase21-1"
 PORTAL_CACHE_OVERRIDES = {
     "dashboard.html": {
-        "styles.css": "20260824-phase20",
-        "auth.js": "20260713-livefix3",
         "dashboard-intake.js": "20260824-phase20",
     },
-    "billing.html": {"styles.css": "20260828-phase21"},
     "link-keys.html": {"link-keys.js": "20260823-phase13-1"},
     "portrait-upload.html": {"portrait-upload.js": "20260824-phase18"},
     "tree-view.html": {"tree-view.js": "20260823-phase13-1"},
@@ -131,11 +129,11 @@ class CustomerDashboardIntegrityTests(unittest.TestCase):
                 source = (REPO_ROOT / page).read_text(encoding="utf-8")
                 overrides = PORTAL_CACHE_OVERRIDES.get(page, {})
                 self.assertIn(
-                    f"styles.css?v={overrides.get('styles.css', AUDIT_CACHE_VERSION)}",
+                    f"styles.css?v={SHARED_ASSET_CACHE_VERSION}",
                     source,
                 )
                 self.assertIn(
-                    f"auth.js?v={overrides.get('auth.js', AUDIT_CACHE_VERSION)}",
+                    f"auth.js?v={SHARED_ASSET_CACHE_VERSION}",
                     source,
                 )
 

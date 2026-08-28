@@ -30,6 +30,7 @@ from app.routes.admin_maintenance import router as admin_maintenance_router
 from app.routes.audit_logs import router as audit_logs_router
 from app.routes.auth import router as auth_router
 from app.routes.billing import router as billing_router
+from app.routes.bridge_event_access import router as bridge_event_access_router
 from app.routes.canonical_persons import router as canonical_persons_router
 from app.routes.certificate_versions import router as certificate_versions_router
 from app.routes.consistency import router as consistency_router
@@ -81,6 +82,7 @@ from app.routes.organizations import router as organizations_router
 from app.services.project_entitlement_service import ensure_project_entitlement_indexes
 from app.services.admin_access_bootstrap_service import bootstrap_admin_access_controls
 from app.services.admin_control_service import ensure_finance_event_indexes
+from app.services.bridge_event_access_service import ensure_bridge_event_invite_indexes
 from app.services.continuity_runtime_service import ensure_continuity_runtime_indexes
 from app.services.organization_service import ensure_organization_indexes
 from app.routes.package_catalog import router as package_catalog_router
@@ -178,6 +180,7 @@ async def lifespan(app: FastAPI):
         initialize_mint_job_indexes()
         ensure_stripe_event_indexes()
         ensure_finance_event_indexes()
+        ensure_bridge_event_invite_indexes()
         ensure_continuity_runtime_indexes()
         ensure_organization_indexes()
         ensure_cinematic_manifest_indexes()
@@ -278,6 +281,7 @@ async def handle_database_unavailable(_: Request, exc: DatabaseUnavailableError)
 app.include_router(health_router)
 app.include_router(auth_router)
 app.include_router(billing_router)
+app.include_router(bridge_event_access_router)
 app.include_router(intake_router)
 app.include_router(intake_options_router)
 app.include_router(intake_submissions_router)
@@ -396,6 +400,8 @@ def root():
             "/auth/login",
             "/auth/logout",
             "/auth/me",
+            "/auth/account-activation/request",
+            "/auth/account-recovery/request",
             "/auth/password-reset/request",
             "/auth/password-reset/confirm",
             "/auth/password-change",

@@ -2032,6 +2032,24 @@
     return "";
   }
 
+  function isExistingAccountError(error) {
+    const statusCode = Number(error?.status || 0);
+    const message = getErrorMessage(error).toLowerCase();
+    return (
+      statusCode === 400 &&
+      (message.includes("email already registered") ||
+        message.includes("email address is already connected to an account"))
+    );
+  }
+
+  async function requestExistingAccountRecovery(email) {
+    await app.apiRequest("/auth/account-recovery/request", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    });
+    return "An account is already connected to this email. If it is eligible for recovery, the appropriate secure link was sent: activation if setup is unfinished, or password reset if the account is active. Check the inbox and spam folder.";
+  }
+
   function setupSignupForm() {
     const form = document.querySelector("[data-signup-form]");
     if (!form) return;
@@ -2194,6 +2212,25 @@
         }
         redirectAfterLogin();
       } catch (error) {
+        if (isExistingAccountError(error)) {
+          try {
+            app.setStatus(
+              statusNode,
+              "This email is already connected to an account. Sending the appropriate secure recovery link…",
+              "info",
+            );
+            const recoveryMessage = await requestExistingAccountRecovery(email);
+            app.setStatus(statusNode, recoveryMessage, "success");
+          } catch (recoveryError) {
+            app.setStatus(
+              statusNode,
+              getUnavailableAccountSetupMessage(recoveryError) ||
+                "This email is already connected to an account, but the secure recovery email could not be requested. Use Account Security or contact support@tomboflight.com.",
+              "error",
+            );
+          }
+          return;
+        }
         app.setStatus(
           statusNode,
           getUnavailableAccountSetupMessage(error) ||

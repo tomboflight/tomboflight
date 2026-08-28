@@ -408,6 +408,23 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("POSTMARK_MESSAGE_STREAM"),
     )
 
+    # Private Bridge Event access. Promotion codes are runtime secrets and
+    # must never be committed to the repository or returned by an API.
+    bridge_paint_promotion_codes_json: str = Field(
+        default="",
+        validation_alias=AliasChoices("BRIDGE_PAINT_PROMOTION_CODES_JSON"),
+    )
+    bridge_paint_event_expires_at: str = Field(
+        default="2026-08-30T03:59:00+00:00",
+        validation_alias=AliasChoices("BRIDGE_PAINT_EVENT_EXPIRES_AT"),
+    )
+    bridge_paint_access_rate_limit: int = Field(
+        default=5,
+        ge=1,
+        le=50,
+        validation_alias=AliasChoices("BRIDGE_PAINT_ACCESS_RATE_LIMIT"),
+    )
+
     allowed_origins: str = Field(
         default=("https://tomboflight.com," "https://www.tomboflight.com"),
         validation_alias=AliasChoices("ALLOWED_ORIGINS"),

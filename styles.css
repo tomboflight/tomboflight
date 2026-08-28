@@ -270,6 +270,15 @@ a {
 }
 
 @media (max-width: 1180px) {
+  body.menu-open {
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  body.menu-open .site-header {
+    position: relative;
+  }
+
   .site-header-inner {
     flex-wrap: wrap;
   }

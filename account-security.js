@@ -446,20 +446,20 @@
       }
 
       try {
-        const payload = await app.apiRequest("/auth/password-reset/request", {
+        const payload = await app.apiRequest("/auth/account-recovery/request", {
           method: "POST",
           body: JSON.stringify({ email }),
         });
         const message = String(
           (payload && payload.message) ||
-            "Password reset request created successfully.",
+            "If this email is connected to an account, the appropriate secure access link has been sent.",
         );
         app.setStatus(statusNode, message, "success");
         form.reset();
       } catch (error) {
         app.setStatus(
           statusNode,
-          getErrorMessage(error) || "Unable to request password reset.",
+          getErrorMessage(error) || "Unable to request account recovery.",
           "error",
         );
       }
