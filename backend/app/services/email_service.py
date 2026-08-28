@@ -582,3 +582,90 @@ def send_household_invite_email(
         html_body=html_body,
         email_type="household_invite",
     )
+
+
+def send_bridge_paint_invitation_email(
+    *,
+    to_email: str,
+    access_token: str,
+    package_name: str,
+    expires_at: str,
+) -> dict[str, Any]:
+    """Send a one-time event-access link without exposing it in server logs."""
+
+    token = quote_plus(_normalize_text(access_token))
+    access_url = f"{_public_app_base_url()}/bridge-paint.html#invite={token}"
+    safe_access_url = escape(access_url, quote=True)
+    safe_package_name = escape(_normalize_text(package_name), quote=True)
+    safe_expires_at = escape(_normalize_text(expires_at), quote=True)
+    subject = "Your private Tomb of Light Sip & Paint invitation"
+    text_body = (
+        "Hello,\n\n"
+        "You have been invited to the private Tomb of Light Sip & Paint offer.\n\n"
+        f"Selected package: {package_name}\n"
+        f"Secure access link: {access_url}\n"
+        f"This invitation expires at {expires_at}.\n\n"
+        "The link is tied to this email address and may be used once to request "
+        "the private offer code. Do not forward it.\n\n"
+        "If you did not expect this invitation, ignore this message.\n"
+    )
+    html_body = (
+        "<p>Hello,</p>"
+        "<p>You have been invited to the private Tomb of Light Sip &amp; Paint offer.</p>"
+        f"<p><strong>Selected package:</strong> {safe_package_name}</p>"
+        f'<p><a href="{safe_access_url}">Open secure event access</a></p>'
+        f"<p>This invitation expires at {safe_expires_at}.</p>"
+        "<p>The link is tied to this email address and may be used once to request "
+        "the private offer code. Do not forward it.</p>"
+        "<p>If you did not expect this invitation, ignore this message.</p>"
+    )
+    return _send_email(
+        to_email=to_email,
+        subject=subject,
+        text_body=text_body,
+        html_body=html_body,
+        email_type="bridge_paint_invitation",
+    )
+
+
+def send_bridge_paint_promotion_email(
+    *,
+    to_email: str,
+    promotion_code: str,
+    package_name: str,
+    expires_at: str,
+) -> dict[str, Any]:
+    """Deliver one server-held promotion code to its invited recipient."""
+
+    normalized_code = _normalize_text(promotion_code)
+    safe_code = escape(normalized_code, quote=True)
+    safe_package_name = escape(_normalize_text(package_name), quote=True)
+    safe_expires_at = escape(_normalize_text(expires_at), quote=True)
+    subject = "Your private Tomb of Light event offer"
+    text_body = (
+        "Hello,\n\n"
+        "Your private Sip & Paint event access was verified.\n\n"
+        f"Selected package: {package_name}\n"
+        f"Private offer code: {normalized_code}\n"
+        f"Offer expiration: {expires_at}\n\n"
+        "Enter this code during the standard Stripe checkout for the selected "
+        "package. It does not apply to maintenance, subscriptions, add-ons, "
+        "services, taxes, or future balances. Do not share this code.\n"
+    )
+    html_body = (
+        "<p>Hello,</p>"
+        "<p>Your private Sip &amp; Paint event access was verified.</p>"
+        f"<p><strong>Selected package:</strong> {safe_package_name}</p>"
+        f"<p><strong>Private offer code:</strong> <code>{safe_code}</code></p>"
+        f"<p><strong>Offer expiration:</strong> {safe_expires_at}</p>"
+        "<p>Enter this code during the standard Stripe checkout for the selected "
+        "package. It does not apply to maintenance, subscriptions, add-ons, "
+        "services, taxes, or future balances. Do not share this code.</p>"
+    )
+    return _send_email(
+        to_email=to_email,
+        subject=subject,
+        text_body=text_body,
+        html_body=html_body,
+        email_type="bridge_paint_promotion",
+    )

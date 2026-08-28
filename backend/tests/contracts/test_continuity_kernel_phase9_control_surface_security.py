@@ -103,7 +103,6 @@ class TestContinuityKernelPhase9ControlSurfaceSecurity(unittest.TestCase):
     def test_07_app_pages_have_csp_valid_inline_hashes_and_current_cache_revision(self) -> None:
         app_pages = []
         separately_managed_commercial_pages = {
-            "bridge-paint.html",
             "bridge-taste.html",
             "pricing.html",
         }
@@ -114,7 +113,7 @@ class TestContinuityKernelPhase9ControlSurfaceSecurity(unittest.TestCase):
             if path.name in separately_managed_commercial_pages:
                 continue
             app_pages.append(path.name)
-            expected_revision = "20260825-phase20-1"
+            expected_revision = "20260828-phase21-1"
             self.assertIn(f"app.js?v={expected_revision}", source, path.name)
             csp_match = re.search(
                 r'http-equiv="Content-Security-Policy"\s+content="([^"]+)"',

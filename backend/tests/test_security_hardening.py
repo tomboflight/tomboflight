@@ -520,7 +520,7 @@ class AccountActivationSecurityTests(unittest.TestCase):
         self.assertIn("activation_token", auth_source)
         self.assertIn("window.history.replaceState", auth_source)
         self.assertNotIn("Email verified. Enter your account details", auth_source)
-        self.assertIn("auth.js?v=20260822-phase11", signup_source)
+        self.assertIn("auth.js?v=20260828-phase21-1", signup_source)
 
 
 class ContinuityLegacyRouteGuardTests(unittest.TestCase):
@@ -800,4 +800,3 @@ class RootDisclosureTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

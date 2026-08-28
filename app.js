@@ -21,6 +21,7 @@
   const FOUNDER_MAINTENANCE_PENDING_KEY = "tol_founder_maintenance_pending";
   const LIGHT_NEVER_DIES_CAMPAIGN = "LIGHT_NEVER_DIES";
   const API_BASE_URL_STORAGE_KEY = "tol_api_base_url";
+  const API_DISCOVERY_TIMEOUT_MS = 15000;
   const API_REQUEST_TIMEOUT_MS = 30000;
   const API_REQUEST_RETRY_ATTEMPTS = 1;
 
@@ -575,12 +576,21 @@
     const urls = uniqueNonEmptyValues(candidates);
     const failures = [];
     for (const apiBaseUrl of urls) {
+      let timeoutId = null;
       try {
-        const response = await fetch(`${apiBaseUrl}/health`, {
+        const requestOptions = {
           method: "GET",
           headers: { Accept: "application/json" },
           credentials: "include",
-        });
+        };
+        if (typeof AbortController === "function") {
+          const controller = new AbortController();
+          requestOptions.signal = controller.signal;
+          timeoutId = window.setTimeout(function () {
+            controller.abort();
+          }, API_DISCOVERY_TIMEOUT_MS);
+        }
+        const response = await fetch(`${apiBaseUrl}/health`, requestOptions);
         if (response && response.ok && isJsonApiResponse(response)) {
           saveApiBaseUrl(apiBaseUrl);
           return apiBaseUrl;
@@ -592,6 +602,10 @@
         );
       } catch (_error) {
         failures.push(`${apiBaseUrl} could not be reached`);
+      } finally {
+        if (timeoutId) {
+          window.clearTimeout(timeoutId);
+        }
       }
     }
 
@@ -605,7 +619,7 @@
   function buildNetworkErrorMessage(apiBaseUrls) {
     const candidates = uniqueNonEmptyValues(apiBaseUrls);
     if (!isLocalApp()) {
-      return `Service temporarily unavailable (NET-API-UNREACHABLE). Unable to reach ${candidates[0] || "the API host"}. Use Retry.`;
+      return "Service temporarily unavailable (NET-API-UNREACHABLE). Tomb of Light could not reach its secure account service. No account change was completed. Use Retry.";
     }
 
     const details = [
@@ -1442,10 +1456,15 @@
     });
 
     window.addEventListener("resize", function () {
-      if (window.innerWidth > 860) {
+      if (window.innerWidth > 1180) {
         closeMenu();
       }
     });
+
+    // Back-forward cache restores can preserve a stale body scroll lock even
+    // though the expanded menu is no longer visible. Always restore the closed
+    // state when the document becomes active again.
+    window.addEventListener("pageshow", closeMenu);
   }
 
   function setupHeaderScrollState() {

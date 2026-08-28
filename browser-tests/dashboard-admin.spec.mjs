@@ -142,8 +142,8 @@ test("[asset-versioning] dashboard and control center include current cache-bust
   const dashboardStyles = await page.locator("link[rel='stylesheet']").evaluateAll((nodes) =>
     nodes.map((node) => node.getAttribute("href") || ""),
   );
-  expect(dashboardStyles.some((href) => href.includes("styles.css?v=20260824-phase20"))).toBeTruthy();
-  expect(dashboardScripts.some((src) => src.includes("app.js?v=20260825-phase20-1"))).toBeTruthy();
+  expect(dashboardStyles.some((href) => href.includes("styles.css?v=20260828-phase21-1"))).toBeTruthy();
+  expect(dashboardScripts.some((src) => src.includes("app.js?v=20260828-phase21-1"))).toBeTruthy();
   expect(dashboardScripts.some((src) => src.includes("dashboard-intake.js?v=20260824-phase20"))).toBeTruthy();
   expect(dashboardScripts.some((src) => src.includes("dashboard-admin.js?v=20260713-livefix3"))).toBeTruthy();
 
@@ -154,7 +154,7 @@ test("[asset-versioning] dashboard and control center include current cache-bust
   const controlCenterStyles = await page.locator("link[rel='stylesheet']").evaluateAll((nodes) =>
     nodes.map((node) => node.getAttribute("href") || ""),
   );
-  expect(controlCenterStyles.some((href) => href.includes("styles.css?v=20260821-phase10"))).toBeTruthy();
-  expect(controlCenterScripts.some((src) => src.includes("app.js?v=20260825-phase20-1"))).toBeTruthy();
+  expect(controlCenterStyles.some((href) => href.includes("styles.css?v=20260828-phase21-1"))).toBeTruthy();
+  expect(controlCenterScripts.some((src) => src.includes("app.js?v=20260828-phase21-1"))).toBeTruthy();
   expect(controlCenterScripts.some((src) => src.includes("admin-control-center.js?v=20260824-phase19-1"))).toBeTruthy();
 });

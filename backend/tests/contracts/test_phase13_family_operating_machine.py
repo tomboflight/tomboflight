@@ -81,7 +81,7 @@ class TestPhase13FamilyOperatingMachine(unittest.TestCase):
             with self.subTest(html_path=html_path, asset=asset):
                 self.assertIn(f'{asset}?v={asset_revision}', _read(html_path))
         self.assertIn(
-            'FRONTEND_ASSET_REVISION = "20260824-phase19-1"',
+            'FRONTEND_ASSET_REVISION = "20260828-phase21-1"',
             _read("backend/app/services/admin_control_service.py"),
         )
 
