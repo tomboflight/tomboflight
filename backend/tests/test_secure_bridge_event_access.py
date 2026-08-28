@@ -133,6 +133,7 @@ class TestSecureBridgeEventAccess(unittest.TestCase):
         self.assertIn('http-equiv="Content-Security-Policy"', paint_html)
         self.assertIn("sessionStorage", paint_js)
         self.assertIn("history.replaceState", paint_js)
+        self.assertIn('window.addEventListener("hashchange"', paint_js)
 
     def test_deployment_example_contains_no_promotion_value(self):
         source = (REPO_ROOT / "backend" / ".env.example").read_text(encoding="utf-8")

@@ -22,8 +22,13 @@ test.describe("Phase 21.1 mobile recovery", () => {
     expect(state.headerPosition).toBe("relative");
     expect(state.scrollHeight).toBeGreaterThan(state.viewportHeight);
 
-    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
-    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+    await page.evaluate(() =>
+      window.scrollTo({
+        top: document.documentElement.scrollHeight,
+        behavior: "instant",
+      }),
+    );
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
   });
 
   test("account recovery chooses one secure endpoint without exposing state", async ({ page }) => {

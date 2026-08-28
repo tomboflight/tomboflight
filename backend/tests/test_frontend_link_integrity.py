@@ -244,7 +244,7 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
             bridge_page,
         )
         self.assertIn("data-bridge-paint-access-form", bridge_page)
-        self.assertIn("bridge-paint.js?v=20260828-secure-event-access", bridge_page)
+        self.assertIn("bridge-paint.js?v=20260828-secure-event-access-1", bridge_page)
         self.assertIn("Previously published event codes are retired", bridge_page)
         self.assertNotIn("Important: do not modify Stripe URLs", bridge_page)
         self.assertNotIn("Private Bridge Event Access", homepage)

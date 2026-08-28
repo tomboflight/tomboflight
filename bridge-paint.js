@@ -52,10 +52,24 @@
     const submitButton = document.querySelector("[data-bridge-paint-access-submit]");
     if (!form || !statusNode || !submitButton) return;
 
-    const hashToken = tokenFromHash();
-    if (hashToken) saveInviteToken(hashToken);
-    removeTokenFromAddressBar();
-    let accessToken = hashToken || storedInviteToken();
+    let accessToken = storedInviteToken();
+
+    function acceptTokenFromAddressBar() {
+      const hashToken = tokenFromHash();
+      if (!hashToken) return false;
+      saveInviteToken(hashToken);
+      removeTokenFromAddressBar();
+      accessToken = hashToken;
+      submitButton.disabled = false;
+      app.setStatus(
+        statusNode,
+        "Secure invitation detected. Enter the exact email address that received it.",
+        "success",
+      );
+      return true;
+    }
+
+    const acceptedAddressBarToken = acceptTokenFromAddressBar();
 
     if (!accessToken) {
       submitButton.disabled = true;
@@ -64,13 +78,18 @@
         "Open the one-time link from your invitation email. Contact the event organizer if you need a new invitation.",
         "info",
       );
-    } else {
+    } else if (!acceptedAddressBarToken) {
       app.setStatus(
         statusNode,
         "Secure invitation detected. Enter the exact email address that received it.",
         "success",
       );
     }
+
+    // A mail client or in-app browser can reuse an already-open event page and
+    // append the one-time fragment without reloading the document. Capture and
+    // remove that fragment immediately, just as we do during a fresh page load.
+    window.addEventListener("hashchange", acceptTokenFromAddressBar);
 
     form.addEventListener("submit", async function (event) {
       event.preventDefault();
