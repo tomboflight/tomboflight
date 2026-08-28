@@ -10,6 +10,7 @@
 
   let currentUser = null;
   let currentContext = null;
+  let currentProfile = null;
   let stripeClient = null;
   let stripeCardElement = null;
 
@@ -65,6 +66,26 @@
       return "Unable to load data right now.";
     }
     return getErrorMessage(error);
+  }
+
+  function getAccountErrorMessage(error) {
+    const message = getErrorMessage(error);
+    const normalized = message.toLowerCase();
+    const safeAccountErrors = [
+      "full name is required",
+      "enter a valid phone number",
+      "street address, city, state or region, and postal code are required",
+      "country must use a two-letter country code",
+      "current password is incorrect",
+      "enter a different email address",
+      "that email address is already connected to an account",
+      "verification email could not be delivered",
+      "email change link is invalid, expired, or already used",
+    ];
+    if (safeAccountErrors.some(function (safeText) { return normalized.includes(safeText); })) {
+      return message.replace(/^\d+\s*:\s*/, "");
+    }
+    return getUserFacingErrorMessage(error);
   }
 
   function buildSubscriptionCard(item) {
@@ -146,6 +167,149 @@
     } finally {
       renderMaintenanceLinks();
     }
+  }
+
+  function setField(form, name, value) {
+    const field = form && form.elements ? form.elements.namedItem(name) : null;
+    if (field) field.value = String(value || "");
+  }
+
+  async function loadAccountProfile() {
+    const form = document.querySelector("[data-account-details-form]");
+    const emailNode = document.querySelector("[data-account-current-email]");
+    const statusNode = document.querySelector("[data-account-details-status]");
+    if (!form) return;
+    try {
+      currentProfile = await app.apiRequest("/users/me/profile", { method: "GET" });
+      const address = (currentProfile && currentProfile.mailing_address) || {};
+      setField(form, "full_name", currentProfile && currentProfile.full_name);
+      setField(form, "phone_number", currentProfile && currentProfile.phone_number);
+      setField(form, "address_line1", address.line1);
+      setField(form, "address_line2", address.line2);
+      setField(form, "address_city", address.city);
+      setField(form, "address_region", address.region);
+      setField(form, "address_postal_code", address.postal_code);
+      setField(form, "address_country", address.country || "US");
+      if (emailNode) {
+        emailNode.textContent = String((currentProfile && currentProfile.email) || "—");
+      }
+      const pendingEmail = String((currentProfile && currentProfile.pending_email) || "");
+      if (pendingEmail) {
+        app.setStatus(
+          document.querySelector("[data-email-change-status]"),
+          `Verification is pending for ${pendingEmail}.`,
+          "info",
+        );
+      }
+    } catch (error) {
+      app.setStatus(statusNode, "Personal details could not be loaded. Try again.", "error");
+    }
+  }
+
+  async function handleAccountDetailsSave(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const statusNode = document.querySelector("[data-account-details-status]");
+    const button = document.querySelector("[data-account-details-save]");
+    const formData = new FormData(form);
+    const payload = {
+      full_name: String(formData.get("full_name") || "").trim(),
+      phone_number: String(formData.get("phone_number") || "").trim() || null,
+      mailing_address: {
+        line1: String(formData.get("address_line1") || "").trim(),
+        line2: String(formData.get("address_line2") || "").trim(),
+        city: String(formData.get("address_city") || "").trim(),
+        region: String(formData.get("address_region") || "").trim(),
+        postal_code: String(formData.get("address_postal_code") || "").trim(),
+        country: String(formData.get("address_country") || "US").trim().toUpperCase(),
+      },
+    };
+    if (!payload.full_name) {
+      app.setStatus(statusNode, "Full name is required.", "error");
+      return;
+    }
+    if (button) button.disabled = true;
+    try {
+      app.setStatus(statusNode, "Saving your personal details…", "info");
+      currentProfile = await app.apiRequest("/users/me/profile", {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      });
+      const syncStatus = String((currentProfile && currentProfile.billing_sync_status) || "");
+      const message = syncStatus === "pending"
+        ? "Personal details saved. Billing synchronization is still pending."
+        : syncStatus === "synced"
+          ? "Personal details saved and your connected billing profile is current."
+          : "Personal details saved. No connected billing profile needed updating.";
+      app.setStatus(statusNode, message, "success");
+    } catch (error) {
+      app.setStatus(statusNode, getAccountErrorMessage(error), "error");
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }
+
+  async function handleEmailChangeRequest(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const statusNode = document.querySelector("[data-email-change-status]");
+    const button = document.querySelector("[data-email-change-submit]");
+    const formData = new FormData(form);
+    const newEmail = String(formData.get("new_email") || "").trim().toLowerCase();
+    const currentPassword = String(formData.get("current_password") || "");
+    if (!newEmail || !currentPassword) {
+      app.setStatus(statusNode, "New email and current password are required.", "error");
+      return;
+    }
+    if (button) button.disabled = true;
+    try {
+      const result = await app.apiRequest("/users/me/email-change/request", {
+        method: "POST",
+        body: JSON.stringify({ new_email: newEmail, current_password: currentPassword }),
+      });
+      form.reset();
+      app.setStatus(
+        statusNode,
+        String((result && result.message) || "Verification sent to the new email address."),
+        "success",
+      );
+    } catch (error) {
+      app.setStatus(statusNode, getAccountErrorMessage(error), "error");
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }
+
+  function emailChangeTokenFromHash() {
+    const rawHash = String(window.location.hash || "").replace(/^#/, "");
+    const params = new URLSearchParams(rawHash);
+    return params.get("mode") === "email-change" ? String(params.get("token") || "") : "";
+  }
+
+  async function handleEmailChangeConfirmation() {
+    const token = emailChangeTokenFromHash();
+    if (!token) return false;
+    window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.search}`);
+    const pageStatus = document.querySelector("[data-billing-page-status]");
+    try {
+      app.setStatus(pageStatus, "Confirming your new email address…", "info");
+      const result = await app.apiRequest("/users/me/email-change/confirm", {
+        method: "POST",
+        body: JSON.stringify({ token }),
+      });
+      app.clearSession();
+      app.setStatus(
+        pageStatus,
+        String((result && result.message) || "Email updated. Sign in again."),
+        "success",
+      );
+      window.setTimeout(function () {
+        window.location.replace("signin.html");
+      }, 2200);
+    } catch (error) {
+      app.setStatus(pageStatus, getAccountErrorMessage(error), "error");
+    }
+    return true;
   }
 
   async function refreshOverview() {
@@ -398,6 +562,16 @@
   }
 
   function bindInteractions() {
+    const accountDetailsForm = document.querySelector("[data-account-details-form]");
+    if (accountDetailsForm) {
+      accountDetailsForm.addEventListener("submit", handleAccountDetailsSave);
+    }
+
+    const emailChangeForm = document.querySelector("[data-email-change-form]");
+    if (emailChangeForm) {
+      emailChangeForm.addEventListener("submit", handleEmailChangeRequest);
+    }
+
     const form = document.querySelector("[data-billing-card-form]");
     if (form) {
       form.addEventListener("submit", handleCardSave);
@@ -450,6 +624,7 @@
   }
 
   document.addEventListener("DOMContentLoaded", async function () {
+    if (await handleEmailChangeConfirmation()) return;
     currentUser = await app.requireSession("signin.html");
     if (!currentUser) return;
     if (isInternalUser(currentUser)) {
@@ -458,6 +633,11 @@
     }
 
     bindInteractions();
-    await Promise.allSettled([loadContext(), ensureStripeClient(), refreshOverview()]);
+    await Promise.allSettled([
+      loadContext(),
+      loadAccountProfile(),
+      ensureStripeClient(),
+      refreshOverview(),
+    ]);
   });
 })();

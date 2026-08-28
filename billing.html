@@ -9,7 +9,7 @@
       name="description"
       content="Manage Tomb of Light billing, payment methods, maintenance subscriptions, and saved cards."
     />
-    <link rel="stylesheet" href="styles.css?v=20260509-audit" />
+    <link rel="stylesheet" href="styles.css?v=20260828-phase21" />
   </head>
   <body class="portal-dashboard-body">
     <div class="site-watermark" aria-hidden="true"></div>
@@ -63,6 +63,81 @@
 
         <section class="page-sections">
           <div class="container form-shell portal-account-grid">
+            <div class="form-panel portal-account-details-panel" id="personal-details">
+              <span class="eyebrow">Personal Details</span>
+              <h2>Account contact information</h2>
+              <p class="card-copy">
+                Keep your Tomb of Light contact record current. Saved details are mirrored to your connected billing profile; past orders remain unchanged.
+              </p>
+
+              <form class="form-grid two-col portal-account-details-form" data-account-details-form novalidate>
+                <label>
+                  Full Name
+                  <input type="text" name="full_name" autocomplete="name" maxlength="150" required />
+                </label>
+                <label>
+                  Phone Number
+                  <input type="tel" name="phone_number" autocomplete="tel" maxlength="32" placeholder="(555) 555-0123" />
+                </label>
+                <label class="portal-form-span-2">
+                  Street Address
+                  <input type="text" name="address_line1" autocomplete="address-line1" maxlength="150" />
+                </label>
+                <label class="portal-form-span-2">
+                  Apartment, Suite, or Unit
+                  <input type="text" name="address_line2" autocomplete="address-line2" maxlength="150" />
+                </label>
+                <label>
+                  City
+                  <input type="text" name="address_city" autocomplete="address-level2" maxlength="100" />
+                </label>
+                <label>
+                  State or Region
+                  <input type="text" name="address_region" autocomplete="address-level1" maxlength="100" />
+                </label>
+                <label>
+                  ZIP or Postal Code
+                  <input type="text" name="address_postal_code" autocomplete="postal-code" maxlength="20" />
+                </label>
+                <label>
+                  Country Code
+                  <input type="text" name="address_country" autocomplete="country" maxlength="2" pattern="[A-Za-z]{2}" value="US" aria-describedby="address-country-help" />
+                  <span class="helper" id="address-country-help">Use the two-letter code, such as US or CA.</span>
+                </label>
+                <div class="portal-form-span-2 inline-actions">
+                  <button class="btn btn-primary" type="submit" data-account-details-save>
+                    Save Personal Details
+                  </button>
+                </div>
+                <p class="status-message portal-form-span-2" data-account-details-status role="status" aria-live="polite"></p>
+              </form>
+            </div>
+
+            <div class="form-panel portal-email-control-panel">
+              <span class="eyebrow">Login Email</span>
+              <h2>Verified account email</h2>
+              <p class="card-copy">
+                Your login email is separate from any billing email entered in Stripe. A new address must be verified before it can replace your current login.
+              </p>
+              <p class="portal-identity-value" data-account-current-email>Loading…</p>
+              <form class="form-grid two-col" data-email-change-form novalidate>
+                <label>
+                  New Email Address
+                  <input type="email" name="new_email" autocomplete="email" maxlength="254" required />
+                </label>
+                <label>
+                  Current Password
+                  <input type="password" name="current_password" autocomplete="current-password" minlength="8" maxlength="128" required />
+                </label>
+                <div class="portal-form-span-2 inline-actions">
+                  <button class="btn btn-secondary" type="submit" data-email-change-submit>
+                    Send Verification Link
+                  </button>
+                </div>
+                <p class="status-message portal-form-span-2" data-email-change-status role="status" aria-live="polite"></p>
+              </form>
+            </div>
+
             <div class="form-panel">
               <span class="eyebrow">Subscription Actions</span>
               <p class="card-copy" data-billing-subscriptions-status>
@@ -160,6 +235,6 @@
     <script src="config.js?v=20260331-2"></script>
     <script src="app.js?v=20260825-phase20-1"></script>
     <script src="auth.js?v=20260509-audit"></script>
-    <script src="billing.js?v=20260331-2"></script>
+    <script src="billing.js?v=20260828-phase21"></script>
   </body>
 </html>

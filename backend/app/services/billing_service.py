@@ -236,6 +236,95 @@ def _serialize_card_created(value: Any) -> str | None:
         return _normalize_text(value) or None
 
 
+def sync_account_contact_to_stripe(
+    *,
+    customer_id: str,
+    full_name: str,
+    phone_number: str | None,
+    mailing_address: dict[str, str] | None,
+    include_phone: bool = True,
+    include_address: bool = True,
+) -> None:
+    """Mirror verified account contact fields to Stripe's billing customer."""
+    _require_stripe_secret_key()
+    normalized_customer_id = _normalize_text(customer_id)
+    if not normalized_customer_id:
+        raise ValueError("Stripe customer id is required.")
+    payload: dict[str, Any] = {"name": _normalize_text(full_name)}
+    if include_phone:
+        payload["phone"] = _normalize_text(phone_number)
+    if include_address:
+        payload["address"] = {
+            "line1": _normalize_text((mailing_address or {}).get("line1")),
+            "line2": _normalize_text((mailing_address or {}).get("line2")),
+            "city": _normalize_text((mailing_address or {}).get("city")),
+            "state": _normalize_text((mailing_address or {}).get("region")),
+            "postal_code": _normalize_text((mailing_address or {}).get("postal_code")),
+            "country": _normalize_text((mailing_address or {}).get("country")) or "US",
+        }
+    stripe.Customer.modify(normalized_customer_id, **payload)
+
+
+def sync_verified_email_to_stripe(*, customer_id: str, email: str) -> None:
+    """Push a Tomb of Light-verified login email to the billing customer."""
+    _require_stripe_secret_key()
+    normalized_customer_id = _normalize_text(customer_id)
+    normalized_email = _normalize_text(email).lower()
+    if not normalized_customer_id or not normalized_email:
+        raise ValueError("Stripe customer id and verified email are required.")
+    stripe.Customer.modify(normalized_customer_id, email=normalized_email)
+
+
+def sync_billing_customer_updated_event(event: dict[str, Any]) -> dict[str, Any]:
+    """Store Stripe portal edits as billing-only contact data.
+
+    Stripe billing email never becomes a Tomb of Light login credential.
+    """
+    payload = cast(dict[str, Any], ((event.get("data") or {}).get("object") or {}))
+    customer_id = _normalize_text(payload.get("id"))
+    if not customer_id:
+        return {"updated": False, "error": "stripe_customer_id_missing"}
+    address = payload.get("address") or {}
+    billing_contact = {
+        "name": _normalize_text(payload.get("name")) or None,
+        "email": _normalize_text(payload.get("email")).lower() or None,
+        "phone": _normalize_text(payload.get("phone")) or None,
+        "address": {
+            "line1": _normalize_text(address.get("line1")) or None,
+            "line2": _normalize_text(address.get("line2")) or None,
+            "city": _normalize_text(address.get("city")) or None,
+            "region": _normalize_text(address.get("state")) or None,
+            "postal_code": _normalize_text(address.get("postal_code")) or None,
+            "country": _normalize_text(address.get("country")) or None,
+        },
+        "source": "stripe_customer_updated_webhook",
+        "updated_at": _now_iso(),
+    }
+    result = _users_collection().update_one(
+        {"stripe_customer_id": customer_id},
+        {
+            "$set": {
+                "billing_contact": billing_contact,
+                "billing_profile_sync_status": "synced",
+                "billing_profile_synced_at": _now_iso(),
+            }
+        },
+    )
+    if int(getattr(result, "matched_count", 0)) != 1:
+        return {"updated": False, "error": "stripe_customer_not_linked", "customer_id": customer_id}
+    try:
+        create_audit_log(
+            "billing_contact_updated_from_stripe",
+            None,
+            "stripe_customer",
+            customer_id,
+            {"login_email_changed": False},
+        )
+    except Exception:
+        pass
+    return {"updated": True, "customer_id": customer_id}
+
+
 def get_billing_overview(user: dict[str, Any]) -> dict[str, Any]:
     _require_stripe_secret_key()
     customer_id = _existing_customer_id_for_user(user)
