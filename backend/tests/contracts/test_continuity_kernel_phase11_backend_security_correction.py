@@ -12,7 +12,14 @@ STRIPE_PATH = REPO_ROOT / "backend" / "app" / "routes" / "stripe_webhooks.py"
 DELETION_PATH = REPO_ROOT / "backend" / "app" / "services" / "admin_control_service.py"
 DATABASE_PATH = REPO_ROOT / "backend" / "app" / "database.py"
 AUTH_JS_PATH = REPO_ROOT / "auth.js"
-DOC_PATH = REPO_ROOT / "backend" / "docs" / "governance" / "continuity_kernel_phase11_backend_security_correction.md"
+MAIN_PATH = REPO_ROOT / "backend" / "app" / "main.py"
+REMOVED_INTERNAL_DOC_PATH = (
+    REPO_ROOT
+    / "backend"
+    / "docs"
+    / "governance"
+    / "continuity_kernel_phase11_backend_security_correction.md"
+)
 
 
 class TestContinuityKernelPhase11BackendSecurityCorrection(unittest.TestCase):
@@ -27,7 +34,7 @@ class TestContinuityKernelPhase11BackendSecurityCorrection(unittest.TestCase):
         cls.deletion = DELETION_PATH.read_text(encoding="utf-8")
         cls.database = DATABASE_PATH.read_text(encoding="utf-8")
         cls.auth_js = AUTH_JS_PATH.read_text(encoding="utf-8")
-        cls.doc = DOC_PATH.read_text(encoding="utf-8")
+        cls.main = MAIN_PATH.read_text(encoding="utf-8")
 
     def test_01_runtime_preserves_phase11_and_registers_legacy_remediation(self) -> None:
         self.assertIn('RUNTIME_VERSION = "13.0.0"', self.runtime)
@@ -58,15 +65,15 @@ class TestContinuityKernelPhase11BackendSecurityCorrection(unittest.TestCase):
         self.assertIn("window.history.replaceState", self.auth_js)
 
     def test_04_covered_legacy_mutations_fail_into_kernel(self) -> None:
+        self.assertIn("continuity_kernel_required", self.main)
         for marker in (
-            "continuity_kernel_required",
             "/admin/control-center",
             "/admin/stripe-ops",
             "/auth/admin/users/",
             "/orders/admin/manual-order",
             "/project-entitlements/apply",
         ):
-            self.assertIn(marker, self.guard + self.doc)
+            self.assertIn(marker, self.guard)
 
     def test_05_stripe_failures_are_retryable_not_false_completion(self) -> None:
         for marker in (
@@ -102,16 +109,8 @@ class TestContinuityKernelPhase11BackendSecurityCorrection(unittest.TestCase):
         ):
             self.assertIn(marker, self.database)
 
-    def test_08_governance_preserves_execution_constraints(self) -> None:
-        for phrase in (
-            "mfa remains optional",
-            "paid order must come from verified stripe state",
-            "no production customer mutation",
-            "does not permanently delete marquis",
-            "provider encryption",
-            "independent penetration-test evidence",
-        ):
-            self.assertIn(phrase, self.doc.lower())
+    def test_08_internal_operational_runbook_is_not_in_public_source(self) -> None:
+        self.assertFalse(REMOVED_INTERNAL_DOC_PATH.exists())
 
 
 if __name__ == "__main__":

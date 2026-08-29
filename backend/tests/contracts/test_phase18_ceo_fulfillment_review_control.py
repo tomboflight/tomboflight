@@ -71,7 +71,9 @@ class TestPhase18CeoFulfillmentReviewControl(unittest.TestCase):
         for html_path, asset in expected.items():
             with self.subTest(html_path=html_path):
                 expected_version = (
-                    "20260824-phase19-1"
+                    "20260829-phase22"
+                    if asset == "portrait-upload.js"
+                    else "20260824-phase19-1"
                     if asset in {
                         "admin-control-center.js",
                         "admin-portrait-review.js",

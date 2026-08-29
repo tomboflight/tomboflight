@@ -14,7 +14,7 @@ from app.services.auth_service import build_user_response
 class AccountSeparationTests(unittest.TestCase):
     def test_admin_role_does_not_inherit_customer_package_capabilities(self):
         admin_user = {
-            "email": "l.robinson@tomboflight.com",
+            "email": "ceo-admin@example.com",
             "role": "admin",
             "access_tier": "super_admin",
             "department_role": "executive_technology",
@@ -36,8 +36,8 @@ class AccountSeparationTests(unittest.TestCase):
         response = build_user_response(
             {
                 "_id": "user-1",
-                "email": "jenn.wood@tomboflight.com",
-                "full_name": "Jennifer Wood",
+                "email": "finance-admin@example.com",
+                "full_name": "Test Finance Officer",
                 "role": "admin",
                 "account_type": "business_admin",
                 "business_title": "CFO",
@@ -123,7 +123,7 @@ class AccountSeparationTests(unittest.TestCase):
     def test_require_super_admin_allows_only_canonical_ceo_super_admin(self):
         current_user = {
             "id": "user-1",
-            "email": "l.robinson@tomboflight.com",
+            "email": "ceo-admin@example.com",
             "role": "super_admin",
             "_access_context": {
                 "project_id": None,
@@ -142,7 +142,7 @@ class AccountSeparationTests(unittest.TestCase):
                 "_load_user_by_id",
                 return_value={
                     "_id": "user-1",
-                    "email": "jenn.wood@tomboflight.com",
+                    "email": "finance-admin@example.com",
                     "role": "admin",
                     "access_tier": "finance_admin",
                     "department_role": "finance",
@@ -183,7 +183,7 @@ class AccountSeparationTests(unittest.TestCase):
                 "_load_user_by_id",
                 return_value={
                     "_id": "user-1",
-                    "email": "l.robinson@tomboflight.com",
+                    "email": "ceo-admin@example.com",
                     "role": "admin",
                     "access_tier": "super_admin",
                     "department_role": "executive_tech_admin",
@@ -225,7 +225,7 @@ class AccountSeparationTests(unittest.TestCase):
                 "_load_user_by_id",
                 return_value={
                     "_id": "user-2",
-                    "email": "k.goffigan@tomboflight.com",
+                    "email": "operations-admin@example.com",
                     "role": "admin",
                     "access_tier": "operations_admin",
                     "department_role": "operations_admin",
@@ -322,8 +322,8 @@ class AccountSeparationTests(unittest.TestCase):
         current_user = {
             "_id": "admin-1",
             "id": "admin-1",
-            "email": "jenn.wood@tomboflight.com",
-            "full_name": "Jennifer Wood",
+            "email": "finance-admin@example.com",
+            "full_name": "Test Finance Officer",
             "role": "admin",
             "access_tier": "finance_admin",
             "department_role": "finance_admin",

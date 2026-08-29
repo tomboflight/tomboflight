@@ -5,7 +5,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
-from app.core.admin_permission_registry import CEO_MASTER_ADMIN_EMAIL
+from app.core.admin_permission_registry import is_canonical_ceo_email
 from app.database import DatabaseUnavailableError
 from app.dependencies.auth import require_any_permission, require_permission, require_super_admin
 from app.services.continuity_runtime_service import (
@@ -60,8 +60,7 @@ def _raise_service_error(exc: Exception) -> None:
 
 
 def _assert_canonical_ceo(current_user: dict[str, Any]) -> None:
-    email = str(current_user.get("email") or "").strip().lower()
-    if email == CEO_MASTER_ADMIN_EMAIL.lower():
+    if is_canonical_ceo_email(current_user.get("email")):
         return
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
@@ -87,8 +86,8 @@ def get_continuity_runtime_status(
     try:
         payload = runtime_status()
         payload["current_actor_role"] = canonical_officer_role(current_user) or None
-        payload["one_step_execution_allowed"] = (
-            str(current_user.get("email") or "").strip().lower() == CEO_MASTER_ADMIN_EMAIL.lower()
+        payload["one_step_execution_allowed"] = is_canonical_ceo_email(
+            current_user.get("email")
         )
         return payload
     except Exception as exc:

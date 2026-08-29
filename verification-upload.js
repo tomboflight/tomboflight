@@ -25,6 +25,7 @@
   let currentContext = null;
   let currentGraph = { members: [] };
   let families = [];
+  const previewObjectUrls = new Map();
 
   function normalizeValue(value) {
     return String(value || "").trim().toLowerCase();
@@ -79,6 +80,34 @@
     if (vs === "pending") return "pending review";
     if (upload.id || upload._id) return "uploaded";
     return "pending review";
+  }
+
+  function uploadResponseState(payload) {
+    const statusPayload = payload?.upload_status;
+    return normalizeValue(
+      (statusPayload && typeof statusPayload === "object" ? statusPayload.state : statusPayload) ||
+        payload?.upload?.upload_status ||
+        payload?.upload?.availability_status ||
+        payload?.upload?.scan_status ||
+        "processing",
+    );
+  }
+
+  function reportVerificationUploadResult(actionStatus, payload, label) {
+    const state = uploadResponseState(payload);
+    if (["blocked", "quarantined", "unavailable", "infected", "error"].includes(state)) {
+      setStatus(
+        actionStatus,
+        `${label} was received but is blocked because its security or private-storage checks did not pass.`,
+        "error",
+      );
+      return;
+    }
+    setStatus(
+      actionStatus,
+      `${label} received securely and sent for the required review.`,
+      "success",
+    );
   }
 
   function getFamilyIdFromUrl() {
@@ -651,11 +680,13 @@
     try {
       setStatus(actionStatus, "Uploading member photo...", "info");
 
-      await app.apiRequest("/uploads/member-photo", {
+      const payload = await app.apiRequest("/uploads/member-photo", {
         method: "POST",
+        headers: { "Idempotency-Key": formIdempotencyKey(form, "verification-photo") },
         body,
       });
 
+      clearFormIdempotencyKey(form);
       form.reset();
 
       const listMember = document.querySelector(
@@ -667,7 +698,7 @@
       if (listMember) listMember.value = memberId;
       if (categoryFilter) categoryFilter.value = "member_photo";
 
-      setStatus(actionStatus, "Member photo uploaded successfully.", "success");
+      reportVerificationUploadResult(actionStatus, payload, "Member photo");
       await loadUploads();
     } catch (error) {
       console.error("Photo upload failed:", error);
@@ -742,11 +773,13 @@
     try {
       setStatus(actionStatus, "Uploading verification evidence...", "info");
 
-      await app.apiRequest("/uploads/verification-evidence", {
+      const payload = await app.apiRequest("/uploads/verification-evidence", {
         method: "POST",
+        headers: { "Idempotency-Key": formIdempotencyKey(form, "verification-evidence") },
         body,
       });
 
+      clearFormIdempotencyKey(form);
       form.reset();
 
       const listMember = document.querySelector(
@@ -758,11 +791,7 @@
       if (listMember) listMember.value = memberId;
       if (categoryFilter) categoryFilter.value = "verification_evidence";
 
-      setStatus(
-        actionStatus,
-        "Verification evidence uploaded successfully.",
-        "success",
-      );
+      reportVerificationUploadResult(actionStatus, payload, "Verification evidence");
       await loadUploads();
     } catch (error) {
       console.error("Upload failed:", error);
@@ -771,6 +800,137 @@
         error.message || "Unable to upload verification evidence.",
         "error",
       );
+    }
+  }
+
+  function protectedUploadUrl(uploadId, preview) {
+    const base =
+      typeof app.getApiBaseUrl === "function" ? app.getApiBaseUrl() : "";
+    const operation = preview ? "preview" : "download";
+    return `${base}/uploads/${encodeURIComponent(uploadId || "")}/${operation}`;
+  }
+
+  async function fetchProtectedUpload(uploadId, preview) {
+    const token = app.getToken ? app.getToken() : "";
+    const response = await fetch(protectedUploadUrl(uploadId, preview), {
+      method: "GET",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      credentials: "include",
+      cache: "no-store",
+    });
+    if (!response.ok) throw new Error("Unable to open this protected record.");
+    return response.blob();
+  }
+
+  function clearProtectedPreviews() {
+    previewObjectUrls.forEach(function (url) {
+      window.URL.revokeObjectURL(url);
+    });
+    previewObjectUrls.clear();
+  }
+
+  async function loadProtectedEvidencePreviews() {
+    const nodes = document.querySelectorAll("[data-evidence-secure-preview-id]");
+    await Promise.all(
+      Array.from(nodes).map(async function (node) {
+        const uploadId = node.getAttribute("data-evidence-secure-preview-id") || "";
+        try {
+          const blob = await fetchProtectedUpload(uploadId, true);
+          const url = window.URL.createObjectURL(blob);
+          previewObjectUrls.set(uploadId, url);
+          node.src = url;
+          node.hidden = false;
+          node.parentElement?.querySelector("[data-evidence-preview-loading]")?.remove();
+        } catch (error) {
+          const container = node.parentElement;
+          node.remove();
+          if (container) container.textContent = "Protected preview unavailable. Download or try again.";
+        }
+      }),
+    );
+  }
+
+  function createIdempotencyKey(prefix) {
+    if (window.crypto && typeof window.crypto.randomUUID === "function") {
+      return `${prefix}-${window.crypto.randomUUID()}`;
+    }
+    return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+
+  function formIdempotencyKey(form, prefix) {
+    if (form && !form.dataset.idempotencyChangeBound) {
+      form.dataset.idempotencyChangeBound = "true";
+      form.addEventListener("change", function () {
+        delete form.dataset.pendingIdempotencyKey;
+      });
+    }
+    if (!form?.dataset.pendingIdempotencyKey) {
+      form.dataset.pendingIdempotencyKey = createIdempotencyKey(prefix);
+    }
+    return form.dataset.pendingIdempotencyKey;
+  }
+
+  function clearFormIdempotencyKey(form) {
+    if (form) delete form.dataset.pendingIdempotencyKey;
+  }
+
+  async function replaceEvidence(uploadId, input) {
+    const actionStatus = document.querySelector("[data-verification-action-status]");
+    const file = input?.files?.[0];
+    if (!file) return;
+    if (!ALLOWED_EVIDENCE_TYPES.has(normalizeValue(file.type))) {
+      setStatus(actionStatus, "Replacement records must be PDF, JPG, PNG, or WEBP.", "error");
+      input.value = "";
+      return;
+    }
+    const body = new FormData();
+    body.append("file", file, file.name);
+    body.append("consent_attested", "true");
+    body.append("authority_attested", "true");
+    const fileSignature = [file.name, file.size, file.type, file.lastModified].join(":");
+    if (input.dataset.idempotencyFileSignature !== fileSignature) {
+      input.dataset.idempotencyFileSignature = fileSignature;
+      input.dataset.idempotencyKey = createIdempotencyKey("evidence-replace");
+    }
+    try {
+      setStatus(actionStatus, "Uploading replacement as a new protected version...", "info");
+      const payload = await app.apiRequest(
+        `/uploads/${encodeURIComponent(uploadId)}/replace`,
+        {
+          method: "POST",
+          headers: { "Idempotency-Key": input.dataset.idempotencyKey },
+          body,
+        },
+      );
+      const version = payload?.replacement?.version || payload?.upload?.version;
+      setStatus(
+        actionStatus,
+        version
+          ? `Replacement uploaded as version ${version} and sent for review.`
+          : "Replacement uploaded and sent for review.",
+        "success",
+      );
+      delete input.dataset.idempotencyKey;
+      delete input.dataset.idempotencyFileSignature;
+      input.value = "";
+      await loadUploads();
+    } catch (error) {
+      setStatus(actionStatus, error.message || "Unable to replace this record.", "error");
+    }
+  }
+
+  async function deleteEvidence(uploadId, filename) {
+    const actionStatus = document.querySelector("[data-verification-action-status]");
+    if (!window.confirm(`Permanently delete ${filename || "this record"}? This cannot be undone.`)) {
+      return;
+    }
+    try {
+      setStatus(actionStatus, "Deleting protected record...", "info");
+      await app.apiRequest(`/uploads/${encodeURIComponent(uploadId)}`, { method: "DELETE" });
+      setStatus(actionStatus, "Protected record deleted.", "success");
+      await loadUploads();
+    } catch (error) {
+      setStatus(actionStatus, error.message || "Unable to delete this record.", "error");
     }
   }
 
@@ -789,19 +949,17 @@
 
     if (emptyNode) emptyNode.style.display = "none";
 
+    clearProtectedPreviews();
     listNode.innerHTML = uploads
       .map(function (upload, index) {
-        const preview = String(upload.content_type || "").startsWith("image/")
-          ? `<div style="margin: 0 0 1rem;">
+        const uploadId = String(upload.id || upload._id || "");
+        const permissions = upload.permissions || {};
+        const preview = permissions.can_preview === true && String(upload.content_type || "").startsWith("image/")
+          ? `<div class="helper" style="display:block;margin:0 0 1rem;min-height:120px;">
+                 <span data-evidence-preview-loading>Loading protected image...</span>
                  <img
-                   src="${escapeHtml(
-                     (typeof app.getApiBaseUrl === "function"
-                       ? app.getApiBaseUrl()
-                       : "") +
-                       "/uploads/" +
-                       encodeURIComponent(upload.id || "") +
-                       "/download",
-                   )}"
+                   hidden
+                   data-evidence-secure-preview-id="${escapeHtml(uploadId)}"
                    alt="${escapeHtml(upload.original_filename || "Uploaded image")}"
                    style="width: 100%; max-height: 220px; object-fit: cover; border-radius: 18px; border: 1px solid rgba(255,255,255,0.08);"
                  />
@@ -821,21 +979,35 @@
             <p class="card-copy"><strong>Size:</strong> ${escapeHtml(upload.size_bytes ?? "—")}</p>
             <p class="card-copy"><strong>Uploaded By:</strong> ${escapeHtml(upload.uploaded_by || "—")}</p>
             <p class="card-copy"><strong>Created:</strong> ${escapeHtml(formatDate(upload.created_at))}</p>
+            <p class="card-copy"><strong>Version:</strong> ${escapeHtml(upload.version || 1)}${upload.is_current_version === false ? " — previous" : " — current"}</p>
 
             <div class="inline-actions" style="margin-top: 1rem">
-              <button
+              ${permissions.can_download === true ? `<button
                 class="btn btn-secondary"
                 type="button"
                 data-download-upload-id="${escapeHtml(upload.id || "")}"
                 data-download-upload-name="${escapeHtml(upload.original_filename || "download")}"
               >
                 Download
-              </button>
+              </button>` : ""}
+              ${permissions.can_replace === true && upload.is_current_version !== false ? `<button
+                class="btn btn-primary"
+                type="button"
+                data-replace-evidence-id="${escapeHtml(uploadId)}"
+              >Replace with New Version</button>` : ""}
+              ${permissions.can_delete === true ? `<button
+                class="btn btn-secondary"
+                type="button"
+                data-delete-evidence-id="${escapeHtml(uploadId)}"
+                data-delete-evidence-name="${escapeHtml(upload.original_filename || "this record")}"
+              >Delete</button>` : ""}
             </div>
+            <input hidden type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp" data-evidence-replacement-file="${escapeHtml(uploadId)}" />
           </div>
         `;
       })
       .join("");
+    loadProtectedEvidencePreviews();
   }
 
   async function loadUploads() {
@@ -905,25 +1077,7 @@
     try {
       setStatus(actionStatus, "Downloading file...", "info");
 
-      const token = app.getToken ? app.getToken() : "";
-      const apiBaseUrl =
-        typeof app.getApiBaseUrl === "function" ? app.getApiBaseUrl() : "";
-
-      const response = await fetch(
-        `${apiBaseUrl}/uploads/${encodeURIComponent(uploadId)}/download`,
-        {
-          method: "GET",
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-          credentials: "include",
-        },
-      );
-
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(text || "Unable to download file.");
-      }
-
-      const blob = await response.blob();
+      const blob = await fetchProtectedUpload(uploadId);
       const objectUrl = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = objectUrl;
@@ -931,7 +1085,9 @@
       document.body.appendChild(link);
       link.click();
       link.remove();
-      window.URL.revokeObjectURL(objectUrl);
+      window.setTimeout(function () {
+        window.URL.revokeObjectURL(objectUrl);
+      }, 1000);
 
       setStatus(actionStatus, "Download started.", "success");
     } catch (error) {
@@ -1000,6 +1156,22 @@
       }
 
       document.addEventListener("click", function (event) {
+        const replaceButton = event.target.closest("[data-replace-evidence-id]");
+        if (replaceButton) {
+          replaceButton
+            .closest(".family-record-card")
+            ?.querySelector("[data-evidence-replacement-file]")
+            ?.click();
+          return;
+        }
+        const deleteButton = event.target.closest("[data-delete-evidence-id]");
+        if (deleteButton) {
+          deleteEvidence(
+            deleteButton.getAttribute("data-delete-evidence-id") || "",
+            deleteButton.getAttribute("data-delete-evidence-name") || "",
+          );
+          return;
+        }
         const downloadButton = event.target.closest(
           "[data-download-upload-id]",
         );
@@ -1010,6 +1182,16 @@
           downloadButton.getAttribute("data-download-upload-name"),
         );
       });
+
+      document.addEventListener("change", function (event) {
+        const input = event.target.closest("[data-evidence-replacement-file]");
+        if (!input) return;
+        replaceEvidence(
+          input.getAttribute("data-evidence-replacement-file") || "",
+          input,
+        );
+      });
+      window.addEventListener("pagehide", clearProtectedPreviews);
 
       const familySelect = document.querySelector(
         "[data-verification-family-select]",

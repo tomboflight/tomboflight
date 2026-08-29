@@ -16,7 +16,18 @@ PORTAL_CACHE_OVERRIDES = {
         "dashboard-intake.js": "20260824-phase20",
     },
     "link-keys.html": {"link-keys.js": "20260823-phase13-1"},
-    "portrait-upload.html": {"portrait-upload.js": "20260824-phase18"},
+    "portrait-upload.html": {
+        "auth.js": "20260829-phase22",
+        "portrait-upload.js": "20260829-phase22",
+    },
+    "verification-upload.html": {
+        "auth.js": "20260829-phase22",
+        "verification-upload.js": "20260829-phase22",
+    },
+    "vault-upload.html": {
+        "auth.js": "20260829-phase22",
+        "vault-upload.js": "20260829-phase22",
+    },
     "tree-view.html": {"tree-view.js": "20260823-phase13-1"},
 }
 AUDITED_PORTAL_PAGES = [
@@ -132,10 +143,10 @@ class CustomerDashboardIntegrityTests(unittest.TestCase):
                     f"styles.css?v={SHARED_ASSET_CACHE_VERSION}",
                     source,
                 )
-                self.assertIn(
-                    f"auth.js?v={SHARED_ASSET_CACHE_VERSION}",
-                    source,
+                expected_auth_version = overrides.get(
+                    "auth.js", SHARED_ASSET_CACHE_VERSION
                 )
+                self.assertIn(f"auth.js?v={expected_auth_version}", source)
 
     def test_changed_page_scripts_use_audit_cache_versions(self):
         expected_scripts = {
@@ -249,7 +260,7 @@ class CustomerDashboardIntegrityTests(unittest.TestCase):
         ):
             payload = workspace_access.get_project_members(
                 "project-robinson",
-                current_user={"id": "owner-1", "email": "larrycr27@gmail.com"},
+                current_user={"id": "owner-1", "email": "test.customer@example.com"},
             )
 
         self.assertEqual(len(payload["items"]), 1)

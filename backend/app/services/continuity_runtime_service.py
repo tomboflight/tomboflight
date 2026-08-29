@@ -29,7 +29,7 @@ from bson import ObjectId
 from pymongo import ASCENDING, DESCENDING
 from pymongo.errors import DuplicateKeyError
 
-from app.core.admin_permission_registry import CEO_MASTER_ADMIN_EMAIL
+from app.core.admin_permission_registry import is_canonical_ceo_email
 from app.database import get_database
 from app.services import (
     admin_control_service,
@@ -259,7 +259,7 @@ def canonical_officer_role(actor: dict[str, Any] | None) -> str:
     role_values.update(_normalize(item).lower() for item in (actor.get("role_codes") or []))
     role_values.update(_normalize(item).lower() for item in (access_context.get("role_codes") or []))
 
-    if email == CEO_MASTER_ADMIN_EMAIL.lower():
+    if is_canonical_ceo_email(email):
         return "SUPERADMIN"
     if role_values.intersection({"executive_tech_admin", "cto", "technical_admin"}):
         return "EXECUTIVE_TECH_ADMIN"
@@ -324,7 +324,7 @@ def _assert_action_actor_scope(action: str, actor: dict[str, Any] | None) -> Non
         "payroll_control",
     }:
         return
-    if _actor_email(actor) == str(CEO_MASTER_ADMIN_EMAIL).strip().lower():
+    if is_canonical_ceo_email(_actor_email(actor)):
         return
     if normalized_action == "account_permanent_delete":
         raise PermissionError(

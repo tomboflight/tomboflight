@@ -10,7 +10,7 @@ router = APIRouter(tags=["Health"])
 
 @router.get("/health")
 def health_check(response: Response):
-    service_state = get_service_state()
+    service_state = get_service_state(reconnect_if_unavailable=True)
     response.status_code = (
         status.HTTP_200_OK
         if service_state["ready"]
@@ -38,7 +38,7 @@ def liveness_check():
 
 @router.get("/health/ready")
 def readiness_check(response: Response):
-    service_state = get_service_state()
+    service_state = get_service_state(reconnect_if_unavailable=True)
     response.status_code = (
         status.HTTP_200_OK
         if service_state["ready"]
@@ -57,7 +57,10 @@ def operational_readiness_check(
     current_user: dict[str, Any] = Depends(require_super_admin),
 ):
     del current_user
-    service_state = get_service_state(include_operational_details=True)
+    service_state = get_service_state(
+        include_operational_details=True,
+        reconnect_if_unavailable=True,
+    )
     operational_ready = bool(service_state.get("operational_ready"))
     response.status_code = (
         status.HTTP_200_OK

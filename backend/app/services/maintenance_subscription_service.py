@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import parse_qsl
+
+from bson import ObjectId
 
 from app.database import get_database
 from app.services.paid_addon_service import (
@@ -10,7 +12,7 @@ from app.services.paid_addon_service import (
     sync_paid_addon_subscription_event,
 )
 from app.services.project_entitlement_service import (
-    MAINTENANCE_START_DELAY_DAYS,
+    maintenance_scheduled_start_at,
     update_project_entitlement_maintenance,
 )
 
@@ -21,11 +23,53 @@ def _normalize(value: Any) -> str:
 
 def _to_datetime(value: Any) -> datetime | None:
     if isinstance(value, datetime):
-        return value
+        if value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
     try:
         return datetime.fromtimestamp(int(value), UTC)
     except Exception:
-        return None
+        try:
+            parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            return None
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=UTC)
+        return parsed.astimezone(UTC)
+
+
+def _maintenance_schedule(
+    project_id: str,
+    *,
+    purchased_at: datetime | None = None,
+) -> datetime:
+    candidates: list[Any] = [project_id]
+    if ObjectId.is_valid(project_id):
+        candidates.append(ObjectId(project_id))
+    existing = get_database()["project_entitlements"].find_one(
+        {"project_id": {"$in": candidates}},
+        {"maintenance_scheduled_start_at": 1, "purchased_at": 1},
+    )
+    stored_schedule = _to_datetime(
+        (existing or {}).get("maintenance_scheduled_start_at")
+    )
+    stored_purchase = _to_datetime((existing or {}).get("purchased_at"))
+    # The package purchase timestamp is the source of truth. Recompute from it
+    # so a previously persisted purchase-time/otherwise stale schedule is
+    # repaired by the next Stripe event. Keep a stored schedule only for
+    # historical rows that do not yet have a recoverable purchase timestamp.
+    if stored_purchase is not None:
+        return maintenance_scheduled_start_at(stored_purchase)
+    return stored_schedule or maintenance_scheduled_start_at(purchased_at)
+
+
+def _status_respecting_maintenance_start(
+    desired_status: str,
+    scheduled_start: datetime,
+) -> str:
+    if desired_status == "active" and datetime.now(UTC) < scheduled_start:
+        return "scheduled"
+    return desired_status
 
 
 def _metadata_project_id(payload: dict[str, Any]) -> str:
@@ -117,13 +161,21 @@ def sync_maintenance_checkout_event(event: dict[str, Any]) -> dict[str, Any]:
     subscription_id = _normalize(payload.get("subscription"))
     customer_id = _normalize(payload.get("customer"))
     created_at = _to_datetime(payload.get("created")) or datetime.now(UTC)
-    scheduled_start = created_at + timedelta(days=MAINTENANCE_START_DELAY_DAYS)
+    scheduled_start = _maintenance_schedule(project_id, purchased_at=created_at)
+    maintenance_status = _status_respecting_maintenance_start(
+        "active",
+        scheduled_start,
+    )
 
     updated = update_project_entitlement_maintenance(
         project_id=project_id,
         maintenance_plan="yearly" if _subscription_interval(payload) == "year" else "monthly",
-        maintenance_status="scheduled",
+        maintenance_status=maintenance_status,
         maintenance_scheduled_start_at=scheduled_start,
+        maintenance_started_at=(
+            scheduled_start if maintenance_status == "active" else None
+        ),
+        clear_maintenance_started_at=maintenance_status == "scheduled",
         maintenance_stripe_subscription_id=subscription_id or None,
         maintenance_stripe_customer_id=customer_id or None,
         maintenance_stripe_status="incomplete",
@@ -154,6 +206,10 @@ def sync_maintenance_subscription_event(event: dict[str, Any]) -> dict[str, Any]
     cancel_at_period_end = bool(payload.get("cancel_at_period_end"))
     current_period_start = _to_datetime(payload.get("current_period_start"))
     current_period_end = _to_datetime(payload.get("current_period_end"))
+    scheduled_start = _maintenance_schedule(
+        project_id,
+        purchased_at=_to_datetime(payload.get("created")),
+    )
     customer_id = payload.get("customer")
     if isinstance(customer_id, dict):
         customer_id = customer_id.get("id")
@@ -167,12 +223,20 @@ def sync_maintenance_subscription_event(event: dict[str, Any]) -> dict[str, Any]
         maintenance_status = "canceled"
     elif cancel_at_period_end and status_value == "active":
         maintenance_status = "active"
+    maintenance_status = _status_respecting_maintenance_start(
+        maintenance_status,
+        scheduled_start,
+    )
 
     updated = update_project_entitlement_maintenance(
         project_id=project_id,
         maintenance_plan="yearly" if _subscription_interval(payload) == "year" else "monthly",
         maintenance_status=maintenance_status,
-        maintenance_started_at=current_period_start,
+        maintenance_scheduled_start_at=scheduled_start,
+        maintenance_started_at=(
+            scheduled_start if maintenance_status == "active" else None
+        ),
+        clear_maintenance_started_at=maintenance_status == "scheduled",
         maintenance_current_period_start=current_period_start,
         maintenance_renews_at=current_period_end,
         maintenance_current_period_end=current_period_end,
@@ -211,13 +275,27 @@ def sync_maintenance_invoice_event(event: dict[str, Any]) -> dict[str, Any]:
         return {"updated": False, "reason": "missing_project_id"}
 
     event_type = _normalize(event.get("type")).lower()
-    maintenance_status = "active" if event_type == "invoice.paid" else "past_due"
+    scheduled_start = _maintenance_schedule(
+        project_id,
+        purchased_at=_to_datetime(payload.get("created")),
+    )
+    maintenance_status = _status_respecting_maintenance_start(
+        "active" if event_type == "invoice.paid" else "past_due",
+        scheduled_start,
+    )
 
     updated = update_project_entitlement_maintenance(
         project_id=project_id,
         maintenance_status=maintenance_status,
+        maintenance_scheduled_start_at=scheduled_start,
+        maintenance_started_at=(
+            scheduled_start if maintenance_status == "active" else None
+        ),
+        clear_maintenance_started_at=maintenance_status == "scheduled",
         maintenance_stripe_subscription_id=subscription_id,
-        maintenance_stripe_status=maintenance_status,
+        maintenance_stripe_status=(
+            "paid" if event_type == "invoice.paid" else "past_due"
+        ),
     )
     return {
         "updated": bool(updated),

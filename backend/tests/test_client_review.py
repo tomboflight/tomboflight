@@ -24,7 +24,7 @@ from unittest.mock import patch, MagicMock
 from bson import ObjectId
 
 
-# ─── Fake helpers (mirrors test_admin_console.py pattern) ─────────────────────
+# ─── Local fake database helpers ──────────────────────────────────────────────
 
 
 class FakeCursor(list):

@@ -18,6 +18,7 @@
   let currentContext = null;
   let currentGraph = { members: [] };
   let families = [];
+  const previewObjectUrls = new Map();
 
   function normalizeValue(value) {
     return String(value || "").trim().toLowerCase();
@@ -69,6 +70,34 @@
     if (vs === "pending") return "pending review";
     if (upload.id || upload._id) return "uploaded";
     return "pending review";
+  }
+
+  function uploadResponseState(payload) {
+    const statusPayload = payload?.upload_status;
+    return normalizeValue(
+      (statusPayload && typeof statusPayload === "object" ? statusPayload.state : statusPayload) ||
+        payload?.upload?.upload_status ||
+        payload?.upload?.availability_status ||
+        payload?.upload?.scan_status ||
+        "processing",
+    );
+  }
+
+  function reportPortraitUploadResult(actionStatus, payload) {
+    const state = uploadResponseState(payload);
+    if (["blocked", "quarantined", "unavailable", "infected", "error"].includes(state)) {
+      setStatus(
+        actionStatus,
+        "The portrait was received but is blocked because its security or private-storage checks did not pass.",
+        "error",
+      );
+      return;
+    }
+    setStatus(
+      actionStatus,
+      "Portrait received securely. It will appear in the family tree and cinematic viewer only after a clean scan and master approval.",
+      "success",
+    );
   }
 
   function getFamilyIdFromUrl() {
@@ -456,17 +485,18 @@
     button.disabled = true;
     try {
       setStatus(actionStatus, "Uploading portrait for the named family member...", "info");
-      await app.apiRequest("/uploads/member-photo", { method: "POST", body });
+      const payload = await app.apiRequest("/uploads/member-photo", {
+        method: "POST",
+        headers: { "Idempotency-Key": formIdempotencyKey(form, "portrait-upload") },
+        body,
+      });
+      clearFormIdempotencyKey(form);
       input.value = "";
       const memberSelect = document.querySelector("[data-portrait-member-select]");
       const listMember = document.querySelector("[data-portrait-list-member]");
       if (memberSelect) memberSelect.value = memberId;
       if (listMember) listMember.value = memberId;
-      setStatus(
-        actionStatus,
-        "Portrait uploaded and sent for security scanning and master review. Approved portraits are placed automatically.",
-        "success",
-      );
+      reportPortraitUploadResult(actionStatus, payload);
       await loadUploads();
     } catch (error) {
       setStatus(actionStatus, error.message || "Unable to upload portrait.", "error");
@@ -749,11 +779,13 @@
     try {
       setStatus(actionStatus, "Uploading portrait...", "info");
 
-      await app.apiRequest("/uploads/member-photo", {
+      const payload = await app.apiRequest("/uploads/member-photo", {
         method: "POST",
+        headers: { "Idempotency-Key": formIdempotencyKey(form, "portrait-upload") },
         body,
       });
 
+      clearFormIdempotencyKey(form);
       form.reset();
 
       const memberSelect = document.querySelector("[data-portrait-member-select]");
@@ -761,11 +793,7 @@
       if (memberSelect) memberSelect.value = memberId;
       if (listMember) listMember.value = memberId;
 
-      setStatus(
-        actionStatus,
-        "Portrait uploaded and sent for security scanning and master review. It will appear in the family tree and cinematic viewer only after approval.",
-        "success",
-      );
+      reportPortraitUploadResult(actionStatus, payload);
       await loadUploads();
     } catch (error) {
       console.error("Portrait upload failed:", error);
@@ -774,6 +802,139 @@
         error.message || "Unable to upload portrait.",
         "error",
       );
+    }
+  }
+
+  function protectedUploadUrl(uploadId, preview) {
+    const base =
+      typeof app.getApiBaseUrl === "function" ? app.getApiBaseUrl() : "";
+    const operation = preview ? "preview" : "download";
+    return `${base}/uploads/${encodeURIComponent(uploadId || "")}/${operation}`;
+  }
+
+  async function fetchProtectedUpload(uploadId, preview) {
+    const token = app.getToken ? app.getToken() : "";
+    const response = await fetch(protectedUploadUrl(uploadId, preview), {
+      method: "GET",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      credentials: "include",
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      throw new Error("Unable to open this protected portrait.");
+    }
+    return response.blob();
+  }
+
+  function clearProtectedPreviews() {
+    previewObjectUrls.forEach(function (url) {
+      window.URL.revokeObjectURL(url);
+    });
+    previewObjectUrls.clear();
+  }
+
+  async function loadProtectedPortraitPreviews() {
+    const nodes = document.querySelectorAll("[data-portrait-secure-preview-id]");
+    await Promise.all(
+      Array.from(nodes).map(async function (node) {
+        const uploadId = node.getAttribute("data-portrait-secure-preview-id") || "";
+        try {
+          const blob = await fetchProtectedUpload(uploadId, true);
+          const url = window.URL.createObjectURL(blob);
+          previewObjectUrls.set(uploadId, url);
+          node.src = url;
+          node.hidden = false;
+          node.parentElement?.querySelector("[data-portrait-preview-loading]")?.remove();
+        } catch (error) {
+          const container = node.parentElement;
+          node.remove();
+          if (container) container.textContent = "Protected preview unavailable. Download or try again.";
+        }
+      }),
+    );
+  }
+
+  function createIdempotencyKey(prefix) {
+    if (window.crypto && typeof window.crypto.randomUUID === "function") {
+      return `${prefix}-${window.crypto.randomUUID()}`;
+    }
+    return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+
+  function formIdempotencyKey(form, prefix) {
+    if (form && !form.dataset.idempotencyChangeBound) {
+      form.dataset.idempotencyChangeBound = "true";
+      form.addEventListener("change", function () {
+        delete form.dataset.pendingIdempotencyKey;
+      });
+    }
+    if (!form?.dataset.pendingIdempotencyKey) {
+      form.dataset.pendingIdempotencyKey = createIdempotencyKey(prefix);
+    }
+    return form.dataset.pendingIdempotencyKey;
+  }
+
+  function clearFormIdempotencyKey(form) {
+    if (form) delete form.dataset.pendingIdempotencyKey;
+  }
+
+  async function replacePortrait(uploadId, input) {
+    const actionStatus = document.querySelector("[data-portrait-action-status]");
+    const file = input?.files?.[0];
+    if (!file) return;
+    if (!ALLOWED_PHOTO_TYPES.has(normalizeValue(file.type))) {
+      setStatus(actionStatus, "Replacement portraits must be JPG, PNG, or WEBP.", "error");
+      input.value = "";
+      return;
+    }
+    const body = new FormData();
+    body.append("file", file, file.name);
+    body.append("consent_attested", "true");
+    body.append("authority_attested", "true");
+    const fileSignature = [file.name, file.size, file.type, file.lastModified].join(":");
+    if (input.dataset.idempotencyFileSignature !== fileSignature) {
+      input.dataset.idempotencyFileSignature = fileSignature;
+      input.dataset.idempotencyKey = createIdempotencyKey("portrait-replace");
+    }
+    try {
+      setStatus(actionStatus, "Uploading replacement portrait as a new version...", "info");
+      const payload = await app.apiRequest(
+        `/uploads/${encodeURIComponent(uploadId)}/replace`,
+        {
+          method: "POST",
+          headers: { "Idempotency-Key": input.dataset.idempotencyKey },
+          body,
+        },
+      );
+      const version = payload?.replacement?.version || payload?.upload?.version;
+      setStatus(
+        actionStatus,
+        version
+          ? `Replacement portrait uploaded as version ${version} and sent for review.`
+          : "Replacement portrait uploaded and sent for review.",
+        "success",
+      );
+      delete input.dataset.idempotencyKey;
+      delete input.dataset.idempotencyFileSignature;
+      input.value = "";
+      await loadUploads();
+    } catch (error) {
+      setStatus(actionStatus, error.message || "Unable to replace portrait.", "error");
+    }
+  }
+
+  async function deletePortrait(uploadId, filename) {
+    const actionStatus = document.querySelector("[data-portrait-action-status]");
+    if (!window.confirm(`Permanently delete ${filename || "this portrait"}? This cannot be undone.`)) {
+      return;
+    }
+    try {
+      setStatus(actionStatus, "Deleting portrait...", "info");
+      await app.apiRequest(`/uploads/${encodeURIComponent(uploadId)}`, { method: "DELETE" });
+      setStatus(actionStatus, "Portrait deleted.", "success");
+      await loadUploads();
+    } catch (error) {
+      setStatus(actionStatus, error.message || "Unable to delete portrait.", "error");
     }
   }
 
@@ -790,22 +951,20 @@
 
     if (emptyNode) emptyNode.style.display = "none";
 
+    clearProtectedPreviews();
     listNode.innerHTML = uploads
       .map(function (upload, index) {
         const attestationsComplete = Boolean(
           upload.consent_attested && upload.authority_attested,
         );
-        const downloadUrl =
-          (typeof app.getApiBaseUrl === "function"
-            ? app.getApiBaseUrl()
-            : "") +
-          "/uploads/" +
-          encodeURIComponent(upload.id || "") +
-          "/download";
-        const preview = String(upload.content_type || "").startsWith("image/")
-          ? `<div style="margin: 0 0 1rem;">
+        const uploadId = String(upload.id || upload._id || "");
+        const permissions = upload.permissions || {};
+        const preview = permissions.can_preview === true && String(upload.content_type || "").startsWith("image/")
+          ? `<div class="helper" style="display:block;margin:0 0 1rem;min-height:120px;">
+                 <span data-portrait-preview-loading>Loading protected portrait...</span>
                  <img
-                   src="${escapeHtml(downloadUrl)}"
+                   hidden
+                   data-portrait-secure-preview-id="${escapeHtml(uploadId)}"
                    alt="${escapeHtml(upload.original_filename || "Uploaded portrait")}"
                    style="width: 100%; max-height: 260px; object-fit: cover; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08);"
                  />
@@ -823,18 +982,30 @@
             <p class="card-copy"><strong>Size:</strong> ${escapeHtml(upload.size_bytes ?? "—")}</p>
             <p class="card-copy"><strong>Uploaded By:</strong> ${escapeHtml(upload.uploaded_by || "—")}</p>
             <p class="card-copy"><strong>Created:</strong> ${escapeHtml(formatDate(upload.created_at))}</p>
+            <p class="card-copy"><strong>Version:</strong> ${escapeHtml(upload.version || 1)}${upload.is_current_version === false ? " — previous" : " — current"}</p>
             <p class="card-copy"><strong>Consent:</strong> ${upload.consent_attested ? "Recorded" : "Missing"}</p>
             <p class="card-copy"><strong>Upload authority:</strong> ${upload.authority_attested ? "Recorded" : "Missing"}</p>
 
             <div class="inline-actions" style="margin-top: 1rem">
-              <button
+              ${permissions.can_download === true ? `<button
                 class="btn btn-secondary"
                 type="button"
                 data-download-upload-id="${escapeHtml(upload.id || "")}"
                 data-download-upload-name="${escapeHtml(upload.original_filename || "download")}"
               >
                 Download
-              </button>
+              </button>` : ""}
+              ${permissions.can_replace === true && upload.is_current_version !== false ? `<button
+                class="btn btn-primary"
+                type="button"
+                data-replace-portrait-id="${escapeHtml(uploadId)}"
+              >Replace with New Version</button>` : ""}
+              ${permissions.can_delete === true ? `<button
+                class="btn btn-secondary"
+                type="button"
+                data-delete-portrait-id="${escapeHtml(uploadId)}"
+                data-delete-portrait-name="${escapeHtml(upload.original_filename || "this portrait")}"
+              >Delete</button>` : ""}
               ${
                 attestationsComplete
                   ? ""
@@ -847,10 +1018,12 @@
                     </button>`
               }
             </div>
+            <input hidden type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" data-portrait-replacement-file="${escapeHtml(uploadId)}" />
           </div>
         `;
       })
       .join("");
+    loadProtectedPortraitPreviews();
   }
 
   async function attestExistingPortrait(uploadId) {
@@ -942,25 +1115,7 @@
     try {
       setStatus(actionStatus, "Downloading portrait...", "info");
 
-      const token = app.getToken ? app.getToken() : "";
-      const apiBaseUrl =
-        typeof app.getApiBaseUrl === "function" ? app.getApiBaseUrl() : "";
-
-      const response = await fetch(
-        `${apiBaseUrl}/uploads/${encodeURIComponent(uploadId)}/download`,
-        {
-          method: "GET",
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-          credentials: "include",
-        },
-      );
-
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(text || "Unable to download portrait.");
-      }
-
-      const blob = await response.blob();
+      const blob = await fetchProtectedUpload(uploadId);
       const objectUrl = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = objectUrl;
@@ -968,7 +1123,9 @@
       document.body.appendChild(link);
       link.click();
       link.remove();
-      window.URL.revokeObjectURL(objectUrl);
+      window.setTimeout(function () {
+        window.URL.revokeObjectURL(objectUrl);
+      }, 1000);
 
       setStatus(actionStatus, "Download started.", "success");
     } catch (error) {
@@ -1031,6 +1188,22 @@
       }
 
       document.addEventListener("click", function (event) {
+        const replaceButton = event.target.closest("[data-replace-portrait-id]");
+        if (replaceButton) {
+          replaceButton
+            .closest(".family-record-card")
+            ?.querySelector("[data-portrait-replacement-file]")
+            ?.click();
+          return;
+        }
+        const deleteButton = event.target.closest("[data-delete-portrait-id]");
+        if (deleteButton) {
+          deletePortrait(
+            deleteButton.getAttribute("data-delete-portrait-id") || "",
+            deleteButton.getAttribute("data-delete-portrait-name") || "",
+          );
+          return;
+        }
         const attestationButton = event.target.closest("[data-attest-upload-id]");
         if (attestationButton) {
           attestExistingPortrait(
@@ -1046,6 +1219,16 @@
           downloadButton.getAttribute("data-download-upload-name"),
         );
       });
+
+      document.addEventListener("change", function (event) {
+        const input = event.target.closest("[data-portrait-replacement-file]");
+        if (!input) return;
+        replacePortrait(
+          input.getAttribute("data-portrait-replacement-file") || "",
+          input,
+        );
+      });
+      window.addEventListener("pagehide", clearProtectedPreviews);
 
       if (familySelect) {
         familySelect.addEventListener("change", function () {

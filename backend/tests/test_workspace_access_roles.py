@@ -13,6 +13,7 @@ from app.routes import uploads as upload_routes
 from app.schemas.family_member import FamilyMemberCreate
 from app.schemas.relationship import RelationshipCreate
 from app.services import access_context_service
+from app.services import workspace_access_service
 from app.services.auth_service import build_user_response
 from app.services.workspace_access_service import require_workspace_member_role
 
@@ -51,6 +52,27 @@ class FakeDatabase:
 
 
 class WorkspaceAccessRoleTests(unittest.TestCase):
+    def test_deprecated_admin_labels_do_not_bypass_workspace_access(self):
+        for role in ("admin", "super_admin", "root_admin", "platform_admin"):
+            with self.subTest(role=role):
+                self.assertFalse(
+                    workspace_access_service._has_workspace_admin_access(
+                        {"role": role, "email": "legacy-admin@example.com"}
+                    )
+                )
+
+    def test_canonical_internal_roles_and_ceo_keep_workspace_authority(self):
+        self.assertTrue(
+            workspace_access_service._has_workspace_admin_access(
+                {"access_tier": "operations_admin", "email": "ops@example.com"}
+            )
+        )
+        self.assertTrue(
+            workspace_access_service._has_workspace_admin_access(
+                {"role": "super_admin", "email": "ceo-admin@example.com"}
+            )
+        )
+
     def test_resolve_default_project_uses_project_membership_for_invited_users(self):
         with (
             patch.object(

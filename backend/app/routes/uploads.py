@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import hashlib
+import inspect
+import json
 import re
 import secrets
 import shutil
@@ -14,6 +17,7 @@ from fastapi import (
     Depends,
     File,
     Form,
+    Header,
     HTTPException,
     Query,
     UploadFile,
@@ -47,14 +51,15 @@ from app.services.r2_storage_service import (
 from app.services.upload_scan_service import scan_uploaded_file
 from app.services.audit_log_service import create_audit_log, write_audit_log
 from app.services.privacy_access_service import (
+    account_access_is_enabled,
     can_access_cinematic_asset,
     can_access_privacy_scope,
+    can_manage_privacy_scope,
     normalize_privacy_scope,
 )
 from app.services.tree_service import list_linked_family_ids
 from app.services.linked_network_service import build_linked_network
 from app.services.workspace_access_service import (
-    count_workspace_uploads,
     family_is_visible_to_user,
     require_workspace_capability,
     require_workspace_member_role,
@@ -114,8 +119,47 @@ PRIVATE_MEDIA_ALLOWED_EXTENSIONS = {
     ".ogv",
 }
 PRIVATE_MEDIA_ALLOWED_ASSET_TYPES = {"private_voice_message", "private_video_message"}
-PRIVATE_MEDIA_ALLOWED_PRIVACY_SCOPES = {"private_to_owner", "private_to_owner_and_co_owner"}
+VAULT_FILE_ASSET_TYPE_ALIASES = {
+    "vault_photo": "vault_photo",
+    "photo": "vault_photo",
+    "group_photo": "vault_photo",
+    "portrait_photo": "vault_photo",
+    "vault_document": "vault_document",
+    "document": "vault_document",
+}
+PRIVATE_MEDIA_ALLOWED_ASSET_TYPES.update(VAULT_FILE_ASSET_TYPE_ALIASES)
+PRIVATE_MEDIA_ALLOWED_PRIVACY_SCOPES = {
+    "private_to_owner",
+    "private_to_owner_and_co_owner",
+    "household_private",
+    "linked_family_shared",
+}
 HOUSEHOLD_VAULT_CAPABILITY = "can_use_household_vault"
+PERSONAL_VAULT_CAPABILITY = "can_use_personal_vault"
+ORGANIZATION_VAULT_CAPABILITY = "can_use_organization_records_vault"
+LINKED_FAMILY_VAULT_CAPABILITY = "can_use_linked_household_vault"
+VAULT_CAPABILITIES = (
+    PERSONAL_VAULT_CAPABILITY,
+    HOUSEHOLD_VAULT_CAPABILITY,
+    LINKED_FAMILY_VAULT_CAPABILITY,
+    ORGANIZATION_VAULT_CAPABILITY,
+)
+UPLOAD_CATEGORY_CAPABILITIES: dict[str, tuple[str, ...]] = {
+    "member_photo": ("can_upload_portraits",),
+    "verification_evidence": ("can_upload_verification_docs",),
+    # Scope-specific filtering narrows this tuple below.  Keeping every Vault
+    # capability here supports legacy rows that were incorrectly labelled
+    # personal even when created by a household package.
+    "private_media": VAULT_CAPABILITIES,
+}
+VAULT_SCOPE_CAPABILITY = {
+    "personal": PERSONAL_VAULT_CAPABILITY,
+    "household": HOUSEHOLD_VAULT_CAPABILITY,
+    "family_shared": HOUSEHOLD_VAULT_CAPABILITY,
+    "linked_family": LINKED_FAMILY_VAULT_CAPABILITY,
+    "organization": ORGANIZATION_VAULT_CAPABILITY,
+    "organization_records": ORGANIZATION_VAULT_CAPABILITY,
+}
 
 ALLOWED_VERIFICATION_TYPES = {
     "government_id",
@@ -140,7 +184,14 @@ ALLOWED_QUERY_CATEGORIES = {
     "verification_evidence",
     "private_media",
 }
-ALLOWED_VAULT_SCOPE = {"personal", "family_shared"}
+ALLOWED_VAULT_SCOPE = {
+    "personal",
+    "household",
+    "family_shared",
+    "linked_family",
+    "organization",
+    "organization_records",
+}
 ALLOWED_VISIBILITY_SCOPE = {
     "private_to_owner",
     "private_to_owner_and_co_owner",
@@ -170,7 +221,14 @@ ALLOWED_PRIVACY_CLASSIFICATION = {
 
 
 class UploadPrivacyUpdatePayload(BaseModel):
-    vault_scope: Literal["personal", "family_shared"] | None = None
+    vault_scope: Literal[
+        "personal",
+        "household",
+        "family_shared",
+        "linked_family",
+        "organization",
+        "organization_records",
+    ] | None = None
     visibility_scope: Literal[
         "private_to_owner",
         "private_to_owner_and_co_owner",
@@ -354,6 +412,534 @@ def _require_member_access(
     return member, family
 
 
+def _upload_category_capabilities(upload_record: dict[str, Any]) -> tuple[str, ...]:
+    category = _normalize_value(upload_record.get("category")).lower()
+    if category != "private_media":
+        return UPLOAD_CATEGORY_CAPABILITIES.get(category, ())
+
+    scope = _normalize_value(upload_record.get("vault_scope")).lower()
+    capability = VAULT_SCOPE_CAPABILITY.get(scope)
+    if capability == PERSONAL_VAULT_CAPABILITY:
+        # Older household-vault rows were persisted as personal.  Accepting the
+        # household capability here preserves legitimate retrieval while still
+        # excluding unrelated portrait/document upload entitlements.
+        return (PERSONAL_VAULT_CAPABILITY, HOUSEHOLD_VAULT_CAPABILITY)
+    if capability:
+        return (capability,)
+    return VAULT_CAPABILITIES
+
+
+def _context_has_any_capability(
+    context: dict[str, Any],
+    capabilities: tuple[str, ...],
+) -> bool:
+    if context.get("is_admin"):
+        return True
+    entitlements = context.get("resolved_entitlements") or {}
+    return any(bool(entitlements.get(capability)) for capability in capabilities)
+
+
+def _is_upload_owner(
+    upload_record: dict[str, Any],
+    current_user: dict[str, Any],
+) -> bool:
+    current_user_id = _current_user_id(current_user)
+    uploaded_by_user_id = _normalize_value(upload_record.get("uploaded_by_user_id"))
+    return bool(
+        current_user_id
+        and uploaded_by_user_id
+        and current_user_id == uploaded_by_user_id
+    )
+
+
+def _is_project_owner(context: dict[str, Any], current_user: dict[str, Any]) -> bool:
+    current_user_id = _current_user_id(current_user)
+    owner_user_id = _normalize_value((context.get("project") or {}).get("owner_user_id"))
+    return bool(current_user_id and owner_user_id and current_user_id == owner_user_id)
+
+
+def _context_link_status(context: dict[str, Any]) -> str:
+    membership = ((context.get("access_snapshot") or {}).get("membership") or {})
+    if isinstance(membership, dict) and "link_status" in membership:
+        return _normalize_value(membership.get("link_status")).lower()
+    relationship_scope = _normalize_value(context.get("relationship_scope")).lower()
+    member_role = _normalize_value(context.get("member_role")).lower()
+    if (
+        relationship_scope in {"linked_relative", "branch_relative"}
+        or member_role in {"linked_relative", "branch_relative"}
+    ):
+        # Workspace context historically synthesized "active" for a missing
+        # membership link. Linked access must instead fail closed.
+        return ""
+    return _normalize_value(context.get("link_status")).lower()
+
+
+def _has_retained_upload_lifecycle_access(
+    *,
+    upload_record: dict[str, Any],
+    context: dict[str, Any],
+    current_user: dict[str, Any],
+) -> bool:
+    """Allow owners/co-owners to retrieve/delete existing data after downgrade."""
+
+    if context.get("is_admin") or _is_upload_owner(upload_record, current_user):
+        return True
+    role = _normalize_value(context.get("member_role")).lower()
+    return bool(_is_project_owner(context, current_user) or role in {"billing_owner", "co_owner"})
+
+
+def _upload_classification(upload_record: dict[str, Any]) -> str:
+    return _normalize_privacy_classification(
+        upload_record.get("privacy_classification"),
+        fallback=_classification_from_flags(
+            visibility_scope=_normalize_visibility_scope(
+                upload_record.get("visibility_scope"),
+                "household_private"
+                if bool(upload_record.get("customer_visible", True))
+                else "private_to_owner",
+            ),
+            internal_only=bool(upload_record.get("internal_only")),
+            customer_visible=bool(upload_record.get("customer_visible", True)),
+        ),
+    )
+
+
+def _resolve_private_upload_vault_item_id(
+    upload_record: dict[str, Any],
+) -> str | None:
+    """Resolve/backfill one exact-current Vault link; ``None`` means conflict.
+
+    Missing denormalized links are inferred only from the canonical current
+    pointer.  A retained ``asset_versions`` entry may represent superseded
+    history and must never be treated as proof that an unlinked upload is
+    current.
+    """
+
+    if _normalize_value(upload_record.get("category")).lower() != "private_media":
+        return ""
+    upload_id = _normalize_value(upload_record.get("_id") or upload_record.get("id"))
+    explicit_item_id = _normalize_value(upload_record.get("vault_item_id"))
+    if not upload_id:
+        return None
+    try:
+        db = get_database()
+    except Exception:
+        return None if explicit_item_id else ""
+    if db is None:
+        return None if explicit_item_id else ""
+    try:
+        matches = list(
+            db["vault_items"].find(
+                {
+                    "$or": [
+                        {"current_upload_id": upload_id},
+                        {"upload_id": upload_id},
+                    ]
+                }
+            )
+        )
+    except Exception:
+        return None if explicit_item_id else ""
+    matches = [
+        item
+        for item in matches
+        if _normalize_value(item.get("current_upload_id") or item.get("upload_id"))
+        == upload_id
+    ]
+    match_ids = {
+        _normalize_value(item.get("_id") or item.get("id"))
+        for item in matches
+        if _normalize_value(item.get("_id") or item.get("id"))
+    }
+    if explicit_item_id:
+        if match_ids and match_ids != {explicit_item_id}:
+            return None
+        return explicit_item_id
+    if not match_ids:
+        return ""
+    if len(match_ids) != 1:
+        try:
+            if ObjectId.is_valid(upload_id):
+                db["uploaded_files"].update_one(
+                    {"_id": ObjectId(upload_id)},
+                    {
+                        "$set": {
+                            "vault_link_status": "conflict",
+                            "vault_link_error": "multiple_reverse_links",
+                            "updated_at": datetime.now(UTC).isoformat(),
+                        }
+                    },
+                )
+        except Exception:
+            pass
+        return None
+    item = matches[0]
+    if _normalize_value(item.get("project_id")) != _normalize_value(
+        upload_record.get("project_id")
+    ):
+        return None
+    resolved_item_id = next(iter(match_ids))
+    upload_record["vault_item_id"] = resolved_item_id
+    try:
+        if ObjectId.is_valid(upload_id):
+            db["uploaded_files"].update_one(
+                {"_id": ObjectId(upload_id), "vault_item_id": {"$in": [None, ""]}},
+                {
+                    "$set": {
+                        "vault_item_id": resolved_item_id,
+                        "vault_link_status": "linked",
+                        "vault_link_reconciled_at": datetime.now(UTC).isoformat(),
+                        "updated_at": datetime.now(UTC).isoformat(),
+                    }
+                },
+            )
+    except Exception:
+        # The in-memory link is sufficient for this request's canonical auth;
+        # persistence can be retried by a later read/reconciliation pass.
+        pass
+    return resolved_item_id
+
+
+def _can_access_linked_vault_upload(
+    *,
+    upload_record: dict[str, Any],
+    context: dict[str, Any],
+    current_user: dict[str, Any],
+    require_current: bool,
+) -> bool:
+    """Apply canonical Vault release/version/grant policy to linked files."""
+
+    if _normalize_value(upload_record.get("category")).lower() != "private_media":
+        return True
+    upload_id = _normalize_value(upload_record.get("_id") or upload_record.get("id"))
+    project_id = _normalize_value(upload_record.get("project_id"))
+    user_id = _current_user_id(current_user)
+    if not upload_id or not project_id or not user_id:
+        return False
+    try:
+        from app.services.vault_service import authorize_vault_upload_access
+
+        item = authorize_vault_upload_access(
+            upload_id,
+            user_id,
+            authorized_project_id=project_id,
+            requesting_workspace_role=_normalize_value(context.get("member_role")).lower(),
+            relationship_scope=_normalize_value(context.get("relationship_scope")).lower(),
+            link_status=_context_link_status(context),
+            require_current=require_current,
+            backfill_legacy_linkage=True,
+        )
+        resolved_item_id = _normalize_value(item.get("_id") or item.get("id"))
+        if resolved_item_id:
+            upload_record["vault_item_id"] = resolved_item_id
+        return True
+    except Exception:
+        linkage_status = _normalize_value(upload_record.get("vault_link_status")).lower()
+        modern_unlinked = bool(
+            _normalize_value(upload_record.get("vault_item_id"))
+            or linkage_status
+            or "release_state" in upload_record
+            or "account_access_enabled" in upload_record
+            or "version" in upload_record
+        )
+        if modern_unlinked:
+            # A failed/pending modern link is a recovery state, not a sharing
+            # grant.  Only the uploader may retain direct lifecycle access.
+            return bool(
+                not _normalize_value(upload_record.get("vault_item_id"))
+                and linkage_status in {"", "pending", "failed"}
+                and _is_upload_owner(upload_record, current_user)
+            )
+        # Truly legacy released rows predate canonical Vault items.  Preserve
+        # their uploader/workspace privacy behavior until a migration can link
+        # them; draft/scheduled rows always take the fail-closed branch above.
+        return True
+
+
+def _can_change_linked_vault_privacy(
+    *,
+    upload_record: dict[str, Any],
+    context: dict[str, Any],
+    current_user: dict[str, Any],
+) -> bool:
+    if _normalize_value(upload_record.get("category")).lower() != "private_media":
+        return True
+    if not _is_upload_owner(upload_record, current_user):
+        return False
+    upload_id = _normalize_value(upload_record.get("_id") or upload_record.get("id"))
+    try:
+        from app.services.vault_service import authorize_vault_upload_access
+
+        item = authorize_vault_upload_access(
+            upload_id,
+            _current_user_id(current_user),
+            authorized_project_id=_normalize_value(upload_record.get("project_id")),
+            requesting_workspace_role=_normalize_value(context.get("member_role")).lower(),
+            relationship_scope=_normalize_value(context.get("relationship_scope")).lower(),
+            link_status=_context_link_status(context),
+            require_current=True,
+            backfill_legacy_linkage=True,
+        )
+        return _normalize_value(item.get("owner_user_id")) == _current_user_id(current_user)
+    except Exception:
+        return False
+
+
+def _sync_linked_vault_item_privacy(
+    *,
+    upload_record: dict[str, Any],
+    current_user: dict[str, Any],
+    next_vault_scope: str,
+    next_privacy_classification: str,
+) -> dict[str, str] | None:
+    if _normalize_value(upload_record.get("category")).lower() != "private_media":
+        return None
+    resolved_vault_item_id = _resolve_private_upload_vault_item_id(upload_record)
+    if resolved_vault_item_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Vault linkage is inconsistent and must be reconciled before changing privacy.",
+        )
+    vault_item_id = resolved_vault_item_id
+    if not vault_item_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Vault linkage must be reconciled before changing file privacy or scope.",
+        )
+    try:
+        from app.schemas.vault import VaultItemUpdate
+        from app.services.vault_service import (
+            _vault_privacy_for_upload,
+            _vault_scope_for_upload,
+            update_vault_item,
+        )
+
+        old_scope = _vault_scope_for_upload(upload_record)
+        old_privacy = _vault_privacy_for_upload(upload_record)
+        next_projection = {
+            **upload_record,
+            "vault_scope": next_vault_scope,
+            "privacy_classification": next_privacy_classification,
+            "privacy_scope": next_privacy_classification,
+            "visibility_scope": next_privacy_classification,
+        }
+        new_scope = _vault_scope_for_upload(next_projection)
+        new_privacy = _vault_privacy_for_upload(next_projection)
+        update_vault_item(
+            vault_item_id,
+            VaultItemUpdate(vault_scope=new_scope, privacy=new_privacy),
+            _current_user_id(current_user),
+            authorized_project_id=_normalize_value(upload_record.get("project_id")),
+        )
+        return {
+            "vault_item_id": vault_item_id,
+            "old_scope": old_scope,
+            "old_privacy": old_privacy,
+        }
+    except PermissionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the Vault item owner can change linked file privacy or scope.",
+        ) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Linked Vault privacy could not be synchronized; no upload policy was changed.",
+        ) from exc
+
+
+def _rollback_linked_vault_item_privacy(
+    *,
+    rollback: dict[str, str] | None,
+    upload_record: dict[str, Any],
+    current_user: dict[str, Any],
+) -> None:
+    if not rollback:
+        return
+    from app.schemas.vault import VaultItemUpdate
+    from app.services.vault_service import update_vault_item
+
+    update_vault_item(
+        rollback["vault_item_id"],
+        VaultItemUpdate(
+            vault_scope=rollback["old_scope"],
+            privacy=rollback["old_privacy"],
+        ),
+        _current_user_id(current_user),
+        authorized_project_id=_normalize_value(upload_record.get("project_id")),
+    )
+
+
+def _can_access_upload_record(
+    *,
+    upload_record: dict[str, Any],
+    context: dict[str, Any],
+    current_user: dict[str, Any],
+) -> bool:
+    if not account_access_is_enabled(upload_record):
+        return False
+    owns_record = _is_upload_owner(upload_record, current_user)
+    if bool(upload_record.get("internal_only")) and not owns_record:
+        return False
+    if not bool(upload_record.get("customer_visible", True)) and not owns_record:
+        return False
+    if not _can_access_classification(
+        _upload_classification(upload_record),
+        context=context,
+        upload_record=upload_record,
+        current_user=current_user,
+    ):
+        return False
+    return _can_access_linked_vault_upload(
+        upload_record=upload_record,
+        context=context,
+        current_user=current_user,
+        require_current=False,
+    )
+
+
+def _can_manage_upload_record(
+    *,
+    upload_record: dict[str, Any],
+    context: dict[str, Any],
+    current_user: dict[str, Any],
+) -> bool:
+    upload_project_id = _normalize_value(upload_record.get("project_id"))
+    context_project_id = _normalize_value(
+        (context.get("project") or {}).get("_id")
+        or (context.get("project") or {}).get("id")
+    )
+    # A context from a linked viewer workspace grants read-only access to
+    # explicitly shared assets.  Its billing/family-manager role must never be
+    # projected onto another family's source project.
+    if bool(context.get("linked_viewer_read_only")) or (
+        upload_project_id
+        and context_project_id
+        and upload_project_id != context_project_id
+    ):
+        return False
+    if not account_access_is_enabled(upload_record):
+        return bool(context.get("is_admin"))
+    if context.get("is_admin"):
+        return True
+
+    if not _can_access_linked_vault_upload(
+        upload_record=upload_record,
+        context=context,
+        current_user=current_user,
+        require_current=False,
+    ):
+        return False
+
+    return can_manage_privacy_scope(
+        privacy_scope=_upload_classification(upload_record),
+        member_role=context.get("member_role") or "viewer",
+        is_owner=_is_upload_owner(upload_record, current_user),
+        is_project_owner=_is_project_owner(context, current_user),
+    )
+
+
+def _can_list_upload_record(
+    *,
+    upload_record: dict[str, Any],
+    context: dict[str, Any],
+    current_user: dict[str, Any],
+) -> bool:
+    capabilities = _upload_category_capabilities(upload_record)
+    if not capabilities:
+        return False
+    has_category_access = _context_has_any_capability(context, capabilities)
+    if not has_category_access and not _has_retained_upload_lifecycle_access(
+        upload_record=upload_record,
+        context=context,
+        current_user=current_user,
+    ):
+        return False
+    if not _can_access_upload_record(
+        upload_record=upload_record,
+        context=context,
+        current_user=current_user,
+    ):
+        return False
+    return _can_access_linked_vault_upload(
+        upload_record=upload_record,
+        context=context,
+        current_user=current_user,
+        require_current=True,
+    )
+
+
+def _resolve_upload_list_context(
+    *,
+    current_user: dict[str, Any],
+    project_id: str = "",
+    family_id: str = "",
+    member_id: str = "",
+    category: str = "",
+    detail: str,
+) -> dict[str, Any]:
+    pseudo_record = {"category": category} if category else {}
+    capabilities = (
+        _upload_category_capabilities(pseudo_record)
+        if category
+        else tuple(
+            dict.fromkeys(
+                capability
+                for values in UPLOAD_CATEGORY_CAPABILITIES.values()
+                for capability in values
+            )
+        )
+    )
+    if not capabilities:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This upload category is not available to customers.",
+        )
+    try:
+        return require_workspace_capability(
+            current_user,
+            project_id=project_id,
+            family_id=family_id,
+            member_id=member_id,
+            capabilities=capabilities,
+            detail=detail,
+        )
+    except HTTPException:
+        # Resolve membership so existing rows can still be filtered to the
+        # uploader/buyer/co-owner after a package downgrade.
+        return resolve_workspace_context(
+            current_user,
+            project_id=project_id,
+            family_id=family_id,
+            member_id=member_id,
+        )
+
+
+def _audit_upload_access_denial(
+    *,
+    upload_id: str,
+    current_user: dict[str, Any],
+    reason: str,
+    upload_record: dict[str, Any],
+) -> None:
+    try:
+        create_audit_log(
+            "private_file_access_denied",
+            _current_user_id(current_user) or None,
+            "upload",
+            upload_id,
+            {
+                "reason": reason,
+                "privacy_classification": _upload_classification(upload_record),
+                "category": _normalize_value(upload_record.get("category")),
+            },
+        )
+    except Exception:
+        pass
+
+
 def _require_upload_access(
     upload_id: str,
     db: Any,
@@ -368,15 +954,78 @@ def _require_upload_access(
     if not upload_record:
         raise HTTPException(status_code=404, detail="Upload not found.")
 
+    if not account_access_is_enabled(upload_record):
+        _audit_upload_access_denial(
+            upload_id=upload_id,
+            current_user=current_user,
+            reason="account_access_disabled",
+            upload_record=upload_record,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This file is unavailable because account access is disabled.",
+        )
+
     family_id = _normalize_value(upload_record.get("family_id"))
     project_id = _normalize_value(upload_record.get("project_id"))
-    context = require_workspace_capability(
-        current_user,
-        project_id=project_id,
-        family_id=family_id,
-        capabilities=("can_upload_portraits", "can_upload_verification_docs"),
-        detail=detail,
-    )
+    capabilities = _upload_category_capabilities(upload_record)
+    if not capabilities:
+        # A small set of legacy rows predates ``category``.  Do not grant a
+        # category capability implicitly, but preserve the uploader's direct
+        # retrieval/deletion right after resolving the exact workspace.
+        try:
+            context = require_workspace_capability(
+                current_user,
+                project_id=project_id,
+                family_id=family_id,
+                capabilities=tuple(
+                    dict.fromkeys(
+                        capability
+                        for values in UPLOAD_CATEGORY_CAPABILITIES.values()
+                        for capability in values
+                    )
+                ),
+                detail=detail,
+            )
+        except HTTPException:
+            context = resolve_workspace_context(
+                current_user,
+                project_id=project_id,
+                family_id=family_id,
+            )
+        if not _has_retained_upload_lifecycle_access(
+            upload_record=upload_record,
+            context=context,
+            current_user=current_user,
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="This legacy upload is available only to its owner or workspace buyer/co-owner.",
+            )
+    else:
+        try:
+            context = require_workspace_capability(
+                current_user,
+                project_id=project_id,
+                family_id=family_id,
+                capabilities=capabilities,
+                detail=detail,
+            )
+        except HTTPException as capability_error:
+            # Existing customer data must remain retrievable after a package
+            # downgrade by the uploader, buyer, or co-owner. New writes/replacements
+            # still require the exact category capability.
+            context = resolve_workspace_context(
+                current_user,
+                project_id=project_id,
+                family_id=family_id,
+            )
+            if not _has_retained_upload_lifecycle_access(
+                upload_record=upload_record,
+                context=context,
+                current_user=current_user,
+            ):
+                raise capability_error
 
     if (
         not context.get("is_admin")
@@ -388,70 +1037,21 @@ def _require_upload_access(
             detail="Upload does not belong to the current workspace.",
         )
 
-    if not context.get("is_admin"):
-        current_user_id = _current_user_id(current_user)
-        uploaded_by_user_id = _normalize_value(upload_record.get("uploaded_by_user_id"))
-        owns_record = bool(current_user_id and uploaded_by_user_id and current_user_id == uploaded_by_user_id)
-        if bool(upload_record.get("internal_only")) and not owns_record:
-            try:
-                create_audit_log(
-                    "private_file_access_denied",
-                    current_user_id or None,
-                    "upload",
-                    upload_id,
-                    {"reason": "visibility_policy"},
-                )
-            except Exception:
-                pass
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="This file is not visible to customers.",
-            )
-
-        if not bool(upload_record.get("customer_visible")) and not owns_record:
-            try:
-                create_audit_log(
-                    "private_file_access_denied",
-                    current_user_id or None,
-                    "upload",
-                    upload_id,
-                    {"reason": "visibility_policy"},
-                )
-            except Exception:
-                pass
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="This file is not visible to customers.",
-            )
-
-        classification = _normalize_privacy_classification(
-            upload_record.get("privacy_classification"),
-            fallback=_classification_from_flags(
-                visibility_scope=_normalize_visibility_scope(upload_record.get("visibility_scope"), "private"),
-                internal_only=bool(upload_record.get("internal_only")),
-                customer_visible=bool(upload_record.get("customer_visible")),
-            ),
-        )
-        if not _can_access_classification(
-            classification,
-            context=context,
-            upload_record=upload_record,
+    if not _can_access_upload_record(
+        upload_record=upload_record,
+        context=context,
+        current_user=current_user,
+    ):
+        _audit_upload_access_denial(
+            upload_id=upload_id,
             current_user=current_user,
-        ):
-            try:
-                create_audit_log(
-                    "private_file_access_denied",
-                    current_user_id or None,
-                    "upload",
-                    upload_id,
-                    {"reason": "privacy_classification", "privacy_classification": classification},
-                )
-            except Exception:
-                pass
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Access denied for this file privacy classification.",
-            )
+            reason="privacy_or_visibility_policy",
+            upload_record=upload_record,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied for this file privacy classification.",
+        )
 
     return upload_record, context
 
@@ -460,6 +1060,8 @@ def _require_upload_management_access(
     upload_id: str,
     db: Any,
     current_user: dict[str, Any],
+    *,
+    action: str = "manage",
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     if not ObjectId.is_valid(upload_id):
         raise HTTPException(status_code=400, detail="Invalid upload id.")
@@ -476,26 +1078,14 @@ def _require_upload_management_access(
         family_id=family_id,
     )
 
-    if context.get("is_admin"):
-        return upload_record, context
-
-    current_user_id = _current_user_id(current_user)
-    uploaded_by_user_id = _normalize_value(upload_record.get("uploaded_by_user_id"))
-    member_role = _normalize_value(context.get("member_role"))
-    if current_user_id == uploaded_by_user_id:
-        return upload_record, context
-
-    if member_role in {"billing_owner", "co_owner", "family_manager"}:
-        return upload_record, context
-
-    project_owner_user_id = _normalize_value((context.get("project") or {}).get("owner_user_id"))
-    if current_user_id == project_owner_user_id:
-        return upload_record, context
-
-    if current_user_id not in {uploaded_by_user_id, project_owner_user_id}:
+    if not _can_manage_upload_record(
+        upload_record=upload_record,
+        context=context,
+        current_user=current_user,
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to manage this upload.",
+            detail=f"Not authorized to {action} this upload.",
         )
 
     return upload_record, context
@@ -557,7 +1147,178 @@ def _require_linked_cinematic_upload_access(
     return upload_record, context
 
 
-def _public_upload_record(record: dict[str, Any]) -> dict[str, Any]:
+def _require_linked_vault_upload_access(
+    upload_id: str,
+    viewer_project_id: str,
+    db: Any,
+    current_user: dict[str, Any],
+    *,
+    require_current: bool = True,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Authorize a read-only linked-family Vault viewer request.
+
+    The viewer proves access to their own project, both linked-Vault
+    entitlements, an approved family graph edge, and the source record's
+    explicit linked-sharing policy. Canonical Vault authorization remains the
+    final release/current-version gate.
+    """
+
+    if not ObjectId.is_valid(upload_id):
+        raise HTTPException(status_code=400, detail="Invalid upload id.")
+    normalized_viewer_project_id = _normalize_value(viewer_project_id)
+    if not normalized_viewer_project_id:
+        raise HTTPException(status_code=400, detail="Viewer project id is required.")
+
+    context = require_workspace_capability(
+        current_user,
+        project_id=normalized_viewer_project_id,
+        capabilities=(LINKED_FAMILY_VAULT_CAPABILITY,),
+        detail="Your active package does not include linked-family Vault access.",
+    )
+    if context.get("is_admin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Customer linked-Vault access requires membership in the viewer workspace.",
+        )
+    if not bool((context.get("resolved_entitlements") or {}).get("can_link_households")):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your active package does not include linked-household access.",
+        )
+
+    viewer_family_id = _normalize_value((context.get("family") or {}).get("_id"))
+    viewer_context_project_id = _normalize_value(
+        (context.get("project") or {}).get("_id")
+        or (context.get("project") or {}).get("id")
+    )
+    if not viewer_family_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="The viewer workspace is not connected to a household.",
+        )
+    upload_record = db["uploaded_files"].find_one({"_id": ObjectId(upload_id)})
+    if upload_record is None:
+        raise HTTPException(status_code=404, detail="Upload not found.")
+
+    source_family_id = _normalize_value(upload_record.get("family_id"))
+    source_project_id = _normalize_value(upload_record.get("project_id"))
+    if (
+        _normalize_value(upload_record.get("category")).lower() != "private_media"
+        or _canonical_vault_scope(upload_record.get("vault_scope")) != "linked_family"
+        or _upload_classification(upload_record) != "linked_family_shared"
+        or not bool(upload_record.get("share_with_linked_families"))
+        or upload_record.get("customer_visible") is not True
+        or bool(upload_record.get("internal_only"))
+        or not source_family_id
+        or source_family_id == viewer_family_id
+        or not source_project_id
+        or source_project_id == viewer_context_project_id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This upload is not explicitly shared with a linked-family Vault.",
+        )
+    try:
+        linked_family_ids = {
+            _normalize_value(value)
+            for value in list_linked_family_ids(viewer_family_id)
+            if _normalize_value(value)
+        }
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Linked-family status could not be verified.",
+        ) from exc
+    if source_family_id not in linked_family_ids:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="An accepted household link is required to access this Vault upload.",
+        )
+
+    access_snapshot = dict(context.get("access_snapshot") or {})
+    membership = dict(access_snapshot.get("membership") or {})
+    membership.update(
+        {
+            "member_role": "linked_relative",
+            "relationship_scope": "linked_relative",
+            "link_status": "approved",
+        }
+    )
+    access_snapshot["membership"] = membership
+    linked_context = {
+        **context,
+        "access_snapshot": access_snapshot,
+        "member_role": "linked_relative",
+        "relationship_scope": "linked_relative",
+        "link_status": "approved",
+        "linked_viewer_read_only": True,
+    }
+    if not _can_access_upload_record(
+        upload_record=upload_record,
+        context=linked_context,
+        current_user=current_user,
+    ) or not _can_access_linked_vault_upload(
+        upload_record=upload_record,
+        context=linked_context,
+        current_user=current_user,
+        require_current=require_current,
+    ):
+        _audit_upload_access_denial(
+            upload_id=upload_id,
+            current_user=current_user,
+            reason="linked_vault_policy",
+            upload_record=upload_record,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This linked Vault upload is not released to the viewer.",
+        )
+    return upload_record, linked_context
+
+
+def _require_viewer_upload_access(
+    upload_id: str,
+    viewer_project_id: str,
+    db: Any,
+    current_user: dict[str, Any],
+    *,
+    require_current: bool = True,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Dispatch the existing portrait viewer and linked Vault viewer policies."""
+
+    if not ObjectId.is_valid(upload_id):
+        raise HTTPException(status_code=400, detail="Invalid upload id.")
+    upload_record = db["uploaded_files"].find_one({"_id": ObjectId(upload_id)})
+    if upload_record is None:
+        raise HTTPException(status_code=404, detail="Upload not found.")
+    category = _normalize_value(upload_record.get("category")).lower()
+    if category == "private_media":
+        return _require_linked_vault_upload_access(
+            upload_id,
+            viewer_project_id,
+            db,
+            current_user,
+            require_current=require_current,
+        )
+    if category == "member_photo":
+        return _require_linked_cinematic_upload_access(
+            upload_id,
+            viewer_project_id,
+            db,
+            current_user,
+        )
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="This upload type is not available through a linked viewer.",
+    )
+
+
+def _public_upload_record(
+    record: dict[str, Any],
+    *,
+    context: dict[str, Any] | None = None,
+    current_user: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     serialized = serialize_upload_record(record)
     serialized.pop("relative_path", None)
     serialized.pop("absolute_path", None)
@@ -568,11 +1329,71 @@ def _public_upload_record(record: dict[str, Any]) -> dict[str, Any]:
     serialized.pop("verified_by", None)
     serialized.pop("scan_detail", None)
     serialized.pop("quarantine_reason", None)
+    can_access = False
+    can_manage = False
+    can_create_next_version = False
+    if context is not None and current_user is not None:
+        can_access = _can_access_upload_record(
+            upload_record=record,
+            context=context,
+            current_user=current_user,
+        )
+        can_manage = _can_manage_upload_record(
+            upload_record=record,
+            context=context,
+            current_user=current_user,
+        )
+        can_create_next_version = bool(
+            _context_has_any_capability(
+                context,
+                _upload_category_capabilities(record),
+            )
+            and can_manage
+        )
+    download_ready = bool(
+        can_access
+        and not _upload_scan_blocks_download(record)
+        and _upload_has_durable_private_storage(record)
+    )
+    serialized["permissions"] = {
+        "can_preview": download_ready,
+        "can_download": download_ready,
+        "can_replace": bool(
+            can_create_next_version
+            and record.get("is_current_version", True)
+            and not _normalize_value(record.get("superseded_by_upload_id"))
+            and not _normalize_value(record.get("pending_replacement_upload_id"))
+        ),
+        "can_delete": can_manage,
+        "can_change_privacy": bool(
+            can_manage
+            and context is not None
+            and current_user is not None
+            and _can_change_linked_vault_privacy(
+                upload_record=record,
+                context=context,
+                current_user=current_user,
+            )
+        ),
+        "can_manage": can_manage,
+    }
     return serialized
 
 
-def _serialize_uploads(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [_public_upload_record(record) for record in records]
+def _serialize_uploads(
+    records: list[dict[str, Any]],
+    *,
+    context: dict[str, Any] | None = None,
+    current_user: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    return [
+        _public_upload_record(
+            record,
+            context=context,
+            current_user=current_user,
+        )
+        for record in records
+    ]
 
 
 def _display_member_name(member: dict[str, Any] | None) -> str | None:
@@ -1377,6 +2198,206 @@ def _clear_deleted_member_photo_references(
         raise RuntimeError("Family member disappeared during upload deletion.")
 
 
+def _deletion_tombstone_id(upload_id: str) -> str:
+    return f"upload_delete_{upload_id}"
+
+
+def _create_upload_deletion_tombstone(
+    *,
+    db: Any,
+    upload_record: dict[str, Any],
+    upload_id: str,
+    current_user: dict[str, Any],
+) -> str:
+    tombstone_id = _deletion_tombstone_id(upload_id)
+    now = datetime.now(UTC).isoformat()
+    tombstone = {
+        "_id": tombstone_id,
+        "upload_id": upload_id,
+        "project_id": _normalize_value(upload_record.get("project_id")) or None,
+        "family_id": _normalize_value(upload_record.get("family_id")) or None,
+        "member_id": _normalize_value(upload_record.get("member_id")) or None,
+        "category": _normalize_value(upload_record.get("category")) or None,
+        "asset_type": _normalize_value(upload_record.get("asset_type")) or None,
+        "vault_item_id": _normalize_value(upload_record.get("vault_item_id")) or None,
+        "version_group_id": _normalize_value(
+            upload_record.get("version_group_id") or upload_record.get("_id")
+        )
+        or None,
+        "version": max(_as_int(upload_record.get("version"), 1), 1),
+        "replaces_upload_id": _normalize_value(upload_record.get("replaces_upload_id")) or None,
+        "superseded_by_upload_id": _normalize_value(
+            upload_record.get("superseded_by_upload_id")
+        )
+        or None,
+        "original_filename_sha256": hashlib.sha256(
+            _normalize_value(upload_record.get("original_filename")).encode("utf-8")
+        ).hexdigest(),
+        "storage_reference_sha256": hashlib.sha256(
+            _normalize_value(
+                upload_record.get("storage_key")
+                or upload_record.get("relative_path")
+                or upload_record.get("quarantine_path")
+            ).encode("utf-8")
+        ).hexdigest(),
+        "size_bytes": max(_as_int(upload_record.get("size_bytes"), 0), 0),
+        "content_type": _normalize_value(upload_record.get("content_type")) or None,
+        "requested_by_user_id": _current_user_id(current_user) or None,
+        "status": "pending",
+        "detail": "",
+        "requested_at": now,
+        "updated_at": now,
+    }
+    collection = db["upload_deletion_tombstones"]
+    try:
+        collection.insert_one(tombstone)
+    except Exception as exc:
+        existing = collection.find_one({"_id": tombstone_id})
+        if existing is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Deletion audit storage is unavailable; no file was removed.",
+            ) from exc
+        collection.update_one(
+            {"_id": tombstone_id},
+            {
+                "$set": {
+                    "status": "pending",
+                    "detail": "retry",
+                    "requested_by_user_id": _current_user_id(current_user) or None,
+                    "updated_at": now,
+                }
+            },
+        )
+    return tombstone_id
+
+
+def _update_upload_deletion_tombstone(
+    *,
+    db: Any,
+    tombstone_id: str,
+    tombstone_status: str,
+    detail: str = "",
+) -> None:
+    result = db["upload_deletion_tombstones"].update_one(
+        {"_id": tombstone_id},
+        {
+            "$set": {
+                "status": tombstone_status,
+                "detail": _normalize_value(detail)[:200],
+                "completed_at": (
+                    datetime.now(UTC).isoformat()
+                    if tombstone_status == "complete"
+                    else None
+                ),
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+        },
+    )
+    if getattr(result, "matched_count", 0) != 1:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Deletion audit could not be checkpointed; the upload record was retained.",
+        )
+
+
+def _tombstone_linked_vault_upload_version(
+    *,
+    db: Any,
+    upload_record: dict[str, Any],
+    upload_id: str,
+    current_user: dict[str, Any],
+    context: dict[str, Any],
+    tombstone_id: str,
+) -> dict[str, Any] | None:
+    if _normalize_value(upload_record.get("category")).lower() != "private_media":
+        return None
+    resolved_vault_item_id = _resolve_private_upload_vault_item_id(upload_record)
+    if resolved_vault_item_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Vault linkage is inconsistent; deletion was stopped for reconciliation.",
+        )
+    if not resolved_vault_item_id:
+        return None
+    try:
+        from app.services.vault_service import (
+            preview_vault_upload_version_deletion,
+            tombstone_vault_upload_version,
+        )
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Vault version deletion is temporarily unavailable; no file was removed.",
+        ) from exc
+
+    kwargs = {
+        "authorized_project_id": _normalize_value(upload_record.get("project_id")),
+        "workspace_member_role": _normalize_value(context.get("member_role")).lower(),
+    }
+    try:
+        preview = preview_vault_upload_version_deletion(
+            resolved_vault_item_id,
+            upload_id,
+            _current_user_id(current_user),
+            **kwargs,
+        )
+        if not bool(preview.get("allowed")):
+            raise PermissionError("vault_delete_not_allowed")
+        result = tombstone_vault_upload_version(
+            resolved_vault_item_id,
+            upload_id,
+            _current_user_id(current_user),
+            reason="customer_delete",
+            **kwargs,
+        )
+    except PermissionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to delete this linked Vault file version.",
+        ) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Vault version state could not be updated; no physical file was removed.",
+        ) from exc
+    if not bool(result.get("safe_to_delete_upload")):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Vault did not confirm that this file version is safe to delete.",
+        )
+
+    promoted_upload_id = _normalize_value(result.get("promoted_upload_id"))
+    if promoted_upload_id and ObjectId.is_valid(promoted_upload_id):
+        db["uploaded_files"].update_one(
+            {"_id": ObjectId(promoted_upload_id)},
+            {
+                "$set": {
+                    "is_current_version": True,
+                    "replacement_status": "current",
+                    "superseded_by_upload_id": None,
+                    "version": max(_as_int(result.get("promoted_version"), 1), 1),
+                    "updated_at": datetime.now(UTC).isoformat(),
+                }
+            },
+        )
+    db["upload_deletion_tombstones"].update_one(
+        {"_id": tombstone_id},
+        {
+            "$set": {
+                "vault_version_tombstoned": True,
+                "vault_was_current": bool(result.get("was_current")),
+                "vault_promoted_upload_id": promoted_upload_id or None,
+                "vault_item_closed": bool(result.get("item_closed")),
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+        },
+    )
+    return result
+
+
 def _file_extension(filename: str) -> str:
     return Path(filename or "").suffix.lower()
 
@@ -1414,6 +2435,8 @@ def _normalize_vault_scope(value: Any, default: str = "personal") -> str:
 
 def _normalize_visibility_scope(value: Any, default: str = "private") -> str:
     normalized = _normalize_value(value).lower()
+    if not normalized and not _normalize_value(default):
+        return ""
     if normalized in ALLOWED_VISIBILITY_SCOPE:
         return normalize_privacy_scope(normalized)
     return normalize_privacy_scope(default)
@@ -1470,7 +2493,8 @@ def _classification_from_flags(
 
 
 def _normalize_privacy_classification(value: Any, *, fallback: str) -> str:
-    normalized = normalize_privacy_scope(value)
+    raw_value = _normalize_value(value)
+    normalized = normalize_privacy_scope(raw_value or fallback)
     if normalized in ALLOWED_PRIVACY_CLASSIFICATION:
         return normalized
     return normalize_privacy_scope(fallback)
@@ -1483,10 +2507,6 @@ def _can_access_classification(
     upload_record: dict[str, Any],
     current_user: dict[str, Any],
 ) -> bool:
-    # Workspace admins intentionally bypass classification gating so support/security
-    # workflows can still operate across all vault privacy classes.
-    if context.get("is_admin"):
-        return True
     normalized = _normalize_privacy_classification(classification, fallback="private_to_owner")
     user_id = _current_user_id(current_user)
     uploaded_by_user_id = _normalize_value(upload_record.get("uploaded_by_user_id"))
@@ -1494,8 +2514,9 @@ def _can_access_classification(
         privacy_scope=normalized,
         member_role=context.get("member_role") or "viewer",
         relationship_scope=context.get("relationship_scope") or "household_member",
-        link_status=context.get("link_status") or "active",
+        link_status=_context_link_status(context),
         is_owner=bool(user_id and uploaded_by_user_id and user_id == uploaded_by_user_id),
+        is_project_owner=_is_project_owner(context, current_user),
     )
 
 
@@ -1544,6 +2565,66 @@ def _validate_upload_file(
             detail=f"{label} file exceeds the maximum allowed size.",
         )
 
+    compatible_extensions = {
+        "image/jpeg": {".jpg", ".jpeg"},
+        "image/png": {".png"},
+        "image/webp": {".webp"},
+        "application/pdf": {".pdf"},
+        "audio/mpeg": {".mp3"},
+        "audio/mp4": {".m4a", ".mp4"},
+        "audio/wav": {".wav"},
+        "audio/x-wav": {".wav"},
+        "audio/webm": {".webm"},
+        "audio/ogg": {".ogg"},
+        "video/mp4": {".mp4"},
+        "video/webm": {".webm"},
+        "video/quicktime": {".mov"},
+        "video/ogg": {".ogv", ".ogg"},
+    }
+    if extension not in compatible_extensions.get(content_type, {extension}):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"{label} filename extension does not match its content type.",
+        )
+
+    file_handle = upload.file
+    original_position = file_handle.tell()
+    try:
+        file_handle.seek(0)
+        header = file_handle.read(32)
+    finally:
+        file_handle.seek(original_position)
+
+    signature_matches = {
+        "image/jpeg": lambda value: len(value) >= 3 and value[:3] == b"\xff\xd8\xff",
+        "image/png": lambda value: value.startswith(b"\x89PNG\r\n\x1a\n"),
+        "image/webp": lambda value: len(value) >= 12
+        and value[:4] == b"RIFF"
+        and value[8:12] == b"WEBP",
+        "application/pdf": lambda value: value.startswith(b"%PDF-"),
+        "audio/mpeg": lambda value: value.startswith(b"ID3")
+        or (len(value) >= 2 and value[0] == 0xFF and (value[1] & 0xE0) == 0xE0),
+        "audio/mp4": lambda value: len(value) >= 12 and value[4:8] == b"ftyp",
+        "audio/wav": lambda value: len(value) >= 12
+        and value[:4] == b"RIFF"
+        and value[8:12] == b"WAVE",
+        "audio/x-wav": lambda value: len(value) >= 12
+        and value[:4] == b"RIFF"
+        and value[8:12] == b"WAVE",
+        "audio/webm": lambda value: value.startswith(b"\x1aE\xdf\xa3"),
+        "audio/ogg": lambda value: value.startswith(b"OggS"),
+        "video/mp4": lambda value: len(value) >= 12 and value[4:8] == b"ftyp",
+        "video/webm": lambda value: value.startswith(b"\x1aE\xdf\xa3"),
+        "video/quicktime": lambda value: len(value) >= 12 and value[4:8] == b"ftyp",
+        "video/ogg": lambda value: value.startswith(b"OggS"),
+    }
+    matcher = signature_matches.get(content_type)
+    if matcher is None or not matcher(header):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"{label} file signature does not match its declared content type.",
+        )
+
     upload.file.seek(0)
 
 
@@ -1559,11 +2640,122 @@ def _enforce_allowed_asset_type(
         for value in (context.get("resolved_entitlements") or {}).get("allowed_asset_types") or []
         if _normalize_value(value)
     }
-    if allowed and _normalize_value(asset_type).lower() not in allowed:
+    normalized_asset_type = _normalize_value(asset_type).lower()
+    entitlement_asset_types = {normalized_asset_type}
+    if normalized_asset_type == "vault_photo":
+        entitlement_asset_types.update({"group_photo", "portrait_photo"})
+    elif normalized_asset_type == "vault_document":
+        entitlement_asset_types.add("document")
+    if not allowed or not allowed.intersection(entitlement_asset_types):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Your active package does not permit this private media type.",
+            detail="Your active package does not permit this private Vault file type.",
         )
+
+
+def _canonical_vault_asset_type(value: Any) -> str:
+    normalized = _normalize_value(value).lower()
+    return VAULT_FILE_ASSET_TYPE_ALIASES.get(normalized, normalized)
+
+
+def _canonical_vault_scope(value: Any) -> str:
+    normalized = _normalize_value(value).lower()
+    if normalized in {"family_shared", "household"}:
+        return "household"
+    if normalized in {"organization", "organization_records"}:
+        return "organization"
+    if normalized == "linked_family":
+        return "linked_family"
+    if normalized == "personal":
+        return "personal"
+    return ""
+
+
+def _resolve_vault_scope_for_create(
+    *,
+    context: dict[str, Any],
+    requested_scope: Any,
+) -> tuple[str, str]:
+    entitlements = context.get("resolved_entitlements") or {}
+    normalized_scope = _canonical_vault_scope(requested_scope)
+    if not normalized_scope:
+        for candidate in ("personal", "household", "linked_family", "organization"):
+            capability = VAULT_SCOPE_CAPABILITY[candidate]
+            if bool(context.get("is_admin")) or bool(entitlements.get(capability)):
+                normalized_scope = candidate
+                break
+    if not normalized_scope:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your active package does not include a private Vault scope.",
+        )
+    capability = VAULT_SCOPE_CAPABILITY[normalized_scope]
+    if not context.get("is_admin") and not bool(entitlements.get(capability)):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Your active package does not include the {normalized_scope} Vault.",
+        )
+    return normalized_scope, capability
+
+
+def _resolve_upload_release_fields(
+    *,
+    context: dict[str, Any],
+    release_state: Any,
+    reveal_at: Any,
+) -> tuple[str, str | None]:
+    normalized_state = _normalize_value(release_state).lower() or "released"
+    if normalized_state not in {"released", "draft", "scheduled"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="release_state must be released, draft, or scheduled.",
+        )
+    normalized_reveal_at = _normalize_value(reveal_at)
+    parsed_reveal_at: datetime | None = None
+    if normalized_reveal_at:
+        try:
+            parsed_reveal_at = datetime.fromisoformat(
+                normalized_reveal_at.replace("Z", "+00:00")
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="reveal_at must be a valid ISO-8601 datetime with a timezone.",
+            ) from exc
+        if parsed_reveal_at.tzinfo is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="reveal_at must include a timezone.",
+            )
+        parsed_reveal_at = parsed_reveal_at.astimezone(UTC)
+
+    if normalized_state == "scheduled":
+        if not context.get("is_admin") and not bool(
+            (context.get("resolved_entitlements") or {}).get("can_use_scheduled_reveal")
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Your active package does not include scheduled Vault release.",
+            )
+        if parsed_reveal_at is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Scheduled Vault uploads require reveal_at.",
+            )
+        if parsed_reveal_at <= datetime.now(UTC):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Scheduled Vault reveal_at must be in the future.",
+            )
+    elif parsed_reveal_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="reveal_at is allowed only when release_state is scheduled.",
+        )
+    return (
+        normalized_state,
+        parsed_reveal_at.isoformat() if parsed_reveal_at is not None else None,
+    )
 
 
 def _as_int(value: Any, default: int = 0) -> int:
@@ -1573,7 +2765,7 @@ def _as_int(value: Any, default: int = 0) -> int:
         return default
 
 
-def _enforce_workspace_upload_limit(context: dict[str, Any]) -> None:
+def _enforce_workspace_upload_limit(context: dict[str, Any], *, db: Any) -> None:
     entitlements = context.get("resolved_entitlements") or {}
     max_uploads = _as_int(entitlements.get("max_uploads"), 0)
     if max_uploads <= 0:
@@ -1581,7 +2773,24 @@ def _enforce_workspace_upload_limit(context: dict[str, Any]) -> None:
 
     family_id = _normalize_value((context.get("family") or {}).get("_id"))
     project_id = _normalize_value((context.get("project") or {}).get("_id"))
-    current_count = count_workspace_uploads(family_id=family_id, project_id=project_id)
+    query: dict[str, Any] = {
+        "account_access_enabled": {"$ne": False},
+        "owner_account_deleted": {"$ne": True},
+        "replacement_status": {"$nin": ["blocked", "rejected"]},
+    }
+    if project_id:
+        query["project_id"] = project_id
+    elif family_id:
+        query["family_id"] = family_id
+    else:
+        return
+    logical_asset_ids: set[str] = set()
+    for record in db["uploaded_files"].find(query):
+        record_id = _normalize_value(record.get("_id") or record.get("id"))
+        group_id = _normalize_value(record.get("version_group_id")) or record_id
+        if group_id:
+            logical_asset_ids.add(group_id)
+    current_count = len(logical_asset_ids)
     enforce_limit("uploads", current_count + 1, context=context)
 
 
@@ -1624,6 +2833,609 @@ def _enforce_workspace_storage_limit(
     )
 
 
+def _normalize_idempotency_key(value: Any) -> str:
+    if not isinstance(value, str):
+        return ""
+    normalized = value.strip()
+    if not normalized:
+        return ""
+    if len(normalized) < 8 or len(normalized) > 200 or not normalized.isprintable():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Idempotency-Key must contain 8 to 200 printable characters.",
+        )
+    return normalized
+
+
+def _idempotency_fingerprint(
+    *,
+    operation: str,
+    current_user: dict[str, Any],
+    upload: UploadFile,
+    fields: dict[str, Any],
+) -> tuple[str, str]:
+    file_handle = upload.file
+    original_position = file_handle.tell()
+    content_digest = hashlib.sha256()
+    try:
+        file_handle.seek(0)
+        while True:
+            chunk = file_handle.read(1024 * 1024)
+            if not chunk:
+                break
+            content_digest.update(chunk)
+    finally:
+        file_handle.seek(original_position)
+    normalized_fields = {
+        key: _normalize_value(value)
+        for key, value in sorted(fields.items())
+    }
+    payload = {
+        "operation": _normalize_value(operation).lower(),
+        "user_id": _current_user_id(current_user),
+        "filename": _normalize_value(upload.filename),
+        "content_type": _normalize_value(upload.content_type).lower(),
+        "size_bytes": _upload_size_bytes(upload),
+        "content_sha256": content_digest.hexdigest(),
+        "fields": normalized_fields,
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest(), json.dumps(payload, sort_keys=True)
+
+
+def _begin_upload_idempotency(
+    *,
+    db: Any,
+    idempotency_key: Any,
+    operation: str,
+    current_user: dict[str, Any],
+    upload: UploadFile,
+    fields: dict[str, Any],
+) -> tuple[str, str, dict[str, Any] | None]:
+    """Reserve one retry key using Mongo's inherently unique ``_id`` field."""
+
+    normalized_key = _normalize_idempotency_key(idempotency_key)
+    if not normalized_key:
+        return "", "", None
+    user_id = _current_user_id(current_user)
+    key_hash = hashlib.sha256(
+        f"{user_id}:{_normalize_value(operation).lower()}:{normalized_key}".encode("utf-8")
+    ).hexdigest()
+    fingerprint_hash, fingerprint_payload = _idempotency_fingerprint(
+        operation=operation,
+        current_user=current_user,
+        upload=upload,
+        fields=fields,
+    )
+
+    existing_upload = db["uploaded_files"].find_one(
+        {"idempotency_key_hash": key_hash}
+    )
+    if existing_upload is not None:
+        if _normalize_value(existing_upload.get("idempotency_fingerprint")) not in {
+            "",
+            fingerprint_hash,
+        }:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Idempotency-Key was already used for a different upload request.",
+            )
+        return key_hash, fingerprint_hash, existing_upload
+
+    collection = db["upload_idempotency_keys"]
+    reservation = {
+        "_id": f"upload_idem_{key_hash}",
+        "key_hash": key_hash,
+        "fingerprint": fingerprint_hash,
+        "fingerprint_payload": fingerprint_payload,
+        "operation": _normalize_value(operation).lower(),
+        "user_id": user_id,
+        "status": "in_progress",
+        "created_at": datetime.now(UTC).isoformat(),
+        "updated_at": datetime.now(UTC).isoformat(),
+    }
+    try:
+        collection.insert_one(reservation)
+    except Exception:
+        existing_upload = db["uploaded_files"].find_one(
+            {"idempotency_key_hash": key_hash}
+        )
+        if existing_upload is not None:
+            if _normalize_value(existing_upload.get("idempotency_fingerprint")) not in {
+                "",
+                fingerprint_hash,
+            }:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Idempotency-Key was already used for a different upload request.",
+                )
+            return key_hash, fingerprint_hash, existing_upload
+        existing_reservation = collection.find_one({"_id": reservation["_id"]})
+        if existing_reservation and _normalize_value(
+            existing_reservation.get("fingerprint")
+        ) != fingerprint_hash:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Idempotency-Key was already used for a different upload request.",
+            )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An upload with this Idempotency-Key is already in progress.",
+        )
+    return key_hash, fingerprint_hash, None
+
+
+def _finish_upload_idempotency(
+    *,
+    db: Any,
+    key_hash: str,
+    upload_record: dict[str, Any],
+) -> None:
+    if not key_hash:
+        return
+    upload_id = _normalize_value(upload_record.get("_id") or upload_record.get("id"))
+    try:
+        db["upload_idempotency_keys"].update_one(
+            {"_id": f"upload_idem_{key_hash}"},
+            {
+                "$set": {
+                    "status": "complete",
+                    "upload_id": upload_id,
+                    "updated_at": datetime.now(UTC).isoformat(),
+                }
+            },
+        )
+    except Exception:
+        # The upload row also contains the deterministic hash and remains the
+        # authoritative replay lookup if reservation checkpointing fails.
+        pass
+
+
+def _release_upload_idempotency(*, db: Any, key_hash: str) -> None:
+    if not key_hash:
+        return
+    try:
+        existing_upload = db["uploaded_files"].find_one(
+            {"idempotency_key_hash": key_hash}
+        )
+        if existing_upload is None:
+            db["upload_idempotency_keys"].delete_one(
+                {"_id": f"upload_idem_{key_hash}"}
+            )
+    except Exception:
+        pass
+
+
+def _upload_status_payload(upload_record: dict[str, Any]) -> dict[str, Any]:
+    scan_status = _normalize_value(upload_record.get("scan_status")).lower() or "pending"
+    review_status = _normalize_value(upload_record.get("verification_status")).lower() or "pending"
+    category = _normalize_value(upload_record.get("category")).lower()
+    if not account_access_is_enabled(upload_record):
+        state = "blocked"
+        message = "Account access is disabled for this file."
+    elif bool(upload_record.get("quarantined")) or scan_status in {
+        "infected",
+        "error",
+        "skipped",
+    }:
+        state = "quarantined"
+        message = "The file is quarantined and cannot be opened until security review succeeds."
+    elif scan_status != "clean":
+        state = "processing"
+        message = "The file is awaiting security scanning."
+    elif category == "private_media":
+        state = "ready"
+        message = "The Vault file passed security scanning and is ready."
+    elif review_status in {"approved", "rejected", "needs_correction"}:
+        state = review_status
+        message = f"The upload review status is {review_status.replace('_', ' ')}."
+    else:
+        state = "pending_review"
+        message = "The file passed security scanning and is awaiting review."
+    return {
+        "state": state,
+        "scan_status": scan_status,
+        "review_status": review_status,
+        "download_ready": bool(
+            state in {"ready", "pending_review", "approved"}
+            and not _upload_scan_blocks_download(upload_record)
+            and _upload_has_durable_private_storage(upload_record)
+        ),
+        "message": message,
+    }
+
+
+def _resume_replayed_upload(*, db: Any, upload_record: dict[str, Any]) -> dict[str, Any]:
+    scan_status = _normalize_value(upload_record.get("scan_status")).lower()
+    if (
+        scan_status in {"", "pending"}
+        and _normalize_value(upload_record.get("relative_path"))
+        and not bool(upload_record.get("quarantined"))
+    ):
+        return _scan_and_quarantine_upload(db=db, upload_record=upload_record)
+    return upload_record
+
+
+def _vault_item_id_from_result(result: Any) -> str:
+    if isinstance(result, str):
+        return _normalize_value(result)
+    if not isinstance(result, dict):
+        return ""
+    nested = result.get("vault_item")
+    if isinstance(nested, dict):
+        result = nested
+    return _normalize_value(
+        result.get("_id")
+        or result.get("id")
+        or result.get("vault_item_id")
+    )
+
+
+def _ensure_upload_vault_linkage(
+    *,
+    db: Any,
+    upload_record: dict[str, Any],
+    current_user: dict[str, Any],
+    authorized_project_id: str,
+    requested_vault_item_id: str = "",
+    workspace_member_role: str = "",
+) -> dict[str, Any]:
+    """Create/validate the Vault item and link its current file version.
+
+    Authorization is repeated by ``vault_service`` against the supplied
+    project/family/member identifiers.  That prevents a client from attaching
+    an upload to a Vault item in another workspace merely by guessing its id.
+    """
+
+    upload_id = _normalize_value(upload_record.get("_id") or upload_record.get("id"))
+    project_id = _normalize_value(authorized_project_id)
+    requesting_user_id = _current_user_id(current_user)
+    if not upload_id or not ObjectId.is_valid(upload_id):
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Upload persistence did not return a valid file identifier.",
+        )
+    if not project_id or not requesting_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="A verified workspace and customer account are required for Vault linkage.",
+        )
+
+    try:
+        from app.services.vault_service import (
+            ensure_vault_item_for_upload,
+            link_vault_upload,
+        )
+
+        vault_item_id = _normalize_value(
+            requested_vault_item_id or upload_record.get("vault_item_id")
+        )
+        role_kwargs = (
+            {"workspace_member_role": _normalize_value(workspace_member_role).lower()}
+            if "workspace_member_role" in inspect.signature(link_vault_upload).parameters
+            else {}
+        )
+        if vault_item_id:
+            link_vault_upload(
+                vault_item_id,
+                upload_id,
+                requesting_user_id,
+                authorized_project_id=project_id,
+                family_id=_normalize_value(upload_record.get("family_id")),
+                member_id=_normalize_value(upload_record.get("member_id")),
+                version=max(_as_int(upload_record.get("version"), 1), 1),
+                replaces_upload_id=_normalize_value(upload_record.get("replaces_upload_id")),
+                **role_kwargs,
+            )
+        else:
+            ensure_role_kwargs = (
+                {"workspace_member_role": _normalize_value(workspace_member_role).lower()}
+                if "workspace_member_role"
+                in inspect.signature(ensure_vault_item_for_upload).parameters
+                else {}
+            )
+            ensured = ensure_vault_item_for_upload(
+                upload_record,
+                requesting_user_id,
+                vault_item_id="",
+                authorized_project_id=project_id,
+                replaces_upload_id=_normalize_value(upload_record.get("replaces_upload_id")),
+                **ensure_role_kwargs,
+            )
+            vault_item_id = _vault_item_id_from_result(ensured)
+            if not vault_item_id:
+                raise RuntimeError("vault_item_id_missing")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        try:
+            db["uploaded_files"].update_one(
+                {"_id": ObjectId(upload_id)},
+                {
+                    "$set": {
+                        "vault_link_status": "failed",
+                        "vault_link_error": type(exc).__name__,
+                        "updated_at": datetime.now(UTC).isoformat(),
+                    }
+                },
+            )
+        except Exception:
+            pass
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="The file was stored safely, but Vault linkage is temporarily unavailable. Retry with the same Idempotency-Key.",
+        ) from exc
+
+    now = datetime.now(UTC).isoformat()
+    try:
+        db["uploaded_files"].update_one(
+            {"_id": ObjectId(upload_id)},
+            {
+                "$set": {
+                    "vault_item_id": vault_item_id,
+                    "vault_link_status": "linked",
+                    "vault_linked_at": now,
+                    "vault_link_error": "",
+                    "updated_at": now,
+                }
+            },
+        )
+        refreshed = db["uploaded_files"].find_one({"_id": ObjectId(upload_id)})
+        if refreshed is not None:
+            return refreshed
+    except Exception:
+        # The core link is authoritative.  Preserve the response linkage even
+        # if this denormalized cache field needs reconciliation.
+        pass
+    updated = dict(upload_record)
+    updated["vault_item_id"] = vault_item_id
+    updated["vault_link_status"] = "linked"
+    updated["vault_linked_at"] = now
+    return updated
+
+
+def _validate_replacement_file(
+    upload_record: dict[str, Any],
+    upload: UploadFile,
+) -> None:
+    category = _normalize_value(upload_record.get("category")).lower()
+    if category == "member_photo":
+        _validate_upload_file(
+            upload,
+            allowed_content_types=PHOTO_ALLOWED_CONTENT_TYPES,
+            allowed_extensions=PHOTO_ALLOWED_EXTENSIONS,
+            max_bytes=PHOTO_MAX_BYTES,
+            label="member photo replacement",
+        )
+        return
+    if category == "verification_evidence":
+        _validate_upload_file(
+            upload,
+            allowed_content_types=EVIDENCE_ALLOWED_CONTENT_TYPES,
+            allowed_extensions=EVIDENCE_ALLOWED_EXTENSIONS,
+            max_bytes=EVIDENCE_MAX_BYTES,
+            label="verification evidence replacement",
+        )
+        return
+    if category != "private_media":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This upload category does not support replacement.",
+        )
+    asset_type = _canonical_vault_asset_type(upload_record.get("asset_type"))
+    if asset_type == "vault_photo":
+        _validate_upload_file(
+            upload,
+            allowed_content_types=PHOTO_ALLOWED_CONTENT_TYPES,
+            allowed_extensions=PHOTO_ALLOWED_EXTENSIONS,
+            max_bytes=PHOTO_MAX_BYTES,
+            label="Vault photo replacement",
+        )
+    elif asset_type == "vault_document":
+        _validate_upload_file(
+            upload,
+            allowed_content_types=EVIDENCE_ALLOWED_CONTENT_TYPES,
+            allowed_extensions=EVIDENCE_ALLOWED_EXTENSIONS,
+            max_bytes=EVIDENCE_MAX_BYTES,
+            label="Vault document replacement",
+        )
+    else:
+        _validate_upload_file(
+            upload,
+            allowed_content_types=PRIVATE_MEDIA_ALLOWED_CONTENT_TYPES,
+            allowed_extensions=PRIVATE_MEDIA_ALLOWED_EXTENSIONS,
+            max_bytes=EVIDENCE_MAX_BYTES,
+            label="private media replacement",
+        )
+
+
+def _replacement_is_storage_ready(upload_record: dict[str, Any]) -> bool:
+    return bool(
+        _normalize_value(upload_record.get("scan_status")).lower() == "clean"
+        and not bool(upload_record.get("quarantined"))
+        and _upload_has_durable_private_storage(upload_record)
+    )
+
+
+def _claim_upload_replacement(
+    *,
+    db: Any,
+    upload_record: dict[str, Any],
+    claim_token: str,
+) -> None:
+    upload_id = _normalize_value(upload_record.get("_id") or upload_record.get("id"))
+    result = db["uploaded_files"].update_one(
+        {
+            "_id": ObjectId(upload_id),
+            "superseded_by_upload_id": {"$in": [None, ""]},
+            "replacement_claim_token": {"$in": [None, ""]},
+        },
+        {
+            "$set": {
+                "replacement_claim_token": claim_token,
+                "replacement_claimed_at": datetime.now(UTC).isoformat(),
+                "updated_at": datetime.now(UTC).isoformat(),
+            }
+        },
+    )
+    if getattr(result, "matched_count", 0) != 1:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This upload is already being replaced or has a newer version.",
+        )
+
+
+def _clear_upload_replacement_claim(
+    *,
+    db: Any,
+    upload_id: str,
+    claim_token: str,
+) -> None:
+    if not upload_id or not ObjectId.is_valid(upload_id):
+        return
+    try:
+        db["uploaded_files"].update_one(
+            {"_id": ObjectId(upload_id), "replacement_claim_token": claim_token},
+            {
+                "$set": {
+                    "replacement_claim_token": None,
+                    "replacement_claimed_at": None,
+                    "updated_at": datetime.now(UTC).isoformat(),
+                }
+            },
+        )
+    except Exception:
+        pass
+
+
+def _apply_replacement_state(
+    *,
+    db: Any,
+    prior_upload: dict[str, Any],
+    replacement: dict[str, Any],
+    claim_token: str = "",
+) -> dict[str, Any]:
+    prior_id = _normalize_value(prior_upload.get("_id") or prior_upload.get("id"))
+    replacement_id = _normalize_value(replacement.get("_id") or replacement.get("id"))
+    if not ObjectId.is_valid(prior_id) or not ObjectId.is_valid(replacement_id):
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Replacement persistence returned an invalid identifier.",
+        )
+    now = datetime.now(UTC).isoformat()
+    category = _normalize_value(prior_upload.get("category")).lower()
+    if not _replacement_is_storage_ready(replacement):
+        db["uploaded_files"].update_one(
+            {"_id": ObjectId(replacement_id)},
+            {
+                "$set": {
+                    "is_current_version": False,
+                    "replacement_status": "blocked",
+                    "updated_at": now,
+                }
+            },
+        )
+        _clear_upload_replacement_claim(
+            db=db,
+            upload_id=prior_id,
+            claim_token=claim_token,
+        )
+    elif category == "private_media":
+        db["uploaded_files"].update_one(
+            {"_id": ObjectId(prior_id)},
+            {
+                "$set": {
+                    "is_current_version": False,
+                    "superseded_by_upload_id": replacement_id,
+                    "pending_replacement_upload_id": None,
+                    "replacement_status": "superseded",
+                    "replacement_claim_token": None,
+                    "replacement_claimed_at": None,
+                    "updated_at": now,
+                }
+            },
+        )
+        db["uploaded_files"].update_one(
+            {"_id": ObjectId(replacement_id)},
+            {
+                "$set": {
+                    "is_current_version": True,
+                    "replacement_status": "current",
+                    "updated_at": now,
+                }
+            },
+        )
+    else:
+        # Portrait and verification replacements do not displace the approved
+        # current file until their existing review workflow approves them.
+        db["uploaded_files"].update_one(
+            {"_id": ObjectId(prior_id)},
+            {
+                "$set": {
+                    "pending_replacement_upload_id": replacement_id,
+                    "replacement_claim_token": None,
+                    "replacement_claimed_at": None,
+                    "updated_at": now,
+                }
+            },
+        )
+        db["uploaded_files"].update_one(
+            {"_id": ObjectId(replacement_id)},
+            {
+                "$set": {
+                    "is_current_version": False,
+                    "replacement_status": "pending_review",
+                    "updated_at": now,
+                }
+            },
+        )
+    refreshed = db["uploaded_files"].find_one({"_id": ObjectId(replacement_id)})
+    return refreshed or replacement
+
+
+def _complete_reviewed_replacement(
+    *,
+    db: Any,
+    upload_record: dict[str, Any],
+    approved: bool,
+) -> dict[str, Any]:
+    replacement_id = _normalize_value(upload_record.get("_id") or upload_record.get("id"))
+    prior_id = _normalize_value(upload_record.get("replaces_upload_id"))
+    if not prior_id or not ObjectId.is_valid(prior_id) or not ObjectId.is_valid(replacement_id):
+        return upload_record
+    now = datetime.now(UTC).isoformat()
+    if approved:
+        db["uploaded_files"].update_one(
+            {"_id": ObjectId(prior_id)},
+            {
+                "$set": {
+                    "is_current_version": False,
+                    "superseded_by_upload_id": replacement_id,
+                    "pending_replacement_upload_id": None,
+                    "replacement_status": "superseded",
+                    "updated_at": now,
+                }
+            },
+        )
+        new_state = {"is_current_version": True, "replacement_status": "current"}
+    else:
+        db["uploaded_files"].update_one(
+            {"_id": ObjectId(prior_id)},
+            {
+                "$set": {
+                    "pending_replacement_upload_id": None,
+                    "updated_at": now,
+                }
+            },
+        )
+        new_state = {"is_current_version": False, "replacement_status": "rejected"}
+    db["uploaded_files"].update_one(
+        {"_id": ObjectId(replacement_id)},
+        {"$set": {**new_state, "updated_at": now}},
+    )
+    return db["uploaded_files"].find_one({"_id": ObjectId(replacement_id)}) or upload_record
+
+
 def _apply_customer_visibility_filter(
     query: dict[str, Any],
     *,
@@ -1634,6 +3446,8 @@ def _apply_customer_visibility_filter(
         return
 
     current_user_id = _current_user_id(current_user)
+    query["account_access_enabled"] = {"$ne": False}
+    query["owner_account_deleted"] = {"$ne": True}
     query["$or"] = [
         {
             "uploaded_by_user_id": current_user_id,
@@ -1720,7 +3534,9 @@ async def upload_member_photo(
     member_id: str = Form(...),
     consent_attested: bool = Form(...),
     authority_attested: bool = Form(...),
+    vault_item_id: str = Form(""),
     file: UploadFile = File(...),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
     context = require_workspace_capability(
@@ -1740,6 +3556,12 @@ async def upload_member_photo(
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")
 
+    if consent_attested is not True or authority_attested is not True:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Portrait consent and upload authority must both be confirmed.",
+        )
+
     _validate_upload_file(
         file,
         allowed_content_types=PHOTO_ALLOWED_CONTENT_TYPES,
@@ -1757,29 +3579,95 @@ async def upload_member_photo(
             detail="family_id does not match the selected member.",
         )
 
-    _enforce_workspace_upload_limit(context)
+    _enforce_workspace_upload_limit(context, db=db)
     _enforce_workspace_storage_limit(
         context=context,
         db=db,
         incoming_size_bytes=_upload_size_bytes(file),
     )
 
-    upload_record = await store_member_photo_upload(
+    key_hash, fingerprint, replay = _begin_upload_idempotency(
         db=db,
-        project_id=_normalize_value(context["project"].get("_id")),
-        family_id=actual_family_id,
-        member_id=member_id,
+        idempotency_key=idempotency_key,
+        operation="member_photo_create",
+        current_user=current_user,
         upload=file,
-        uploaded_by=_actor_label(current_user),
-        uploaded_by_user_id=_current_user_id(current_user),
-        consent_attested=consent_attested,
-        authority_attested=authority_attested,
+        fields={
+            "project_id": _normalize_value(context["project"].get("_id")),
+            "family_id": actual_family_id,
+            "member_id": member_id,
+            "vault_item_id": vault_item_id if isinstance(vault_item_id, str) else "",
+        },
     )
-    upload_record = _scan_and_quarantine_upload(db=db, upload_record=upload_record)
+    if replay is not None:
+        await file.close()
+        replay = _resume_replayed_upload(db=db, upload_record=replay)
+        if isinstance(vault_item_id, str) and vault_item_id.strip():
+            replay = _ensure_upload_vault_linkage(
+                db=db,
+                upload_record=replay,
+                current_user=current_user,
+                authorized_project_id=_normalize_value(context["project"].get("_id")),
+                requested_vault_item_id=vault_item_id,
+                workspace_member_role=_normalize_value(context.get("member_role")),
+            )
+        _finish_upload_idempotency(db=db, key_hash=key_hash, upload_record=replay)
+        return {
+            "message": _upload_status_payload(replay)["message"],
+            "upload": _public_upload_record(
+                replay,
+                context=context,
+                current_user=current_user,
+            ),
+            "upload_status": _upload_status_payload(replay),
+            "idempotency_replayed": True,
+            "member_id": member_id,
+            "family_id": actual_family_id,
+        }
+
+    try:
+        upload_record = await store_member_photo_upload(
+            db=db,
+            project_id=_normalize_value(context["project"].get("_id")),
+            family_id=actual_family_id,
+            member_id=member_id,
+            upload=file,
+            uploaded_by=_actor_label(current_user),
+            uploaded_by_user_id=_current_user_id(current_user),
+            consent_attested=consent_attested,
+            authority_attested=authority_attested,
+            vault_item_id=vault_item_id if isinstance(vault_item_id, str) else "",
+            idempotency_key_hash=key_hash,
+            idempotency_fingerprint=fingerprint,
+        )
+        upload_record = _scan_and_quarantine_upload(db=db, upload_record=upload_record)
+        if isinstance(vault_item_id, str) and vault_item_id.strip():
+            upload_record = _ensure_upload_vault_linkage(
+                db=db,
+                upload_record=upload_record,
+                current_user=current_user,
+                authorized_project_id=_normalize_value(context["project"].get("_id")),
+                requested_vault_item_id=vault_item_id,
+                workspace_member_role=_normalize_value(context.get("member_role")),
+            )
+        _finish_upload_idempotency(
+            db=db,
+            key_hash=key_hash,
+            upload_record=upload_record,
+        )
+    except Exception:
+        _release_upload_idempotency(db=db, key_hash=key_hash)
+        raise
 
     return {
-        "message": "Member photo uploaded successfully.",
-        "upload": _public_upload_record(upload_record),
+        "message": _upload_status_payload(upload_record)["message"],
+        "upload": _public_upload_record(
+            upload_record,
+            context=context,
+            current_user=current_user,
+        ),
+        "upload_status": _upload_status_payload(upload_record),
+        "idempotency_replayed": False,
         "member_id": member_id,
         "family_id": actual_family_id,
     }
@@ -1791,7 +3679,9 @@ async def upload_verification_evidence(
     member_id: str = Form(...),
     verification_type: str = Form(...),
     evidence_kind: str = Form("supporting_family_record"),
+    vault_item_id: str = Form(""),
     file: UploadFile = File(...),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
     context = require_workspace_capability(
@@ -1837,29 +3727,97 @@ async def upload_verification_evidence(
             detail="family_id does not match the selected member.",
         )
 
-    _enforce_workspace_upload_limit(context)
+    _enforce_workspace_upload_limit(context, db=db)
     _enforce_workspace_storage_limit(
         context=context,
         db=db,
         incoming_size_bytes=_upload_size_bytes(file),
     )
 
-    upload_record = await store_verification_evidence_upload(
+    key_hash, fingerprint, replay = _begin_upload_idempotency(
         db=db,
-        project_id=_normalize_value(context["project"].get("_id")),
-        family_id=actual_family_id,
-        member_id=member_id,
-        verification_type=normalized_verification_type,
-        evidence_kind=normalized_evidence_kind,
+        idempotency_key=idempotency_key,
+        operation="verification_evidence_create",
+        current_user=current_user,
         upload=file,
-        uploaded_by=_actor_label(current_user),
-        uploaded_by_user_id=_current_user_id(current_user),
+        fields={
+            "project_id": _normalize_value(context["project"].get("_id")),
+            "family_id": actual_family_id,
+            "member_id": member_id,
+            "verification_type": normalized_verification_type,
+            "evidence_kind": normalized_evidence_kind,
+            "vault_item_id": vault_item_id if isinstance(vault_item_id, str) else "",
+        },
     )
-    upload_record = _scan_and_quarantine_upload(db=db, upload_record=upload_record)
+    if replay is not None:
+        await file.close()
+        replay = _resume_replayed_upload(db=db, upload_record=replay)
+        if isinstance(vault_item_id, str) and vault_item_id.strip():
+            replay = _ensure_upload_vault_linkage(
+                db=db,
+                upload_record=replay,
+                current_user=current_user,
+                authorized_project_id=_normalize_value(context["project"].get("_id")),
+                requested_vault_item_id=vault_item_id,
+                workspace_member_role=_normalize_value(context.get("member_role")),
+            )
+        _finish_upload_idempotency(db=db, key_hash=key_hash, upload_record=replay)
+        return {
+            "message": _upload_status_payload(replay)["message"],
+            "upload": _public_upload_record(
+                replay,
+                context=context,
+                current_user=current_user,
+            ),
+            "upload_status": _upload_status_payload(replay),
+            "idempotency_replayed": True,
+            "member_id": member_id,
+            "family_id": actual_family_id,
+        }
+
+    try:
+        upload_record = await store_verification_evidence_upload(
+            db=db,
+            project_id=_normalize_value(context["project"].get("_id")),
+            family_id=actual_family_id,
+            member_id=member_id,
+            verification_type=normalized_verification_type,
+            evidence_kind=normalized_evidence_kind,
+            upload=file,
+            uploaded_by=_actor_label(current_user),
+            uploaded_by_user_id=_current_user_id(current_user),
+            vault_item_id=vault_item_id if isinstance(vault_item_id, str) else "",
+            idempotency_key_hash=key_hash,
+            idempotency_fingerprint=fingerprint,
+        )
+        upload_record = _scan_and_quarantine_upload(db=db, upload_record=upload_record)
+        if isinstance(vault_item_id, str) and vault_item_id.strip():
+            upload_record = _ensure_upload_vault_linkage(
+                db=db,
+                upload_record=upload_record,
+                current_user=current_user,
+                authorized_project_id=_normalize_value(context["project"].get("_id")),
+                requested_vault_item_id=vault_item_id,
+                workspace_member_role=_normalize_value(context.get("member_role")),
+            )
+        _finish_upload_idempotency(
+            db=db,
+            key_hash=key_hash,
+            upload_record=upload_record,
+        )
+    except Exception:
+        _release_upload_idempotency(db=db, key_hash=key_hash)
+        raise
 
     return {
-        "message": "Verification evidence uploaded successfully.",
-        "upload": _public_upload_record(upload_record),
+        "message": _upload_status_payload(upload_record)["message"],
+        "upload": _public_upload_record(
+            upload_record,
+            context=context,
+            current_user=current_user,
+        ),
+        "upload_status": _upload_status_payload(upload_record),
+        "idempotency_replayed": False,
         "member_id": member_id,
         "family_id": actual_family_id,
     }
@@ -1867,19 +3825,28 @@ async def upload_verification_evidence(
 
 @router.post("/private-media")
 async def upload_private_media(
-    family_id: str = Form(...),
-    member_id: str = Form(...),
+    family_id: str = Form(""),
+    member_id: str = Form(""),
+    project_id: str = Form(""),
     asset_type: str = Form(...),
     privacy_scope: str = Form("private_to_owner"),
+    vault_scope: str = Form(""),
+    vault_item_id: str = Form(""),
+    release_state: str = Form("released"),
+    reveal_at: str = Form(""),
+    consent_attested: bool = Form(...),
+    authority_attested: bool = Form(...),
     file: UploadFile = File(...),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
     context = require_workspace_capability(
         current_user,
+        project_id=project_id if isinstance(project_id, str) else "",
         family_id=family_id,
         member_id=member_id,
-        capabilities=(HOUSEHOLD_VAULT_CAPABILITY,),
-        detail="Your active package does not include private household vault access.",
+        capabilities=VAULT_CAPABILITIES,
+        detail="Your active package does not include private Vault access.",
     )
     require_workspace_member_role(
         context,
@@ -1891,7 +3858,13 @@ async def upload_private_media(
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")
 
-    normalized_asset_type = _normalize_value(asset_type).lower()
+    if consent_attested is not True or authority_attested is not True:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Vault consent and upload authority must both be confirmed.",
+        )
+
+    normalized_asset_type = _canonical_vault_asset_type(asset_type)
     if normalized_asset_type not in PRIVATE_MEDIA_ALLOWED_ASSET_TYPES:
         raise HTTPException(status_code=400, detail="Invalid private media asset type.")
 
@@ -1899,44 +3872,197 @@ async def upload_private_media(
     if normalized_privacy_scope not in PRIVATE_MEDIA_ALLOWED_PRIVACY_SCOPES:
         raise HTTPException(status_code=400, detail="Invalid private media privacy scope.")
 
-    _enforce_allowed_asset_type(context=context, asset_type=normalized_asset_type)
-    _validate_upload_file(
-        file,
-        allowed_content_types=PRIVATE_MEDIA_ALLOWED_CONTENT_TYPES,
-        allowed_extensions=PRIVATE_MEDIA_ALLOWED_EXTENSIONS,
-        max_bytes=EVIDENCE_MAX_BYTES,
-        label="private media",
+    normalized_vault_scope, _required_capability = _resolve_vault_scope_for_create(
+        context=context,
+        requested_scope=vault_scope if isinstance(vault_scope, str) else "",
     )
+    normalized_release_state, normalized_reveal_at = _resolve_upload_release_fields(
+        context=context,
+        release_state=release_state if isinstance(release_state, str) else "released",
+        reveal_at=reveal_at if isinstance(reveal_at, str) else "",
+    )
+    _enforce_allowed_asset_type(context=context, asset_type=normalized_asset_type)
+    if normalized_asset_type == "vault_photo":
+        _validate_upload_file(
+            file,
+            allowed_content_types=PHOTO_ALLOWED_CONTENT_TYPES,
+            allowed_extensions=PHOTO_ALLOWED_EXTENSIONS,
+            max_bytes=PHOTO_MAX_BYTES,
+            label="Vault photo",
+        )
+    elif normalized_asset_type == "vault_document":
+        _validate_upload_file(
+            file,
+            allowed_content_types=EVIDENCE_ALLOWED_CONTENT_TYPES,
+            allowed_extensions=EVIDENCE_ALLOWED_EXTENSIONS,
+            max_bytes=EVIDENCE_MAX_BYTES,
+            label="Vault document",
+        )
+    else:
+        _validate_upload_file(
+            file,
+            allowed_content_types=PRIVATE_MEDIA_ALLOWED_CONTENT_TYPES,
+            allowed_extensions=PRIVATE_MEDIA_ALLOWED_EXTENSIONS,
+            max_bytes=EVIDENCE_MAX_BYTES,
+            label="private media",
+        )
 
-    member = context["member"]
-    actual_family_id = _normalize_value(member.get("family_id"))
-    if _normalize_value(family_id) != actual_family_id:
+    member = context.get("member") or {}
+    actual_member_id = _normalize_value(member.get("_id")) or _normalize_value(member_id)
+    actual_family_id = _normalize_value(member.get("family_id")) or _normalize_value(
+        (context.get("family") or {}).get("_id")
+    )
+    if member and _normalize_value(family_id) != actual_family_id:
         raise HTTPException(status_code=400, detail="family_id does not match the selected member.")
+    if normalized_vault_scope == "household" and not actual_family_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Household Vault uploads require a household.",
+        )
+    if normalized_privacy_scope == "household_private" and normalized_vault_scope != "household":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="household_private visibility is available only in a household Vault.",
+        )
+    share_with_linked_families = normalized_privacy_scope == "linked_family_shared"
+    if normalized_vault_scope == "linked_family" and not share_with_linked_families:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A linked-family Vault upload must use linked_family_shared visibility.",
+        )
+    if share_with_linked_families and normalized_vault_scope != "linked_family":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="linked_family_shared visibility requires the linked-family Vault scope.",
+        )
+    if normalized_vault_scope == "linked_family":
+        if not context.get("is_admin") and not bool(
+            (context.get("resolved_entitlements") or {}).get("can_link_households")
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Your active package does not include linked-household access.",
+            )
+        if not actual_family_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Linked-family Vault uploads require a household.",
+            )
+        try:
+            linked_family_ids = list_linked_family_ids(actual_family_id)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Linked-family status could not be verified.",
+            ) from exc
+        if len({value for value in linked_family_ids if _normalize_value(value)}) < 2:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="An accepted household link is required for linked-family Vault uploads.",
+            )
 
-    _enforce_workspace_upload_limit(context)
+    _enforce_workspace_upload_limit(context, db=db)
     _enforce_workspace_storage_limit(
         context=context,
         db=db,
         incoming_size_bytes=_upload_size_bytes(file),
     )
 
-    upload_record = await store_private_media_upload(
+    actual_project_id = _normalize_value((context.get("project") or {}).get("_id"))
+    normalized_vault_item_id = vault_item_id if isinstance(vault_item_id, str) else ""
+    key_hash, fingerprint, replay = _begin_upload_idempotency(
         db=db,
-        project_id=_normalize_value(context["project"].get("_id")),
-        family_id=actual_family_id,
-        member_id=member_id,
-        asset_type=normalized_asset_type,
-        privacy_scope=normalized_privacy_scope,
+        idempotency_key=idempotency_key,
+        operation="private_vault_create",
+        current_user=current_user,
         upload=file,
-        uploaded_by=_actor_label(current_user),
-        uploaded_by_user_id=_current_user_id(current_user),
+        fields={
+            "project_id": actual_project_id,
+            "family_id": actual_family_id,
+            "member_id": actual_member_id,
+            "asset_type": normalized_asset_type,
+            "privacy_scope": normalized_privacy_scope,
+            "vault_scope": normalized_vault_scope,
+            "vault_item_id": normalized_vault_item_id,
+            "share_with_linked_families": share_with_linked_families,
+            "release_state": normalized_release_state,
+            "reveal_at": normalized_reveal_at or "",
+        },
     )
-    upload_record = _scan_and_quarantine_upload(db=db, upload_record=upload_record)
+    if replay is not None:
+        await file.close()
+        replay = _resume_replayed_upload(db=db, upload_record=replay)
+        replay = _ensure_upload_vault_linkage(
+            db=db,
+            upload_record=replay,
+            current_user=current_user,
+            authorized_project_id=actual_project_id,
+            requested_vault_item_id=normalized_vault_item_id,
+            workspace_member_role=_normalize_value(context.get("member_role")),
+        )
+        _finish_upload_idempotency(db=db, key_hash=key_hash, upload_record=replay)
+        return {
+            "message": _upload_status_payload(replay)["message"],
+            "upload": _public_upload_record(
+                replay,
+                context=context,
+                current_user=current_user,
+            ),
+            "upload_status": _upload_status_payload(replay),
+            "idempotency_replayed": True,
+            "member_id": actual_member_id or None,
+            "family_id": actual_family_id or None,
+        }
+
+    try:
+        upload_record = await store_private_media_upload(
+            db=db,
+            project_id=actual_project_id,
+            family_id=actual_family_id,
+            member_id=actual_member_id,
+            asset_type=normalized_asset_type,
+            privacy_scope=normalized_privacy_scope,
+            vault_scope=normalized_vault_scope,
+            consent_attested=consent_attested,
+            authority_attested=authority_attested,
+            vault_item_id=normalized_vault_item_id,
+            upload=file,
+            uploaded_by=_actor_label(current_user),
+            uploaded_by_user_id=_current_user_id(current_user),
+            idempotency_key_hash=key_hash,
+            idempotency_fingerprint=fingerprint,
+            release_state=normalized_release_state,
+            reveal_at=normalized_reveal_at,
+            share_with_linked_families=share_with_linked_families,
+        )
+        upload_record = _scan_and_quarantine_upload(db=db, upload_record=upload_record)
+        upload_record = _ensure_upload_vault_linkage(
+            db=db,
+            upload_record=upload_record,
+            current_user=current_user,
+            authorized_project_id=actual_project_id,
+            requested_vault_item_id=normalized_vault_item_id,
+            workspace_member_role=_normalize_value(context.get("member_role")),
+        )
+        _finish_upload_idempotency(
+            db=db,
+            key_hash=key_hash,
+            upload_record=upload_record,
+        )
+    except Exception:
+        _release_upload_idempotency(db=db, key_hash=key_hash)
+        raise
     return {
-        "message": "Private media uploaded successfully.",
-        "upload": _public_upload_record(upload_record),
-        "member_id": member_id,
-        "family_id": actual_family_id,
+        "message": _upload_status_payload(upload_record)["message"],
+        "upload": _public_upload_record(
+            upload_record,
+            context=context,
+            current_user=current_user,
+        ),
+        "upload_status": _upload_status_payload(upload_record),
+        "idempotency_replayed": False,
+        "member_id": actual_member_id or None,
+        "family_id": actual_family_id or None,
     }
 
 
@@ -1946,10 +4072,11 @@ def list_member_uploads(
     category: Optional[str] = Query(default=None),
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
-    context = require_workspace_capability(
-        current_user,
+    normalized_category = _validate_category_filter(category)
+    context = _resolve_upload_list_context(
+        current_user=current_user,
         member_id=member_id,
-        capabilities=("can_upload_verification_docs", "can_upload_portraits"),
+        category=normalized_category or "",
         detail="Your active package does not include upload access.",
     )
 
@@ -1961,8 +4088,6 @@ def list_member_uploads(
     family = context["family"]
     project = context["project"]
 
-    normalized_category = _validate_category_filter(category)
-
     query: dict[str, Any] = {
         "member_id": str(member.get("_id")),
         "family_id": _normalize_value((family or {}).get("_id")),
@@ -1976,11 +4101,24 @@ def list_member_uploads(
     if normalized_category:
         query["category"] = normalized_category
 
-    records = list(db["uploaded_files"].find(query).sort("created_at", -1))
+    candidates = list(db["uploaded_files"].find(query).sort("created_at", -1))
+    records = [
+        record
+        for record in candidates
+        if _can_list_upload_record(
+            upload_record=record,
+            context=context,
+            current_user=current_user,
+        )
+    ]
     return {
         "member_id": str(member.get("_id")),
         "count": len(records),
-        "uploads": _serialize_uploads(records),
+        "uploads": _serialize_uploads(
+            records,
+            context=context,
+            current_user=current_user,
+        ),
     }
 
 
@@ -1990,10 +4128,11 @@ def list_family_uploads(
     category: Optional[str] = Query(default=None),
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
-    context = require_workspace_capability(
-        current_user,
+    normalized_category = _validate_category_filter(category)
+    context = _resolve_upload_list_context(
+        current_user=current_user,
         family_id=family_id,
-        capabilities=("can_upload_verification_docs", "can_upload_portraits"),
+        category=normalized_category or "",
         detail="Your active package does not include upload access.",
     )
 
@@ -2003,8 +4142,6 @@ def list_family_uploads(
 
     family = context["family"]
     project = context["project"]
-    normalized_category = _validate_category_filter(category)
-
     query: dict[str, Any] = {
         "family_id": _normalize_value((family or {}).get("_id")),
         "project_id": _normalize_value((project or {}).get("_id")),
@@ -2017,11 +4154,24 @@ def list_family_uploads(
     if normalized_category:
         query["category"] = normalized_category
 
-    records = list(db["uploaded_files"].find(query).sort("created_at", -1))
+    candidates = list(db["uploaded_files"].find(query).sort("created_at", -1))
+    records = [
+        record
+        for record in candidates
+        if _can_list_upload_record(
+            upload_record=record,
+            context=context,
+            current_user=current_user,
+        )
+    ]
     return {
         "family_id": _normalize_value((family or {}).get("_id")),
         "count": len(records),
-        "uploads": _serialize_uploads(records),
+        "uploads": _serialize_uploads(
+            records,
+            context=context,
+            current_user=current_user,
+        ),
     }
 
 
@@ -2033,11 +4183,11 @@ def list_family_vault_items(
     visibility_scope: Optional[str] = Query(default=None),
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
-    context = require_workspace_capability(
-        current_user,
+    context = _resolve_upload_list_context(
+        current_user=current_user,
         family_id=family_id,
-        capabilities=(HOUSEHOLD_VAULT_CAPABILITY,),
-        detail="Your active package does not include private household vault access.",
+        category="private_media",
+        detail="Your active package does not include private Vault access.",
     )
 
     db = get_database()
@@ -2047,8 +4197,10 @@ def list_family_vault_items(
     base_family_id = _normalize_value((context.get("family") or {}).get("_id"))
     family_ids = [base_family_id]
     if include_linked_families:
+        entitlements = context.get("resolved_entitlements") or {}
         has_link_capability = bool(context.get("is_admin")) or bool(
-            (context.get("resolved_entitlements") or {}).get("can_link_households")
+            entitlements.get("can_link_households")
+            and entitlements.get(LINKED_FAMILY_VAULT_CAPABILITY)
         )
         if not has_link_capability:
             raise HTTPException(
@@ -2059,6 +4211,9 @@ def list_family_vault_items(
 
     query: dict[str, Any] = {
         "family_id": {"$in": [fid for fid in family_ids if fid]},
+        "category": "private_media",
+        "account_access_enabled": {"$ne": False},
+        "owner_account_deleted": {"$ne": True},
     }
     normalized_scope = _normalize_vault_scope(vault_scope, default="")
     if normalized_scope:
@@ -2079,12 +4234,455 @@ def list_family_vault_items(
             {"privacy_classification": "public"},
         ]
 
-    records = list(db["uploaded_files"].find(query).sort("created_at", -1))
+    candidates = list(db["uploaded_files"].find(query).sort("created_at", -1))
+    records: list[dict[str, Any]] = []
+    for record in candidates:
+        if not _can_list_upload_record(
+            upload_record=record,
+            context=context,
+            current_user=current_user,
+        ):
+            continue
+        record_family_id = _normalize_value(record.get("family_id"))
+        linked_record = bool(record_family_id and record_family_id != base_family_id)
+        if linked_record and not _is_upload_owner(record, current_user):
+            if (
+                not bool(record.get("share_with_linked_families"))
+                or _upload_classification(record) != "linked_family_shared"
+                or _canonical_vault_scope(record.get("vault_scope")) != "linked_family"
+            ):
+                continue
+        records.append(record)
     return {
         "family_id": base_family_id,
         "linked_family_ids": family_ids,
         "count": len(records),
-        "items": _serialize_uploads(records),
+        "items": _serialize_uploads(
+            records,
+            context=context,
+            current_user=current_user,
+        ),
+    }
+
+
+@router.get("/vault/project/{project_id}")
+def list_project_vault_items(
+    project_id: str,
+    member_id: str = Query(default=""),
+    category: Optional[str] = Query(default=None),
+    vault_scope: Optional[str] = Query(default=None),
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    """List customer-visible Vault uploads without requiring household ids."""
+
+    normalized_category = _validate_category_filter(category)
+    context = _resolve_upload_list_context(
+        current_user=current_user,
+        project_id=project_id,
+        member_id=_normalize_value(member_id),
+        category=normalized_category or "",
+        detail="Your active package does not include access to these Vault uploads.",
+    )
+    db = get_database()
+    if db is None:
+        raise HTTPException(status_code=500, detail="Database is not connected.")
+
+    canonical_project_id = _normalize_value((context.get("project") or {}).get("_id"))
+    query: dict[str, Any] = {"project_id": canonical_project_id}
+    if normalized_category:
+        query["category"] = normalized_category
+    normalized_member_id = _normalize_value(member_id)
+    if normalized_member_id:
+        query["member_id"] = normalized_member_id
+    if vault_scope is not None:
+        normalized_scope = _normalize_vault_scope(vault_scope, default="")
+        if not normalized_scope:
+            raise HTTPException(status_code=400, detail="Invalid Vault scope filter.")
+        query["vault_scope"] = normalized_scope
+    _apply_customer_visibility_filter(
+        query,
+        is_admin=bool(context.get("is_admin")),
+        current_user=current_user,
+    )
+    candidates = list(db["uploaded_files"].find(query).sort("created_at", -1))
+    records = [
+        record
+        for record in candidates
+        if _can_list_upload_record(
+            upload_record=record,
+            context=context,
+            current_user=current_user,
+        )
+    ]
+    return {
+        "project_id": canonical_project_id,
+        "member_id": normalized_member_id or None,
+        "count": len(records),
+        "items": _serialize_uploads(
+            records,
+            context=context,
+            current_user=current_user,
+        ),
+    }
+
+
+@router.get("/{upload_id}/versions")
+def list_upload_versions(
+    upload_id: str,
+    viewer_project_id: str = Query(default=""),
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    db = get_database()
+    if db is None:
+        raise HTTPException(status_code=500, detail="Database is not connected.")
+    normalized_viewer_project_id = (
+        _normalize_value(viewer_project_id)
+        if isinstance(viewer_project_id, str)
+        else ""
+    )
+    linked_viewer = bool(normalized_viewer_project_id)
+    if linked_viewer:
+        upload_record, context = _require_linked_vault_upload_access(
+            upload_id,
+            normalized_viewer_project_id,
+            db,
+            current_user,
+            require_current=True,
+        )
+    else:
+        upload_record, context = _require_upload_access(
+            upload_id,
+            db,
+            current_user,
+            detail="Your active package does not include access to this upload history.",
+        )
+    root_upload_id = _normalize_value(
+        upload_record.get("version_group_id") or upload_record.get("_id")
+    )
+    candidates = list(
+        db["uploaded_files"].find(
+            {
+                "$or": [
+                    {"version_group_id": root_upload_id},
+                    {"_id": ObjectId(root_upload_id)}
+                    if ObjectId.is_valid(root_upload_id)
+                    else {"version_group_id": root_upload_id},
+                ]
+            }
+        ).sort("version", -1)
+    )
+    if linked_viewer:
+        records = []
+        for record in candidates:
+            candidate_id = _normalize_value(record.get("_id") or record.get("id"))
+            if not candidate_id:
+                continue
+            try:
+                _require_linked_vault_upload_access(
+                    candidate_id,
+                    normalized_viewer_project_id,
+                    db,
+                    current_user,
+                    require_current=True,
+                )
+            except HTTPException:
+                continue
+            records.append(record)
+    else:
+        records = [
+            record
+            for record in candidates
+            if (
+                (
+                    _context_has_any_capability(
+                        context,
+                        _upload_category_capabilities(record),
+                    )
+                    or _has_retained_upload_lifecycle_access(
+                        upload_record=record,
+                        context=context,
+                        current_user=current_user,
+                    )
+                )
+                and _can_access_upload_record(
+                    upload_record=record,
+                    context=context,
+                    current_user=current_user,
+                )
+            )
+        ]
+    return {
+        "upload_id": upload_id,
+        "root_upload_id": root_upload_id,
+        "count": len(records),
+        "versions": _serialize_uploads(
+            records,
+            context=context,
+            current_user=current_user,
+        ),
+    }
+
+
+@router.post("/{upload_id}/replace")
+async def replace_upload(
+    upload_id: str,
+    file: UploadFile = File(...),
+    consent_attested: bool | None = Form(None),
+    authority_attested: bool | None = Form(None),
+    privacy_scope: str = Form(""),
+    vault_item_id: str = Form(""),
+    release_state: str = Form(""),
+    reveal_at: str = Form(""),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    db = get_database()
+    if db is None:
+        raise HTTPException(status_code=500, detail="Database is not connected.")
+    prior_upload, context = _require_upload_management_access(
+        upload_id,
+        db,
+        current_user,
+        action="replace",
+    )
+    category = _normalize_value(prior_upload.get("category")).lower()
+    capabilities = _upload_category_capabilities(prior_upload)
+    if not capabilities or not _context_has_any_capability(context, capabilities):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your active package does not include replacement for this upload type.",
+        )
+    require_workspace_member_role(
+        context,
+        allowed_roles=("billing_owner", "co_owner", "family_manager", "contributor"),
+        detail="Your role is read-only for uploads.",
+    )
+    if category in {"member_photo", "private_media"} and (
+        consent_attested is not True or authority_attested is not True
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Consent and upload authority must both be confirmed for this replacement.",
+        )
+    _validate_replacement_file(prior_upload, file)
+    if category == "private_media":
+        _enforce_allowed_asset_type(
+            context=context,
+            asset_type=_canonical_vault_asset_type(prior_upload.get("asset_type")),
+        )
+
+    requested_privacy = privacy_scope if isinstance(privacy_scope, str) else ""
+    normalized_privacy_scope = _normalize_visibility_scope(
+        requested_privacy,
+        _normalize_value(
+            prior_upload.get("privacy_classification")
+            or prior_upload.get("privacy_scope")
+            or prior_upload.get("visibility_scope")
+        )
+        or "private_to_owner",
+    )
+    existing_privacy_scope = _upload_classification(prior_upload)
+    if requested_privacy and normalized_privacy_scope != existing_privacy_scope:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Change Vault privacy through the privacy endpoint before replacing its file.",
+        )
+    if category == "private_media" and normalized_privacy_scope not in PRIVATE_MEDIA_ALLOWED_PRIVACY_SCOPES:
+        raise HTTPException(status_code=400, detail="Invalid private media privacy scope.")
+
+    existing_vault_item_id = _normalize_value(prior_upload.get("vault_item_id"))
+    requested_vault_item_id = (
+        _normalize_value(vault_item_id) if isinstance(vault_item_id, str) else ""
+    )
+    if (
+        existing_vault_item_id
+        and requested_vault_item_id
+        and existing_vault_item_id != requested_vault_item_id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A replacement must remain linked to the same Vault item.",
+        )
+    effective_vault_item_id = existing_vault_item_id or requested_vault_item_id
+
+    effective_release_state = _normalize_value(prior_upload.get("release_state")) or "released"
+    effective_reveal_at = _normalize_value(prior_upload.get("reveal_at")) or None
+    if category == "private_media" and (
+        (isinstance(release_state, str) and release_state.strip())
+        or (isinstance(reveal_at, str) and reveal_at.strip())
+    ):
+        effective_release_state, effective_reveal_at = _resolve_upload_release_fields(
+            context=context,
+            release_state=release_state,
+            reveal_at=reveal_at,
+        )
+
+    project_id = _normalize_value(prior_upload.get("project_id"))
+    family_id = _normalize_value(prior_upload.get("family_id"))
+    member_id = _normalize_value(prior_upload.get("member_id"))
+    # A replacement creates a physical version, not a new logical customer
+    # asset, so it must not consume another upload-count entitlement.
+    _enforce_workspace_storage_limit(
+        context=context,
+        db=db,
+        incoming_size_bytes=_upload_size_bytes(file),
+    )
+    key_hash, fingerprint, replay = _begin_upload_idempotency(
+        db=db,
+        idempotency_key=idempotency_key,
+        operation=f"replace:{upload_id}",
+        current_user=current_user,
+        upload=file,
+        fields={
+            "upload_id": upload_id,
+            "privacy_scope": normalized_privacy_scope,
+            "vault_item_id": effective_vault_item_id,
+            "release_state": effective_release_state,
+            "reveal_at": effective_reveal_at or "",
+        },
+    )
+    if replay is not None:
+        await file.close()
+        replay = _resume_replayed_upload(db=db, upload_record=replay)
+        if category == "private_media" and _replacement_is_storage_ready(replay):
+            replay = _ensure_upload_vault_linkage(
+                db=db,
+                upload_record=replay,
+                current_user=current_user,
+                authorized_project_id=project_id,
+                requested_vault_item_id=effective_vault_item_id,
+                workspace_member_role=_normalize_value(context.get("member_role")),
+            )
+        replay = _apply_replacement_state(
+            db=db,
+            prior_upload=prior_upload,
+            replacement=replay,
+        )
+        response_status = _upload_status_payload(replay)
+        public_replay = _public_upload_record(
+            replay,
+            context=context,
+            current_user=current_user,
+        )
+        _finish_upload_idempotency(db=db, key_hash=key_hash, upload_record=replay)
+        return {
+            "message": response_status["message"],
+            "replacement": public_replay,
+            "upload": public_replay,
+            "upload_status": response_status,
+            "idempotency_replayed": True,
+        }
+
+    if not bool(prior_upload.get("is_current_version", True)) or _normalize_value(
+        prior_upload.get("superseded_by_upload_id")
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only the current upload version can be replaced.",
+        )
+    if _normalize_value(prior_upload.get("pending_replacement_upload_id")):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This upload already has a replacement awaiting review.",
+        )
+
+    version_group_id = _normalize_value(
+        prior_upload.get("version_group_id") or prior_upload.get("_id")
+    )
+    next_version = max(_as_int(prior_upload.get("version"), 1), 1) + 1
+    claim_token = f"replace_{secrets.token_hex(16)}"
+    _claim_upload_replacement(
+        db=db,
+        upload_record=prior_upload,
+        claim_token=claim_token,
+    )
+    try:
+        common_fields = {
+            "db": db,
+            "project_id": project_id,
+            "family_id": family_id,
+            "member_id": member_id,
+            "upload": file,
+            "uploaded_by": _actor_label(current_user),
+            "uploaded_by_user_id": _current_user_id(current_user),
+            "vault_item_id": effective_vault_item_id,
+            "version": next_version,
+            "version_group_id": version_group_id,
+            "replaces_upload_id": upload_id,
+            "idempotency_key_hash": key_hash,
+            "idempotency_fingerprint": fingerprint,
+        }
+        if category == "member_photo":
+            replacement = await store_member_photo_upload(
+                **common_fields,
+                consent_attested=True,
+                authority_attested=True,
+            )
+        elif category == "verification_evidence":
+            replacement = await store_verification_evidence_upload(
+                **common_fields,
+                verification_type=_normalize_value(prior_upload.get("verification_type")),
+                evidence_kind=_normalize_value(prior_upload.get("evidence_kind"))
+                or "supporting_family_record",
+            )
+        elif category == "private_media":
+            replacement = await store_private_media_upload(
+                **common_fields,
+                asset_type=_canonical_vault_asset_type(prior_upload.get("asset_type")),
+                privacy_scope=normalized_privacy_scope,
+                vault_scope=_canonical_vault_scope(prior_upload.get("vault_scope")) or "personal",
+                consent_attested=True,
+                authority_attested=True,
+                release_state=effective_release_state,
+                reveal_at=effective_reveal_at,
+                share_with_linked_families=bool(
+                    prior_upload.get("share_with_linked_families")
+                ),
+            )
+        else:
+            raise HTTPException(status_code=400, detail="Unsupported replacement category.")
+        replacement = _scan_and_quarantine_upload(db=db, upload_record=replacement)
+        if category == "private_media" and _replacement_is_storage_ready(replacement):
+            replacement = _ensure_upload_vault_linkage(
+                db=db,
+                upload_record=replacement,
+                current_user=current_user,
+                authorized_project_id=project_id,
+                requested_vault_item_id=effective_vault_item_id,
+                workspace_member_role=_normalize_value(context.get("member_role")),
+            )
+        replacement = _apply_replacement_state(
+            db=db,
+            prior_upload=prior_upload,
+            replacement=replacement,
+            claim_token=claim_token,
+        )
+        _finish_upload_idempotency(
+            db=db,
+            key_hash=key_hash,
+            upload_record=replacement,
+        )
+    except Exception:
+        _clear_upload_replacement_claim(
+            db=db,
+            upload_id=upload_id,
+            claim_token=claim_token,
+        )
+        _release_upload_idempotency(db=db, key_hash=key_hash)
+        raise
+
+    response_status = _upload_status_payload(replacement)
+    public_replacement = _public_upload_record(
+        replacement,
+        context=context,
+        current_user=current_user,
+    )
+    return {
+        "message": response_status["message"],
+        "replacement": public_replacement,
+        "upload": public_replacement,
+        "upload_status": response_status,
+        "idempotency_replayed": False,
     }
 
 
@@ -2102,6 +4700,7 @@ def update_upload_privacy(
         upload_id,
         db,
         current_user,
+        action="change privacy for",
     )
 
     current_scope = _normalize_visibility_scope(upload_record.get("visibility_scope"), "private")
@@ -2110,20 +4709,42 @@ def update_upload_privacy(
         if payload.visibility_scope is not None
         else current_scope
     )
+    category = _normalize_value(upload_record.get("category")).lower()
+    if category == "verification_evidence":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Verification evidence privacy is fixed to its owner-only review policy.",
+        )
+    if category == "private_media" and not _is_upload_owner(upload_record, current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the Vault item owner can change its privacy or scope.",
+        )
+    if not context.get("is_admin"):
+        if category == "member_photo" and visibility_scope not in {
+            "private_to_owner",
+            "private_to_owner_and_co_owner",
+            "household_private",
+            "minor_protected",
+        }:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Portrait privacy must remain owner, co-owner, household, or minor protected.",
+            )
+        if category == "private_media" and visibility_scope not in PRIVATE_MEDIA_ALLOWED_PRIVACY_SCOPES:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid privacy scope for this Vault file.",
+            )
+        if category not in {"member_photo", "private_media", "verification_evidence"}:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="This upload category does not allow customer privacy changes.",
+            )
     flag_defaults = _visibility_flags(visibility_scope)
     customer_visible = flag_defaults["customer_visible"]
     internal_only = flag_defaults["internal_only"]
     share_with_linked = flag_defaults["share_with_linked_families"]
-
-    if payload.customer_visible is not None:
-        customer_visible = bool(payload.customer_visible)
-    if payload.internal_only is not None:
-        internal_only = bool(payload.internal_only)
-    if payload.share_with_linked_families is not None:
-        share_with_linked = bool(payload.share_with_linked_families)
-    if internal_only:
-        customer_visible = False
-        visibility_scope = "internal_only"
 
     current_vault_scope = _normalize_vault_scope(upload_record.get("vault_scope"), "personal")
     next_vault_scope = (
@@ -2131,38 +4752,168 @@ def update_upload_privacy(
         if payload.vault_scope is not None
         else current_vault_scope
     )
-    next_classification = _normalize_privacy_classification(
-        payload.privacy_classification,
-        fallback=_classification_from_flags(
-            visibility_scope=visibility_scope,
-            internal_only=internal_only,
-            customer_visible=customer_visible,
-        ),
-    )
-    if next_classification == "admin_only":
-        internal_only = True
-        customer_visible = False
-        visibility_scope = "internal_only"
-    elif next_classification == "owner_only":
-        customer_visible = False
 
-    db["uploaded_files"].update_one(
-        {"_id": ObjectId(upload_id)},
-        {
-            "$set": {
+    if not context.get("is_admin") and (
+        payload.customer_visible is not None or payload.internal_only is not None
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Customer visibility flags are derived from the selected privacy scope.",
+        )
+    if context.get("is_admin"):
+        if payload.customer_visible is not None:
+            customer_visible = bool(payload.customer_visible)
+        if payload.internal_only is not None:
+            internal_only = bool(payload.internal_only)
+        if payload.share_with_linked_families is not None:
+            share_with_linked = bool(payload.share_with_linked_families)
+    elif payload.share_with_linked_families is not None:
+        share_with_linked = bool(payload.share_with_linked_families)
+
+    if payload.vault_scope is not None and category != "private_media" and not context.get("is_admin"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Vault scope can be changed only for Vault media uploads.",
+        )
+    next_capability = VAULT_SCOPE_CAPABILITY.get(next_vault_scope)
+    if (
+        category == "private_media"
+        and next_capability
+        and not context.get("is_admin")
+        and not bool((context.get("resolved_entitlements") or {}).get(next_capability))
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your active package does not include the selected Vault scope.",
+        )
+    canonical_next_vault_scope = _canonical_vault_scope(next_vault_scope) or next_vault_scope
+    if visibility_scope == "household_private" and canonical_next_vault_scope != "household":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="household_private visibility requires a household Vault.",
+        )
+    if visibility_scope == "linked_family_shared":
+        has_link_entitlement = bool(context.get("is_admin")) or bool(
+            (context.get("resolved_entitlements") or {}).get("can_link_households")
+        )
+        family_id = _normalize_value(upload_record.get("family_id"))
+        try:
+            linked_family_ids = list_linked_family_ids(family_id) if family_id else []
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Linked-family status could not be verified.",
+            ) from exc
+        has_accepted_link = len(
+            {value for value in linked_family_ids if _normalize_value(value)}
+        ) >= 2
+        if (
+            not has_link_entitlement
+            or not share_with_linked
+            or canonical_next_vault_scope != "linked_family"
+            or not has_accepted_link
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Linked-family sharing requires its Vault scope, entitlement, explicit sharing, and an accepted link.",
+            )
+    elif share_with_linked and not context.get("is_admin"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Linked-family sharing can be enabled only with linked_family_shared visibility.",
+        )
+
+    if internal_only:
+        customer_visible = False
+    next_classification = visibility_scope
+    if payload.privacy_classification is not None:
+        requested_classification = _normalize_privacy_classification(
+            payload.privacy_classification,
+            fallback=next_classification,
+        )
+        if not context.get("is_admin") and requested_classification != next_classification:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="privacy_classification must match visibility_scope.",
+            )
+        if context.get("is_admin"):
+            next_classification = requested_classification
+
+    now = datetime.now(UTC).isoformat()
+    before = {
+        "vault_scope": current_vault_scope,
+        "visibility_scope": current_scope,
+        "privacy_classification": _upload_classification(upload_record),
+        "share_with_linked_families": bool(upload_record.get("share_with_linked_families")),
+    }
+    vault_rollback = _sync_linked_vault_item_privacy(
+        upload_record=upload_record,
+        current_user=current_user,
+        next_vault_scope=next_vault_scope,
+        next_privacy_classification=next_classification,
+    )
+    try:
+        result = db["uploaded_files"].update_one(
+            {"_id": ObjectId(upload_id)},
+            {
+                "$set": {
+                    "vault_scope": next_vault_scope,
+                    "visibility_scope": visibility_scope,
+                    "customer_visible": customer_visible,
+                    "internal_only": internal_only,
+                    "share_with_linked_families": share_with_linked,
+                    "privacy_notes": _normalize_value(payload.privacy_notes),
+                    "privacy_classification": next_classification,
+                    "privacy_scope": next_classification,
+                    "updated_at": now,
+                }
+            },
+        )
+        if getattr(result, "matched_count", 0) != 1:
+            raise RuntimeError("upload_privacy_update_missing")
+    except Exception as exc:
+        try:
+            _rollback_linked_vault_item_privacy(
+                rollback=vault_rollback,
+                upload_record=upload_record,
+                current_user=current_user,
+            )
+        except Exception as rollback_exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Upload privacy failed and Vault rollback requires reconciliation.",
+            ) from rollback_exc
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Upload privacy was not changed; linked Vault policy was rolled back.",
+        ) from exc
+    updated = db["uploaded_files"].find_one({"_id": ObjectId(upload_id)}) or upload_record
+    actor = _actor_audit_identity(current_user)
+    try:
+        write_audit_log(
+            actor_user_id=actor["user_id"],
+            actor_email=actor["email"],
+            actor_name=actor["name"],
+            action="uploads.privacy_changed",
+            target_type="upload",
+            target_id=upload_id,
+            before=before,
+            after={
                 "vault_scope": next_vault_scope,
                 "visibility_scope": visibility_scope,
-                "customer_visible": customer_visible,
-                "internal_only": internal_only,
-                "share_with_linked_families": share_with_linked,
-                "privacy_notes": _normalize_value(payload.privacy_notes),
                 "privacy_classification": next_classification,
-            }
-        },
-    )
-    updated = db["uploaded_files"].find_one({"_id": ObjectId(upload_id)}) or upload_record
+                "share_with_linked_families": share_with_linked,
+            },
+            context={"project_id": _normalize_value((context.get("project") or {}).get("_id"))},
+        )
+    except Exception:
+        pass
     return {
-        "upload": _public_upload_record(updated),
+        "upload": _public_upload_record(
+            updated,
+            context=context,
+            current_user=current_user,
+        ),
         "workspace_project_id": _normalize_value((context.get("project") or {}).get("_id")) or None,
     }
 
@@ -2248,6 +4999,11 @@ def update_upload_cinematic_approval(
         },
     )
     updated = db["uploaded_files"].find_one({"_id": ObjectId(upload_id)}) or upload_record
+    updated = _complete_reviewed_replacement(
+        db=db,
+        upload_record=updated,
+        approved=approving,
+    )
     member_id = _normalize_value(upload_record.get("member_id"))
     if member_id and ObjectId.is_valid(member_id):
         member_update: dict[str, Any] = {
@@ -2282,7 +5038,13 @@ def update_upload_cinematic_approval(
             {"_id": ObjectId(member_id)},
             {"$set": member_update},
         )
-    return {"upload": _public_upload_record(updated)}
+    return {
+        "upload": _public_upload_record(
+            updated,
+            context=context,
+            current_user=current_user,
+        )
+    }
 
 
 @router.post("/{upload_id}/verification-review")
@@ -2297,7 +5059,7 @@ def update_upload_verification_review(
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")
 
-    upload_record, _context = _require_upload_management_access(
+    upload_record, context = _require_upload_management_access(
         upload_id,
         db,
         current_user,
@@ -2352,7 +5114,18 @@ def update_upload_verification_review(
     updated = db["uploaded_files"].find_one(
         {"_id": ObjectId(upload_id)}
     ) or upload_record
-    return {"upload": _public_upload_record(updated)}
+    updated = _complete_reviewed_replacement(
+        db=db,
+        upload_record=updated,
+        approved=decision == "approved",
+    )
+    return {
+        "upload": _public_upload_record(
+            updated,
+            context=context,
+            current_user=current_user,
+        )
+    }
 
 
 @router.get("/cinematic/family/{family_id}")
@@ -2386,7 +5159,7 @@ def list_cinematic_assets(
             asset=record,
             member_role=context.get("member_role") or "viewer",
             relationship_scope=context.get("relationship_scope") or "household_member",
-            link_status=context.get("link_status") or "active",
+            link_status=_context_link_status(context),
             is_owner=user_id == _normalize_value(record.get("uploaded_by_user_id")),
         )
     ]
@@ -2481,6 +5254,14 @@ def preview_upload_for_admin_review(
         db,
         current_user,
     )
+    if _normalize_value(upload_record.get("category")).lower() not in {
+        "member_photo",
+        "verification_evidence",
+    }:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrative preview is limited to portrait and verification review files.",
+        )
     if _upload_scan_blocks_download(upload_record):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -2491,6 +5272,30 @@ def preview_upload_for_admin_review(
             status_code=status.HTTP_409_CONFLICT,
             detail="Private storage migration must complete before preview.",
         )
+
+    actor = _actor_audit_identity(current_user)
+    try:
+        write_audit_log(
+            actor_user_id=actor["user_id"],
+            actor_email=actor["email"],
+            actor_name=actor["name"],
+            action="uploads.admin.preview_accessed",
+            target_type="upload",
+            target_id=upload_id,
+            before=None,
+            after={"access": "inline_preview"},
+            context={
+                "surface": "admin_upload_review",
+                "category": _normalize_value(upload_record.get("category")),
+                "project_id": _normalize_value(upload_record.get("project_id")) or None,
+                "vault_item_id": _normalize_value(upload_record.get("vault_item_id")) or None,
+            },
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Preview audit checkpoint failed; the file was not streamed.",
+        ) from exc
 
     content_type = _normalize_value(upload_record.get("content_type")) or "application/octet-stream"
     filename = Path(
@@ -2528,6 +5333,96 @@ def preview_upload_for_admin_review(
     return response
 
 
+@router.get("/{upload_id}/preview")
+def preview_upload(
+    upload_id: str,
+    viewer_project_id: str = Query(default=""),
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    """Stream an authorized private upload without exposing its storage URL."""
+
+    db = get_database()
+    if db is None:
+        raise HTTPException(status_code=500, detail="Database is not connected.")
+    normalized_viewer_project_id = (
+        _normalize_value(viewer_project_id)
+        if isinstance(viewer_project_id, str)
+        else ""
+    )
+    if normalized_viewer_project_id:
+        upload_record, _context = _require_viewer_upload_access(
+            upload_id,
+            normalized_viewer_project_id,
+            db,
+            current_user,
+            require_current=True,
+        )
+    else:
+        upload_record, _context = _require_upload_access(
+            upload_id,
+            db,
+            current_user,
+            detail="Your active package does not include access to this upload.",
+        )
+    if _normalize_value(upload_record.get("deletion_status")).lower() in {"pending", "failed"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This file is unavailable while deletion is pending reconciliation.",
+        )
+    if _upload_scan_blocks_download(upload_record):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This file is unavailable until its security scan passes.",
+        )
+    if not _upload_has_durable_private_storage(upload_record):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="This file is unavailable until private storage migration completes.",
+        )
+
+    content_type = _normalize_value(upload_record.get("content_type")) or "application/octet-stream"
+    filename = Path(
+        _normalize_value(upload_record.get("original_filename")) or "vault-file"
+    ).name.replace('"', "")
+    if _normalize_value(upload_record.get("storage_provider")).lower() == "r2":
+        storage_key = _normalize_value(upload_record.get("storage_key"))
+        if not storage_key:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Private object storage key is missing for this upload.",
+            )
+        try:
+            body = download_private_bytes(
+                key=storage_key,
+                max_bytes=_upload_read_limit(upload_record),
+            )
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Private object storage is unavailable for this upload.",
+            ) from exc
+        response: Response = Response(content=body, media_type=content_type)
+        response.headers["Content-Disposition"] = f'inline; filename="{filename}"'
+    else:
+        relative_path = _normalize_value(upload_record.get("relative_path"))
+        if not relative_path:
+            raise HTTPException(status_code=404, detail="Upload path missing.")
+        absolute_path = _absolute_upload_path(relative_path)
+        if not absolute_path.exists():
+            raise HTTPException(status_code=404, detail="Upload file not found on disk.")
+        response = FileResponse(
+            path=absolute_path,
+            media_type=content_type,
+            filename=filename,
+            content_disposition_type="inline",
+        )
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
 @router.get("/{upload_id}/download")
 def download_upload(
     upload_id: str,
@@ -2545,11 +5440,12 @@ def download_upload(
         else ""
     )
     if normalized_viewer_project_id:
-        upload_record, _context = _require_linked_cinematic_upload_access(
+        upload_record, _context = _require_viewer_upload_access(
             upload_id,
             normalized_viewer_project_id,
             db,
             current_user,
+            require_current=True,
         )
     else:
         upload_record, _context = _require_upload_access(
@@ -2649,10 +5545,83 @@ def delete_upload(
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")
 
-    upload_record, _context = _require_upload_management_access(
-        upload_id,
-        db,
-        current_user,
+    existing_tombstone = None
+    raw_upload_record = None
+    if ObjectId.is_valid(upload_id):
+        existing_tombstone = db["upload_deletion_tombstones"].find_one(
+            {"_id": _deletion_tombstone_id(upload_id)}
+        )
+        raw_upload_record = db["uploaded_files"].find_one({"_id": ObjectId(upload_id)})
+    same_retry_requester = bool(
+        existing_tombstone
+        and raw_upload_record
+        and _normalize_value(existing_tombstone.get("requested_by_user_id"))
+        == _current_user_id(current_user)
+        and _normalize_value(raw_upload_record.get("deletion_requested_by_user_id"))
+        == _current_user_id(current_user)
+        and _normalize_value(raw_upload_record.get("deletion_status")).lower()
+        in {"pending", "failed"}
+    )
+
+    try:
+        if same_retry_requester:
+            # Canonical Vault auth intentionally hides a tombstoned version.
+            # A retry by the already-authorized deletion requester must still
+            # be able to finish idempotent physical/metadata cleanup.
+            upload_record = raw_upload_record
+            context = resolve_workspace_context(
+                current_user,
+                project_id=_normalize_value(upload_record.get("project_id")),
+                family_id=_normalize_value(upload_record.get("family_id")),
+            )
+        else:
+            upload_record, context = _require_upload_management_access(
+                upload_id,
+                db,
+                current_user,
+                action="delete",
+            )
+    except HTTPException as exc:
+        if exc.status_code != status.HTTP_404_NOT_FOUND or not ObjectId.is_valid(upload_id):
+            raise
+        existing_tombstone = existing_tombstone or db["upload_deletion_tombstones"].find_one(
+            {"_id": _deletion_tombstone_id(upload_id)}
+        )
+        same_requester = bool(
+            existing_tombstone
+            and _normalize_value(existing_tombstone.get("requested_by_user_id"))
+            == _current_user_id(current_user)
+        )
+        if not existing_tombstone or not (same_requester or _is_admin(current_user)):
+            raise
+        if (
+            _normalize_value(existing_tombstone.get("category")).lower() == "private_media"
+            and _normalize_value(existing_tombstone.get("vault_item_id"))
+            and not bool(existing_tombstone.get("vault_version_tombstoned"))
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Vault deletion reconciliation is incomplete; the tombstone was retained.",
+            )
+        if _normalize_value(existing_tombstone.get("status")).lower() != "complete":
+            _update_upload_deletion_tombstone(
+                db=db,
+                tombstone_id=_deletion_tombstone_id(upload_id),
+                tombstone_status="complete",
+                detail="idempotent_metadata_absent",
+            )
+        return {
+            "status": "deleted",
+            "upload_id": upload_id,
+            "tombstone_id": _deletion_tombstone_id(upload_id),
+            "idempotency_replayed": True,
+        }
+
+    tombstone_id = _create_upload_deletion_tombstone(
+        db=db,
+        upload_record=upload_record,
+        upload_id=upload_id,
+        current_user=current_user,
     )
 
     relative_path = _normalize_value(upload_record.get("relative_path"))
@@ -2675,6 +5644,35 @@ def delete_upload(
         },
     )
 
+    try:
+        _tombstone_linked_vault_upload_version(
+            db=db,
+            upload_record=upload_record,
+            upload_id=upload_id,
+            current_user=current_user,
+            context=context,
+            tombstone_id=tombstone_id,
+        )
+    except HTTPException as exc:
+        detail_code = f"vault_version_tombstone_failed:{exc.status_code}"
+        db["uploaded_files"].update_one(
+            {"_id": ObjectId(upload_id)},
+            {
+                "$set": {
+                    "deletion_status": "failed",
+                    "deletion_detail": detail_code,
+                    "updated_at": datetime.now(UTC).isoformat(),
+                }
+            },
+        )
+        _update_upload_deletion_tombstone(
+            db=db,
+            tombstone_id=tombstone_id,
+            tombstone_status="failed",
+            detail=detail_code,
+        )
+        raise
+
     if _normalize_value(upload_record.get("storage_provider")).lower() == "r2":
         storage_key = _normalize_value(upload_record.get("storage_key"))
         if not storage_key:
@@ -2687,6 +5685,12 @@ def delete_upload(
                         "updated_at": datetime.now(UTC).isoformat(),
                     }
                 },
+            )
+            _update_upload_deletion_tombstone(
+                db=db,
+                tombstone_id=tombstone_id,
+                tombstone_status="failed",
+                detail="private_storage_key_missing",
             )
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -2706,6 +5710,12 @@ def delete_upload(
                         "updated_at": datetime.now(UTC).isoformat(),
                     }
                 },
+            )
+            _update_upload_deletion_tombstone(
+                db=db,
+                tombstone_id=tombstone_id,
+                tombstone_status="failed",
+                detail=f"private_storage_delete_failed:{type(exc).__name__}",
             )
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -2728,6 +5738,12 @@ def delete_upload(
                     "updated_at": datetime.now(UTC).isoformat(),
                 }
             },
+        )
+        _update_upload_deletion_tombstone(
+            db=db,
+            tombstone_id=tombstone_id,
+            tombstone_status="failed",
+            detail=f"local_cleanup_failed:{type(exc).__name__}",
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -2754,6 +5770,12 @@ def delete_upload(
                 }
             },
         )
+        _update_upload_deletion_tombstone(
+            db=db,
+            tombstone_id=tombstone_id,
+            tombstone_status="failed",
+            detail=f"member_reference_cleanup_failed:{type(exc).__name__}",
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=(
@@ -2762,9 +5784,55 @@ def delete_upload(
             ),
         )
 
-    db["uploaded_files"].delete_one({"_id": ObjectId(upload_id)})
+    try:
+        deletion_result = db["uploaded_files"].delete_one({"_id": ObjectId(upload_id)})
+        if getattr(deletion_result, "deleted_count", 1) != 1:
+            raise RuntimeError("upload_metadata_delete_missing")
+    except Exception as exc:
+        db["uploaded_files"].update_one(
+            {"_id": ObjectId(upload_id)},
+            {
+                "$set": {
+                    "deletion_status": "failed",
+                    "deletion_detail": f"metadata_delete_failed:{type(exc).__name__}",
+                    "updated_at": datetime.now(UTC).isoformat(),
+                }
+            },
+        )
+        _update_upload_deletion_tombstone(
+            db=db,
+            tombstone_id=tombstone_id,
+            tombstone_status="failed",
+            detail=f"metadata_delete_failed:{type(exc).__name__}",
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Upload metadata deletion failed and was retained for reconciliation.",
+        ) from exc
+    _update_upload_deletion_tombstone(
+        db=db,
+        tombstone_id=tombstone_id,
+        tombstone_status="complete",
+    )
+
+    actor = _actor_audit_identity(current_user)
+    try:
+        write_audit_log(
+            actor_user_id=actor["user_id"],
+            actor_email=actor["email"],
+            actor_name=actor["name"],
+            action="uploads.deleted",
+            target_type="upload_tombstone",
+            target_id=tombstone_id,
+            before={"upload_id": upload_id, "category": upload_record.get("category")},
+            after={"status": "complete"},
+            context={"project_id": upload_record.get("project_id")},
+        )
+    except Exception:
+        pass
 
     return {
         "status": "deleted",
         "upload_id": upload_id,
+        "tombstone_id": tombstone_id,
     }

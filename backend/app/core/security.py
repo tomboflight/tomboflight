@@ -8,27 +8,22 @@ import jwt
 from jwt.exceptions import InvalidTokenError
 from passlib.context import CryptContext
 
-from app.config import settings
+from app.config import LOCAL_ENVIRONMENTS, settings
 
 
 def _resolve_secret_key() -> str:
     secret_key = str(settings.secret_key or "").strip()
     environment = str(settings.environment or "development").strip().lower()
-    is_non_production = environment in {
-        "development",
-        "dev",
-        "local",
-        "test",
-    }
+    is_local_environment = environment in LOCAL_ENVIRONMENTS
 
     if not secret_key:
         raise RuntimeError("SECRET_KEY is not configured.")
 
-    if secret_key == "change-me" and not is_non_production:
+    if secret_key == "change-me" and not is_local_environment:
         raise RuntimeError(
             "SECRET_KEY must be set to a unique value outside development."
         )
-    if len(secret_key.encode("utf-8")) < 32 and not is_non_production:
+    if len(secret_key.encode("utf-8")) < 32 and not is_local_environment:
         raise RuntimeError(
             "SECRET_KEY must contain at least 32 bytes outside development."
         )

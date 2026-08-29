@@ -1,15 +1,29 @@
 from __future__ import annotations
 
+import json
+import re
 from typing import Any
 
+from app.config import DEPLOYED_ENVIRONMENTS, settings
 from app.core.role_catalog import normalize_role_code
 
-CEO_MASTER_ADMIN_EMAIL = "l.robinson@tomboflight.com"
+
+_IDENTITY_EMAIL_PATTERN = re.compile(
+    r"^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$"
+)
+
+
+def _normalize_identity_email(value: Any) -> str:
+    normalized = str(value or "").strip().lower()
+    if not normalized or not _IDENTITY_EMAIL_PATTERN.fullmatch(normalized):
+        return ""
+    return normalized
 
 
 def is_canonical_ceo_email(value: Any) -> bool:
     """Return True only for the immutable CEO Master Administrator mailbox."""
-    return str(value or "").strip().lower() == CEO_MASTER_ADMIN_EMAIL
+    normalized = _normalize_identity_email(value)
+    return bool(CEO_MASTER_ADMIN_EMAIL) and normalized == CEO_MASTER_ADMIN_EMAIL
 
 # Job-scoped roles that the canonical CEO may assign to an active officer.
 # The CEO singleton is intentionally excluded from this collection.
@@ -19,6 +33,38 @@ ASSIGNABLE_OFFICER_ROLE_CODES: tuple[str, ...] = (
     "finance_admin",
     "marketing_admin",
 )
+
+
+def has_canonical_internal_admin_authority(user: dict[str, Any] | None) -> bool:
+    """Return whether an identity has live internal administrator authority.
+
+    Deprecated generic admin/super-admin labels intentionally do not qualify;
+    they receive no authority elsewhere in the canonical permission policy.
+    """
+    if not user:
+        return False
+    if is_canonical_ceo_email(user.get("email")):
+        return True
+    role_values: list[Any] = [
+        user.get("role"),
+        user.get("access_tier"),
+        user.get("department_role"),
+    ]
+    for key in ("role_codes", "admin_roles", "officer_roles"):
+        values = user.get(key)
+        if isinstance(values, (list, tuple, set, frozenset)):
+            role_values.extend(values)
+    role_codes = {
+        normalize_role_code(value)
+        for value in role_values
+        if str(value or "").strip()
+    }
+    return bool(role_codes.intersection(ASSIGNABLE_OFFICER_ROLE_CODES))
+
+
+def requires_privileged_mfa(user: dict[str, Any] | None) -> bool:
+    """Return whether an identity's live authority must be MFA-bound."""
+    return has_canonical_internal_admin_authority(user)
 
 PERMISSION_REGISTRY: dict[str, dict[str, str]] = {
     "admin.access": {"name": "Admin Workspace Access", "description": "Access shared admin workspace data."},
@@ -197,42 +243,192 @@ ROLE_METADATA: dict[str, dict[str, str]] = {
     },
 }
 
-OFFICER_ROLE_MAPPING: dict[str, list[str]] = {
-    "l.robinson@tomboflight.com": ["CEO_MASTER_ADMIN", "EXECUTIVE_TECH_ADMIN"],
-    "jenn.wood@tomboflight.com": ["CFO_ADMIN"],
-    "k.goffigan@tomboflight.com": ["COO_ADMIN"],
-}
+_ACTIVE_PROFILE_KEYS = frozenset(
+    {"full_name", "business_title", "access_tier", "department_role"}
+)
+_RETIRED_PROFILE_KEYS = frozenset(
+    {"full_name", "former_business_title", "retirement_reason"}
+)
 
-OFFICER_PROFILE_FIELDS: dict[str, dict[str, str]] = {
-    "l.robinson@tomboflight.com": {
-        "full_name": "Larry Robinson",
-        "business_title": "CEO",
-        "access_tier": "ceo_master_admin",
-        "department_role": "executive_tech_admin",
-    },
-    "jenn.wood@tomboflight.com": {
-        "full_name": "Jennifer Wood",
-        "business_title": "CFO",
-        "access_tier": "finance_admin",
-        "department_role": "finance_admin",
-    },
-    "k.goffigan@tomboflight.com": {
-        "full_name": "Keith Goffigan",
-        "business_title": "COO",
-        "access_tier": "operations_admin",
-        "department_role": "operations_admin",
-    },
-}
 
-# Former officers remain explicit so startup reconciliation fails closed instead
-# of accidentally restoring a separated administrator from an old database row.
-RETIRED_OFFICER_PROFILE_FIELDS: dict[str, dict[str, str]] = {
-    "marquis.l.floyd@tomboflight.com": {
-        "full_name": "Marquis Floyd",
-        "former_business_title": "CMO",
-        "retirement_reason": "Officer separation",
-    },
-}
+def _clean_profile(
+    value: Any,
+    *,
+    allowed_keys: frozenset[str],
+    item_label: str,
+    errors: list[str],
+) -> dict[str, str]:
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        errors.append(f"{item_label}.profile must be an object.")
+        return {}
+    unknown_keys = sorted(set(value) - set(allowed_keys))
+    if unknown_keys:
+        errors.append(f"{item_label}.profile contains unsupported fields.")
+    return {
+        key: str(value.get(key) or "").strip()
+        for key in allowed_keys
+        if str(value.get(key) or "").strip()
+    }
+
+
+def _load_admin_identity_registry(raw_registry: str | None = None) -> tuple[
+    str,
+    dict[str, list[str]],
+    dict[str, dict[str, str]],
+    dict[str, dict[str, str]],
+    tuple[str, ...],
+    bool,
+]:
+    raw = (
+        settings.admin_identity_registry_json_value
+        if raw_registry is None
+        else str(raw_registry or "").strip()
+    )
+    if not raw:
+        return "", {}, {}, {}, (), False
+
+    errors: list[str] = []
+    try:
+        payload = json.loads(raw)
+    except (TypeError, ValueError):
+        return "", {}, {}, {}, ("ADMIN_IDENTITY_REGISTRY_JSON is not valid JSON.",), True
+
+    if not isinstance(payload, dict):
+        return "", {}, {}, {}, ("ADMIN_IDENTITY_REGISTRY_JSON must be a JSON object.",), True
+
+    if set(payload) - {"active_officers", "retired_officers"}:
+        errors.append("ADMIN_IDENTITY_REGISTRY_JSON contains unsupported top-level fields.")
+
+    active_items = payload.get("active_officers", [])
+    retired_items = payload.get("retired_officers", [])
+    if not isinstance(active_items, list):
+        errors.append("active_officers must be a list.")
+        active_items = []
+    if not isinstance(retired_items, list):
+        errors.append("retired_officers must be a list.")
+        retired_items = []
+
+    role_mapping: dict[str, list[str]] = {}
+    active_profiles: dict[str, dict[str, str]] = {}
+    retired_profiles: dict[str, dict[str, str]] = {}
+    ceo_emails: list[str] = []
+    allowed_active_roles = set(ASSIGNABLE_OFFICER_ROLE_CODES) | {"ceo_master_admin"}
+
+    for index, item in enumerate(active_items):
+        item_label = f"active_officers[{index}]"
+        if not isinstance(item, dict):
+            errors.append(f"{item_label} must be an object.")
+            continue
+        if set(item) - {"email", "role_codes", "profile"}:
+            errors.append(f"{item_label} contains unsupported fields.")
+        email = _normalize_identity_email(item.get("email"))
+        if not email:
+            errors.append(f"{item_label}.email must be a valid email address.")
+            continue
+        if email in role_mapping:
+            errors.append(f"{item_label}.email duplicates another active identity.")
+            continue
+
+        raw_roles = item.get("role_codes")
+        if not isinstance(raw_roles, list) or not raw_roles:
+            errors.append(f"{item_label}.role_codes must be a non-empty list.")
+            continue
+        roles = sorted(
+            {
+                normalized
+                for normalized in (normalize_role_code(value) for value in raw_roles)
+                if normalized
+            }
+        )
+        if not roles or any(role not in allowed_active_roles for role in roles):
+            errors.append(f"{item_label}.role_codes contains an unsupported role.")
+            continue
+        if "ceo_master_admin" in roles:
+            ceo_emails.append(email)
+
+        profile = _clean_profile(
+            item.get("profile"),
+            allowed_keys=_ACTIVE_PROFILE_KEYS,
+            item_label=item_label,
+            errors=errors,
+        )
+        for field_name in ("access_tier", "department_role"):
+            if profile.get(field_name):
+                profile[field_name] = normalize_role_code(profile[field_name])
+                if profile[field_name] not in allowed_active_roles:
+                    errors.append(
+                        f"{item_label}.profile.{field_name} contains an unsupported role."
+                    )
+                elif profile[field_name] not in roles:
+                    errors.append(
+                        f"{item_label}.profile.{field_name} must match an assigned role."
+                    )
+        role_mapping[email] = roles
+        active_profiles[email] = profile
+
+    for index, item in enumerate(retired_items):
+        item_label = f"retired_officers[{index}]"
+        if not isinstance(item, dict):
+            errors.append(f"{item_label} must be an object.")
+            continue
+        if set(item) - {"email", "profile"}:
+            errors.append(f"{item_label} contains unsupported fields.")
+        email = _normalize_identity_email(item.get("email"))
+        if not email:
+            errors.append(f"{item_label}.email must be a valid email address.")
+            continue
+        if email in role_mapping or email in retired_profiles:
+            errors.append(f"{item_label}.email duplicates another configured identity.")
+            continue
+        retired_profiles[email] = _clean_profile(
+            item.get("profile"),
+            allowed_keys=_RETIRED_PROFILE_KEYS,
+            item_label=item_label,
+            errors=errors,
+        )
+
+    if len(ceo_emails) != 1:
+        errors.append("Exactly one active identity must have ceo_master_admin authority.")
+
+    ceo_email = ceo_emails[0] if len(ceo_emails) == 1 else ""
+    return (
+        ceo_email,
+        role_mapping,
+        active_profiles,
+        retired_profiles,
+        tuple(errors),
+        True,
+    )
+
+
+(
+    CEO_MASTER_ADMIN_EMAIL,
+    OFFICER_ROLE_MAPPING,
+    OFFICER_PROFILE_FIELDS,
+    RETIRED_OFFICER_PROFILE_FIELDS,
+    ADMIN_IDENTITY_REGISTRY_ERRORS,
+    ADMIN_IDENTITY_REGISTRY_CONFIGURED,
+) = _load_admin_identity_registry()
+
+
+def validate_admin_identity_registry_configuration(*, require_config: bool | None = None) -> None:
+    """Fail closed when the private officer identity registry is absent or invalid."""
+    required = (
+        str(settings.environment or "").strip().lower() in DEPLOYED_ENVIRONMENTS
+        if require_config is None
+        else bool(require_config)
+    )
+    if required and not ADMIN_IDENTITY_REGISTRY_CONFIGURED:
+        raise RuntimeError(
+            "ADMIN_IDENTITY_REGISTRY_JSON must be configured outside source control."
+        )
+    if ADMIN_IDENTITY_REGISTRY_ERRORS:
+        raise RuntimeError(
+            "ADMIN_IDENTITY_REGISTRY_JSON is invalid: "
+            + " ".join(ADMIN_IDENTITY_REGISTRY_ERRORS)
+        )
 
 
 def normalize_officer_role(value: Any) -> str:

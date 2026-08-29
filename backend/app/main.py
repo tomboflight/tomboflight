@@ -6,7 +6,8 @@ from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.config import settings
+from app.config import settings, validate_runtime_environment_on_startup
+from app.core.admin_permission_registry import validate_admin_identity_registry_configuration
 from app.core.continuity_route_guard import (
     KERNEL_EXECUTION_PATH,
     requires_continuity_kernel,
@@ -16,6 +17,7 @@ from app.database import (
     close_mongo_connection,
     connect_to_mongo,
     get_service_state,
+    set_mongo_connection_state_callback,
 )
 
 from app.routes.admin_intake_submissions import (
@@ -118,6 +120,7 @@ from app.services.rate_limit_service import ensure_rate_limit_indexes
 from app.services.cinematic_version_service import (
     ensure_cinematic_manifest_indexes,
 )
+from app.services.db_bootstrap_service import ensure_runtime_data_indexes
 
 
 logger = logging.getLogger(__name__)
@@ -166,6 +169,8 @@ def _is_secure_request(request: Request) -> bool:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    validate_runtime_environment_on_startup()
+    validate_admin_identity_registry_configuration()
     validate_nft_runtime_configuration_on_startup()
     db = connect_to_mongo()
     app.state.db = db
@@ -184,6 +189,7 @@ async def lifespan(app: FastAPI):
         ensure_continuity_runtime_indexes()
         ensure_organization_indexes()
         ensure_cinematic_manifest_indexes()
+        ensure_runtime_data_indexes()
         try:
             bootstrap_admin_access_controls()
         except Exception as exc:
@@ -213,13 +219,23 @@ app = FastAPI(
     version=settings.app_version,
     lifespan=lifespan,
 )
+set_mongo_connection_state_callback(
+    lambda connected_database: setattr(app.state, "db", connected_database)
+)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_resolve_allowed_origins(),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "Accept", "Origin", "X-CSRF-Token"],
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "Accept",
+        "Origin",
+        "X-CSRF-Token",
+        "Idempotency-Key",
+    ],
 )
 
 

@@ -7,7 +7,7 @@
     <title>Vault Files | Tomb of Light</title>
     <meta
       name="description"
-      content="Upload private vault files — voice messages, video messages, and protected legacy media — to your Tomb of Light vault."
+      content="Upload, preview, replace, and manage protected photos, documents, voice messages, and videos in your Tomb of Light vault."
     />
     <link rel="stylesheet" href="styles.css?v=20260828-phase21-1" />
   </head>
@@ -85,9 +85,9 @@
             <div class="form-panel">
               <span class="eyebrow">About Vault Files</span>
               <div class="notice">
-                Vault files are private legacy media — voice messages, video
-                messages, and protected archives — stored securely under your
-                account. Only upload files you have the lawful right to submit.
+                Vault files include protected photos, documents, certificates,
+                voice messages, videos, and family archives stored securely
+                under your account. Only upload files you have the lawful right to submit.
                 Do not upload Social Security cards, full Social Security
                 numbers, payment card information, or other sensitive
                 information not required for this workflow.
@@ -101,37 +101,42 @@
                 legal validation.
               </div>
               <div class="helper" style="margin-top: 0.75rem">
-                For portraits and family photos, use
-                <a href="portrait-upload.html">Portrait Uploads</a>. For birth
-                certificates, marriage records, or other verification documents,
-                use
+                Production portraits can still be submitted through
+                <a href="portrait-upload.html">Portrait Uploads</a>, and records
+                requiring family verification through
                 <a href="verification-upload.html">Verification Uploads</a>.
+                Your permitted photos and documents from those lanes are also
+                available from My Vault Files for viewing and lifecycle management.
               </div>
             </div>
 
             <div class="form-panel">
-              <span class="eyebrow">Step 1 — Select Family</span>
+              <span class="eyebrow">Step 1 — Select Vault</span>
 
               <div class="form-grid two-col">
+                <label>
+                  Vault Area
+                  <select data-vault-scope-select aria-label="Vault area">
+                    <option value="">Loading available Vault areas...</option>
+                  </select>
+                </label>
+
                 <label>
                   Family Record
                   <select data-vault-family-select>
                     <option value="">Loading family records...</option>
                   </select>
                 </label>
-
-                <label>
-                  Load Record
-                  <button
-                    class="btn btn-primary"
-                    type="button"
-                    data-vault-load-family
-                    style="margin-top: 0.45rem"
-                  >
-                    Load Family Record
-                  </button>
-                </label>
               </div>
+
+              <button
+                class="btn btn-primary"
+                type="button"
+                data-vault-load-family
+                style="margin-top: 0.75rem"
+              >
+                Load Family Record
+              </button>
 
               <div
                 class="helper"
@@ -147,9 +152,9 @@
               <form class="form-grid" data-vault-upload-form novalidate>
                 <div class="form-grid two-col">
                   <label>
-                    Family Member
-                    <select name="member_id" data-vault-member-select required>
-                      <option value="">Select member</option>
+                    Family Member (optional)
+                    <select name="member_id" data-vault-member-select>
+                      <option value="">Household-level file</option>
                     </select>
                   </label>
 
@@ -157,6 +162,12 @@
                     File Type
                     <select name="asset_type" required>
                       <option value="">Select type</option>
+                      <option value="vault_photo">
+                        Protected Photo
+                      </option>
+                      <option value="vault_document">
+                        Protected Document or Certificate
+                      </option>
                       <option value="private_voice_message">
                         Private Voice Message
                       </option>
@@ -177,6 +188,12 @@
                       <option value="private_to_owner_and_co_owner">
                         Private to me and co-owner
                       </option>
+                      <option value="household_private" data-vault-household-privacy hidden>
+                        Household members
+                      </option>
+                      <option value="linked_family_shared" data-vault-linked-privacy hidden>
+                        Approved linked family
+                      </option>
                     </select>
                   </label>
 
@@ -185,15 +202,41 @@
                     <input
                       type="file"
                       name="vault_file"
-                      accept=".mp3,.m4a,.wav,.webm,.ogg,.mp4,.mov,.ogv,audio/mpeg,audio/mp4,audio/wav,audio/webm,audio/ogg,audio/x-wav,video/mp4,video/webm,video/quicktime,video/ogg"
+                      accept=".jpg,.jpeg,.png,.webp,.pdf,.mp3,.m4a,.wav,.webm,.ogg,.mp4,.mov,.ogv,image/jpeg,image/png,image/webp,application/pdf,audio/mpeg,audio/mp4,audio/wav,audio/webm,audio/ogg,audio/x-wav,video/mp4,video/webm,video/quicktime,video/ogg"
                       required
                     />
                   </label>
                 </div>
 
+                <div class="form-grid two-col">
+                  <label>
+                    Release Timing
+                    <select name="release_state" data-vault-release-state required>
+                      <option value="released">Available now to permitted viewers</option>
+                      <option value="draft">Keep private as a draft</option>
+                      <option value="scheduled" data-vault-scheduled-option>
+                        Reveal on a specific date
+                      </option>
+                    </select>
+                  </label>
+
+                  <label data-vault-reveal-date-field hidden>
+                    Reveal Date and Time
+                    <input type="datetime-local" name="reveal_at" />
+                  </label>
+                </div>
+
+                <div class="helper" data-vault-release-help>
+                  Date-based release is available only when included in the
+                  active package. Event-based releases remain locked until the
+                  required executor, consent, and legal verification workflow
+                  has completed.
+                </div>
+
                 <div class="helper">
-                  Voice messages: MP3, M4A, WAV, WebM, OGG. Video messages:
-                  MP4, WebM, MOV. Maximum file size applies based on your
+                  Photos: JPG, PNG, WEBP. Documents and certificates: PDF.
+                  Voice messages: MP3, M4A, WAV, WebM, OGG. Videos: MP4,
+                  WebM, MOV. Maximum file size and storage limits follow your
                   active package.
                 </div>
 
@@ -203,6 +246,8 @@
                   >
                     <input
                       type="checkbox"
+                      name="authority_attested"
+                      value="true"
                       required
                       style="margin-top: 0.2rem"
                     />
@@ -219,6 +264,8 @@
                   >
                     <input
                       type="checkbox"
+                      name="consent_attested"
+                      value="true"
                       required
                       style="margin-top: 0.2rem"
                     />
@@ -257,7 +304,7 @@
             </div>
 
             <div class="form-panel">
-              <span class="eyebrow">Step 3 — Vault Files</span>
+              <span class="eyebrow">Step 3 — My Vault Files</span>
 
               <div class="form-grid two-col">
                 <label>
@@ -275,7 +322,7 @@
                     data-vault-load-uploads
                     style="margin-top: 0.45rem"
                   >
-                    Load Vault Files
+                    Load My Vault Files
                   </button>
                 </label>
               </div>
@@ -291,7 +338,8 @@
                 data-vault-uploads-empty
                 style="display: none; margin-top: 1rem"
               >
-                No vault files found for this member.
+                No photos, documents, recordings, or videos were found for
+                this member.
               </div>
             </div>
 
@@ -394,7 +442,7 @@
 
     <script src="config.js?v=20260828-phase21-1"></script>
     <script src="app.js?v=20260828-phase21-1"></script>
-    <script src="auth.js?v=20260828-phase21-1"></script>
-    <script src="vault-upload.js?v=20260509-audit"></script>
+    <script src="auth.js?v=20260829-phase22"></script>
+    <script src="vault-upload.js?v=20260829-phase22"></script>
   </body>
 </html>

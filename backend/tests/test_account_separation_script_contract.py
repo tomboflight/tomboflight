@@ -6,9 +6,9 @@ from scripts import enforce_account_separation
 
 
 class AccountSeparationScriptContractTests(unittest.TestCase):
-    def test_larry_personal_account_is_targeted_for_package_experience(self):
+    def test_legacy_personal_account_is_targeted_for_package_experience(self):
         config = enforce_account_separation.TARGET_PERSONAL_ACCOUNT_EXPERIENCE.get(
-            "larrycr27@gmail.com"
+            "legacy-customer@example.com"
         )
         self.assertIsNotNone(config)
         assert config is not None
@@ -23,6 +23,25 @@ class AccountSeparationScriptContractTests(unittest.TestCase):
         ):
             result = enforce_account_separation.main()
         self.assertEqual(result, 2)
+        connect_mock.assert_not_called()
+
+    def test_dry_run_requires_private_audit_targets_before_database_access(self):
+        with (
+            patch.object(sys, "argv", ["enforce_account_separation.py"]),
+            patch.object(
+                enforce_account_separation,
+                "validate_admin_identity_registry_configuration",
+            ),
+            patch.object(
+                enforce_account_separation,
+                "_validate_account_separation_audit_targets",
+                side_effect=RuntimeError("private audit targets missing"),
+            ),
+            patch.object(enforce_account_separation, "connect_to_mongo") as connect_mock,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "private audit targets missing"):
+                enforce_account_separation.main()
+
         connect_mock.assert_not_called()
 
 

@@ -5,7 +5,7 @@ POST /projects/{project_id}/client-review/approve   — record approval
 POST /projects/{project_id}/client-review/request-revision — record revision request
 
 No mint, certificate, delivery, Stripe, or email side effects are triggered
-by any route in this module.  Larry Robinson's canonical mint is never touched.
+by any route in this module. The canonical mint is never touched.
 """
 
 from __future__ import annotations
@@ -239,8 +239,8 @@ def approve_client_review(
 
     Only permitted when the project is in client_review state.
     Does NOT mint, remint, issue a certificate, mark delivered, or change billing.
-    For Larry Robinson: public_safe_consent is approval for viewer content and
-    delivery presentation only — his existing canonical mint is unchanged.
+    public_safe_consent approves viewer content and delivery presentation only;
+    an existing canonical mint remains unchanged.
     """
     project = _load_project(project_id)
     _assert_project_access(project, current_user)

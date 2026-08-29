@@ -1,11 +1,24 @@
 from functools import lru_cache
+import os
 from pathlib import Path
+from typing import Mapping
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_ENV_PATH = Path(__file__).resolve().parents[1] / ".env"
 ROOT_ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
+
+LOCAL_ENVIRONMENTS = frozenset({"development", "dev", "local", "test"})
+DEPLOYED_ENVIRONMENTS = frozenset({"staging", "stage", "production", "prod"})
+KNOWN_ENVIRONMENTS = LOCAL_ENVIRONMENTS | DEPLOYED_ENVIRONMENTS
+HOSTED_RUNTIME_ENV_VARS = (
+    "RENDER",
+    "RENDER_SERVICE_ID",
+    "K_SERVICE",
+    "FLY_APP_NAME",
+    "WEBSITE_INSTANCE_ID",
+)
 
 
 class Settings(BaseSettings):
@@ -34,6 +47,14 @@ class Settings(BaseSettings):
     secret_key: str = Field(
         default="change-me",
         validation_alias=AliasChoices("SECRET_KEY"),
+    )
+    admin_identity_registry_json: SecretStr = Field(
+        default=SecretStr(""),
+        validation_alias=AliasChoices("ADMIN_IDENTITY_REGISTRY_JSON"),
+    )
+    account_separation_audit_targets_json: SecretStr = Field(
+        default=SecretStr(""),
+        validation_alias=AliasChoices("ACCOUNT_SEPARATION_AUDIT_TARGETS_JSON"),
     )
     algorithm: str = Field(
         default="HS256",
@@ -499,8 +520,30 @@ class Settings(BaseSettings):
         return str(self.environment or "").strip().lower() in {"production", "prod"}
 
     @property
+    def is_local_environment(self) -> bool:
+        return str(self.environment or "").strip().lower() in LOCAL_ENVIRONMENTS
+
+    @property
+    def admin_identity_registry_json_value(self) -> str:
+        value = self.admin_identity_registry_json
+        if isinstance(value, SecretStr):
+            return value.get_secret_value().strip()
+        return str(value or "").strip()
+
+    @property
+    def account_separation_audit_targets_json_value(self) -> str:
+        value = self.account_separation_audit_targets_json
+        if isinstance(value, SecretStr):
+            return value.get_secret_value().strip()
+        return str(value or "").strip()
+
+    @property
     def local_dev_cors_enabled_effective(self) -> bool:
-        return self.local_dev_cors_enabled or not self.is_production_environment
+        # Staging and any other explicitly deployed environment must not
+        # inherit browser origins intended only for a developer workstation.
+        return self.is_local_environment and (
+            self.local_dev_cors_enabled or self.environment.strip().lower() != "test"
+        )
 
     @property
     def allowed_origins_list(self) -> list[str]:
@@ -601,3 +644,70 @@ def get_settings() -> Settings:
 
 
 settings = get_settings()
+
+
+def validate_runtime_environment_on_startup(
+    *,
+    runtime_settings: Settings | None = None,
+    environ: Mapping[str, str] | None = None,
+) -> None:
+    """Reject ambiguous or development-grade configuration on hosted runtimes.
+
+    Local development remains zero-configuration. Hosted processes must set an
+    explicit environment and may never identify themselves as local/dev/test;
+    otherwise production-only controls could silently be bypassed.
+    """
+
+    configured = runtime_settings or settings
+    runtime_environ = environ if environ is not None else os.environ
+    normalized_environ = {
+        str(key).upper(): str(value or "").strip()
+        for key, value in runtime_environ.items()
+    }
+    normalized_environment = str(configured.environment or "").strip().lower()
+    if normalized_environment not in KNOWN_ENVIRONMENTS:
+        raise RuntimeError(
+            "ENVIRONMENT must be one of development, test, staging, or production."
+        )
+
+    hosted = any(
+        normalized_environ.get(key, "")
+        for key in HOSTED_RUNTIME_ENV_VARS
+    )
+    explicitly_configured = bool(normalized_environ.get("ENVIRONMENT"))
+    if hosted and not explicitly_configured:
+        raise RuntimeError("ENVIRONMENT must be explicitly configured on hosted runtimes.")
+    if hosted and normalized_environment in LOCAL_ENVIRONMENTS:
+        raise RuntimeError(
+            "Hosted runtimes cannot use development, local, or test ENVIRONMENT values."
+        )
+
+    if normalized_environment in DEPLOYED_ENVIRONMENTS:
+        secret_key = str(configured.secret_key or "").strip()
+        if secret_key.lower() in {
+            "",
+            "change-me",
+            "changeme",
+            "replace-me",
+            "secret",
+        }:
+            raise RuntimeError(
+                "SECRET_KEY must be set to a unique value in deployed environments."
+            )
+        if len(secret_key.encode("utf-8")) < 32:
+            raise RuntimeError(
+                "SECRET_KEY must contain at least 32 bytes in deployed environments."
+            )
+        registry_value = getattr(configured, "admin_identity_registry_json_value", "")
+        if callable(registry_value):
+            registry_value = registry_value()
+        if not registry_value:
+            raw_registry = getattr(configured, "admin_identity_registry_json", "")
+            if isinstance(raw_registry, SecretStr):
+                registry_value = raw_registry.get_secret_value().strip()
+            else:
+                registry_value = str(raw_registry or "").strip()
+        if not registry_value:
+            raise RuntimeError(
+                "ADMIN_IDENTITY_REGISTRY_JSON must be set in deployed environments."
+            )

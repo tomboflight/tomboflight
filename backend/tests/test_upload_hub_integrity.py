@@ -176,12 +176,21 @@ class UploadHubIntegrityTests(unittest.TestCase):
         )
 
     def test_private_media_backend_uses_private_vault_entitlement(self):
-        """Private media upload routes must not unlock vault access via generic upload flags."""
+        """Vault upload routes use explicit personal, household, and org capabilities."""
         upload_source = inspect.getsource(upload_routes.upload_private_media)
         vault_list_source = inspect.getsource(upload_routes.list_family_vault_items)
         self.assertEqual(upload_routes.HOUSEHOLD_VAULT_CAPABILITY, "can_use_household_vault")
-        self.assertIn("HOUSEHOLD_VAULT_CAPABILITY", upload_source)
-        self.assertIn("HOUSEHOLD_VAULT_CAPABILITY", vault_list_source)
+        self.assertEqual(
+            upload_routes.VAULT_CAPABILITIES,
+            (
+                "can_use_personal_vault",
+                "can_use_household_vault",
+                "can_use_linked_household_vault",
+                "can_use_organization_records_vault",
+            ),
+        )
+        self.assertIn("VAULT_CAPABILITIES", upload_source)
+        self.assertIn('category="private_media"', vault_list_source)
         self.assertNotIn("premium_archive_structure", upload_source)
         self.assertNotIn("premium_archive_structure", vault_list_source)
         self.assertNotIn("can_upload_verification_docs", upload_source)

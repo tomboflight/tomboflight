@@ -308,7 +308,15 @@ def confirm_email_change(token: str) -> dict[str, Any]:
     if db is None:
         raise RuntimeError("Database is not connected.")
     token_hash = _email_change_token_hash(token)
-    user = db.users.find_one({"pending_email_change_token_hash": token_hash})
+    allowed_status = {
+        "$nin": ["deleted", "deletion_in_progress", "permanently_deleted"]
+    }
+    user = db.users.find_one(
+        {
+            "pending_email_change_token_hash": token_hash,
+            "status": allowed_status,
+        }
+    )
     if user is None:
         raise ValueError("Email change link is invalid, expired, or already used.")
     expires_raw = _normalize_text(user.get("pending_email_change_expires_at"))
@@ -332,6 +340,7 @@ def confirm_email_change(token: str) -> dict[str, Any]:
                 "_id": user.get("_id"),
                 "pending_email_change_token_hash": token_hash,
                 "pending_email": new_email,
+                "status": allowed_status,
             },
             {
                 "$set": {

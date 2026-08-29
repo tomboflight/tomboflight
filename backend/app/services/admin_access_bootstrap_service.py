@@ -5,12 +5,12 @@ from typing import Any
 
 from app.core.admin_permission_registry import (
     ASSIGNABLE_OFFICER_ROLE_CODES,
-    CEO_MASTER_ADMIN_EMAIL,
     OFFICER_PROFILE_FIELDS,
     PERMISSION_REGISTRY,
     RETIRED_OFFICER_PROFILE_FIELDS,
     ROLE_METADATA,
     ROLE_PERMISSION_MAP,
+    is_canonical_ceo_email,
     normalized_officer_role_mapping,
 )
 from app.core.role_catalog import normalize_role_code
@@ -122,7 +122,7 @@ def _sync_officer_assignments(db, now_iso: str) -> dict[str, Any]:
 
         profile_fields = OFFICER_PROFILE_FIELDS.get(email, {})
         managed_role_code = normalize_role_code(user.get("managed_role_code"))
-        if email == CEO_MASTER_ADMIN_EMAIL or managed_role_code not in ASSIGNABLE_OFFICER_ROLE_CODES:
+        if is_canonical_ceo_email(email) or managed_role_code not in ASSIGNABLE_OFFICER_ROLE_CODES:
             expected_roles = list(seeded_roles)
             managed_role_code = ""
         else:
@@ -153,7 +153,7 @@ def _sync_officer_assignments(db, now_iso: str) -> dict[str, Any]:
         user_id = _normalize(user.get("_id"))
         if not user_id:
             continue
-        if email == CEO_MASTER_ADMIN_EMAIL:
+        if is_canonical_ceo_email(email):
             ceo_master_admin_user_id = user_id
 
         for role_code in expected_roles:

@@ -56,19 +56,6 @@ jobs:
       - name: Run Phase 6L runtime no-skip enforcement test
         run: python -m unittest backend.tests.contracts.test_continuity_kernel_phase6l_runtime_no_skip_enforcement -v
 
-      - name: Run Phase 9 operational runtime and security tests
-        env:
-          PYTHONPATH: backend
-        run: >-
-          python -m unittest
-          backend.tests.test_continuity_runtime_service
-          backend.tests.test_continuity_runtime_route
-          backend.tests.test_security_hardening
-          backend.tests.test_admin_console
-          backend.tests.test_manual_fulfillment_queue
-          backend.tests.contracts.test_continuity_kernel_phase9_control_surface_security
-          -v
-
       - name: Run full backend regression suite
         env:
           PYTHONPATH: backend
@@ -109,5 +96,5 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Verify every CEO control workflow in a browser
+      - name: Verify public customer workflows in a browser
         run: npm run test:browser
