@@ -4,53 +4,207 @@ import certifi
 import logging
 import os
 from pathlib import Path
-from typing import Any
+from threading import Lock
+from time import monotonic
+from typing import Any, Callable
+from urllib.parse import parse_qs, unquote, urlsplit
 
 from app.config import settings
 
 client: MongoClient | None = None
 db: Database | None = None
 logger = logging.getLogger(__name__)
+_connection_lock = Lock()
+_last_connection_attempt_monotonic = 0.0
+_RECONNECT_COOLDOWN_SECONDS = 5.0
+_connection_state_callback: Callable[[Database | None], None] | None = None
 
 
 class DatabaseUnavailableError(RuntimeError):
     """Raised when a DB-required code path is invoked without an active DB connection."""
 
 
-def connect_to_mongo() -> Database | None:
+def set_mongo_connection_state_callback(
+    callback: Callable[[Database | None], None] | None,
+) -> None:
+    """Keep framework-owned database references synchronized after reconnects."""
+
+    global _connection_state_callback
+    _connection_state_callback = callback
+    _publish_connection_state()
+
+
+def _publish_connection_state() -> None:
+    callback = _connection_state_callback
+    if callback is None:
+        return
+    try:
+        callback(db)
+    except Exception:
+        logger.exception("MongoDB connection state callback failed.")
+
+
+def _mongodb_tls_options(uri: str) -> dict[str, Any]:
+    """Return safe TLS overrides without breaking ordinary local MongoDB.
+
+    SRV URIs already enable TLS through PyMongo. An explicit ``tls``/``ssl``
+    query option always wins. Standard remote URIs retain the previous secure
+    default, while loopback and Unix-socket development URIs use the driver's
+    normal non-TLS default.
+    """
+
+    parsed = urlsplit(uri)
+    query_keys = {key.lower() for key in parse_qs(parsed.query, keep_blank_values=True)}
+    if "tls" in query_keys or "ssl" in query_keys:
+        return {}
+    if parsed.scheme.lower() == "mongodb+srv":
+        return {"tlsCAFile": certifi.where()}
+
+    authority = parsed.netloc.rsplit("@", 1)[-1]
+    host_tokens = [unquote(token.strip()) for token in authority.split(",") if token.strip()]
+    local_hosts = True
+    for token in host_tokens:
+        if token.startswith("/"):
+            continue
+        if token.startswith("[") and "]" in token:
+            hostname = token[1 : token.index("]")]
+        else:
+            hostname = token.rsplit(":", 1)[0] if token.count(":") == 1 else token
+        if hostname.strip().lower() not in {"localhost", "127.0.0.1", "::1"}:
+            local_hosts = False
+            break
+
+    if host_tokens and local_hosts:
+        return {}
+    return {"tls": True, "tlsCAFile": certifi.where()}
+
+
+def _close_mongo_connection_unlocked() -> None:
     global client, db
+
+    existing_client = client
+    client = None
+    db = None
+    _publish_connection_state()
+    if existing_client is not None:
+        existing_client.close()
+
+
+def _connect_to_mongo_unlocked(
+    *,
+    force: bool,
+    publish_state: bool = True,
+) -> Database | None:
+    global client, db, _last_connection_attempt_monotonic
 
     if not settings.mongodb_uri:
         logger.warning("MongoDB URI is not set; starting without database connectivity.")
+        _close_mongo_connection_unlocked()
         return None
 
+    now = monotonic()
+    if (
+        not force
+        and _last_connection_attempt_monotonic
+        and now - _last_connection_attempt_monotonic < _RECONNECT_COOLDOWN_SECONDS
+    ):
+        return None
+    _last_connection_attempt_monotonic = now
+
+    candidate_client: MongoClient | None = None
     try:
-        client = MongoClient(
+        candidate_client = MongoClient(
             settings.mongodb_uri,
-            tls=True,
-            tlsCAFile=certifi.where(),
             serverSelectionTimeoutMS=10000,
             connectTimeoutMS=10000,
             socketTimeoutMS=10000,
+            **_mongodb_tls_options(settings.mongodb_uri),
         )
-        db = client[settings.mongodb_db_name]
-        client.admin.command("ping")
+        candidate_db = candidate_client[settings.mongodb_db_name]
+        candidate_client.admin.command("ping")
+        previous_client = client
+        client = candidate_client
+        db = candidate_db
+        if publish_state:
+            _publish_connection_state()
+        if previous_client is not None and previous_client is not candidate_client:
+            previous_client.close()
         logger.info("Connected to MongoDB database", extra={"database": settings.mongodb_db_name})
         return db
     except Exception as exc:
-        client = None
-        db = None
-        logger.error("MongoDB connection failed; starting without database connectivity: %s", exc)
+        if candidate_client is not None:
+            candidate_client.close()
+        _close_mongo_connection_unlocked()
+        # Avoid logging exception strings that may echo a credential-bearing URI.
+        logger.error(
+            "MongoDB connection failed; database connectivity is unavailable (%s).",
+            type(exc).__name__,
+        )
         return None
 
 
+def connect_to_mongo() -> Database | None:
+    """Establish a fresh MongoDB connection for application startup."""
+
+    with _connection_lock:
+        _close_mongo_connection_unlocked()
+        return _connect_to_mongo_unlocked(force=True)
+
+
+def ensure_mongo_connection() -> Database | None:
+    """Live-ping MongoDB and reconnect after startup or transient outages."""
+
+    current_db = db
+    if current_db is not None:
+        try:
+            current_db.command("ping")
+            return current_db
+        except Exception:
+            logger.warning("MongoDB readiness ping failed; attempting reconnection.")
+
+    with _connection_lock:
+        current_db = db
+        if current_db is not None:
+            try:
+                current_db.command("ping")
+                return current_db
+            except Exception:
+                _close_mongo_connection_unlocked()
+        reconnected = _connect_to_mongo_unlocked(force=False, publish_state=False)
+        if reconnected is None:
+            return None
+        try:
+            # A process that started while MongoDB was unavailable still needs
+            # the correctness-critical Vault/upload/message indexes before a
+            # readiness probe can advertise the recovered connection.
+            from app.services.db_bootstrap_service import ensure_runtime_data_indexes
+
+            ensure_runtime_data_indexes()
+        except Exception as exc:
+            logger.error(
+                "MongoDB reconnected but required runtime indexes are unavailable (%s).",
+                type(exc).__name__,
+            )
+            _close_mongo_connection_unlocked()
+            return None
+        _publish_connection_state()
+        return reconnected
+
+
 def get_database() -> Database:
+    # Reconnection is driven by the readiness probe so ordinary requests fail
+    # fast with a structured 503 during an outage instead of each blocking on
+    # a network connection attempt.
     if db is None:
         raise DatabaseUnavailableError("Database connection is currently unavailable.")
     return db
 
 
-def get_service_state(*, include_operational_details: bool = False) -> dict[str, Any]:
+def get_service_state(
+    *,
+    include_operational_details: bool = False,
+    reconnect_if_unavailable: bool = False,
+) -> dict[str, Any]:
     # Import lazily so the services package can import get_database during
     # application startup without creating a database/services import cycle.
     from app.services.r2_storage_service import get_private_storage_health
@@ -59,7 +213,12 @@ def get_service_state(*, include_operational_details: bool = False) -> dict[str,
         get_upload_scanner_health,
     )
 
-    database_connected = db is not None
+    active_db = (
+        ensure_mongo_connection()
+        if db is not None or reconnect_if_unavailable
+        else None
+    )
+    database_connected = active_db is not None
     degraded_reasons = [] if database_connected else ["database_unavailable"]
     ready = database_connected
     service_mode = "ok" if ready else "degraded"
@@ -118,7 +277,7 @@ def get_service_state(*, include_operational_details: bool = False) -> dict[str,
     if include_operational_details and database_connected:
         try:
             legacy_clean_local_uploads = int(
-                db["uploaded_files"].count_documents(
+                active_db["uploaded_files"].count_documents(
                     {
                         "scan_status": "clean",
                         "quarantined": {"$ne": True},
@@ -265,11 +424,8 @@ def get_service_state(*, include_operational_details: bool = False) -> dict[str,
 
 
 def close_mongo_connection() -> None:
-    global client, db
-
-    if client is not None:
-        client.close()
+    with _connection_lock:
+        had_client = client is not None
+        _close_mongo_connection_unlocked()
+    if had_client:
         logger.info("MongoDB connection closed.")
-
-    client = None
-    db = None

@@ -30,6 +30,8 @@ PRIVATE_VIDEO_CONTENT_TYPES = {
     "video/ogg",
 }
 PRIVATE_MEDIA_CONTENT_TYPES = PRIVATE_VOICE_CONTENT_TYPES | PRIVATE_VIDEO_CONTENT_TYPES
+VAULT_PHOTO_CONTENT_TYPES = IMAGE_CONTENT_TYPES
+VAULT_DOCUMENT_CONTENT_TYPES = EVIDENCE_CONTENT_TYPES
 
 EXTENSION_BY_CONTENT_TYPE = {
     "image/jpeg": ".jpg",
@@ -84,6 +86,13 @@ def _upload_root() -> Path:
     root = Path(settings.upload_root_path)
     root.mkdir(parents=True, exist_ok=True)
     return root
+
+
+def _safe_version(value: Any) -> int:
+    try:
+        return max(int(value or 1), 1)
+    except (TypeError, ValueError):
+        return 1
 
 
 async def _save_upload_to_disk(
@@ -150,6 +159,7 @@ def serialize_upload_record(record: dict[str, Any]) -> dict[str, Any]:
         "consent_attested": bool(record.get("consent_attested")),
         "authority_attested": bool(record.get("authority_attested")),
         "consent_attested_at": record.get("consent_attested_at"),
+        "authority_attested_at": record.get("authority_attested_at"),
         "approved_for_cinematic": bool(record.get("approved_for_cinematic")),
         "approved_by": record.get("approved_by"),
         "master_review_status": record.get("master_review_status") or "pending",
@@ -165,9 +175,83 @@ def serialize_upload_record(record: dict[str, Any]) -> dict[str, Any]:
         "scan_detail": record.get("scan_detail"),
         "quarantined": bool(record.get("quarantined")),
         "quarantine_reason": record.get("quarantine_reason"),
+        "account_access_enabled": (
+            record.get("account_access_enabled") is not False
+            and not bool(record.get("owner_account_deleted"))
+        ),
+        "vault_item_id": record.get("vault_item_id"),
+        "version": _safe_version(record.get("version")),
+        "version_group_id": record.get("version_group_id") or record_id,
+        "root_upload_id": record.get("version_group_id") or record_id,
+        "replaces_upload_id": record.get("replaces_upload_id") or None,
+        "superseded_by_upload_id": record.get("superseded_by_upload_id") or None,
+        "pending_replacement_upload_id": record.get("pending_replacement_upload_id") or None,
+        "replacement_status": record.get("replacement_status") or "current",
+        "is_current_version": bool(record.get("is_current_version", True)),
+        "release_state": record.get("release_state") or "released",
+        "reveal_at": record.get("reveal_at"),
         "created_at": record.get("created_at"),
+        "updated_at": record.get("updated_at"),
         "download_path": f"/uploads/{record_id}/download" if record_id else "",
     }
+
+
+def _upload_lifecycle_fields(
+    *,
+    account_access_enabled: bool,
+    vault_item_id: str,
+    version: int,
+    version_group_id: str,
+    replaces_upload_id: str,
+    idempotency_key_hash: str,
+    idempotency_fingerprint: str,
+) -> dict[str, Any]:
+    normalized_version = _safe_version(version)
+    normalized_replaces = str(replaces_upload_id or "").strip()
+    return {
+        "account_access_enabled": bool(account_access_enabled),
+        "owner_account_deleted": False,
+        "vault_item_id": str(vault_item_id or "").strip() or None,
+        "version": normalized_version,
+        "version_group_id": str(version_group_id or "").strip(),
+        "replaces_upload_id": normalized_replaces or None,
+        "superseded_by_upload_id": None,
+        "pending_replacement_upload_id": None,
+        "replacement_status": "pending" if normalized_replaces else "current",
+        "is_current_version": not bool(normalized_replaces),
+        "idempotency_key_hash": str(idempotency_key_hash or "").strip() or None,
+        "idempotency_fingerprint": str(idempotency_fingerprint or "").strip() or None,
+    }
+
+
+def _insert_upload_record(
+    *,
+    db: Any,
+    upload_record: dict[str, Any],
+    absolute_path: Path,
+) -> str:
+    """Insert a staged upload and compensate if Mongo persistence fails."""
+
+    try:
+        result = db["uploaded_files"].insert_one(upload_record)
+    except Exception:
+        absolute_path.unlink(missing_ok=True)
+        raise
+
+    upload_record["_id"] = result.inserted_id
+    upload_id = str(result.inserted_id)
+    if not str(upload_record.get("version_group_id") or "").strip():
+        upload_record["version_group_id"] = upload_id
+        try:
+            db["uploaded_files"].update_one(
+                {"_id": result.inserted_id},
+                {"$set": {"version_group_id": upload_id}},
+            )
+        except Exception:
+            # The inserted row is still authoritative and serialization falls
+            # back to its own id. A reconciliation/index pass can backfill it.
+            pass
+    return upload_id
 
 
 async def store_member_photo_upload(
@@ -181,6 +265,12 @@ async def store_member_photo_upload(
     uploaded_by_user_id: str = "",
     consent_attested: bool = False,
     authority_attested: bool = False,
+    vault_item_id: str = "",
+    version: int = 1,
+    version_group_id: str = "",
+    replaces_upload_id: str = "",
+    idempotency_key_hash: str = "",
+    idempotency_fingerprint: str = "",
 ) -> dict[str, Any]:
     if not consent_attested or not authority_attested:
         raise HTTPException(
@@ -225,7 +315,7 @@ async def store_member_photo_upload(
         "privacy_classification": "household_private",
         "relationship_scope": "household_member",
         "branch_id": "",
-        "person_ids": [member_id],
+        "person_ids": [member_id] if member_id else [],
         "asset_type": "portrait",
         "verification_status": "pending",
         "consent_status": "pending",
@@ -233,6 +323,8 @@ async def store_member_photo_upload(
         "authority_attested": True,
         "consent_attested_at": now_iso,
         "consent_attested_by_user_id": uploaded_by_user_id,
+        "authority_attested_at": now_iso,
+        "authority_attested_by_user_id": uploaded_by_user_id,
         "approved_for_cinematic": False,
         "approved_by": None,
         "master_review_status": "pending",
@@ -255,11 +347,22 @@ async def store_member_photo_upload(
         "quarantine_reason": "",
         "created_at": now_iso,
         "updated_at": now_iso,
+        **_upload_lifecycle_fields(
+            account_access_enabled=True,
+            vault_item_id=vault_item_id,
+            version=version,
+            version_group_id=version_group_id,
+            replaces_upload_id=replaces_upload_id,
+            idempotency_key_hash=idempotency_key_hash,
+            idempotency_fingerprint=idempotency_fingerprint,
+        ),
     }
 
-    result = db["uploaded_files"].insert_one(upload_record)
-    upload_record["_id"] = result.inserted_id
-    upload_id = str(result.inserted_id)
+    upload_id = _insert_upload_record(
+        db=db,
+        upload_record=upload_record,
+        absolute_path=absolute_path,
+    )
 
     db["family_members"].update_one(
         {"_id": ObjectId(member_id)},
@@ -288,6 +391,12 @@ async def store_verification_evidence_upload(
     upload: UploadFile,
     uploaded_by: str,
     uploaded_by_user_id: str = "",
+    vault_item_id: str = "",
+    version: int = 1,
+    version_group_id: str = "",
+    replaces_upload_id: str = "",
+    idempotency_key_hash: str = "",
+    idempotency_fingerprint: str = "",
 ) -> dict[str, Any]:
     content_type = str(upload.content_type or "").strip().lower()
     if content_type not in EVIDENCE_CONTENT_TYPES:
@@ -357,10 +466,22 @@ async def store_verification_evidence_upload(
         "quarantine_reason": "",
         "created_at": now_iso,
         "updated_at": now_iso,
+        **_upload_lifecycle_fields(
+            account_access_enabled=True,
+            vault_item_id=vault_item_id,
+            version=version,
+            version_group_id=version_group_id,
+            replaces_upload_id=replaces_upload_id,
+            idempotency_key_hash=idempotency_key_hash,
+            idempotency_fingerprint=idempotency_fingerprint,
+        ),
     }
 
-    result = db["uploaded_files"].insert_one(upload_record)
-    upload_record["_id"] = result.inserted_id
+    _insert_upload_record(
+        db=db,
+        upload_record=upload_record,
+        absolute_path=absolute_path,
+    )
 
     return serialize_upload_record(upload_record)
 
@@ -376,14 +497,38 @@ async def store_private_media_upload(
     upload: UploadFile,
     uploaded_by: str,
     uploaded_by_user_id: str = "",
+    vault_scope: str = "personal",
+    consent_attested: bool = False,
+    authority_attested: bool = False,
+    vault_item_id: str = "",
+    version: int = 1,
+    version_group_id: str = "",
+    replaces_upload_id: str = "",
+    idempotency_key_hash: str = "",
+    idempotency_fingerprint: str = "",
+    release_state: str = "released",
+    reveal_at: str | None = None,
+    share_with_linked_families: bool = False,
 ) -> dict[str, Any]:
     normalized_asset_type = str(asset_type or "").strip().lower()
     normalized_privacy_scope = str(privacy_scope or "").strip().lower() or "private_to_owner"
     content_type = str(upload.content_type or "").strip().lower()
-    if content_type not in PRIVATE_MEDIA_CONTENT_TYPES:
+    allowed_content_types = set(PRIVATE_MEDIA_CONTENT_TYPES)
+    if normalized_asset_type == "vault_photo":
+        allowed_content_types = set(VAULT_PHOTO_CONTENT_TYPES)
+    elif normalized_asset_type == "vault_document":
+        allowed_content_types = set(VAULT_DOCUMENT_CONTENT_TYPES)
+
+    if content_type not in allowed_content_types:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Unsupported private media type.",
+            detail="Unsupported private vault file type.",
+        )
+
+    if consent_attested is not True or authority_attested is not True:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Vault consent and upload authority must both be confirmed.",
         )
 
     if normalized_asset_type == "private_voice_message" and content_type not in PRIVATE_VOICE_CONTENT_TYPES:
@@ -407,14 +552,19 @@ async def store_private_media_upload(
     relative_path = Path("private_media") / family_token / member_token / asset_token / stored_filename
     absolute_path = _upload_root() / relative_path
 
+    max_bytes = (
+        settings.upload_max_image_bytes
+        if normalized_asset_type == "vault_photo"
+        else settings.upload_max_document_bytes
+    )
     size_bytes = await _save_upload_to_disk(
         upload=upload,
         destination=absolute_path,
-        max_bytes=settings.upload_max_document_bytes,
+        max_bytes=max_bytes,
     )
 
     now_iso = datetime.now(UTC).isoformat()
-    customer_visible = normalized_privacy_scope == "private_to_owner_and_co_owner"
+    customer_visible = normalized_privacy_scope != "private_to_owner"
     upload_record = {
         "project_id": project_id,
         "family_id": family_id,
@@ -422,19 +572,27 @@ async def store_private_media_upload(
         "category": "private_media",
         "internal_only": False,
         "customer_visible": customer_visible,
-        "vault_scope": "personal",
+        "vault_scope": str(vault_scope or "personal").strip().lower() or "personal",
         "visibility_scope": normalized_privacy_scope,
         "privacy_scope": normalized_privacy_scope,
         "privacy_classification": normalized_privacy_scope,
         "relationship_scope": "self",
         "branch_id": "",
-        "person_ids": [member_id],
+        "person_ids": [member_id] if member_id else [],
         "asset_type": normalized_asset_type or "private_media",
         "verification_status": "pending",
         "consent_status": "pending",
+        "consent_attested": True,
+        "authority_attested": True,
+        "consent_attested_at": now_iso,
+        "consent_attested_by_user_id": uploaded_by_user_id,
+        "authority_attested_at": now_iso,
+        "authority_attested_by_user_id": uploaded_by_user_id,
         "approved_for_cinematic": False,
         "approved_by": None,
-        "share_with_linked_families": False,
+        "share_with_linked_families": bool(share_with_linked_families),
+        "release_state": str(release_state or "released").strip().lower() or "released",
+        "reveal_at": str(reveal_at or "").strip() or None,
         "evidence_kind": "",
         "verification_type": "",
         "original_filename": original_filename,
@@ -451,7 +609,19 @@ async def store_private_media_upload(
         "quarantine_reason": "",
         "created_at": now_iso,
         "updated_at": now_iso,
+        **_upload_lifecycle_fields(
+            account_access_enabled=True,
+            vault_item_id=vault_item_id,
+            version=version,
+            version_group_id=version_group_id,
+            replaces_upload_id=replaces_upload_id,
+            idempotency_key_hash=idempotency_key_hash,
+            idempotency_fingerprint=idempotency_fingerprint,
+        ),
     }
-    result = db["uploaded_files"].insert_one(upload_record)
-    upload_record["_id"] = result.inserted_id
+    _insert_upload_record(
+        db=db,
+        upload_record=upload_record,
+        absolute_path=absolute_path,
+    )
     return serialize_upload_record(upload_record)

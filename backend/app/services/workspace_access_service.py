@@ -10,6 +10,7 @@ from app.config import settings
 from app.core.package_mapping import resolve_package_identity
 from app.core.package_type_catalog import normalize_package_type
 from app.core.role_catalog import normalize_project_member_role
+from app.core.admin_permission_registry import has_canonical_internal_admin_authority
 from app.database import get_database
 from app.services.audit_log_service import create_audit_log
 from app.services.entitlement_service import resolve_project_entitlements
@@ -36,15 +37,6 @@ ENTITLEMENT_BLOCKING_REASON_MAP = {
     "missing_active_entitlement": "missing_active_entitlement",
     "package_code_mismatch": "entitlement_package_mismatch",
     "package_lane_mismatch": "entitlement_lane_mismatch",
-}
-WORKSPACE_ADMIN_ROLE_KEYS = {
-    "admin",
-    "super_admin",
-    "root_admin",
-    "platform_admin",
-    "operations_admin",
-    "executive_technology",
-    "operations",
 }
 _logger = logging.getLogger(__name__)
 
@@ -76,12 +68,10 @@ def _current_user_name(user: dict[str, Any]) -> str:
 
 
 def _has_workspace_admin_access(user: dict[str, Any]) -> bool:
-    role_values = {
-        _normalize_value(user.get("role")).lower(),
-        _normalize_value(user.get("access_tier")).lower(),
-        _normalize_value(user.get("department_role")).lower(),
-    }
-    return any(value in WORKSPACE_ADMIN_ROLE_KEYS for value in role_values if value)
+    # Workspace bypass authority must match the canonical platform access
+    # policy. In particular, deprecated admin/super-admin labels are not
+    # sufficient for non-CEO identities.
+    return has_canonical_internal_admin_authority(user)
 
 
 def _to_object_id(value: str) -> ObjectId | None:

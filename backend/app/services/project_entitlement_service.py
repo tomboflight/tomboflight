@@ -33,6 +33,17 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def maintenance_scheduled_start_at(purchased_at: datetime | None = None) -> datetime:
+    """Return the canonical maintenance start: 30 days after purchase."""
+
+    start_basis = purchased_at or _utcnow()
+    if start_basis.tzinfo is None:
+        start_basis = start_basis.replace(tzinfo=timezone.utc)
+    else:
+        start_basis = start_basis.astimezone(timezone.utc)
+    return start_basis + timedelta(days=MAINTENANCE_START_DELAY_DAYS)
+
+
 def _serialize(document: dict[str, Any] | None) -> dict[str, Any] | None:
     if not document:
         return None
@@ -125,8 +136,7 @@ def _compute_maintenance_fields(
     if plan in {"", "none"}:
         return "not_started", None, None, None, None
 
-    start_basis = purchased_at or _utcnow()
-    scheduled_start = start_basis + timedelta(days=MAINTENANCE_START_DELAY_DAYS)
+    scheduled_start = maintenance_scheduled_start_at(purchased_at)
     now = _utcnow()
     if now < scheduled_start:
         return "scheduled", scheduled_start, None, None, None
@@ -336,6 +346,7 @@ def update_project_entitlement_maintenance(
     maintenance_stripe_subscription_id: str | None = None,
     maintenance_stripe_customer_id: str | None = None,
     maintenance_stripe_status: str | None = None,
+    clear_maintenance_started_at: bool = False,
 ) -> dict[str, Any] | None:
     collection = _collection()
     candidates = _project_id_candidates(project_id)
@@ -370,7 +381,10 @@ def update_project_entitlement_maintenance(
     if maintenance_stripe_status is not None:
         updates["maintenance_stripe_status"] = maintenance_stripe_status
 
-    collection.update_one({"_id": existing["_id"]}, {"$set": updates})
+    update_operation: dict[str, Any] = {"$set": updates}
+    if clear_maintenance_started_at:
+        update_operation["$unset"] = {"maintenance_started_at": ""}
+    collection.update_one({"_id": existing["_id"]}, update_operation)
     saved = cast(
         dict[str, Any] | None,
         collection.find_one({"_id": existing["_id"]}),

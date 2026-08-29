@@ -15,6 +15,10 @@ class _UsersCollection:
 
     def find_one(self, query, projection=None):
         del projection
+        expected_status = query.get("status")
+        if isinstance(expected_status, dict) and "$nin" in expected_status:
+            if self.user.get("status") in expected_status["$nin"]:
+                return None
         if "stripe_customer_id" in query:
             return (
                 deepcopy(self.user)
@@ -169,6 +173,26 @@ class Phase21CustomerAccountManagementTests(unittest.TestCase):
         self.assertEqual(database.users.user["session_token_version"], 3)
         self.assertIn("customer@example.com", database.users.user["email_aliases"])
         self.assertNotIn("pending_email_change_token_hash", database.users.user)
+
+    def test_email_confirmation_cannot_reactivate_a_deletion_locked_identity(self):
+        token = "phase21-deleted-email-change-token"
+        self.user.update(
+            {
+                "status": "deletion_in_progress",
+                "login_enabled": False,
+                "pending_email": "new@example.com",
+                "pending_email_change_token_hash": user_service._email_change_token_hash(token),
+                "pending_email_change_expires_at": "2999-01-01T00:00:00+00:00",
+            }
+        )
+        database = _Database(self.user)
+
+        with patch.object(user_service, "get_database", return_value=database):
+            with self.assertRaisesRegex(ValueError, "invalid, expired, or already used"):
+                user_service.confirm_email_change(token)
+
+        self.assertEqual(database.users.user["email"], "customer@example.com")
+        self.assertEqual(database.users.user["status"], "deletion_in_progress")
 
     def test_stripe_customer_webhook_cannot_change_login_email(self):
         database = _Database(self.user)

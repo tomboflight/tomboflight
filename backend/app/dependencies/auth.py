@@ -12,11 +12,11 @@ from app.core.admin_permission_registry import (
     CAPABILITY_PERMISSIONS,
     ROLE_CAPABILITIES,
     ROLE_PERMISSION_MAP,
+    has_canonical_internal_admin_authority,
     is_canonical_ceo_email,
 )
 from app.core.package_catalog import get_package
 from app.core.role_catalog import (
-    INTERNAL_ADMIN_ROLE_CODES,
     SUPER_ADMIN_ROLE_CODES,
     collect_role_codes,
     normalize_role_code,
@@ -24,7 +24,10 @@ from app.core.role_catalog import (
 from app.core.security import decode_access_token, verify_csrf_token
 from app.database import get_database
 from app.services.audit_log_service import write_audit_log
-from app.services.auth_service import get_user_by_email
+from app.services.auth_service import (
+    get_user_by_email,
+    has_privileged_admin_authority,
+)
 from app.services.control_layer_service import create_workflow_event
 from app.services.order_service import get_orders_for_user
 from app.services.project_entitlement_service import list_user_project_entitlements
@@ -36,7 +39,6 @@ from app.services.project_membership_service import (
 COOKIE_NAME = "tol_access_token"
 CSRF_COOKIE_NAME = "tol_csrf_token"
 
-INTERNAL_ADMIN_KEYS = set(INTERNAL_ADMIN_ROLE_CODES)
 SUPER_ADMIN_KEYS = set(SUPER_ADMIN_ROLE_CODES)
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -193,20 +195,7 @@ def _get_token_from_request(
 
 
 def _has_internal_admin_access(user: dict[str, Any]) -> bool:
-    if is_canonical_ceo_email(user.get("email")):
-        # The canonical CEO remains an administrator even if a stale database
-        # row temporarily loses its role labels. resolve_access_context applies
-        # the same singleton invariant to capabilities and permissions.
-        return True
-    role_codes = collect_role_codes(
-        (
-            user.get("role"),
-            user.get("access_tier"),
-            user.get("department_role"),
-        )
-    )
-    role_codes.difference_update(SUPER_ADMIN_KEYS)
-    return any(role_code in INTERNAL_ADMIN_KEYS for role_code in role_codes)
+    return has_canonical_internal_admin_authority(user)
 
 
 def has_internal_admin_access(user: dict[str, Any]) -> bool:
@@ -484,6 +473,11 @@ def get_current_user(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="MFA verification is required for this session.",
             )
+    elif has_privileged_admin_authority(normalized_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="MFA enrollment is required for internal administrator accounts.",
+        )
 
     if source == "cookie":
         _enforce_cookie_auth_csrf(

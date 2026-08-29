@@ -6,8 +6,16 @@ from fastapi import HTTPException, WebSocket, status
 
 from app.core.security import decode_access_token
 from app.core.websocket_manager import websocket_manager
-from app.dependencies.auth import COOKIE_NAME
-from app.services.auth_service import get_user_by_email, get_user_by_id
+from app.dependencies.auth import (
+    COOKIE_NAME,
+    _allowed_cookie_auth_origins,
+    _normalize_origin,
+)
+from app.services.auth_service import (
+    get_user_by_email,
+    get_user_by_id,
+    has_privileged_admin_authority,
+)
 from app.services.workspace_access_service import resolve_workspace_context
 
 
@@ -63,6 +71,11 @@ def authenticate_presence_user(token: str) -> dict[str, Any]:
     payload = decode_access_token(token)
     if payload is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid websocket token.")
+    if _normalize(payload.get("purpose")):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="MFA and account-action tokens cannot open websocket sessions.",
+        )
 
     user_id = _normalize(payload.get("user_id") or payload.get("id"))
     email = _normalize(payload.get("sub") or payload.get("email")).lower()
@@ -75,11 +88,60 @@ def authenticate_presence_user(token: str) -> dict[str, Any]:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Websocket user could not be resolved.",
         )
+
+    actual_user_id = _current_user_id(user)
+    actual_email = _normalize(user.get("email")).lower()
+    if user_id and actual_user_id and user_id != actual_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid websocket token identity.",
+        )
+    if email and actual_email and email != actual_email:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid websocket token identity.",
+        )
+
+    status_value = _normalize(user.get("status")).lower()
+    if status_value not in {"", "active"} or user.get("login_enabled") is False:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Websocket user is inactive.",
+        )
+
+    token_version = _normalize(payload.get("tv"))
+    user_token_version = _normalize(user.get("session_token_version") or 0)
+    legacy_version_allowed = token_version == "" and user_token_version == "0"
+    if token_version != user_token_version and not legacy_version_allowed:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Websocket session has been revoked.",
+        )
+
+    if bool(user.get("mfa_enabled")) and not bool(payload.get("mfa")):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="MFA verification is required for this websocket session.",
+        )
+    if not bool(user.get("mfa_enabled")) and has_privileged_admin_authority(user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="MFA enrollment is required for internal administrator accounts.",
+        )
     return user
 
 
 def authenticate_presence_websocket(websocket: WebSocket) -> dict[str, Any]:
-    token = _normalize(websocket.query_params.get("token") or websocket.cookies.get(COOKIE_NAME))
+    cookie_token = _normalize(websocket.cookies.get(COOKIE_NAME))
+    query_token = _normalize(websocket.query_params.get("token"))
+    if cookie_token:
+        origin = _normalize_origin(websocket.headers.get("origin"))
+        if not origin or origin not in _allowed_cookie_auth_origins():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Origin is not allowed for cookie-authenticated websocket.",
+            )
+    token = cookie_token or query_token
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Websocket authentication token is required.")
     return authenticate_presence_user(token)

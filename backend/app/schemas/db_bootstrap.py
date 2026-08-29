@@ -1,10 +1,11 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class CollectionStatus(BaseModel):
     name: str
     created: bool
     indexes_created: list[str]
+    indexes_failed: list[str] = Field(default_factory=list)
 
 
 class BootstrapResponse(BaseModel):

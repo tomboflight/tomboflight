@@ -13,7 +13,10 @@ from cryptography.fernet import Fernet, InvalidToken
 from pymongo import ASCENDING
 
 from app.config import settings
-from app.core.admin_permission_registry import is_canonical_ceo_email
+from app.core.admin_permission_registry import (
+    is_canonical_ceo_email,
+    requires_privileged_mfa as _requires_privileged_mfa,
+)
 from app.core.password_policy import validate_password_strength
 from app.core.security import (
     create_access_token,
@@ -113,6 +116,48 @@ def _session_version(user: dict) -> int:
         return max(0, int(user.get("session_token_version") or 0))
     except Exception:
         return 0
+
+
+def has_privileged_admin_authority(user: dict[str, Any] | None) -> bool:
+    """Resolve privileged authority from the identity and active role grants."""
+    if not user:
+        return False
+    if _requires_privileged_mfa(user):
+        return True
+
+    user_id = _current_user_id_from_doc(user)
+    if not user_id:
+        return False
+    user_id_candidates: list[Any] = [user_id]
+    if ObjectId.is_valid(user_id):
+        user_id_candidates.append(ObjectId(user_id))
+
+    try:
+        assignments = get_database()["user_role_assignments"].find(
+            {"user_id": {"$in": user_id_candidates}}
+        )
+        assigned_role_codes = [
+            assignment.get("role_code")
+            for assignment in assignments
+            if _normalize_text(assignment.get("status")).lower()
+            in {"", "active", "enabled"}
+        ]
+    except Exception:
+        # Do not manufacture privileged authority when its assignment source
+        # cannot be resolved. Downstream admin permission resolution also
+        # remains unavailable/fail-closed in this state.
+        return False
+    if not assigned_role_codes:
+        return False
+    enriched_user = dict(user)
+    existing_role_codes = user.get("role_codes")
+    if not isinstance(existing_role_codes, (list, tuple, set, frozenset)):
+        existing_role_codes = [existing_role_codes] if existing_role_codes else []
+    enriched_user["role_codes"] = [
+        *existing_role_codes,
+        *assigned_role_codes,
+    ]
+    return _requires_privileged_mfa(enriched_user)
 
 
 def _assert_mfa_token_version(
@@ -643,6 +688,21 @@ def authenticate_user(email: str, password: str) -> dict[str, Any] | None:
             "mfa_challenge_token": challenge,
         }
 
+    if has_privileged_admin_authority(user):
+        enrollment_challenge = create_access_token(
+            {
+                "sub": user["email"],
+                "user_id": str(user["_id"]),
+                "purpose": "mfa_enroll",
+                "tv": _session_version(user),
+            },
+            expires_minutes=max(2, int(settings.mfa_challenge_expire_minutes or 10)),
+        )
+        return {
+            "status": "mfa_enrollment_required",
+            "mfa_challenge_token": enrollment_challenge,
+        }
+
     now_iso = _now_iso()
     db.users.update_one(
         {"_id": user["_id"]},
@@ -786,21 +846,32 @@ def verify_mfa_enrollment(setup_token: str, code: str) -> dict[str, Any]:
     ]
     now_iso = _now_iso()
     db = get_database()
-    db.users.update_one(
-        {"_id": user["_id"]},
+    encrypted_secret = _mfa_encrypt_secret(pending_secret, user_id=user_id)
+    next_session_version = _session_version(user) + 1
+    update_result = db.users.update_one(
+        {
+            "_id": user["_id"],
+            "mfa_pending_secret_encrypted": user.get(
+                "mfa_pending_secret_encrypted"
+            ),
+            "session_token_version": user.get("session_token_version"),
+        },
         {
             "$set": {
                 "mfa_enabled": True,
-                "mfa_secret_encrypted": _mfa_encrypt_secret(pending_secret, user_id=user_id),
+                "mfa_secret_encrypted": encrypted_secret,
                 "mfa_backup_code_hashes": backup_hashes,
                 "mfa_enrolled_at": now_iso,
                 "mfa_last_verified_at": now_iso,
                 "mfa_pending_secret_encrypted": None,
                 "mfa_pending_started_at": None,
                 "last_login_at": now_iso,
-            }
+                "session_token_version": next_session_version,
+            },
         },
     )
+    if int(getattr(update_result, "matched_count", 0)) != 1:
+        raise ValueError("MFA enrollment changed before verification completed.")
     try:
         create_audit_log(
             "mfa_enrollment_verified",
@@ -811,10 +882,14 @@ def verify_mfa_enrollment(setup_token: str, code: str) -> dict[str, Any]:
         )
     except Exception:
         pass
-    user["mfa_enabled"] = True
-    user["mfa_secret_encrypted"] = _mfa_encrypt_secret(pending_secret, user_id=user_id)
+    refreshed_user = db.users.find_one({"_id": user["_id"]}) or {
+        **user,
+        "session_token_version": next_session_version,
+    }
+    refreshed_user["mfa_enabled"] = True
+    refreshed_user["mfa_secret_encrypted"] = encrypted_secret
     return {
-        "access_token": _build_access_token_for_user(user),
+        "access_token": _build_access_token_for_user(refreshed_user),
         "backup_codes": backup_codes,
     }
 
@@ -895,7 +970,21 @@ def disable_mfa_for_user(
     if not verified:
         raise ValueError("MFA verification failed.")
     db = get_database()
-    db.users.update_one({"_id": user["_id"]}, {"$set": _clear_mfa_fields()})
+    next_session_version = _session_version(user) + 1
+    update_result = db.users.update_one(
+        {
+            "_id": user["_id"],
+            "session_token_version": user.get("session_token_version"),
+        },
+        {
+            "$set": {
+                **_clear_mfa_fields(),
+                "session_token_version": next_session_version,
+            },
+        },
+    )
+    if int(getattr(update_result, "matched_count", 0)) != 1:
+        raise ValueError("Account security changed before MFA could be disabled.")
     try:
         create_audit_log(
             "mfa_disabled",

@@ -141,6 +141,7 @@ def create_project_from_paid_order(
     package_name: str,
     stripe_session_id: str | None = None,
     stripe_payment_link_id: str | None = None,
+    purchased_at: datetime | None = None,
 ) -> dict[str, Any] | None:
     db = get_database()
     if db is None:
@@ -207,6 +208,7 @@ def create_project_from_paid_order(
                 package_code=package_code,
                 active_addons=[],
                 maintenance_plan="not_started",
+                purchased_at=purchased_at or now,
                 delivered_at=None,
                 status="active",
             )
@@ -224,6 +226,7 @@ def apply_package_purchase_to_project(
     package_name: str,
     stripe_session_id: str | None = None,
     stripe_payment_link_id: str | None = None,
+    purchased_at: datetime | None = None,
 ) -> dict[str, Any] | None:
     db = get_database()
     if db is None:
@@ -304,6 +307,7 @@ def apply_package_purchase_to_project(
     existing_addons = list(current_entitlement.get("active_addons") or [])
     maintenance_plan = str(current_entitlement.get("maintenance_plan") or "not_started")
     delivered_at = current_entitlement.get("delivered_at")
+    entitlement_purchased_at = current_entitlement.get("purchased_at") or purchased_at or now
 
     try:
         entitlement_user_id = ""
@@ -319,6 +323,7 @@ def apply_package_purchase_to_project(
             package_code=package_code,
             active_addons=existing_addons,
             maintenance_plan=maintenance_plan,
+            purchased_at=entitlement_purchased_at,
             delivered_at=delivered_at,
             status="active",
         )

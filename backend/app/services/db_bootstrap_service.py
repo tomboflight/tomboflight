@@ -1,5 +1,7 @@
+import logging
+
 from pymongo import ASCENDING, DESCENDING
-from pymongo.errors import OperationFailure
+from pymongo.errors import OperationFailure, PyMongoError
 
 from app.database import get_database
 from app.schemas.db_bootstrap import (
@@ -8,6 +10,8 @@ from app.schemas.db_bootstrap import (
     DropLegacyIndexesResponse,
     LegacyIndexDropResult,
 )
+
+logger = logging.getLogger(__name__)
 
 
 CORE_COLLECTIONS: dict[str, list[tuple[list[tuple[str, int]], dict]]] = {
@@ -145,8 +149,6 @@ CORE_COLLECTIONS: dict[str, list[tuple[list[tuple[str, int]], dict]]] = {
         ([("owner_user_id", ASCENDING)], {"name": "idx_projects_owner_user_id"}),
         ([("owner_email", ASCENDING)], {"name": "idx_projects_owner_email"}),
         ([("created_at", ASCENDING)], {"name": "idx_projects_created_at"}),
-        ([("owner_user_id", ASCENDING)], {"name": "idx_projects_owner_user_id"}),
-        ([("owner_email", ASCENDING)], {"name": "idx_projects_owner_email"}),
         ([("family_id", ASCENDING)], {"name": "idx_projects_family_id"}),
     ],
     "project_members": [
@@ -156,29 +158,29 @@ CORE_COLLECTIONS: dict[str, list[tuple[list[tuple[str, int]], dict]]] = {
         ([("member_role", ASCENDING)], {"name": "idx_project_members_member_role"}),
         ([("status", ASCENDING)], {"name": "idx_project_members_status"}),
         (
-            [("project_id", ASCENDING), ("user_id", ASCENDING), ("email", ASCENDING)],
+            [("project_id", ASCENDING), ("user_id", ASCENDING)],
             {
                 "unique": True,
-                "name": "idx_project_members_project_identity_unique",
+                "name": "idx_project_members_project_user_unique",
                 "partialFilterExpression": {
-                    "$or": [
-                        {"user_id": {"$type": "string"}},
-                        {"email": {"$type": "string"}},
-                    ]
+                    "user_id": {"$type": "string"},
                 },
             },
         ),
-    ],
-    "project_members": [
         (
-            [("project_id", ASCENDING), ("user_id", ASCENDING)],
-            {"unique": True, "name": "idx_project_members_project_user_unique"},
+            [("project_id", ASCENDING), ("email", ASCENDING)],
+            {
+                "unique": True,
+                "name": "idx_project_members_project_email_unique",
+                "partialFilterExpression": {
+                    "email": {"$type": "string"},
+                },
+            },
         ),
-        ([("project_id", ASCENDING)], {"name": "idx_project_members_project_id"}),
-        ([("user_id", ASCENDING)], {"name": "idx_project_members_user_id"}),
-        ([("user_email", ASCENDING)], {"name": "idx_project_members_user_email"}),
-        ([("status", ASCENDING)], {"name": "idx_project_members_status"}),
-        ([("role", ASCENDING)], {"name": "idx_project_members_role"}),
+        (
+            [("project_id", ASCENDING), ("status", ASCENDING), ("updated_at", DESCENDING)],
+            {"name": "idx_project_members_project_status_updated"},
+        ),
     ],
     "project_entitlements": [
         (
@@ -215,6 +217,183 @@ CORE_COLLECTIONS: dict[str, list[tuple[list[tuple[str, int]], dict]]] = {
         ([("uploader_id", ASCENDING)], {"name": "idx_vault_files_uploader_id"}),
         ([("uploaded_at", DESCENDING)], {"name": "idx_vault_files_uploaded_at"}),
         ([("verification_status", ASCENDING)], {"name": "idx_vault_files_verification_status"}),
+    ],
+    "vault_items": [
+        (
+            [("project_id", ASCENDING), ("owner_user_id", ASCENDING), ("updated_at", DESCENDING)],
+            {"name": "idx_vault_items_project_owner_updated"},
+        ),
+        (
+            [("project_id", ASCENDING), ("family_id", ASCENDING), ("privacy", ASCENDING)],
+            {"name": "idx_vault_items_project_family_privacy"},
+        ),
+        (
+            [("release_state", ASCENDING), ("reveal_at", ASCENDING)],
+            {"name": "idx_vault_items_release_reveal"},
+        ),
+        (
+            [("collection_id", ASCENDING), ("status", ASCENDING)],
+            {"name": "idx_vault_items_collection_status"},
+        ),
+    ],
+    "vault_collections": [
+        (
+            [("project_id", ASCENDING), ("owner_user_id", ASCENDING), ("created_at", DESCENDING)],
+            {"name": "idx_vault_collections_project_owner_created"},
+        ),
+    ],
+    "vault_access_grants": [
+        (
+            [
+                ("vault_item_id", ASCENDING),
+                ("grantee_user_id", ASCENDING),
+                ("status", ASCENDING),
+                ("expires_at", ASCENDING),
+            ],
+            {"name": "idx_vault_grants_item_user_status_expiry"},
+        ),
+        (
+            [("grantee_project_id", ASCENDING), ("status", ASCENDING), ("expires_at", ASCENDING)],
+            {"name": "idx_vault_grants_project_status_expiry"},
+        ),
+        (
+            [
+                ("grantee_user_id", ASCENDING),
+                ("status", ASCENDING),
+                ("expires_at", ASCENDING),
+                ("vault_item_id", ASCENDING),
+            ],
+            {"name": "idx_vault_grants_user_status_expiry_item"},
+        ),
+    ],
+    "vault_release_rules": [
+        (
+            [("vault_item_id", ASCENDING), ("trigger_type", ASCENDING)],
+            {"name": "idx_vault_release_rules_item_trigger"},
+        ),
+        (
+            [("status", ASCENDING), ("trigger_type", ASCENDING), ("trigger_value", ASCENDING)],
+            {"name": "idx_vault_release_rules_status_trigger_value"},
+        ),
+    ],
+    "vault_audit_events": [
+        (
+            [("vault_item_id", ASCENDING), ("created_at", DESCENDING)],
+            {"name": "idx_vault_audit_item_created"},
+        ),
+        (
+            [("user_id", ASCENDING), ("created_at", DESCENDING)],
+            {"name": "idx_vault_audit_user_created"},
+        ),
+    ],
+    "uploaded_files": [
+        (
+            [("idempotency_key_hash", ASCENDING)],
+            {
+                "unique": True,
+                "name": "idx_uploads_idempotency_key_hash_unique",
+                # Legacy rows use missing/null/empty values. Only populated
+                # deterministic request hashes participate in uniqueness.
+                "partialFilterExpression": {
+                    "$and": [
+                        {"idempotency_key_hash": {"$type": "string"}},
+                        {"idempotency_key_hash": {"$gt": ""}},
+                    ]
+                },
+            },
+        ),
+        (
+            [("version_group_id", ASCENDING), ("version", ASCENDING)],
+            {
+                "unique": True,
+                "name": "idx_uploads_version_group_version_unique",
+                # Pre-lifecycle uploads have no group/version fields and stay
+                # readable while current lifecycle records are race-safe.
+                "partialFilterExpression": {
+                    "$and": [
+                        {"version_group_id": {"$type": "string"}},
+                        {"version_group_id": {"$gt": ""}},
+                        {"version": {"$gte": 1}},
+                    ]
+                },
+            },
+        ),
+        (
+            [
+                ("vault_item_id", ASCENDING),
+                ("is_current_version", ASCENDING),
+                ("created_at", DESCENDING),
+            ],
+            {
+                "name": "idx_uploads_vault_item_current_created",
+                "partialFilterExpression": {
+                    "$and": [
+                        {"vault_item_id": {"$type": "string"}},
+                        {"vault_item_id": {"$gt": ""}},
+                    ]
+                },
+            },
+        ),
+        (
+            [
+                ("project_id", ASCENDING),
+                ("family_id", ASCENDING),
+                ("category", ASCENDING),
+                ("created_at", DESCENDING),
+            ],
+            {"name": "idx_uploads_project_family_category_created"},
+        ),
+        (
+            [
+                ("family_id", ASCENDING),
+                ("member_id", ASCENDING),
+                ("category", ASCENDING),
+                ("created_at", DESCENDING),
+            ],
+            {"name": "idx_uploads_family_member_category_created"},
+        ),
+        (
+            [
+                ("family_id", ASCENDING),
+                ("vault_scope", ASCENDING),
+                ("visibility_scope", ASCENDING),
+                ("created_at", DESCENDING),
+            ],
+            {"name": "idx_uploads_family_vault_visibility_created"},
+        ),
+        (
+            [("uploaded_by_user_id", ASCENDING), ("created_at", DESCENDING)],
+            {"name": "idx_uploads_uploader_created"},
+        ),
+        (
+            [
+                ("scan_status", ASCENDING),
+                ("quarantined", ASCENDING),
+                ("storage_promotion_status", ASCENDING),
+                ("deletion_status", ASCENDING),
+            ],
+            {"name": "idx_uploads_reconciliation_state"},
+        ),
+        ([("storage_key", ASCENDING)], {"name": "idx_uploads_storage_key"}),
+    ],
+    "legacy_messages": [
+        (
+            [
+                ("project_id", ASCENDING),
+                ("owner_user_id", ASCENDING),
+                ("status", ASCENDING),
+                ("created_at", DESCENDING),
+            ],
+            {"name": "idx_legacy_messages_project_owner_status_created"},
+        ),
+        (
+            [("named_recipients", ASCENDING), ("status", ASCENDING), ("created_at", DESCENDING)],
+            {"name": "idx_legacy_messages_recipient_status_created"},
+        ),
+        (
+            [("release_trigger", ASCENDING), ("status", ASCENDING), ("release_value", ASCENDING)],
+            {"name": "idx_legacy_messages_release_status_value"},
+        ),
     ],
     "audit_logs": [
         ([("action", ASCENDING)], {"name": "idx_audit_logs_action"}),
@@ -334,6 +513,53 @@ CORE_COLLECTIONS: dict[str, list[tuple[list[tuple[str, int]], dict]]] = {
     ],
 }
 
+RUNTIME_DATA_COLLECTION_NAMES = (
+    "project_members",
+    "vault_items",
+    "vault_collections",
+    "vault_access_grants",
+    "vault_release_rules",
+    "vault_audit_events",
+    "uploaded_files",
+    "legacy_messages",
+)
+
+
+def ensure_runtime_data_indexes() -> None:
+    """Create indexes required by live membership, Vault, upload, and message paths.
+
+    These indexes run automatically at startup. Unlike the manual broad
+    bootstrap endpoint, an index conflict is surfaced so a deployment cannot
+    claim its core data indexes are healthy when they are not.
+    """
+
+    db = get_database()
+    failures: list[str] = []
+    for collection_name in RUNTIME_DATA_COLLECTION_NAMES:
+        collection = db[collection_name]
+        for keys, options in CORE_COLLECTIONS[collection_name]:
+            index_name = options.get("name", "unnamed_index")
+            try:
+                # Calling create_index for an existing name is intentional:
+                # MongoDB treats an identical definition as idempotent and
+                # rejects a stale/conflicting definition. A name-only check
+                # would incorrectly report a mismatched production index as
+                # healthy.
+                collection.create_index(keys, **options)
+            except PyMongoError as exc:
+                logger.error(
+                    "Could not create runtime data index %s.%s: %s",
+                    collection_name,
+                    index_name,
+                    type(exc).__name__,
+                )
+                failures.append(f"{collection_name}.{index_name}")
+
+    if failures:
+        raise RuntimeError(
+            "Required runtime data indexes could not be created: " + ", ".join(failures)
+        )
+
 
 def bootstrap_core_collections() -> BootstrapResponse:
     db = get_database()
@@ -347,6 +573,7 @@ def bootstrap_core_collections() -> BootstrapResponse:
     for collection_name, index_definitions in CORE_COLLECTIONS.items():
         created = False
         created_indexes: list[str] = []
+        failed_indexes: list[str] = []
 
         if collection_name not in existing_collections:
             db.create_collection(collection_name)
@@ -365,20 +592,31 @@ def bootstrap_core_collections() -> BootstrapResponse:
             try:
                 collection.create_index(keys, **options)
                 created_indexes.append(index_name)
-            except OperationFailure:
-                # Skip index conflicts safely so bootstrap does not crash startup
-                created_indexes.append(index_name)
+            except PyMongoError as exc:
+                logger.warning(
+                    "Could not create bootstrap index %s.%s: %s",
+                    collection_name,
+                    index_name,
+                    type(exc).__name__,
+                )
+                failed_indexes.append(index_name)
 
         results.append(
             CollectionStatus(
                 name=collection_name,
                 created=created,
                 indexes_created=created_indexes,
+                indexes_failed=failed_indexes,
             )
         )
 
+    failure_count = sum(len(item.indexes_failed) for item in results)
     return BootstrapResponse(
-        message="Core Tomb of Light collections and indexes processed successfully.",
+        message=(
+            "Core Tomb of Light collections and indexes processed successfully."
+            if failure_count == 0
+            else f"Core collections processed with {failure_count} index failure(s)."
+        ),
         database_name=db.name,
         collections=results,
     )

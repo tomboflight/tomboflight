@@ -4066,7 +4066,9 @@
     }
     const ceoIdentity = document.querySelector("[data-admin-team-ceo-identity]");
     if (ceoIdentity) {
-      ceoIdentity.textContent = normalizeValue(state.teamAccess.ceoIdentity && state.teamAccess.ceoIdentity.email) || "l.robinson@tomboflight.com";
+      ceoIdentity.textContent = normalizeValue(
+        state.teamAccess.ceoIdentity && state.teamAccess.ceoIdentity.email,
+      ) || "Protected identity unavailable";
     }
   }
 

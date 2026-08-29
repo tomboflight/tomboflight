@@ -1,6 +1,6 @@
 import re
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any, Optional, cast
 from urllib.parse import parse_qsl
 
@@ -22,9 +22,9 @@ from app.services.project_service import (
 )
 from app.services.project_entitlement_service import (
     get_project_entitlement,
+    maintenance_scheduled_start_at,
     update_project_entitlement_maintenance,
 )
-from app.services.project_entitlement_service import MAINTENANCE_START_DELAY_DAYS
 from app.services.nft_addon_service import (
     NFT_ADDON_CODES,
     validate_nft_addon_purchase_target,
@@ -302,6 +302,7 @@ def _attach_project_to_paid_package_order(
     if _normalize_status(order_doc.get("item_type") or "package") != "package":
         return order_doc
 
+    purchased_at = order_doc.get("purchased_at") or order_doc.get("created_at")
     project = None
     if target_project_id:
         project = apply_package_purchase_to_project(
@@ -311,6 +312,7 @@ def _attach_project_to_paid_package_order(
             package_name=package_name,
             stripe_session_id=stripe_session_id,
             stripe_payment_link_id=stripe_payment_link_id,
+            purchased_at=purchased_at,
         )
     else:
         project = _find_matching_approved_project(
@@ -325,6 +327,7 @@ def _attach_project_to_paid_package_order(
                 package_name=package_name,
                 stripe_session_id=stripe_session_id,
                 stripe_payment_link_id=stripe_payment_link_id,
+                purchased_at=purchased_at,
             )
         else:
             project = create_project_from_paid_order(
@@ -333,6 +336,7 @@ def _attach_project_to_paid_package_order(
                 package_name=package_name,
                 stripe_session_id=stripe_session_id,
                 stripe_payment_link_id=stripe_payment_link_id,
+                purchased_at=purchased_at,
             )
 
     _link_order_to_project(
@@ -654,6 +658,7 @@ def repair_paid_package_order_access(limit: int = 500) -> dict[str, Any]:
                 package_name=order_doc.get("package_name") or package_code,
                 stripe_session_id=order_doc.get("stripe_session_id"),
                 stripe_payment_link_id=order_doc.get("stripe_payment_link_id"),
+                purchased_at=order_doc.get("purchased_at") or order_doc.get("created_at"),
             )
             stats["ensured_entitlements"] += 1
         else:
@@ -663,6 +668,7 @@ def repair_paid_package_order_access(limit: int = 500) -> dict[str, Any]:
                 package_name=order_doc.get("package_name") or package_code,
                 stripe_session_id=order_doc.get("stripe_session_id"),
                 stripe_payment_link_id=order_doc.get("stripe_payment_link_id"),
+                purchased_at=order_doc.get("purchased_at") or order_doc.get("created_at"),
             )
             if project:
                 update_fields["project_id"] = project.get("_id")
@@ -1182,24 +1188,37 @@ def _find_order_by_session_id_for_customer(
         raise ValueError("Checkout session is already associated with another customer.")
     return existing
 
+
+def _stripe_purchase_datetime(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
+    try:
+        return datetime.fromtimestamp(int(value), UTC)
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
 def _schedule_maintenance_start(
     *,
     project_id: str,
     billing_plan: str,
     stripe_subscription_id: str | None = None,
     stripe_customer_id: str | None = None,
+    purchased_at: datetime | None = None,
 ) -> None:
     plan = _normalize(billing_plan).lower()
     if plan not in {"monthly", "yearly"}:
         return
 
-    now = datetime.now(UTC)
-    start_at = now + timedelta(days=MAINTENANCE_START_DELAY_DAYS)
+    start_at = maintenance_scheduled_start_at(purchased_at)
     update_project_entitlement_maintenance(
         project_id=project_id,
         maintenance_plan=plan,
         maintenance_status="scheduled",
         maintenance_scheduled_start_at=start_at,
+        clear_maintenance_started_at=True,
         maintenance_stripe_subscription_id=_normalize(stripe_subscription_id) or None,
         maintenance_stripe_customer_id=_normalize(stripe_customer_id) or None,
         maintenance_stripe_status="incomplete",
@@ -1667,6 +1686,12 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
             "stripe_session_id": session_id,
             "amount_total_cents": int(purchase.get("amount_cents") or session.get("amount_total") or 0),
             "currency": _normalize(purchase.get("currency") or session.get("currency")) or "usd",
+            "purchased_at": (
+                _stripe_purchase_datetime(session.get("created"))
+                or existing.get("purchased_at")
+                or existing.get("created_at")
+                or datetime.now(UTC)
+            ),
         }
         if item_type == "addon" and target_project is not None:
             update_fields.update(
@@ -1744,6 +1769,8 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
             "project_id": str(order_doc["project_id"]) if order_doc.get("project_id") else None,
         }
 
+    recorded_at = datetime.now(UTC)
+    purchased_at = _stripe_purchase_datetime(session.get("created")) or recorded_at
     order_doc = {
         "user_id": ObjectId(str(user["_id"])),
         "email": email,
@@ -1760,7 +1787,8 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
         "stripe_session_id": session_id,
         "amount_total_cents": int(purchase.get("amount_cents") or session.get("amount_total") or 0),
         "currency": _normalize(purchase.get("currency") or session.get("currency")) or "usd",
-        "created_at": datetime.now(UTC),
+        "purchased_at": purchased_at,
+        "created_at": recorded_at,
     }
     if item_type == "addon" and target_project is not None:
         order_doc.update(
@@ -1876,6 +1904,7 @@ def upsert_order_from_stripe_event(event: dict[str, Any]) -> dict[str, Any]:
                     billing_plan=billing_plan,
                     stripe_subscription_id=_normalize(session.get("subscription")) or None,
                     stripe_customer_id=_normalize(session.get("customer")) or None,
+                    purchased_at=_stripe_purchase_datetime(session.get("created")),
                 )
     if item_type == "package" and not manual_mode:
         _trigger_package_provisioning()

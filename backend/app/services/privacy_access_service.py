@@ -18,6 +18,7 @@ PRIVACY_SCOPE_ALIASES = {
 
 MINOR_SAFE_SCOPES = {"minor_protected", "public_memorial"}
 LINK_SHARED_SCOPES = {"linked_family_shared", "branch_shared", "public_memorial"}
+ACTIVE_LINK_STATUSES = {"approved", "active", "accepted", "verified", "linked"}
 HOUSEHOLD_ROLES = {"billing_owner", "co_owner", "family_manager", "contributor", "viewer", "minor_viewer"}
 
 
@@ -35,6 +36,7 @@ def can_access_privacy_scope(
     relationship_scope: str = "",
     link_status: str = "",
     is_owner: bool = False,
+    is_project_owner: bool = False,
 ) -> bool:
     normalized_scope = normalize_privacy_scope(privacy_scope)
     normalized_role = normalize_project_member_role(member_role, default="viewer")
@@ -44,9 +46,16 @@ def can_access_privacy_scope(
     if normalized_scope == "public_memorial":
         return True
     if normalized_scope == "private_to_owner":
-        return bool(is_owner or normalized_role == "billing_owner")
+        # "Private to me" is uploader/record-owner only.  A billing owner may
+        # administer the workspace, but that must not silently make another
+        # customer's owner-only file readable.
+        return bool(is_owner)
     if normalized_scope == "private_to_owner_and_co_owner":
-        return bool(is_owner or normalized_role in {"billing_owner", "co_owner"})
+        return bool(
+            is_owner
+            or is_project_owner
+            or normalized_role in {"billing_owner", "co_owner"}
+        )
     if normalized_scope == "minor_protected":
         return normalized_role in {"billing_owner", "co_owner", "family_manager", "minor_viewer"}
     if normalized_scope == "household_private":
@@ -59,12 +68,65 @@ def can_access_privacy_scope(
         if normalized_role in {"billing_owner", "co_owner", "family_manager"}:
             return True
         if normalized_role == "linked_relative":
-            return normalized_link_status in {"approved", "active", "verified"}
-        return normalized_link_status in {"approved", "active", "verified"} and normalized_relationship in {
+            return normalized_link_status in ACTIVE_LINK_STATUSES
+        return normalized_link_status in ACTIVE_LINK_STATUSES and normalized_relationship in {
             "linked_relative",
             "branch_relative",
         }
     return False
+
+
+def can_manage_privacy_scope(
+    *,
+    privacy_scope: str,
+    member_role: str,
+    is_owner: bool = False,
+    is_project_owner: bool = False,
+) -> bool:
+    """Return whether a customer may mutate/delete a record in this scope.
+
+    Read access and management access deliberately remain separate.  In
+    particular, family managers must not be able to reclassify an uploader's
+    owner-only file and use that mutation to grant themselves read access.
+    """
+
+    normalized_scope = normalize_privacy_scope(privacy_scope)
+    normalized_role = normalize_project_member_role(member_role, default="viewer")
+
+    if is_owner:
+        return True
+    if normalized_scope == "private_to_owner":
+        return False
+    if normalized_scope == "private_to_owner_and_co_owner":
+        return bool(
+            is_project_owner
+            or normalized_role in {"billing_owner", "co_owner"}
+        )
+    if normalized_scope in {
+        "household_private",
+        "minor_protected",
+        "branch_shared",
+        "linked_family_shared",
+        "public_memorial",
+    }:
+        return bool(
+            is_project_owner
+            or normalized_role in {"billing_owner", "co_owner", "family_manager"}
+        )
+    return False
+
+
+def account_access_is_enabled(record: dict[str, Any]) -> bool:
+    """Fail closed for records explicitly disabled during account deletion.
+
+    Legacy upload rows predate the flag, so a missing value remains readable;
+    every newly-created row writes an explicit ``True`` value.  Either deletion
+    marker always wins.
+    """
+
+    if bool(record.get("owner_account_deleted")):
+        return False
+    return record.get("account_access_enabled") is not False
 
 
 def can_access_cinematic_asset(
@@ -87,4 +149,5 @@ def can_access_cinematic_asset(
         relationship_scope=relationship_scope,
         link_status=link_status,
         is_owner=is_owner,
+        is_project_owner=False,
     )

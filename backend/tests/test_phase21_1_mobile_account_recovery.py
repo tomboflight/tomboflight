@@ -172,7 +172,18 @@ class Phase211FrontendContractTests(TestCase):
             source = path.read_text(encoding="utf-8")
             for asset in ("styles.css", "config.js", "app.js", "auth.js"):
                 marker = f"{asset}?v="
-                if marker in source and f"{marker}{REVISION}" not in source:
+                allowed_revision = (
+                    "20260829-phase22"
+                    if path.name
+                    in {
+                        "portrait-upload.html",
+                        "verification-upload.html",
+                        "vault-upload.html",
+                    }
+                    and asset == "auth.js"
+                    else REVISION
+                )
+                if marker in source and f"{marker}{allowed_revision}" not in source:
                     stale.append(f"{path.relative_to(REPOSITORY_ROOT)}:{asset}")
 
         self.assertEqual(stale, [])

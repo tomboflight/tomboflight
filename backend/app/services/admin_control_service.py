@@ -1135,6 +1135,9 @@ def _project_by_id(project_id: str) -> dict[str, Any] | None:
         document = db["projects"].find_one({"_id": oid})
         if document is not None:
             return document
+    document = db["projects"].find_one({"_id": project_id})
+    if document is not None:
+        return document
     return db["projects"].find_one({"id": project_id})
 
 
@@ -4762,7 +4765,7 @@ def _classify_user_account_type(
     if is_internal:
         if email in OFFICER_ADMIN_EMAILS:
             return "Officer Administrative Identity"
-        if email == _normalize(CEO_MASTER_ADMIN_EMAIL).lower():
+        if is_canonical_ceo_email(email):
             return "Internal Administrative Identity"
         return "Unexplained Privileged Account"
     if has_project:
@@ -5329,7 +5332,7 @@ def _enforce_ceo_master_admin_singleton(*, target_user: dict[str, Any], new_role
         return
     if not _is_canonical_ceo_master_admin_identity(target_user):
         raise ValueError(
-            "Wildcard administrator roles can only be assigned to Larry Robinson's canonical identity."
+            "Wildcard administrator roles can only be assigned to the configured canonical identity for the CEO."
         )
 
 
@@ -6069,7 +6072,7 @@ def super_admin_preview_account_lifecycle(
     )
     ownership = {name: len(records) for name, records in ownership_records.items()}
     current_status = _normalize(user.get("status")).lower() or "active"
-    is_canonical_ceo = _normalize_email(user.get("email")) == str(CEO_MASTER_ADMIN_EMAIL).strip().lower()
+    is_canonical_ceo = is_canonical_ceo_email(user.get("email"))
     permanently_deleted = current_status == "permanently_deleted" or _normalize(user.get("account_type")).lower() == "deleted_tombstone"
     ceo_protected = is_canonical_ceo and normalized_action in {"billing_hold", "suspend", "disable", "archive"}
     blocked_by_ownership = normalized_action == "archive" and any(ownership.values()) and not archive_owned_records
@@ -6668,7 +6671,7 @@ def super_admin_preview_account_permanent_deletion(
     active_subscription_ids = _active_maintenance_subscription_ids(
         ownership_records=ownership_records
     )
-    is_canonical_ceo = email == str(CEO_MASTER_ADMIN_EMAIL).strip().lower()
+    is_canonical_ceo = is_canonical_ceo_email(email)
     existing_tombstone = _db()[ACCOUNT_DELETION_TOMBSTONES_COLLECTION].find_one({"user_id": resolved_user_id})
     completed_tombstone = _normalize((existing_tombstone or {}).get("status")).lower() == "completed"
     deletion_started = _normalize((existing_tombstone or {}).get("status")).lower() == "started"
@@ -6746,6 +6749,8 @@ def super_admin_preview_account_permanent_deletion(
             "corporate_ownership_records",
             "issued_certificates",
             "delivery_records",
+            "deidentified_uploaded_content",
+            "closed_vault_content",
             "security_evidence",
             "audit_logs",
             "continuity_evidence",
@@ -6769,7 +6774,7 @@ def super_admin_apply_account_permanent_deletion(
     continuity_operation_id: str = "",
     actor: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    if _normalize_email((actor or {}).get("email")) != str(CEO_MASTER_ADMIN_EMAIL).strip().lower():
+    if not is_canonical_ceo_email((actor or {}).get("email")):
         raise PermissionError("Permanent account deletion is restricted to the canonical CEO Master Administrator.")
     normalized_reason = _normalize(reason)
     if len(normalized_reason) < 3:
@@ -7116,6 +7121,14 @@ def super_admin_apply_account_permanent_deletion(
         "session_token_version": int(user.get("session_token_version") or 0),
         "updated_at": now_value,
     }
+    personal_identity_unsets = {
+        "mailing_address_structured": "",
+        "email_aliases": "",
+        "pending_email": "",
+        "pending_email_change_token_hash": "",
+        "pending_email_change_requested_at": "",
+        "pending_email_change_expires_at": "",
+    }
     role_result = db["user_role_assignments"].update_many(
         {"user_id": {"$in": _project_id_candidates(resolved_user_id)}, "status": {"$nin": ["revoked", "deleted"]}},
         {"$set": {"status": "revoked", "revoked_at": now_value, "updated_at": now_value}},
@@ -7160,7 +7173,7 @@ def super_admin_apply_account_permanent_deletion(
             "status": "deletion_in_progress",
             "permanent_deletion_id": deletion_id,
         },
-        {"$set": updates},
+        {"$set": updates, "$unset": personal_identity_unsets},
     )
     if int(getattr(update_result, "matched_count", 0)) != 1:
         raise RuntimeError("The target account changed before permanent deletion could be applied.")
@@ -7404,9 +7417,7 @@ def super_admin_preview_orphan_identity_reconciliation(
         db["user_permission_overrides"].count_documents(access_filter)
     )
 
-    is_canonical_ceo = (
-        normalized_email == str(CEO_MASTER_ADMIN_EMAIL).strip().lower()
-    )
+    is_canonical_ceo = is_canonical_ceo_email(normalized_email)
     blocked = bool(
         is_canonical_ceo
         or live_user
@@ -7516,10 +7527,7 @@ def super_admin_apply_orphan_identity_reconciliation(
     continuity_operation_id: str = "",
     actor: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    if (
-        _normalize_email((actor or {}).get("email"))
-        != str(CEO_MASTER_ADMIN_EMAIL).strip().lower()
-    ):
+    if not is_canonical_ceo_email((actor or {}).get("email")):
         raise PermissionError(
             "Manual identity reconciliation is restricted to the canonical CEO Master Administrator."
         )
@@ -7880,16 +7888,110 @@ def super_admin_transfer_project_ownership(
         raise ValueError("Project and new owner must both exist.")
     if _is_internal_user_document(new_owner):
         raise ValueError("Projects must be owned by a customer identity, not an internal administrator.")
-    resolved_project_id = _normalize_object_id(project.get("_id")) or _normalize(project_id)
+    resolved_project_id = _normalize_object_id(project.get("_id")) or _normalize(
+        project.get("id") or project_id
+    )
     owner_id = _normalize_object_id(new_owner.get("_id")) or _normalize(new_owner_user_id)
     before = {"owner_user_id": _normalize(project.get("owner_user_id")), "owner_email": _normalize_email(project.get("owner_email"))}
     after = {"owner_user_id": owner_id, "owner_email": _normalize_email(new_owner.get("email"))}
-    _db()["projects"].update_one({"_id": _to_object_id(resolved_project_id) or resolved_project_id}, {"$set": {**after, "updated_at": _now()}})
-    _db()["project_members"].update_one(
-        {"project_id": _to_object_id(resolved_project_id) or resolved_project_id, "user_id": _to_object_id(owner_id) or owner_id},
-        {"$set": {"role": "owner", "status": "active", "updated_at": _now()}, "$setOnInsert": {"created_at": _now()}},
+    now_value = _now()
+    db = _db()
+    project_members = db["project_members"]
+    project_candidates = _project_id_candidates(resolved_project_id)
+
+    project_lookup = (
+        {"_id": project.get("_id")}
+        if project.get("_id") is not None
+        else {"id": project.get("id")}
+    )
+    project_update = db["projects"].update_one(
+        {
+            **project_lookup,
+            "owner_user_id": project.get("owner_user_id"),
+            "owner_email": project.get("owner_email"),
+        },
+        {"$set": {**after, "updated_at": now_value}},
+    )
+    if int(getattr(project_update, "matched_count", 0)) != 1:
+        raise RuntimeError("The project owner changed before the transfer could be applied.")
+
+    # Canonical membership records store string identifiers and member_role.
+    # Normalize legacy ObjectId/role rows in place so the new owner is visible
+    # to the same access resolver used by customer workspace routes.
+    project_members.update_many(
+        {
+            "project_id": {"$in": project_candidates},
+            "member_role": "billing_owner",
+            "status": {"$nin": ["removed", "revoked", "deleted"]},
+        },
+        {
+            "$set": {
+                "project_id": resolved_project_id,
+                "member_role": "co_owner",
+                "updated_at": now_value,
+            }
+        },
+    )
+
+    previous_owner_id = _normalize(before.get("owner_user_id"))
+    previous_owner_email = _normalize_email(before.get("owner_email"))
+    same_owner = bool(
+        (previous_owner_id and previous_owner_id == owner_id)
+        or (previous_owner_email and previous_owner_email == after["owner_email"])
+    )
+    if not same_owner and (previous_owner_id or previous_owner_email):
+        previous_owner_filters: list[dict[str, Any]] = []
+        if previous_owner_id:
+            previous_owner_filters.append(
+                {"user_id": {"$in": _document_id_candidates(previous_owner_id)}}
+            )
+        if previous_owner_email:
+            previous_owner_filters.append({"email": previous_owner_email})
+        project_members.update_one(
+            {
+                "project_id": {"$in": project_candidates},
+                "$or": previous_owner_filters,
+            },
+            {
+                "$set": {
+                    "project_id": resolved_project_id,
+                    "user_id": previous_owner_id or None,
+                    "email": previous_owner_email or None,
+                    "member_role": "co_owner",
+                    "status": "active",
+                    "updated_at": now_value,
+                },
+                "$unset": {"role": ""},
+                "$setOnInsert": {"created_at": now_value},
+            },
+            upsert=True,
+        )
+
+    new_owner_filters: list[dict[str, Any]] = [
+        {"user_id": {"$in": _document_id_candidates(owner_id)}}
+    ]
+    if after["owner_email"]:
+        new_owner_filters.append({"email": after["owner_email"]})
+    project_members.update_one(
+        {
+            "project_id": {"$in": project_candidates},
+            "$or": new_owner_filters,
+        },
+        {
+            "$set": {
+                "project_id": resolved_project_id,
+                "user_id": owner_id,
+                "email": after["owner_email"] or None,
+                "member_role": "billing_owner",
+                "status": "active",
+                "updated_at": now_value,
+            },
+            "$unset": {"role": ""},
+            "$setOnInsert": {"created_at": now_value},
+        },
         upsert=True,
     )
+
     audit_event_created = _write_admin_action_audit(
         actor=actor,
         action="super_admin.project_ownership_transfer",
@@ -7914,11 +8016,12 @@ def legacy_admin_security_review(
     actor: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     db = _db()
-    user = db["users"].find_one({"email": "admin@tomboflight.com"})
+    review_email = _normalize_email(settings.postmark_from_email)
+    user = db["users"].find_one({"email": review_email})
     if user is None:
         return {
             "found": False,
-            "email": "admin@tomboflight.com",
+            "email": review_email,
             "disposition": "no_user_identity_found",
             "repository_references": ["POSTMARK_FROM_EMAIL default sender address"],
             "service_dependency": False,
@@ -7943,7 +8046,7 @@ def legacy_admin_security_review(
     review = {
         "found": True,
         "user_id": user_id,
-        "email": "admin@tomboflight.com",
+        "email": review_email,
         "name": _user_display_name(user),
         "created_at": _serialize_datetime(user.get("created_at")),
         "created_by": _normalize(user.get("created_by")) or None,

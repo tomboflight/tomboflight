@@ -212,7 +212,7 @@ class UploadVisibilityTests(unittest.TestCase):
 
         with patch.object(
             upload_routes,
-            "require_workspace_capability",
+            "resolve_workspace_context",
             return_value={"project": {"_id": "project-1"}, "is_admin": False},
         ):
             upload_record, _context = upload_routes._require_upload_access(
@@ -244,7 +244,7 @@ class UploadVisibilityTests(unittest.TestCase):
 
         with patch.object(
             upload_routes,
-            "require_workspace_capability",
+            "resolve_workspace_context",
             return_value={"project": {"_id": "project-1"}, "is_admin": False},
         ):
             with self.assertRaises(HTTPException):

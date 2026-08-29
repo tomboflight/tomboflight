@@ -24,6 +24,7 @@ def _workspace_context(*, allowed_asset_types: list[str]):
         "member": {"_id": "member-1", "family_id": "family-1"},
         "resolved_entitlements": {
             "can_upload_verification_docs": True,
+            "can_use_household_vault": True,
             "allowed_asset_types": allowed_asset_types,
         },
         "is_admin": False,
@@ -36,7 +37,7 @@ class PrivateMediaUploadTests(unittest.TestCase):
             upload = _upload_file(
                 filename="legacy-voice.mp3",
                 content_type="audio/mpeg",
-                payload=b"voice-bytes",
+                payload=b"ID3voice-bytes",
             )
             with (
                 patch.object(upload_routes, "require_workspace_capability", return_value=_workspace_context(allowed_asset_types=["private_voice_message"])),
@@ -53,6 +54,7 @@ class PrivateMediaUploadTests(unittest.TestCase):
                     },
                 ),
                 patch.object(upload_routes, "_scan_and_quarantine_upload", side_effect=lambda **kwargs: kwargs["upload_record"]),
+                patch.object(upload_routes, "_ensure_upload_vault_linkage", side_effect=lambda **kwargs: kwargs["upload_record"]),
                 patch.object(upload_routes, "_enforce_workspace_upload_limit"),
                 patch.object(upload_routes, "_enforce_workspace_storage_limit"),
             ):
@@ -61,12 +63,14 @@ class PrivateMediaUploadTests(unittest.TestCase):
                     member_id="member-1",
                     asset_type="private_voice_message",
                     privacy_scope="private_to_owner",
+                    consent_attested=True,
+                    authority_attested=True,
                     file=upload,
                     current_user={"id": "owner-1", "email": "owner@example.com"},
                 )
 
         payload = asyncio.run(_run())
-        self.assertEqual(payload["message"], "Private media uploaded successfully.")
+        self.assertEqual(payload["upload_status"]["state"], "processing")
         self.assertEqual(payload["upload"]["asset_type"], "private_voice_message")
 
     def test_disallowed_package_private_video_upload_fails(self):
@@ -74,7 +78,7 @@ class PrivateMediaUploadTests(unittest.TestCase):
             upload = _upload_file(
                 filename="legacy-video.mp4",
                 content_type="video/mp4",
-                payload=b"video-bytes",
+                payload=b"\x00\x00\x00\x18ftypisomvideo-bytes",
             )
             with (
                 patch.object(upload_routes, "require_workspace_capability", return_value=_workspace_context(allowed_asset_types=["document"])),
@@ -86,6 +90,8 @@ class PrivateMediaUploadTests(unittest.TestCase):
                     member_id="member-1",
                     asset_type="private_video_message",
                     privacy_scope="private_to_owner",
+                    consent_attested=True,
+                    authority_attested=True,
                     file=upload,
                     current_user={"id": "owner-1", "email": "owner@example.com"},
                 )
@@ -99,7 +105,7 @@ class PrivateMediaUploadTests(unittest.TestCase):
             upload = _upload_file(
                 filename="legacy-voice.mp3",
                 content_type="audio/mpeg",
-                payload=b"voice-bytes",
+                payload=b"ID3voice-bytes",
             )
             with (
                 patch.object(upload_routes, "require_workspace_capability", return_value=_workspace_context(allowed_asset_types=["private_voice_message"])),
@@ -111,6 +117,8 @@ class PrivateMediaUploadTests(unittest.TestCase):
                     member_id="member-1",
                     asset_type="private_voice_message",
                     privacy_scope="public_memorial",
+                    consent_attested=True,
+                    authority_attested=True,
                     file=upload,
                     current_user={"id": "owner-1", "email": "owner@example.com"},
                 )
@@ -124,7 +132,7 @@ class PrivateMediaUploadTests(unittest.TestCase):
             upload = _upload_file(
                 filename="legacy-voice.mp3",
                 content_type="audio/mpeg",
-                payload=b"voice-bytes",
+                payload=b"ID3voice-bytes",
             )
             with (
                 patch.object(upload_routes, "require_workspace_capability", return_value=_workspace_context(allowed_asset_types=["private_voice_message"])),
@@ -142,6 +150,8 @@ class PrivateMediaUploadTests(unittest.TestCase):
                     member_id="member-1",
                     asset_type="private_voice_message",
                     privacy_scope="private_to_owner",
+                    consent_attested=True,
+                    authority_attested=True,
                     file=upload,
                     current_user={"id": "owner-1", "email": "owner@example.com"},
                 )

@@ -124,7 +124,7 @@ class AdminAuthOverrideHotfixTests(unittest.TestCase):
     def test_resolve_access_context_without_override_keeps_base_role_permissions(self):
         user = {
             "_id": "u-finance",
-            "email": "jenn.wood@tomboflight.com",
+            "email": "finance-admin@example.com",
             "role": "admin",
             "access_tier": "finance_admin",
             "department_role": "finance_admin",
@@ -163,7 +163,7 @@ class AdminAuthOverrideHotfixTests(unittest.TestCase):
     def test_resolve_access_context_applies_only_active_override_records(self):
         user = {
             "_id": "u-larry",
-            "email": "l.robinson@tomboflight.com",
+            "email": "ceo-admin@example.com",
             "role": "admin",
             "access_tier": "ceo_master_admin",
             "department_role": "executive_tech_admin",

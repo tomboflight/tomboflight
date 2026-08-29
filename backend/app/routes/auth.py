@@ -393,6 +393,7 @@ def mfa_login_verify(
 @router.post("/mfa/disable")
 def mfa_disable(
     payload: MfaDisableRequest,
+    request: Request,
     response: Response,
     current_user: dict = Depends(get_current_user),
 ):
@@ -409,8 +410,12 @@ def mfa_disable(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    _clear_auth_cookie(response, request)
     _apply_no_store(response)
-    return {"success": True, "message": "MFA disabled successfully."}
+    return {
+        "success": True,
+        "message": "MFA disabled successfully. Sign in again to continue.",
+    }
 
 
 @router.get("/me", response_model=UserResponse)

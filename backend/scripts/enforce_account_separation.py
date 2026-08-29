@@ -13,6 +13,12 @@ from bson import ObjectId
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from app.config import settings
+from app.core.admin_permission_registry import (
+    CEO_MASTER_ADMIN_EMAIL,
+    OFFICER_PROFILE_FIELDS,
+    validate_admin_identity_registry_configuration,
+)
 from app.core.package_catalog import (
     get_package,
     get_package_control_profile,
@@ -32,41 +38,136 @@ from app.services.mint_record_service import (
 from app.services.project_entitlement_service import upsert_project_entitlement
 from app.services.project_membership_service import ensure_project_owner_membership
 
-GENESIS_EMAIL = "larry.frontend.test2@tomboflight.com"
-GENESIS_PROJECT_NAME = "Genesis Prototype"
-GENESIS_PACKAGE_CODE = "household_foundation"
-GENESIS_FAMILY_NAME = "Moreland Family"
 
-PERSONAL_ACCOUNTS: dict[str, dict[str, str]] = {
-    "queenjwood@gmail.com": {"full_name": "Jennifer Wood", "account_type": "customer"},
-    "chief757@outlook.com": {"full_name": "Keith Goffigan", "account_type": "customer"},
-    "larrycr27@gmail.com": {"full_name": "Larry Robinson", "account_type": "customer"},
-    GENESIS_EMAIL: {
-        "full_name": GENESIS_PROJECT_NAME,
-        "account_type": "prototype_customer",
-        "prototype_key": "genesis_prototype",
-    },
-}
+def _load_account_separation_audit_targets() -> tuple[
+    str,
+    str,
+    str,
+    str,
+    dict[str, dict[str, str]],
+    dict[str, dict[str, str]],
+    tuple[str, ...],
+    bool,
+]:
+    raw = settings.account_separation_audit_targets_json_value
+    if not raw:
+        return "", "", "", "", {}, {}, (), False
+    try:
+        payload = json.loads(raw)
+    except (TypeError, ValueError):
+        return "", "", "", "", {}, {}, ("Audit targets JSON is invalid.",), True
+    if not isinstance(payload, dict):
+        return "", "", "", "", {}, {}, ("Audit targets must be an object.",), True
+
+    errors: list[str] = []
+    genesis = payload.get("genesis")
+    personal_accounts = payload.get("personal_accounts")
+    target_experiences = payload.get("target_personal_account_experience")
+    if not isinstance(genesis, dict):
+        errors.append("genesis must be an object.")
+        genesis = {}
+    if not isinstance(personal_accounts, dict):
+        errors.append("personal_accounts must be an object.")
+        personal_accounts = {}
+    if not isinstance(target_experiences, dict):
+        errors.append("target_personal_account_experience must be an object.")
+        target_experiences = {}
+
+    genesis_email = str(genesis.get("email") or "").strip().lower()
+    genesis_project_name = str(genesis.get("project_name") or "").strip()
+    genesis_package_code = normalize_package_code(genesis.get("package_code"))
+    genesis_family_name = str(genesis.get("family_name") or "").strip()
+    if not genesis_email or "@" not in genesis_email:
+        errors.append("genesis.email is required.")
+    if not genesis_project_name:
+        errors.append("genesis.project_name is required.")
+    if not genesis_package_code:
+        errors.append("genesis.package_code is required.")
+    if not genesis_family_name:
+        errors.append("genesis.family_name is required.")
+
+    normalized_accounts: dict[str, dict[str, str]] = {}
+    for raw_email, raw_profile in personal_accounts.items():
+        email = str(raw_email or "").strip().lower()
+        if not email or "@" not in email or not isinstance(raw_profile, dict):
+            errors.append(
+                "Each personal account target must have an email and object profile."
+            )
+            continue
+        normalized_accounts[email] = {
+            key: str(raw_profile.get(key) or "").strip()
+            for key in ("full_name", "account_type", "prototype_key")
+            if str(raw_profile.get(key) or "").strip()
+        }
+
+    if genesis_email:
+        normalized_accounts.setdefault(
+            genesis_email,
+            {
+                "full_name": genesis_project_name,
+                "account_type": "prototype_customer",
+                "prototype_key": "genesis_prototype",
+            },
+        )
+
+    normalized_experiences: dict[str, dict[str, str]] = {}
+    for raw_email, raw_experience in target_experiences.items():
+        email = str(raw_email or "").strip().lower()
+        if not email or "@" not in email or not isinstance(raw_experience, dict):
+            errors.append(
+                "Each experience target must have an email and object configuration."
+            )
+            continue
+        if email not in normalized_accounts:
+            errors.append(
+                "Each experience target must reference a configured personal account."
+            )
+            continue
+        normalized_experiences[email] = {
+            key: str(raw_experience.get(key) or "").strip()
+            for key in ("package_code", "project_name", "wallet_address")
+            if str(raw_experience.get(key) or "").strip()
+        }
+
+    return (
+        genesis_email,
+        genesis_project_name,
+        genesis_package_code,
+        genesis_family_name,
+        normalized_accounts,
+        normalized_experiences,
+        tuple(errors),
+        True,
+    )
+
+
+(
+    GENESIS_EMAIL,
+    GENESIS_PROJECT_NAME,
+    GENESIS_PACKAGE_CODE,
+    GENESIS_FAMILY_NAME,
+    PERSONAL_ACCOUNTS,
+    TARGET_PERSONAL_ACCOUNT_EXPERIENCE,
+    ACCOUNT_SEPARATION_AUDIT_TARGET_ERRORS,
+    ACCOUNT_SEPARATION_AUDIT_TARGETS_CONFIGURED,
+) = _load_account_separation_audit_targets()
+
+
+def _validate_account_separation_audit_targets() -> None:
+    if not ACCOUNT_SEPARATION_AUDIT_TARGETS_CONFIGURED:
+        raise RuntimeError(
+            "ACCOUNT_SEPARATION_AUDIT_TARGETS_JSON must be configured outside source control."
+        )
+    if ACCOUNT_SEPARATION_AUDIT_TARGET_ERRORS:
+        raise RuntimeError(
+            "ACCOUNT_SEPARATION_AUDIT_TARGETS_JSON is invalid: "
+            + " ".join(ACCOUNT_SEPARATION_AUDIT_TARGET_ERRORS)
+        )
+
 
 ADMIN_ACCOUNTS: dict[str, dict[str, str]] = {
-    "jenn.wood@tomboflight.com": {
-        "full_name": "Jennifer Wood",
-        "business_title": "CFO",
-        "department_role": "finance_admin",
-        "access_tier": "finance_admin",
-    },
-    "k.goffigan@tomboflight.com": {
-        "full_name": "Keith Goffigan",
-        "business_title": "COO",
-        "department_role": "operations_admin",
-        "access_tier": "operations_admin",
-    },
-    "l.robinson@tomboflight.com": {
-        "full_name": "Larry Robinson",
-        "business_title": "CEO",
-        "department_role": "executive_tech_admin",
-        "access_tier": "super_admin",
-    },
+    email: dict(profile)
+    for email, profile in OFFICER_PROFILE_FIELDS.items()
 }
 
 PERSONAL_UNSET_FIELDS = [
@@ -88,19 +189,6 @@ ADMIN_UNSET_FIELDS = [
     "customer_package_name",
     "creator_credit",
 ]
-
-TARGET_PERSONAL_ACCOUNT_EXPERIENCE: dict[str, dict[str, str]] = {
-    "queenjwood@gmail.com": {
-        "package_code": "digital_legacy_portrait",
-        "project_name": "Jennifer Wood Digital Legacy Portrait",
-        "wallet_address": "0x1111111111111111111111111111111111111111",
-    },
-    "larrycr27@gmail.com": {
-        "package_code": "legacy_plus",
-        "project_name": "Larry Robinson Legacy Plus",
-        "wallet_address": "0x3333333333333333333333333333333333333333",
-    },
-}
 
 
 def _now() -> datetime:
@@ -192,7 +280,8 @@ def _normalize_personal_accounts(
     creator: dict[str, Any],
 ) -> dict[str, dict[str, Any]]:
     users: dict[str, dict[str, Any]] = {}
-    creator_credit = "Larry Robinson, creator and owner of Tomb of Light"
+    creator_name = str(creator.get("full_name") or "").strip() or "Tomb of Light creator"
+    creator_credit = f"{creator_name}, creator and owner of Tomb of Light"
 
     for email, config in PERSONAL_ACCOUNTS.items():
         user = _require_user(db, email)
@@ -212,7 +301,7 @@ def _normalize_personal_accounts(
                     "creator_credit": creator_credit,
                     "creator_user_id": _doc_id(creator),
                     "creator_email": creator.get("email"),
-                    "creator_name": creator.get("full_name") or "Larry Robinson",
+                    "creator_name": creator_name,
                 }
             )
         if email in TARGET_PERSONAL_ACCOUNT_EXPERIENCE:
@@ -317,7 +406,8 @@ def _normalize_project_order_and_entitlement(
     package_lane = normalize_package_type(package.get("package_lane"), default="household")
     project_id = _doc_id(project)
     genesis_user_id = _doc_id(genesis_user)
-    creator_credit = "Larry Robinson, creator and owner of Tomb of Light"
+    creator_name = str(creator.get("full_name") or "").strip() or "Tomb of Light creator"
+    creator_credit = f"{creator_name}, creator and owner of Tomb of Light"
     now = _now()
 
     project_fields = {
@@ -343,7 +433,7 @@ def _normalize_project_order_and_entitlement(
         "creator_credit": creator_credit,
         "creator_user_id": _doc_id(creator),
         "creator_email": creator.get("email"),
-        "creator_name": creator.get("full_name") or "Larry Robinson",
+        "creator_name": creator_name,
         "updated_at": now,
     }
     _update_one(
@@ -365,7 +455,7 @@ def _normalize_project_order_and_entitlement(
         "creator_credit": creator_credit,
         "creator_user_id": _doc_id(creator),
         "creator_email": creator.get("email"),
-        "created_by": creator.get("full_name") or "Larry Robinson",
+        "created_by": creator_name,
         "updated_at": now,
     }
     _update_one(
@@ -711,7 +801,7 @@ def _ensure_target_personal_account_experience(
         mint_record_id = str(mint_record.get("id"))
         approve_admin_mint_record(
             mint_record_id,
-            approved_by_email="ops@tomboflight.com",
+            approved_by_email=CEO_MASTER_ADMIN_EMAIL,
             notes="Fictional completion for personal demo account.",
         )
         approve_customer_mint_record(
@@ -856,11 +946,13 @@ def main() -> int:
         )
         return 2
 
+    validate_admin_identity_registry_configuration(require_config=True)
+    _validate_account_separation_audit_targets()
     actions: list[dict[str, Any]] = []
     account_standings: list[dict[str, Any]] = []
     db = connect_to_mongo()
     try:
-        creator = _require_user(db, "l.robinson@tomboflight.com")
+        creator = _require_user(db, CEO_MASTER_ADMIN_EMAIL)
         admin_users = _normalize_admin_accounts(db, apply=args.apply, actions=actions)
         personal_users = _normalize_personal_accounts(
             db,

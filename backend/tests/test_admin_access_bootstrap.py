@@ -1,7 +1,9 @@
 import unittest
 from copy import deepcopy
+import json
 from unittest.mock import patch
 
+from app.core import admin_permission_registry
 from app.core.admin_permission_registry import normalized_officer_role_mapping
 from app.services import admin_access_bootstrap_service
 
@@ -99,24 +101,112 @@ class FakeDatabase:
         return self.collections[name]
 
 
+class AdminIdentityRegistryConfigurationTests(unittest.TestCase):
+    def test_missing_registry_never_matches_an_empty_identity(self):
+        with patch.object(admin_permission_registry, "CEO_MASTER_ADMIN_EMAIL", ""):
+            self.assertFalse(admin_permission_registry.is_canonical_ceo_email(""))
+            self.assertFalse(admin_permission_registry.is_canonical_ceo_email(None))
+
+    def test_registry_requires_exactly_one_ceo_identity(self):
+        payload = {
+            "active_officers": [
+                {
+                    "email": "first-ceo@example.com",
+                    "role_codes": ["ceo_master_admin"],
+                },
+                {
+                    "email": "second-ceo@example.com",
+                    "role_codes": ["ceo_master_admin"],
+                },
+            ],
+            "retired_officers": [],
+        }
+        _, _, _, _, errors, configured = (
+            admin_permission_registry._load_admin_identity_registry(
+                json.dumps(payload)
+            )
+        )
+
+        self.assertTrue(configured)
+        self.assertTrue(any("Exactly one" in error for error in errors))
+
+    def test_registry_rejects_unscoped_privileged_roles(self):
+        payload = {
+            "active_officers": [
+                {
+                    "email": "ceo-admin@example.com",
+                    "role_codes": ["ceo_master_admin"],
+                },
+                {
+                    "email": "legacy-admin@example.com",
+                    "role_codes": ["super_admin"],
+                },
+            ],
+            "retired_officers": [],
+        }
+        _, mapping, _, _, errors, _ = (
+            admin_permission_registry._load_admin_identity_registry(
+                json.dumps(payload)
+            )
+        )
+
+        self.assertNotIn("legacy-admin@example.com", mapping)
+        self.assertTrue(any("unsupported role" in error for error in errors))
+
+    def test_deployed_runtime_rejects_missing_or_invalid_registry(self):
+        with (
+            patch.object(
+                admin_permission_registry,
+                "ADMIN_IDENTITY_REGISTRY_CONFIGURED",
+                False,
+            ),
+            patch.object(
+                admin_permission_registry,
+                "ADMIN_IDENTITY_REGISTRY_ERRORS",
+                (),
+            ),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "outside source control"):
+                admin_permission_registry.validate_admin_identity_registry_configuration(
+                    require_config=True
+                )
+
+        with (
+            patch.object(
+                admin_permission_registry,
+                "ADMIN_IDENTITY_REGISTRY_CONFIGURED",
+                True,
+            ),
+            patch.object(
+                admin_permission_registry,
+                "ADMIN_IDENTITY_REGISTRY_ERRORS",
+                ("invalid registry",),
+            ),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "invalid registry"):
+                admin_permission_registry.validate_admin_identity_registry_configuration(
+                    require_config=True
+                )
+
+
 class AdminAccessBootstrapTests(unittest.TestCase):
     def test_officer_role_mapping_normalizes_expected_roles(self):
         mapping = normalized_officer_role_mapping()
         self.assertEqual(
-            mapping["l.robinson@tomboflight.com"],
+            mapping["ceo-admin@example.com"],
             ["ceo_master_admin", "executive_tech_admin"],
         )
-        self.assertNotIn("l.robinson@tomboflight", mapping)
-        self.assertEqual(mapping["jenn.wood@tomboflight.com"], ["finance_admin"])
-        self.assertNotIn("marquis.l.floyd@tomboflight.com", mapping)
-        self.assertEqual(mapping["k.goffigan@tomboflight.com"], ["operations_admin"])
+        self.assertNotIn("ceo-admin@example", mapping)
+        self.assertEqual(mapping["finance-admin@example.com"], ["finance_admin"])
+        self.assertNotIn("retired-officer@example.com", mapping)
+        self.assertEqual(mapping["operations-admin@example.com"], ["operations_admin"])
 
     def test_bootstrap_updates_existing_users_without_duplicate_role_assignments(self):
         users = [
-            {"_id": "u-larry", "email": "l.robinson@tomboflight.com", "role": "admin"},
-            {"_id": "u-jenn", "email": "jenn.wood@tomboflight.com", "role": "admin"},
-            {"_id": "u-marquis", "email": "marquis.l.floyd@tomboflight.com", "role": "admin"},
-            {"_id": "u-keith", "email": "k.goffigan@tomboflight.com", "role": "admin"},
+            {"_id": "u-larry", "email": "ceo-admin@example.com", "role": "admin"},
+            {"_id": "u-jenn", "email": "finance-admin@example.com", "role": "admin"},
+            {"_id": "u-marquis", "email": "retired-officer@example.com", "role": "admin"},
+            {"_id": "u-keith", "email": "operations-admin@example.com", "role": "admin"},
         ]
         db = FakeDatabase(
             {
@@ -188,16 +278,16 @@ class AdminAccessBootstrapTests(unittest.TestCase):
         db = FakeDatabase(
             {
                 "users": [
-                    {"_id": "u-larry", "email": "l.robinson@tomboflight.com", "role": "admin"},
+                    {"_id": "u-larry", "email": "ceo-admin@example.com", "role": "admin"},
                     {
                         "_id": "u-jenn",
-                        "email": "jenn.wood@tomboflight.com",
+                        "email": "finance-admin@example.com",
                         "role": "admin",
                         "access_tier": "finance_admin",
                         "department_role": "finance_admin",
                         "managed_role_code": "marketing_admin",
                     },
-                    {"_id": "u-keith", "email": "k.goffigan@tomboflight.com", "role": "admin"},
+                    {"_id": "u-keith", "email": "operations-admin@example.com", "role": "admin"},
                 ],
                 "user_role_assignments": [
                     {"_id": "jenn-finance", "user_id": "u-jenn", "role_code": "finance_admin", "status": "active"},

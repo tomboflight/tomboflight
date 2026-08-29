@@ -2944,8 +2944,18 @@
         return;
       }
 
-      // vault-upload.html: requires household vault entitlement.
-      if (vaultUploadPages.has(page) && !resolved.can_use_household_vault) {
+      // Vault access follows the purchased scope: personal, household, linked
+      // household, or organization records. The API remains authoritative for
+      // the exact operations permitted inside that scope.
+      if (
+        vaultUploadPages.has(page) &&
+        !(
+          resolved.can_use_personal_vault ||
+          resolved.can_use_household_vault ||
+          resolved.can_use_linked_household_vault ||
+          resolved.can_use_organization_records_vault
+        )
+      ) {
         window.location.href = "dashboard.html?upgrade_required=1";
         return;
       }

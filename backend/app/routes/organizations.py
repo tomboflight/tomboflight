@@ -5,6 +5,7 @@ from datetime import date
 from io import StringIO
 from typing import Any
 
+from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import Response
 
@@ -30,6 +31,7 @@ from app.schemas.organization import (
     WhiteGloveRequestPayload,
 )
 from app.database import get_database
+from app.core.role_catalog import normalize_project_member_role
 from app.services.project_membership_service import get_project_access_snapshot
 from app.services.audit_log_service import write_audit_log
 from app.services.organization_service import (
@@ -64,6 +66,13 @@ from app.services.organization_service import (
 
 router = APIRouter(prefix="/organizations", tags=["Organizations"])
 
+ORG_EDITOR_ROLES = frozenset(
+    {"billing_owner", "co_owner", "family_manager", "contributor"}
+)
+ORG_MANAGER_ROLES = frozenset(
+    {"billing_owner", "co_owner", "family_manager"}
+)
+
 
 def _actor_user_id(user: dict[str, Any]) -> str:
     return str(user.get("id") or user.get("_id") or user.get("user_id") or "").strip()
@@ -89,14 +98,49 @@ def _require_org_lane(current_user: dict[str, Any]) -> None:
     )
 
 
-def _require_org_project_access(organization_id: str, project_id: str, current_user: dict[str, Any]) -> None:
+def _project_id_candidates(project_id: str) -> list[Any]:
+    normalized_project_id = str(project_id or "").strip()
+    candidates: list[Any] = [normalized_project_id]
+    if ObjectId.is_valid(normalized_project_id):
+        candidates.append(ObjectId(normalized_project_id))
+    return candidates
+
+
+def _find_project(project_id: str) -> dict[str, Any] | None:
     db = get_database()
-    project = db["projects"].find_one({"_id": project_id})
+    project = db["projects"].find_one(
+        {"_id": {"$in": _project_id_candidates(project_id)}}
+    )
+    if project is None:
+        project = db["projects"].find_one({"id": str(project_id or "").strip()})
+    return project
+
+
+def _require_org_project_access(
+    organization_id: str,
+    project_id: str,
+    current_user: dict[str, Any],
+    *,
+    allowed_roles: frozenset[str] | None = None,
+) -> dict[str, Any]:
+    db = get_database()
+    project = _find_project(project_id)
     if project is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found.")
+
+    resolved_project_id = str(project.get("_id") or project.get("id") or "").strip()
     project_org = str(project.get("organization_id") or "").strip()
-    if project_org != organization_id:
+    profile = db["organization_profiles"].find_one(
+        {"organization_id": organization_id}
+    )
+    profile_project_id = str((profile or {}).get("project_id") or "").strip()
+    if project_org and project_org != organization_id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Project is not mapped to the requested organization.")
+    if profile_project_id and profile_project_id != resolved_project_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Organization is mapped to a different project.",
+        )
     snapshot = get_project_access_snapshot(
         project,
         user_id=_actor_user_id(current_user),
@@ -104,6 +148,47 @@ def _require_org_project_access(organization_id: str, project_id: str, current_u
     )
     if not bool(snapshot.get("accessible")):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Workspace/project access is required.")
+    if allowed_roles is not None:
+        member_role = normalize_project_member_role(
+            snapshot.get("member_role")
+            or (snapshot.get("membership") or {}).get("member_role"),
+            default="viewer",
+        )
+        if member_role not in allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Your workspace role cannot modify this organization.",
+            )
+    return project
+
+
+def _require_org_access(
+    organization_id: str,
+    current_user: dict[str, Any],
+    *,
+    allowed_roles: frozenset[str] | None = None,
+) -> dict[str, Any]:
+    db = get_database()
+    profile = db["organization_profiles"].find_one(
+        {"organization_id": organization_id}
+    )
+    if profile is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organization not found.",
+        )
+    project_id = str(profile.get("project_id") or "").strip()
+    if not project_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Organization is not mapped to a workspace project.",
+        )
+    return _require_org_project_access(
+        organization_id,
+        project_id,
+        current_user,
+        allowed_roles=allowed_roles,
+    )
 
 
 def _command_structure_button_matrix() -> list[dict[str, Any]]:
@@ -347,7 +432,25 @@ def get_organization_profile(
     current_user: dict[str, Any] = Depends(require_permission("projects.read")),
 ):
     _require_org_lane(current_user)
-    return {"items": list_organization_profiles(organization_id)}
+    if organization_id:
+        _require_org_access(organization_id, current_user)
+        return {"items": list_organization_profiles(organization_id)}
+
+    visible_profiles: list[dict[str, Any]] = []
+    for profile in list_organization_profiles():
+        candidate_org_id = str(profile.get("organization_id") or "").strip()
+        if not candidate_org_id:
+            continue
+        try:
+            _require_org_project_access(
+                candidate_org_id,
+                str(profile.get("project_id") or "").strip(),
+                current_user,
+            )
+        except HTTPException:
+            continue
+        visible_profiles.append(profile)
+    return {"items": visible_profiles}
 
 
 @router.get("/command-ui/buttons")
@@ -365,6 +468,17 @@ def post_organization_profile(
     current_user: dict[str, Any] = Depends(require_permission("uploads.write")),
 ):
     _require_org_lane(current_user)
+    project = _require_org_project_access(
+        payload.organization_id,
+        payload.project_id,
+        current_user,
+        allowed_roles=ORG_MANAGER_ROLES,
+    )
+    if not str(project.get("organization_id") or "").strip():
+        get_database()["projects"].update_one(
+            {"_id": project.get("_id")},
+            {"$set": {"organization_id": payload.organization_id}},
+        )
     item = upsert_organization_profile(payload.model_dump(), actor_user_id=_actor_user_id(current_user))
     _audit(current_user, "organization.profile.upsert", "organization", payload.organization_id, details={"project_id": payload.project_id})
     return item
@@ -373,6 +487,7 @@ def post_organization_profile(
 @router.get("/{org_id}/nodes")
 def get_nodes(org_id: str, current_user: dict[str, Any] = Depends(require_permission("projects.read"))):
     _require_org_lane(current_user)
+    _require_org_access(org_id, current_user)
     return {"items": list_organization_nodes(org_id)}
 
 
@@ -383,6 +498,7 @@ def post_nodes(
     current_user: dict[str, Any] = Depends(require_permission("uploads.write")),
 ):
     _require_org_lane(current_user)
+    _require_org_access(org_id, current_user, allowed_roles=ORG_EDITOR_ROLES)
     try:
         item = create_organization_node(org_id, payload.model_dump(), actor_user_id=_actor_user_id(current_user))
     except ValueError as exc:
@@ -394,6 +510,7 @@ def post_nodes(
 @router.get("/{org_id}/role-seats")
 def get_role_seats(org_id: str, current_user: dict[str, Any] = Depends(require_permission("projects.read"))):
     _require_org_lane(current_user)
+    _require_org_access(org_id, current_user)
     return {"items": list_role_seats(org_id)}
 
 
@@ -404,6 +521,7 @@ def post_role_seats(
     current_user: dict[str, Any] = Depends(require_permission("uploads.write")),
 ):
     _require_org_lane(current_user)
+    _require_org_access(org_id, current_user, allowed_roles=ORG_EDITOR_ROLES)
     try:
         item = create_role_seat(org_id, payload.model_dump(), actor_user_id=_actor_user_id(current_user))
     except ValueError as exc:
@@ -415,6 +533,7 @@ def post_role_seats(
 @router.get("/{org_id}/people")
 def get_people(org_id: str, current_user: dict[str, Any] = Depends(require_permission("projects.read"))):
     _require_org_lane(current_user)
+    _require_org_access(org_id, current_user)
     return {"items": list_people(org_id)}
 
 
@@ -425,6 +544,7 @@ def post_people(
     current_user: dict[str, Any] = Depends(require_permission("uploads.write")),
 ):
     _require_org_lane(current_user)
+    _require_org_access(org_id, current_user, allowed_roles=ORG_EDITOR_ROLES)
     try:
         item = create_person(org_id, payload.model_dump(), actor_user_id=_actor_user_id(current_user))
     except ValueError as exc:
@@ -436,6 +556,7 @@ def post_people(
 @router.get("/{org_id}/assignments")
 def get_assignments(org_id: str, current_user: dict[str, Any] = Depends(require_permission("projects.read"))):
     _require_org_lane(current_user)
+    _require_org_access(org_id, current_user)
     return {"items": list_assignments(org_id)}
 
 
@@ -446,6 +567,7 @@ def post_assignments(
     current_user: dict[str, Any] = Depends(require_permission("uploads.write")),
 ):
     _require_org_lane(current_user)
+    _require_org_access(org_id, current_user, allowed_roles=ORG_EDITOR_ROLES)
     try:
         item = create_assignment(org_id, payload.model_dump(), actor_user_id=_actor_user_id(current_user))
     except ValueError as exc:
@@ -462,6 +584,7 @@ def end_assignment_route(
     current_user: dict[str, Any] = Depends(require_permission("uploads.write")),
 ):
     _require_org_lane(current_user)
+    _require_org_access(org_id, current_user, allowed_roles=ORG_EDITOR_ROLES)
     try:
         item = end_assignment(
             org_id,
@@ -485,6 +608,7 @@ def replace_role_seat(
     current_user: dict[str, Any] = Depends(require_permission("uploads.write")),
 ):
     _require_org_lane(current_user)
+    _require_org_access(org_id, current_user, allowed_roles=ORG_EDITOR_ROLES)
     try:
         item = replace_role_seat_assignment(
             org_id,
@@ -501,6 +625,7 @@ def replace_role_seat(
 @router.get("/{org_id}/transitions")
 def get_transitions(org_id: str, current_user: dict[str, Any] = Depends(require_permission("projects.read"))):
     _require_org_lane(current_user)
+    _require_org_access(org_id, current_user)
     return {"items": list_transitions(org_id)}
 
 
@@ -511,6 +636,7 @@ def post_transitions(
     current_user: dict[str, Any] = Depends(require_permission("uploads.write")),
 ):
     _require_org_lane(current_user)
+    _require_org_access(org_id, current_user, allowed_roles=ORG_EDITOR_ROLES)
     try:
         item = create_transition(org_id, payload.model_dump(), actor_user_id=_actor_user_id(current_user))
     except ValueError as exc:
@@ -522,6 +648,7 @@ def post_transitions(
 @router.get("/{org_id}/support-records")
 def get_support_records(org_id: str, current_user: dict[str, Any] = Depends(require_permission("projects.read"))):
     _require_org_lane(current_user)
+    _require_org_access(org_id, current_user)
     return {"items": list_support_records(org_id)}
 
 
@@ -532,6 +659,7 @@ def post_support_records(
     current_user: dict[str, Any] = Depends(require_permission("uploads.write")),
 ):
     _require_org_lane(current_user)
+    _require_org_access(org_id, current_user, allowed_roles=ORG_EDITOR_ROLES)
     try:
         item = create_support_record(org_id, payload.model_dump(), actor_user_id=_actor_user_id(current_user))
     except ValueError as exc:
@@ -550,6 +678,7 @@ def post_verify_support_record(
     current_user: dict[str, Any] = Depends(require_permission("uploads.write")),
 ):
     _require_org_lane(current_user)
+    _require_org_access(org_id, current_user, allowed_roles=ORG_EDITOR_ROLES)
     try:
         item = verify_support_record(
             org_id,
@@ -567,6 +696,7 @@ def post_verify_support_record(
 @router.get("/{org_id}/links")
 def get_links(org_id: str, current_user: dict[str, Any] = Depends(require_permission("projects.read"))):
     _require_org_lane(current_user)
+    _require_org_access(org_id, current_user)
     return {"items": list_links(org_id)}
 
 
@@ -577,6 +707,7 @@ def post_links(
     current_user: dict[str, Any] = Depends(require_permission("uploads.write")),
 ):
     _require_org_lane(current_user)
+    _require_org_access(org_id, current_user, allowed_roles=ORG_EDITOR_ROLES)
     try:
         item = create_linked_organization(org_id, payload.model_dump(), actor_user_id=_actor_user_id(current_user))
     except ValueError as exc:
@@ -660,7 +791,12 @@ def post_admin_seat_invite(
     current_user: dict[str, Any] = Depends(require_permission("uploads.write")),
 ):
     _require_org_lane(current_user)
-    _require_org_project_access(org_id, payload.project_id, current_user)
+    _require_org_project_access(
+        org_id,
+        payload.project_id,
+        current_user,
+        allowed_roles=ORG_MANAGER_ROLES,
+    )
     item = create_admin_invite(org_id, payload.model_dump(), actor_user_id=_actor_user_id(current_user))
     _audit(current_user, "organization.admin_seat.invite", "organization_admin_invite", f"{org_id}:{payload.project_id}:{payload.email}:{payload.role}", details={"organization_id": org_id, "project_id": payload.project_id})
     return item
@@ -673,7 +809,12 @@ def post_organization_note(
     current_user: dict[str, Any] = Depends(require_permission("uploads.write")),
 ):
     _require_org_lane(current_user)
-    _require_org_project_access(org_id, payload.project_id, current_user)
+    _require_org_project_access(
+        org_id,
+        payload.project_id,
+        current_user,
+        allowed_roles=ORG_MANAGER_ROLES,
+    )
     item = create_organization_note(org_id, payload.model_dump(), actor_user_id=_actor_user_id(current_user))
     _audit(current_user, "organization.note.create", "organization_note", str(item.get("created_at")), details={"organization_id": org_id, "project_id": payload.project_id, "visibility": payload.visibility, "sensitive": payload.visibility == "internal"})
     return item
@@ -686,7 +827,12 @@ def post_white_glove_review_request(
     current_user: dict[str, Any] = Depends(require_permission("uploads.write")),
 ):
     _require_org_lane(current_user)
-    _require_org_project_access(org_id, payload.project_id, current_user)
+    _require_org_project_access(
+        org_id,
+        payload.project_id,
+        current_user,
+        allowed_roles=ORG_MANAGER_ROLES,
+    )
     item = create_white_glove_request(org_id, payload.model_dump(), actor_user_id=_actor_user_id(current_user))
     _audit(current_user, "organization.white_glove.request", "organization_white_glove_request", f"{org_id}:{payload.project_id}", details={"organization_id": org_id, "project_id": payload.project_id, "status": item.get("status")})
     return item

@@ -142,7 +142,7 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
         self.assertIn("Private Household Vault", homepage)
         self.assertIn("Founder-led stewardship", homepage)
         self.assertIn(
-            "Every Tomb of Light package requires an active Legacy Care &amp; Maintenance plan beginning at purchase.",
+            "Every Tomb of Light package requires a Legacy Care &amp; Maintenance plan beginning 30 days after purchase.",
             pricing_page,
         )
         self.assertIn("Full Package Details", pricing_page)

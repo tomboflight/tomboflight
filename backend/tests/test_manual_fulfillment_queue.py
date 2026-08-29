@@ -92,7 +92,7 @@ class FakeDb:
 USER_ID = ObjectId()
 ORDER_ID = ObjectId()
 
-ADMIN = {"_id": "admin-1", "email": "l.robinson@tomboflight.com", "full_name": "Larry Robinson"}
+ADMIN = {"_id": "admin-1", "email": "ceo-admin@example.com", "full_name": "Test CEO"}
 
 
 def _paid_order(**overrides):
@@ -264,7 +264,7 @@ class ManualFulfillmentQueueTests(unittest.TestCase):
         self.assertEqual(first["fulfillment_status"], mfs.FULFILLMENT_COMPLETE)
         self.assertTrue(second.get("already_complete"))
         stored = db["orders"].find_one({"_id": ORDER_ID})
-        self.assertEqual(stored["fulfillment_completed_by"], "l.robinson@tomboflight.com")
+        self.assertEqual(stored["fulfillment_completed_by"], "ceo-admin@example.com")
         audit_actions = [d["action"] for d in db["audit_logs"].docs]
         self.assertEqual(audit_actions.count("manual_fulfillment.complete_fulfillment"), 1)
 

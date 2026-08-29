@@ -6,12 +6,37 @@ from app import main as main_module
 
 
 class StartupInitializationTests(unittest.TestCase):
+    def test_lifespan_fails_before_connecting_when_runtime_environment_is_unsafe(self):
+        async def _run():
+            async with main_module.lifespan(main_module.app):
+                return None
+
+        with (
+            patch.object(
+                main_module,
+                "validate_runtime_environment_on_startup",
+                side_effect=RuntimeError("unsafe hosted environment"),
+            ),
+            patch.object(
+                main_module,
+                "validate_admin_identity_registry_configuration",
+            ) as identity_validate_mock,
+            patch.object(main_module, "connect_to_mongo") as connect_mock,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "unsafe hosted environment"):
+                asyncio.run(_run())
+
+        identity_validate_mock.assert_not_called()
+        connect_mock.assert_not_called()
+
     def test_lifespan_runs_index_initializers(self):
         async def _run():
             async with main_module.lifespan(main_module.app):
                 return None
 
         with (
+            patch.object(main_module, "validate_runtime_environment_on_startup") as environment_validate_mock,
+            patch.object(main_module, "validate_admin_identity_registry_configuration") as identity_validate_mock,
             patch.object(main_module, "validate_nft_runtime_configuration_on_startup") as validate_mock,
             patch.object(main_module, "connect_to_mongo", return_value={"db": "ok"}) as connect_mock,
             patch.object(main_module, "ensure_auth_indexes") as auth_index_mock,
@@ -26,11 +51,14 @@ class StartupInitializationTests(unittest.TestCase):
             patch.object(main_module, "ensure_continuity_runtime_indexes") as continuity_init_mock,
             patch.object(main_module, "ensure_organization_indexes") as organization_init_mock,
             patch.object(main_module, "ensure_cinematic_manifest_indexes") as cinematic_init_mock,
+            patch.object(main_module, "ensure_runtime_data_indexes") as runtime_data_index_mock,
             patch.object(main_module, "bootstrap_admin_access_controls") as admin_access_bootstrap_mock,
             patch.object(main_module, "close_mongo_connection") as close_mock,
         ):
             asyncio.run(_run())
 
+        environment_validate_mock.assert_called_once()
+        identity_validate_mock.assert_called_once()
         validate_mock.assert_called_once()
         connect_mock.assert_called_once()
         auth_index_mock.assert_called_once()
@@ -45,6 +73,7 @@ class StartupInitializationTests(unittest.TestCase):
         continuity_init_mock.assert_called_once()
         organization_init_mock.assert_called_once()
         cinematic_init_mock.assert_called_once()
+        runtime_data_index_mock.assert_called_once()
         admin_access_bootstrap_mock.assert_called_once()
         close_mock.assert_called_once()
 
@@ -54,6 +83,8 @@ class StartupInitializationTests(unittest.TestCase):
                 return None
 
         with (
+            patch.object(main_module, "validate_runtime_environment_on_startup") as environment_validate_mock,
+            patch.object(main_module, "validate_admin_identity_registry_configuration") as identity_validate_mock,
             patch.object(main_module, "validate_nft_runtime_configuration_on_startup") as validate_mock,
             patch.object(main_module, "connect_to_mongo", return_value=None) as connect_mock,
             patch.object(main_module, "ensure_auth_indexes") as auth_index_mock,
@@ -68,11 +99,14 @@ class StartupInitializationTests(unittest.TestCase):
             patch.object(main_module, "ensure_continuity_runtime_indexes") as continuity_init_mock,
             patch.object(main_module, "ensure_organization_indexes") as organization_init_mock,
             patch.object(main_module, "ensure_cinematic_manifest_indexes") as cinematic_init_mock,
+            patch.object(main_module, "ensure_runtime_data_indexes") as runtime_data_index_mock,
             patch.object(main_module, "bootstrap_admin_access_controls") as admin_access_bootstrap_mock,
             patch.object(main_module, "close_mongo_connection") as close_mock,
         ):
             asyncio.run(_run())
 
+        environment_validate_mock.assert_called_once()
+        identity_validate_mock.assert_called_once()
         validate_mock.assert_called_once()
         connect_mock.assert_called_once()
         auth_index_mock.assert_not_called()
@@ -87,6 +121,7 @@ class StartupInitializationTests(unittest.TestCase):
         continuity_init_mock.assert_not_called()
         organization_init_mock.assert_not_called()
         cinematic_init_mock.assert_not_called()
+        runtime_data_index_mock.assert_not_called()
         admin_access_bootstrap_mock.assert_not_called()
         close_mock.assert_called_once()
 
