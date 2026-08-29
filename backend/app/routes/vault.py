@@ -38,6 +38,7 @@ from app.services.vault_service import (
 )
 from app.services.workspace_access_service import (
     require_workspace_capability,
+    require_workspace_maintenance_write_access,
     require_workspace_member_role,
 )
 
@@ -126,7 +127,13 @@ def _resolve_vault_context(
     )
 
 
-def _require_vault_role(context: dict[str, Any], *, write: bool = False, sensitive: bool = False) -> None:
+def _require_vault_role(
+    context: dict[str, Any],
+    *,
+    write: bool = False,
+    sensitive: bool = False,
+    mutation: bool = False,
+) -> None:
     # Item-level owner/grant checks in vault_service are authoritative for
     # existing items. Broad workspace admission here lets editor/steward/
     # executor grants work even when the base workspace role is read-only.
@@ -141,6 +148,8 @@ def _require_vault_role(context: dict[str, Any], *, write: bool = False, sensiti
             else "Your role cannot access vault items."
         )
     require_workspace_member_role(context, allowed_roles=allowed_roles, detail=detail)
+    if write or mutation:
+        require_workspace_maintenance_write_access(context, feature_name="Vault")
 
 
 def _require_additional_capability(
@@ -326,7 +335,7 @@ def update_vault_item_route(
         project_id=_normalize(doc.get("project_id")),
         vault_scope=_normalize(doc.get("vault_scope")),
     )
-    _require_vault_role(context, sensitive=True)
+    _require_vault_role(context, sensitive=True, mutation=True)
     authorized_project_id = _normalize((context.get("project") or {}).get("_id"))
     if "vault_scope" in payload.model_fields_set and payload.vault_scope:
         _resolve_vault_context(
@@ -370,7 +379,7 @@ def delete_vault_item_route(
         project_id=_normalize(doc.get("project_id")),
         vault_scope=_normalize(doc.get("vault_scope")),
     )
-    _require_vault_role(context, sensitive=True)
+    _require_vault_role(context, sensitive=True, mutation=True)
     authorized_project_id = _normalize((context.get("project") or {}).get("_id"))
     try:
         delete_vault_item(item_id, user_id, authorized_project_id=authorized_project_id)
@@ -450,7 +459,7 @@ def create_vault_access_grant_route(
         project_id=_normalize(doc.get("project_id")),
         vault_scope=_normalize(doc.get("vault_scope")),
     )
-    _require_vault_role(context, sensitive=True)
+    _require_vault_role(context, sensitive=True, mutation=True)
     authorized_project_id = _normalize((context.get("project") or {}).get("_id"))
     try:
         return create_vault_access_grant(
@@ -507,7 +516,7 @@ def update_vault_access_grant_route(
         project_id=_normalize(doc.get("project_id")),
         vault_scope=_normalize(doc.get("vault_scope")),
     )
-    _require_vault_role(context, sensitive=True)
+    _require_vault_role(context, sensitive=True, mutation=True)
     project_id = _normalize((context.get("project") or {}).get("_id"))
     try:
         return update_vault_access_grant(
@@ -536,7 +545,7 @@ def revoke_vault_access_grant_route(
         project_id=_normalize(doc.get("project_id")),
         vault_scope=_normalize(doc.get("vault_scope")),
     )
-    _require_vault_role(context, sensitive=True)
+    _require_vault_role(context, sensitive=True, mutation=True)
     project_id = _normalize((context.get("project") or {}).get("_id"))
     try:
         return revoke_vault_access_grant(
@@ -564,7 +573,7 @@ def delete_vault_access_grant_route(
         project_id=_normalize(doc.get("project_id")),
         vault_scope=_normalize(doc.get("vault_scope")),
     )
-    _require_vault_role(context, sensitive=True)
+    _require_vault_role(context, sensitive=True, mutation=True)
     project_id = _normalize((context.get("project") or {}).get("_id"))
     try:
         delete_vault_access_grant(
@@ -602,7 +611,7 @@ def create_vault_release_rule_route(
         project_id=_normalize(doc.get("project_id")),
         vault_scope=_normalize(doc.get("vault_scope")),
     )
-    _require_vault_role(context, sensitive=True)
+    _require_vault_role(context, sensitive=True, mutation=True)
     authorized_project_id = _normalize((context.get("project") or {}).get("_id"))
     _require_release_entitlements(
         current_user,
@@ -664,7 +673,7 @@ def update_vault_release_rule_route(
         project_id=_normalize(doc.get("project_id")),
         vault_scope=_normalize(doc.get("vault_scope")),
     )
-    _require_vault_role(context, sensitive=True)
+    _require_vault_role(context, sensitive=True, mutation=True)
     project_id = _normalize((context.get("project") or {}).get("_id"))
     rule = _find_vault_release_rule_by_id(rule_id)
     if not rule or _normalize(rule.get("vault_item_id")) != item_id:
@@ -704,7 +713,7 @@ def revoke_vault_release_rule_route(
         project_id=_normalize(doc.get("project_id")),
         vault_scope=_normalize(doc.get("vault_scope")),
     )
-    _require_vault_role(context, sensitive=True)
+    _require_vault_role(context, sensitive=True, mutation=True)
     project_id = _normalize((context.get("project") or {}).get("_id"))
     try:
         return revoke_vault_release_rule(
@@ -732,7 +741,7 @@ def delete_vault_release_rule_route(
         project_id=_normalize(doc.get("project_id")),
         vault_scope=_normalize(doc.get("vault_scope")),
     )
-    _require_vault_role(context, sensitive=True)
+    _require_vault_role(context, sensitive=True, mutation=True)
     project_id = _normalize((context.get("project") or {}).get("_id"))
     try:
         delete_vault_release_rule(

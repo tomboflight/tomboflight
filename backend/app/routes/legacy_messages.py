@@ -19,6 +19,7 @@ from app.services.legacy_message_service import (
 )
 from app.services.workspace_access_service import (
     require_workspace_capability,
+    require_workspace_maintenance_write_access,
     require_workspace_member_role,
 )
 
@@ -106,6 +107,11 @@ def _resolve_legacy_message_context(
             else "Your workspace role cannot access legacy messages."
         ),
     )
+    if write:
+        require_workspace_maintenance_write_access(
+            context,
+            feature_name="Future-message Vault",
+        )
     authorized_project_id = _normalize((context.get("project") or {}).get("_id"))
     if not authorized_project_id or authorized_project_id != _normalize(project_id):
         raise HTTPException(

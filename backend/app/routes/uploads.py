@@ -10,6 +10,7 @@ import shutil
 import tempfile
 from pathlib import Path
 from typing import Any, Literal, Optional
+from urllib.parse import quote
 
 from bson import ObjectId
 from fastapi import (
@@ -23,7 +24,7 @@ from fastapi import (
     UploadFile,
     status,
 )
-from fastapi.responses import FileResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
 from app.config import settings
@@ -44,7 +45,6 @@ from app.services.upload_service import (
 from app.services.r2_storage_service import (
     delete_private_object,
     download_private_bytes,
-    generate_private_download_url,
     private_storage_is_configured,
     upload_private_file,
 )
@@ -62,6 +62,7 @@ from app.services.linked_network_service import build_linked_network
 from app.services.workspace_access_service import (
     family_is_visible_to_user,
     require_workspace_capability,
+    require_workspace_maintenance_write_access,
     require_workspace_member_role,
     resolve_workspace_context,
 )
@@ -1350,6 +1351,17 @@ def _public_upload_record(
             )
             and can_manage
         )
+        if (
+            _normalize_value(record.get("category")).lower() == "private_media"
+            and not bool(
+                (context.get("maintenance_access") or {}).get(
+                    "write_allowed",
+                    True,
+                )
+            )
+        ):
+            can_manage = False
+            can_create_next_version = False
     download_ready = bool(
         can_access
         and not _upload_scan_blocks_download(record)
@@ -1908,6 +1920,22 @@ def _upload_read_limit(upload_record: dict[str, Any]) -> int:
     if category == "member_photo":
         return int(PHOTO_MAX_BYTES)
     return int(EVIDENCE_MAX_BYTES)
+
+
+def _private_content_disposition(filename: Any, *, disposition: str) -> str:
+    safe_name = Path(_normalize_value(filename) or "vault-file").name
+    safe_name = "".join(
+        character
+        for character in safe_name
+        if character.isprintable() and character not in {"/", "\\", '"'}
+    ).strip() or "vault-file"
+    ascii_fallback = safe_name.encode("ascii", "ignore").decode("ascii").strip()
+    ascii_fallback = re.sub(r"[^A-Za-z0-9._ -]", "_", ascii_fallback) or "vault-file"
+    encoded_name = quote(safe_name, safe="")
+    return (
+        f'{disposition}; filename="{ascii_fallback}"; '
+        f"filename*=UTF-8''{encoded_name}"
+    )
 
 
 def _actor_audit_identity(current_user: dict[str, Any]) -> dict[str, str | None]:
@@ -3551,7 +3579,6 @@ async def upload_member_photo(
         allowed_roles=("billing_owner", "co_owner", "family_manager", "contributor"),
         detail="Your role is read-only for uploads.",
     )
-
     db = get_database()
     if db is None:
         raise HTTPException(status_code=500, detail="Database is not connected.")
@@ -3853,6 +3880,7 @@ async def upload_private_media(
         allowed_roles=("billing_owner", "co_owner", "family_manager", "contributor"),
         detail="Your role is read-only for uploads.",
     )
+    require_workspace_maintenance_write_access(context, feature_name="Vault")
 
     db = get_database()
     if db is None:
@@ -4446,6 +4474,8 @@ async def replace_upload(
         action="replace",
     )
     category = _normalize_value(prior_upload.get("category")).lower()
+    if category == "private_media":
+        require_workspace_maintenance_write_access(context, feature_name="Vault")
     capabilities = _upload_category_capabilities(prior_upload)
     if not capabilities or not _context_has_any_capability(context, capabilities):
         raise HTTPException(
@@ -4710,6 +4740,8 @@ def update_upload_privacy(
         else current_scope
     )
     category = _normalize_value(upload_record.get("category")).lower()
+    if category == "private_media":
+        require_workspace_maintenance_write_access(context, feature_name="Vault")
     if category == "verification_evidence":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -5314,7 +5346,10 @@ def preview_upload_for_admin_review(
                 detail="Private object storage is unavailable for this review file.",
             ) from exc
         response = Response(content=body, media_type=content_type)
-        response.headers["Content-Disposition"] = f'inline; filename="{filename}"'
+        response.headers["Content-Disposition"] = _private_content_disposition(
+            filename,
+            disposition="inline",
+        )
     else:
         relative_path = _normalize_value(upload_record.get("relative_path"))
         absolute_path = _absolute_upload_path(relative_path)
@@ -5402,7 +5437,10 @@ def preview_upload(
                 detail="Private object storage is unavailable for this upload.",
             ) from exc
         response: Response = Response(content=body, media_type=content_type)
-        response.headers["Content-Disposition"] = f'inline; filename="{filename}"'
+        response.headers["Content-Disposition"] = _private_content_disposition(
+            filename,
+            disposition="inline",
+        )
     else:
         relative_path = _normalize_value(upload_record.get("relative_path"))
         if not relative_path:
@@ -5498,18 +5536,27 @@ def download_upload(
                 detail="Private object storage key is missing for this upload.",
             )
         try:
-            signed_url = generate_private_download_url(
+            body = download_private_bytes(
                 key=storage_key,
-                expires_seconds=120,
+                max_bytes=_upload_read_limit(upload_record),
             )
-        except Exception:
-            signed_url = None
-        if not signed_url:
+        except Exception as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Private object storage is unavailable for this upload.",
-            )
-        response = RedirectResponse(url=signed_url, status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+            ) from exc
+        content_type = (
+            _normalize_value(upload_record.get("content_type"))
+            or "application/octet-stream"
+        )
+        filename = Path(
+            _normalize_value(upload_record.get("original_filename")) or "vault-file"
+        ).name.replace('"', "")
+        response = Response(content=body, media_type=content_type)
+        response.headers["Content-Disposition"] = _private_content_disposition(
+            filename,
+            disposition="attachment",
+        )
         response.headers["Cache-Control"] = "no-store"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
@@ -5616,6 +5663,12 @@ def delete_upload(
             "tombstone_id": _deletion_tombstone_id(upload_id),
             "idempotency_replayed": True,
         }
+
+    if (
+        _normalize_value(upload_record.get("category")).lower() == "private_media"
+        and not same_retry_requester
+    ):
+        require_workspace_maintenance_write_access(context, feature_name="Vault")
 
     tombstone_id = _create_upload_deletion_tombstone(
         db=db,

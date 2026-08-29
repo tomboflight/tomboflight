@@ -20,6 +20,9 @@ from app.services.entitlement_service import (
 
 MAINTENANCE_START_DELAY_DAYS = 30
 MAINTENANCE_MONTHLY_PERIOD_DAYS = 30
+MAINTENANCE_LAPSED_STATUSES = frozenset(
+    {"canceled", "cancelled", "churned", "overdue", "past_due", "refunded", "unpaid"}
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -71,6 +74,7 @@ def _serialize(document: dict[str, Any] | None) -> dict[str, Any] | None:
         "maintenance_renews_at": document.get("maintenance_renews_at"),
         "maintenance_current_period_start": document.get("maintenance_current_period_start"),
         "maintenance_current_period_end": document.get("maintenance_current_period_end"),
+        "maintenance_lapsed_at": document.get("maintenance_lapsed_at"),
         "maintenance_stripe_subscription_id": document.get("maintenance_stripe_subscription_id"),
         "maintenance_stripe_customer_id": document.get("maintenance_stripe_customer_id"),
         "maintenance_stripe_status": document.get("maintenance_stripe_status"),
@@ -217,9 +221,12 @@ def upsert_project_entitlement(
     }
 
     if existing:
+        update_operation: dict[str, Any] = {"$set": document}
+        if maintenance_status not in MAINTENANCE_LAPSED_STATUSES:
+            update_operation["$unset"] = {"maintenance_lapsed_at": ""}
         collection.update_one(
             {"_id": existing["_id"]},
-            {"$set": document},
+            update_operation,
         )
     else:
         document["created_at"] = now
@@ -359,11 +366,19 @@ def update_project_entitlement_maintenance(
     if not existing:
         return None
 
-    updates: dict[str, Any] = {"updated_at": _utcnow()}
+    now = _utcnow()
+    updates: dict[str, Any] = {"updated_at": now}
+    unset_fields: dict[str, str] = {}
     if maintenance_plan is not None:
         updates["maintenance_plan"] = maintenance_plan
     if maintenance_status is not None:
         updates["maintenance_status"] = maintenance_status
+        normalized_maintenance_status = str(maintenance_status or "").strip().lower()
+        if normalized_maintenance_status in MAINTENANCE_LAPSED_STATUSES:
+            if not existing.get("maintenance_lapsed_at"):
+                updates["maintenance_lapsed_at"] = now
+        else:
+            unset_fields["maintenance_lapsed_at"] = ""
     if maintenance_scheduled_start_at is not None:
         updates["maintenance_scheduled_start_at"] = maintenance_scheduled_start_at
     if maintenance_started_at is not None:
@@ -383,7 +398,9 @@ def update_project_entitlement_maintenance(
 
     update_operation: dict[str, Any] = {"$set": updates}
     if clear_maintenance_started_at:
-        update_operation["$unset"] = {"maintenance_started_at": ""}
+        unset_fields["maintenance_started_at"] = ""
+    if unset_fields:
+        update_operation["$unset"] = unset_fields
     collection.update_one({"_id": existing["_id"]}, update_operation)
     saved = cast(
         dict[str, Any] | None,

@@ -38,6 +38,7 @@
   let currentVaultScope = "household";
   let availableVaultScopes = [];
   let currentContext = null;
+  let maintenanceReadOnly = false;
   let currentGraph = { members: [] };
   let families = [];
   let pendingVaultUploadIdempotencyKey = "";
@@ -80,6 +81,38 @@
     if (!node) return;
     node.style.display = "none";
     node.textContent = "";
+  }
+
+  function applyMaintenanceAccess(context) {
+    const maintenance =
+      context?.maintenance || context?.workspaceContextSnapshot?.maintenance || {};
+    maintenanceReadOnly = maintenance.read_only === true;
+    const form = document.querySelector("[data-vault-upload-form]");
+    if (form) {
+      form
+        .querySelectorAll("input, select, button[type=submit]")
+        .forEach(function (control) {
+          control.disabled = maintenanceReadOnly;
+        });
+    }
+
+    const pageStatus = document.querySelector("[data-vault-page-status]");
+    if (maintenanceReadOnly && pageStatus) {
+      setStatus(
+        pageStatus,
+        "Your Vault is read-only because required maintenance has been past due or canceled for more than 30 days. Existing files remain available to view and download; update billing to resume changes.",
+        "warning",
+      );
+    } else if (maintenance.in_grace && pageStatus) {
+      const graceEnds = maintenance.grace_ends_at
+        ? formatDate(maintenance.grace_ends_at)
+        : "the end of your grace period";
+      setStatus(
+        pageStatus,
+        `Maintenance grace period active until ${graceEnds}. Vault changes remain available during this period.`,
+        "warning",
+      );
+    }
   }
 
   function syncReleaseTimingFields() {
@@ -442,6 +475,7 @@
         scopeSelect.value = currentVaultScope;
       }
       await configureVaultScope(currentVaultScope);
+      applyMaintenanceAccess(context);
     } catch (error) {
       if (pageStatus) {
         setStatus(
@@ -1118,6 +1152,7 @@
     if (scopeSelect) {
       scopeSelect.addEventListener("change", async function () {
         await configureVaultScope(String(scopeSelect.value || ""));
+        applyMaintenanceAccess(currentContext);
         renderUploads([]);
       });
     }
@@ -1277,7 +1312,9 @@
           await loadUploads();
         } catch (error) {
           const msg = error.message || "Upload failed. Please try again.";
-          if (isEntitlementError(msg)) {
+          if (msg.toLowerCase().includes("read-only") || msg.toLowerCase().includes("maintenance")) {
+            setStatus(uploadStatus, msg, "error");
+          } else if (isEntitlementError(msg)) {
             setStatus(
               uploadStatus,
               "Your active package does not allow vault file uploads. Contact support or upgrade your package.",

@@ -516,9 +516,8 @@ class UploadLifecycleSecurityTests(unittest.TestCase):
                     patch.object(upload_routes, "create_audit_log"),
                     patch.object(
                         upload_routes,
-                        "generate_private_download_url",
-                        return_value="https://private.example/relative-must-not-receive",
-                    ) as relative_signed_url,
+                        "download_private_bytes",
+                    ) as relative_object_read,
                 ):
                     with self.assertRaises(HTTPException) as denied:
                         upload_routes.download_upload(
@@ -528,7 +527,7 @@ class UploadLifecycleSecurityTests(unittest.TestCase):
                             current_user=relative,
                         )
                 self.assertEqual(denied.exception.status_code, 403)
-                relative_signed_url.assert_not_called()
+                relative_object_read.assert_not_called()
 
                 with (
                     patch.object(vault_service, "get_database", return_value=db),
@@ -540,9 +539,9 @@ class UploadLifecycleSecurityTests(unittest.TestCase):
                     ),
                     patch.object(
                         upload_routes,
-                        "generate_private_download_url",
-                        return_value="https://private.example/owner-download",
-                    ) as owner_signed_url,
+                        "download_private_bytes",
+                        return_value=b"owner-download",
+                    ) as owner_object_read,
                 ):
                     response = upload_routes.download_upload(
                         str(upload["_id"]),
@@ -550,9 +549,11 @@ class UploadLifecycleSecurityTests(unittest.TestCase):
                         viewer_project_id="",
                         current_user=owner,
                     )
-                self.assertEqual(response.status_code, 307)
-                self.assertEqual(response.headers["location"], "https://private.example/owner-download")
-                owner_signed_url.assert_called_once()
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.body, b"owner-download")
+                self.assertIn("attachment", response.headers["content-disposition"])
+                self.assertNotIn("location", response.headers)
+                owner_object_read.assert_called_once()
 
     def test_failed_modern_vault_link_cannot_bypass_draft_or_scheduled_release(self):
         relative = {"id": "relative-1", "email": "relative@example.com"}
@@ -633,9 +634,8 @@ class UploadLifecycleSecurityTests(unittest.TestCase):
                         patch.object(upload_routes, "create_audit_log"),
                         patch.object(
                             upload_routes,
-                            "generate_private_download_url",
-                            return_value="https://private.example/must-not-leak",
-                        ) as relative_signed_url,
+                            "download_private_bytes",
+                        ) as relative_object_read,
                     ):
                         with self.assertRaises(HTTPException) as denied:
                             upload_routes.download_upload(
@@ -644,7 +644,7 @@ class UploadLifecycleSecurityTests(unittest.TestCase):
                                 viewer_project_id="",
                                 current_user=relative,
                             )
-                    relative_signed_url.assert_not_called()
+                    relative_object_read.assert_not_called()
 
                     with (
                         patch.object(
@@ -654,9 +654,9 @@ class UploadLifecycleSecurityTests(unittest.TestCase):
                         ),
                         patch.object(
                             upload_routes,
-                            "generate_private_download_url",
-                            return_value="https://private.example/owner-recovery",
-                        ) as owner_signed_url,
+                            "download_private_bytes",
+                            return_value=b"owner-recovery",
+                        ) as owner_object_read,
                     ):
                         owner_response = upload_routes.download_upload(
                             str(record["_id"]),
@@ -668,8 +668,9 @@ class UploadLifecycleSecurityTests(unittest.TestCase):
                 self.assertEqual(relative_list["count"], 0)
                 self.assertEqual(owner_list["count"], 1)
                 self.assertEqual(denied.exception.status_code, 403)
-                self.assertEqual(owner_response.status_code, 307)
-                owner_signed_url.assert_called_once()
+                self.assertEqual(owner_response.status_code, 200)
+                self.assertEqual(owner_response.body, b"owner-recovery")
+                owner_object_read.assert_called_once()
 
     def test_approved_link_status_allows_released_linked_relative(self):
         relative = {"id": "relative-1", "email": "relative@example.com"}
@@ -695,9 +696,9 @@ class UploadLifecycleSecurityTests(unittest.TestCase):
                 ),
                 patch.object(
                     upload_routes,
-                    "generate_private_download_url",
-                    return_value="https://private.example/approved-relative",
-                ) as signed_url,
+                    "download_private_bytes",
+                    return_value=b"approved-relative",
+                ) as object_read,
             ):
                 response = upload_routes.download_upload(
                     str(upload["_id"]),
@@ -707,8 +708,9 @@ class UploadLifecycleSecurityTests(unittest.TestCase):
                 )
 
         self.assertEqual(item["id"], str(_item["_id"]))
-        self.assertEqual(response.status_code, 307)
-        signed_url.assert_called_once()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.body, b"approved-relative")
+        object_read.assert_called_once()
 
     def test_linked_viewer_preview_proxies_authorized_r2_bytes_inline(self):
         upload, _prior, _item, db = linked_viewer_fixture()
@@ -733,7 +735,6 @@ class UploadLifecycleSecurityTests(unittest.TestCase):
                 "download_private_bytes",
                 return_value=body,
             ) as object_read,
-            patch.object(upload_routes, "generate_private_download_url") as signed_url,
         ):
             response = upload_routes.preview_upload(
                 str(upload["_id"]),
@@ -757,11 +758,11 @@ class UploadLifecycleSecurityTests(unittest.TestCase):
             key=upload["storage_key"],
             max_bytes=upload_routes.EVIDENCE_MAX_BYTES,
         )
-        signed_url.assert_not_called()
 
-    def test_linked_viewer_download_returns_short_lived_r2_redirect(self):
+    def test_linked_viewer_download_streams_authorized_r2_bytes(self):
         upload, _prior, _item, db = linked_viewer_fixture()
         viewer = {"id": "viewer-user", "email": "viewer@example.com"}
+        body = b"linked-viewer-download"
 
         with (
             patch.object(upload_routes, "get_database", return_value=db),
@@ -776,12 +777,11 @@ class UploadLifecycleSecurityTests(unittest.TestCase):
                 "list_linked_family_ids",
                 return_value=["viewer-family", "source-family"],
             ),
-            patch.object(upload_routes, "download_private_bytes") as object_read,
             patch.object(
                 upload_routes,
-                "generate_private_download_url",
-                return_value="https://private.example/linked-viewer-download",
-            ) as signed_url,
+                "download_private_bytes",
+                return_value=body,
+            ) as object_read,
         ):
             response = upload_routes.download_upload(
                 str(upload["_id"]),
@@ -790,17 +790,15 @@ class UploadLifecycleSecurityTests(unittest.TestCase):
                 current_user=viewer,
             )
 
-        self.assertEqual(response.status_code, 307)
-        self.assertEqual(
-            response.headers["location"],
-            "https://private.example/linked-viewer-download",
-        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.body, body)
         self.assertEqual(response.headers["cache-control"], "no-store")
-        signed_url.assert_called_once_with(
+        self.assertIn("attachment", response.headers["content-disposition"])
+        self.assertNotIn("location", response.headers)
+        object_read.assert_called_once_with(
             key=upload["storage_key"],
-            expires_seconds=120,
+            max_bytes=upload_routes.EVIDENCE_MAX_BYTES,
         )
-        object_read.assert_not_called()
 
     def test_linked_viewer_versions_returns_only_current_with_read_only_permissions(self):
         current, prior, _item, db = linked_viewer_fixture(with_prior=True)
@@ -821,7 +819,6 @@ class UploadLifecycleSecurityTests(unittest.TestCase):
             ),
             patch.object(upload_routes, "create_audit_log"),
             patch.object(upload_routes, "download_private_bytes") as object_read,
-            patch.object(upload_routes, "generate_private_download_url") as signed_url,
         ):
             payload = upload_routes.list_upload_versions(
                 str(current["_id"]),
@@ -846,7 +843,6 @@ class UploadLifecycleSecurityTests(unittest.TestCase):
             },
         )
         object_read.assert_not_called()
-        signed_url.assert_not_called()
 
     def test_linked_viewer_unreleased_or_unshared_upload_never_reaches_storage(self):
         viewer = {"id": "viewer-user", "email": "viewer@example.com"}
@@ -877,10 +873,6 @@ class UploadLifecycleSecurityTests(unittest.TestCase):
                     ),
                     patch.object(upload_routes, "create_audit_log"),
                     patch.object(upload_routes, "download_private_bytes") as object_read,
-                    patch.object(
-                        upload_routes,
-                        "generate_private_download_url",
-                    ) as signed_url,
                 ):
                     with self.assertRaises(HTTPException) as preview_denied:
                         upload_routes.preview_upload(
@@ -899,7 +891,6 @@ class UploadLifecycleSecurityTests(unittest.TestCase):
                 self.assertEqual(preview_denied.exception.status_code, 403)
                 self.assertEqual(download_denied.exception.status_code, 403)
                 object_read.assert_not_called()
-                signed_url.assert_not_called()
 
     def test_scheduled_upload_with_nonexistent_vault_item_denies_nonowner_before_storage(self):
         missing_item_id = ObjectId()
@@ -938,10 +929,6 @@ class UploadLifecycleSecurityTests(unittest.TestCase):
                 ),
                 patch.object(upload_routes, "create_audit_log"),
                 patch.object(upload_routes, "download_private_bytes") as object_read,
-                patch.object(
-                    upload_routes,
-                    "generate_private_download_url",
-                ) as signed_url,
             ):
                 with self.assertRaises(HTTPException) as denied:
                     upload_routes.download_upload(
@@ -953,7 +940,6 @@ class UploadLifecycleSecurityTests(unittest.TestCase):
 
         self.assertEqual(denied.exception.status_code, 403)
         object_read.assert_not_called()
-        signed_url.assert_not_called()
 
     def test_missing_or_pending_membership_link_denies_linked_relative(self):
         relative = {"id": "relative-1", "email": "relative@example.com"}
@@ -1018,7 +1004,6 @@ class UploadLifecycleSecurityTests(unittest.TestCase):
                 "download_private_bytes",
                 return_value=body,
             ) as object_read,
-            patch.object(upload_routes, "generate_private_download_url") as signed_url,
         ):
             response = upload_routes.preview_upload(
                 str(record["_id"]),
@@ -1032,7 +1017,17 @@ class UploadLifecycleSecurityTests(unittest.TestCase):
         self.assertEqual(response.headers["x-content-type-options"], "nosniff")
         self.assertIn("inline", response.headers["content-disposition"])
         object_read.assert_called_once()
-        signed_url.assert_not_called()
+
+    def test_private_content_disposition_supports_unicode_without_header_injection(self):
+        header = upload_routes._private_content_disposition(
+            'family\r\nrecord-Élodie.pdf',
+            disposition="attachment",
+        )
+
+        self.assertTrue(header.startswith("attachment;"))
+        self.assertNotIn("\r", header)
+        self.assertNotIn("\n", header)
+        self.assertIn("filename*=UTF-8''", header)
 
     def test_customer_preview_denial_happens_before_private_object_read(self):
         record = private_upload_record()
@@ -1047,7 +1042,6 @@ class UploadLifecycleSecurityTests(unittest.TestCase):
                 side_effect=HTTPException(status_code=403, detail="denied"),
             ),
             patch.object(upload_routes, "download_private_bytes") as object_read,
-            patch.object(upload_routes, "generate_private_download_url") as signed_url,
         ):
             with self.assertRaises(HTTPException) as denied:
                 upload_routes.preview_upload(
@@ -1057,7 +1051,6 @@ class UploadLifecycleSecurityTests(unittest.TestCase):
 
         self.assertEqual(denied.exception.status_code, 403)
         object_read.assert_not_called()
-        signed_url.assert_not_called()
 
     def test_internal_admin_cannot_use_generic_customer_preview_for_owner_private_file(self):
         record = private_upload_record(uploaded_by_user_id="customer-owner")
@@ -1074,7 +1067,6 @@ class UploadLifecycleSecurityTests(unittest.TestCase):
             ),
             patch.object(upload_routes, "create_audit_log"),
             patch.object(upload_routes, "download_private_bytes") as object_read,
-            patch.object(upload_routes, "generate_private_download_url") as signed_url,
         ):
             with self.assertRaises(HTTPException) as denied:
                 upload_routes.preview_upload(
@@ -1084,7 +1076,6 @@ class UploadLifecycleSecurityTests(unittest.TestCase):
 
         self.assertEqual(denied.exception.status_code, 403)
         object_read.assert_not_called()
-        signed_url.assert_not_called()
 
     def test_admin_preview_restricts_categories_and_requires_audit_before_read(self):
         admin = {"id": "admin-1", "email": "admin@example.com", "role": "admin"}

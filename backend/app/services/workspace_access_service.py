@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime, timedelta
 from typing import Any, Iterable
 
 from bson import ObjectId
@@ -23,6 +24,18 @@ PAID_PACKAGE_STATUSES = {
     "completed",
     "succeeded",
 }
+MAINTENANCE_WRITE_GRACE_DAYS = 30
+MAINTENANCE_LAPSED_STATUSES = frozenset(
+    {
+        "canceled",
+        "cancelled",
+        "churned",
+        "overdue",
+        "past_due",
+        "refunded",
+        "unpaid",
+    }
+)
 WORKSPACE_PIPELINE_READY_STATUSES = {
     "approved",
     "build_ready",
@@ -53,6 +66,103 @@ def _normalize_value(value: Any) -> str:
 
 def _normalize_email(value: Any) -> str:
     return _normalize_value(value).lower()
+
+
+def _coerce_utc_datetime(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
+    normalized = _normalize_value(value)
+    if not normalized:
+        return None
+    try:
+        parsed = datetime.fromisoformat(normalized.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
+def resolve_maintenance_access_state(
+    entitlement: dict[str, Any] | None,
+    *,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Resolve maintenance access while preserving customer reads.
+
+    A past-due or cancelled workspace receives a 30-day write grace period.
+    After the grace window, Vault mutations are blocked while preview and
+    download access remain available.
+    """
+
+    document = entitlement or {}
+    maintenance_status = _normalize_value(document.get("maintenance_status")).lower()
+    state: dict[str, Any] = {
+        "status": maintenance_status or "not_started",
+        "grace_days": MAINTENANCE_WRITE_GRACE_DAYS,
+        "lapsed_at": None,
+        "grace_ends_at": None,
+        "in_grace": False,
+        "read_only": False,
+        "write_allowed": True,
+    }
+    if maintenance_status not in MAINTENANCE_LAPSED_STATUSES:
+        return state
+
+    lapsed_at = (
+        _coerce_utc_datetime(document.get("maintenance_lapsed_at"))
+        or _coerce_utc_datetime(document.get("maintenance_current_period_end"))
+        or _coerce_utc_datetime(document.get("updated_at"))
+        or _coerce_utc_datetime(document.get("purchased_at"))
+    )
+    if lapsed_at is None:
+        # A lapsed row without a trustworthy timestamp cannot safely receive
+        # an unbounded grace period. Preserve reads and fail closed for writes.
+        state["read_only"] = True
+        state["write_allowed"] = False
+        return state
+
+    current_time = now or datetime.now(UTC)
+    if current_time.tzinfo is None:
+        current_time = current_time.replace(tzinfo=UTC)
+    else:
+        current_time = current_time.astimezone(UTC)
+    grace_ends_at = lapsed_at + timedelta(days=MAINTENANCE_WRITE_GRACE_DAYS)
+    in_grace = current_time <= grace_ends_at
+    state.update(
+        {
+            "lapsed_at": lapsed_at.isoformat(),
+            "grace_ends_at": grace_ends_at.isoformat(),
+            "in_grace": in_grace,
+            "read_only": not in_grace,
+            "write_allowed": in_grace,
+        }
+    )
+    return state
+
+
+def require_workspace_maintenance_write_access(
+    context: dict[str, Any],
+    *,
+    feature_name: str = "Vault",
+) -> dict[str, Any]:
+    if context.get("is_admin"):
+        return context
+    maintenance = context.get("maintenance_access") or resolve_maintenance_access_state(
+        context.get("entitlement")
+    )
+    if bool(maintenance.get("write_allowed", True)):
+        return context
+    raise HTTPException(
+        status_code=status.HTTP_402_PAYMENT_REQUIRED,
+        detail=(
+            f"{feature_name} is read-only because required maintenance has been "
+            "past due or canceled for more than 30 days. Existing files remain "
+            "available to view and download; update billing to resume changes."
+        ),
+    )
 
 
 def _current_user_id(user: dict[str, Any]) -> str:
@@ -963,6 +1073,7 @@ def resolve_workspace_context(
     membership = (access_snapshot or {}).get("membership") or {}
 
     entitlement_map = _resolve_project_entitlement_map(project, current_user=current_user)
+    maintenance_access = resolve_maintenance_access_state(entitlement_map.get("entitlement"))
     return {
         "project": project,
         "family": family,
@@ -972,6 +1083,7 @@ def resolve_workspace_context(
         "resolved_entitlements": entitlement_map.get("resolved_entitlements") or {},
         "entitlement": entitlement_map.get("entitlement"),
         "paid_order": entitlement_map.get("paid_order"),
+        "maintenance_access": maintenance_access,
         "access_snapshot": access_snapshot,
         "member_role": _normalize_value(access_snapshot.get("member_role") or "viewer") or "viewer",
         "relationship_scope": _normalize_value(membership.get("relationship_scope") or "household_member")
@@ -1162,6 +1274,9 @@ def build_workspace_context_snapshot(
             key
             for key, enabled in resolved_entitlements.items()
             if str(key).startswith("can_") and bool(enabled)
+        ),
+        "maintenance": resolve_maintenance_access_state(
+            entitlement_state.get("entitlement")
         ),
     }
     if not response["entitlements"]:
