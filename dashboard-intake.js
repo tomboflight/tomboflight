@@ -528,7 +528,7 @@
     );
     text(
       document.querySelector("[data-health-vault]"),
-      Boolean(resolved.premium_archive_structure) ? "Available" : "Not included",
+      canUseVaultAccess(resolved) ? "Available" : "Not included",
     );
     text(document.querySelector("[data-health-privacy]"), "Private by default");
   }
@@ -578,8 +578,15 @@
     }
     if (tool === "vault") {
       return accessStateFromFlag(
-        Boolean(resolved.premium_archive_structure),
-        hasResolvedFlag(resolved, "premium_archive_structure"),
+        canUseVaultAccess(resolved),
+        [
+          "can_use_personal_vault",
+          "can_use_household_vault",
+          "can_use_linked_household_vault",
+          "can_use_organization_records_vault",
+        ].some(function (key) {
+          return hasResolvedFlag(resolved, key);
+        }),
       );
     }
     if (tool === "tree") {
@@ -693,6 +700,15 @@
     return Boolean(resolved?.can_use_link_keys || resolved?.can_manage_link_keys);
   }
 
+  function canUseVaultAccess(resolved) {
+    return Boolean(
+      resolved?.can_use_personal_vault ||
+        resolved?.can_use_household_vault ||
+        resolved?.can_use_linked_household_vault ||
+        resolved?.can_use_organization_records_vault,
+    );
+  }
+
   function canUseHouseholdAccess(resolved) {
     return Boolean(
       resolved?.can_build_household ||
@@ -710,7 +726,7 @@
     );
     setUnlockState(
       "[data-unlock-vault]",
-      Boolean(resolved.premium_archive_structure),
+      canUseVaultAccess(resolved),
     );
     setUnlockState(
       "[data-unlock-intake]",

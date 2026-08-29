@@ -1352,6 +1352,10 @@
       hasPackageAccess: Boolean(isActive && packageCode),
       hasPaidPackage: Boolean(isActive && packageCode),
       workspaceContextSnapshot: snapshot,
+      maintenance:
+        snapshot.maintenance && typeof snapshot.maintenance === "object"
+          ? snapshot.maintenance
+          : {},
       blockingReason: normalizeValue(snapshot.blocking_reason) || null,
     };
   }
@@ -1792,6 +1796,7 @@
       currentWorkspace,
       hasPackageAccess,
       hasPaidPackage: hasPackageAccess,
+      maintenance: {},
     };
   }
 

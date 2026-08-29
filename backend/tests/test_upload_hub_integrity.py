@@ -190,6 +190,7 @@ class UploadHubIntegrityTests(unittest.TestCase):
             ),
         )
         self.assertIn("VAULT_CAPABILITIES", upload_source)
+        self.assertIn("require_workspace_maintenance_write_access", upload_source)
         self.assertIn('category="private_media"', vault_list_source)
         self.assertNotIn("premium_archive_structure", upload_source)
         self.assertNotIn("premium_archive_structure", vault_list_source)
@@ -202,6 +203,10 @@ class UploadHubIntegrityTests(unittest.TestCase):
         self.assertEqual(vault_routes.HOUSEHOLD_VAULT_CAPABILITIES, ("can_use_household_vault",))
         self.assertIn("HOUSEHOLD_VAULT_CAPABILITIES", vault_source)
         self.assertNotIn("premium_archive_structure", vault_source)
+        self.assertIn(
+            "require_workspace_maintenance_write_access",
+            inspect.getsource(vault_routes._require_vault_role),
+        )
 
     def test_vault_upload_uses_correct_asset_types(self):
         """vault-upload.js must only submit the two backend-allowed asset types."""
@@ -216,6 +221,24 @@ class UploadHubIntegrityTests(unittest.TestCase):
             contents,
             "vault-upload.js must use the 'private_video_message' asset type",
         )
+
+    def test_dashboard_recognizes_every_vault_scope(self):
+        contents = self._read("dashboard-intake.js")
+        self.assertIn("function canUseVaultAccess", contents)
+        for capability in (
+            "can_use_personal_vault",
+            "can_use_household_vault",
+            "can_use_linked_household_vault",
+            "can_use_organization_records_vault",
+        ):
+            self.assertIn(capability, contents)
+        self.assertNotIn("Boolean(resolved.premium_archive_structure)", contents)
+
+    def test_vault_ui_preserves_reads_when_maintenance_is_read_only(self):
+        contents = self._read("vault-upload.js")
+        self.assertIn("maintenance.read_only", contents)
+        self.assertIn("Existing files remain available to view and download", contents)
+        self.assertIn('document.querySelector("[data-vault-upload-form]")', contents)
 
     def test_portrait_upload_js_shows_customer_status(self):
         """portrait-upload.js must display a customer-facing upload status label."""
