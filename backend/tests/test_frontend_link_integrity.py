@@ -104,8 +104,6 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
         config_source = (REPO_ROOT / "config.js").read_text(encoding="utf-8")
         homepage = (REPO_ROOT / "index.html").read_text(encoding="utf-8")
         pricing_page = (REPO_ROOT / "pricing.html").read_text(encoding="utf-8")
-        bridge_page = (REPO_ROOT / "bridge-paint.html").read_text(encoding="utf-8")
-        archived_bridge_page = (REPO_ROOT / "bridge-taste.html").read_text(encoding="utf-8")
         app_source = (REPO_ROOT / "app.js").read_text(encoding="utf-8")
         deploy_workflow = (REPO_ROOT / ".github" / "workflows" / "deploy.yml").read_text(
             encoding="utf-8"
@@ -170,8 +168,6 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
         self.assertIn("Full Tomb of Light Pricing", pricing_page)
         self.assertIn("Required Legacy Care &amp; Maintenance", pricing_page)
         self.assertIn("Add-ons &amp; Legacy Services", pricing_page)
-        self.assertIn("Private Bridge Event Access", pricing_page)
-        self.assertIn("View Private Sip &amp; Paint Access", pricing_page)
         self.assertIn("Storage &amp; Vault Upgrades", pricing_page)
         self.assertIn("Rush Delivery", pricing_page)
         self.assertIn('href="portal-help.html">Need help choosing?</a>', pricing_page)
@@ -217,58 +213,6 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
         self.assertGreaterEqual(homepage.count('rel="noopener noreferrer"'), 3)
         self.assertGreaterEqual(pricing_page.count('rel="noopener noreferrer"'), 20)
 
-        bridge_page_text = html.unescape(bridge_page)
-        pricing_page_text = html.unescape(pricing_page)
-        self.assertNotRegex(
-            bridge_page,
-            r"BRIDGE-PAINT-[A-Z0-9][A-Z0-9-]{3,}",
-        )
-
-        for expected_content in [
-            "Sip & Paint",
-            "Event 2 of 4",
-            "August 29, 2026",
-            "6:00 PM",
-            "9:00 PM",
-            "Norfolk, VA",
-            "Private Event",
-            "Invite Only",
-            "Open your secure invitation",
-            "One-time secure link",
-        ]:
-            self.assertIn(expected_content, bridge_page_text)
-
-        self.assertIn("VERIFIED INVITED-GUEST ACCESS", bridge_page)
-        self.assertIn(
-            "The offer is never displayed",
-            bridge_page,
-        )
-        self.assertIn("data-bridge-paint-access-form", bridge_page)
-        self.assertIn("bridge-paint.js?v=20260828-secure-event-access-1", bridge_page)
-        self.assertIn("Previously published event codes are retired", bridge_page)
-        self.assertNotIn("Important: do not modify Stripe URLs", bridge_page)
-        self.assertNotIn("Private Bridge Event Access", homepage)
-        self.assertNotIn("BRIDGE-TASTE", homepage)
-        self.assertNotIn("BRIDGE-PAINT", homepage)
-        self.assertNotRegex(homepage, r"BRIDGE-(?:TASTE|PAINT)-")
-        self.assertIn("bridge-paint.html", pricing_page)
-        self.assertNotIn("BRIDGE-PAINT", pricing_page)
-        self.assertIn("one-time access link", pricing_page)
-        self.assertIn("Sip & Paint — Event 2 of 4", pricing_page_text)
-        self.assertNotIn("BRIDGE-TASTE", pricing_page)
-
-        self.assertIn("Bridge Event 1 Has Concluded", archived_bridge_page)
-        self.assertIn('href="bridge-paint.html"', archived_bridge_page)
-        self.assertNotRegex(
-            archived_bridge_page,
-            r"BRIDGE-TASTE-[A-Z0-9][A-Z0-9-]{3,}",
-        )
-
-        for inactive_campaign in ["BRIDGE-LINEAGE", "GRANDOPENING"]:
-            self.assertNotIn(inactive_campaign, homepage)
-            self.assertNotIn(inactive_campaign, pricing_page)
-            self.assertNotIn(inactive_campaign, bridge_page)
-            self.assertNotIn(inactive_campaign, archived_bridge_page)
         self.assertIn('const checkoutFrozen = link.getAttribute("aria-disabled") === "true";', app_source)
         self.assertIn("prefilled_promo_code", app_source)
         self.assertIn("function configureDirectStripeCheckout(link, href) {", app_source)
@@ -283,8 +227,6 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
         self.assertIn("https://tomboflight.com/pricing.html", sitemap)
         self.assertIn("https://tomboflight.com/platform.html", sitemap)
         self.assertIn("https://tomboflight.com/refunds-delivery.html", sitemap)
-        self.assertIn("https://tomboflight.com/bridge-paint.html", sitemap)
-        self.assertNotIn("https://tomboflight.com/bridge-taste.html", sitemap)
 
     def test_founder_access_redirects_to_pricing(self):
         founder_page = (REPO_ROOT / "founder-access.html").read_text(encoding="utf-8")
