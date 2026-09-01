@@ -113,7 +113,6 @@ class TestContinuityKernelPhase9ControlSurfaceSecurity(unittest.TestCase):
     def test_07_app_pages_have_csp_valid_inline_hashes_and_current_cache_revision(self) -> None:
         app_pages = []
         separately_managed_commercial_pages = {
-            "bridge-taste.html",
             "pricing.html",
         }
         for path in sorted(REPO_ROOT.glob("*.html")):

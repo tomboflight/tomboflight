@@ -8841,14 +8841,9 @@ main [id] {
 }
 
 .vault-panel-compact,
-.offer-panel-private,
 .pricing-cta-panel {
   max-width: 980px;
   margin: 0 auto;
-}
-
-.bridge-access-grid {
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
 .pricing-page-shell {
@@ -8943,13 +8938,6 @@ main [id] {
   min-height: 100%;
 }
 
-.bridge-invite-panel {
-  display: grid;
-  gap: 16px;
-}
-
-.bridge-invite-panel h3,
-.bridge-invite-panel .section-lead,
 .pricing-actions-inline {
   margin: 0;
 }

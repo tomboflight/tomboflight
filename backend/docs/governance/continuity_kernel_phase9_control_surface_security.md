@@ -46,7 +46,7 @@ The pre-existing Phase 8 action registry continues to cover case mutations, safe
 - Overview payloads are reduced server-side to finance, operations, or marketing domains for restricted officer roles.
 - Administrator-assisted password reset never exposes the reset token. The verified account email receives the link, and an unconfirmed email delivery is recorded as a partial failure rather than success.
 - Upload scanning defaults to fail closed. Infected files, scanner errors, and unavailable scanning enter quarantine.
-- Customer, administrative, and general public application pages include a restrictive Content Security Policy; inline scripts are authorized by exact hashes. The private Sip & Paint page has completed its sanitized migration: promotion values are no longer present in public source, recipient access uses a one-time server-verified link, and the protected runtime delivers an eligible package value only to the invited mailbox. `pricing.html` and the remaining legacy invite page continue as separately managed commercial surfaces pending their own migration.
+- Customer, administrative, and general public application pages include a restrictive Content Security Policy; inline scripts are authorized by exact hashes. Expired campaign pages, coupon-delivery routes, and campaign-specific administrative surfaces were retired after their campaigns. `pricing.html` remains a separately managed commercial surface pending its own migration.
 - Pinned dependencies were upgraded and the legacy JWT dependency was removed. `pip-audit` reports no known vulnerabilities for `backend/requirements.txt` at this revision.
 - Pull requests now run the dependency audit plus Phase 9 runtime and security suites.
 
