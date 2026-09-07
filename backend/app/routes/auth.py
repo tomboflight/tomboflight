@@ -514,10 +514,14 @@ def account_activation_request_route(
 
 
 @router.post("/password-reset/request", response_model=PasswordResetResponse)
-def password_reset_request_route(payload: PasswordResetRequest, response: Response):
+def password_reset_request_route(
+    payload: PasswordResetRequest,
+    request: Request,
+    response: Response,
+):
     _enforce_rate_limit_with_audit(
         scope="auth_password_reset_request",
-        key=payload.email.lower(),
+        key=_rate_key_from_request(request, principal=payload.email),
         limit=max(1, int(settings.auth_password_reset_request_rate_limit or 5)),
         window_seconds=max(1, int(settings.auth_rate_limit_window_seconds or 60)),
         audit_action="password_reset_request_throttled",

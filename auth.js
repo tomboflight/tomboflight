@@ -5,6 +5,7 @@
   const POST_LOGIN_REDIRECT = "dashboard.html";
   const SIGNUP_POLICY_VERSION = "2026-03-26";
   const DASHBOARD_CONTEXT_STORAGE_KEY = "tol_dashboard_context_v2";
+  const LOGOUT_REDIRECT_MAX_WAIT_MS = 10000;
   let hasLogoutBinding = false;
   const HOUSEHOLD_LINK_PACKAGE_CODES = new Set([
     "family_estate_concierge",
@@ -3016,7 +3017,7 @@
     if (hasLogoutBinding) return;
     hasLogoutBinding = true;
 
-    document.addEventListener("click", function (event) {
+    document.addEventListener("click", async function (event) {
       const button = event.target.closest("[data-logout-btn]");
       if (!button) return;
 
@@ -3024,25 +3025,27 @@
       if (button.disabled) return;
       button.disabled = true;
 
-      // Clear the local session immediately so the redirect is not blocked by
-      // network latency or a backend timeout (the API call can take up to 15 s).
-      try {
-        if (app && typeof app.clearSession === "function") {
-          app.clearSession();
-        }
-      } catch (_error) {
-        // Best-effort local cleanup.
-      }
-
       clearCachedDashboardContext();
 
-      // Notify the backend in the background — do not await.  The local session
-      // is already cleared, so the user is logged out regardless of the outcome.
-      if (app && typeof app.logoutUser === "function") {
-        app.logoutUser().catch(function (err) {
-          console.warn("Background logout request failed:", err);
-        });
-      }
+      const logoutTask =
+        app && typeof app.logoutUser === "function"
+          ? app.logoutUser({ maxWaitMs: LOGOUT_REDIRECT_MAX_WAIT_MS })
+          : Promise.resolve().then(function () {
+              if (app && typeof app.clearSession === "function") {
+                app.clearSession();
+              }
+            });
+
+      await Promise.race([
+        logoutTask.catch(function () {
+          if (app && typeof app.clearSession === "function") {
+            app.clearSession();
+          }
+        }),
+        new Promise(function (resolve) {
+          window.setTimeout(resolve, LOGOUT_REDIRECT_MAX_WAIT_MS);
+        }),
+      ]);
 
       window.location.href = "signin.html";
     });
