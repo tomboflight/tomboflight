@@ -18,10 +18,10 @@
   }
 
   const BLOCKER_LABELS = {
-    security_scan_not_clean: "Run the security scan and obtain a clean verdict before previewing this file.",
+    security_scan_not_clean: "Run the security scan and obtain a clean verdict before previewing this file",
     customer_consent_attestation_missing: "customer consent attestation is missing",
     upload_authority_attestation_missing: "upload-authority attestation is missing",
-    durable_private_storage_missing: "Private storage migration must complete before preview.",
+    durable_private_storage_missing: "Private storage migration must complete before preview",
     orphaned_project_reference: "the project record was removed and must be reconciled",
     orphaned_family_reference: "the family record was removed and must be reconciled",
     orphaned_member_reference: "the family-member record was removed and must be reconciled",
