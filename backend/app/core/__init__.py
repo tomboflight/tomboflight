@@ -5,6 +5,12 @@ all callers of package_catalog share the same published product truth.
 """
 
 from importlib import import_module
+import sys
+
+try:
+    import_module("app")
+except ModuleNotFoundError:
+    sys.modules.setdefault("app", import_module("backend.app"))
 
 try:
     _package_catalog = import_module("app.core.package_catalog")
