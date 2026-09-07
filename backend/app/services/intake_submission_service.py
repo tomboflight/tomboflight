@@ -20,6 +20,7 @@ PIPELINE_STATUSES = {
 }
 LOCKED_STATUSES = {"submitted", "in_review", "approved"} | PIPELINE_STATUSES
 REVIEWABLE_STATUSES = {"submitted", "in_review", "approved", "rejected"} | PIPELINE_STATUSES
+APPROVAL_GATED_STATUSES = {"approved"} | PIPELINE_STATUSES
 
 ALLOWED_VISIBILITY_PREFERENCES = {"private", "family", "public"}
 ALLOWED_PRIMARY_ASSET_TYPES = {"", "photos", "videos", "documents", "mixed"}
@@ -68,6 +69,44 @@ def _clean_section(section: Any) -> dict[str, Any]:
         else:
             cleaned[key] = value
     return cleaned
+
+
+def get_approval_requirement_errors(submission: dict[str, Any]) -> list[str]:
+    """Return fail-closed approval blockers for an intake submission.
+
+    Submission creation validates the same confirmations, but legacy, migrated,
+    manually-edited, or otherwise inconsistent records can predate or bypass that
+    creation path. Approval and downstream production therefore re-check these
+    immutable safety requirements at the point where status would become trusted.
+    """
+
+    uploads = _clean_section(submission.get("uploads"))
+    consent = _clean_section(submission.get("consent"))
+    review = _clean_section(submission.get("review"))
+
+    errors: list[str] = []
+    if not bool(uploads.get("uploads_rights_confirmed")):
+        errors.append("Upload rights confirmation is required.")
+    if not bool(uploads.get("uploads_minimization_confirmed")):
+        errors.append("Upload minimization confirmation is required.")
+    if not bool(consent.get("consent_process")):
+        errors.append("Consent to process is required.")
+    if not bool(consent.get("consent_store")):
+        errors.append("Consent to store is required.")
+    if not bool(consent.get("consent_authority")):
+        errors.append("Authority confirmation is required.")
+    if not bool(consent.get("consent_review_disclaimer")):
+        errors.append("Review disclaimer acknowledgment is required.")
+    if not bool(review.get("confirm_accuracy")):
+        errors.append("Intake accuracy confirmation is required.")
+
+    return errors
+
+
+def assert_approval_requirements(submission: dict[str, Any]) -> None:
+    errors = get_approval_requirement_errors(submission)
+    if errors:
+        raise ValueError("Intake approval blocked: " + " ".join(errors))
 
 
 def _validate_payload(payload: dict[str, Any]) -> None:
@@ -361,6 +400,9 @@ def update_status(
     status_normalized = str(new_status).strip().lower()
     if status_normalized not in REVIEWABLE_STATUSES:
         raise ValueError("Invalid intake submission status.")
+
+    if status_normalized in APPROVAL_GATED_STATUSES:
+        assert_approval_requirements(existing)
 
     now = _now()
 
