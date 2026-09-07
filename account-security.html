@@ -63,6 +63,67 @@
 
         <section class="page-sections">
           <div class="container form-shell portal-account-grid">
+            <div class="form-panel" data-customer-account-summary>
+              <span class="eyebrow">Account Overview</span>
+              <h2>Your account and workspace</h2>
+              <p class="card-copy" data-customer-account-summary-status>
+                Sign in to load your current account and workspace details.
+              </p>
+
+              <div class="grid-3" style="margin-top: 1rem">
+                <div>
+                  <span class="eyebrow">Account Status</span>
+                  <p class="portal-identity-value" data-summary-account-status>Not available</p>
+                </div>
+                <div>
+                  <span class="eyebrow">Verified Login Email</span>
+                  <p class="portal-identity-value" data-summary-email>Not available</p>
+                </div>
+                <div>
+                  <span class="eyebrow">Current Package</span>
+                  <p class="portal-identity-value" data-summary-package>Not available</p>
+                </div>
+                <div>
+                  <span class="eyebrow">Active Project</span>
+                  <p class="portal-identity-value" data-summary-project>Not available</p>
+                </div>
+                <div>
+                  <span class="eyebrow">Family / Household</span>
+                  <p class="portal-identity-value" data-summary-family>Not available</p>
+                </div>
+                <div>
+                  <span class="eyebrow">Workspace Role</span>
+                  <p class="portal-identity-value" data-summary-member-role>Not available</p>
+                </div>
+                <div>
+                  <span class="eyebrow">Billing Profile Sync</span>
+                  <p class="portal-identity-value" data-summary-billing-sync>Not available</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-panel" data-security-activity-panel>
+              <span class="eyebrow">Recent Security Activity</span>
+              <h2>Account security history</h2>
+              <p class="card-copy" data-security-activity-status>
+                Sign in to view recent security activity for your account.
+              </p>
+              <div class="form-grid" data-security-activity-list style="margin-top: 1rem"></div>
+
+              <div class="notice" style="margin-top: 1.25rem">
+                Account or deletion requests begin a reviewed request process. Submitting a request does not immediately erase your account or protected records.
+              </div>
+              <div class="inline-actions" style="margin-top: 1rem">
+                <a
+                  class="btn btn-secondary"
+                  href="data-request.html"
+                  data-account-data-requests-link
+                >
+                  Account &amp; Data Requests
+                </a>
+              </div>
+            </div>
+
             <div
               class="form-panel"
               id="reset-request"
@@ -401,5 +462,6 @@
     <script src="app.js?v=20260828-phase21-1"></script>
     <script src="auth.js?v=20260828-phase21-1"></script>
     <script src="account-security.js?v=20260828-phase21-1"></script>
+    <script src="customer-account-step5.js?v=20260906-step5"></script>
   </body>
 </html>
