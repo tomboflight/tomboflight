@@ -18,8 +18,8 @@
   }
 
   const PREVIEW_BLOCKER_LABELS = {
-    security_scan_not_clean: "Run the security scan and obtain a clean verdict before previewing this file.",
-    durable_private_storage_missing: "Private storage migration must complete before preview.",
+    security_scan_not_clean: "Run the security scan and obtain a clean verdict before previewing this file",
+    durable_private_storage_missing: "Private storage migration must complete before preview",
   };
 
   function previewBlockerText(item, blockers) {
