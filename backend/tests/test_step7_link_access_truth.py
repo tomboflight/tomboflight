@@ -187,7 +187,7 @@ class VerifiedPackageAcquisitionTests(unittest.TestCase):
                     "69c0402387082765345cff8c"
                 )
 
-        self.assertEqual(captured.exception.reason, "entitlement_lane_mismatch")
+        self.assertEqual(captured.exception.reason, "package_lane_mismatch")
 
 
 class LinkKeyVerifiedAcquisitionTests(unittest.TestCase):

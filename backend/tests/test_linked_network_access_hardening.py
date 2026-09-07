@@ -5,7 +5,7 @@ from bson import ObjectId
 from fastapi import HTTPException
 
 from app.routes import linked_network as linked_network_routes
-from app.services import workspace_access_service
+from app.services import package_acquisition_service, workspace_access_service
 
 
 class _FakeCursor:
@@ -220,6 +220,7 @@ class WorkspaceCapabilityStrictEntitlementTests(unittest.TestCase):
         )
         with (
             patch.object(workspace_access_service, "get_database", return_value=db),
+            patch.object(package_acquisition_service, "get_database", return_value=db),
             patch.object(
                 workspace_access_service,
                 "get_project_access_snapshot",

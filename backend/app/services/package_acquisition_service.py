@@ -113,7 +113,7 @@ def _package_code_from_identity(value: Any) -> str:
 def _package_lane_from_identity(value: Any, fallback: Any = "") -> str:
     identity = resolve_package_identity(value)
     return normalize_package_type(
-        _normalize(identity.get("package_lane") or identity.get("lane") or fallback),
+        _normalize(fallback or identity.get("package_lane") or identity.get("lane")),
         default="",
     )
 

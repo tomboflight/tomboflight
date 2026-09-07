@@ -195,6 +195,7 @@ class PR465BackendPortalAuditTests(unittest.TestCase):
                     "resolved_entitlements": resolved,
                     "entitlement": {"status": "active"},
                     "paid_order": paid_order,
+                    "acquisition_source": "paid_order",
                 },
             ),
             patch.object(workspace_access_service, "_billing_blocking_reason", return_value=None),
