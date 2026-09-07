@@ -116,6 +116,115 @@ class LogoutRevocationTests(unittest.TestCase):
             audit_action="password_reset_request_throttled",
         )
 
+    def test_logout_accepts_cookie_authenticated_request_from_allowed_origin(self):
+        request = _request_with_headers(
+            headers=[
+                (b"origin", b"https://tomboflight.com"),
+                (b"cookie", b"tol_access_token=cookie-token"),
+            ]
+        )
+        response = Response()
+
+        with (
+            patch.object(
+                auth_routes,
+                "decode_access_token",
+                side_effect=lambda token: {"sub": "user@example.com"} if token == "cookie-token" else None,
+            ),
+            patch.object(
+                auth_routes,
+                "_extract_user_id_from_token",
+                side_effect=lambda token: "cookie-user" if token == "cookie-token" else "",
+            ),
+            patch.object(auth_routes, "revoke_user_sessions") as revoke_mock,
+        ):
+            payload = auth_routes.logout(request=request, response=response)
+
+        self.assertTrue(payload["success"])
+        revoke_mock.assert_called_once_with(
+            user_id="cookie-user",
+            actor_user_id="cookie-user",
+            reason="logout",
+        )
+
+    def test_logout_rejects_cookie_authenticated_request_from_foreign_origin(self):
+        request = _request_with_headers(
+            headers=[
+                (b"origin", b"https://evil.example"),
+                (b"cookie", b"tol_access_token=cookie-token"),
+            ]
+        )
+        response = Response()
+
+        with patch.object(auth_routes, "revoke_user_sessions") as revoke_mock:
+            with self.assertRaises(HTTPException) as ctx:
+                auth_routes.logout(request=request, response=response)
+
+        self.assertEqual(ctx.exception.status_code, 403)
+        self.assertIn("origin is not allowed", str(ctx.exception.detail).lower())
+        revoke_mock.assert_not_called()
+
+    def test_logout_accepts_bearer_authenticated_request_without_origin(self):
+        request = _request_with_headers(
+            [(b"authorization", b"Bearer bearer-token")]
+        )
+        response = Response()
+
+        with (
+            patch.object(
+                auth_routes,
+                "decode_access_token",
+                side_effect=lambda token: {"sub": "user@example.com"} if token == "bearer-token" else None,
+            ),
+            patch.object(
+                auth_routes,
+                "_extract_user_id_from_token",
+                side_effect=lambda token: "bearer-user" if token == "bearer-token" else "",
+            ),
+            patch.object(auth_routes, "revoke_user_sessions") as revoke_mock,
+        ):
+            payload = auth_routes.logout(request=request, response=response)
+
+        self.assertTrue(payload["success"])
+        revoke_mock.assert_called_once_with(
+            user_id="bearer-user",
+            actor_user_id="bearer-user",
+            reason="logout",
+        )
+
+    def test_logout_prefers_valid_bearer_over_stale_cookie(self):
+        request = _request_with_headers(
+            headers=[
+                (b"authorization", b"Bearer bearer-token"),
+                (b"cookie", b"tol_access_token=stale-cookie-token"),
+            ]
+        )
+        response = Response()
+
+        with (
+            patch.object(
+                auth_routes,
+                "decode_access_token",
+                side_effect=lambda token: (
+                    {"sub": "user@example.com"} if token == "bearer-token" else None
+                ),
+            ),
+            patch.object(
+                auth_routes,
+                "_extract_user_id_from_token",
+                side_effect=lambda token: "bearer-user" if token == "bearer-token" else "",
+            ),
+            patch.object(auth_routes, "revoke_user_sessions") as revoke_mock,
+        ):
+            payload = auth_routes.logout(request=request, response=response)
+
+        self.assertTrue(payload["success"])
+        revoke_mock.assert_called_once_with(
+            user_id="bearer-user",
+            actor_user_id="bearer-user",
+            reason="logout",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
