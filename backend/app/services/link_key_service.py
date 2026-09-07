@@ -8,11 +8,13 @@ from typing import Any
 from bson import ObjectId
 
 from app.config import settings
-from app.core.package_catalog import get_package
 from app.core.role_catalog import normalize_project_member_role
 from app.database import get_database
 from app.services.audit_log_service import create_audit_log
-from app.services.entitlement_service import resolve_project_entitlements
+from app.services.package_acquisition_service import (
+    ProjectAcquisitionError,
+    resolve_verified_project_acquisition,
+)
 from app.services.project_membership_service import (
     get_project_access_snapshot,
     list_accessible_project_ids,
@@ -45,16 +47,6 @@ def _keys_collection():
 def _projects_collection():
     db = get_database()
     return db["projects"]
-
-
-def _entitlements_collection():
-    db = get_database()
-    return db["project_entitlements"]
-
-
-def _orders_collection():
-    db = get_database()
-    return db["orders"]
 
 
 def _families_collection():
@@ -104,31 +96,13 @@ def _project_id_candidates(project_id: str) -> list[Any]:
     return values
 
 
-def _is_paid_package_order(order: dict[str, Any] | None) -> bool:
-    if not isinstance(order, dict):
-        return False
-
-    item_type = _normalize_value(order.get("item_type") or "package").lower()
-    status = _normalize_value(order.get("status")).lower()
-
-    return item_type == "package" and status in {
-        "paid",
-        "complete",
-        "completed",
-        "succeeded",
-    }
-
-
-def _get_paid_package_order(project_id: str) -> dict[str, Any] | None:
-    cursor = _orders_collection().find(
-        {"project_id": {"$in": _project_id_candidates(project_id)}}
-    ).sort("created_at", -1)
-
-    for order in cursor:
-        if _is_paid_package_order(order):
-            return order
-
-    return None
+def _verified_acquisition(project_id: str) -> dict[str, Any] | None:
+    try:
+        return resolve_verified_project_acquisition(project_id)
+    except ProjectAcquisitionError:
+        return None
+    except Exception:
+        return None
 
 
 def _serialize_key(document: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -179,17 +153,10 @@ def get_project_summary(project_id: str) -> dict[str, Any] | None:
 
     raw_id = project.get("_id")
     project_id_str = str(raw_id)
-    entitlement = _get_project_entitlement(project_id_str)
-    paid_order = _get_paid_package_order(project_id_str)
-    package_code = str(
-        (entitlement or {}).get("package_code")
-        or (paid_order or {}).get("package_code")
-        or (paid_order or {}).get("package_slug")
-        or project.get("package_code")
-        or project.get("package_slug")
-        or ""
-    ).strip()
-    package = get_package(package_code) or {}
+    acquisition = _verified_acquisition(project_id_str)
+    entitlement = (acquisition or {}).get("entitlement") or {}
+    acquisition_record = (acquisition or {}).get("acquisition_record") or {}
+    package_code = _normalize_value((acquisition or {}).get("package_code"))
 
     return {
         "project_id": str(raw_id),
@@ -197,23 +164,20 @@ def get_project_summary(project_id: str) -> dict[str, Any] | None:
         "owner_user_id": str(project.get("owner_user_id") or "").strip(),
         "owner_email": str(project.get("owner_email") or "").strip(),
         "package_code": package_code or None,
-        "package_name": str(
-            (entitlement or {}).get("package_name")
-            or (paid_order or {}).get("package_name")
+        "package_name": _normalize_value(
+            entitlement.get("package_name")
+            or acquisition_record.get("package_name")
             or project.get("package_name")
-            or package.get("display_name")
-            or ""
-        ).strip()
+        )
         or None,
-        "package_lane": str(
-            (entitlement or {}).get("package_lane")
-            or project.get("project_lane")
-            or package.get("package_lane")
-            or ""
-        ).strip()
+        "package_lane": _normalize_value(
+            (acquisition or {}).get("package_lane")
+            or entitlement.get("package_lane")
+        )
         or None,
         "household_id": str(project.get("household_id") or "").strip() or None,
         "family_id": str(project.get("family_id") or "").strip() or None,
+        "acquisition_source": _normalize_value((acquisition or {}).get("acquisition_source")) or None,
     }
 
 
@@ -233,11 +197,6 @@ def _can_user_access_project(
         email=str(user_email or "").strip().lower(),
     )
     return bool(access_snapshot.get("accessible"))
-
-
-def _get_project_entitlement(project_id: str) -> dict[str, Any] | None:
-    entitlements = _entitlements_collection()
-    return entitlements.find_one({"project_id": str(project_id), "status": "active"}) or entitlements.find_one({"project_id": str(project_id)})
 
 
 def _load_user_identity(user_id: str) -> tuple[str, str]:
@@ -296,62 +255,24 @@ def _family_allows_user_access(
 
 
 def _project_has_access_signal(project_id: str, project: dict[str, Any]) -> bool:
-    if _get_project_entitlement(project_id) or _get_paid_package_order(project_id):
-        return True
-
-    return bool(
-        _normalize_value(
-            project.get("package_code")
-            or project.get("package_slug")
-            or project.get("package_type")
-        )
-    )
+    del project
+    return _verified_acquisition(project_id) is not None
 
 
 def project_supports_link_keys(project_id: str) -> bool:
-    entitlement = _get_project_entitlement(project_id)
-    if entitlement:
-        try:
-            resolved = resolve_project_entitlements(
-                str(entitlement.get("package_code") or "").strip(),
-                list(entitlement.get("active_addons", [])),
-            )
-        except Exception:
-            resolved = entitlement.get("resolved_entitlements") or {}
-        if "can_use_link_keys" in resolved:
-            return bool(resolved.get("can_use_link_keys"))
-
-    paid_order = _get_paid_package_order(project_id)
-    package_code = str(
-        (paid_order or {}).get("package_code")
-        or (paid_order or {}).get("package_slug")
-        or ""
-    ).strip()
-    package = get_package(package_code) or {}
-    return bool(package.get("can_use_link_keys", False))
+    acquisition = _verified_acquisition(project_id)
+    if not acquisition:
+        return False
+    resolved = acquisition.get("resolved_entitlements") or {}
+    return bool(resolved.get("can_use_link_keys"))
 
 
 def project_supports_household_links(project_id: str) -> bool:
-    entitlement = _get_project_entitlement(project_id)
-    if entitlement:
-        try:
-            resolved = resolve_project_entitlements(
-                str(entitlement.get("package_code") or "").strip(),
-                list(entitlement.get("active_addons", [])),
-            )
-        except Exception:
-            resolved = entitlement.get("resolved_entitlements") or {}
-        if "can_link_households" in resolved:
-            return bool(resolved.get("can_link_households"))
-
-    paid_order = _get_paid_package_order(project_id)
-    package_code = str(
-        (paid_order or {}).get("package_code")
-        or (paid_order or {}).get("package_slug")
-        or ""
-    ).strip()
-    package = get_package(package_code) or {}
-    return bool(package.get("can_link_households", False))
+    acquisition = _verified_acquisition(project_id)
+    if not acquisition:
+        return False
+    resolved = acquisition.get("resolved_entitlements") or {}
+    return bool(resolved.get("can_link_households"))
 
 
 def user_can_access_project(
@@ -359,8 +280,8 @@ def user_can_access_project(
     user_id: str,
     user_email: str = "",
 ) -> bool:
-    summary = get_project_summary(project_id)
-    if not summary:
+    project = get_project_by_id(project_id)
+    if not project:
         return False
 
     if not _can_user_access_project(
@@ -368,9 +289,6 @@ def user_can_access_project(
         user_id=user_id,
         user_email=user_email,
     ):
-        return False
-    project = get_project_by_id(project_id)
-    if not project:
         return False
     return _project_has_access_signal(str(project.get("_id")), project)
 
@@ -573,8 +491,8 @@ def generate_link_key(
         raise ValueError("This package does not include link capabilities.")
 
     project_summary = get_project_summary(project_id)
-    if not project_summary:
-        raise ValueError("Project not found.")
+    if not project_summary or not project_summary.get("package_code"):
+        raise ValueError("Project does not have a verified package acquisition.")
 
     keys = _keys_collection()
     now = _utcnow_iso()
