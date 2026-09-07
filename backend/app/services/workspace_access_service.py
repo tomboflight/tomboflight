@@ -1262,9 +1262,9 @@ def build_workspace_context_snapshot(
         ),
         "status": (
             "paid"
-            if acquisition_source == "paid_order"
+            if acquisition_source == "paid_order" or paid_order
             else "granted"
-            if acquisition_source == "governed_grant"
+            if acquisition_source == "governed_grant" or governed_assignment
             else "unverified"
         ),
         "payment_required": payment_required,

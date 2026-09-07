@@ -7,7 +7,7 @@ from bson import ObjectId
 
 from app.core.package_mapping import resolve_package_identity
 from app.core.package_type_catalog import normalize_package_type
-from app.database import get_database
+from app.database import DatabaseUnavailableError, get_database
 from app.services.audit_log_service import create_audit_log
 from app.services.entitlement_service import resolve_project_entitlements
 
@@ -50,7 +50,12 @@ def _project_id_candidates(project_id: str) -> list[Any]:
 
 
 def _db():
-    db = get_database()
+    try:
+        db = get_database()
+    except DatabaseUnavailableError as exc:
+        raise ProjectAcquisitionError(
+            "database_unavailable", "Database is not connected."
+        ) from exc
     if db is None:
         raise ProjectAcquisitionError("database_unavailable", "Database is not connected.")
     return db
@@ -113,7 +118,7 @@ def _package_code_from_identity(value: Any) -> str:
 def _package_lane_from_identity(value: Any, fallback: Any = "") -> str:
     identity = resolve_package_identity(value)
     return normalize_package_type(
-        _normalize(identity.get("package_lane") or identity.get("lane") or fallback),
+        _normalize(fallback or identity.get("package_lane") or identity.get("lane")),
         default="",
     )
 
@@ -281,13 +286,13 @@ def resolve_verified_project_acquisition(project_id: str) -> dict[str, Any]:
     if entitlement_lane != source_lane:
         _audit_drift(
             normalized_project_id,
-            "package_lane_mismatch",
+            "entitlement_lane_mismatch",
             entitlement=entitlement,
             paid_order=paid_order,
             governed_assignment=governed_assignment,
         )
         raise ProjectAcquisitionError(
-            "package_lane_mismatch",
+            "entitlement_lane_mismatch",
             "Workspace entitlement lane does not match its package acquisition authority.",
         )
 
