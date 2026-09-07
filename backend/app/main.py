@@ -134,13 +134,19 @@ def _resolve_allowed_origins() -> list[str]:
             continue
         cleaned.append(value)
 
-    if cleaned:
-        return list(dict.fromkeys(cleaned))
-
-    defaults = [
+    # Always retain the canonical production origins alongside configured
+    # origins so a stale ALLOWED_ORIGINS value cannot break the live portal.
+    canonical_production_origins = [
         "https://tomboflight.com",
         "https://www.tomboflight.com",
     ]
+    if getattr(settings, "is_production_environment", False):
+        cleaned.extend(canonical_production_origins)
+
+    if cleaned:
+        return list(dict.fromkeys(cleaned))
+
+    defaults = canonical_production_origins
     if getattr(settings, "local_dev_cors_enabled_effective", False):
         defaults.extend(
             [
