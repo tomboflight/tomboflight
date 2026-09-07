@@ -98,8 +98,18 @@ def test_command_structure_network_provisioning_does_not_create_family_or_member
                             "project_scope": "Command graph setup",
                         },
                         "family_map": {},
-                        "consent": {},
-                        "review": {},
+                        "uploads": {
+                            "uploads_rights_confirmed": True,
+                            "uploads_minimization_confirmed": True,
+                        },
+                        "consent": {
+                            "consent_process": True,
+                            "consent_store": True,
+                            "consent_authority": True,
+                            "consent_review_disclaimer": True,
+                            "visibility_preference": "private",
+                        },
+                        "review": {"confirm_accuracy": True},
                         "created_at": now,
                         "updated_at": now,
                     }
