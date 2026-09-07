@@ -12,9 +12,30 @@ const CUSTOMER = {
 
 async function seedCustomerSession(page) {
   await page.addInitScript((user) => {
+    const currentPage = window.location.pathname.split("/").pop() || "";
+    if (currentPage !== "billing.html") return;
     localStorage.setItem("tol_access_token", "phase21-fixture-token");
     localStorage.setItem("tol_user", JSON.stringify(user));
   }, CUSTOMER);
+}
+
+async function configureApiBases(page, pageUrl) {
+  const origin = new URL(pageUrl).origin;
+  const gateway = `${origin}/api-gateway`;
+  const fallback = `${origin}/direct-api`;
+  await page.evaluate(
+    ({ gatewayBase, fallbackBase }) => {
+      window.TOL_CONFIG.API_BASE_URL = gatewayBase;
+      window.TOL_CONFIG.API_BASE_URLS = [gatewayBase, fallbackBase];
+      window.sessionStorage.setItem("tol_api_base_url", gatewayBase);
+    },
+    { gatewayBase: gateway, fallbackBase: fallback },
+  );
+  return { gateway, fallback };
+}
+
+async function openMobileMenu(page) {
+  await page.locator(".menu-toggle").click();
 }
 
 test.describe("Phase 21 customer account management", () => {
@@ -124,5 +145,163 @@ test.describe("Phase 21 customer account management", () => {
       document: document.documentElement.scrollWidth,
     }));
     expect(width.document).toBeLessThanOrEqual(width.viewport + 1);
+  });
+
+  test("forwards a captured bearer token to the direct logout fallback and clears session storage", async ({
+    page,
+  }) => {
+    const logoutRequests = [];
+
+    await seedCustomerSession(page);
+    await page.route("https://js.stripe.com/**", (route) =>
+      route.fulfill({ status: 200, contentType: "application/javascript", body: "" }),
+    );
+    await page.route("**/*", async (route) => {
+      const request = route.request();
+      const url = new URL(request.url());
+      const path = url.pathname;
+      const method = request.method();
+      const json = (payload, status = 200) =>
+        route.fulfill({ status, contentType: "application/json", body: JSON.stringify(payload) });
+
+      if (method === "GET" && (path === "/auth/me" || path === "/api-gateway/auth/me")) {
+        return json(CUSTOMER);
+      }
+      if (method === "GET" && path === "/users/me/profile") {
+        return json({
+          ...CUSTOMER,
+          created_at: "2026-08-28T00:00:00Z",
+          billing_sync_status: "synced",
+          legal_acceptance: {},
+        });
+      }
+      if (method === "GET" && path === "/billing/overview") {
+        return json({
+          customer_id: "cus_fixture",
+          max_cards: 3,
+          cards_on_file: 0,
+          can_add_card: true,
+          payment_methods: [],
+          subscriptions: [],
+        });
+      }
+      if (method === "GET" && path === "/billing/config") {
+        return json({ publishable_key: "", max_cards: 3 });
+      }
+      if (method === "GET" && path === "/orders/my-orders") return json([]);
+      if (method === "POST" && path === "/api-gateway/auth/logout") {
+        return route.fulfill({ status: 404, contentType: "text/html", body: "<h1>404 gateway</h1>" });
+      }
+      if (method === "POST" && path === "/direct-api/auth/logout") {
+        logoutRequests.push({
+          authorization: request.headers()["authorization"] || "",
+          cookies: request.headers()["cookie"] || "",
+        });
+        return json({ ok: true });
+      }
+      if (path.startsWith("/")) {
+        if (request.resourceType() === "document" || ["script", "stylesheet", "image", "font"].includes(request.resourceType())) {
+          return route.continue();
+        }
+        return json({ ok: true });
+      }
+      return route.continue();
+    });
+
+    await page.goto("/billing.html", { waitUntil: "load" });
+    await configureApiBases(page, page.url());
+    await openMobileMenu(page);
+
+    await page.locator("[data-logout-btn]").click();
+    await page.waitForURL("**/signin.html");
+
+    expect(logoutRequests).toEqual([
+      {
+        authorization: "******",
+        cookies: "",
+      },
+    ]);
+    await expect
+      .poll(() =>
+        page.evaluate(() => ({
+          sessionToken: window.sessionStorage.getItem("tol_access_token"),
+          localToken: window.localStorage.getItem("tol_access_token"),
+          user: window.sessionStorage.getItem("tol_user"),
+        })),
+      )
+      .toEqual({
+        sessionToken: null,
+        localToken: null,
+        user: null,
+      });
+  });
+
+  test("bounds logout redirect even when revocation cannot complete", async ({ page }) => {
+    const logoutDelayMs = 11_000;
+
+    await seedCustomerSession(page);
+    await page.route("https://js.stripe.com/**", (route) =>
+      route.fulfill({ status: 200, contentType: "application/javascript", body: "" }),
+    );
+    await page.route("**/*", async (route) => {
+      const request = route.request();
+      const url = new URL(request.url());
+      const path = url.pathname;
+      const method = request.method();
+      const json = (payload, status = 200) =>
+        route.fulfill({ status, contentType: "application/json", body: JSON.stringify(payload) });
+
+      if (method === "GET" && (path === "/auth/me" || path === "/api-gateway/auth/me")) {
+        return json(CUSTOMER);
+      }
+      if (method === "GET" && path === "/users/me/profile") {
+        return json({
+          ...CUSTOMER,
+          created_at: "2026-08-28T00:00:00Z",
+          billing_sync_status: "synced",
+          legal_acceptance: {},
+        });
+      }
+      if (method === "GET" && path === "/billing/overview") {
+        return json({
+          customer_id: "cus_fixture",
+          max_cards: 3,
+          cards_on_file: 0,
+          can_add_card: true,
+          payment_methods: [],
+          subscriptions: [],
+        });
+      }
+      if (method === "GET" && path === "/billing/config") {
+        return json({ publishable_key: "", max_cards: 3 });
+      }
+      if (method === "GET" && path === "/orders/my-orders") return json([]);
+      if (path.startsWith("/")) {
+        if (request.resourceType() === "document" || ["script", "stylesheet", "image", "font"].includes(request.resourceType())) {
+          return route.continue();
+        }
+        return json({ ok: true });
+      }
+      return route.continue();
+    });
+
+    await page.goto("/billing.html", { waitUntil: "load" });
+    await configureApiBases(page, page.url());
+    await openMobileMenu(page);
+    await page.evaluate((delayMs) => {
+      const originalClearSession = window.TOLApp.clearSession.bind(window.TOLApp);
+      window.TOLApp.logoutUser = async function () {
+        originalClearSession();
+        await new Promise((resolve) => window.setTimeout(resolve, delayMs));
+      };
+    }, logoutDelayMs);
+
+    const startedAt = Date.now();
+    await page.locator("[data-logout-btn]").click();
+    await page.waitForURL("**/signin.html", { timeout: 10_500 });
+    const elapsedMs = Date.now() - startedAt;
+
+    expect(elapsedMs).toBeGreaterThanOrEqual(8_500);
+    expect(elapsedMs).toBeLessThan(10_500);
   });
 });

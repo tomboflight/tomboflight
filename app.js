@@ -24,6 +24,7 @@
   const API_DISCOVERY_TIMEOUT_MS = 15000;
   const API_REQUEST_TIMEOUT_MS = 30000;
   const API_REQUEST_RETRY_ATTEMPTS = 1;
+  const LOGOUT_REQUEST_MAX_WAIT_MS = 10000;
 
   const ADDON_OR_EXTRA_SLUGS = new Set([
     "extra_upload_pack",
@@ -1067,33 +1068,43 @@
   }
 
   async function apiRequest(path, options = {}) {
+    const {
+      skipDiscovery = false,
+      totalTimeoutMs = 0,
+      ...requestOverrides
+    } = options || {};
     const configuredApiBaseUrls = getApiBaseUrls();
     const savedApiBaseUrl = getSavedApiBaseUrl();
     const token = getToken();
+    const hasRequestDeadline =
+      Number.isFinite(totalTimeoutMs) && totalTimeoutMs > 0;
+    const requestDeadline = hasRequestDeadline
+      ? Date.now() + totalTimeoutMs
+      : 0;
 
     const headers = {
       Accept: "application/json",
-      ...(options.headers || {}),
+      ...(requestOverrides.headers || {}),
     };
 
-    if (!(options.body instanceof FormData) && !headers["Content-Type"]) {
+    if (!(requestOverrides.body instanceof FormData) && !headers["Content-Type"]) {
       headers["Content-Type"] = "application/json";
     }
 
     if (token && !headers.Authorization) {
-      headers.Authorization = `Bearer ${token}`;
+      headers.Authorization = `******`;
     }
 
-    const preferredApiBaseUrl =
-      savedApiBaseUrl && configuredApiBaseUrls[0] === savedApiBaseUrl
-        ? savedApiBaseUrl
-        : configuredApiBaseUrls.length > 1
-        ? await discoverApiBaseUrl(configuredApiBaseUrls)
-        : configuredApiBaseUrls[0] || "";
-    const apiBaseUrls = uniqueNonEmptyValues([
-      preferredApiBaseUrl,
-      ...configuredApiBaseUrls,
-    ]);
+    const preferredApiBaseUrl = skipDiscovery
+      ? configuredApiBaseUrls[0] || ""
+      : savedApiBaseUrl && configuredApiBaseUrls[0] === savedApiBaseUrl
+      ? savedApiBaseUrl
+      : configuredApiBaseUrls.length > 1
+      ? await discoverApiBaseUrl(configuredApiBaseUrls)
+      : configuredApiBaseUrls[0] || "";
+    const apiBaseUrls = skipDiscovery
+      ? configuredApiBaseUrls
+      : uniqueNonEmptyValues([preferredApiBaseUrl, ...configuredApiBaseUrls]);
 
     let response = null;
     let lastNetworkError = null;
@@ -1111,7 +1122,7 @@
         let signalHandler = null;
         try {
           const requestOptions = {
-            ...options,
+            ...requestOverrides,
             headers,
             credentials: "include",
           };
@@ -1119,19 +1130,22 @@
           if (typeof AbortController === "function") {
             const controller = new AbortController();
             requestOptions.signal = controller.signal;
+            const timeoutMs = hasRequestDeadline
+              ? Math.max(1, requestDeadline - Date.now())
+              : API_REQUEST_TIMEOUT_MS;
 
             timeoutId = window.setTimeout(function () {
               controller.abort();
-            }, API_REQUEST_TIMEOUT_MS);
+            }, timeoutMs);
 
-            if (options.signal) {
-              if (options.signal.aborted) {
+            if (requestOverrides.signal) {
+              if (requestOverrides.signal.aborted) {
                 controller.abort();
               } else {
                 signalHandler = function () {
                   controller.abort();
                 };
-                options.signal.addEventListener("abort", signalHandler, {
+                requestOverrides.signal.addEventListener("abort", signalHandler, {
                   once: true,
                 });
               }
@@ -1200,8 +1214,8 @@
           if (timeoutId) {
             window.clearTimeout(timeoutId);
           }
-          if (options.signal && signalHandler) {
-            options.signal.removeEventListener("abort", signalHandler);
+          if (requestOverrides.signal && signalHandler) {
+            requestOverrides.signal.removeEventListener("abort", signalHandler);
           }
         }
       }
@@ -1256,7 +1270,12 @@
     return user;
   }
 
-  async function logoutUser() {
+  async function logoutUser(options = {}) {
+    const capturedToken = String(options.token || getToken() || "").trim();
+    const maxWaitMs =
+      Number.isFinite(options.maxWaitMs) && options.maxWaitMs > 0
+        ? options.maxWaitMs
+        : LOGOUT_REQUEST_MAX_WAIT_MS;
     // Clear the local session immediately so the caller is not blocked on the
     // network round-trip.  The backend call is best-effort: we still attempt it
     // so the server-side httpOnly auth cookie is revoked, but a slow or failing
@@ -1265,6 +1284,12 @@
     try {
       await apiRequest("/auth/logout", {
         method: "POST",
+        headers: capturedToken
+          ? {
+              Authorization: `******`,
+            }
+          : {},
+        totalTimeoutMs: maxWaitMs,
       });
     } catch (_error) {
       // Ignore – local session already cleared above.

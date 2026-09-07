@@ -8,6 +8,7 @@ from app.core.role_catalog import OFFICER_ROLE_CODES
 from app.core.security import create_csrf_token, decode_access_token
 from app.dependencies.auth import (
     COOKIE_NAME,
+    _enforce_cookie_auth_origin,
     get_current_user,
     require_capability,
     resolve_access_context,
@@ -237,15 +238,36 @@ def login(payload: UserLogin, request: Request, response: Response):
 
 @router.post("/logout")
 def logout(request: Request, response: Response):
-    token = (
-        request.cookies.get(COOKIE_NAME)
-        or (
-            request.headers.get("authorization", "").split(" ", 1)[1]
-            if request.headers.get("authorization", "").lower().startswith("bearer ")
-            else ""
-        )
+    bearer_token = (
+        request.headers.get("authorization", "").split(" ", 1)[1]
+        if request.headers.get("authorization", "").lower().startswith("bearer ")
+        else ""
     )
-    payload = decode_access_token(str(token or ""))
+    cookie_token = str(request.cookies.get(COOKIE_NAME) or "")
+
+    payload = None
+    token = ""
+    source = None
+
+    if bearer_token:
+        bearer_payload = decode_access_token(str(bearer_token or ""))
+        if bearer_payload:
+            token = bearer_token
+            payload = bearer_payload
+            source = "bearer"
+
+    if not token and cookie_token:
+        token = cookie_token
+        payload = decode_access_token(cookie_token)
+        source = "cookie"
+
+    if not token and bearer_token:
+        token = bearer_token
+        source = "bearer"
+
+    if source == "cookie":
+        _enforce_cookie_auth_origin(request)
+
     user_id = _extract_user_id_from_token(str(token or ""))
     if not user_id and payload:
         user = get_user_by_email(str(payload.get("sub") or "").strip().lower())
@@ -514,10 +536,14 @@ def account_activation_request_route(
 
 
 @router.post("/password-reset/request", response_model=PasswordResetResponse)
-def password_reset_request_route(payload: PasswordResetRequest, response: Response):
+def password_reset_request_route(
+    payload: PasswordResetRequest,
+    request: Request,
+    response: Response,
+):
     _enforce_rate_limit_with_audit(
         scope="auth_password_reset_request",
-        key=payload.email.lower(),
+        key=_rate_key_from_request(request, principal=payload.email),
         limit=max(1, int(settings.auth_password_reset_request_rate_limit or 5)),
         window_seconds=max(1, int(settings.auth_rate_limit_window_seconds or 60)),
         audit_action="password_reset_request_throttled",
