@@ -9,7 +9,9 @@ import sys
 
 try:
     import_module("app")
-except ModuleNotFoundError:
+except ModuleNotFoundError as exc:
+    if getattr(exc, "name", None) != "app":
+        raise
     sys.modules.setdefault("app", import_module("backend.app"))
 
 try:
