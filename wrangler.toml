@@ -1,0 +1,8 @@
+name = "tomb-of-light-api-gateway"
+main = "cloudflare-worker-api-gateway.js"
+compatibility_date = "2026-09-07"
+
+routes = [
+  { pattern = "tomboflight.com/api-gateway/*", zone_name = "tomboflight.com" },
+  { pattern = "www.tomboflight.com/api-gateway/*", zone_name = "tomboflight.com" }
+]
