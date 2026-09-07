@@ -14,13 +14,8 @@ except ModuleNotFoundError as exc:
         raise
     sys.modules.setdefault("app", import_module("backend.app"))
 
-try:
-    _package_catalog = import_module("app.core.package_catalog")
-    _overlay = import_module("app.core.commercial_catalog_overlay")
-except ModuleNotFoundError as exc:
-    if exc.name != "app":
-        raise
-else:
-    _overlay.apply_commercial_catalog_overlay(_package_catalog)
+_package_catalog = import_module(".package_catalog", __name__)
+_overlay = import_module(".commercial_catalog_overlay", __name__)
+_overlay.apply_commercial_catalog_overlay(_package_catalog)
 
 __all__: list[str] = []
