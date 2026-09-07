@@ -15,6 +15,10 @@ from app.core.admin_permission_registry import has_canonical_internal_admin_auth
 from app.database import get_database
 from app.services.audit_log_service import create_audit_log
 from app.services.entitlement_service import resolve_project_entitlements
+from app.services.package_acquisition_service import (
+    ProjectAcquisitionError,
+    resolve_verified_project_acquisition,
+)
 from app.services.project_member_service import is_project_member
 from app.services.project_membership_service import get_project_access_snapshot
 
@@ -47,6 +51,7 @@ WORKSPACE_PIPELINE_READY_STATUSES = {
 }
 ENTITLEMENT_BLOCKING_REASON_MAP = {
     "missing_paid_order": "no_paid_order",
+    "missing_acquisition_source": "no_verified_package_acquisition",
     "missing_active_entitlement": "missing_active_entitlement",
     "package_code_mismatch": "entitlement_package_mismatch",
     "package_lane_mismatch": "entitlement_lane_mismatch",
@@ -909,29 +914,39 @@ def _resolve_project_entitlement_map(
 ) -> dict[str, Any]:
     project_id = _normalize_value(project.get("_id") or project.get("id"))
     try:
-        return resolve_strict_paid_active_project_entitlement(project_id)
-    except WorkspaceEntitlementError as exc:
+        return resolve_verified_project_acquisition(project_id)
+    except ProjectAcquisitionError as exc:
         blocking_reason = _effective_workspace_blocking_reason(exc.reason)
-        if current_user and blocking_reason in {
-            "missing_active_entitlement",
-            "entitlement_package_mismatch",
-            "entitlement_lane_mismatch",
-        }:
+        if (
+            current_user
+            and _get_paid_package_order_for_project(project_id) is not None
+            and blocking_reason
+            in {
+                "missing_active_entitlement",
+                "entitlement_package_mismatch",
+                "entitlement_lane_mismatch",
+            }
+        ):
             try:
                 repair_workspace_entitlements_for_user(
                     _current_user_email(current_user) or _normalize_email(project.get("owner_email")),
                     project_id=project_id,
                     dry_run=False,
                 )
-                return resolve_strict_paid_active_project_entitlement(project_id)
+                return resolve_verified_project_acquisition(project_id)
             except Exception:
                 pass
         return {
             "package_code": "",
+            "package_lane": "",
             "active_addons": [],
             "resolved_entitlements": {},
             "entitlement": _get_active_project_entitlement(project_id),
             "paid_order": _get_paid_package_order_for_project(project_id),
+            "governed_assignment": None,
+            "acquisition_source": None,
+            "acquisition_record": None,
+            "payment_required": None,
             "blocking_reason": blocking_reason,
         }
 
@@ -1083,6 +1098,9 @@ def resolve_workspace_context(
         "resolved_entitlements": entitlement_map.get("resolved_entitlements") or {},
         "entitlement": entitlement_map.get("entitlement"),
         "paid_order": entitlement_map.get("paid_order"),
+        "governed_assignment": entitlement_map.get("governed_assignment"),
+        "acquisition_source": entitlement_map.get("acquisition_source"),
+        "payment_required": entitlement_map.get("payment_required"),
         "maintenance_access": maintenance_access,
         "access_snapshot": access_snapshot,
         "member_role": _normalize_value(access_snapshot.get("member_role") or "viewer") or "viewer",
@@ -1108,14 +1126,14 @@ def build_workspace_context_snapshot(
         user_role = "customer"
 
     intake = _latest_ready_intake_for_user(current_user)
-    paid_order = _get_paid_package_order_for_user(
+    paid_order_hint = _get_paid_package_order_for_user(
         current_user,
         project_id=_normalize_value(project_id),
     )
     resolved_project = _resolve_active_project_for_user(
         current_user,
         explicit_project_id=_normalize_value(project_id),
-        paid_order=paid_order,
+        paid_order=paid_order_hint,
         intake_submission=intake,
     )
     if resolved_project is None:
@@ -1188,32 +1206,22 @@ def build_workspace_context_snapshot(
             "active_entitlements": [],
         }
 
-    paid_order = _get_paid_package_order_for_project(project_doc_id)
-    if paid_order is None:
-        return {
-            "status": "blocked",
-            "blocking_reason": "no_paid_order",
-            "user": {"id": user_id, "email": user_email, "role": user_role},
-            "workspace": {"project_id": project_doc_id},
-            "package": {},
-            "entitlements": {},
-            "membership": {},
-            "active_project_id": project_doc_id or None,
-            "active_family_id": None,
-            "package_lane": "",
-            "active_entitlements": [],
-        }
-
     entitlement_state = _resolve_project_entitlement_map(
         resolved_project,
         current_user=current_user,
     )
     blocking_reason = _normalize_value(entitlement_state.get("blocking_reason"))
     resolved_entitlements = entitlement_state.get("resolved_entitlements") or {}
+    paid_order = entitlement_state.get("paid_order") or {}
+    governed_assignment = entitlement_state.get("governed_assignment") or {}
+    acquisition_record = entitlement_state.get("acquisition_record") or {}
+    acquisition_source = _normalize_value(entitlement_state.get("acquisition_source"))
+    payment_required = entitlement_state.get("payment_required")
     package_identity = resolve_package_identity(
         entitlement_state.get("package_code")
         or paid_order.get("package_code")
         or paid_order.get("package_slug")
+        or governed_assignment.get("new_package")
     )
     workspace_family_id = _normalize_value(
         (resolved_family or {}).get("_id") or (resolved_family or {}).get("id")
@@ -1238,18 +1246,28 @@ def build_workspace_context_snapshot(
         "display_name": _normalize_value(
             package_identity.get("display_name")
             or paid_order.get("package_name")
+            or resolved_project.get("package_name")
         ),
         "slug": _normalize_value(package_identity.get("package_slug")),
         "code": _normalize_value(
             package_identity.get("package_code")
             or paid_order.get("package_code")
+            or governed_assignment.get("new_package")
         ),
         "lane": _normalize_package_lane_or_type(
             package_identity.get("package_lane")
             or paid_order.get("package_lane")
             or paid_order.get("project_lane")
+            or entitlement_state.get("package_lane")
         ),
-        "status": "paid",
+        "status": (
+            "paid"
+            if acquisition_source == "paid_order" or paid_order
+            else "granted"
+            if acquisition_source == "governed_grant" or governed_assignment
+            else "unverified"
+        ),
+        "payment_required": payment_required,
     }
 
     response = {
@@ -1267,6 +1285,19 @@ def build_workspace_context_snapshot(
             "access_via": _normalize_value(membership_snapshot.get("via"))
             or "owner_fallback_or_project_member",
         },
+        "acquisition": {
+            "source": acquisition_source or None,
+            "payment_required": payment_required,
+            "record_id": _normalize_value(acquisition_record.get("_id")) or None,
+            "authorization_source": _normalize_value(
+                governed_assignment.get("authorization_source")
+            )
+            or None,
+            "billing_classification": _normalize_value(
+                governed_assignment.get("billing_classification")
+            )
+            or None,
+        },
         "active_project_id": project_doc_id or None,
         "active_family_id": workspace_family_id or None,
         "package_lane": package_payload.get("lane") or "",
@@ -1283,7 +1314,13 @@ def build_workspace_context_snapshot(
         response["status"] = "blocked"
         response["blocking_reason"] = blocking_reason or "missing_active_entitlement"
 
-    response["billing"] = {"blocking_reason": _billing_blocking_reason(current_user)}
+    response["billing"] = {
+        "blocking_reason": (
+            _billing_blocking_reason(current_user)
+            if acquisition_source == "paid_order"
+            else None
+        )
+    }
 
     return response
 
