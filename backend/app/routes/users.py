@@ -3,6 +3,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from app.config import settings
+from app.database import get_database
 from app.dependencies.auth import (
     get_current_user,
     is_customer_account,
@@ -28,6 +29,23 @@ from app.services.rate_limit_service import enforce_rate_limit
 from app.services.workspace_access_service import build_workspace_context_snapshot
 
 router = APIRouter(prefix="/users", tags=["Users"])
+
+SECURITY_ACTIVITY_LABELS: dict[str, str] = {
+    "account_activation_requested": "Account activation requested",
+    "customer_profile_updated": "Personal details updated",
+    "customer_email_change_requested": "Email change requested",
+    "customer_email_changed": "Login email changed",
+    "password_reset_requested": "Password reset requested",
+    "password_reset_completed": "Password reset completed",
+    "password_changed": "Password changed",
+    "mfa_enrollment_verified": "Authenticator MFA enabled",
+    "mfa_disabled": "Authenticator MFA disabled",
+    "mfa_login_challenge_failed": "MFA verification failed",
+    "mfa_login_challenge_succeeded": "MFA verification succeeded",
+    "session_revoked": "Session signed out or revoked",
+    "admin_security_reset": "Account security reset",
+}
+SECURITY_ACTIVITY_LIMIT = 20
 
 
 def _apply_no_store(response: Response) -> None:
@@ -98,6 +116,51 @@ def _profile_response(user: dict[str, Any], current_user: dict[str, Any]) -> dic
     }
 
 
+def _security_activity_result(value: Any) -> str:
+    normalized = str(value or "success").strip().lower()
+    if normalized in {"success", "succeeded", "complete", "completed", "ok"}:
+        return "success"
+    if normalized in {"failure", "failed", "error", "denied", "blocked"}:
+        return "failed"
+    return "recorded"
+
+
+def _list_customer_security_activity(user_id: str) -> list[dict[str, str]]:
+    db = get_database()
+    if db is None:
+        raise RuntimeError("Database is not connected.")
+
+    query = {
+        "action": {"$in": sorted(SECURITY_ACTIVITY_LABELS)},
+        "$or": [
+            {"target_type": "user", "target_id": user_id},
+            {"actor_user_id": user_id},
+        ],
+    }
+    cursor = (
+        db["audit_logs"]
+        .find(query)
+        .sort("timestamp", -1)
+        .limit(SECURITY_ACTIVITY_LIMIT)
+    )
+
+    items: list[dict[str, str]] = []
+    for row in cursor:
+        action = str(row.get("action") or "").strip().lower()
+        label = SECURITY_ACTIVITY_LABELS.get(action)
+        if not label:
+            continue
+        items.append(
+            {
+                "action": action,
+                "label": label,
+                "result": _security_activity_result(row.get("result")),
+                "timestamp": str(row.get("timestamp") or "").strip(),
+            }
+        )
+    return items
+
+
 @router.get("/", response_model=list[UserResponse])
 def get_users(current_user: dict[str, Any] = Depends(require_permission("admin.users.read"))):
     users = list_users()
@@ -153,6 +216,23 @@ def patch_my_profile(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
 
     return _profile_response(updated_user, current_user)
+
+
+@router.get("/me/security-activity")
+def get_my_security_activity(
+    response: Response,
+    current_user: dict[str, Any] = Depends(get_current_user),
+):
+    _apply_no_store(response)
+    _require_customer_self_service(current_user)
+    try:
+        items = _list_customer_security_activity(_current_user_id(current_user))
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Security activity is temporarily unavailable.",
+        ) from exc
+    return {"items": items, "count": len(items)}
 
 
 @router.post("/me/email-change/request", response_model=UserEmailChangeResponse)
