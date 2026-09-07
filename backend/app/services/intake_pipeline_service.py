@@ -10,6 +10,7 @@ from app.core.package_type_catalog import normalize_package_type
 from app.core.state_catalog import normalize_visibility_state
 from app.database import get_database
 from app.dependencies.auth import transition_project
+from app.services.intake_submission_service import assert_approval_requirements
 from app.services.viewer_manifest_service import ensure_project_workspace_anchor
 
 
@@ -137,6 +138,10 @@ def provision_build_from_submission(
     }
     if status not in allowed_statuses:
         raise ValueError("Submission must be approved before provisioning a build.")
+
+    # Defense in depth: do not trust a historical/legacy approved status if the
+    # record itself no longer satisfies the immutable consent and authority gate.
+    assert_approval_requirements(submission)
 
     existing_family_root_id = str(submission.get("family_root_id") or "").strip()
     existing_household_id = str(submission.get("household_id") or "").strip()
