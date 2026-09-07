@@ -302,6 +302,8 @@ class FamilyEstateConciergePackageContractTests(unittest.TestCase):
                 "on_site_photo_scanning",
                 "additional_narration_minute",
                 "white_glove_archive_support",
+                "extra_linked_household",
+                "extra_branch",
                 *NFT_ADDON_CODES,
             ],
         )
@@ -372,6 +374,7 @@ class CommandStructureNetworkPackageContractTests(unittest.TestCase):
                 "extra_storage",
                 "rush_delivery",
                 "command_report_addon",
+                "extra_org_node",
                 *NFT_ADDON_CODES,
             ],
         )
@@ -433,7 +436,7 @@ class EntitlementAddonBoundaryTests(unittest.TestCase):
         self.assertFalse(can_purchase_addon("legacy_plus", "extra_storage"))
         self.assertFalse(can_purchase_addon("legacy_plus", "extra_linked_household"))
 
-    def test_family_estate_concierge_disallows_silent_branch_cap_expansion_addons(self):
+    def test_family_estate_concierge_expansion_addons_match_published_capacity_products(self):
         resolved = resolve_project_entitlements(
             "family_estate_concierge",
             [
@@ -442,19 +445,20 @@ class EntitlementAddonBoundaryTests(unittest.TestCase):
                 "white_glove_archive_support",
             ],
         )
-        self.assertEqual(resolved.get("max_households"), 3)
+        self.assertEqual(resolved.get("max_households"), 5)
+        self.assertEqual(resolved.get("max_family_branches"), 4)
         self.assertEqual(
             list(resolved.get("active_addons") or []),
-            ["white_glove_archive_support"],
+            ["extra_linked_household", "extra_branch", "white_glove_archive_support"],
         )
 
-    def test_family_estate_concierge_cannot_purchase_silent_branch_cap_expansion_addons(self):
-        self.assertFalse(
+    def test_family_estate_concierge_can_purchase_published_expansion_addons(self):
+        self.assertTrue(
             can_purchase_addon("family_estate_concierge", "extra_linked_household")
         )
-        self.assertFalse(can_purchase_addon("family_estate_concierge", "extra_branch"))
+        self.assertTrue(can_purchase_addon("family_estate_concierge", "extra_branch"))
 
-    def test_command_structure_network_disallows_org_node_cap_expansion_addon(self):
+    def test_command_structure_network_extra_node_matches_published_capacity_product(self):
         resolved = resolve_project_entitlements(
             "command_structure_network",
             [
@@ -463,14 +467,14 @@ class EntitlementAddonBoundaryTests(unittest.TestCase):
                 "command_report_addon",
             ],
         )
-        self.assertEqual(resolved.get("max_org_nodes"), 15)
+        self.assertEqual(resolved.get("max_org_nodes"), 16)
         self.assertEqual(
             list(resolved.get("active_addons") or []),
-            ["extra_admin_seat", "command_report_addon"],
+            ["extra_org_node", "extra_admin_seat", "command_report_addon"],
         )
 
-    def test_command_structure_network_cannot_purchase_extra_org_node_addon(self):
-        self.assertFalse(can_purchase_addon("command_structure_network", "extra_org_node"))
+    def test_command_structure_network_can_purchase_extra_org_node_addon(self):
+        self.assertTrue(can_purchase_addon("command_structure_network", "extra_org_node"))
 
 
 class LegacySnapshotGatingRegressionTests(unittest.TestCase):

@@ -27,6 +27,75 @@ def get_addon_or_raise(addon_code: str) -> dict[str, Any]:
     return addon
 
 
+def _addon_effect_code(addon: dict[str, Any], fallback: str) -> str:
+    return _normalize(addon.get("entitlement_code") or addon.get("addon_code") or fallback)
+
+
+def _addon_is_compatible(package: dict[str, Any], addon: dict[str, Any], addon_code: str) -> bool:
+    package_code = _normalize(package.get("package_code"))
+    package_lane = _normalize(package.get("package_lane"))
+    sku_code = _normalize(addon.get("addon_code") or addon_code)
+    effect_code = _addon_effect_code(addon, sku_code)
+
+    allowed_packages = {
+        _normalize(value)
+        for value in (addon.get("allowed_packages") or [])
+        if _normalize(value)
+    }
+    if allowed_packages and package_code not in allowed_packages:
+        return False
+
+    allowed_lanes = {
+        _normalize(value)
+        for value in (addon.get("allowed_lanes") or [])
+        if _normalize(value)
+    }
+    if allowed_lanes and package_lane not in allowed_lanes:
+        return False
+
+    if not bool(addon.get("requires_package_allowlist", True)):
+        return True
+
+    allowed_addons = {
+        _normalize(value)
+        for value in (package.get("allowed_addons") or [])
+        if _normalize(value)
+    }
+    return bool(sku_code in allowed_addons or effect_code in allowed_addons)
+
+
+def _apply_entitlement_effects(
+    entitlements: dict[str, Any],
+    effects: dict[str, Any],
+) -> None:
+    numeric_deltas: dict[str, str] = {
+        "max_uploads_delta": "max_uploads",
+        "max_storage_gb_delta": "max_storage_gb",
+        "max_members_delta": "max_members",
+        "max_zoom_layers_delta": "max_zoom_layers",
+        "max_households_delta": "max_households",
+        "max_family_branches_delta": "max_family_branches",
+        "max_org_nodes_delta": "max_org_nodes",
+        "extra_admin_seats_delta": "extra_admin_seats",
+    }
+    for effect_key, entitlement_key in numeric_deltas.items():
+        delta = effects.get(effect_key)
+        if delta is None:
+            continue
+        current = entitlements.get(entitlement_key, 0) or 0
+        if entitlement_key == "max_storage_gb":
+            entitlements[entitlement_key] = float(current) + float(delta)
+        else:
+            entitlements[entitlement_key] = int(current) + int(delta)
+
+    for boolean_key in (
+        "can_link_households",
+        "can_link_org_units",
+    ):
+        if boolean_key in effects:
+            entitlements[boolean_key] = bool(effects.get(boolean_key))
+
+
 def resolve_project_entitlements(
     package_code: str,
     active_addon_codes: list[str] | None = None,
@@ -34,70 +103,66 @@ def resolve_project_entitlements(
     package = get_package_or_raise(package_code)
     entitlements = deepcopy(package)
     entitlements["active_addons"] = []
-    allowed_addons = {
-        str(addon_code).strip()
-        for addon_code in (package.get("allowed_addons") or [])
-        if str(addon_code).strip()
-    }
     processed_addons: set[str] = set()
 
     for raw_addon_code in active_addon_codes or []:
         addon = get_addon_or_raise(raw_addon_code)
-        addon_code = str(addon.get("addon_code") or raw_addon_code).strip()
+        addon_code = _normalize(addon.get("addon_code") or raw_addon_code)
         if not addon_code or addon_code in processed_addons:
             continue
         processed_addons.add(addon_code)
 
-        if addon_code not in allowed_addons:
+        if not _addon_is_compatible(package, addon, addon_code):
             _logger.warning(
-                "Skipping addon '%s' because it is not allowed for package '%s'.",
+                "Skipping addon '%s' because it is not compatible with package '%s' in lane '%s'.",
                 addon_code,
                 package.get("package_code"),
-            )
-            continue
-
-        if package["package_lane"] not in addon.get("allowed_lanes", []):
-            _logger.warning(
-                "Skipping addon '%s' because lane '%s' is not in allowed lanes %s.",
-                addon_code,
                 package.get("package_lane"),
-                addon.get("allowed_lanes", []),
             )
             continue
 
         entitlements["active_addons"].append(addon_code)
+        effect_code = _addon_effect_code(addon, addon_code)
+        effects = addon.get("entitlement_effects")
+        if isinstance(effects, dict) and effects:
+            _apply_entitlement_effects(entitlements, effects)
+            continue
 
-        if addon_code == "extra_upload_pack":
+        # Backward-compatible effects for historical generic add-on codes.
+        if effect_code == "extra_upload_pack":
             entitlements["max_uploads"] = int(entitlements.get("max_uploads", 0)) + 10
-        elif addon_code == "extra_storage":
+        elif effect_code == "extra_storage":
             entitlements["max_storage_gb"] = float(
                 entitlements.get("max_storage_gb", 0)
             ) + 10
-        elif addon_code == "extra_mapped_person":
+        elif effect_code == "extra_mapped_person":
             entitlements["max_members"] = int(entitlements.get("max_members", 0)) + 1
-        elif addon_code == "extra_zoom_layer":
+        elif effect_code == "extra_zoom_layer":
             entitlements["max_zoom_layers"] = int(
                 entitlements.get("max_zoom_layers", 0)
             ) + 1
-        elif addon_code == "extra_linked_household":
+        elif effect_code == "extra_linked_household":
             entitlements["max_households"] = int(
                 entitlements.get("max_households", 0)
             ) + 1
             entitlements["can_link_households"] = True
-        elif addon_code == "extra_branch":
+        elif effect_code == "extra_branch":
             entitlements["max_households"] = int(
                 entitlements.get("max_households", 0)
             ) + 1
+            entitlements["max_family_branches"] = int(
+                entitlements.get("max_family_branches", 0)
+            ) + 1
             entitlements["can_link_households"] = True
-        elif addon_code == "extra_org_node":
+        elif effect_code == "extra_org_node":
             entitlements["max_org_nodes"] = int(
                 entitlements.get("max_org_nodes", 0)
             ) + 1
-        elif addon_code == "extra_org_level":
+        elif effect_code == "extra_org_level":
             entitlements["max_zoom_layers"] = int(
                 entitlements.get("max_zoom_layers", 0)
             ) + 1
-        elif addon_code == "extra_admin_seat":
+        elif effect_code == "extra_admin_seat":
             entitlements["extra_admin_seats"] = int(
                 entitlements.get("extra_admin_seats", 0)
             ) + 1
@@ -109,13 +174,7 @@ def resolve_project_entitlements(
 def can_purchase_addon(package_code: str, addon_code: str) -> bool:
     package = get_package_or_raise(package_code)
     addon = get_addon_or_raise(addon_code)
-    allowed_addons = {
-        str(value).strip() for value in (package.get("allowed_addons") or []) if str(value).strip()
-    }
-    normalized_addon_code = str(addon.get("addon_code") or addon_code).strip()
-    if normalized_addon_code not in allowed_addons:
-        return False
-    return package["package_lane"] in addon.get("allowed_lanes", [])
+    return _addon_is_compatible(package, addon, addon_code)
 
 
 def can_upgrade(from_package_code: str, to_package_code: str) -> bool:

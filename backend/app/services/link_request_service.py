@@ -103,8 +103,6 @@ def _resolve_project_link_scope(project_id: str) -> dict[str, Any]:
     package_code = _normalize_value(
         entitlement.get("package_code") or summary.get("package_code")
     )
-    active_addons = list(entitlement.get("active_addons") or [])
-
     resolved: dict[str, Any] = {}
     embedded_resolved = entitlement.get("resolved_entitlements")
     if isinstance(embedded_resolved, dict) and embedded_resolved:
@@ -112,7 +110,7 @@ def _resolve_project_link_scope(project_id: str) -> dict[str, Any]:
 
     if not resolved and package_code:
         try:
-            resolved = resolve_project_entitlements(package_code, active_addons)
+            resolved = resolve_project_entitlements(package_code, [])
         except Exception:
             resolved = {}
 
