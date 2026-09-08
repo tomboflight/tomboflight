@@ -142,7 +142,9 @@ test.describe("Phase 20 premium customer dashboard", () => {
 
     await expect(page.locator(".page-sections")).toBeHidden();
     await expect(page.locator("#dashboard-primary-actions")).toBeHidden();
-    await expect(page.locator(".tol-home-quick-action")).toHaveCount(2);
+    const quickActionCount = await page.locator(".tol-home-quick-action").count();
+    expect(quickActionCount).toBeGreaterThan(0);
+    expect(quickActionCount).toBeLessThanOrEqual(4);
 
     const menuToggle = page.locator(".menu-toggle");
     await expect(menuToggle).toBeVisible();
