@@ -335,7 +335,7 @@
         title: "Your intake is under review",
         copy: "No new submission is required right now. You can review the record while Tomb of Light completes the intake review.",
         label: "View Intake Status",
-        href: "intake-review.html",
+        href: "portal-section.html?section=project",
       };
     }
     if (normalized === "approved") {
@@ -351,7 +351,7 @@
         title: "Continue your production setup",
         copy: "Your project has moved beyond intake. Review your family workspace and add any remaining production materials.",
         label: "Open Family Workspace",
-        href: "tree-view.html",
+        href: "portal-section.html?section=family",
       };
     }
     if (normalized === "in_production") {
@@ -359,7 +359,7 @@
         title: "Production is underway",
         copy: "Your materials are in the production workflow. Review the project record for the latest status and upcoming customer actions.",
         label: "View Project Status",
-        href: "intake-review.html",
+        href: "portal-section.html?section=project",
       };
     }
     if (normalized === "qa_review" || normalized === "client_review") {
@@ -369,7 +369,7 @@
           ? "Your project has reached customer review. Open the project record to review the current delivery state."
           : "Tomb of Light is completing verification and quality review before customer delivery.",
         label: "Open Project",
-        href: "intake-review.html",
+        href: "portal-section.html?section=project",
       };
     }
     if (normalized === "delivered" || normalized === "archived") {
@@ -377,14 +377,14 @@
         title: "Your legacy workspace is ready",
         copy: "Open your protected deliverables and continuity tools from the customer application.",
         label: "View Deliverables",
-        href: "lineage-certificate.html",
+        href: "portal-section.html?section=deliverables",
       };
     }
     return {
       title: "Continue your legacy project",
       copy: "Open your project record to review the current status and next required action.",
       label: "Open Project",
-      href: "intake-review.html",
+      href: "portal-section.html?section=project",
     };
   }
 
@@ -464,13 +464,13 @@
 
     return [
       { key: "home", label: "Home", href: "dashboard.html", show: true },
-      { key: "project", label: "My Project", href: "intake-review.html", show: true },
-      { key: "family", label: "Family", href: hasFamily ? "tree-view.html" : "household-access.html", show: hasFamily },
+      { key: "project", label: "My Project", href: "portal-section.html?section=project", show: true },
+      { key: "family", label: "Family", href: "portal-section.html?section=family", show: hasFamily },
       { key: "uploads", label: "Uploads", href: "upload-hub.html", show: Boolean(context?.hasPackageAccess) },
       { key: "vault", label: "Vault", href: "vault-upload.html", show: hasVault },
-      { key: "deliverables", label: "Deliverables", href: "lineage-certificate.html", show: hasDeliverables },
-      { key: "account", label: "Account", href: "account-security.html", show: true },
-      { key: "support", label: "Support", href: "portal-help.html", show: true },
+      { key: "deliverables", label: "Deliverables", href: "portal-section.html?section=deliverables", show: hasDeliverables },
+      { key: "account", label: "Account", href: "portal-section.html?section=account", show: true },
+      { key: "support", label: "Support", href: "portal-section.html?section=support", show: true },
     ].filter(function (item) {
       return item.show;
     }).map(function (item) {
@@ -566,7 +566,7 @@
       actions.push({
         title: "Account",
         copy: "Manage security and account settings.",
-        href: "account-security.html",
+        href: withContextParams("portal-section.html?section=account", context),
       });
     }
     return actions.slice(0, 4);
