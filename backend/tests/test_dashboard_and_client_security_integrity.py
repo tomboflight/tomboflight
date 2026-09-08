@@ -13,7 +13,10 @@ AUDIT_CACHE_VERSION = "20260509-audit"
 SHARED_ASSET_CACHE_VERSION = "20260828-phase21-1"
 PORTAL_CACHE_OVERRIDES = {
     "dashboard.html": {
-        "dashboard-intake.js": "20260824-phase20",
+        "app.js": "20260907-auth-hardening",
+        "auth.js": "20260907-auth-hardening",
+        "dashboard-step8.js": "20260907-step8",
+        "dashboard-intake.js": "20260829-vault-ready",
     },
     "link-keys.html": {"link-keys.js": "20260823-phase13-1"},
     "portrait-upload.html": {
