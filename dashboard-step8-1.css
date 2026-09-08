@@ -1,0 +1,44 @@
+@import url("dashboard-step8-1-base.css?v=20260908-step8-1-base");
+
+/* Focused Deliverables subview. The legacy governed Anchor controls remain intact,
+   but the old all-in-one dashboard stays hidden. */
+body.tol-layered-app:has(#legacy-anchor:target) .portal-dashboard-hero,
+body.tol-layered-app:has(#legacy-anchor:target) .tol-home-shell {
+  display: none !important;
+}
+
+body.tol-layered-app:has(#legacy-anchor:target) .page-sections {
+  display: block !important;
+}
+
+body.tol-layered-app:has(#legacy-anchor:target) .page-sections .portal-dashboard-shell > * {
+  display: none !important;
+}
+
+body.tol-layered-app:has(#legacy-anchor:target) .page-sections .portal-dashboard-shell > #legacy-anchor {
+  display: block !important;
+}
+
+body.tol-layered-app:has(#legacy-anchor:target) #legacy-anchor {
+  width: min(1180px, calc(100% - 40px));
+  margin: 28px auto 54px;
+}
+
+body.tol-layered-app:has(#legacy-anchor:target) .tol-app-rail-link[data-tol-domain="home"] {
+  color: rgba(255, 255, 255, 0.78);
+  background: transparent;
+  box-shadow: none;
+}
+
+body.tol-layered-app:has(#legacy-anchor:target) .tol-app-rail-link[data-tol-domain="deliverables"] {
+  color: #14395c;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+@media (max-width: 899px) {
+  body.tol-layered-app:has(#legacy-anchor:target) #legacy-anchor {
+    width: min(100% - 24px, 920px);
+    margin-top: 18px;
+  }
+}

@@ -11,6 +11,8 @@ REVISION = "20260828-phase21-1"
 SHARED_ASSET_REVISION_OVERRIDES = {
     ("dashboard.html", "app.js"): "20260907-auth-hardening",
     ("dashboard.html", "auth.js"): "20260907-auth-hardening",
+    ("portal-section.html", "app.js"): "20260907-auth-hardening",
+    ("portal-section.html", "auth.js"): "20260907-auth-hardening",
 }
 
 

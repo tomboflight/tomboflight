@@ -145,7 +145,7 @@ test("[asset-versioning] dashboard and control center include current cache-bust
   expect(dashboardStyles.some((href) => href.includes("styles.css?v=20260828-phase21-1"))).toBeTruthy();
   expect(dashboardScripts.some((src) => src.includes("app.js?v=20260907-auth-hardening"))).toBeTruthy();
   expect(dashboardScripts.some((src) => src.includes("auth.js?v=20260907-auth-hardening"))).toBeTruthy();
-  expect(dashboardScripts.some((src) => src.includes("dashboard-step8.js?v=20260907-step8"))).toBeTruthy();
+  expect(dashboardScripts.some((src) => src.includes("dashboard-step8.js?v=20260908-step8-1"))).toBeTruthy();
   expect(dashboardScripts.some((src) => src.includes("dashboard-intake.js?v=20260829-vault-ready"))).toBeTruthy();
   expect(dashboardScripts.some((src) => src.includes("dashboard-admin.js?v=20260713-livefix3"))).toBeTruthy();
 

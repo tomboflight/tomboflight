@@ -126,29 +126,37 @@ async function installRakimDashboardRoutes(page) {
 test.describe("Phase 20 premium customer dashboard", () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
-  test("puts Rakim's next action first and keeps supporting detail collapsed", async ({ page }) => {
+  test("uses the layered customer Home instead of the legacy accordion stack", async ({ page }) => {
     await seedRakimSession(page);
     await installRakimDashboardRoutes(page);
     await page.goto("/dashboard.html", { waitUntil: "networkidle" });
 
+    await expect(page.locator("body")).toHaveClass(/tol-layered-app/);
     await expect(page.locator("[data-dashboard-first-name]")).toHaveText("Rakim");
-    await expect(page.locator("[data-dashboard-hero-title]")).toHaveText("Your Portrait Chamber");
-    await expect(page.locator("[data-dashboard-status]")).toContainText(
-      "Your package is active: Digital Legacy Portrait",
+    await expect(page.locator("[data-dashboard-hero-title]")).toHaveText(
+      "Rakim Customer Legacy Project",
     );
-    await expect(page.locator("#dashboard-primary-actions")).toBeVisible();
-    await expect(page.locator("[data-workspace-action-bar] [data-dashboard-hero-action]")).toHaveCount(1);
+    await expect(page.locator(".tol-home-shell")).toBeVisible();
+    await expect(page.locator(".tol-home-next h2")).toHaveText("Start your project intake");
+    await expect(page.locator(".tol-home-primary")).toHaveText("Start Intake");
 
-    const overview = page.locator(".portal-workspace-overview-disclosure");
-    const tools = page.locator(".portal-tools-access-panel");
-    await expect(overview).not.toHaveAttribute("open", "");
-    await expect(tools).not.toHaveAttribute("open", "");
+    await expect(page.locator(".page-sections")).toBeHidden();
+    await expect(page.locator("#dashboard-primary-actions")).toBeHidden();
+    const quickActionCount = await page.locator(".tol-home-quick-action").count();
+    expect(quickActionCount).toBeGreaterThan(0);
+    expect(quickActionCount).toBeLessThanOrEqual(4);
 
-    await tools.locator("summary").click();
-    await expect(tools).toHaveAttribute("open", "");
-    await expect(tools.locator('[data-dashboard-tool="link_keys"]')).toBeHidden();
-    await expect(page.locator('.site-nav a[href^="link-keys.html"]')).toBeHidden();
-    await expect(page.locator("[data-health-maintenance]")).toHaveText("Active");
+    const menuToggle = page.locator(".menu-toggle");
+    await expect(menuToggle).toBeVisible();
+    await menuToggle.click();
+    const mobileNav = page.locator("#site-nav");
+    await expect(mobileNav.getByText("Home", { exact: true })).toBeVisible();
+    await expect(mobileNav.getByText("My Project", { exact: true })).toBeVisible();
+    await expect(mobileNav.getByText("Uploads", { exact: true })).toBeVisible();
+    await expect(mobileNav.getByText("Deliverables", { exact: true })).toBeVisible();
+    await expect(mobileNav.getByText("Account", { exact: true })).toBeVisible();
+    await expect(mobileNav.getByText("Support", { exact: true })).toBeVisible();
+    await expect(mobileNav.getByText("Link Keys", { exact: true })).toHaveCount(0);
 
     const truth = await page.evaluate(() => ({
       hasPackageAccess: window.TOLDashboardContext?.hasPackageAccess,
@@ -168,15 +176,19 @@ test.describe("Phase 20 premium customer dashboard", () => {
     expect(width.document).toBeLessThanOrEqual(width.viewport + 1);
   });
 
-  test("opens the governed Legacy Anchor section when the hash targets it", async ({ page }) => {
+  test("keeps the governed Legacy Anchor state available behind the Deliverables layer", async ({ page }) => {
     await seedRakimSession(page);
     await installRakimDashboardRoutes(page);
     await page.goto("/dashboard.html#legacy-anchor", { waitUntil: "networkidle" });
 
     await expect(page.locator("#legacy-anchor")).toHaveAttribute("open", "");
+    await expect(page.locator("#legacy-anchor")).toBeVisible();
     await expect(page.locator("[data-anchor-status-badge]")).toHaveText("Finish Profile First");
     await expect(page.locator("[data-nft-addon-purchase-panel]")).toContainText(
       "No base package includes an NFT.",
     );
+    await expect(page.locator(".page-sections")).toBeVisible();
+    await expect(page.locator(".tol-home-shell")).toBeHidden();
+    await expect(page.locator("#dashboard-primary-actions")).toBeHidden();
   });
 });
