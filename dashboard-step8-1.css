@@ -28,7 +28,7 @@ body.tol-layered-app .page-wrap {
   display: none;
 }
 
-@media (min-width: 1040px) {
+@media (min-width: 900px) {
   body.tol-layered-app .page-wrap {
     display: grid;
     grid-template-columns: var(--tol-rail-width) minmax(0, 1fr);
@@ -195,6 +195,27 @@ body.tol-layered-app .portal-core-visual,
 body.tol-layered-app .portal-workspace-overview-disclosure,
 body.tol-layered-app .page-sections {
   display: none !important;
+}
+
+body.tol-layered-app.tol-legacy-anchor-focus .tol-home-shell {
+  display: none !important;
+}
+
+body.tol-layered-app.tol-legacy-anchor-focus .page-sections {
+  display: block !important;
+}
+
+body.tol-layered-app.tol-legacy-anchor-focus .page-sections .portal-dashboard-shell > * {
+  display: none !important;
+}
+
+body.tol-layered-app.tol-legacy-anchor-focus .page-sections .portal-dashboard-shell > #legacy-anchor {
+  display: block !important;
+}
+
+body.tol-layered-app.tol-legacy-anchor-focus #legacy-anchor {
+  width: min(1180px, calc(100% - 40px));
+  margin: 18px auto 54px;
 }
 
 body.tol-layered-app .dashboard-hero-panel {
@@ -473,7 +494,7 @@ body.tol-layered-app .footer-card {
   box-shadow: none;
 }
 
-@media (max-width: 1039px) {
+@media (max-width: 899px) {
   body.tol-layered-app .site-header .brand {
     display: flex;
   }
@@ -483,7 +504,8 @@ body.tol-layered-app .footer-card {
   }
 
   body.tol-layered-app .portal-dashboard-hero .container,
-  body.tol-layered-app .tol-home-shell {
+  body.tol-layered-app .tol-home-shell,
+  body.tol-layered-app.tol-legacy-anchor-focus #legacy-anchor {
     width: min(100% - 24px, 920px);
   }
 
