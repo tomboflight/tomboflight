@@ -48,7 +48,19 @@ async function installRakimDashboardRoutes(page) {
           code: "digital_legacy_portrait",
           display_name: "Digital Legacy Portrait",
           lane: "portrait",
+          status: "paid",
+          payment_required: true,
+        },
+        acquisition: {
+          source: "paid_order",
+          payment_required: true,
+          record_id: "order-rakim",
+        },
+        maintenance: {
           status: "active",
+          in_grace: false,
+          read_only: false,
+          write_allowed: true,
         },
         entitlements: {
           package_code: "digital_legacy_portrait",
@@ -57,6 +69,7 @@ async function installRakimDashboardRoutes(page) {
           can_upload_verification_docs: true,
           can_manage_link_keys: true,
           can_use_link_keys: true,
+          can_link_households: false,
           can_use_viewer: true,
           can_use_secure_share_viewer: true,
         },
@@ -133,7 +146,20 @@ test.describe("Phase 20 premium customer dashboard", () => {
 
     await tools.locator("summary").click();
     await expect(tools).toHaveAttribute("open", "");
-    await expect(tools.locator('[data-dashboard-tool="link_keys"] .portal-action-status')).toHaveText("Open");
+    await expect(tools.locator('[data-dashboard-tool="link_keys"]')).toBeHidden();
+    await expect(page.locator('.site-nav a[href^="link-keys.html"]')).toBeHidden();
+    await expect(page.locator("[data-health-maintenance]")).toHaveText("Active");
+
+    const truth = await page.evaluate(() => ({
+      hasPackageAccess: window.TOLDashboardContext?.hasPackageAccess,
+      hasPaidPackage: window.TOLDashboardContext?.hasPaidPackage,
+      acquisitionSource: window.TOLDashboardContext?.acquisitionSource,
+    }));
+    expect(truth).toEqual({
+      hasPackageAccess: true,
+      hasPaidPackage: true,
+      acquisitionSource: "paid_order",
+    });
 
     const width = await page.evaluate(() => ({
       viewport: window.innerWidth,
