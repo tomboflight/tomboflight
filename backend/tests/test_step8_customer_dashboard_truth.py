@@ -12,7 +12,7 @@ def test_dashboard_truth_layer_load_order_and_cache_identity():
     html = _read("dashboard.html")
 
     auth = 'auth.js?v=20260907-auth-hardening'
-    truth = 'dashboard-step8.js?v=20260907-step8'
+    truth = 'dashboard-step8.js?v=20260908-step8-1'
     intake = 'dashboard-intake.js?v=20260829-vault-ready'
 
     assert 'app.js?v=20260907-auth-hardening' in html

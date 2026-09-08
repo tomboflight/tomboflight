@@ -3,7 +3,7 @@
 
   const DASHBOARD_SELECTOR = "[data-dashboard]";
   const STEP81_STYLE_ID = "tol-step8-1-styles";
-  const STEP81_STYLE_HREF = "dashboard-step8-1.css?v=20260907-step8-1";
+  const STEP81_STYLE_HREF = "dashboard-step8-1.css?v=20260908-step8-1";
   const LAPSED_MAINTENANCE_STATUSES = new Set([
     "canceled",
     "cancelled",
@@ -281,9 +281,9 @@
     );
     if (direct) return direct;
     const domStatus = normalizeValue(readText("[data-intake-status-badge]"));
-    if (!domStatus || domStatus === "not submitted" || domStatus === "unavailable") {
-      return domStatus === "not submitted" ? "not_started" : "";
-    }
+    if (!domStatus) return "";
+    if (domStatus === "not submitted") return "not_started";
+    if (domStatus === "unavailable") return "unavailable";
     return domStatus.replace(/\s+/g, "_");
   }
 
@@ -299,6 +299,7 @@
     if (normalized === "submitted") return "Intake submitted — review pending";
     if (normalized === "in_review") return "Intake under review";
     if (normalized === "rejected") return "Intake needs attention";
+    if (normalized === "unavailable") return "Project status unavailable";
     return "Workspace active";
   }
 
@@ -314,6 +315,14 @@
     }
 
     const normalized = normalizeValue(status);
+    if (normalized === "unavailable") {
+      return {
+        title: "Project status unavailable",
+        copy: "Tomb of Light could not confirm the current project state. Refresh before taking a workflow action.",
+        label: "Refresh Home",
+        href: "dashboard.html",
+      };
+    }
     if (!normalized || normalized === "not_started") {
       return {
         title: "Start your project intake",
@@ -405,6 +414,9 @@
       if (steps[index]) steps[index].state = "current";
     }
 
+    if (normalized === "unavailable") {
+      return steps;
+    }
     if (!normalized || normalized === "not_started" || normalized === "rejected") {
       markCurrent(0);
       return steps;
@@ -574,6 +586,13 @@
 
   function getHomeAlert(context, status) {
     const maintenance = getMaintenancePresentation(context && context.maintenance);
+    if (normalizeValue(status) === "unavailable") {
+      return {
+        kind: "warning",
+        title: "Project status unavailable",
+        copy: "The current project state could not be confirmed. Refresh before continuing workflow actions.",
+      };
+    }
     if (maintenance.key === "read_only" || maintenance.key === "billing_attention") {
       return {
         kind: "warning",
