@@ -74,14 +74,25 @@ def test_step81_customer_application_shell_is_layered_and_customer_only():
 def test_step81_section_hub_is_hardened_and_keeps_domain_truth_separate():
     html = _read("portal-section.html")
     source = _read("portal-section.js")
+    bootstrap = _read("portal-section-bootstrap.js")
     css = _read("portal-section.css")
 
     assert 'app.js?v=20260907-auth-hardening' in html
     assert 'auth.js?v=20260907-auth-hardening' in html
-    assert 'portal-section.js?v=20260907-step8-1' in html
-    assert 'portal-section.css?v=20260907-step8-1' in html
+    assert 'portal-section.js?v=20260908-step8-1' in html
+    assert 'portal-section-bootstrap.js?v=20260908-step8-1' in html
+    assert 'portal-section.css?v=20260908-step8-1' in html
+    assert html.index('portal-section.js?v=20260908-step8-1') < html.index(
+        'portal-section-bootstrap.js?v=20260908-step8-1'
+    )
     assert "object-src 'none'" in html
     assert "script-src 'self'" in html
+
+    assert 'app.apiRequest("/auth/me"' in bootstrap
+    assert "window.TOLResolvedUser = user" in bootstrap
+    assert 'new CustomEvent("tol:user-resolved"' in bootstrap
+    assert "Secure session unavailable" in bootstrap
+    assert "No private workspace data has been displayed" in bootstrap
 
     assert "can_link_households" in source
     assert '"Household Link Keys"' in source
