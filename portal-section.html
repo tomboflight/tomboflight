@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://tomboflight-api.onrender.com https://*.onrender.com http://127.0.0.1:* http://localhost:*; media-src 'self' blob: https:; worker-src 'self' blob:; form-action 'self' https://buy.stripe.com; upgrade-insecure-requests" />
+    <title>Workspace | Tomb of Light</title>
+    <meta name="description" content="Your protected Tomb of Light customer workspace section." />
+    <link rel="stylesheet" href="styles.css?v=20260828-phase21-1" />
+    <link rel="stylesheet" href="portal-section.css?v=20260907-step8-1" />
+  </head>
+  <body class="portal-section-body">
+    <div class="site-watermark" aria-hidden="true"></div>
+    <div class="page-wrap">
+      <aside class="portal-section-rail" data-portal-section-rail aria-label="Customer workspace navigation"></aside>
+
+      <header class="site-header">
+        <div class="container site-header-inner">
+          <a class="brand" href="dashboard.html" aria-label="Tomb of Light Home">
+            <img class="brand-logo" src="site-logo-header.png" alt="" aria-hidden="true" />
+            <span>Tomb of Light<span class="brand-symbol">™</span></span>
+          </a>
+          <button class="menu-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false" aria-controls="site-nav">Menu</button>
+          <nav class="site-nav" id="site-nav" aria-label="Customer workspace navigation"></nav>
+          <div class="header-actions">
+            <button class="btn btn-secondary" type="button" data-logout-btn>Log Out</button>
+          </div>
+        </div>
+      </header>
+
+      <main class="portal-section-main" data-auth-required style="display: none">
+        <div class="portal-section-shell" data-portal-section-root>
+          <div class="portal-section-heading">
+            <div class="portal-section-heading-copy">
+              <span class="portal-section-eyebrow" data-portal-section-eyebrow>Private Customer Workspace</span>
+              <h1 data-portal-section-title>Loading workspace</h1>
+              <p data-portal-section-description>Resolving the tools and status available to this account.</p>
+            </div>
+            <span class="portal-section-package" data-portal-section-package>Checking package</span>
+          </div>
+
+          <div class="portal-section-status" data-portal-section-status></div>
+          <div class="portal-section-grid" data-portal-section-grid></div>
+          <p class="card-copy" data-portal-section-message></p>
+        </div>
+      </main>
+
+      <footer class="footer">
+        <div class="container">
+          <div class="footer-card">
+            <div class="footer-bottom">
+              <span>© 2026 Tomb of Light LLC. All rights reserved.</span>
+            </div>
+          </div>
+        </div>
+      </footer>
+    </div>
+
+    <script src="config.js?v=20260828-phase21-1"></script>
+    <script src="app.js?v=20260907-auth-hardening"></script>
+    <script src="auth.js?v=20260907-auth-hardening"></script>
+    <script src="portal-section.js?v=20260907-step8-1"></script>
+  </body>
+</html>
