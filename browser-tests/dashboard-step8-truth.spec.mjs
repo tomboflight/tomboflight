@@ -71,6 +71,32 @@ function grantedFamilyEstateSnapshot() {
   return snapshot;
 }
 
+function approvedIntake() {
+  return {
+    id: "intake-step8-approved",
+    _id: "intake-step8-approved",
+    project_id: "project-step8",
+    family_root_id: "family-step8",
+    package_name: "Family Estate Concierge",
+    package_slug: "family_estate_concierge",
+    status: "approved",
+    submitted_at: "2026-09-07T21:30:00-04:00",
+    uploads: {
+      key_portraits: "planned",
+      supporting_records: "planned",
+      approx_upload_count: "8",
+      uploads_rights_confirmed: true,
+      uploads_minimization_confirmed: true,
+    },
+    review: { confirm_accuracy: true },
+    consent: {
+      consent_process: true,
+      consent_store: true,
+      consent_authority: true,
+    },
+  };
+}
+
 async function seedSession(page) {
   await page.addInitScript((user) => {
     localStorage.setItem("tol_access_token", "step8-fixture-token");
@@ -78,7 +104,7 @@ async function seedSession(page) {
   }, CUSTOMER);
 }
 
-async function installRoutes(page, snapshot) {
+async function installRoutes(page, snapshot, latest = null) {
   await page.route("**/*", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -110,9 +136,11 @@ async function installRoutes(page, snapshot) {
       });
     }
     if (method === "GET" && path === "/intake-submissions/my-latest") {
-      return json({ detail: "No intake submissions found" }, 404);
+      return latest ? json(latest) : json({ detail: "No intake submissions found" }, 404);
     }
-    if (method === "GET" && path === "/intake-submissions/my-list") return json([]);
+    if (method === "GET" && path === "/intake-submissions/my-list") {
+      return json(latest ? [latest] : []);
+    }
     if (method === "GET" && path === "/projects/project-step8/mint-eligibility") {
       return json({
         eligible: false,
@@ -140,29 +168,34 @@ async function installRoutes(page, snapshot) {
   });
 }
 
-async function openDashboard(page, snapshot) {
+async function openDashboard(page, snapshot, latest = null) {
   await seedSession(page);
-  await installRoutes(page, snapshot);
+  await installRoutes(page, snapshot, latest);
   await page.goto("/dashboard.html", { waitUntil: "networkidle" });
 }
 
-test.describe("Step 8 customer dashboard truth", () => {
+test.describe("Step 8.1 layered customer dashboard truth", () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
-  test("Family Estate exposes household branch Link Keys", async ({ page }) => {
+  test("Family Estate uses domain navigation instead of exposing raw tool catalog on Home", async ({ page }) => {
     await openDashboard(page, paidFamilyEstateSnapshot());
 
-    const tools = page.locator(".portal-tools-access-panel");
-    await tools.locator("summary").click();
-    const linkCard = tools.locator('[data-dashboard-tool="link_keys"]');
-    await expect(linkCard).toBeVisible();
-    await expect(linkCard.locator(".portal-action-status")).toHaveText("Open");
+    await expect(page.locator(".tol-home-shell")).toBeVisible();
+    await expect(page.locator(".page-sections")).toBeHidden();
+    await expect(page.locator(".tol-home-quick-action")).toHaveCount(4);
 
     const menuToggle = page.locator(".menu-toggle");
-    await expect(menuToggle).toBeVisible();
     await menuToggle.click();
-    await expect(page.locator('.site-nav a[href^="link-keys.html"]')).toBeVisible();
-    await expect(page.locator("[data-health-maintenance]")).toHaveText("Active");
+    const nav = page.locator("#site-nav");
+    await expect(nav.getByText("Home", { exact: true })).toBeVisible();
+    await expect(nav.getByText("My Project", { exact: true })).toBeVisible();
+    await expect(nav.getByText("Family", { exact: true })).toBeVisible();
+    await expect(nav.getByText("Uploads", { exact: true })).toBeVisible();
+    await expect(nav.getByText("Vault", { exact: true })).toBeVisible();
+    await expect(nav.getByText("Deliverables", { exact: true })).toBeVisible();
+    await expect(nav.getByText("Account", { exact: true })).toBeVisible();
+    await expect(nav.getByText("Support", { exact: true })).toBeVisible();
+    await expect(nav.getByText("Link Keys", { exact: true })).toHaveCount(0);
   });
 
   test("CEO-governed grant stays accessible without becoming a paid package", async ({ page }) => {
@@ -186,12 +219,29 @@ test.describe("Step 8 customer dashboard truth", () => {
       packageStatus: "granted",
     });
 
+    await expect(page.locator(".tol-home-shell")).toBeVisible();
     await expect(page.locator("[data-dashboard-package-display]")).toContainText(
       "Granted access",
     );
-    await expect(page.locator("[data-access-status]")).toContainText(
-      "No package payment is required",
+  });
+
+  test("approved intake moves Home to production materials instead of asking for final submission", async ({ page }) => {
+    await openDashboard(page, paidFamilyEstateSnapshot(), approvedIntake());
+
+    await expect(page.locator(".tol-home-next h2")).toHaveText(
+      "Upload your production materials",
     );
+    await expect(page.locator(".tol-home-primary")).toHaveText("Upload Materials");
+    await expect(page.locator(".tol-home-alert")).toContainText("Intake approved");
+    await expect(page.locator(".tol-home-shell")).not.toContainText(
+      "Continue and finalize your intake",
+    );
+
+    const progress = page.locator(".tol-home-progress-step");
+    await expect(progress.nth(0)).toHaveClass(/is-complete/);
+    await expect(progress.nth(1)).toHaveClass(/is-current/);
+    await expect(progress.nth(2)).not.toHaveClass(/is-complete/);
+    await expect(progress.nth(3)).not.toHaveClass(/is-complete/);
   });
 
   test("maintenance grace is visible without falsely locking the workspace", async ({ page }) => {
@@ -206,13 +256,13 @@ test.describe("Step 8 customer dashboard truth", () => {
       }),
     );
 
-    await expect(page.locator("[data-health-maintenance]")).toContainText("Grace period");
-    await expect(page.locator("[data-dashboard-hero-primary-action]")).not.toHaveText(
-      "Restore Maintenance Billing",
+    await expect(page.locator(".tol-home-alert")).toContainText("Maintenance grace period");
+    await expect(page.locator(".tol-home-next h2")).not.toHaveText(
+      "Restore maintenance billing",
     );
   });
 
-  test("read-only maintenance makes billing the next action while Vault stays readable", async ({ page }) => {
+  test("read-only maintenance makes Billing the Home next action", async ({ page }) => {
     await openDashboard(
       page,
       paidFamilyEstateSnapshot({
@@ -224,26 +274,30 @@ test.describe("Step 8 customer dashboard truth", () => {
       }),
     );
 
-    await expect(page.locator("[data-health-maintenance]")).toContainText("Read-only");
-    await expect(page.locator("[data-dashboard-next-focus]")).toHaveText(
+    await expect(page.locator(".tol-home-next h2")).toHaveText(
       "Restore maintenance billing",
     );
-    const heroAction = page.locator("[data-dashboard-hero-primary-action]");
-    await expect(heroAction).toHaveText("Restore Maintenance Billing");
-    await expect(heroAction).toHaveAttribute("href", "billing.html");
-
-    const tools = page.locator(".portal-tools-access-panel");
-    await tools.locator("summary").click();
-    const vaultCard = tools.locator('[data-dashboard-tool="vault"]');
-    await expect(vaultCard.locator(".portal-action-status")).toHaveText("Read-only");
-    await expect(vaultCard).toHaveAttribute("href", "vault-upload.html");
+    const action = page.locator(".tol-home-primary");
+    await expect(action).toHaveText("Open Billing");
+    await expect(action).toHaveAttribute("href", /billing\.html/);
+    await expect(page.locator(".tol-home-alert")).toContainText(
+      "Maintenance billing needs attention",
+    );
   });
 
-  test("desktop layout stays within the viewport and keeps the primary action usable", async ({ page }) => {
+  test("desktop shows persistent application rail and no long dashboard stack", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await openDashboard(page, paidFamilyEstateSnapshot());
+    await openDashboard(page, paidFamilyEstateSnapshot(), approvedIntake());
 
-    await expect(page.locator("#dashboard-primary-actions")).toBeVisible();
+    await expect(page.locator(".tol-app-rail")).toBeVisible();
+    await expect(page.locator('.tol-app-rail-link[data-tol-domain="home"]')).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    await expect(page.locator(".page-sections")).toBeHidden();
+    await expect(page.locator(".tol-home-shell")).toBeVisible();
+    await expect(page.locator(".tol-home-quick-action")).toHaveCount(4);
+
     const width = await page.evaluate(() => ({
       viewport: window.innerWidth,
       document: document.documentElement.scrollWidth,

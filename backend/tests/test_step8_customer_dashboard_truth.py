@@ -39,19 +39,44 @@ def test_dashboard_truth_layer_enforces_step8_invariants():
     assert "These indicators describe workflow status, not a file inventory" in source
 
 
+def test_step81_customer_application_shell_is_layered_and_customer_only():
+    source = _read("dashboard-step8.js")
+    css = _read("dashboard-step8-1.css")
+
+    assert "tol-layered-app" in source
+    assert "tol-app-rail" in source
+    assert "tol-home-shell" in source
+    assert "My Project" in source
+    assert "Deliverables" in source
+    assert "isInternalContext" in source
+    assert "Upload your production materials" in source
+    assert "getIntakeStatus" in source
+    assert "resolveProgress" in source
+    assert "can_link_households" in source
+
+    assert "grid-template-columns: var(--tol-rail-width) minmax(0, 1fr)" in css
+    assert "body.tol-layered-app .page-sections" in css
+    assert "display: none !important" in css
+    assert "@media (max-width: 1039px)" in css
+    assert "@media (max-width: 620px)" in css
+
+
 def test_dashboard_browser_contract_no_longer_treats_generic_link_keys_as_branch_access():
     source = _read("browser-tests/dashboard-customer-phase20.spec.mjs")
 
     assert "can_link_households: false" in source
-    assert "toBeHidden()" in source
-    assert "acquisitionSource: \"paid_order\"" in source
+    assert "Link Keys" in source
+    assert "toHaveCount(0)" in source
+    assert 'acquisitionSource: "paid_order"' in source
+    assert "uses the layered customer Home instead of the legacy accordion stack" in source
 
 
-def test_step8_browser_contract_covers_grants_branch_links_and_maintenance():
+def test_step81_browser_contract_covers_live_contradictions_and_responsive_shell():
     source = _read("browser-tests/dashboard-step8-truth.spec.mjs")
 
-    assert "Family Estate exposes household branch Link Keys" in source
+    assert "Family Estate uses domain navigation instead of exposing raw tool catalog on Home" in source
     assert "CEO-governed grant stays accessible without becoming a paid package" in source
+    assert "approved intake moves Home to production materials instead of asking for final submission" in source
     assert "maintenance grace is visible" in source
-    assert "read-only maintenance makes billing the next action" in source
-    assert "desktop layout stays within the viewport" in source
+    assert "read-only maintenance makes Billing the Home next action" in source
+    assert "desktop shows persistent application rail and no long dashboard stack" in source
