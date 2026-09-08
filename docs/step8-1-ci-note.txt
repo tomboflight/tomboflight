@@ -1,0 +1,1 @@
+Step 8.1 CI checkpoint: layered customer application shell, simplified Home, live-state semantics, and responsive browser contracts.
