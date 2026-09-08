@@ -210,7 +210,7 @@
   }
 
   function card(title, copy, state, href, label, enabled = true) {
-    const stateClass = state === "Not included" ? " is-locked" : state.includes("Pending") || state.includes("Awaiting") ? " is-pending" : "";
+    const stateClass = state === "Not included" ? " is-locked" : state.includes("Pending") || state.includes("Awaiting") || state.includes("Unavailable") ? " is-pending" : "";
     const disabled = !enabled;
     return `
       <article class="portal-section-card${disabled ? " is-unavailable" : ""}">
@@ -229,9 +229,21 @@
     if (!container) return;
     const packageInfo = getPackage(context);
     const acquisition = context && context.acquisition && typeof context.acquisition === "object" ? context.acquisition : {};
-    const packageState = normalize(packageInfo.status) === "granted" ? "Granted access" : "Active";
+    const packageStatus = normalize(packageInfo.status);
+    const packageState = packageStatus === "granted"
+      ? "Granted access"
+      : packageStatus === "paid"
+        ? "Active"
+        : packageStatus
+          ? humanize(packageStatus)
+          : "Status unavailable";
     const intakeState = intake ? stageLabel(intake.status || intake.submission_status) : "Not started";
-    const accessState = acquisition.payment_required === false ? "Authorized grant" : "Private customer";
+    const acquisitionSource = normalize(acquisition.source);
+    const accessState = acquisition.payment_required === false
+      ? "Authorized grant"
+      : acquisitionSource === "paid_order"
+        ? "Verified purchase"
+        : "Private customer";
     container.innerHTML = `
       <div class="portal-section-status-card"><small>Package</small><strong>${escapeHtml(packageState)}</strong></div>
       <div class="portal-section-status-card"><small>Project stage</small><strong>${escapeHtml(intakeState)}</strong></div>
@@ -331,18 +343,29 @@
             certificateReady,
           ));
 
+          const mintUnavailable = Boolean(mintStatus && mintStatus.unavailable);
           const latestMint = mintStatus && mintStatus.latest ? mintStatus.latest : null;
-          const mintState = normalize(latestMint && latestMint.status);
-          const minted = ["minted", "completed", "delivered"].includes(mintState) || Boolean(latestMint && latestMint.tx_hash);
-          items.push(card(
-            "Legacy Anchor",
-            minted
-              ? "Your public-safe Legacy Anchor proof is minted and can be reviewed separately from private Vault records."
-              : "NFT services are governed separately from the base package and only proceed after the required customer and Tomb of Light approvals.",
-            minted ? "Minted" : "Governed service",
-            withContext(minted ? "digital-collectible.html" : "dashboard.html#legacy-anchor", context),
-            minted ? "View Legacy Anchor" : "View Anchor Status",
-          ));
+          const mintState = normalize(latestMint && (latestMint.mint_status || latestMint.status));
+          const minted = !mintUnavailable && (["minted", "completed", "delivered"].includes(mintState) || Boolean(latestMint && latestMint.tx_hash));
+          if (mintUnavailable) {
+            items.push(card(
+              "Legacy Anchor",
+              "Legacy Anchor status could not be confirmed right now. Open the governed Anchor view or try again before assuming a mint state.",
+              "Status unavailable",
+              withContext("dashboard.html#legacy-anchor", context),
+              "Open Anchor Status",
+            ));
+          } else {
+            items.push(card(
+              "Legacy Anchor",
+              minted
+                ? "Your public-safe Legacy Anchor proof is minted and can be reviewed separately from private Vault records."
+                : "NFT services are governed separately from the base package and only proceed after the required customer and Tomb of Light approvals.",
+              minted ? "Minted" : "Governed service",
+              withContext(minted ? "digital-collectible.html" : "dashboard.html#legacy-anchor", context),
+              minted ? "View Legacy Anchor" : "View Anchor Status",
+            ));
+          }
           return items.join("");
         },
       },
@@ -365,9 +388,9 @@
         cards: function () {
           return [
             card("Help Center", "Review customer guidance and continuity questions inside the protected portal.", "Open", "portal-help.html", "Open Help Center"),
-            card("Customer Support", "Contact the Tomb of Light support team for project or account assistance.", "Available", "mailto:support@tomboflight.com", "Email Support"),
-            card("Billing Support", "Contact billing support for payment or maintenance questions.", "Available", "mailto:billing@tomboflight.com", "Email Billing"),
-            card("Privacy", "Contact the privacy team for data and privacy requests.", "Available", "mailto:privacy@tomboflight.com", "Email Privacy"),
+            card("Customer Support", "Contact the Tomb of Light support team for project or account assistance.", "Open", "mailto:support@tomboflight.com", "Email Support"),
+            card("Billing Support", "Contact billing support for payment or maintenance questions.", "Open", "mailto:billing@tomboflight.com", "Email Billing"),
+            card("Privacy", "Contact the privacy team for data and privacy requests.", "Open", "mailto:privacy@tomboflight.com", "Email Privacy"),
           ].join("");
         },
       },
@@ -394,17 +417,18 @@
       return await app.apiRequest("/intake-submissions/my-latest", { method: "GET" });
     } catch (error) {
       if (Number(error && error.status) === 404) return null;
-      return null;
+      throw error;
     }
   }
 
   async function loadMintStatus(context) {
     const projectId = getProjectId(context);
-    if (!projectId) return null;
+    if (!projectId) return { latest: null };
     try {
       return await app.apiRequest(`/projects/${encodeURIComponent(projectId)}/mint-status`, { method: "GET" });
-    } catch (_error) {
-      return null;
+    } catch (error) {
+      if (Number(error && error.status) === 404) return { latest: null };
+      return { latest: null, unavailable: true };
     }
   }
 
@@ -429,6 +453,10 @@
       if (message) {
         message.textContent = "Unable to load this workspace section right now. Return to Home or contact support if the problem continues.";
       }
+      const grid = document.querySelector("[data-portal-section-grid]");
+      if (grid) grid.innerHTML = "";
+      const status = document.querySelector("[data-portal-section-status]");
+      if (status) status.innerHTML = "";
     }
   }
 
