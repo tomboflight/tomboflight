@@ -15,6 +15,7 @@ from app.dependencies.auth import (
 )
 from app.schemas.auth import (
     AccountActivationRequest,
+    AdminMfaResetRequest,
     MfaDisableRequest,
     MfaEnrollmentBeginRequest,
     MfaEnrollmentVerifyRequest,
@@ -29,6 +30,7 @@ from app.schemas.auth import (
     UserResponse,
 )
 from app.services.auth_service import (
+    admin_reset_user_mfa,
     admin_reset_user_security,
     admin_issue_password_reset,
     authenticate_user,
@@ -642,6 +644,38 @@ def admin_issue_password_reset_route(
     return result
 
 
+@router.post("/admin/mfa/reset")
+def admin_mfa_reset_route(
+    payload: AdminMfaResetRequest,
+    response: Response,
+    current_user: dict = Depends(require_capability("manage_users_full")),
+):
+    try:
+        result = admin_reset_user_mfa(
+            target_user_id=str(payload.user_id or ""),
+            target_email=str(payload.email or ""),
+            actor_user_id=_current_user_id(current_user),
+            actor_email=str(current_user.get("email") or ""),
+        )
+    except ValueError as exc:
+        detail = str(exc)
+        status_code = status.HTTP_404_NOT_FOUND
+        if detail == "Target user email or user id is required.":
+            status_code = status.HTTP_400_BAD_REQUEST
+        elif detail == "Only the canonical CEO can reset CEO account security.":
+            status_code = status.HTTP_403_FORBIDDEN
+        elif detail == "Account security changed before MFA could be reset.":
+            status_code = status.HTTP_409_CONFLICT
+        raise HTTPException(status_code=status_code, detail=detail) from exc
+    _apply_no_store(response)
+    return {
+        "success": True,
+        "message": "Authenticator MFA reset successfully.",
+        "user_id": result["user_id"],
+        "email": result["email"],
+    }
+
+
 @router.post("/admin/users/{user_id}/security-reset")
 def admin_security_reset_route(
     user_id: str,
@@ -655,6 +689,12 @@ def admin_security_reset_route(
             actor_email=str(current_user.get("email") or ""),
         )
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        detail = str(exc)
+        status_code = status.HTTP_404_NOT_FOUND
+        if detail == "Only the canonical CEO can reset CEO account security.":
+            status_code = status.HTTP_403_FORBIDDEN
+        elif detail == "Account security changed before MFA could be reset.":
+            status_code = status.HTTP_409_CONFLICT
+        raise HTTPException(status_code=status_code, detail=detail) from exc
     _apply_no_store(response)
     return {"success": True, "message": "User sessions revoked and MFA reset."}
