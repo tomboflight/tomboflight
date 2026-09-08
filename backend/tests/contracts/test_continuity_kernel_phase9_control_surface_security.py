@@ -13,6 +13,10 @@ CONTROL_JS_PATH = REPO_ROOT / "admin-control-center.js"
 MOBILE_CONTROL_JS_PATH = REPO_ROOT / "admin-control-center-mobile.js"
 APP_JS_PATH = REPO_ROOT / "app.js"
 AUTH_JS_PATH = REPO_ROOT / "auth.js"
+APP_CACHE_REVISION = "20260828-phase21-1"
+APP_CACHE_REVISION_OVERRIDES = {
+    "dashboard.html": "20260907-auth-hardening",
+}
 
 
 class TestContinuityKernelPhase9ControlSurfaceSecurity(unittest.TestCase):
@@ -122,7 +126,9 @@ class TestContinuityKernelPhase9ControlSurfaceSecurity(unittest.TestCase):
             if path.name in separately_managed_commercial_pages:
                 continue
             app_pages.append(path.name)
-            expected_revision = "20260828-phase21-1"
+            expected_revision = APP_CACHE_REVISION_OVERRIDES.get(
+                path.name, APP_CACHE_REVISION
+            )
             self.assertIn(f"app.js?v={expected_revision}", source, path.name)
             csp_match = re.search(
                 r'http-equiv="Content-Security-Policy"\s+content="([^"]+)"',
