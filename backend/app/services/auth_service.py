@@ -13,6 +13,7 @@ from cryptography.fernet import Fernet, InvalidToken
 from pymongo import ASCENDING
 
 from app.config import settings
+from app.core.metadata import apply_update_metadata
 from app.core.admin_permission_registry import (
     is_canonical_ceo_email,
     requires_privileged_mfa as _requires_privileged_mfa,
@@ -997,38 +998,94 @@ def disable_mfa_for_user(
         pass
 
 
+def _resolve_admin_security_target(
+    *,
+    target_user_id: str = "",
+    target_email: str = "",
+) -> tuple[dict[str, Any], str]:
+    normalized_user_id = _normalize_text(target_user_id)
+    if normalized_user_id:
+        user = get_user_by_id(normalized_user_id)
+        if user:
+            return user, "user_id"
+
+    normalized_email = _normalize_text(target_email).lower()
+    if normalized_email:
+        user = get_user_by_email(normalized_email)
+        if user:
+            return user, "email"
+
+    if normalized_user_id or normalized_email:
+        raise ValueError("User account not found.")
+    raise ValueError("Target user email or user id is required.")
+
+
+def admin_reset_user_mfa(
+    *,
+    target_user_id: str = "",
+    target_email: str = "",
+    actor_user_id: str,
+    actor_email: str = "",
+) -> dict[str, str]:
+    user, lookup_mode = _resolve_admin_security_target(
+        target_user_id=target_user_id,
+        target_email=target_email,
+    )
+    if is_canonical_ceo_email(user.get("email")) and not is_canonical_ceo_email(actor_email):
+        raise ValueError("Only the canonical CEO can reset CEO account security.")
+    next_version = _session_version(user) + 1
+    db = get_database()
+    now_iso = _now_iso()
+    update_fields = apply_update_metadata(
+        {
+            "session_token_version": next_version,
+            "last_logout_at": now_iso,
+            **_clear_mfa_fields(),
+        },
+        actor_user_id or None,
+    )
+    update_result = db.users.update_one(
+        {
+            "_id": user["_id"],
+            "session_token_version": user.get("session_token_version"),
+        },
+        {"$set": update_fields},
+    )
+    if int(getattr(update_result, "matched_count", 0)) != 1:
+        raise ValueError("Account security changed before MFA could be reset.")
+    normalized_email = _normalize_text(user.get("email")).lower()
+    user_id = str(user.get("_id") or "")
+    try:
+        create_audit_log(
+            "admin_security_reset",
+            actor_user_id,
+            "user",
+            user_id,
+            {
+                "email": normalized_email,
+                "lookup_mode": lookup_mode,
+                "reset_scope": "mfa",
+            },
+        )
+    except Exception:
+        pass
+    return {
+        "user_id": user_id,
+        "email": normalized_email,
+    }
+
+
 def admin_reset_user_security(
     *,
     target_user_id: str,
     actor_user_id: str,
     actor_email: str = "",
 ) -> None:
-    user = get_user_by_id(target_user_id)
-    if not user:
-        raise ValueError("User account not found.")
-    if is_canonical_ceo_email(user.get("email")) and not is_canonical_ceo_email(actor_email):
-        raise ValueError("Only the canonical CEO can reset CEO account security.")
-    next_version = _session_version(user) + 1
-    db = get_database()
-    db.users.update_one(
-        {"_id": user["_id"]},
-        {
-            "$set": {
-                "session_token_version": next_version,
-                **_clear_mfa_fields(),
-            }
-        },
+    admin_reset_user_mfa(
+        target_user_id=target_user_id,
+        actor_user_id=actor_user_id,
+        actor_email=actor_email,
     )
-    try:
-        create_audit_log(
-            "admin_security_reset",
-            actor_user_id,
-            "user",
-            str(user["_id"]),
-            {"email": _normalize_text(user.get("email")).lower()},
-        )
-    except Exception:
-        pass
 
 
 def revoke_user_sessions(

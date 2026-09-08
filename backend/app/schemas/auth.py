@@ -91,6 +91,11 @@ class MfaDisableRequest(BaseModel):
     recovery_code: Optional[str] = Field(default=None, min_length=6, max_length=64)
 
 
+class AdminMfaResetRequest(BaseModel):
+    user_id: Optional[str] = Field(default=None, min_length=1)
+    email: Optional[EmailStr] = None
+
+
 class UserResponse(BaseModel):
     id: str
     email: EmailStr
