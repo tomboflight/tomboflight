@@ -157,6 +157,10 @@ test.describe("Step 8 customer dashboard truth", () => {
     const linkCard = tools.locator('[data-dashboard-tool="link_keys"]');
     await expect(linkCard).toBeVisible();
     await expect(linkCard.locator(".portal-action-status")).toHaveText("Open");
+
+    const menuToggle = page.locator(".menu-toggle");
+    await expect(menuToggle).toBeVisible();
+    await menuToggle.click();
     await expect(page.locator('.site-nav a[href^="link-keys.html"]')).toBeVisible();
     await expect(page.locator("[data-health-maintenance]")).toHaveText("Active");
   });
