@@ -16,6 +16,7 @@ AUTH_JS_PATH = REPO_ROOT / "auth.js"
 APP_CACHE_REVISION = "20260828-phase21-1"
 APP_CACHE_REVISION_OVERRIDES = {
     "dashboard.html": "20260907-auth-hardening",
+    "portal-section.html": "20260907-auth-hardening",
 }
 
 
@@ -79,6 +80,7 @@ class TestContinuityKernelPhase9ControlSurfaceSecurity(unittest.TestCase):
         for relative_path in (
             "signin.html",
             "dashboard.html",
+            "portal-section.html",
             "admin-control-center.html",
             "account-security.html",
             "vault-upload.html",
