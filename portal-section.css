@@ -288,7 +288,7 @@ body.portal-section-body {
   line-height: 1.5;
 }
 
-@media (min-width: 1040px) {
+@media (min-width: 900px) {
   .portal-section-body .page-wrap {
     display: grid;
     grid-template-columns: var(--tol-rail-width) minmax(0, 1fr);
@@ -341,7 +341,7 @@ body.portal-section-body {
   }
 }
 
-@media (max-width: 1039px) {
+@media (max-width: 899px) {
   .portal-section-shell {
     width: min(100% - 24px, 920px);
   }
