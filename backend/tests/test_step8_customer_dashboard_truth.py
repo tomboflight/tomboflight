@@ -41,7 +41,9 @@ def test_dashboard_truth_layer_enforces_step8_invariants():
 
 def test_step81_customer_application_shell_is_layered_and_customer_only():
     source = _read("dashboard-step8.js")
-    css = _read("dashboard-step8-1.css")
+    css_overlay = _read("dashboard-step8-1.css")
+    css_base = _read("dashboard-step8-1-base.css")
+    css = css_base + "\n" + css_overlay
 
     assert "tol-layered-app" in source
     assert "tol-app-rail" in source
@@ -58,12 +60,15 @@ def test_step81_customer_application_shell_is_layered_and_customer_only():
     assert "resolveProgress" in source
     assert "can_link_households" in source
 
+    assert '@import url("dashboard-step8-1-base.css?v=20260908-step8-1-base")' in css_overlay
     assert "grid-template-columns: var(--tol-rail-width) minmax(0, 1fr)" in css
     assert "body.tol-layered-app .page-sections" in css
     assert "display: none !important" in css
     assert "@media (min-width: 900px)" in css
     assert "@media (max-width: 899px)" in css
     assert "@media (max-width: 620px)" in css
+    assert ":has(#legacy-anchor:target)" in css_overlay
+    assert 'data-tol-domain="deliverables"' in css_overlay
 
 
 def test_step81_section_hub_is_hardened_and_keeps_domain_truth_separate():
@@ -104,6 +109,7 @@ def test_dashboard_browser_contract_no_longer_treats_generic_link_keys_as_branch
 def test_step81_browser_contract_covers_live_contradictions_and_responsive_shell():
     dashboard_source = _read("browser-tests/dashboard-step8-truth.spec.mjs")
     hub_source = _read("browser-tests/portal-section-step8-1.spec.mjs")
+    customer_source = _read("browser-tests/dashboard-customer-phase20.spec.mjs")
 
     assert "Family Estate uses domain navigation instead of exposing raw tool catalog on Home" in dashboard_source
     assert "CEO-governed grant stays accessible without becoming a paid package" in dashboard_source
@@ -118,3 +124,4 @@ def test_step81_browser_contract_covers_live_contradictions_and_responsive_shell
     assert "mobile section navigation stays domain-based and scroll-safe" in hub_source
     assert "intake API failure is shown as unavailable instead of false Not started state" in hub_source
     assert "width: 960" in hub_source
+    assert "keeps the governed Legacy Anchor state available behind the Deliverables layer" in customer_source
