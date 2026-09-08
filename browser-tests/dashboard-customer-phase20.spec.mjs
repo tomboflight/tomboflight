@@ -182,11 +182,13 @@ test.describe("Phase 20 premium customer dashboard", () => {
     await page.goto("/dashboard.html#legacy-anchor", { waitUntil: "networkidle" });
 
     await expect(page.locator("#legacy-anchor")).toHaveAttribute("open", "");
+    await expect(page.locator("#legacy-anchor")).toBeVisible();
     await expect(page.locator("[data-anchor-status-badge]")).toHaveText("Finish Profile First");
     await expect(page.locator("[data-nft-addon-purchase-panel]")).toContainText(
       "No base package includes an NFT.",
     );
-    await expect(page.locator(".page-sections")).toBeHidden();
-    await expect(page.locator(".tol-home-shell")).toBeVisible();
+    await expect(page.locator(".page-sections")).toBeVisible();
+    await expect(page.locator(".tol-home-shell")).toBeHidden();
+    await expect(page.locator("#dashboard-primary-actions")).toBeHidden();
   });
 });
