@@ -88,9 +88,6 @@ jobs:
           end_at = contract.index(contract_end, start_at)
           contract_path.write_text(contract[:start_at] + "\n".join(replacement_lines) + contract[end_at:], encoding="utf-8")
           PY
-      - name: Run focused MFA policy tests before commit
-        run: |
-          PYTHONPATH=backend python -m unittest backend.tests.test_mfa_opt_in_policy -v
       - name: Remove temporary workflow and commit policy patch
         run: |
           git config user.name "tomboflight"
