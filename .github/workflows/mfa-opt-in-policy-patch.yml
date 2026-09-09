@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - fix/mfa-opt-in-admin-login
-    paths:
-      - .github/workflows/mfa-opt-in-policy-patch.yml
 
 permissions:
   contents: write
@@ -22,58 +20,48 @@ jobs:
           python - <<'PY'
           from pathlib import Path
 
-          def replace_once(path, old, new):
-              p = Path(path)
-              text = p.read_text(encoding="utf-8")
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f"{path}: expected exactly one match, found {count}")
-              p.write_text(text.replace(old, new, 1), encoding="utf-8")
-
           auth_path = Path("backend/app/services/auth_service.py")
           auth = auth_path.read_text(encoding="utf-8")
           start = '    if has_privileged_admin_authority(user):\n'
           end = '    now_iso = _now_iso()\n'
-          if auth.count(start) != 1 or auth.count(end) < 1:
-              raise SystemExit("auth_service.py: forced-enrollment block markers did not match")
+          if auth.count(start) != 1:
+              raise SystemExit(f"auth_service.py: expected one forced-enrollment block, found {auth.count(start)}")
           start_at = auth.index(start)
           end_at = auth.index(end, start_at)
-          auth = auth[:start_at] + auth[end_at:]
-          auth_path.write_text(auth, encoding="utf-8")
+          auth_path.write_text(auth[:start_at] + auth[end_at:], encoding="utf-8")
 
           dep_path = Path("backend/app/dependencies/auth.py")
           dep = dep_path.read_text(encoding="utf-8")
-          dep_import = 'from app.services.auth_service import (\n    get_user_by_email,\n    has_privileged_admin_authority,\n)\n'
-          dep_import_new = 'from app.services.auth_service import get_user_by_email\n'
+          dep_import = "from app.services.auth_service import (\n    get_user_by_email,\n    has_privileged_admin_authority,\n)\n"
           if dep.count(dep_import) != 1:
-              raise SystemExit("dependencies/auth.py: admin authority import block did not match")
-          dep = dep.replace(dep_import, dep_import_new, 1)
+              raise SystemExit(f"dependencies/auth.py: expected one import block, found {dep.count(dep_import)}")
+          dep = dep.replace(dep_import, "from app.services.auth_service import get_user_by_email\n", 1)
           dep_start = '    elif has_privileged_admin_authority(normalized_user):\n'
           dep_end = '    if source == "cookie":\n'
           if dep.count(dep_start) != 1:
-              raise SystemExit("dependencies/auth.py: forced-enrollment block did not match")
-          s = dep.index(dep_start)
-          e = dep.index(dep_end, s)
-          dep = dep[:s] + dep[e:]
-          dep_path.write_text(dep, encoding="utf-8")
+              raise SystemExit(f"dependencies/auth.py: expected one forced-enrollment block, found {dep.count(dep_start)}")
+          start_at = dep.index(dep_start)
+          end_at = dep.index(dep_end, start_at)
+          dep_path.write_text(dep[:start_at] + dep[end_at:], encoding="utf-8")
 
           presence_path = Path("backend/app/services/presence_service.py")
           presence = presence_path.read_text(encoding="utf-8")
-          presence_import = 'from app.services.auth_service import (\n    get_user_by_email,\n    get_user_by_id,\n    has_privileged_admin_authority,\n)\n'
-          presence_import_new = 'from app.services.auth_service import get_user_by_email, get_user_by_id\n'
+          presence_import = "from app.services.auth_service import (\n    get_user_by_email,\n    get_user_by_id,\n    has_privileged_admin_authority,\n)\n"
           if presence.count(presence_import) != 1:
-              raise SystemExit("presence_service.py: admin authority import block did not match")
-          presence = presence.replace(presence_import, presence_import_new, 1)
-          presence_block = '''    if not bool(user.get("mfa_enabled")) and has_privileged_admin_authority(user):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="MFA enrollment is required for internal administrator accounts.",
-        )
-'''
+              raise SystemExit(f"presence_service.py: expected one import block, found {presence.count(presence_import)}")
+          presence = presence.replace(presence_import, "from app.services.auth_service import get_user_by_email, get_user_by_id\n", 1)
+          block_lines = [
+              '    if not bool(user.get("mfa_enabled")) and has_privileged_admin_authority(user):',
+              '        raise HTTPException(',
+              '            status_code=status.HTTP_403_FORBIDDEN,',
+              '            detail="MFA enrollment is required for internal administrator accounts.",',
+              '        )',
+              '',
+          ]
+          presence_block = "\n".join(block_lines)
           if presence.count(presence_block) != 1:
-              raise SystemExit("presence_service.py: forced-enrollment block did not match")
-          presence = presence.replace(presence_block, "", 1)
-          presence_path.write_text(presence, encoding="utf-8")
+              raise SystemExit(f"presence_service.py: expected one forced-enrollment block, found {presence.count(presence_block)}")
+          presence_path.write_text(presence.replace(presence_block, "", 1), encoding="utf-8")
 
           contract_path = Path("backend/tests/contracts/test_continuity_kernel_phase9_control_surface_security.py")
           contract = contract_path.read_text(encoding="utf-8")
@@ -81,29 +69,33 @@ jobs:
           contract_end = '    def test_04_bearer_and_user_context_are_tab_scoped(self) -> None:\n'
           if contract.count(contract_start) != 1 or contract.count(contract_end) != 1:
               raise SystemExit("phase9 security contract: test_03 markers did not match")
-          s = contract.index(contract_start)
-          e = contract.index(contract_end, s)
-          replacement = '''    def test_03_authentication_fails_closed_and_mfa_is_opt_in(self) -> None:
-        self.assertIn('if mfa_enabled:', self.auth)
-        self.assertIn('"status": "mfa_required"', self.auth)
-        self.assertNotIn('"status": "mfa_enrollment_required"', self.auth)
-        self.assertNotIn(
-            "MFA enrollment is required for internal administrator accounts",
-            self.dependencies,
-        )
-        self.assertIn('if bool(normalized_user.get("mfa_enabled")):', self.dependencies)
-        self.assertIn("MFA verification is required for this session", self.dependencies)
-        self.assertIn('return {"status": "authenticated", "access_token": _build_access_token_for_user(user)}', self.auth)
-
-'''
-          contract = contract[:s] + replacement + contract[e:]
-          contract_path.write_text(contract, encoding="utf-8")
+          replacement_lines = [
+              '    def test_03_authentication_fails_closed_and_mfa_is_opt_in(self) -> None:',
+              "        self.assertIn('if mfa_enabled:', self.auth)",
+              "        self.assertIn('\\\"status\\\": \\\"mfa_required\\\"', self.auth)",
+              "        self.assertNotIn('\\\"status\\\": \\\"mfa_enrollment_required\\\"', self.auth)",
+              '        self.assertNotIn(',
+              '            "MFA enrollment is required for internal administrator accounts",',
+              '            self.dependencies,',
+              '        )',
+              "        self.assertIn('if bool(normalized_user.get(\\\"mfa_enabled\\\")):', self.dependencies)",
+              '        self.assertIn("MFA verification is required for this session", self.dependencies)',
+              "        self.assertIn('return {\\\"status\\\": \\\"authenticated\\\", \\\"access_token\\\": _build_access_token_for_user(user)}', self.auth)",
+              '',
+              '',
+          ]
+          start_at = contract.index(contract_start)
+          end_at = contract.index(contract_end, start_at)
+          contract_path.write_text(contract[:start_at] + "\n".join(replacement_lines) + contract[end_at:], encoding="utf-8")
           PY
+      - name: Run focused MFA policy tests before commit
+        run: |
+          PYTHONPATH=backend python -m unittest backend.tests.test_mfa_opt_in_policy -v
       - name: Remove temporary workflow and commit policy patch
         run: |
           git config user.name "tomboflight"
           git config user.email "thetomboflight@gmail.com"
           git rm .github/workflows/mfa-opt-in-policy-patch.yml
-          git add backend/app/services/auth_service.py backend/app/dependencies/auth.py backend/app/services/presence_service.py backend/tests/contracts/test_continuity_kernel_phase9_control_surface_security.py
+          git add backend/app/services/auth_service.py backend/app/dependencies/auth.py backend/app/services/presence_service.py backend/tests/contracts/test_continuity_kernel_phase9_control_surface_security.py backend/tests/test_mfa_opt_in_policy.py
           git commit -m "Auth: make MFA opt-in for administrators"
           git push origin HEAD:fix/mfa-opt-in-admin-login
