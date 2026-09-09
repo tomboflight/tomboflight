@@ -1,0 +1,85 @@
+name: Admin Workbench Asset Alignment
+
+on:
+  push:
+    branches:
+      - fix/admin-review-workbench
+    paths:
+      - .github/workflows/admin-workbench-asset-alignment.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: fix/admin-review-workbench
+      - name: Align protected admin assets
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          pages = [
+              "account-security.html",
+              "admin-control-center.html",
+              "admin-intake-queue.html",
+              "admin-intake-review.html",
+              "admin-family-manager.html",
+              "admin-portrait-review.html",
+              "admin-verification-review.html",
+          ]
+
+          for name in pages:
+              path = Path(name)
+              text = path.read_text(encoding="utf-8")
+              for asset in ("app.js", "auth.js"):
+                  old = f'{asset}?v=20260828-phase21-1'
+                  new = f'{asset}?v=20260907-auth-hardening'
+                  count = text.count(old)
+                  if count != 1:
+                      raise SystemExit(f"{name}: expected exactly one {old}, found {count}")
+                  text = text.replace(old, new, 1)
+              path.write_text(text, encoding="utf-8")
+
+          replacements = {
+              "account-security.html": [
+                  ("customer-account-step5.js?v=20260906-step5", "customer-account-step5.js?v=20260909-admin-aware"),
+              ],
+              "admin-portrait-review.html": [
+                  ("admin-portrait-review.js?v=20260824-phase19-1", "admin-portrait-review.js?v=20260909-review-workbench"),
+              ],
+              "admin-verification-review.html": [
+                  ("admin-verification-review.js?v=20260824-phase19-1", "admin-verification-review.js?v=20260909-review-workbench"),
+              ],
+          }
+
+          for name, pairs in replacements.items():
+              path = Path(name)
+              text = path.read_text(encoding="utf-8")
+              for old, new in pairs:
+                  count = text.count(old)
+                  if count != 1:
+                      raise SystemExit(f"{name}: expected exactly one {old}, found {count}")
+                  text = text.replace(old, new, 1)
+              path.write_text(text, encoding="utf-8")
+
+          control = Path("admin-control-center.html")
+          text = control.read_text(encoding="utf-8")
+          marker = '    <script src="admin-control-center-mobile.js?v=20260828-phase21-2"></script>'
+          insert = '    <script src="admin-operational-health.js?v=20260909-operational-health"></script>\n' + marker
+          if text.count(marker) != 1:
+              raise SystemExit(f"admin-control-center.html: expected one mobile script marker, found {text.count(marker)}")
+          text = text.replace(marker, insert, 1)
+          control.write_text(text, encoding="utf-8")
+          PY
+      - name: Commit aligned assets and remove staging workflow
+        run: |
+          git config user.name "tomboflight"
+          git config user.email "thetomboflight@gmail.com"
+          git rm .github/workflows/admin-workbench-asset-alignment.yml
+          git add account-security.html admin-control-center.html admin-intake-queue.html admin-intake-review.html admin-family-manager.html admin-portrait-review.html admin-verification-review.html
+          git commit -m "Admin: align protected session assets"
+          git push origin HEAD:fix/admin-review-workbench
