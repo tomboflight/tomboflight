@@ -11,11 +11,7 @@ from app.dependencies.auth import (
     _allowed_cookie_auth_origins,
     _normalize_origin,
 )
-from app.services.auth_service import (
-    get_user_by_email,
-    get_user_by_id,
-    has_privileged_admin_authority,
-)
+from app.services.auth_service import get_user_by_email, get_user_by_id
 from app.services.workspace_access_service import resolve_workspace_context
 
 
@@ -122,11 +118,6 @@ def authenticate_presence_user(token: str) -> dict[str, Any]:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="MFA verification is required for this websocket session.",
-        )
-    if not bool(user.get("mfa_enabled")) and has_privileged_admin_authority(user):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="MFA enrollment is required for internal administrator accounts.",
         )
     return user
 

@@ -689,21 +689,6 @@ def authenticate_user(email: str, password: str) -> dict[str, Any] | None:
             "mfa_challenge_token": challenge,
         }
 
-    if has_privileged_admin_authority(user):
-        enrollment_challenge = create_access_token(
-            {
-                "sub": user["email"],
-                "user_id": str(user["_id"]),
-                "purpose": "mfa_enroll",
-                "tv": _session_version(user),
-            },
-            expires_minutes=max(2, int(settings.mfa_challenge_expire_minutes or 10)),
-        )
-        return {
-            "status": "mfa_enrollment_required",
-            "mfa_challenge_token": enrollment_challenge,
-        }
-
     now_iso = _now_iso()
     db.users.update_one(
         {"_id": user["_id"]},
