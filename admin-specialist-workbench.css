@@ -1,0 +1,250 @@
+/* Step 617 — shared operations styling for specialist admin workbenches. */
+:root {
+  --ops-bg: #eef5fa;
+  --ops-surface: #ffffff;
+  --ops-surface-soft: #f8fbfd;
+  --ops-border: #cbdce9;
+  --ops-border-strong: #9fbdd4;
+  --ops-text: #11263d;
+  --ops-muted: #5f7287;
+  --ops-accent: #1f5f96;
+  --ops-accent-soft: #e7f2fa;
+  --ops-gold: #a56f1e;
+  --ops-success: #1d6a4a;
+  --ops-danger: #8a3131;
+  --ops-shadow: 0 16px 42px rgba(19, 55, 84, 0.08);
+}
+
+body[data-admin-workbench],
+body.admin-specialist-workbench {
+  background:
+    radial-gradient(circle at 18% 8%, rgba(201, 224, 239, 0.45), transparent 28rem),
+    linear-gradient(180deg, #f6fbfe 0%, var(--ops-bg) 100%);
+  color: var(--ops-text);
+}
+
+body[data-admin-workbench] .site-header,
+body.admin-specialist-workbench .site-header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  border-bottom: 1px solid var(--ops-border);
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(12px);
+}
+
+body[data-admin-workbench] .site-header-inner,
+body.admin-specialist-workbench .site-header-inner {
+  max-width: 1540px;
+}
+
+body[data-admin-workbench] main,
+body.admin-specialist-workbench main {
+  padding-bottom: 3rem;
+}
+
+body[data-admin-workbench] .page-hero,
+body.admin-specialist-workbench .page-hero {
+  padding: 1.25rem 0 0;
+}
+
+body[data-admin-workbench] .page-hero .container,
+body.admin-specialist-workbench .page-hero .container,
+body[data-admin-workbench] .page-sections > .container,
+body.admin-specialist-workbench .page-sections > .container {
+  max-width: 1540px;
+}
+
+body[data-admin-workbench] .page-hero-panel,
+body.admin-specialist-workbench .page-hero-panel {
+  border: 1px solid var(--ops-border);
+  border-radius: 18px;
+  background: linear-gradient(120deg, #ffffff 0%, #f2f9fd 66%, #fffaf0 100%);
+  box-shadow: var(--ops-shadow);
+  padding: 1.4rem 1.55rem;
+}
+
+body[data-admin-workbench] .page-hero-panel h1,
+body.admin-specialist-workbench .page-hero-panel h1 {
+  color: var(--ops-text);
+  letter-spacing: -0.025em;
+}
+
+body[data-admin-workbench] .page-hero-panel .eyebrow,
+body.admin-specialist-workbench .page-hero-panel .eyebrow,
+body[data-admin-workbench] .form-panel > .eyebrow,
+body.admin-specialist-workbench .form-panel > .eyebrow {
+  color: var(--ops-gold);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+body[data-admin-workbench] .form-shell,
+body.admin-specialist-workbench .form-shell {
+  gap: 1rem;
+}
+
+body[data-admin-workbench] .form-panel,
+body.admin-specialist-workbench .form-panel {
+  border: 1px solid var(--ops-border);
+  border-radius: 16px;
+  background: var(--ops-surface);
+  box-shadow: 0 8px 24px rgba(18, 55, 85, 0.045);
+}
+
+body[data-admin-workbench] .family-record-card,
+body.admin-specialist-workbench .family-record-card {
+  border: 1px solid #d5e2ec;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 8px 22px rgba(18, 55, 85, 0.04);
+}
+
+body[data-admin-workbench] .notice,
+body.admin-specialist-workbench .notice {
+  border-radius: 12px;
+}
+
+.admin-workbench-explainer {
+  margin-top: 0.65rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid #d5e3ee;
+  border-radius: 11px;
+  background: var(--ops-surface-soft);
+  color: var(--ops-muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.admin-workbench-explainer strong {
+  color: var(--ops-text);
+}
+
+.admin-secure-preview {
+  margin: 0.85rem 0;
+  min-height: 9rem;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid #c6d8e6;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #f8fbfd 0%, #eef5fa 100%);
+}
+
+.admin-secure-preview img {
+  display: block;
+  width: 100%;
+  max-height: 34rem;
+  object-fit: contain;
+  background: #f6f9fb;
+}
+
+.admin-secure-preview iframe {
+  display: block;
+  width: 100%;
+  min-height: 38rem;
+  border: 0;
+  background: #fff;
+}
+
+.admin-secure-preview-empty {
+  max-width: 30rem;
+  padding: 1.25rem;
+  text-align: center;
+  color: var(--ops-muted);
+}
+
+.admin-file-state-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.55rem;
+  margin: 0.75rem 0;
+}
+
+.admin-file-state-grid > div {
+  padding: 0.55rem 0.65rem;
+  border: 1px solid #d8e5ef;
+  border-radius: 9px;
+  background: #fbfdff;
+}
+
+.admin-file-state-grid span {
+  display: block;
+  color: var(--ops-muted);
+  font-size: 0.67rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.admin-file-state-grid strong {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--ops-text);
+  font-size: 0.8rem;
+}
+
+.admin-review-note-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin-top: 0.9rem;
+}
+
+.admin-review-note-grid label {
+  display: grid;
+  gap: 0.3rem;
+  color: var(--ops-text);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.admin-review-note-grid textarea,
+.admin-review-note-grid input {
+  width: 100%;
+  min-height: 2.6rem;
+  padding: 0.65rem 0.7rem;
+  border: 1px solid #bdd1e1;
+  border-radius: 9px;
+  background: #fff;
+  color: var(--ops-text);
+}
+
+.admin-review-note-grid textarea:focus,
+.admin-review-note-grid input:focus {
+  outline: 3px solid rgba(31, 95, 150, 0.14);
+  border-color: var(--ops-accent);
+}
+
+body[data-admin-workbench] .btn,
+body.admin-specialist-workbench .btn {
+  border-radius: 10px;
+}
+
+body[data-admin-workbench] .btn-primary,
+body.admin-specialist-workbench .btn-primary {
+  box-shadow: 0 5px 14px rgba(31, 95, 150, 0.15);
+}
+
+.admin-workbench-empty {
+  padding: 1.5rem;
+  border: 1px dashed var(--ops-border-strong);
+  border-radius: 14px;
+  background: #fbfdff;
+  color: var(--ops-muted);
+}
+
+.admin-workbench-empty h3 {
+  margin: 0 0 0.35rem;
+  color: var(--ops-text);
+}
+
+@media (max-width: 900px) {
+  .admin-file-state-grid,
+  .admin-review-note-grid {
+    grid-template-columns: 1fr;
+  }
+  .admin-secure-preview iframe {
+    min-height: 30rem;
+  }
+}
