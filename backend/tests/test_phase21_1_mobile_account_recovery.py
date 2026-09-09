@@ -13,6 +13,14 @@ SHARED_ASSET_REVISION_OVERRIDES = {
     ("dashboard.html", "auth.js"): "20260907-auth-hardening",
     ("portal-section.html", "app.js"): "20260907-auth-hardening",
     ("portal-section.html", "auth.js"): "20260907-auth-hardening",
+    ("upload-hub.html", "app.js"): "20260907-auth-hardening",
+    ("upload-hub.html", "auth.js"): "20260907-auth-hardening",
+    ("portrait-upload.html", "app.js"): "20260907-auth-hardening",
+    ("portrait-upload.html", "auth.js"): "20260907-auth-hardening",
+    ("verification-upload.html", "app.js"): "20260907-auth-hardening",
+    ("verification-upload.html", "auth.js"): "20260907-auth-hardening",
+    ("vault-upload.html", "app.js"): "20260907-auth-hardening",
+    ("vault-upload.html", "auth.js"): "20260907-auth-hardening",
 }
 
 

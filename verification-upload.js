@@ -68,19 +68,27 @@
   }
 
   function uploadStatusLabel(upload) {
-    if (upload.quarantined) return "quarantined — under security review";
-    const vs = String(upload.verification_status || "").toLowerCase();
-    const cat = String(upload.category || upload.asset_type || "").toLowerCase();
-    if (vs === "rejected") return "rejected";
-    if (vs === "needs_correction") return "needs correction";
-    if (vs === "approved") {
-      if (cat === "verification_evidence") return "approved for verification";
-      return "approved";
-    }
-    if (vs === "pending") return "pending review";
-    if (upload.id || upload._id) return "uploaded";
-    return "pending review";
+  const scanStatus = normalizeValue(upload.scan_status);
+  if (upload.quarantined) return "blocked — security review required";
+  if (scanStatus === "infected") return "blocked — unsafe file detected";
+  if (scanStatus === "error" || scanStatus === "skipped") {
+    return "blocked — security review required";
   }
+  if (!scanStatus || scanStatus === "pending") return "security scan in progress";
+  if (scanStatus !== "clean") return "security status unavailable";
+
+  const vs = normalizeValue(upload.verification_status);
+  const cat = normalizeValue(upload.category || upload.asset_type);
+  if (vs === "rejected") return "rejected";
+  if (vs === "needs_correction") return "needs correction";
+  if (vs === "approved") {
+    if (cat === "verification_evidence") return "approved for verification";
+    return "approved";
+  }
+  if (vs === "pending") return "pending review";
+  if (upload.id || upload._id) return "uploaded";
+  return "pending review";
+}
 
   function uploadResponseState(payload) {
     const statusPayload = payload?.upload_status;
