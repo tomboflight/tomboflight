@@ -19,16 +19,23 @@ PORTAL_CACHE_OVERRIDES = {
         "dashboard-intake.js": "20260829-vault-ready",
     },
     "link-keys.html": {"link-keys.js": "20260823-phase13-1"},
+    "upload-hub.html": {
+        "app.js": "20260907-auth-hardening",
+        "auth.js": "20260907-auth-hardening",
+    },
     "portrait-upload.html": {
-        "auth.js": "20260829-phase22",
-        "portrait-upload.js": "20260829-phase22",
+        "app.js": "20260907-auth-hardening",
+        "auth.js": "20260907-auth-hardening",
+        "portrait-upload.js": "20260909-step9",
     },
     "verification-upload.html": {
-        "auth.js": "20260829-phase22",
-        "verification-upload.js": "20260829-phase22",
+        "app.js": "20260907-auth-hardening",
+        "auth.js": "20260907-auth-hardening",
+        "verification-upload.js": "20260909-step9",
     },
     "vault-upload.html": {
-        "auth.js": "20260829-phase22",
+        "app.js": "20260907-auth-hardening",
+        "auth.js": "20260907-auth-hardening",
         "vault-upload.js": "20260829-phase22",
     },
     "tree-view.html": {"tree-view.js": "20260823-phase13-1"},

@@ -17,6 +17,10 @@ APP_CACHE_REVISION = "20260828-phase21-1"
 APP_CACHE_REVISION_OVERRIDES = {
     "dashboard.html": "20260907-auth-hardening",
     "portal-section.html": "20260907-auth-hardening",
+    "upload-hub.html": "20260907-auth-hardening",
+    "portrait-upload.html": "20260907-auth-hardening",
+    "verification-upload.html": "20260907-auth-hardening",
+    "vault-upload.html": "20260907-auth-hardening",
 }
 
 
