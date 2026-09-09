@@ -195,6 +195,20 @@
     if (activityStatus) {
       activityStatus.textContent = "Internal account recognized. Customer-only security history endpoints are not used for this identity.";
     }
+
+    const nav = document.getElementById("site-nav");
+    if (nav) {
+      nav.innerHTML =
+        '<a href="dashboard.html">Admin Workspace</a>' +
+        '<a href="admin-control-center.html">Control Center</a>' +
+        '<a href="admin-family-manager.html">Family Manager</a>' +
+        '<a href="admin-portrait-review.html">Portrait Review</a>' +
+        '<a href="admin-verification-review.html">Evidence Review</a>';
+    }
+    const dataRequestLink = document.querySelector("[data-account-data-requests-link]");
+    if (dataRequestLink) dataRequestLink.hidden = true;
+    const signInLink = document.querySelector('.header-actions a[href="signin.html"]');
+    if (signInLink) signInLink.hidden = true;
   }
 
   function formatTimestamp(value) {
