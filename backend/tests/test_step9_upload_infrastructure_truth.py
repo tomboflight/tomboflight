@@ -19,8 +19,10 @@ def test_protected_upload_surfaces_use_hardened_shared_assets():
         assert "app.js?v=20260907-auth-hardening" in html
         assert "auth.js?v=20260907-auth-hardening" in html
 
+    assert "upload-hub.js?v=20260909-step9" in _read("upload-hub.html")
     assert "portrait-upload.js?v=20260909-step9" in _read("portrait-upload.html")
     assert "verification-upload.js?v=20260909-step9" in _read("verification-upload.html")
+    # Vault source was not changed in this slice, so its asset identity remains asset-specific.
     assert "vault-upload.js?v=20260829-phase22" in _read("vault-upload.html")
 
 
@@ -53,3 +55,47 @@ def test_verification_inventory_security_state_precedes_review_state():
     assert labeler.index('scanStatus !== "clean"') < labeler.index('vs === "pending"')
     assert 'blocked — security review required' in labeler
     assert 'security scan in progress' in labeler
+
+
+def test_upload_hub_reads_authorized_inventory_without_mutating_files():
+    source = _read("upload-hub.js")
+
+    assert '/users/me/workspace-context' in source
+    assert '/uploads/family/' in source
+    assert '/uploads/vault/project/' in source
+    assert 'category=member_photo' in source
+    assert 'category=verification_evidence' in source
+    assert 'category=private_media' in source
+    assert 'method: "GET"' in source
+    assert 'method: "POST"' not in source
+    assert 'method: "DELETE"' not in source
+    assert 'method: "PATCH"' not in source
+    assert 'method: "PUT"' not in source
+
+
+def test_upload_hub_fails_closed_and_never_converts_unknown_state_to_zero():
+    source = _read("upload-hub.js")
+    security_start = source.index("function securityState(record)")
+    security_end = source.index("function stateLabel", security_start)
+    security = source[security_start:security_end]
+
+    assert 'record && record.quarantined' in security
+    assert '["infected", "error", "skipped"].includes(scanStatus)' in security
+    assert 'scanStatus !== "clean"' in security
+    assert security.index('["infected", "error", "skipped"]') < security.index('verification_status')
+    assert 'Status unavailable' in source
+    assert 'No unavailable lane is reported as empty.' in source
+    assert 'Unable to confirm the live upload inventory' in source
+
+
+def test_step9_browser_contract_covers_real_counts_failures_and_mobile_width():
+    source = _read("browser-tests/upload-hub-step9.spec.mjs")
+
+    assert "reports real lane counts and security state before review state" in source
+    assert "a failed lane is unavailable and is never converted to a fake zero" in source
+    assert "workspace failure fails closed without fabricated file cards" in source
+    assert "mobile Upload Hub overview stays within the viewport" in source
+    assert "Security blocked" in source
+    assert "0 current files" in source
+    assert "width: 390" in source
+    assert "width: 960" in source
