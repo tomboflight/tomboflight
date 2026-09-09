@@ -24,10 +24,7 @@ from app.core.role_catalog import (
 from app.core.security import decode_access_token, verify_csrf_token
 from app.database import get_database
 from app.services.audit_log_service import write_audit_log
-from app.services.auth_service import (
-    get_user_by_email,
-    has_privileged_admin_authority,
-)
+from app.services.auth_service import get_user_by_email
 from app.services.control_layer_service import create_workflow_event
 from app.services.order_service import get_orders_for_user
 from app.services.project_entitlement_service import list_user_project_entitlements
@@ -473,12 +470,6 @@ def get_current_user(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="MFA verification is required for this session.",
             )
-    elif has_privileged_admin_authority(normalized_user):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="MFA enrollment is required for internal administrator accounts.",
-        )
-
     if source == "cookie":
         _enforce_cookie_auth_csrf(
             request,
