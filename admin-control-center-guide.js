@@ -55,8 +55,9 @@
 
     const guide = document.createElement("div");
     guide.className = "admin-command-search-guide";
+    guide.id = "admin-case-search-help";
     guide.innerHTML =
-      '<span><strong>Case Finder:</strong> search by customer, email, project, family, order, session, wallet, token, or certificate. No customer record opens until you select it.</span>' +
+      '<span><strong>Find → Open → Act:</strong> search by customer, email, project, family, order, session, wallet, token, or certificate. No customer record opens until you select it.</span>' +
       '<span><kbd class="admin-kbd">⌘K</kbd> / <kbd class="admin-kbd">Ctrl K</kbd> focus search</span>';
     panel.appendChild(guide);
   }

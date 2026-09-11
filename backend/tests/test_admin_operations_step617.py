@@ -15,9 +15,9 @@ def test_control_center_is_case_first_and_never_auto_opens_first_result():
 
     assert 'data-admin-case-search' in html
     assert 'data-admin-clear-case' in html
-    assert 'admin-control-center-step617.css?v=20260909-step617' in html
-    assert 'admin-control-center-guide.js?v=20260909-step617' in html
-    assert 'admin-control-center.js?v=20260909-step617' in html
+    assert 'admin-control-center-step617.css?v=20260911-command-center' in html
+    assert 'admin-control-center-guide.js?v=20260911-command-center' in html
+    assert 'admin-control-center.js?v=20260911-command-center' in html
     assert 'state.cases[0].case_id' not in js
     assert 'searchFirstQueue = ["overview", "customer_cases"].includes(state.queue)' in js
     assert 'getSearchValue().length < 2' in js
@@ -145,3 +145,33 @@ def test_temporary_step617_patch_workflows_are_not_persistent():
     )
     for name in forbidden:
         assert not (workflows / name).exists(), f"temporary staging workflow survived: {name}"
+
+
+def test_case_finder_has_explicit_search_status_and_accessible_open_action():
+    html = read("admin-control-center.html")
+    js = read("admin-control-center.js")
+
+    assert 'role="search"' in html
+    assert "data-admin-run-search" in html
+    assert "data-admin-case-search-status" in html
+    assert 'aria-describedby="admin-case-search-help admin-case-search-status"' in html
+    assert "data-admin-run-search" in js
+    assert "Nothing is open until you choose Open case." in js
+    assert 'aria-label="Open ${escapeHtml(item.name || "customer")} case"' in js
+
+
+def test_user_case_summary_uses_open_workspace_relationship_truth_and_flags_unmapped_privileged_roles():
+    service = read("backend/app/services/admin_control_service.py")
+    ownership = service[service.index("def _user_owns_project"):service.index("def _user_has_pending_verified_purchase")]
+    serializer = service[service.index("def _serialize_user_case"):service.index("def _finance_admin_profile")]
+    workspace = service[service.index("def _build_user_workspace_payload"):service.index("def list_customer_cases")]
+
+    assert '"owner_user_id"' in ownership
+    assert '"owner_email"' in ownership
+    assert "related_projects = _related_projects_for_user(user)" in serializer
+    assert '"project": (' in serializer
+    assert '"package_name": package_name or "No Package Assigned"' in serializer
+    assert "privileged_identity_review_required" in serializer
+    assert '"account_type": account_type' in workspace
+    assert "privileged_identity_review_required" in workspace
+    assert '"Account Classification"' in read("admin-control-center.js")

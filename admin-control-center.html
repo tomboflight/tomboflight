@@ -11,7 +11,7 @@
     />
     <link rel="stylesheet" href="styles.css?v=20260828-phase21-1" />
     <link rel="stylesheet" href="admin-control-center-mobile.css?v=20260828-phase21-2" />
-    <link rel="stylesheet" href="admin-control-center-step617.css?v=20260909-step617" />
+    <link rel="stylesheet" href="admin-control-center-step617.css?v=20260911-command-center" />
   </head>
   <body class="admin-control-center-body">
     <div class="page-wrap">
@@ -58,27 +58,37 @@
               <div class="admin-status-summary" data-admin-status-summary aria-live="polite"></div>
             </div>
 
-            <div class="admin-command-search">
-              <label>
+            <div class="admin-command-search" role="search" aria-label="Customer and project search">
+              <label for="admin-case-search">
                 Global customer and project search
                 <input
-                  type="text"
+                  id="admin-case-search"
+                  type="search"
                   placeholder="Name, email, birthday, package, project, family, last4, order, session, wallet, token, certificate"
                   data-admin-case-search
+                  aria-describedby="admin-case-search-help admin-case-search-status"
                 />
               </label>
-              <button class="btn btn-primary" type="button" data-admin-refresh-cases>
-                Refresh Cases
-              </button>
-              <button class="btn btn-secondary" type="button" data-super-admin-create-account hidden>
-                Create Customer
-              </button>
-              <button class="btn btn-secondary" type="button" data-super-admin-manage-team-access hidden>
-                Team Access
-              </button>
-              <button class="btn btn-secondary" type="button" data-super-admin-reconcile-orphan hidden>
-                Reconcile Manual Removal
-              </button>
+              <div class="admin-command-actions" aria-label="Command center actions">
+                <button class="btn btn-primary" type="button" data-admin-run-search>
+                  Search Cases
+                </button>
+                <button class="btn btn-secondary" type="button" data-admin-refresh-cases>
+                  Refresh Cases
+                </button>
+                <button class="btn btn-secondary" type="button" data-super-admin-create-account hidden>
+                  Create Customer
+                </button>
+                <button class="btn btn-secondary" type="button" data-super-admin-manage-team-access hidden>
+                  Team Access
+                </button>
+                <button class="btn btn-secondary" type="button" data-super-admin-reconcile-orphan hidden>
+                  Reconcile Manual Removal
+                </button>
+              </div>
+              <div class="admin-command-search-status" data-admin-case-search-status aria-live="polite">
+                Search is private by default. Enter two or more characters before a customer case can open.
+              </div>
             </div>
             <div class="helper" data-admin-control-action-status aria-live="polite"></div>
             <div class="admin-warning-strip" data-admin-kernel-status aria-live="polite">
@@ -577,8 +587,8 @@
     <script src="config.js?v=20260828-phase21-1"></script>
     <script src="app.js?v=20260907-auth-hardening"></script>
     <script src="auth.js?v=20260907-auth-hardening"></script>
-    <script src="admin-control-center.js?v=20260909-step617"></script>
-    <script src="admin-control-center-guide.js?v=20260909-step617"></script>
+    <script src="admin-control-center.js?v=20260911-command-center"></script>
+    <script src="admin-control-center-guide.js?v=20260911-command-center"></script>
     <script src="admin-operational-health.js?v=20260909-operational-health"></script>
     <script src="admin-control-center-mobile.js?v=20260828-phase21-2"></script>
   </body>

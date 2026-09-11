@@ -46,8 +46,8 @@ class TestPhase191ProductionTruthCorrections(unittest.TestCase):
         html = _read("admin-control-center.html")
         portrait_html = _read("admin-portrait-review.html")
         evidence_html = _read("admin-verification-review.html")
-        self.assertIn('FRONTEND_ASSET_REVISION = "20260828-phase21-1"', service)
-        self.assertIn("admin-control-center.js?v=20260909-step617", html)
+        self.assertIn('FRONTEND_ASSET_REVISION = "20260911-command-center"', service)
+        self.assertIn("admin-control-center.js?v=20260911-command-center", html)
         self.assertIn("admin-portrait-review.js?v=20260909-review-workbench", portrait_html)
         self.assertIn("admin-verification-review.js?v=20260909-review-workbench", evidence_html)
 
