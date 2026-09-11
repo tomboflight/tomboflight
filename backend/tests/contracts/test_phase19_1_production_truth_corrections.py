@@ -30,10 +30,10 @@ class TestPhase191ProductionTruthCorrections(unittest.TestCase):
         evidence = _read("admin-verification-review.js")
         self.assertIn('"preview_available": not preview_blockers', routes)
         self.assertIn('or scan_status != "clean"', routes)
-        self.assertIn("Preview Blocked", portrait)
-        self.assertIn("Preview Blocked", evidence)
-        self.assertIn("Private storage migration must complete before preview", portrait)
-        self.assertIn("Private storage migration must complete before preview", evidence)
+        self.assertIn("Secure preview preparation required", portrait)
+        self.assertIn("Secure preview preparation required", evidence)
+        self.assertIn("private R2 storage preparation is incomplete", portrait)
+        self.assertIn("private R2 storage preparation is incomplete", evidence)
 
     def test_duplicate_candidates_are_visible_without_collapsing_distinct_records(self):
         routes = _read("backend/app/routes/uploads.py")
@@ -47,9 +47,9 @@ class TestPhase191ProductionTruthCorrections(unittest.TestCase):
         portrait_html = _read("admin-portrait-review.html")
         evidence_html = _read("admin-verification-review.html")
         self.assertIn('FRONTEND_ASSET_REVISION = "20260828-phase21-1"', service)
-        self.assertIn("admin-control-center.js?v=20260824-phase19-1", html)
-        self.assertIn("admin-portrait-review.js?v=20260824-phase19-1", portrait_html)
-        self.assertIn("admin-verification-review.js?v=20260824-phase19-1", evidence_html)
+        self.assertIn("admin-control-center.js?v=20260909-step617", html)
+        self.assertIn("admin-portrait-review.js?v=20260909-review-workbench", portrait_html)
+        self.assertIn("admin-verification-review.js?v=20260909-review-workbench", evidence_html)
 
 
 if __name__ == "__main__":

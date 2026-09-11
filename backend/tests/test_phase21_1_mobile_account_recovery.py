@@ -9,6 +9,20 @@ from app.services import auth_service
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 REVISION = "20260828-phase21-1"
 SHARED_ASSET_REVISION_OVERRIDES = {
+    ("account-security.html", "app.js"): "20260907-auth-hardening",
+    ("account-security.html", "auth.js"): "20260907-auth-hardening",
+    ("admin-control-center.html", "app.js"): "20260907-auth-hardening",
+    ("admin-control-center.html", "auth.js"): "20260907-auth-hardening",
+    ("admin-family-manager.html", "app.js"): "20260907-auth-hardening",
+    ("admin-family-manager.html", "auth.js"): "20260907-auth-hardening",
+    ("admin-intake-queue.html", "app.js"): "20260907-auth-hardening",
+    ("admin-intake-queue.html", "auth.js"): "20260907-auth-hardening",
+    ("admin-intake-review.html", "app.js"): "20260907-auth-hardening",
+    ("admin-intake-review.html", "auth.js"): "20260907-auth-hardening",
+    ("admin-portrait-review.html", "app.js"): "20260907-auth-hardening",
+    ("admin-portrait-review.html", "auth.js"): "20260907-auth-hardening",
+    ("admin-verification-review.html", "app.js"): "20260907-auth-hardening",
+    ("admin-verification-review.html", "auth.js"): "20260907-auth-hardening",
     ("dashboard.html", "app.js"): "20260907-auth-hardening",
     ("dashboard.html", "auth.js"): "20260907-auth-hardening",
     ("portal-section.html", "app.js"): "20260907-auth-hardening",

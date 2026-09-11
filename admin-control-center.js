@@ -1793,14 +1793,24 @@
     const cases = Array.isArray(state.cases) ? state.cases : [];
     const canRepairSelected = isAllowedBulkAction("repair-selected-records");
     if (!cases.length) {
-      node.innerHTML = `
-        ${operationsPanel}
-        <div class="admin-empty-state">
-          <div class="card-number">C</div>
-          <h3>No case results</h3>
-          <p class="card-copy">No customer cases matched this queue/search.</p>
-        </div>
-      `;
+      const searchFirst = ["overview", "customer_cases"].includes(state.queue) && getSearchValue().length < 2;
+      node.innerHTML = searchFirst
+        ? `
+          ${operationsPanel}
+          <div class="admin-search-first-state">
+            <span class="eyebrow">Case Finder</span>
+            <h3>Find the customer or record you intend to work on.</h3>
+            <p>Enter at least two characters from a name, email, project, family, order, session, wallet, token, or certificate. Tomb of Light will not open a customer profile until you explicitly select a result.</p>
+          </div>
+        `
+        : `
+          ${operationsPanel}
+          <div class="admin-empty-state">
+            <div class="card-number">C</div>
+            <h3>No case results</h3>
+            <p class="card-copy">No customer cases matched this queue/search.</p>
+          </div>
+        `;
       return;
     }
 
@@ -2597,6 +2607,18 @@
     });
   }
 
+  function clearSelectedCase() {
+    state.selectedCaseId = "";
+    state.workspace = null;
+    renderCaseList();
+    renderCaseHeader();
+    renderCaseContext();
+    renderWorkspaceTab();
+    updateActionAvailability();
+    updateBulkActionAvailability();
+    clearPageStatus();
+  }
+
   async function loadCaseWorkspace(caseId) {
     if (!caseId) return;
     state.selectedCaseId = caseId;
@@ -2673,6 +2695,21 @@
       clearPageStatus();
       return;
     }
+    const searchValue = getSearchValue();
+    const searchFirstQueue = ["overview", "customer_cases"].includes(state.queue);
+    if (searchFirstQueue && searchValue.length < 2) {
+      state.cases = [];
+      state.selectedCaseId = "";
+      state.workspace = null;
+      renderCaseList();
+      renderCaseHeader();
+      renderCaseContext();
+      renderWorkspaceTab();
+      updateActionAvailability();
+      updateBulkActionAvailability();
+      clearPageStatus();
+      return;
+    }
     const meta = QUEUE_META[state.queue] || QUEUE_META.customer_cases;
     setPageStatus(`Loading ${meta[0].toLowerCase()}...`, "info");
     try {
@@ -2685,18 +2722,16 @@
         state.selectedCaseId = "";
         state.workspace = null;
       }
+      const stillExists = state.selectedCaseId
+        ? state.cases.find(function (item) { return item.case_id === state.selectedCaseId; })
+        : null;
+      if (state.selectedCaseId && !stillExists) {
+        state.selectedCaseId = "";
+        state.workspace = null;
+      }
       renderCaseList();
-      if (!state.selectedCaseId && state.cases.length) {
-        await loadCaseWorkspace(state.cases[0].case_id);
-      } else if (state.selectedCaseId) {
-        const stillExists = state.cases.find(function (item) {
-          return item.case_id === state.selectedCaseId;
-        });
-        if (stillExists) {
-          await loadCaseWorkspace(state.selectedCaseId);
-        } else if (state.cases.length) {
-          await loadCaseWorkspace(state.cases[0].case_id);
-        }
+      if (state.selectedCaseId && stillExists) {
+        await loadCaseWorkspace(state.selectedCaseId);
       }
       renderCaseContext();
       renderCaseHeader();
@@ -4735,7 +4770,13 @@
         const queue = queueButton.getAttribute("data-case-queue") || "overview";
         if (!isAllowedQueue(queue)) return;
         state.queue = queue;
+        state.selectedCaseId = "";
+        state.workspace = null;
         applyRailSelection();
+        renderCaseHeader();
+        renderCaseContext();
+        renderWorkspaceTab();
+        updateActionAvailability();
         loadCases();
         return;
       }
@@ -4793,6 +4834,12 @@
         return;
       }
 
+      const clearCaseButton = target.closest("[data-admin-clear-case]");
+      if (clearCaseButton) {
+        clearSelectedCase();
+        return;
+      }
+
       const openCaseButton = target.closest("[data-open-case]");
       if (openCaseButton) {
         const caseId = openCaseButton.getAttribute("data-open-case");
@@ -4801,7 +4848,12 @@
       }
 
       const caseRow = target.closest("[data-case-row]");
-      if (caseRow && !target.closest("[data-case-select]") && !target.closest(".admin-case-select")) {
+      if (
+        caseRow &&
+        !target.closest("[data-case-select]") &&
+        !target.closest(".admin-case-select") &&
+        !target.closest("[data-open-case]")
+      ) {
         const caseId = caseRow.getAttribute("data-case-row");
         if (caseId) loadCaseWorkspace(caseId);
         return;
@@ -5099,7 +5151,6 @@
           loadCases();
         }, 280);
       });
-      searchInput.addEventListener("change", loadCases);
       searchInput.addEventListener("keydown", function (event) {
         if (event.key === "Enter") {
           event.preventDefault();

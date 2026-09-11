@@ -15,12 +15,19 @@ APP_JS_PATH = REPO_ROOT / "app.js"
 AUTH_JS_PATH = REPO_ROOT / "auth.js"
 APP_CACHE_REVISION = "20260828-phase21-1"
 APP_CACHE_REVISION_OVERRIDES = {
+    "account-security.html": "20260907-auth-hardening",
+    "admin-control-center.html": "20260907-auth-hardening",
+    "admin-family-manager.html": "20260907-auth-hardening",
+    "admin-intake-queue.html": "20260907-auth-hardening",
+    "admin-intake-review.html": "20260907-auth-hardening",
+    "admin-portrait-review.html": "20260907-auth-hardening",
+    "admin-verification-review.html": "20260907-auth-hardening",
     "dashboard.html": "20260907-auth-hardening",
     "portal-section.html": "20260907-auth-hardening",
-    "upload-hub.html": "20260907-auth-hardening",
-    "portrait-upload.html": "20260907-auth-hardening",
     "verification-upload.html": "20260907-auth-hardening",
     "vault-upload.html": "20260907-auth-hardening",
+    "upload-hub.html": "20260907-auth-hardening",
+    "portrait-upload.html": "20260907-auth-hardening",
 }
 
 

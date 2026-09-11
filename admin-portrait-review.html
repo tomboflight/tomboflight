@@ -6,47 +6,50 @@
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data: https:; connect-src 'self' https://tomboflight-api.onrender.com https://*.onrender.com http://127.0.0.1:* http://localhost:*; form-action 'self'; upgrade-insecure-requests" />
     <title>Master Portrait Review | Tomb of Light</title>
     <link rel="stylesheet" href="styles.css?v=20260828-phase21-1" />
+    <link rel="stylesheet" href="admin-specialist-workbench.css?v=20260909-step617" />
   </head>
-  <body class="portal-dashboard-body">
+  <body class="portal-dashboard-body admin-specialist-workbench" data-admin-workbench="portrait-review">
     <div class="page-wrap">
       <header class="site-header">
         <div class="container site-header-inner">
           <a class="brand" href="index.html">Tomb of Light<span class="brand-symbol">™</span></a>
           <nav class="site-nav" aria-label="Admin navigation">
             <a href="admin-control-center.html">Control Center</a>
+            <a href="admin-family-manager.html">Family Manager</a>
             <a href="admin-portrait-review.html" aria-current="page">Portrait Review</a>
             <a href="admin-verification-review.html">Evidence Review</a>
-            <a href="admin-family-manager.html">Family Manager</a>
+            <a href="account-security.html">Account Security</a>
           </nav>
           <button class="btn btn-secondary" type="button" data-logout-btn>Log Out</button>
         </div>
       </header>
       <main data-admin-portrait-review>
         <section class="page-hero"><div class="container"><div class="page-hero-panel">
-          <span class="eyebrow">Master Account Review</span>
-          <h1>Approve portraits before automatic placement.</h1>
+          <span class="eyebrow">Visual Production Review</span>
+          <h1>Portrait Review Workbench</h1>
           <p data-review-status>Loading portrait submissions…</p>
-          <div class="notice" style="margin-top: 1rem">
-            Approval is available only after a clean security scan and recorded
-            customer consent and authority attestations.
+          <div class="admin-workbench-explainer">
+            <strong>Workflow:</strong> prepare a protected preview, inspect the complete image inside Tomb of Light, record review notes and an operational reason, then approve placement or reject. Approval remains unavailable until security, private storage, consent, authority, and record references are valid.
           </div>
         </div></div></section>
         <section class="page-sections"><div class="container form-shell">
           <div class="form-panel">
             <div class="inline-actions">
-              <button class="btn btn-primary" type="button" data-refresh-review>Refresh Queue</button>
+              <button class="btn btn-primary" type="button" data-refresh-review>Refresh Review Queue</button>
+              <a class="btn btn-secondary" href="admin-control-center.html">Return to Control Center</a>
             </div>
           </div>
           <div class="grid-3" data-review-list></div>
           <div class="form-panel" data-review-empty style="display: none">
             <h2>No portrait submissions are waiting.</h2>
+            <p class="card-copy">The portrait review queue is clear.</p>
           </div>
         </div></section>
       </main>
     </div>
     <script src="config.js?v=20260828-phase21-1"></script>
-    <script src="app.js?v=20260828-phase21-1"></script>
-    <script src="auth.js?v=20260828-phase21-1"></script>
-    <script src="admin-portrait-review.js?v=20260824-phase19-1"></script>
+    <script src="app.js?v=20260907-auth-hardening"></script>
+    <script src="auth.js?v=20260907-auth-hardening"></script>
+    <script src="admin-portrait-review.js?v=20260909-review-workbench"></script>
   </body>
 </html>

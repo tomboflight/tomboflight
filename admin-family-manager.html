@@ -10,8 +10,9 @@
       content="Admin family build manager for Tomb of Light."
     />
     <link rel="stylesheet" href="styles.css?v=20260828-phase21-1" />
+    <link rel="stylesheet" href="admin-specialist-workbench.css?v=20260909-step617" />
   </head>
-  <body>
+  <body class="admin-specialist-workbench" data-admin-workbench="family">
     <div class="page-wrap">
       <header class="site-header">
         <div class="container site-header-inner">
@@ -56,7 +57,8 @@
             <div class="page-hero-panel">
               <span class="eyebrow">Admin Family Build</span>
               <h1>Family Manager</h1>
-              <p data-admin-family-status>Loading family build tools...</p>
+              <p data-admin-family-status>Choose a provisioned family build. No family record opens automatically.</p>
+              <div class="admin-workbench-explainer"><strong>How this works:</strong> select the family you intend to manage, then choose Load Family. Member, relationship, upload, and verification controls stay case-scoped to that loaded family.</div>
             </div>
           </div>
         </section>
@@ -98,10 +100,9 @@
             <div class="form-panel">
               <span class="eyebrow">Family Overview</span>
               <div class="grid-3" data-admin-family-summary>
-                <div>
-                  <div class="card-number">1</div>
-                  <h3>Loading</h3>
-                  <p class="card-copy">Family summary is loading.</p>
+                <div class="admin-workbench-empty">
+                  <h3>No family selected</h3>
+                  <p class="card-copy">Select a provisioned family build above and choose Load Family. No household data is displayed until you do.</p>
                 </div>
               </div>
             </div>
@@ -495,8 +496,8 @@
     </div>
 
     <script src="config.js?v=20260828-phase21-1"></script>
-    <script src="app.js?v=20260828-phase21-1"></script>
-    <script src="auth.js?v=20260828-phase21-1"></script>
-    <script src="admin-family-manager.js?v=20260824-phase18"></script>
+    <script src="app.js?v=20260907-auth-hardening"></script>
+    <script src="auth.js?v=20260907-auth-hardening"></script>
+    <script src="admin-family-manager.js?v=20260909-step617"></script>
   </body>
 </html>

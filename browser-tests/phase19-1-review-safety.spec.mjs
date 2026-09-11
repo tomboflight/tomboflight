@@ -1,6 +1,5 @@
 import { expect, test } from "@playwright/test";
 
-
 const BLOCKED_REVIEW_ITEM = {
   id: "upload-phase19-1-blocked",
   member_name: "Review Safety Fixture",
@@ -26,8 +25,7 @@ const BLOCKED_REVIEW_ITEM = {
   orphaned_member_reference: false,
 };
 
-
-test("[phase19.1 review safety] blocks unsafe portrait and evidence previews with exact remediation", async ({ page }) => {
+test("[phase19.1 review safety] blocks unsafe preview but exposes secure preparation without bypassing approval", async ({ page }) => {
   let previewRequests = 0;
   await page.addInitScript(() => {
     localStorage.setItem("tol_access_token", "phase19-1-review-fixture");
@@ -43,6 +41,8 @@ test("[phase19.1 review safety] blocks unsafe portrait and evidence previews wit
           id: "ceo-fixture",
           email: "ceo.fixture@tomboflight.test",
           role: "ceo_master_admin",
+          is_admin: true,
+          dashboard_type: "admin",
         }),
       });
     }
@@ -70,8 +70,10 @@ test("[phase19.1 review safety] blocks unsafe portrait and evidence previews wit
   });
 
   await page.goto("/admin-portrait-review.html");
-  const portraitPreview = page.getByRole("button", { name: "Preview Blocked" });
+  const portraitPreview = page.getByRole("button", { name: "Preview Not Ready" });
   await expect(portraitPreview).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Prepare Secure Preview" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Approve & Place" })).toBeDisabled();
   await expect(page.locator("[data-preview-blockers]")).toContainText(
     "Private storage migration must complete before preview",
   );
@@ -80,8 +82,10 @@ test("[phase19.1 review safety] blocks unsafe portrait and evidence previews wit
   );
 
   await page.goto("/admin-verification-review.html");
-  const evidencePreview = page.getByRole("button", { name: "Preview Blocked" });
+  const evidencePreview = page.getByRole("button", { name: "Preview Not Ready" });
   await expect(evidencePreview).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Prepare Secure Preview" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Approve" })).toBeDisabled();
   await expect(page.locator("[data-evidence-preview-blockers]")).toContainText(
     "clean verdict",
   );

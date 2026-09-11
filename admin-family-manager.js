@@ -9,6 +9,7 @@
 
   const FAMILY_MANAGER_ROLE_KEYS = new Set([
     "super_admin",
+    "ceo_master_admin",
     "executive_tech_admin",
     "operations_admin",
   ]);
@@ -509,22 +510,48 @@
       .join("");
   }
 
+  function renderFamilyContextState(title, copy) {
+    const node = document.querySelector("[data-admin-family-summary]");
+    if (!node) return;
+    node.innerHTML = `<div class="admin-workbench-empty"><h3>${escapeHtml(title)}</h3><p class="card-copy">${escapeHtml(copy)}</p></div>`;
+  }
+
+  function setFamilyScopedControlsEnabled(enabled) {
+    document.querySelectorAll(
+      "[data-admin-member-form] input, [data-admin-member-form] textarea, [data-admin-member-form] button, " +
+      "[data-admin-relationship-form] select, [data-admin-relationship-form] input, [data-admin-relationship-form] button, " +
+      "[data-admin-photo-form] select, [data-admin-photo-form] input, [data-admin-photo-form] button, " +
+      "[data-admin-evidence-form] select, [data-admin-evidence-form] input, [data-admin-evidence-form] button, " +
+      "[data-admin-uploads-member], [data-admin-upload-category-filter], [data-admin-load-member-uploads]"
+    ).forEach(function (node) {
+      node.disabled = !enabled;
+      node.setAttribute("aria-disabled", enabled ? "false" : "true");
+    });
+  }
+
+  function clearFamilyContext(message) {
+    currentFamilyId = "";
+    currentGraph = { members: [], relationships: [] };
+    renderFamilyContextState(
+      "No family loaded",
+      message || "Choose a provisioned family build and select Load Family before making changes."
+    );
+    renderMembers(currentGraph);
+    renderRelationships(currentGraph);
+    populateRelationshipMemberSelects(currentGraph);
+    populateUploadMemberSelects(currentGraph);
+    renderMemberUploads([]);
+    setFamilyScopedControlsEnabled(false);
+  }
+
   function buildUploadPreviewMarkup(upload) {
-    if (!String(upload.content_type || "").startsWith("image/")) {
-      return "";
-    }
-
-    const apiBaseUrl =
-      typeof app.getApiBaseUrl === "function" ? app.getApiBaseUrl() : "";
-
-    return `<div style="margin: 0 0 1rem;">
-      <img
-        src="${escapeHtml(
-          `${apiBaseUrl}/uploads/${encodeURIComponent(upload.id || "")}/download`,
-        )}"
-        alt="${escapeHtml(upload.original_filename || "Uploaded image")}"
-        style="width: 100%; max-height: 220px; object-fit: cover; border-radius: 18px; border: 1px solid rgba(255,255,255,0.08);"
-      />
+    const permissions = upload && typeof upload.permissions === "object" ? upload.permissions : {};
+    const previewReady = permissions.can_preview === true;
+    return `<div class="admin-secure-preview" data-admin-upload-preview-frame="${escapeHtml(upload.id || "")}">
+      <div class="admin-secure-preview-empty">
+        <strong>${previewReady ? "Protected preview ready" : "Protected preview not ready"}</strong>
+        <p>${previewReady ? "Choose Secure Preview to view this customer file inside Tomb of Light." : "The file remains private until scanning and durable private storage are complete. Use the appropriate review queue to prepare it."}</p>
+      </div>
     </div>`;
   }
 
@@ -559,16 +586,23 @@
             <p class="card-copy"><strong>Created:</strong> ${escapeHtml(formatDate(upload.created_at))}</p>
             <p class="card-copy"><strong>Upload ID:</strong> ${escapeHtml(upload.id || "—")}</p>
 
+            <div class="admin-file-state-grid">
+              <div><span>Security</span><strong>${escapeHtml(upload.scan_status || "Unknown")}</strong></div>
+              <div><span>Review</span><strong>${escapeHtml(upload.verification_status || upload.master_review_status || "Pending")}</strong></div>
+              <div><span>Private preview</span><strong>${upload.permissions && upload.permissions.can_preview ? "Ready" : "Not ready"}</strong></div>
+            </div>
+
             <div class="inline-actions" style="margin-top: 1rem">
               <button
-                class="btn btn-secondary"
+                class="btn btn-primary"
                 type="button"
-                data-download-upload-id="${escapeHtml(upload.id || "")}"
-                data-download-upload-name="${escapeHtml(upload.original_filename || "download")}"
+                data-secure-preview-upload-id="${escapeHtml(upload.id || "")}"
+                ${upload.permissions && upload.permissions.can_preview ? "" : "disabled"}
               >
-                Download
+                Secure Preview
               </button>
-
+              ${upload.category === "member_photo" ? '<a class="btn btn-secondary" href="admin-portrait-review.html">Open Portrait Review</a>' : ''}
+              ${upload.category === "verification_evidence" ? '<a class="btn btn-secondary" href="admin-verification-review.html">Open Evidence Review</a>' : ''}
               <button
                 class="btn btn-secondary"
                 type="button"
@@ -725,13 +759,17 @@
 
     try {
       clearStatus(actionNode);
-      currentFamilyId = familyId;
+      currentFamilyId = "";
+      currentGraph = { members: [], relationships: [] };
+      setFamilyScopedControlsEnabled(false);
+      renderFamilyContextState("Loading selected family", "Retrieving the isolated family graph and permissions…");
 
       const graph = await app.apiRequest(
         `/families/${encodeURIComponent(familyId)}/graph`,
         { method: "GET" },
       );
 
+      currentFamilyId = familyId;
       currentGraph = {
         members: Array.isArray(graph.members) ? graph.members : [],
         relationships: Array.isArray(graph.relationships)
@@ -744,6 +782,7 @@
       renderRelationships(currentGraph);
       populateRelationshipMemberSelects(currentGraph);
       populateUploadMemberSelects(currentGraph);
+      setFamilyScopedControlsEnabled(true);
 
       if (statusNode) {
         statusNode.textContent = `Family build ${familyId} loaded successfully.`;
@@ -752,6 +791,13 @@
       setStatus(actionNode, "Family build loaded successfully.", "success");
     } catch (error) {
       console.error("Family graph load failed:", error);
+      currentFamilyId = "";
+      currentGraph = { members: [], relationships: [] };
+      setFamilyScopedControlsEnabled(false);
+      renderFamilyContextState(
+        "Family unavailable",
+        "The selected family could not be loaded. No family-scoped action is enabled. Retry the selection or return to Control Center."
+      );
       setStatus(
         actionNode,
         getUserFacingErrorMessage(error, "Unable to load family graph."),
@@ -1234,54 +1280,62 @@
     }
   }
 
-  async function downloadUpload(uploadId, originalFilename) {
-    const actionNode = document.querySelector(
-      "[data-admin-family-action-status]",
-    );
-
+  async function securePreviewUpload(uploadId, button) {
+    const actionNode = document.querySelector("[data-admin-family-action-status]");
     if (!uploadId) {
       setStatus(actionNode, "Missing upload id.", "error");
       return;
     }
 
     try {
-      setStatus(actionNode, "Downloading file...", "info");
-
+      setStatus(actionNode, "Loading protected customer file inside Family Manager…", "info");
       const token = app.getToken ? app.getToken() : "";
-      const apiBaseUrl =
-        typeof app.getApiBaseUrl === "function" ? app.getApiBaseUrl() : "";
-
+      const apiBaseUrl = typeof app.getApiBaseUrl === "function" ? app.getApiBaseUrl() : "";
       const response = await fetch(
-        `${apiBaseUrl}/uploads/${encodeURIComponent(uploadId)}/download`,
-        {
-          method: "GET",
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        },
+        `${apiBaseUrl}/uploads/${encodeURIComponent(uploadId)}/admin-preview`,
+        { credentials: "include", headers: token ? { Authorization: `Bearer ${token}` } : {} },
       );
-
       if (!response.ok) {
-        const text = await response.text();
-        throw new Error(text || "Unable to download upload.");
+        let detail = "Protected preview is not available yet.";
+        try {
+          const payload = await response.json();
+          detail = String(payload && payload.detail || detail);
+        } catch (_error) {}
+        throw new Error(detail);
       }
-
       const blob = await response.blob();
-      const objectUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = objectUrl;
-      link.download = originalFilename || "download";
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(objectUrl);
-
-      setStatus(actionNode, "Download started.", "success");
+      const url = URL.createObjectURL(blob);
+      const card = button && button.closest(".family-record-card");
+      const frame = card && card.querySelector(`[data-admin-upload-preview-frame="${CSS.escape(String(uploadId))}"]`);
+      if (!frame) {
+        URL.revokeObjectURL(url);
+        throw new Error("Protected preview area is unavailable.");
+      }
+      const previous = frame.dataset.previewObjectUrl || "";
+      if (previous) URL.revokeObjectURL(previous);
+      frame.dataset.previewObjectUrl = url;
+      frame.innerHTML = "";
+      const type = String(blob.type || "").toLowerCase();
+      if (type.startsWith("image/")) {
+        const image = document.createElement("img");
+        image.src = url;
+        image.alt = "Protected customer upload preview";
+        frame.appendChild(image);
+      } else if (type === "application/pdf") {
+        const iframe = document.createElement("iframe");
+        iframe.src = url;
+        iframe.title = "Protected customer document preview";
+        frame.appendChild(iframe);
+      } else {
+        const empty = document.createElement("div");
+        empty.className = "admin-secure-preview-empty";
+        empty.textContent = "This protected file type cannot be rendered inline in this browser.";
+        frame.appendChild(empty);
+      }
+      setStatus(actionNode, "Protected customer file is visible inside Family Manager.", "success");
     } catch (error) {
-      console.error("Download upload failed:", error);
-      setStatus(
-        actionNode,
-        getUserFacingErrorMessage(error, "Unable to download upload."),
-        "error",
-      );
+      console.error("Secure upload preview failed:", error);
+      setStatus(actionNode, getUserFacingErrorMessage(error, "Unable to open protected preview."), "error");
     }
   }
 
@@ -1513,13 +1567,13 @@
           return;
         }
 
-        const downloadButton = event.target.closest(
-          "[data-download-upload-id]",
+        const securePreviewButton = event.target.closest(
+          "[data-secure-preview-upload-id]",
         );
-        if (downloadButton) {
-          downloadUpload(
-            downloadButton.getAttribute("data-download-upload-id"),
-            downloadButton.getAttribute("data-download-upload-name"),
+        if (securePreviewButton) {
+          securePreviewUpload(
+            securePreviewButton.getAttribute("data-secure-preview-upload-id"),
+            securePreviewButton,
           );
           return;
         }
@@ -1535,8 +1589,20 @@
       });
 
       const selectNode = document.querySelector("[data-admin-family-select]");
+      setFamilyScopedControlsEnabled(false);
+      if (selectNode) {
+        selectNode.addEventListener("change", function () {
+          clearFamilyContext(
+            selectNode.value
+              ? "The family selection changed. Choose Load Family to open that family before making changes."
+              : "Choose a provisioned family build and select Load Family before making changes."
+          );
+        });
+      }
       if (selectNode && selectNode.value) {
         await loadFamilyGraph();
+      } else {
+        clearFamilyContext();
       }
     } catch (error) {
       console.error("Admin family manager setup failed:", error);

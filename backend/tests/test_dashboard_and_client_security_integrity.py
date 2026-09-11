@@ -12,6 +12,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 AUDIT_CACHE_VERSION = "20260509-audit"
 SHARED_ASSET_CACHE_VERSION = "20260828-phase21-1"
 PORTAL_CACHE_OVERRIDES = {
+    "account-security.html": {
+        "app.js": "20260907-auth-hardening",
+        "auth.js": "20260907-auth-hardening",
+    },
     "dashboard.html": {
         "app.js": "20260907-auth-hardening",
         "auth.js": "20260907-auth-hardening",
