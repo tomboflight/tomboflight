@@ -25,7 +25,7 @@ class TestContinuityKernelPhase10CommandCenter(unittest.TestCase):
         self.assertIn("styles.css?v=20260828-phase21-1", self.html)
         self.assertIn("app.js?v=20260907-auth-hardening", self.html)
         self.assertIn("admin-control-center.js?v=20260911-command-center", self.html)
-        self.assertIn('FRONTEND_ASSET_REVISION = "20260828-phase21-1"', self.service)
+        self.assertIn('FRONTEND_ASSET_REVISION = "20260911-command-center"', self.service)
 
     def test_02_account_creation_and_closure_are_visible_previewed_workflows(self) -> None:
         for marker in (
