@@ -4848,7 +4848,12 @@
       }
 
       const caseRow = target.closest("[data-case-row]");
-      if (caseRow && !target.closest("[data-case-select]") && !target.closest(".admin-case-select")) {
+      if (
+        caseRow &&
+        !target.closest("[data-case-select]") &&
+        !target.closest(".admin-case-select") &&
+        !target.closest("[data-open-case]")
+      ) {
         const caseId = caseRow.getAttribute("data-case-row");
         if (caseId) loadCaseWorkspace(caseId);
         return;
@@ -5146,7 +5151,6 @@
           loadCases();
         }, 280);
       });
-      searchInput.addEventListener("change", loadCases);
       searchInput.addEventListener("keydown", function (event) {
         if (event.key === "Enter") {
           event.preventDefault();

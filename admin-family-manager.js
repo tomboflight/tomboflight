@@ -9,6 +9,7 @@
 
   const FAMILY_MANAGER_ROLE_KEYS = new Set([
     "super_admin",
+    "ceo_master_admin",
     "executive_tech_admin",
     "operations_admin",
   ]);

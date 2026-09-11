@@ -184,7 +184,8 @@ test("[step617] Control Center explains commands, separates bulk work, supports 
     const help = await bulkButtons.nth(index).getAttribute("data-action-help");
     expect(String(help || "").length).toBeGreaterThan(20);
   }
-  await expect(page.locator(".admin-console-priority").first()).toContainText("Bulk actions affect more than one record");
+  await expect(page.locator(".admin-console-priority").first()).toContainText("Priority Repairs");
+  await expect(page.locator(".admin-console-priority").first()).toContainText("Repair All Safe Records");
 
   await page.keyboard.press(process.platform === "darwin" ? "Meta+K" : "Control+K");
   await expect(page.locator("[data-admin-case-search]")).toBeFocused();
@@ -211,7 +212,7 @@ test("[step617] internal Account Security uses admin identity and never calls cu
   });
 
   await page.goto("/account-security.html", { waitUntil: "networkidle" });
-  await expect(page.locator("[data-customer-account-summary-status]")).toContainText("Internal administrator account");
+  await expect(page.locator("[data-customer-account-summary-status]")).toContainText("internal Tomb of Light operations identity");
   await expect(page.locator("[data-summary-package]")).toHaveText("Internal Operations");
   await expect(page.locator("[data-summary-project]")).toHaveText("Administrator Workspace");
   await expect(page.locator("[data-summary-family]")).toHaveText("Authorized");
@@ -269,15 +270,15 @@ test("[step617] Family Manager shows no family by default, clears stale context 
   });
 
   await page.goto("/admin-family-manager.html", { waitUntil: "networkidle" });
-  await expect(page.locator("[data-admin-family-summary]")).toContainText("No family selected");
+  await expect(page.locator("[data-admin-family-summary]")).toContainText("No family loaded");
   expect(state.graphCalls).toBe(0);
   await expect(page.locator('[data-admin-member-form] button[type="submit"]')).toBeDisabled();
 
   const familySelect = page.locator("[data-admin-family-select]");
   await familySelect.selectOption("family-1");
   expect(state.graphCalls).toBe(0);
-  await page.locator("[data-admin-load-family]").click();
-  await expect(page.locator("[data-admin-current-members]")).toContainText("Larry Robinson");
+  await page.locator("[data-admin-family-load]").click();
+  await expect(page.locator("[data-admin-family-members-list]")).toContainText("Larry Robinson");
   expect(state.graphCalls).toBe(1);
   await expect(page.locator('[data-admin-member-form] button[type="submit"]')).toBeEnabled();
 
@@ -386,10 +387,9 @@ test("[step617] Evidence Review renders protected images and PDFs inline without
   });
 
   await page.goto("/admin-verification-review.html", { waitUntil: "networkidle" });
-  const buttons = page.getByRole("button", { name: "View Secure Evidence" });
-  await buttons.nth(0).click();
+  await page.locator('[data-evidence-card="evidence-image"] [data-evidence-preview="evidence-image"]').click();
   await expect(page.locator('[data-evidence-card="evidence-image"] [data-evidence-preview-frame] img')).toBeVisible();
-  await buttons.nth(1).click();
+  await page.locator('[data-evidence-card="evidence-pdf"] [data-evidence-preview="evidence-pdf"]').click();
   await expect(page.locator('[data-evidence-card="evidence-pdf"] [data-evidence-preview-frame] iframe')).toBeVisible();
   expect(state.previewCalls).toBe(2);
 });
