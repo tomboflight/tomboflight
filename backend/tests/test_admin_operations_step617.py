@@ -15,9 +15,9 @@ def test_control_center_is_case_first_and_never_auto_opens_first_result():
 
     assert 'data-admin-case-search' in html
     assert 'data-admin-clear-case' in html
-    assert 'admin-control-center-step617.css?v=20260909-step617' in html
-    assert 'admin-control-center-guide.js?v=20260909-step617' in html
-    assert 'admin-control-center.js?v=20260909-step617' in html
+    assert 'admin-control-center-step617.css?v=20260911-command-center' in html
+    assert 'admin-control-center-guide.js?v=20260911-command-center' in html
+    assert 'admin-control-center.js?v=20260911-command-center' in html
     assert 'state.cases[0].case_id' not in js
     assert 'searchFirstQueue = ["overview", "customer_cases"].includes(state.queue)' in js
     assert 'getSearchValue().length < 2' in js

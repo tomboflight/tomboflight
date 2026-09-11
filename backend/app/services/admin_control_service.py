@@ -661,7 +661,7 @@ def admin_control_bulk_action_allowed(
 # Bumped alongside the static frontend cache-busting query string
 # (see admin-control-center.html / dashboard.html `?v=` suffix) whenever a
 # hotfix ships to the admin control center or dashboard assets.
-FRONTEND_ASSET_REVISION = "20260828-phase21-1"
+FRONTEND_ASSET_REVISION = "20260911-command-center"
 
 
 def _backend_release_identifier() -> str:
