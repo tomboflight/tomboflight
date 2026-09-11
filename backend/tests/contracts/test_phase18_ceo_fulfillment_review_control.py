@@ -73,13 +73,12 @@ class TestPhase18CeoFulfillmentReviewControl(unittest.TestCase):
                 expected_version = (
                     "20260909-step9"
                     if asset == "portrait-upload.js"
-                    else "20260824-phase19-1"
+                    else "20260909-step617"
                     if asset in {
                         "admin-control-center.js",
-                        "admin-portrait-review.js",
-                        "admin-verification-review.js",
+                        "admin-family-manager.js",
                     }
-                    else "20260824-phase18"
+                    else "20260909-review-workbench"
                 )
                 self.assertIn(f'{asset}?v={expected_version}', _read(html_path))
 

@@ -76,7 +76,7 @@ class TestPhase13FamilyOperatingMachine(unittest.TestCase):
                 self.assertIn(f'{asset}?v={revision}', _read(html_path))
         for html_path, asset, asset_revision in (
             ("portrait-upload.html", "portrait-upload.js", "20260909-step9"),
-            ("admin-control-center.html", "admin-control-center.js", "20260824-phase19-1"),
+            ("admin-control-center.html", "admin-control-center.js", "20260909-step617"),
         ):
             with self.subTest(html_path=html_path, asset=asset):
                 self.assertIn(f'{asset}?v={asset_revision}', _read(html_path))
