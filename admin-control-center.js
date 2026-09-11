@@ -345,6 +345,40 @@
     return normalizeValue(node && node.value);
   }
 
+  function setCaseSearchStatus(message, type) {
+    const node = document.querySelector("[data-admin-case-search-status]");
+    if (!node) return;
+    node.textContent = normalizeValue(message);
+    node.dataset.state = normalizeLower(type) || "neutral";
+  }
+
+  function updateCaseSearchStatus(cases) {
+    const searchValue = getSearchValue();
+    const searchFirstQueue = ["overview", "customer_cases"].includes(state.queue);
+    const records = Array.isArray(cases) ? cases : [];
+    if (searchFirstQueue && searchValue.length < 2) {
+      setCaseSearchStatus(
+        "Search required: enter two or more characters. No customer record is open.",
+        "neutral",
+      );
+      return;
+    }
+    if (!records.length) {
+      setCaseSearchStatus(
+        searchValue
+          ? "No matching cases. Nothing is open; refine the search or choose another queue."
+          : "This queue has no records to open.",
+        "empty",
+      );
+      return;
+    }
+    const noun = records.length === 1 ? "case" : "cases";
+    setCaseSearchStatus(
+      `${records.length} ${noun} found. Nothing is open until you choose Open case.`,
+      "ready",
+    );
+  }
+
   function getInternalRoleKey(me) {
     const roleCodes = Array.isArray(me && me.role_codes) ? me.role_codes : [];
     const values = [
@@ -1067,6 +1101,7 @@
     const items = state.fulfillmentItems || [];
     if (!items.length) {
       list.innerHTML = `<div class="family-record-card admin-card"><h3>No paid orders waiting</h3><p class="card-copy">Verified purchases requiring manual fulfillment will appear here.</p></div>`;
+      setCaseSearchStatus("No paid orders are waiting for manual fulfillment. No customer record is open.", "empty");
       return;
     }
     list.innerHTML = items
@@ -1103,6 +1138,10 @@
           </div>`;
       })
       .join("");
+    setCaseSearchStatus(
+      `${items.length} paid order${items.length === 1 ? "" : "s"} require manual fulfillment. Open a governed action only after reviewing the order.`,
+      "ready",
+    );
   }
 
   async function loadFulfillmentQueue() {
@@ -1779,14 +1818,17 @@
     const operationsPanel = isOperationsRole() ? renderOperationsQueuePanel() : "";
     const financePanel = ["payroll", "reports_exports"].includes(state.queue) ? renderFinanceQueuePanel() : "";
     if (isMarketingRole()) {
+      setCaseSearchStatus("This section uses its own reporting panel. No customer record is open.", "neutral");
       renderMarketingQueuePanel();
       return;
     }
     if (isOperationsRole() && state.queue === "ops_reports") {
+      setCaseSearchStatus("Operations reporting is scoped to the selected role. No customer record is open.", "neutral");
       node.innerHTML = operationsPanel;
       return;
     }
     if (financePanel) {
+      setCaseSearchStatus("Finance reporting is scoped to the selected role. No customer record is open.", "neutral");
       node.innerHTML = financePanel;
       return;
     }
@@ -1811,6 +1853,7 @@
             <p class="card-copy">No customer cases matched this queue/search.</p>
           </div>
         `;
+      updateCaseSearchStatus(cases);
       return;
     }
 
@@ -1858,11 +1901,18 @@
                 ? `<div class="admin-case-guidance"><span>Next</span><strong>${escapeHtml(primaryGuidance.next_action || primaryGuidance.title || "Review Case")}</strong></div>`
                 : ""
             }
-            <button class="btn btn-secondary admin-open-case" type="button" data-open-case="${escapeHtml(item.case_id || "")}">Open</button>
+            <button
+              class="btn btn-secondary admin-open-case"
+              type="button"
+              data-open-case="${escapeHtml(item.case_id || "")}"
+              aria-label="Open ${escapeHtml(item.name || "customer")} case"
+              title="Open this case in an isolated workspace"
+            >Open case</button>
           </article>
         `;
       })
       .join("")}`;
+    updateCaseSearchStatus(cases);
   }
 
   function summarizeTabValue(value) {
@@ -2014,6 +2064,7 @@
             { label: "Role", value: tabData.role, chip: true },
             { label: "Status", value: tabData.status, chip: true },
             { label: "Admin/User Relationship", value: tabData.admin_user_relationship, chip: true },
+            { label: "Account Classification", value: tabData.account_type || "—", chip: true },
             { label: "Access Tier", value: tabData.access_tier || "—" },
             { label: "Department Role", value: tabData.department_role || "—" },
             { label: "Mailing Address", value: tabData.mailing_address || "—" },
@@ -2429,8 +2480,20 @@
     );
     const canStartImpersonation = Boolean(state.isSuperAdmin && context.caseId && !isImpersonating);
     const canStopImpersonation = Boolean(state.isSuperAdmin && isImpersonating);
+    const privilegedIdentityReviewRequired = Boolean(
+      selected.account_type === "Unexplained Privileged Account" ||
+      (context.alerts || []).includes("privileged_identity_review_required"),
+    );
     node.innerHTML = `
       <div class="admin-context-card">
+        ${
+          privilegedIdentityReviewRequired
+            ? `<div class="admin-identity-review-callout" role="alert">
+               <strong>Privileged identity review required</strong>
+               <p>The record carries an administrative role but is not matched to the active officer registry. Do not broaden access until the CEO reviews the identity and job template.</p>
+               ${state.isSuperAdmin ? '<button class="btn btn-secondary" type="button" data-super-admin-manage-team-access>Review Team Access</button>' : ""}
+             </div>`
+          : ""}
         ${
           isPreviewedCase
             ? `<div class="admin-warning-strip"><span>Customer Preview Active</span><div><strong>${escapeHtml(impersonation.banner || "Read-only customer context")}</strong></div></div>
@@ -2712,6 +2775,7 @@
     }
     const meta = QUEUE_META[state.queue] || QUEUE_META.customer_cases;
     setPageStatus(`Loading ${meta[0].toLowerCase()}...`, "info");
+    setCaseSearchStatus(`Searching ${meta[0].toLowerCase()}...`, "loading");
     try {
       const payload = await fetchJson(
         `/admin/control-center/cases?queue=${encodeURIComponent(state.queue)}&limit=80&search=${encodeURIComponent(getSearchValue())}`,
@@ -5160,7 +5224,16 @@
           loadCases();
         }
       });
-    }
+
+      const runSearchButton = document.querySelector("[data-admin-run-search]");
+      if (runSearchButton) {
+        runSearchButton.addEventListener("click", function () {
+          window.clearTimeout(searchTimer);
+          state.selectedCaseId = "";
+          state.workspace = null;
+          loadCases();
+        });
+      }    }
 
     const refreshButton = document.querySelector("[data-admin-refresh-cases]");
     if (refreshButton) {
