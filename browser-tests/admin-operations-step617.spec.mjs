@@ -151,9 +151,12 @@ test("[step617] Control Center starts private/search-first and opens a customer 
   expect(state.caseDetailCalls).toBe(0);
 
   const search = page.locator("[data-admin-case-search]");
+  await expect(page.getByRole("button", { name: "Search Cases" })).toBeVisible();
   await search.fill("Robinson");
-  await page.waitForTimeout(450);
+  await page.getByRole("button", { name: "Search Cases" }).click();
   await expect(page.locator("[data-admin-case-list]")).toContainText("Larry Robinson");
+  await expect(page.getByRole("button", { name: "Open Larry Robinson case" })).toBeVisible();
+  await expect(page.locator("[data-admin-case-search-status]")).toContainText("Nothing is open until you choose Open case");
   expect(state.caseListCalls).toBeGreaterThan(0);
   expect(state.caseDetailCalls).toBe(0);
 
