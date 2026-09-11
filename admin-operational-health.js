@@ -40,7 +40,8 @@
   async function fetchOperationalHealth() {
     const base = typeof app.getApiBaseUrl === "function" ? app.getApiBaseUrl() : "";
     const token = typeof app.getToken === "function" ? app.getToken() : "";
-    const response = await fetch(`${base}/health/operational`, {
+    const endpoint = "/health/operational";
+    const response = await fetch(`${base}${endpoint}`, {
       method: "GET",
       credentials: "include",
       headers: token ? { Authorization: `Bearer ${token}` } : {},

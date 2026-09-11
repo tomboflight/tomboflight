@@ -211,6 +211,10 @@
     if (signInLink) signInLink.hidden = true;
   }
 
+  function renderInternalAccountSummary(me) {
+    renderInternalSummary(me);
+  }
+
   function formatTimestamp(value) {
     const raw = text(value);
     if (!raw) return "Time unavailable";
@@ -260,28 +264,14 @@
     }
   }
 
-  async function loadAccountDetails() {
-    const user = await resolveSignedInUser();
-    if (!user) {
-      const summaryStatus = document.querySelector("[data-customer-account-summary-status]");
-      const activityStatus = document.querySelector("[data-security-activity-status]");
-      if (summaryStatus) summaryStatus.textContent = "Sign in to view your account and workspace summary.";
-      if (activityStatus) activityStatus.textContent = "Sign in to view recent security activity.";
-      return;
-    }
-
-    if (isInternalAdmin(user)) {
-      renderInternalSummary(user);
-      return;
-    }
-
+  async function loadCustomerAccountDetails(me) {
     if (summaryPanel) {
       try {
         const results = await Promise.all([
           app.apiRequest("/users/me/profile", { method: "GET" }),
           app.apiRequest("/users/me/workspace-context", { method: "GET" }),
         ]);
-        renderCustomerSummary(results[0] || user, results[1] || {});
+        renderCustomerSummary(results[0] || me, results[1] || {});
       } catch (_error) {
         const statusNode = document.querySelector("[data-customer-account-summary-status]");
         if (statusNode) statusNode.textContent = "Your account summary could not be loaded right now.";
@@ -297,6 +287,24 @@
         if (statusNode) statusNode.textContent = "Recent security activity could not be loaded right now.";
       }
     }
+  }
+
+  async function loadAccountDetails() {
+    const me = await resolveSignedInUser();
+    if (!me) {
+      const summaryStatus = document.querySelector("[data-customer-account-summary-status]");
+      const activityStatus = document.querySelector("[data-security-activity-status]");
+      if (summaryStatus) summaryStatus.textContent = "Sign in to view your account and workspace summary.";
+      if (activityStatus) activityStatus.textContent = "Sign in to view recent security activity.";
+      return;
+    }
+
+    const internalAdmin = me.is_admin === true || isInternalAdmin(me);
+    if (internalAdmin) {
+      renderInternalAccountSummary(me);
+      return;
+    }
+    await loadCustomerAccountDetails(me);
   }
 
   document.addEventListener("DOMContentLoaded", loadAccountDetails);
