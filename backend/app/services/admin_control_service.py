@@ -406,6 +406,13 @@ OPERATOR_GUIDANCE_RULES = {
         "recommended_action": "repair_record",
         "severity": "warning",
     },
+    "privileged_identity_review_required": {
+        "title": "Privileged identity is not in the officer registry",
+        "rule": "The record carries an administrative role, but its email is not mapped to an active officer identity. Keep access unchanged until the CEO reviews the identity and job template.",
+        "next_action": "Review Team Access",
+        "recommended_action": "",
+        "severity": "critical",
+    },
     "upload_review_pending": {
         "title": "Upload review is pending",
         "rule": "Mint eligibility requires customer files to be present and reviewable before the case can advance.",
@@ -4539,6 +4546,7 @@ def _case_queue_match(
                 "paid_order_not_linked",
                 "mint_blocked",
                 "duplicate_admin_user_identity",
+                "privileged_identity_review_required",
             }
             for alert in alerts
         )
@@ -4775,17 +4783,22 @@ def _classify_user_account_type(
     return "Customer Identity"
 
 
-def _user_owns_project(user_id: str) -> bool:
+def _user_owns_project(user_id: str, email: str | None = None) -> bool:
     db = _db()
     user_oid = _to_object_id(user_id)
     owner_values: list[Any] = [user_id]
     if user_oid is not None:
         owner_values.append(user_oid)
-    return db["projects"].find_one({"$or": [
+    owner_clauses: list[dict[str, Any]] = [
         {"user_id": {"$in": owner_values}},
         {"owner_id": {"$in": owner_values}},
+        {"owner_user_id": {"$in": owner_values}},
         {"created_by": {"$in": owner_values}},
-    ]}) is not None
+    ]
+    normalized_email = _normalize_email(email)
+    if normalized_email:
+        owner_clauses.append({"owner_email": normalized_email})
+    return db["projects"].find_one({"$or": owner_clauses}) is not None
 
 
 def _user_has_pending_verified_purchase(user_id: str, email: str | None) -> bool:
@@ -4815,8 +4828,49 @@ def _serialize_user_case(user: dict[str, Any]) -> dict[str, Any]:
     is_internal = _is_internal_user_document(user)
     status_value = _normalize(user.get("status")) or "active"
     email = _normalize_email(user.get("email")) or None
-    has_project = _user_owns_project(user_id)
-    has_pending_purchase = False if has_project else _user_has_pending_verified_purchase(user_id, email)
+
+    # Use the same relationship resolver as the opened workspace. The older
+    # summary path omitted owner_user_id/owner_email and could show No Project
+    # while the case workspace found a real project.
+    related_projects = _related_projects_for_user(user)
+    has_project = bool(related_projects)
+    has_pending_purchase = (
+        False if has_project else _user_has_pending_verified_purchase(user_id, email)
+    )
+    related_orders = (
+        _related_orders_for_user(user) if has_project or has_pending_purchase else []
+    )
+    project_ids = [
+        _normalize_object_id(project.get("id"))
+        for project in related_projects
+        if _normalize_object_id(project.get("id"))
+    ]
+    related_entitlements = _related_entitlements_for_user(user, project_ids)
+    primary_project = related_projects[0] if related_projects else {}
+    primary_order = related_orders[0] if related_orders else {}
+    primary_entitlement = related_entitlements[0] if related_entitlements else {}
+
+    package_code = normalize_package_code(
+        _normalize(
+            primary_entitlement.get("package_code")
+            or primary_order.get("package_code")
+            or primary_project.get("package_code")
+        )
+    )
+    package_name = (
+        _normalize(
+            primary_entitlement.get("package_name")
+            or primary_order.get("package_name")
+            or primary_project.get("package_name")
+        )
+        or package_code
+    )
+    project_lane = _normalize(
+        primary_project.get("project_lane")
+        or primary_project.get("lane")
+        or primary_entitlement.get("package_lane")
+        or primary_order.get("lane")
+    ).lower()
     account_type = _classify_user_account_type(
         user,
         is_internal=is_internal,
@@ -4828,6 +4882,8 @@ def _serialize_user_case(user: dict[str, Any]) -> dict[str, Any]:
         alerts.append("user_inactive")
     if is_internal:
         alerts.append("internal_admin_identity")
+    if account_type == "Unexplained Privileged Account":
+        alerts.append("privileged_identity_review_required")
     if account_type == "Customer With Verified Purchase Pending Fulfillment":
         alerts.append("verified_purchase_pending_fulfillment")
 
@@ -4841,29 +4897,33 @@ def _serialize_user_case(user: dict[str, Any]) -> dict[str, Any]:
         "email": email,
         "role": role,
         "account_type": account_type,
-        "project": "Active Project" if has_project else "No Project",
-        "package": "No Package Assigned",
-        "package_name": "No Package Assigned",
-        "package_slug": "",
-        "package_code": "",
+        "project": (
+            primary_project.get("name")
+            or ("Active Project" if has_project else "No Project")
+        ),
+        "package": package_name or "No Package Assigned",
+        "package_name": package_name or "No Package Assigned",
+        "package_slug": package_code,
+        "package_code": package_code,
         "purchase": (
             "Verified Purchase Pending Fulfillment"
             if has_pending_purchase
             else "No Verified Purchase Linked"
         ),
         "package_normalization_status": "not_applicable",
-        "lane": "admin" if is_internal else "customer",
-        "project_lane": "admin" if is_internal else "customer",
-        "lane_source": "user_role",
+        "lane": project_lane or ("admin" if is_internal else "customer"),
+        "project_lane": project_lane or ("admin" if is_internal else "customer"),
+        "lane_source": "user_role" if is_internal else "project_relationship",
         "warnings": [],
         "status": status_value,
         "alerts": alerts,
         "operator_guidance": _operator_guidance_items(alerts=alerts),
         "quick_actions": quick_actions,
         "mint_blocking_reasons": [],
-        "updated_at": _serialize_datetime(user.get("updated_at") or user.get("last_login_at") or user.get("created_at")),
+        "updated_at": _serialize_datetime(
+            user.get("updated_at") or user.get("last_login_at") or user.get("created_at")
+        ),
     }
-
 
 def _finance_admin_profile(current_user: dict[str, Any] | None) -> dict[str, Any] | None:
     if not isinstance(current_user, dict):
@@ -8921,6 +8981,7 @@ def _build_user_workspace_payload(user: dict[str, Any]) -> dict[str, Any]:
 
     role = _user_role_value(user)
     is_internal = _is_internal_user_document(user)
+    email = _normalize_email(user.get("email")) or None
     related_projects = _related_projects_for_user(user)
     related_orders = _related_orders_for_user(user)
     project_ids = [
@@ -8929,6 +8990,17 @@ def _build_user_workspace_payload(user: dict[str, Any]) -> dict[str, Any]:
         if _normalize_object_id(project.get("id"))
     ]
     related_entitlements = _related_entitlements_for_user(user, project_ids)
+    has_pending_verified_purchase = (
+        False
+        if related_projects
+        else _user_has_pending_verified_purchase(user_id, email)
+    )
+    account_type = _classify_user_account_type(
+        user,
+        is_internal=is_internal,
+        has_project=bool(related_projects),
+        has_pending_verified_purchase=has_pending_verified_purchase,
+    )
     uploads = _user_uploads_snapshot(user, project_ids)
     audit = _user_audit_timeline(user)
     primary_project = related_projects[0] if related_projects else {}
@@ -8963,6 +9035,8 @@ def _build_user_workspace_payload(user: dict[str, Any]) -> dict[str, Any]:
     alerts: list[str] = []
     if is_internal:
         alerts.append("internal_admin_identity")
+    if account_type == "Unexplained Privileged Account":
+        alerts.append("privileged_identity_review_required")
     if not related_projects and not is_internal:
         alerts.append("customer_without_project")
     operator_guidance = _operator_guidance_items(alerts=alerts)
@@ -8971,6 +9045,7 @@ def _build_user_workspace_payload(user: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "case_id": f"user:{user_id}",
+        "account_type": account_type,
         "project": primary_project or None,
         "order": primary_order or None,
         "package": {
@@ -9012,6 +9087,7 @@ def _build_user_workspace_payload(user: dict[str, Any]) -> dict[str, Any]:
                 "access_tier": _normalize(user.get("access_tier")) or None,
                 "department_role": _normalize(user.get("department_role")) or None,
                 "admin_user_relationship": "internal_admin_identity" if is_internal else "customer_record",
+                "account_type": account_type,
                 "created_at": _serialize_datetime(user.get("created_at")),
                 "updated_at": _serialize_datetime(user.get("updated_at")),
                 "last_login_at": _serialize_datetime(user.get("last_login_at")),
