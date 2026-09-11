@@ -373,9 +373,19 @@
       return;
     }
     const noun = records.length === 1 ? "case" : "cases";
+    const hasOpenWorkspace = Boolean(
+      state.selectedCaseId &&
+      state.workspace &&
+      state.workspace.case_id === state.selectedCaseId,
+    );
+    const openState = hasOpenWorkspace
+      ? "The selected case is open in the isolated workspace."
+      : state.selectedCaseId
+        ? "Opening the selected case in an isolated workspace..."
+        : "Nothing is open until you choose Open case.";
     setCaseSearchStatus(
-      `${records.length} ${noun} found. Nothing is open until you choose Open case.`,
-      "ready",
+      `${records.length} ${noun} found. ${openState}`,
+      hasOpenWorkspace ? "ready" : state.selectedCaseId ? "loading" : "ready",
     );
   }
 
@@ -1152,6 +1162,7 @@
       renderFulfillmentQueue();
       clearPageStatus();
     } catch (error) {
+      setCaseSearchStatus("Unable to confirm the manual fulfillment queue. No customer record is open.", "empty");
       setPageStatus(error.message || "Unable to load fulfillment queue.", "error");
     }
   }
@@ -2808,6 +2819,7 @@
       state.casesLoadFailed = true;
       const code = classifyAdminError(error, ADMIN_ERROR_CODES.search);
       showBootstrapError(code, error && error.message, loadCases);
+      setCaseSearchStatus("Search unavailable. No customer record is open. Use Refresh to retry.", "empty");
       setPageStatus(actionableError(code, "Case search", `/admin/control-center/cases?queue=${state.queue}`, error), "error");
     }
   }
@@ -5233,7 +5245,8 @@
           state.workspace = null;
           loadCases();
         });
-      }    }
+      }
+    }
 
     const refreshButton = document.querySelector("[data-admin-refresh-cases]");
     if (refreshButton) {
