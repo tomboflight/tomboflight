@@ -74,10 +74,7 @@ function resolveApiBaseUrl(): string {
   }
 }
 
-/**
- * Shared API config.
- * TODO: wire this to FastAPI environment-specific values.
- */
+/** Shared API config with local-network development support and hosted fallback. */
 export const API_CONFIG = {
   baseUrl: resolveApiBaseUrl(),
   timeoutMs: 15000
@@ -118,8 +115,13 @@ export const API_ENDPOINTS = {
       `/project-entitlements/project/${encodeURIComponent(projectId)}`
   },
   uploads: {
+    memberPhoto: '/uploads/member-photo',
+    verificationEvidence: '/uploads/verification-evidence',
+    privateMedia: '/uploads/private-media',
     byFamily: (familyId: string) => `/uploads/family/${encodeURIComponent(familyId)}`,
-    cinematicByFamily: (familyId: string) => `/uploads/cinematic/family/${encodeURIComponent(familyId)}`
+    cinematicByFamily: (familyId: string) => `/uploads/cinematic/family/${encodeURIComponent(familyId)}`,
+    protected: (uploadId: string, operation: 'preview' | 'download') =>
+      `/uploads/${encodeURIComponent(uploadId)}/${operation}`
   },
   issuedCertificates: {
     list: '/issued-certificates'
@@ -140,10 +142,7 @@ export const API_ENDPOINTS = {
   }
 } as const;
 
-/**
- * Produces canonical + legacy workspace access paths for backward compatibility.
- * TODO: Remove legacy aliases when backend/web have fully standardized on canonical routes.
- */
+/** Produces canonical + legacy workspace access paths for backward compatibility. */
 export function workspaceAccessPathAliases(path: string): string[] {
   const normalized = `/${path.replace(/^\/+/, '')}`;
   const canonical = normalized

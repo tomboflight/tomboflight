@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useRouter } from 'expo-router';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ScreenContainer } from '../../src/components/ScreenContainer';
 import { signOut } from '../../src/services/auth';
@@ -39,6 +39,16 @@ function profileDisplayName(profile: UserProfilePayload | null): string {
   }
 
   return asString(profile.full_name) || asString(profile.email) || '';
+}
+
+async function openExternal(url: string): Promise<void> {
+  try {
+    if (await Linking.canOpenURL(url)) {
+      await Linking.openURL(url);
+    }
+  } catch {
+    // External-link availability is controlled by the operating system.
+  }
 }
 
 export default function SettingsScreen() {
@@ -249,6 +259,22 @@ export default function SettingsScreen() {
                 accessibilityLabel="Sign out"
               >
                 <Text style={styles.signOutText}>{isSigningOut ? 'Signing Out...' : 'Sign Out'}</Text>
+              </Pressable>
+            </View>
+          </SectionCard>
+
+          <SectionCard title="Privacy And Account Requests" subtitle="Use the official request flow for access, correction, deletion, or privacy questions.">
+            <View style={styles.actions}>
+              <Link href="/(app)/data-requests" asChild>
+                <Pressable style={styles.secondaryButton} accessibilityRole="button" accessibilityLabel="Open account and data requests">
+                  <Text style={styles.secondaryButtonText}>Account & Data Requests</Text>
+                </Pressable>
+              </Link>
+              <Pressable style={styles.secondaryButton} onPress={() => void openExternal('https://tomboflight.com/privacy.html')} accessibilityRole="button" accessibilityLabel="Open privacy policy">
+                <Text style={styles.secondaryButtonText}>Open Privacy Policy</Text>
+              </Pressable>
+              <Pressable style={styles.secondaryButton} onPress={() => void openExternal('https://tomboflight.com/terms.html')} accessibilityRole="button" accessibilityLabel="Open terms of service">
+                <Text style={styles.secondaryButtonText}>Open Terms of Service</Text>
               </Pressable>
             </View>
           </SectionCard>

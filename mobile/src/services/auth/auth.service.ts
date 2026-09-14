@@ -253,7 +253,6 @@ export async function signIn(input: SignInInput): Promise<AuthTokenResponse> {
 
 /**
  * Uses FastAPI /auth/signup.
- * TODO: Build sign-up UI fields for policy acceptance and policy version display.
  */
 export async function signUp(input: SignUpInput): Promise<UserSignupResponse> {
   return apiRequest<UserSignupResponse>(API_ENDPOINTS.auth.signUp, {
@@ -272,13 +271,33 @@ export async function signUp(input: SignUpInput): Promise<UserSignupResponse> {
 
 /**
  * Uses FastAPI /auth/password-reset/request.
- * TODO: Implement token-confirm reset flow via /auth/password-reset/confirm.
  */
 export async function requestPasswordReset(email: string): Promise<PasswordResetResponse> {
   return apiRequest<PasswordResetResponse>(API_ENDPOINTS.auth.passwordResetRequest, {
     method: 'POST',
     body: {
       email: email.trim().toLowerCase()
+    }
+  });
+}
+
+/**
+ * Uses FastAPI /auth/password-reset/confirm with the one-time token from the secure reset link.
+ */
+export async function confirmPasswordReset(input: {
+  token: string;
+  newPassword: string;
+}): Promise<PasswordResetResponse> {
+  const token = input.token.trim();
+  if (!token) {
+    throw new Error('The password reset link is missing its token.');
+  }
+
+  return apiRequest<PasswordResetResponse>(API_ENDPOINTS.auth.passwordResetConfirm, {
+    method: 'POST',
+    body: {
+      token,
+      new_password: input.newPassword
     }
   });
 }

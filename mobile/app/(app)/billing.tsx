@@ -1,17 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'expo-router';
-import { Alert, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ScreenContainer } from '../../src/components/ScreenContainer';
 import {
-  createBillingPortalSession,
   fetchAccessContext,
-  fetchBillingConfig,
   fetchBillingOverview,
   fetchMyOrders,
   mapWorkspaceDataError,
   BillingOverviewPayload,
-  BillingConfigPayload,
   OrderPayload
 } from '../../src/services/api';
 import { appTheme } from '../../src/theme';
@@ -69,12 +66,10 @@ function sortedOrders(items: OrderPayload[]): OrderPayload[] {
 
 export default function BillingScreen() {
   const [isLoading, setIsLoading] = useState(true);
-  const [isOpeningPortal, setIsOpeningPortal] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
   const [accessContext, setAccessContext] = useState<AccessContextSnapshot | null>(null);
   const [billingOverview, setBillingOverview] = useState<BillingOverviewPayload | null>(null);
-  const [billingConfig, setBillingConfig] = useState<BillingConfigPayload | null>(null);
   const [orders, setOrders] = useState<OrderPayload[]>([]);
   const [notes, setNotes] = useState<string[]>([]);
   const [lastUpdatedAt, setLastUpdatedAt] = useState('');
@@ -100,8 +95,7 @@ export default function BillingScreen() {
       const context = summarizeContext(asRecord(contextPayload));
       setAccessContext(context);
 
-      const [configResult, overviewResult, ordersResult] = await Promise.allSettled([
-        fetchBillingConfig(),
+      const [overviewResult, ordersResult] = await Promise.allSettled([
         fetchBillingOverview(),
         fetchMyOrders()
       ]);
@@ -111,13 +105,6 @@ export default function BillingScreen() {
       }
 
       const responseNotes: string[] = [];
-
-      if (configResult.status === 'fulfilled') {
-        setBillingConfig(configResult.value);
-      } else {
-        setBillingConfig(null);
-        responseNotes.push(`Billing config unavailable: ${mapWorkspaceDataError(configResult.reason)}`);
-      }
 
       if (overviewResult.status === 'fulfilled') {
         setBillingOverview(overviewResult.value);
@@ -143,7 +130,6 @@ export default function BillingScreen() {
       setErrorMessage(mapWorkspaceDataError(error));
       setAccessContext(null);
       setBillingOverview(null);
-      setBillingConfig(null);
       setOrders([]);
       setNotes([]);
       setLastUpdatedAt('');
@@ -163,33 +149,6 @@ export default function BillingScreen() {
     };
   }, [loadBilling]);
 
-  const openBillingPortal = useCallback(async () => {
-    if (isOpeningPortal) {
-      return;
-    }
-
-    setIsOpeningPortal(true);
-
-    try {
-      const payload = await createBillingPortalSession();
-      const url = asString(payload.url);
-      if (!url) {
-        throw new Error('Billing portal session did not return a URL.');
-      }
-
-      const canOpen = await Linking.canOpenURL(url);
-      if (!canOpen) {
-        throw new Error('This device cannot open the returned billing portal URL.');
-      }
-
-      await Linking.openURL(url);
-    } catch (error) {
-      Alert.alert('Billing Portal Unavailable', mapWorkspaceDataError(error));
-    } finally {
-      setIsOpeningPortal(false);
-    }
-  }, [isOpeningPortal]);
-
   const paymentMethods = Array.isArray(billingOverview?.payment_methods) ? billingOverview.payment_methods : [];
   const subscriptions = Array.isArray(billingOverview?.subscriptions) ? billingOverview.subscriptions : [];
 
@@ -204,7 +163,7 @@ export default function BillingScreen() {
       <Pressable
         style={[styles.refreshButton, isLoading && styles.refreshButtonDisabled]}
         onPress={() => void loadBilling()}
-        disabled={isLoading || isOpeningPortal}
+        disabled={isLoading}
         accessibilityRole="button"
         accessibilityLabel="Refresh billing"
       >
@@ -226,7 +185,6 @@ export default function BillingScreen() {
           message={errorMessage}
           actionLabel="Retry"
           onAction={() => void loadBilling()}
-          actionDisabled={isOpeningPortal}
         />
       ) : null}
 
@@ -237,7 +195,6 @@ export default function BillingScreen() {
           message="Account workspace context is unavailable for billing in this session."
           actionLabel="Refresh"
           onAction={() => void loadBilling()}
-          actionDisabled={isOpeningPortal}
         />
       ) : null}
 
@@ -255,11 +212,7 @@ export default function BillingScreen() {
 
             <View style={styles.chipRow}>
               <WorkspaceChip
-                label={billingOverview?.can_add_card ? 'Can Add Card' : 'Card Limit Reached'}
-                tone={billingOverview?.can_add_card ? 'success' : 'warning'}
-              />
-              <WorkspaceChip
-                label={`Max Cards ${typeof billingOverview?.max_cards === 'number' ? billingOverview.max_cards : 0}`}
+                label={`Cards On File ${typeof billingOverview?.cards_on_file === 'number' ? billingOverview.cards_on_file : 0}`}
                 tone="muted"
               />
               <WorkspaceChip
@@ -362,19 +315,9 @@ export default function BillingScreen() {
             </SectionCard>
           ) : null}
 
-          <SectionCard title="Actions" subtitle="Open secure billing portal or contact support.">
+          <SectionCard title="Billing Management" subtitle="This mobile app shows billing history and account status only.">
             <View style={styles.actions}>
-              <Pressable
-                style={[styles.primaryButton, isOpeningPortal && styles.buttonDisabled]}
-                onPress={() => void openBillingPortal()}
-                disabled={isOpeningPortal}
-                accessibilityRole="button"
-                accessibilityLabel="Open secure billing portal"
-              >
-                <Text style={styles.primaryButtonText}>
-                  {isOpeningPortal ? 'Opening Portal...' : 'Open Secure Billing Portal'}
-                </Text>
-              </Pressable>
+              <Text style={styles.noteLine}>Payment changes and checkout are not offered inside the mobile MVP. Contact Tomb of Light support for account billing assistance.</Text>
 
               <Link href="/(app)/support" asChild>
                 <Pressable style={styles.secondaryButton} accessibilityRole="button" accessibilityLabel="Open support">

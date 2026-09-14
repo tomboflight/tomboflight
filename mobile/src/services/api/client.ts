@@ -78,10 +78,7 @@ function extractDetailMessage(detail: unknown): string {
   return '';
 }
 
-/**
- * Minimal API client starter.
- * TODO: map backend errors to typed mobile errors.
- */
+/** Shared API client with typed HTTP and connectivity errors. */
 export async function apiRequest<TResponse>(
   path: string,
   options: ApiRequestOptions = {}

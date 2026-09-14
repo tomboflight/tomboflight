@@ -1,6 +1,6 @@
 # Tomb of Light Mobile
 
-Customer-facing mobile app scaffold for Tomb of Light.
+Customer-facing iOS and Android app for Tomb of Light.
 
 ## Stack
 
@@ -14,8 +14,9 @@ Customer-facing mobile app scaffold for Tomb of Light.
 ```bash
 nvm use
 npm install
-npx expo install
 npm run typecheck
+npm test
+npx expo-doctor
 npm run start
 npm run build:web
 ```
@@ -50,9 +51,17 @@ npx eas-cli build --profile production --platform ios
 npx eas-cli build --profile production --platform android
 ```
 
+## Current mobile scope
+
+- Customer authentication, MFA challenge/enrollment, password reset request/confirmation, and secure session storage.
+- Customer-only project, family, tree, certificates, support, billing-summary, settings, privacy, and data-request flows.
+- Native portrait, verification-evidence, and permitted Vault upload intake using the existing FastAPI authorization and idempotency contracts.
+- Bearer-protected upload preview/download sharing; private storage URLs are never exposed to the app UI.
+- Admin tools remain on the web application.
+
 ## Notes
 
 - Use Node LTS (20.x or 22.x). Newer Node 25 can cause Expo CLI runtime errors.
-- This scaffold is intentionally minimal and production-oriented.
-- TODO markers show where FastAPI backend integration should be added.
-- Keep admin tools out of the mobile MVP.
+- The hosted API fallback is `https://tomboflight-api.onrender.com`; use a LAN URL only for local backend testing on a physical device.
+- Run `npx eas-cli init` once for the connected Expo account before the first EAS build. It adds the project identity to the local app configuration.
+- Keep admin tools out of the mobile app.
