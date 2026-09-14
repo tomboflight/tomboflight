@@ -56,8 +56,8 @@ def test_active_admin_pages_use_hardened_shared_auth_assets():
     )
     for page in pages:
         source = read(page)
-        assert 'app.js?v=20260907-auth-hardening' in source, page
-        assert 'auth.js?v=20260907-auth-hardening' in source, page
+        assert 'app.js?v=20260914-upload-auth' in source, page
+        assert 'auth.js?v=20260914-upload-auth' in source, page
 
 
 def test_internal_account_security_does_not_use_customer_profile_endpoints():
@@ -99,8 +99,8 @@ def test_review_workbenches_are_inline_and_fail_closed():
 
     for html in (portrait_html, evidence_html):
         assert 'admin-specialist-workbench.css?v=20260909-step617' in html
-        assert 'app.js?v=20260907-auth-hardening' in html
-        assert 'auth.js?v=20260907-auth-hardening' in html
+        assert 'app.js?v=20260914-upload-auth' in html
+        assert 'auth.js?v=20260914-upload-auth' in html
         assert 'Return to Control Center' in html
 
     assert 'Prepare Secure Preview' in portrait_js

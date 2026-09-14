@@ -16,8 +16,8 @@ def test_protected_upload_surfaces_use_hardened_shared_assets():
         "vault-upload.html",
     ):
         html = _read(path)
-        assert "app.js?v=20260907-auth-hardening" in html
-        assert "auth.js?v=20260907-auth-hardening" in html
+        assert "app.js?v=20260914-upload-auth" in html
+        assert "auth.js?v=20260914-upload-auth" in html
 
     assert "upload-hub.js?v=20260909-step9" in _read("upload-hub.html")
     assert "portrait-upload.js?v=20260909-step9" in _read("portrait-upload.html")
@@ -95,6 +95,8 @@ def test_step9_browser_contract_covers_real_counts_failures_and_mobile_width():
     assert "a failed lane is unavailable and is never converted to a fake zero" in source
     assert "workspace failure fails closed without fabricated file cards" in source
     assert "mobile Upload Hub overview stays within the viewport" in source
+    assert "customer mutation requests carry the bearer and CSRF credentials" in source
+    assert "cookie-authenticated customer mutations obtain CSRF before upload" in source
     assert "Security blocked" in source
     assert "0 current files" in source
     assert "width: 390" in source
@@ -114,9 +116,9 @@ def test_legacy_cache_contracts_recognize_step9_asset_revisions():
         "verification-upload.html",
         "vault-upload.html",
     ):
-        assert f'"{page}": "20260907-auth-hardening"' in phase9
-        assert f'("{page}", "app.js"): "20260907-auth-hardening"' in recovery
-        assert f'("{page}", "auth.js"): "20260907-auth-hardening"' in recovery
+        assert f'"{page}": "20260914-upload-auth"' in phase9
+        assert f'("{page}", "app.js"): "20260914-upload-auth"' in recovery
+        assert f'("{page}", "auth.js"): "20260914-upload-auth"' in recovery
 
     assert '("portrait-upload.html", "portrait-upload.js", "20260909-step9")' in phase13
     assert '"20260909-step9"\n                    if asset == "portrait-upload.js"' in phase18

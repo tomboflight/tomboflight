@@ -217,7 +217,7 @@ test.describe("Phase 21 customer account management", () => {
 
     expect(logoutRequests).toEqual([
       {
-        authorization: "******",
+        authorization: "Bearer phase21-fixture-token",
         cookies: "",
       },
     ]);

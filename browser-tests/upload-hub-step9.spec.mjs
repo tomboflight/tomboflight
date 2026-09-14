@@ -35,6 +35,7 @@ async function seedSession(page) {
   await page.addInitScript((user) => {
     localStorage.setItem("tol_access_token", "step9-fixture-token");
     localStorage.setItem("tol_user", JSON.stringify(user));
+    sessionStorage.setItem("tol_csrf_token", "step9-fixture-csrf-token");
   }, CUSTOMER);
 }
 
@@ -195,5 +196,105 @@ test.describe("Step 9 upload infrastructure truth", () => {
       document: document.documentElement.scrollWidth,
     }));
     expect(width.document).toBeLessThanOrEqual(width.viewport + 1);
+  });
+
+  test("customer mutation requests carry the bearer and CSRF credentials", async ({ page }) => {
+    let uploadHeaders = null;
+    await seedSession(page);
+    await page.route("**/*", async (route) => {
+      const request = route.request();
+      const url = new URL(request.url());
+      const path = url.pathname;
+      const method = request.method();
+      const json = (payload, status = 200) =>
+        route.fulfill({
+          status,
+          contentType: "application/json",
+          body: JSON.stringify(payload),
+        });
+
+      if (method === "GET" && path === "/auth/me") return json(CUSTOMER);
+      if (method === "GET" && path === "/users/me/workspace-context") return json(WORKSPACE);
+      if (method === "POST" && path === "/uploads/member-photo") {
+        uploadHeaders = request.headers();
+        return json({ ok: true });
+      }
+      if (path.startsWith("/")) {
+        if (request.resourceType() === "document" || ["script", "stylesheet", "image", "font"].includes(request.resourceType())) {
+          return route.continue();
+        }
+        return json({ ok: true });
+      }
+      return route.continue();
+    });
+
+    await page.goto("/upload-hub.html", { waitUntil: "networkidle" });
+    await page.evaluate(async () => {
+      const body = new FormData();
+      body.append("file", new Blob(["fixture"], { type: "image/png" }), "fixture.png");
+      await window.TOLApp.apiRequest("/uploads/member-photo", {
+        method: "POST",
+        body,
+      });
+    });
+
+    expect(uploadHeaders).toMatchObject({
+      authorization: "Bearer step9-fixture-token",
+      "x-csrf-token": "step9-fixture-csrf-token",
+    });
+  });
+
+  test("cookie-authenticated customer mutations obtain CSRF before upload", async ({ page }) => {
+    let csrfRequestCount = 0;
+    let uploadHeaders = null;
+    await page.addInitScript((user) => {
+      localStorage.setItem("tol_user", JSON.stringify(user));
+    }, CUSTOMER);
+    await page.route("**/*", async (route) => {
+      const request = route.request();
+      const url = new URL(request.url());
+      const path = url.pathname;
+      const method = request.method();
+      const json = (payload, status = 200) =>
+        route.fulfill({
+          status,
+          contentType: "application/json",
+          body: JSON.stringify(payload),
+        });
+
+      if (method === "GET" && path === "/auth/me") return json(CUSTOMER);
+      if (method === "GET" && path === "/users/me/workspace-context") return json(WORKSPACE);
+      if (method === "GET" && path === "/auth/csrf-token") {
+        csrfRequestCount += 1;
+        return json({ csrf_token: "cookie-session-csrf-token" });
+      }
+      if (method === "POST" && path === "/uploads/member-photo") {
+        uploadHeaders = request.headers();
+        return json({ ok: true });
+      }
+      if (path.startsWith("/")) {
+        if (request.resourceType() === "document" || ["script", "stylesheet", "image", "font"].includes(request.resourceType())) {
+          return route.continue();
+        }
+        return json({ ok: true });
+      }
+      return route.continue();
+    });
+
+    await page.goto("/upload-hub.html", { waitUntil: "networkidle" });
+    await page.evaluate(async () => {
+      const body = new FormData();
+      body.append("file", new Blob(["fixture"], { type: "image/png" }), "fixture.png");
+      await window.TOLApp.apiRequest("/uploads/member-photo", {
+        method: "POST",
+        body,
+      });
+    });
+
+    expect(csrfRequestCount).toBe(1);
+    expect(uploadHeaders).toMatchObject({
+      "x-csrf-token": "cookie-session-csrf-token",
+    });
+    expect(uploadHeaders.authorization).toBeUndefined();
   });
 });

@@ -11,11 +11,11 @@ def _read(path: str) -> str:
 def test_dashboard_truth_layer_load_order_and_cache_identity():
     html = _read("dashboard.html")
 
-    auth = 'auth.js?v=20260907-auth-hardening'
+    auth = 'auth.js?v=20260914-upload-auth'
     truth = 'dashboard-step8.js?v=20260908-step8-1'
     intake = 'dashboard-intake.js?v=20260829-vault-ready'
 
-    assert 'app.js?v=20260907-auth-hardening' in html
+    assert 'app.js?v=20260914-upload-auth' in html
     assert auth in html
     assert truth in html
     assert intake in html
@@ -77,8 +77,8 @@ def test_step81_section_hub_is_hardened_and_keeps_domain_truth_separate():
     bootstrap = _read("portal-section-bootstrap.js")
     css = _read("portal-section.css")
 
-    assert 'app.js?v=20260907-auth-hardening' in html
-    assert 'auth.js?v=20260907-auth-hardening' in html
+    assert 'app.js?v=20260914-upload-auth' in html
+    assert 'auth.js?v=20260914-upload-auth' in html
     assert 'portal-section.js?v=20260908-step8-1' in html
     assert 'portal-section-bootstrap.js?v=20260908-step8-1' in html
     assert 'portal-section.css?v=20260908-step8-1' in html

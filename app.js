@@ -12,6 +12,7 @@
   const DEFAULT_LIVE_API_BASE_URLS = [DEFAULT_LIVE_API_BASE_URL];
 
   const TOKEN_KEY = "tol_access_token";
+  const CSRF_TOKEN_KEY = "tol_csrf_token";
   const USER_KEY = "tol_user";
   const COOKIE_CHOICE_KEY = "tol_cookie_choice";
   const ADMIN_APPEARANCE_DEFAULT_KEY = "tol_admin_appearance_default";
@@ -25,6 +26,7 @@
   const API_REQUEST_TIMEOUT_MS = 30000;
   const API_REQUEST_RETRY_ATTEMPTS = 1;
   const LOGOUT_REQUEST_MAX_WAIT_MS = 10000;
+  const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
   const ADDON_OR_EXTRA_SLUGS = new Set([
     "extra_upload_pack",
@@ -868,6 +870,26 @@
     }
   }
 
+  function saveCsrfToken(token) {
+    const normalizedToken = typeof token === "string" ? token.trim() : "";
+    if (normalizedToken) {
+      // CSRF tokens stay tab-scoped and are never persisted to local storage.
+      sessionStorage.setItem(CSRF_TOKEN_KEY, normalizedToken);
+    } else {
+      sessionStorage.removeItem(CSRF_TOKEN_KEY);
+    }
+    localStorage.removeItem(CSRF_TOKEN_KEY);
+  }
+
+  function getCsrfToken() {
+    return sessionStorage.getItem(CSRF_TOKEN_KEY) || "";
+  }
+
+  function clearCsrfToken() {
+    sessionStorage.removeItem(CSRF_TOKEN_KEY);
+    localStorage.removeItem(CSRF_TOKEN_KEY);
+  }
+
   function getToken() {
     const sessionToken = sessionStorage.getItem(TOKEN_KEY);
     if (sessionToken) return sessionToken;
@@ -914,7 +936,15 @@
 
   function clearSession() {
     clearToken();
+    clearCsrfToken();
     clearUser();
+  }
+
+  function hasHeader(headers, name) {
+    const normalizedName = String(name || "").trim().toLowerCase();
+    return Object.keys(headers || {}).some(function (headerName) {
+      return String(headerName || "").trim().toLowerCase() === normalizedName;
+    });
   }
 
   function isMeaningfulMessage(value) {
@@ -1076,6 +1106,34 @@
     const configuredApiBaseUrls = getApiBaseUrls();
     const savedApiBaseUrl = getSavedApiBaseUrl();
     const token = getToken();
+    const hasKnownSessionUser = Boolean(getSavedUser());
+    const requestMethod = String(requestOverrides.method || "GET").toUpperCase();
+    let csrfToken = getCsrfToken();
+
+    // A cookie-authenticated session may not expose an access token to
+    // JavaScript. Fetch the matching CSRF token before the first mutation so
+    // those sessions remain fully functional without weakening cookie auth.
+    if (
+      UNSAFE_METHODS.has(requestMethod) &&
+      !csrfToken &&
+      !token &&
+      hasKnownSessionUser
+    ) {
+      try {
+        const csrfRequestOptions = {
+          method: "GET",
+          skipDiscovery,
+        };
+        if (Number.isFinite(totalTimeoutMs) && totalTimeoutMs > 0) {
+          csrfRequestOptions.totalTimeoutMs = totalTimeoutMs;
+        }
+        await apiRequest("/auth/csrf-token", csrfRequestOptions);
+        csrfToken = getCsrfToken();
+      } catch (_error) {
+        // Let the original mutation surface the authoritative auth/CSRF error.
+      }
+    }
+
     const hasRequestDeadline =
       Number.isFinite(totalTimeoutMs) && totalTimeoutMs > 0;
     const requestDeadline = hasRequestDeadline
@@ -1091,8 +1149,16 @@
       headers["Content-Type"] = "application/json";
     }
 
-    if (token && !headers.Authorization) {
-      headers.Authorization = `******`;
+    if (token && !hasHeader(headers, "Authorization")) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    if (
+      csrfToken &&
+      UNSAFE_METHODS.has(requestMethod) &&
+      !hasHeader(headers, "X-CSRF-Token")
+    ) {
+      headers["X-CSRF-Token"] = csrfToken;
     }
 
     const preferredApiBaseUrl = skipDiscovery
@@ -1260,6 +1326,12 @@
       throw error;
     }
 
+    if (data && typeof data === "object" && !Array.isArray(data)) {
+      if (typeof data.csrf_token === "string" && data.csrf_token.trim()) {
+        saveCsrfToken(data.csrf_token);
+      }
+    }
+
     return data;
   }
 
@@ -1286,7 +1358,7 @@
         method: "POST",
         headers: capturedToken
           ? {
-              Authorization: `******`,
+              Authorization: `Bearer ${capturedToken}`,
             }
           : {},
         totalTimeoutMs: maxWaitMs,
@@ -1890,6 +1962,9 @@
     saveToken,
     getToken,
     clearToken,
+    saveCsrfToken,
+    getCsrfToken,
+    clearCsrfToken,
     saveUser,
     getSavedUser,
     clearUser,
