@@ -137,6 +137,10 @@ export type UploadRecordPayload = {
   scan_status?: string;
   created_at?: string;
   download_path?: string;
+  permissions?: Record<string, unknown>;
+  version?: number;
+  is_current_version?: boolean;
+  deletion_status?: string;
   [key: string]: unknown;
 };
 

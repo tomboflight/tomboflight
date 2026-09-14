@@ -59,6 +59,7 @@ export default function AppLayout() {
       <Tabs.Screen name="certificates" options={{ title: 'Certificates', href: null }} />
       <Tabs.Screen name="billing" options={{ title: 'Billing', href: null }} />
       <Tabs.Screen name="support" options={{ title: 'Support', href: null }} />
+      <Tabs.Screen name="data-requests" options={{ title: 'Account & Data', href: null }} />
     </Tabs>
   );
 }

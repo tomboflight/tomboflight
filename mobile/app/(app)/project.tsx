@@ -492,18 +492,16 @@ export default function ProjectScreen() {
           </SectionCard>
 
           <SectionCard
-            title="Milestones And Checklist"
-            subtitle="Interim mobile state while milestone/checklist APIs are not yet available."
+            title="Mobile Project Readiness"
+            subtitle="Live readiness summary from the current project, package, maintenance, and member records."
           >
             <View style={styles.rowsCompact}>
-              <WorkspaceChip label="Milestone endpoint: not yet exposed" tone="muted" />
-              <WorkspaceChip label="Checklist endpoint: not yet exposed" tone="muted" />
+              <WorkspaceChip label={`Status: ${toHumanLabel(asString(activeProject.status) || 'unknown')}`} tone="accent" />
+              <WorkspaceChip label={`Phase: ${toHumanLabel(asString(activeProject.phase) || 'unknown')}`} />
+              <WorkspaceChip label={`Maintenance: ${toHumanLabel(asString(entitlement?.maintenance_status) || 'unknown')}`} tone="muted" />
             </View>
             <Text style={styles.interimLine}>
-              Current mobile project readiness is based on status, phase, package lane, entitlement payloads, and project member scope.
-            </Text>
-            <Text style={styles.interimLine}>
-              Once backend milestone/checklist routes are available, this card can promote to timeline and action tracking without replacing today’s real project metadata.
+              Current mobile readiness is based on the real project status, phase, package lane, entitlement payloads, maintenance state, and project member scope.
             </Text>
           </SectionCard>
 
