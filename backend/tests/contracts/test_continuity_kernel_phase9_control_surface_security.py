@@ -13,21 +13,21 @@ CONTROL_JS_PATH = REPO_ROOT / "admin-control-center.js"
 MOBILE_CONTROL_JS_PATH = REPO_ROOT / "admin-control-center-mobile.js"
 APP_JS_PATH = REPO_ROOT / "app.js"
 AUTH_JS_PATH = REPO_ROOT / "auth.js"
-APP_CACHE_REVISION = "20260828-phase21-1"
+APP_CACHE_REVISION = "20260914-upload-auth"
 APP_CACHE_REVISION_OVERRIDES = {
-    "account-security.html": "20260907-auth-hardening",
-    "admin-control-center.html": "20260907-auth-hardening",
-    "admin-family-manager.html": "20260907-auth-hardening",
-    "admin-intake-queue.html": "20260907-auth-hardening",
-    "admin-intake-review.html": "20260907-auth-hardening",
-    "admin-portrait-review.html": "20260907-auth-hardening",
-    "admin-verification-review.html": "20260907-auth-hardening",
-    "dashboard.html": "20260907-auth-hardening",
-    "portal-section.html": "20260907-auth-hardening",
-    "verification-upload.html": "20260907-auth-hardening",
-    "vault-upload.html": "20260907-auth-hardening",
-    "upload-hub.html": "20260907-auth-hardening",
-    "portrait-upload.html": "20260907-auth-hardening",
+    "account-security.html": "20260914-upload-auth",
+    "admin-control-center.html": "20260914-upload-auth",
+    "admin-family-manager.html": "20260914-upload-auth",
+    "admin-intake-queue.html": "20260914-upload-auth",
+    "admin-intake-review.html": "20260914-upload-auth",
+    "admin-portrait-review.html": "20260914-upload-auth",
+    "admin-verification-review.html": "20260914-upload-auth",
+    "dashboard.html": "20260914-upload-auth",
+    "portal-section.html": "20260914-upload-auth",
+    "verification-upload.html": "20260914-upload-auth",
+    "vault-upload.html": "20260914-upload-auth",
+    "upload-hub.html": "20260914-upload-auth",
+    "portrait-upload.html": "20260914-upload-auth",
 }
 
 
@@ -90,6 +90,12 @@ class TestContinuityKernelPhase9ControlSurfaceSecurity(unittest.TestCase):
         self.assertIn("sessionStorage.setItem(USER_KEY", self.app_js)
         self.assertNotIn("localStorage.setItem(TOKEN_KEY, token)", self.app_js)
         self.assertNotIn("localStorage.setItem(USER_KEY", self.app_js)
+
+    def test_04b_mutating_customer_requests_preserve_authentication_truth(self) -> None:
+        self.assertIn("headers.Authorization = `Bearer ${token}`", self.app_js)
+        self.assertIn('headers["X-CSRF-Token"] = csrfToken', self.app_js)
+        self.assertIn('apiRequest("/auth/csrf-token"', self.app_js)
+        self.assertNotIn('Authorization: `******`', self.app_js)
 
     def test_05_sensitive_surfaces_ship_a_restrictive_csp(self) -> None:
         for relative_path in (

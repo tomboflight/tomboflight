@@ -11,35 +11,36 @@ from app.services import household_access_service
 REPO_ROOT = Path(__file__).resolve().parents[2]
 AUDIT_CACHE_VERSION = "20260509-audit"
 SHARED_ASSET_CACHE_VERSION = "20260828-phase21-1"
+SHARED_AUTH_CACHE_VERSION = "20260914-upload-auth"
 PORTAL_CACHE_OVERRIDES = {
     "account-security.html": {
-        "app.js": "20260907-auth-hardening",
-        "auth.js": "20260907-auth-hardening",
+        "app.js": "20260914-upload-auth",
+        "auth.js": "20260914-upload-auth",
     },
     "dashboard.html": {
-        "app.js": "20260907-auth-hardening",
-        "auth.js": "20260907-auth-hardening",
+        "app.js": "20260914-upload-auth",
+        "auth.js": "20260914-upload-auth",
         "dashboard-step8.js": "20260907-step8",
         "dashboard-intake.js": "20260829-vault-ready",
     },
     "link-keys.html": {"link-keys.js": "20260823-phase13-1"},
     "upload-hub.html": {
-        "app.js": "20260907-auth-hardening",
-        "auth.js": "20260907-auth-hardening",
+        "app.js": "20260914-upload-auth",
+        "auth.js": "20260914-upload-auth",
     },
     "portrait-upload.html": {
-        "app.js": "20260907-auth-hardening",
-        "auth.js": "20260907-auth-hardening",
+        "app.js": "20260914-upload-auth",
+        "auth.js": "20260914-upload-auth",
         "portrait-upload.js": "20260909-step9",
     },
     "verification-upload.html": {
-        "app.js": "20260907-auth-hardening",
-        "auth.js": "20260907-auth-hardening",
+        "app.js": "20260914-upload-auth",
+        "auth.js": "20260914-upload-auth",
         "verification-upload.js": "20260909-step9",
     },
     "vault-upload.html": {
-        "app.js": "20260907-auth-hardening",
-        "auth.js": "20260907-auth-hardening",
+        "app.js": "20260914-upload-auth",
+        "auth.js": "20260914-upload-auth",
         "vault-upload.js": "20260829-phase22",
     },
     "tree-view.html": {"tree-view.js": "20260823-phase13-1"},
@@ -158,7 +159,7 @@ class CustomerDashboardIntegrityTests(unittest.TestCase):
                     source,
                 )
                 expected_auth_version = overrides.get(
-                    "auth.js", SHARED_ASSET_CACHE_VERSION
+                    "auth.js", SHARED_AUTH_CACHE_VERSION
                 )
                 self.assertIn(f"auth.js?v={expected_auth_version}", source)
 

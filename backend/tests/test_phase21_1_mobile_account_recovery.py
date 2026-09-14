@@ -8,33 +8,34 @@ from app.services import auth_service
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 REVISION = "20260828-phase21-1"
+SHARED_APP_AUTH_REVISION = "20260914-upload-auth"
 SHARED_ASSET_REVISION_OVERRIDES = {
-    ("account-security.html", "app.js"): "20260907-auth-hardening",
-    ("account-security.html", "auth.js"): "20260907-auth-hardening",
-    ("admin-control-center.html", "app.js"): "20260907-auth-hardening",
-    ("admin-control-center.html", "auth.js"): "20260907-auth-hardening",
-    ("admin-family-manager.html", "app.js"): "20260907-auth-hardening",
-    ("admin-family-manager.html", "auth.js"): "20260907-auth-hardening",
-    ("admin-intake-queue.html", "app.js"): "20260907-auth-hardening",
-    ("admin-intake-queue.html", "auth.js"): "20260907-auth-hardening",
-    ("admin-intake-review.html", "app.js"): "20260907-auth-hardening",
-    ("admin-intake-review.html", "auth.js"): "20260907-auth-hardening",
-    ("admin-portrait-review.html", "app.js"): "20260907-auth-hardening",
-    ("admin-portrait-review.html", "auth.js"): "20260907-auth-hardening",
-    ("admin-verification-review.html", "app.js"): "20260907-auth-hardening",
-    ("admin-verification-review.html", "auth.js"): "20260907-auth-hardening",
-    ("dashboard.html", "app.js"): "20260907-auth-hardening",
-    ("dashboard.html", "auth.js"): "20260907-auth-hardening",
-    ("portal-section.html", "app.js"): "20260907-auth-hardening",
-    ("portal-section.html", "auth.js"): "20260907-auth-hardening",
-    ("upload-hub.html", "app.js"): "20260907-auth-hardening",
-    ("upload-hub.html", "auth.js"): "20260907-auth-hardening",
-    ("portrait-upload.html", "app.js"): "20260907-auth-hardening",
-    ("portrait-upload.html", "auth.js"): "20260907-auth-hardening",
-    ("verification-upload.html", "app.js"): "20260907-auth-hardening",
-    ("verification-upload.html", "auth.js"): "20260907-auth-hardening",
-    ("vault-upload.html", "app.js"): "20260907-auth-hardening",
-    ("vault-upload.html", "auth.js"): "20260907-auth-hardening",
+    ("account-security.html", "app.js"): "20260914-upload-auth",
+    ("account-security.html", "auth.js"): "20260914-upload-auth",
+    ("admin-control-center.html", "app.js"): "20260914-upload-auth",
+    ("admin-control-center.html", "auth.js"): "20260914-upload-auth",
+    ("admin-family-manager.html", "app.js"): "20260914-upload-auth",
+    ("admin-family-manager.html", "auth.js"): "20260914-upload-auth",
+    ("admin-intake-queue.html", "app.js"): "20260914-upload-auth",
+    ("admin-intake-queue.html", "auth.js"): "20260914-upload-auth",
+    ("admin-intake-review.html", "app.js"): "20260914-upload-auth",
+    ("admin-intake-review.html", "auth.js"): "20260914-upload-auth",
+    ("admin-portrait-review.html", "app.js"): "20260914-upload-auth",
+    ("admin-portrait-review.html", "auth.js"): "20260914-upload-auth",
+    ("admin-verification-review.html", "app.js"): "20260914-upload-auth",
+    ("admin-verification-review.html", "auth.js"): "20260914-upload-auth",
+    ("dashboard.html", "app.js"): "20260914-upload-auth",
+    ("dashboard.html", "auth.js"): "20260914-upload-auth",
+    ("portal-section.html", "app.js"): "20260914-upload-auth",
+    ("portal-section.html", "auth.js"): "20260914-upload-auth",
+    ("upload-hub.html", "app.js"): "20260914-upload-auth",
+    ("upload-hub.html", "auth.js"): "20260914-upload-auth",
+    ("portrait-upload.html", "app.js"): "20260914-upload-auth",
+    ("portrait-upload.html", "auth.js"): "20260914-upload-auth",
+    ("verification-upload.html", "app.js"): "20260914-upload-auth",
+    ("verification-upload.html", "auth.js"): "20260914-upload-auth",
+    ("vault-upload.html", "app.js"): "20260914-upload-auth",
+    ("vault-upload.html", "auth.js"): "20260914-upload-auth",
 }
 
 
@@ -205,14 +206,8 @@ class Phase211FrontendContractTests(TestCase):
                 )
                 if allowed_revision is None:
                     allowed_revision = (
-                        "20260829-phase22"
-                        if path.name
-                        in {
-                            "portrait-upload.html",
-                            "verification-upload.html",
-                            "vault-upload.html",
-                        }
-                        and asset == "auth.js"
+                        SHARED_APP_AUTH_REVISION
+                        if asset in {"app.js", "auth.js"}
                         else REVISION
                     )
                 if marker in source and f"{marker}{allowed_revision}" not in source:
