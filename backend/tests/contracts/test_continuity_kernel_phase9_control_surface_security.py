@@ -95,6 +95,7 @@ class TestContinuityKernelPhase9ControlSurfaceSecurity(unittest.TestCase):
         self.assertIn("headers.Authorization = `Bearer ${token}`", self.app_js)
         self.assertIn('headers["X-CSRF-Token"] = csrfToken', self.app_js)
         self.assertIn('apiRequest("/auth/csrf-token"', self.app_js)
+        self.assertIn("hasKnownSessionUser", self.app_js)
         self.assertNotIn('Authorization: `******`', self.app_js)
 
     def test_05_sensitive_surfaces_ship_a_restrictive_csp(self) -> None:

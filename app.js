@@ -1106,13 +1106,19 @@
     const configuredApiBaseUrls = getApiBaseUrls();
     const savedApiBaseUrl = getSavedApiBaseUrl();
     const token = getToken();
+    const hasKnownSessionUser = Boolean(getSavedUser());
     const requestMethod = String(requestOverrides.method || "GET").toUpperCase();
     let csrfToken = getCsrfToken();
 
     // A cookie-authenticated session may not expose an access token to
     // JavaScript. Fetch the matching CSRF token before the first mutation so
     // those sessions remain fully functional without weakening cookie auth.
-    if (UNSAFE_METHODS.has(requestMethod) && !csrfToken && !token) {
+    if (
+      UNSAFE_METHODS.has(requestMethod) &&
+      !csrfToken &&
+      !token &&
+      hasKnownSessionUser
+    ) {
       try {
         const csrfRequestOptions = {
           method: "GET",
