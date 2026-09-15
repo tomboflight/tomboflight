@@ -40,10 +40,17 @@
     "android": {
       "package": "com.tomboflight.mobile",
       "versionCode": 1,
-      "permissions": ["CAMERA"]
+      "permissions": [
+        "android.permission.CAMERA"
+      ]
     },
     "extra": {
-      "apiBaseUrl": "https://tomboflight-api.onrender.com"
-    }
+      "apiBaseUrl": "https://tomboflight-api.onrender.com",
+      "router": {},
+      "eas": {
+        "projectId": "e7b05db9-294d-4509-a16b-70b0f02e8b82"
+      }
+    },
+    "owner": "tomb-of-light"
   }
 }
