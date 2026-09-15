@@ -51,6 +51,12 @@
         "projectId": "e7b05db9-294d-4509-a16b-70b0f02e8b82"
       }
     },
-    "owner": "tomb-of-light"
+    "owner": "tomb-of-light",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/e7b05db9-294d-4509-a16b-70b0f02e8b82"
+    }
   }
 }
