@@ -1,5 +1,6 @@
 import React from 'react';
 import { Redirect, Tabs } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -30,11 +31,16 @@ export default function AppLayout() {
       screenOptions={{
         headerStyle: { backgroundColor: appTheme.colors.surface },
         headerTintColor: appTheme.colors.textPrimary,
+        headerTitleStyle: {
+          color: appTheme.colors.textPrimary,
+          fontSize: 18,
+          fontWeight: '700'
+        },
         headerShadowVisible: false,
         tabBarActiveTintColor: appTheme.colors.primary,
         tabBarInactiveTintColor: '#7A8AA3',
         tabBarLabelStyle: {
-          fontSize: 12,
+          fontSize: 11,
           fontWeight: '600'
         },
         tabBarHideOnKeyboard: true,
@@ -43,18 +49,55 @@ export default function AppLayout() {
         },
         tabBarStyle: {
           backgroundColor: appTheme.colors.surface,
+          borderTopWidth: 1,
           borderTopColor: appTheme.colors.border,
-          height: 56 + insets.bottom,
-          paddingBottom: Math.max(insets.bottom, 8),
-          paddingTop: 8
+          height: 62 + insets.bottom,
+          paddingBottom: Math.max(insets.bottom, 9),
+          paddingTop: 7,
+          shadowColor: '#17345E',
+          shadowOpacity: 0.08,
+          shadowRadius: 12,
+          shadowOffset: { width: 0, height: -4 },
+          elevation: 8
         }
       }}
     >
-      <Tabs.Screen name="dashboard" options={{ title: 'Dashboard', tabBarLabel: 'Home' }} />
-      <Tabs.Screen name="project" options={{ title: 'Project' }} />
-      <Tabs.Screen name="family" options={{ title: 'Family' }} />
-      <Tabs.Screen name="tree" options={{ title: 'Tree' }} />
-      <Tabs.Screen name="settings" options={{ title: 'Settings' }} />
+      <Tabs.Screen
+        name="dashboard"
+        options={{
+          title: 'Dashboard',
+          tabBarLabel: 'Home',
+          tabBarIcon: ({ color, size }) => <Ionicons name="home-outline" size={size} color={color} />
+        }}
+      />
+      <Tabs.Screen
+        name="project"
+        options={{
+          title: 'Project',
+          tabBarIcon: ({ color, size }) => <Ionicons name="folder-outline" size={size} color={color} />
+        }}
+      />
+      <Tabs.Screen
+        name="family"
+        options={{
+          title: 'Family',
+          tabBarIcon: ({ color, size }) => <Ionicons name="people-outline" size={size} color={color} />
+        }}
+      />
+      <Tabs.Screen
+        name="tree"
+        options={{
+          title: 'Tree',
+          tabBarIcon: ({ color, size }) => <Ionicons name="git-network-outline" size={size} color={color} />
+        }}
+      />
+      <Tabs.Screen
+        name="settings"
+        options={{
+          title: 'Settings',
+          tabBarIcon: ({ color, size }) => <Ionicons name="settings-outline" size={size} color={color} />
+        }}
+      />
       <Tabs.Screen name="uploads" options={{ title: 'Uploads', href: null }} />
       <Tabs.Screen name="certificates" options={{ title: 'Certificates', href: null }} />
       <Tabs.Screen name="billing" options={{ title: 'Billing', href: null }} />

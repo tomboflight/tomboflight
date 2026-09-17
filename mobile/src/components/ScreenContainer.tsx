@@ -35,8 +35,9 @@ const styles = StyleSheet.create({
     backgroundColor: appTheme.colors.background
   },
   content: {
-    padding: appTheme.spacing.lg,
+    paddingHorizontal: 20,
+    paddingTop: 20,
     paddingBottom: appTheme.spacing.xl + appTheme.spacing.md,
-    gap: appTheme.spacing.lg
+    gap: appTheme.spacing.md
   }
 });
