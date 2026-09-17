@@ -91,7 +91,7 @@ def build_subscription_summary(item: dict[str, Any]) -> SubscriptionSummaryRespo
     for entry in items:
         price = (entry or {}).get("price") or {}
         product = price.get("product") or {}
-        name = _normalize_text(product.get("name"))
+        name = _normalize_text(product.get("name")) if isinstance(product, dict) else ""
         if name:
             product_names.append(name)
 
