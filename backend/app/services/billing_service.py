@@ -290,6 +290,47 @@ def _is_missing_stripe_customer_error(error: Exception) -> bool:
     )
 
 
+def _enrich_subscription_products(subscriptions: list[dict[str, Any]]) -> None:
+    """Resolve subscription product names without exceeding Stripe's expand limit.
+
+    Stripe rejects ``data.items.data.price.product`` because it is more than
+    four expansion levels deep. Product retrieval is kept as a separate
+    read-only request and deduplicated per billing response.
+    """
+    product_cache: dict[str, dict[str, Any] | None] = {}
+
+    for subscription in subscriptions:
+        if not isinstance(subscription, dict):
+            continue
+        items = ((subscription.get("items") or {}).get("data")) or []
+        for entry in items:
+            if not isinstance(entry, dict):
+                continue
+            price = entry.get("price")
+            if not isinstance(price, dict):
+                continue
+            product = price.get("product")
+            if isinstance(product, dict):
+                continue
+
+            product_id = _normalize_text(product)
+            if not product_id.startswith("prod_"):
+                continue
+            if product_id not in product_cache:
+                try:
+                    product_cache[product_id] = _stripe_to_dict(
+                        stripe.Product.retrieve(product_id)
+                    )
+                except Exception:
+                    # A product-name lookup must not make the whole billing
+                    # overview unavailable; the subscription remains usable.
+                    product_cache[product_id] = None
+
+            product_payload = product_cache[product_id]
+            if product_payload:
+                price["product"] = product_payload
+
+
 def sync_account_contact_to_stripe(
     *,
     customer_id: str,
@@ -411,10 +452,13 @@ def get_billing_overview(user: dict[str, Any]) -> dict[str, Any]:
             customer=customer_id,
             status="all",
             limit=10,
-            expand=["data.default_payment_method", "data.items.data.price.product"],
+            # Stripe permits at most four nested expansion levels. Product names
+            # are resolved separately by _enrich_subscription_products().
+            expand=["data.default_payment_method"],
         )
         subscriptions_payload = _stripe_to_dict(subscriptions_result)
         subscriptions = subscriptions_payload.get("data") or []
+        _enrich_subscription_products(subscriptions)
     except stripe.error.StripeError as exc:
         if _is_missing_stripe_customer_error(exc):
             return _billing_profile_missing_overview()
