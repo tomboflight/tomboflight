@@ -15,6 +15,25 @@
   const CSRF_TOKEN_KEY = "tol_csrf_token";
   const USER_KEY = "tol_user";
   const COOKIE_CHOICE_KEY = "tol_cookie_choice";
+  const GOOGLE_ANALYTICS_MEASUREMENT_ID = "G-XD3CH5VKBM";
+  const GOOGLE_ANALYTICS_SCRIPT_ID = "tol-google-analytics-script";
+  const ANALYTICS_BLOCKED_FILES = new Set([
+    "signin.html",
+    "signup.html",
+    "dashboard.html",
+    "billing.html",
+    "account.html",
+    "vault.html",
+    "vault-upload.html",
+    "admin.html",
+    "admin-control-center.html",
+    "admin-family-manager.html",
+    "admin-review.html",
+    "admin-queue.html",
+    "checkout.html",
+    "thank-you.html",
+    "password-reset.html",
+  ]);
   const ADMIN_APPEARANCE_DEFAULT_KEY = "tol_admin_appearance_default";
   const ADMIN_APPEARANCE_BY_USER_KEY = "tol_admin_appearance_by_user";
   const ADMIN_APPEARANCE_ENABLED = false;
@@ -1428,6 +1447,95 @@
     document.documentElement.dataset.cookieChoice = choice;
   }
 
+  function isAnalyticsAllowedPage() {
+    const pathname = String(window.location.pathname || "").toLowerCase();
+    const filename = pathname.split("/").filter(Boolean).pop() || "index.html";
+    const blockedPathPrefixes = [
+      "/app/",
+      "/admin/",
+      "/api/",
+      "/account/",
+      "/dashboard/",
+      "/private/",
+      "/portal/",
+      "/vault/",
+      "/viewer/",
+    ];
+
+    if (ANALYTICS_BLOCKED_FILES.has(filename)) return false;
+    if (blockedPathPrefixes.some((prefix) => pathname.startsWith(prefix))) {
+      return false;
+    }
+
+    const privatePageMarkers = [
+      "[data-dashboard]",
+      "[data-admin-control-center-page]",
+      "[data-admin-queue-page]",
+      "[data-admin-family-manager-page]",
+      "[data-admin-review-page]",
+      "[data-private-portal]",
+      "[data-vault-page]",
+    ];
+
+    return !privatePageMarkers.some(function (selector) {
+      return Boolean(document.querySelector(selector));
+    });
+  }
+
+  function disableGoogleAnalytics() {
+    try {
+      window["ga-disable-" + GOOGLE_ANALYTICS_MEASUREMENT_ID] = true;
+    } catch (_error) {
+      // Ignore analytics-disable errors in restricted browser modes.
+    }
+
+    if (typeof window.gtag === "function") {
+      window.gtag("consent", "update", {
+        analytics_storage: "denied",
+        ad_storage: "denied",
+        ad_user_data: "denied",
+        ad_personalization: "denied",
+      });
+    }
+  }
+
+  function loadGoogleAnalytics() {
+    if (getCookieChoice() !== "accepted") return;
+    if (!isAnalyticsAllowedPage()) return;
+    if (window.__tolGoogleAnalyticsLoaded) return;
+
+    window.__tolGoogleAnalyticsLoaded = true;
+    window["ga-disable-" + GOOGLE_ANALYTICS_MEASUREMENT_ID] = false;
+    window.dataLayer = window.dataLayer || [];
+    window.gtag =
+      window.gtag ||
+      function () {
+        window.dataLayer.push(arguments);
+      };
+
+    if (!document.getElementById(GOOGLE_ANALYTICS_SCRIPT_ID)) {
+      const script = document.createElement("script");
+      script.id = GOOGLE_ANALYTICS_SCRIPT_ID;
+      script.async = true;
+      script.src =
+        "https://www.googletagmanager.com/gtag/js?id=" +
+        encodeURIComponent(GOOGLE_ANALYTICS_MEASUREMENT_ID);
+      document.head.appendChild(script);
+    }
+
+    window.gtag("js", new Date());
+    window.gtag("consent", "default", {
+      analytics_storage: "granted",
+      ad_storage: "denied",
+      ad_user_data: "denied",
+      ad_personalization: "denied",
+    });
+    window.gtag("config", GOOGLE_ANALYTICS_MEASUREMENT_ID, {
+      allow_google_signals: false,
+      allow_ad_personalization_signals: false,
+    });
+  }
+
   function updateCookieStatus() {
     const statusNodes = document.querySelectorAll("[data-cookie-status]");
     if (!statusNodes.length) return;
@@ -1455,10 +1563,20 @@
     function applyChoice(choice) {
       saveCookieChoice(choice);
       updateCookieStatus();
+      if (choice === "accepted") {
+        loadGoogleAnalytics();
+      } else {
+        disableGoogleAnalytics();
+      }
       if (banner) banner.classList.remove("visible");
     }
 
     const existingChoice = getCookieChoice();
+    if (existingChoice === "accepted") {
+      loadGoogleAnalytics();
+    } else if (existingChoice === "declined") {
+      disableGoogleAnalytics();
+    }
     if (banner) {
       if (!existingChoice) {
         banner.classList.add("visible");
