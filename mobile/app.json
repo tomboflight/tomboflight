@@ -34,7 +34,8 @@
       "buildNumber": "1",
       "infoPlist": {
         "NSCameraUsageDescription": "Tomb of Light uses your camera when you take a family portrait.",
-        "NSPhotoLibraryUsageDescription": "Tomb of Light uses your photo library when you choose a family portrait or upload image evidence."
+        "NSPhotoLibraryUsageDescription": "Tomb of Light uses your photo library when you choose a family portrait or upload image evidence.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
