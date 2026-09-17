@@ -8,6 +8,7 @@ from bson import ObjectId
 
 from app.core.package_catalog import get_package
 from app.core.package_mapping import resolve_package_identity
+from app.schemas.billing import build_subscription_summary
 from app.services import billing_service, workspace_access_service
 from app.services.entitlement_service import resolve_project_entitlements
 
@@ -391,6 +392,66 @@ class PR465BackendPortalAuditTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(ValueError, "stripe_portal_not_configured"):
                 billing_service.create_billing_portal_session_for_user({"id": "user-1"})
+
+    def test_billing_overview_avoids_deep_subscription_expansion(self):
+        subscription = {
+            "id": "sub_123",
+            "status": "active",
+            "items": {
+                "data": [
+                    {
+                        "price": {
+                            "id": "price_123",
+                            "product": "prod_123",
+                        }
+                    }
+                ]
+            },
+        }
+        with (
+            patch.object(billing_service, "_require_stripe_secret_key", return_value="key"),
+            patch.object(
+                billing_service,
+                "_get_user_document",
+                return_value={"_id": "user-1", "stripe_customer_id": "cus_123"},
+            ),
+            patch.object(
+                billing_service.stripe.Customer,
+                "retrieve",
+                return_value={"id": "cus_123", "invoice_settings": {}},
+            ),
+            patch.object(billing_service, "_list_payment_methods", return_value=[]),
+            patch.object(
+                billing_service.stripe.Subscription,
+                "list",
+                return_value={"data": [subscription]},
+            ) as subscription_list_mock,
+            patch.object(
+                billing_service.stripe.Product,
+                "retrieve",
+                return_value={"id": "prod_123", "name": "Legacy Plus Maintenance"},
+            ) as product_retrieve_mock,
+        ):
+            overview = billing_service.get_billing_overview({"id": "user-1"})
+
+        subscription_list_mock.assert_called_once_with(
+            customer="cus_123",
+            status="all",
+            limit=10,
+            expand=["data.default_payment_method"],
+        )
+        product_retrieve_mock.assert_called_once_with("prod_123")
+        self.assertEqual(
+            overview["subscriptions"][0]["items"]["data"][0]["price"]["product"]["name"],
+            "Legacy Plus Maintenance",
+        )
+        summary = build_subscription_summary(
+            {
+                "id": "sub_unexpanded",
+                "items": {"data": [{"price": {"product": "prod_123"}}]},
+            }
+        )
+        self.assertEqual(summary.product_names, [])
 
     def test_setup_intent_creates_customer_when_missing(self):
         with (
