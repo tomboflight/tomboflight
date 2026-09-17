@@ -240,7 +240,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: appTheme.colors.border,
     padding: appTheme.spacing.md,
-    gap: appTheme.spacing.sm
+    gap: appTheme.spacing.sm,
+    shadowColor: '#17345E',
+    shadowOpacity: 0.06,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2
   },
   sectionHeader: {
     gap: 4

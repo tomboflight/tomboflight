@@ -4,13 +4,13 @@
  */
 export const appTheme = {
   colors: {
-    primary: '#1157CC',
-    primaryPressed: '#0D46A6',
-    background: '#EEF3FA',
+    primary: '#2F64D6',
+    primaryPressed: '#244FAF',
+    background: '#F3F6FB',
     surface: '#FFFFFF',
-    border: '#CBD7EA',
+    border: '#D7E2F0',
     textPrimary: '#081733',
-    textSecondary: '#44597A',
+    textSecondary: '#526684',
     success: '#1AAB8B',
     warning: '#D88E12',
     error: '#D64545'
@@ -24,8 +24,8 @@ export const appTheme = {
   },
   radius: {
     sm: 10,
-    md: 14,
-    lg: 20
+    md: 16,
+    lg: 24
   },
   typography: {
     title: 28,
