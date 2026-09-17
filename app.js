@@ -1637,17 +1637,20 @@
         }
         link.addEventListener("click", function (event) {
           const founderCampaign = isLightNeverDiesCampaign(campaign);
-          let checkoutHref = hasDirectStripeHref ? existingHref : "";
-          if (!hasDirectStripeHref) {
-            checkoutHref = buildCheckoutLinkWithContext(resolved, {
-              slug,
-              purchaseType,
-              campaign,
-              promoCode,
-            });
-            if (checkoutHref) {
-              link.href = checkoutHref;
-            }
+          const checkoutBaseHref = hasDirectStripeHref
+            ? existingHref
+            : resolved;
+          let checkoutHref = buildCheckoutLinkWithContext(checkoutBaseHref, {
+            slug,
+            purchaseType,
+            campaign,
+            promoCode,
+          });
+          if (!checkoutHref) {
+            checkoutHref = checkoutBaseHref;
+          }
+          if (checkoutHref) {
+            link.href = checkoutHref;
           }
           const normalizedSlug = stripMaintenanceSuffix(slug);
           if (founderCampaign && purchaseType === "package" && normalizedSlug) {
