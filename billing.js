@@ -59,6 +59,9 @@
     if (normalized.includes("stripe_portal_not_configured")) {
       return "Billing portal is not configured yet.";
     }
+    if (normalized.includes("billing_provider_unavailable")) {
+      return "Billing data is temporarily unavailable. Please try again shortly.";
+    }
     if (typeof console !== "undefined" && typeof console.error === "function") {
       console.error("[Billing] Error details:", error);
     }
@@ -335,6 +338,7 @@
       const payloadErrorCode = String((payload && payload.error_code) || "").trim();
       const payloadMessage = String((payload && payload.message) || "").trim();
       if (payloadErrorCode) {
+        const providerUnavailable = payloadErrorCode === "billing_provider_unavailable";
         if (pageStatus) {
           pageStatus.textContent =
             payloadMessage ||
@@ -342,18 +346,21 @@
             "Billing profile data is currently unavailable.";
         }
         if (cardsStatus) {
-          cardsStatus.textContent = "No saved cards are on file yet.";
+          cardsStatus.textContent = providerUnavailable
+            ? "Billing provider is unavailable; saved-card state could not be confirmed."
+            : "No saved cards are on file yet.";
         }
         if (subscriptionsStatus) {
-          subscriptionsStatus.textContent =
-            "No active or historical subscriptions found.";
+          subscriptionsStatus.textContent = providerUnavailable
+            ? "Billing provider is unavailable; subscription state could not be confirmed."
+            : "No active or historical subscriptions found.";
         }
         if (cardsList) {
           cardsList.innerHTML = `
               <div class="family-record-card">
                 <div class="card-number">•</div>
-                <h3>No cards saved</h3>
-                <p class="card-copy">No saved cards are on file yet.</p>
+                <h3>${providerUnavailable ? "Billing data unavailable" : "No cards saved"}</h3>
+                <p class="card-copy">${providerUnavailable ? "Saved-card state could not be confirmed. Try again shortly." : "No saved cards are on file yet."}</p>
               </div>
             `;
         }
@@ -361,15 +368,17 @@
           subscriptionsList.innerHTML = `
               <div class="family-record-card">
                 <div class="card-number">•</div>
-                <h3>No subscriptions found</h3>
-                <p class="card-copy">No active or historical subscriptions found.</p>
+                <h3>${providerUnavailable ? "Billing data unavailable" : "No subscriptions found"}</h3>
+                <p class="card-copy">${providerUnavailable ? "Subscription state could not be confirmed. Try again shortly." : "No active or historical subscriptions found."}</p>
               </div>
             `;
         }
         if (addCardCopy) {
           addCardCopy.textContent =
             payloadMessage ||
-            "Billing profile has not been created yet.";
+            (providerUnavailable
+              ? "Billing data is temporarily unavailable. Try again shortly."
+              : "Billing profile has not been created yet.");
         }
         if (saveCardButton) {
           saveCardButton.disabled = true;
@@ -432,13 +441,41 @@
       if (pageStatus) {
         pageStatus.textContent =
           getUserFacingErrorMessage(error) ||
-          "This section is temporarily unavailable.";
+          "Billing data is temporarily unavailable. Please try again shortly.";
       }
       if (cardsStatus) {
-        cardsStatus.textContent = "No saved cards are on file yet.";
+        cardsStatus.textContent =
+          "Billing provider is unavailable; saved-card state could not be confirmed.";
       }
       if (subscriptionsStatus) {
-        subscriptionsStatus.textContent = "No active or historical subscriptions found.";
+        subscriptionsStatus.textContent =
+          "Billing provider is unavailable; subscription state could not be confirmed.";
+      }
+      if (cardsList) {
+        cardsList.innerHTML = `
+            <div class="family-record-card">
+              <div class="card-number">•</div>
+              <h3>Billing data unavailable</h3>
+              <p class="card-copy">Saved-card state could not be confirmed. Try again shortly.</p>
+            </div>
+          `;
+      }
+      if (subscriptionsList) {
+        subscriptionsList.innerHTML = `
+            <div class="family-record-card">
+              <div class="card-number">•</div>
+              <h3>Billing data unavailable</h3>
+              <p class="card-copy">Subscription state could not be confirmed. Try again shortly.</p>
+            </div>
+          `;
+      }
+      if (addCardCopy) {
+        addCardCopy.textContent =
+          "Billing data is temporarily unavailable. Try again shortly.";
+      }
+      if (saveCardButton) {
+        saveCardButton.disabled = true;
+        saveCardButton.style.opacity = "0.45";
       }
     }
   }

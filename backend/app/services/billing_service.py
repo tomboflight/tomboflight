@@ -236,6 +236,60 @@ def _serialize_card_created(value: Any) -> str | None:
         return _normalize_text(value) or None
 
 
+def _billing_profile_missing_overview() -> dict[str, Any]:
+    return {
+        "customer_id": None,
+        "error_code": "billing_profile_missing",
+        "message": "Billing profile has not been created yet.",
+        "max_cards": max(1, int(settings.stripe_payment_method_max_cards or 3)),
+        "cards_on_file": 0,
+        "can_add_card": False,
+        "default_payment_method_id": None,
+        "payment_methods": [],
+        "subscriptions": [],
+    }
+
+
+def _billing_provider_unavailable_overview(customer_id: str | None) -> dict[str, Any]:
+    return {
+        "customer_id": customer_id or None,
+        "error_code": "billing_provider_unavailable",
+        "message": "Billing data is temporarily unavailable. Please try again shortly.",
+        "max_cards": max(1, int(settings.stripe_payment_method_max_cards or 3)),
+        "cards_on_file": 0,
+        "can_add_card": False,
+        "default_payment_method_id": None,
+        "payment_methods": [],
+        "subscriptions": [],
+    }
+
+
+def _is_missing_stripe_customer_error(error: Exception) -> bool:
+    raw_status_code = (
+        getattr(error, "http_status", None)
+        or getattr(error, "status_code", None)
+        or 0
+    )
+    try:
+        status_code = int(raw_status_code)
+    except (TypeError, ValueError):
+        status_code = 0
+    error_code = _normalize_text(getattr(error, "code", "")).lower()
+    message = _normalize_text(
+        getattr(error, "user_message", None)
+        or getattr(error, "message", None)
+        or error
+    ).lower()
+    return status_code == 404 or error_code == "resource_missing" or any(
+        marker in message
+        for marker in (
+            "no such customer",
+            "customer does not exist",
+            "no such resource",
+        )
+    )
+
+
 def _enrich_subscription_products(subscriptions: list[dict[str, Any]]) -> None:
     """Resolve subscription product names without exceeding Stripe's expand limit.
 
@@ -367,53 +421,48 @@ def sync_billing_customer_updated_event(event: dict[str, Any]) -> dict[str, Any]
 
 
 def get_billing_overview(user: dict[str, Any]) -> dict[str, Any]:
-    _require_stripe_secret_key()
+    try:
+        _require_stripe_secret_key()
+    except RuntimeError as exc:
+        # A missing provider secret is an operational configuration problem,
+        # not proof that the customer has no billing profile. Keep the
+        # customer page truthful while preserving the failure for operations
+        # to correct in the deployment environment.
+        if "stripe_secret_key" in str(exc).lower():
+            return _billing_provider_unavailable_overview(None)
+        raise
+
     customer_id = _existing_customer_id_for_user(user)
     if not customer_id:
-        return {
-            "customer_id": None,
-            "error_code": "billing_profile_missing",
-            "message": "Billing profile has not been created yet.",
-            "max_cards": max(1, int(settings.stripe_payment_method_max_cards or 3)),
-            "cards_on_file": 0,
-            "can_add_card": False,
-            "default_payment_method_id": None,
-            "payment_methods": [],
-            "subscriptions": [],
-        }
+        return _billing_profile_missing_overview()
 
-    customer = stripe.Customer.retrieve(customer_id)
-    customer_dict = _stripe_to_dict(customer)
-    if bool(customer_dict.get("deleted")):
-        return {
-            "customer_id": None,
-            "error_code": "billing_profile_missing",
-            "message": "Billing profile has not been created yet.",
-            "max_cards": max(1, int(settings.stripe_payment_method_max_cards or 3)),
-            "cards_on_file": 0,
-            "can_add_card": False,
-            "default_payment_method_id": None,
-            "payment_methods": [],
-            "subscriptions": [],
-        }
+    try:
+        customer = stripe.Customer.retrieve(customer_id)
+        customer_dict = _stripe_to_dict(customer)
+        if bool(customer_dict.get("deleted")):
+            return _billing_profile_missing_overview()
 
-    default_payment_method_id = _default_payment_method_id(customer)
-    payment_methods = _list_payment_methods(customer_id)
+        default_payment_method_id = _default_payment_method_id(customer)
+        payment_methods = _list_payment_methods(customer_id)
 
-    for item in payment_methods:
-        item["created"] = _serialize_card_created(item.get("created"))
+        for item in payment_methods:
+            item["created"] = _serialize_card_created(item.get("created"))
 
-    subscriptions_result = stripe.Subscription.list(
-        customer=customer_id,
-        status="all",
-        limit=10,
-        # Stripe permits at most four nested expansion levels. Product names
-        # are resolved separately by _enrich_subscription_products().
-        expand=["data.default_payment_method"],
-    )
-    subscriptions_payload = _stripe_to_dict(subscriptions_result)
-    subscriptions = subscriptions_payload.get("data") or []
-    _enrich_subscription_products(subscriptions)
+        subscriptions_result = stripe.Subscription.list(
+            customer=customer_id,
+            status="all",
+            limit=10,
+            # Stripe permits at most four nested expansion levels. Product names
+            # are resolved separately by _enrich_subscription_products().
+            expand=["data.default_payment_method"],
+        )
+        subscriptions_payload = _stripe_to_dict(subscriptions_result)
+        subscriptions = subscriptions_payload.get("data") or []
+        _enrich_subscription_products(subscriptions)
+    except stripe.error.StripeError as exc:
+        if _is_missing_stripe_customer_error(exc):
+            return _billing_profile_missing_overview()
+        return _billing_provider_unavailable_overview(customer_id)
 
     max_cards = max(1, int(settings.stripe_payment_method_max_cards or 3))
 

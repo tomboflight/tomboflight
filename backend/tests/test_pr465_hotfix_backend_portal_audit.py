@@ -393,6 +393,79 @@ class PR465BackendPortalAuditTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "stripe_portal_not_configured"):
                 billing_service.create_billing_portal_session_for_user({"id": "user-1"})
 
+        self.assertIn(
+            "Billing provider is unavailable; saved-card state could not be confirmed.",
+            billing_js,
+        )
+        self.assertIn(
+            "Billing provider is unavailable; subscription state could not be confirmed.",
+            billing_js,
+        )
+
+    def test_billing_overview_handles_missing_stripe_customer_without_500(self):
+        missing_customer = billing_service.stripe.error.StripeError(
+            "No such customer: cus_stale"
+        )
+        missing_customer.http_status = 404
+        missing_customer.code = "resource_missing"
+
+        with (
+            patch.object(billing_service, "_require_stripe_secret_key", return_value="key"),
+            patch.object(
+                billing_service,
+                "_get_user_document",
+                return_value={"_id": "user-1", "stripe_customer_id": "cus_stale"},
+            ),
+            patch.object(
+                billing_service.stripe.Customer,
+                "retrieve",
+                side_effect=missing_customer,
+            ),
+        ):
+            overview = billing_service.get_billing_overview({"id": "user-1"})
+
+        self.assertEqual(overview.get("error_code"), "billing_profile_missing")
+        self.assertEqual(overview.get("customer_id"), None)
+        self.assertEqual(overview.get("payment_methods"), [])
+        self.assertEqual(overview.get("subscriptions"), [])
+
+    def test_billing_overview_handles_provider_failure_without_500(self):
+        provider_error = billing_service.stripe.error.StripeError(
+            "Stripe temporarily unavailable"
+        )
+        provider_error.http_status = 503
+
+        with (
+            patch.object(billing_service, "_require_stripe_secret_key", return_value="key"),
+            patch.object(
+                billing_service,
+                "_get_user_document",
+                return_value={"_id": "user-1", "stripe_customer_id": "cus_123"},
+            ),
+            patch.object(
+                billing_service.stripe.Customer,
+                "retrieve",
+                side_effect=provider_error,
+            ),
+        ):
+            overview = billing_service.get_billing_overview({"id": "user-1"})
+
+        self.assertEqual(overview.get("error_code"), "billing_provider_unavailable")
+        self.assertEqual(overview.get("customer_id"), "cus_123")
+        self.assertEqual(overview.get("payment_methods"), [])
+        self.assertEqual(overview.get("subscriptions"), [])
+
+    def test_billing_overview_handles_missing_provider_secret_without_500(self):
+        with patch.object(
+            billing_service,
+            "_require_stripe_secret_key",
+            side_effect=RuntimeError("STRIPE_SECRET_KEY is not configured."),
+        ):
+            overview = billing_service.get_billing_overview({"id": "user-1"})
+
+        self.assertEqual(overview.get("error_code"), "billing_provider_unavailable")
+        self.assertIsNone(overview.get("customer_id"))
+
     def test_billing_overview_avoids_deep_subscription_expansion(self):
         subscription = {
             "id": "sub_123",
