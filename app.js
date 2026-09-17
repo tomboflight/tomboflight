@@ -15,7 +15,7 @@
   const CSRF_TOKEN_KEY = "tol_csrf_token";
   const USER_KEY = "tol_user";
   const COOKIE_CHOICE_KEY = "tol_cookie_choice";
-  const GOOGLE_ANALYTICS_MEASUREMENT_ID = "G-XD3CH5VKBM";
+  const GOOGLE_ANALYTICS_MEASUREMENT_ID = "G-QW1HEQFW0Z";
   const GOOGLE_ANALYTICS_SCRIPT_ID = "tol-google-analytics-script";
   const ANALYTICS_BLOCKED_FILES = new Set([
     "signin.html",
