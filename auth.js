@@ -2258,6 +2258,26 @@
     if (!form) return;
 
     const statusNode = document.querySelector("[data-signin-status]");
+    const logoutWarning =
+      new URLSearchParams(window.location.search).get("logout_warning") === "1";
+    if (logoutWarning) {
+      app.setStatus(
+        statusNode,
+        "This device was signed out, but server-side session revocation could not be confirmed. Reset your password if another device may still have access.",
+        "error",
+      );
+      try {
+        const cleanUrl = new URL(window.location.href);
+        cleanUrl.searchParams.delete("logout_warning");
+        window.history.replaceState(
+          {},
+          document.title,
+          `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`,
+        );
+      } catch (_error) {
+        // The warning remains visible even when URL cleanup is unavailable.
+      }
+    }
     const submitBtn = form.querySelector("[data-submit-btn]");
     const defaultSubmitLabel =
       (submitBtn && submitBtn.textContent
@@ -3029,25 +3049,36 @@
 
       const logoutTask =
         app && typeof app.logoutUser === "function"
-          ? app.logoutUser({ maxWaitMs: LOGOUT_REDIRECT_MAX_WAIT_MS })
+          ? app
+              .logoutUser({ maxWaitMs: LOGOUT_REDIRECT_MAX_WAIT_MS })
+              .then(function () {
+                return "confirmed";
+              })
           : Promise.resolve().then(function () {
               if (app && typeof app.clearSession === "function") {
                 app.clearSession();
               }
+              return "unconfirmed";
             });
 
-      await Promise.race([
+      const logoutOutcome = await Promise.race([
         logoutTask.catch(function () {
           if (app && typeof app.clearSession === "function") {
             app.clearSession();
           }
+          return "failed";
         }),
         new Promise(function (resolve) {
-          window.setTimeout(resolve, LOGOUT_REDIRECT_MAX_WAIT_MS);
+          window.setTimeout(function () {
+            resolve("timeout");
+          }, LOGOUT_REDIRECT_MAX_WAIT_MS);
         }),
       ]);
 
-      window.location.href = "signin.html";
+      window.location.href =
+        logoutOutcome === "confirmed"
+          ? "signin.html"
+          : "signin.html?logout_warning=1";
     });
   }
 

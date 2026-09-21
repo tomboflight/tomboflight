@@ -1367,24 +1367,32 @@
       Number.isFinite(options.maxWaitMs) && options.maxWaitMs > 0
         ? options.maxWaitMs
         : LOGOUT_REQUEST_MAX_WAIT_MS;
-    // Clear the local session immediately so the caller is not blocked on the
-    // network round-trip.  The backend call is best-effort: we still attempt it
-    // so the server-side httpOnly auth cookie is revoked, but a slow or failing
-    // backend cannot prevent the user from being logged out locally.
+    // Clear local state immediately, but do not suppress failure to revoke the
+    // server session. Callers must distinguish local sign-out from confirmed
+    // server-side revocation so users receive accurate security status.
     clearSession();
-    try {
-      await apiRequest("/auth/logout", {
-        method: "POST",
-        headers: capturedToken
-          ? {
-              Authorization: `Bearer ${capturedToken}`,
-            }
-          : {},
-        totalTimeoutMs: maxWaitMs,
-      });
-    } catch (_error) {
-      // Ignore – local session already cleared above.
+    const result = await apiRequest("/auth/logout", {
+      method: "POST",
+      headers: capturedToken
+        ? {
+            Authorization: `Bearer ${capturedToken}`,
+          }
+        : {},
+      totalTimeoutMs: maxWaitMs,
+    });
+
+    if (
+      result &&
+      typeof result === "object" &&
+      result.server_revocation_confirmed === false
+    ) {
+      throw new Error(
+        String(result.message || "").trim() ||
+          "This device was signed out locally, but server-side session revocation could not be confirmed.",
+      );
     }
+
+    return result;
   }
 
   async function requireSession(redirectTo = "signin.html") {

@@ -121,14 +121,33 @@ export default function SettingsScreen() {
           setIsSigningOut(true);
 
           void (async () => {
+            let serverRevocationConfirmed = true;
             try {
               await signOut();
+            } catch {
+              serverRevocationConfirmed = false;
             } finally {
               if (mountedRef.current) {
                 setIsSigningOut(false);
               }
-              router.replace('/(auth)/sign-in');
             }
+
+            if (!serverRevocationConfirmed) {
+              Alert.alert(
+                'Signed Out Locally',
+                'This device was signed out, but server-side session revocation could not be confirmed. Reset your password if another device may still have access.',
+                [
+                  {
+                    text: 'Continue',
+                    onPress: () => router.replace('/(auth)/sign-in')
+                  }
+                ],
+                { cancelable: false }
+              );
+              return;
+            }
+
+            router.replace('/(auth)/sign-in');
           })();
         }
       }

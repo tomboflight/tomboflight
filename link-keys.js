@@ -716,17 +716,21 @@
 
     document.querySelectorAll("[data-logout-btn]").forEach(function (button) {
       button.addEventListener("click", async function () {
+        let serverRevocationConfirmed = false;
         try {
           if (app.logoutUser) {
             await app.logoutUser();
+            serverRevocationConfirmed = true;
           } else {
             app.clearSession();
           }
-        } catch (error) {
+        } catch (_error) {
           app.clearSession();
         }
 
-        window.location.href = "signin.html";
+        window.location.href = serverRevocationConfirmed
+          ? "signin.html"
+          : "signin.html?logout_warning=1";
       });
     });
   }
