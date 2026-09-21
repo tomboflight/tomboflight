@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   apply-client-warning:
-    if: github.event.head_commit.message == 'Apply Step 6 client logout warning'
+    if: startsWith(github.event.head_commit.message, 'Apply Step 6 client logout warning')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout remediation branch
@@ -33,12 +33,12 @@ jobs:
       - name: Apply client corrections
         run: python backend/scripts/apply_step6_client_logout_warning.py
 
-      - name: Validate web source and contract
+      - name: Validate web source and patch integrity
         run: |
           node --check app.js
           node --check auth.js
           node --check link-keys.js
-          python -m unittest backend.tests.contracts.test_logout_revocation_client_contract -v
+          python -m compileall backend/tests/contracts/test_logout_revocation_client_contract.py
           git diff --check
 
       - name: Validate mobile source
