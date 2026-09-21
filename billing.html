@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://tomboflight-api.onrender.com https://*.onrender.com http://127.0.0.1:* http://localhost:*; media-src 'self' blob: https:; worker-src 'self' blob:; form-action 'self' https://buy.stripe.com; upgrade-insecure-requests" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self' https://js.stripe.com https://*.js.stripe.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://tomboflight-api.onrender.com https://*.onrender.com https://api.stripe.com http://127.0.0.1:* http://localhost:*; frame-src https://js.stripe.com https://*.js.stripe.com https://hooks.stripe.com; media-src 'self' blob: https:; worker-src 'self' blob:; form-action 'self' https://buy.stripe.com; upgrade-insecure-requests" />
     <title>Billing & Cards | Tomb of Light</title>
     <meta
       name="description"
