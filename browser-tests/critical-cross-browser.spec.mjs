@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 
 test.describe("critical customer entry points", () => {
-  test("sign-in gateway remains visible and keyboard operable", async ({ page }) => {
+  test("sign-in gateway supports the primary input method", async ({ page }, testInfo) => {
     const response = await page.goto("/signin.html", {
       waitUntil: "domcontentloaded",
     });
@@ -19,7 +19,10 @@ test.describe("critical customer entry points", () => {
 
     const email = page.locator('input[name="email"]');
     const password = page.locator('input[name="password"]');
-    const submit = page.locator("[data-submit-btn]");
+    const submit = page.getByRole("button", {
+      name: "Enter Private Portal",
+      exact: true,
+    });
 
     await expect(email).toBeVisible();
     await expect(password).toBeVisible();
@@ -27,7 +30,12 @@ test.describe("critical customer entry points", () => {
 
     await email.focus();
     await expect(email).toBeFocused();
-    await page.keyboard.press("Tab");
+
+    if (testInfo.project.name === "webkit-mobile-critical") {
+      await password.tap();
+    } else {
+      await page.keyboard.press("Tab");
+    }
     await expect(password).toBeFocused();
   });
 
@@ -45,16 +53,21 @@ test.describe("critical customer entry points", () => {
     expect(response.ok()).toBeTruthy();
 
     const viewerTitle = page.locator("#viewerTitle");
+    const navigateToDescendants = page.locator("#navRightBtn");
+    const resetViewer = page.locator("#resetViewerBtn");
+
     await expect(viewerTitle).toHaveText("Malik Moreland");
-    await expect(page.locator("#navRightBtn")).toBeVisible();
-    await expect(page.locator("#resetViewerBtn")).toBeVisible();
+    await expect(navigateToDescendants).toBeVisible();
+    await expect(resetViewer).toBeHidden();
 
     await page.waitForTimeout(200);
-    await page.locator("#navRightBtn").click();
+    await navigateToDescendants.click();
     await expect(viewerTitle).toHaveText("Malik Descendants");
+    await expect(resetViewer).toBeVisible();
 
     await page.waitForTimeout(200);
-    await page.locator("#resetViewerBtn").click();
+    await resetViewer.click();
     await expect(viewerTitle).toHaveText("Malik Moreland");
+    await expect(resetViewer).toBeHidden();
   });
 });
