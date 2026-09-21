@@ -85,18 +85,18 @@ class TestPhase13FamilyOperatingMachine(unittest.TestCase):
             _read("backend/app/services/admin_control_service.py"),
         )
 
-    def test_workflows_use_current_node24_actions_and_full_backend_regression(self):
-        guardrails = _read(".github/workflows/continuity-kernel-guardrails.yml")
-        deploy = _read(".github/workflows/deploy.yml")
-        self.assertNotIn("actions/checkout@v4", guardrails + deploy)
-        self.assertIn("actions/checkout@v6", guardrails)
-        self.assertIn("actions/setup-python@v7", guardrails)
-        self.assertIn("actions/setup-node@v6", guardrails)
-        self.assertIn("python -m pip install pytest==9.1.1", guardrails)
-        self.assertIn("python -m pytest backend/tests -q", guardrails)
-        self.assertIn("actions/configure-pages@v6", deploy)
-        self.assertIn("actions/upload-pages-artifact@v5", deploy)
-        self.assertIn("actions/deploy-pages@v5", deploy)
+    def test_workflow_uses_current_actions_and_gates_pages_on_full_regression(self):
+        workflow = _read(".github/workflows/continuity-kernel-guardrails.yml")
+        self.assertNotIn("actions/checkout@v4", workflow)
+        self.assertIn("actions/checkout@v6", workflow)
+        self.assertIn("actions/setup-python@v7", workflow)
+        self.assertIn("actions/setup-node@v6", workflow)
+        self.assertIn("python -m pip install pytest==9.1.1", workflow)
+        self.assertIn("python -m pytest backend/tests -q", workflow)
+        self.assertIn("actions/configure-pages@v6", workflow)
+        self.assertIn("actions/upload-pages-artifact@v5", workflow)
+        self.assertIn("actions/deploy-pages@v5", workflow)
+        self.assertIn("needs: build-pages-artifact", workflow)
 
 
 if __name__ == "__main__":
