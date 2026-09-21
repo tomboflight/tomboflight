@@ -8,6 +8,7 @@ from fastapi import HTTPException, WebSocket, status
 
 from app.core.admin_permission_registry import has_canonical_internal_admin_authority
 from app.core.security import decode_access_token
+from app.core.state_catalog import ACTIVE_OR_UNSET_RECORD_STATES
 from app.core.websocket_manager import websocket_manager
 from app.database import get_database
 from app.dependencies.auth import (
@@ -121,8 +122,19 @@ def _candidate_presence_workspace_ids(
             db["project_members"]
             .find(
                 {
-                    "$or": member_filters,
-                    "status": {"$ne": "suspended"},
+                    "$and": [
+                        {"$or": member_filters},
+                        {
+                            "$or": [
+                                {
+                                    "status": {
+                                        "$in": sorted(ACTIVE_OR_UNSET_RECORD_STATES)
+                                    }
+                                },
+                                {"status": {"$exists": False}},
+                            ]
+                        },
+                    ]
                 },
                 {"project_id": 1},
             )
