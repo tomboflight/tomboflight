@@ -1,0 +1,47 @@
+name: Apply Step 6 Logout Remediation
+
+on:
+  push:
+    branches:
+      - audit-remediation/06-logout-revocation-integrity
+
+permissions:
+  contents: write
+
+jobs:
+  apply-remediation:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout remediation branch
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Apply audited source corrections
+        run: python backend/scripts/apply_step6_logout_revocation.py
+
+      - name: Validate syntax and patch integrity
+        run: |
+          python -m compileall backend/app backend/tests/test_logout_revocation_integrity.py
+          git diff --check
+
+      - name: Commit corrected implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No remediation changes remain to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/app/routes/auth.py \
+            backend/app/services/auth_service.py \
+            backend/tests/test_logout_revocation_integrity.py
+          git commit -m "Fix logout session revocation integrity"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
