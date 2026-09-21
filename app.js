@@ -1363,28 +1363,46 @@
 
   async function logoutUser(options = {}) {
     const capturedToken = String(options.token || getToken() || "").trim();
+    const capturedCsrfToken = String(
+      options.csrfToken || getCsrfToken() || "",
+    ).trim();
     const maxWaitMs =
       Number.isFinite(options.maxWaitMs) && options.maxWaitMs > 0
         ? options.maxWaitMs
         : LOGOUT_REQUEST_MAX_WAIT_MS;
-    // Clear the local session immediately so the caller is not blocked on the
-    // network round-trip.  The backend call is best-effort: we still attempt it
-    // so the server-side httpOnly auth cookie is revoked, but a slow or failing
-    // backend cannot prevent the user from being logged out locally.
+    // Clear local state immediately, but preserve the current credentials for
+    // the logout request. This keeps cookie-only sessions CSRF-valid while the
+    // caller still receives immediate local sign-out behavior.
     clearSession();
-    try {
-      await apiRequest("/auth/logout", {
-        method: "POST",
-        headers: capturedToken
+    const result = await apiRequest("/auth/logout", {
+      method: "POST",
+      headers: {
+        ...(capturedToken
           ? {
               Authorization: `Bearer ${capturedToken}`,
             }
-          : {},
-        totalTimeoutMs: maxWaitMs,
-      });
-    } catch (_error) {
-      // Ignore – local session already cleared above.
+          : {}),
+        ...(capturedCsrfToken
+          ? {
+              "X-CSRF-Token": capturedCsrfToken,
+            }
+          : {}),
+      },
+      totalTimeoutMs: maxWaitMs,
+    });
+
+    if (
+      result &&
+      typeof result === "object" &&
+      result.server_revocation_confirmed === false
+    ) {
+      throw new Error(
+        String(result.message || "").trim() ||
+          "This device was signed out locally, but server-side session revocation could not be confirmed.",
+      );
     }
+
+    return result;
   }
 
   async function requireSession(redirectTo = "signin.html") {

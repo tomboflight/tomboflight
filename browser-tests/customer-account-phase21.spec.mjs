@@ -303,5 +303,8 @@ test.describe("Phase 21 customer account management", () => {
 
     expect(elapsedMs).toBeGreaterThanOrEqual(8_500);
     expect(elapsedMs).toBeLessThan(10_500);
+    await expect(page.locator("[data-signin-status]")).toContainText(
+      "server-side session revocation could not be confirmed",
+    );
   });
 });

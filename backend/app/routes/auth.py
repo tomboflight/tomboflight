@@ -238,6 +238,37 @@ def login(payload: UserLogin, request: Request, response: Response):
     return TokenResponse(access_token=token, csrf_token=csrf_token)
 
 
+LOGOUT_REVOCATION_FAILURE_MESSAGE = (
+    "This device was signed out locally, but server-side session revocation "
+    "could not be confirmed. Use Account Security or reset your password to "
+    "invalidate any remaining sessions."
+)
+
+
+def _resolve_logout_user_id(token: str, payload: dict | None) -> str:
+    if not payload:
+        return ""
+
+    direct_user_id = str(payload.get("user_id") or payload.get("id") or "").strip()
+    if direct_user_id:
+        return direct_user_id
+
+    email = str(payload.get("sub") or payload.get("email") or "").strip().lower()
+    if email:
+        user = get_user_by_email(email)
+        resolved_user_id = _current_user_id(user or {})
+        if resolved_user_id:
+            return resolved_user_id
+
+    # Preserve compatibility with older signed tokens that carried a stable id
+    # outside the current user_id claim. Never treat the email subject itself as
+    # an id when the identity store could not resolve it.
+    extracted_identity = _extract_user_id_from_token(str(token or ""))
+    if extracted_identity and extracted_identity.strip().lower() != email:
+        return extracted_identity.strip()
+    return ""
+
+
 @router.post("/logout")
 def logout(request: Request, response: Response):
     bearer_token = (
@@ -270,18 +301,64 @@ def logout(request: Request, response: Response):
     if source == "cookie":
         _enforce_cookie_auth_origin(request)
 
-    user_id = _extract_user_id_from_token(str(token or ""))
-    if not user_id and payload:
-        user = get_user_by_email(str(payload.get("sub") or "").strip().lower())
-        user_id = _current_user_id(user or {})
-    if user_id:
+    revocation_required = bool(payload)
+    revocation_confirmed = not revocation_required
+    revocation_failure_reason = ""
+    user_id = ""
+
+    if revocation_required:
         try:
-            revoke_user_sessions(user_id=user_id, actor_user_id=user_id, reason="logout")
+            user_id = _resolve_logout_user_id(token, payload)
+            if not user_id:
+                revocation_failure_reason = "logout_identity_unresolved"
+            elif revoke_user_sessions(
+                user_id=user_id,
+                actor_user_id=user_id,
+                reason="logout",
+            ):
+                revocation_confirmed = True
+            else:
+                revocation_failure_reason = "session_revocation_not_persisted"
         except Exception:
-            pass
+            revocation_failure_reason = "session_revocation_error"
+            logger.exception(
+                "Logout session revocation failed.",
+                extra={"logout_user_id": user_id or None},
+            )
+
     _clear_auth_cookie(response, request)
     _apply_no_store(response)
-    return {"success": True, "message": "Logged out successfully."}
+
+    if not revocation_confirmed:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        try:
+            create_audit_log(
+                "session_revocation_failed",
+                user_id or None,
+                "user",
+                user_id or "unresolved",
+                {"reason": revocation_failure_reason or "revocation_unconfirmed"},
+            )
+        except Exception:
+            logger.warning(
+                "Unable to persist logout revocation-failure audit evidence.",
+                exc_info=True,
+            )
+        return {
+            "success": False,
+            "local_logout": True,
+            "server_revocation_required": True,
+            "server_revocation_confirmed": False,
+            "message": LOGOUT_REVOCATION_FAILURE_MESSAGE,
+        }
+
+    return {
+        "success": True,
+        "local_logout": True,
+        "server_revocation_required": revocation_required,
+        "server_revocation_confirmed": True,
+        "message": "Logged out successfully.",
+    }
 
 
 @router.get("/csrf-token")
