@@ -1,0 +1,64 @@
+name: Apply Step 6 Client Logout Warning
+
+on:
+  push:
+    branches:
+      - audit-remediation/06-logout-revocation-integrity
+
+permissions:
+  contents: write
+
+jobs:
+  apply-client-warning:
+    if: github.event.head_commit.message == 'Apply Step 6 client logout warning'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout remediation branch
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Apply client corrections
+        run: python backend/scripts/apply_step6_client_logout_warning.py
+
+      - name: Validate web source and contract
+        run: |
+          node --check app.js
+          node --check auth.js
+          node --check link-keys.js
+          python -m unittest backend.tests.contracts.test_logout_revocation_client_contract -v
+          git diff --check
+
+      - name: Validate mobile source
+        working-directory: mobile
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+
+      - name: Commit corrected clients
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app.js \
+            auth.js \
+            link-keys.js \
+            mobile/app/\(app\)/settings.tsx \
+            browser-tests/customer-account-phase21.spec.mjs \
+            backend/tests/contracts/test_logout_revocation_client_contract.py
+          git commit -m "Surface unconfirmed logout revocation to clients"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
