@@ -30,8 +30,7 @@ def _timestamp() -> str:
 def get_presence_status_route(
     current_user: dict[str, Any] = Depends(get_current_user),
 ):
-    del current_user
-    return build_presence_status()
+    return build_presence_status(current_user)
 
 
 @router.websocket(WS_EXPERIENCE_PATH)
