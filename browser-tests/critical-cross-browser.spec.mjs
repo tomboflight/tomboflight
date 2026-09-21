@@ -53,20 +53,22 @@ test.describe("critical customer entry points", () => {
     expect(response.ok()).toBeTruthy();
 
     const viewerTitle = page.locator("#viewerTitle");
+    const navigateToParents = page.locator("#navLeftBtn");
     const navigateToDescendants = page.locator("#navRightBtn");
     const resetViewer = page.locator("#resetViewerBtn");
 
     await expect(viewerTitle).toHaveText("Malik Moreland");
+    await expect(navigateToParents).toBeVisible();
     await expect(navigateToDescendants).toBeVisible();
     await expect(resetViewer).toBeHidden();
 
     await page.waitForTimeout(200);
     await navigateToDescendants.click();
     await expect(viewerTitle).toHaveText("Malik Descendants");
-    await expect(resetViewer).toBeVisible();
+    await expect(resetViewer).toBeHidden();
 
     await page.waitForTimeout(200);
-    await resetViewer.click();
+    await navigateToParents.click();
     await expect(viewerTitle).toHaveText("Malik Moreland");
     await expect(resetViewer).toBeHidden();
   });
