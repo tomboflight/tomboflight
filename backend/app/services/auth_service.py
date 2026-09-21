@@ -10,7 +10,7 @@ from urllib.parse import quote, urlsplit, urlunsplit
 
 from bson import ObjectId
 from cryptography.fernet import Fernet, InvalidToken
-from pymongo import ASCENDING
+from pymongo import ASCENDING, ReturnDocument
 
 from app.config import settings
 from app.core.metadata import apply_update_metadata
@@ -1082,26 +1082,31 @@ def revoke_user_sessions(
     user = get_user_by_id(user_id)
     if not user:
         return False
-    next_version = _session_version(user) + 1
+
     db = get_database()
-    db.users.update_one(
+    revoked_user = db.users.find_one_and_update(
         {"_id": user["_id"]},
         {
-            "$set": {
-                "session_token_version": next_version,
-                "last_logout_at": _now_iso(),
-            }
+            "$inc": {"session_token_version": 1},
+            "$set": {"last_logout_at": _now_iso()},
         },
+        return_document=ReturnDocument.AFTER,
     )
+    if not revoked_user:
+        return False
+
+    next_version = _session_version(revoked_user)
     try:
         create_audit_log(
             "session_revoked",
             actor_user_id or user_id,
             "user",
-            str(user["_id"]),
+            str(revoked_user.get("_id") or user["_id"]),
             {
                 "reason": _normalize_text(reason) or "logout",
-                "email": _normalize_text(user.get("email")).lower(),
+                "email": _normalize_text(
+                    revoked_user.get("email") or user.get("email")
+                ).lower(),
                 "session_token_version": next_version,
             },
         )
