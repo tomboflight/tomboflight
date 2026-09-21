@@ -103,6 +103,17 @@ jobs:
       - name: Verify public customer workflows in supported browser profiles
         run: npm run test:browser
 
+      - name: Retain browser verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-test-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            browser-test-results.json
+            test-results
+          if-no-files-found: ignore
+          retention-days: 14
+
   build-pages-artifact:
     if: >-
       (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
