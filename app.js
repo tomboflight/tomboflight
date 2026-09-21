@@ -1363,21 +1363,31 @@
 
   async function logoutUser(options = {}) {
     const capturedToken = String(options.token || getToken() || "").trim();
+    const capturedCsrfToken = String(
+      options.csrfToken || getCsrfToken() || "",
+    ).trim();
     const maxWaitMs =
       Number.isFinite(options.maxWaitMs) && options.maxWaitMs > 0
         ? options.maxWaitMs
         : LOGOUT_REQUEST_MAX_WAIT_MS;
-    // Clear local state immediately, but do not suppress failure to revoke the
-    // server session. Callers must distinguish local sign-out from confirmed
-    // server-side revocation so users receive accurate security status.
+    // Clear local state immediately, but preserve the current credentials for
+    // the logout request. This keeps cookie-only sessions CSRF-valid while the
+    // caller still receives immediate local sign-out behavior.
     clearSession();
     const result = await apiRequest("/auth/logout", {
       method: "POST",
-      headers: capturedToken
-        ? {
-            Authorization: `Bearer ${capturedToken}`,
-          }
-        : {},
+      headers: {
+        ...(capturedToken
+          ? {
+              Authorization: `Bearer ${capturedToken}`,
+            }
+          : {}),
+        ...(capturedCsrfToken
+          ? {
+              "X-CSRF-Token": capturedCsrfToken,
+            }
+          : {}),
+      },
       totalTimeoutMs: maxWaitMs,
     });
 

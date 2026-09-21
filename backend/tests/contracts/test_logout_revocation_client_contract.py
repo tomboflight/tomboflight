@@ -16,6 +16,15 @@ def test_web_logout_does_not_suppress_revocation_failures() -> None:
     assert "result.server_revocation_confirmed === false" in app_source
 
 
+def test_cookie_only_logout_preserves_csrf_before_local_clear() -> None:
+    app_source = _read("app.js")
+    capture_index = app_source.index("const capturedCsrfToken")
+    clear_index = app_source.index("clearSession();", capture_index)
+    request_index = app_source.index('apiRequest("/auth/logout"', clear_index)
+    assert capture_index < clear_index < request_index
+    assert '"X-CSRF-Token": capturedCsrfToken' in app_source
+
+
 def test_web_logout_surfaces_unconfirmed_revocation_after_redirect() -> None:
     auth_source = _read("auth.js")
     assert 'signin.html?logout_warning=1' in auth_source
@@ -23,10 +32,10 @@ def test_web_logout_surfaces_unconfirmed_revocation_after_redirect() -> None:
     assert 'resolve("timeout")' in auth_source
 
 
-def test_link_keys_logout_preserves_revocation_warning() -> None:
+def test_link_keys_does_not_install_a_duplicate_logout_handler() -> None:
     link_keys_source = _read("link-keys.js")
-    assert 'signin.html?logout_warning=1' in link_keys_source
-    assert "serverRevocationConfirmed" in link_keys_source
+    assert 'document.querySelectorAll("[data-logout-btn]")' not in link_keys_source
+    assert "Logout is handled once by auth.js" in link_keys_source
 
 
 def test_mobile_logout_warns_before_returning_to_sign_in() -> None:

@@ -714,25 +714,9 @@
       runRequestAction(requestId, action);
     });
 
-    document.querySelectorAll("[data-logout-btn]").forEach(function (button) {
-      button.addEventListener("click", async function () {
-        let serverRevocationConfirmed = false;
-        try {
-          if (app.logoutUser) {
-            await app.logoutUser();
-            serverRevocationConfirmed = true;
-          } else {
-            app.clearSession();
-          }
-        } catch (_error) {
-          app.clearSession();
-        }
-
-        window.location.href = serverRevocationConfirmed
-          ? "signin.html"
-          : "signin.html?logout_warning=1";
-      });
-    });
+    // Logout is handled once by auth.js through its delegated
+    // [data-logout-btn] listener. A second page-local listener would issue a
+    // duplicate revocation request after local credentials have been cleared.
   }
 
   async function setupLinkKeysPage() {
