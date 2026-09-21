@@ -115,6 +115,7 @@ def _connect_to_mongo_unlocked(
     try:
         candidate_client = MongoClient(
             settings.mongodb_uri,
+            tz_aware=True,
             serverSelectionTimeoutMS=10000,
             connectTimeoutMS=10000,
             socketTimeoutMS=10000,
