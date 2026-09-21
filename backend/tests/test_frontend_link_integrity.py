@@ -105,9 +105,12 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
         homepage = (REPO_ROOT / "index.html").read_text(encoding="utf-8")
         pricing_page = (REPO_ROOT / "pricing.html").read_text(encoding="utf-8")
         app_source = (REPO_ROOT / "app.js").read_text(encoding="utf-8")
-        deploy_workflow = (REPO_ROOT / ".github" / "workflows" / "deploy.yml").read_text(
-            encoding="utf-8"
-        )
+        release_workflow = (
+            REPO_ROOT
+            / ".github"
+            / "workflows"
+            / "continuity-kernel-guardrails.yml"
+        ).read_text(encoding="utf-8")
         sitemap = (REPO_ROOT / "sitemap.xml").read_text(encoding="utf-8")
 
         featured_homepage_slugs = [
@@ -230,10 +233,10 @@ class FrontendLinkIntegrityTests(unittest.TestCase):
         )
         self.assertNotIn("mailto:billing@tomboflight.com", app_source)
         self.assertNotIn("window.location.href = `signin.html?next=", app_source)
-        self.assertIn("workflow_dispatch:", deploy_workflow)
-        self.assertIn("path: .site", deploy_workflow)
-        self.assertIn("artifact_name: ${{ env.PAGES_ARTIFACT_NAME }}", deploy_workflow)
-        self.assertIn("name: ${{ env.PAGES_ARTIFACT_NAME }}", deploy_workflow)
+        self.assertIn("workflow_dispatch:", release_workflow)
+        self.assertIn("path: .site", release_workflow)
+        self.assertIn("artifact_name: ${{ env.PAGES_ARTIFACT_NAME }}", release_workflow)
+        self.assertIn("name: ${{ env.PAGES_ARTIFACT_NAME }}", release_workflow)
         self.assertIn("https://tomboflight.com/pricing.html", sitemap)
         self.assertIn("https://tomboflight.com/platform.html", sitemap)
         self.assertIn("https://tomboflight.com/refunds-delivery.html", sitemap)
