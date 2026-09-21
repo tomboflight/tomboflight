@@ -23,7 +23,7 @@ jobs:
           python-version: '3.12'
 
       - name: Apply audited source corrections
-        run: python backend/scripts/apply_step6_logout_revocation.py
+        run: python backend/scripts/run_step6_logout_remediation.py
 
       - name: Validate syntax and patch integrity
         run: |
