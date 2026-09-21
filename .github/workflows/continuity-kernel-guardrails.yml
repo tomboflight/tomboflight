@@ -1,13 +1,17 @@
-name: Continuity Kernel Guardrails
+name: Production Validation and Pages Deployment
 
 on:
   pull_request:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 permissions:
   contents: read
+
+env:
+  PAGES_ARTIFACT_NAME: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
 
 jobs:
   continuity-kernel-guardrails:
@@ -93,8 +97,91 @@ jobs:
       - name: Install browser verification dependencies
         run: npm ci
 
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+      - name: Install Chromium and WebKit
+        run: npx playwright install --with-deps chromium webkit
 
-      - name: Verify public customer workflows in a browser
+      - name: Verify public customer workflows in supported browser profiles
         run: npm run test:browser
+
+      - name: Retain browser verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-test-evidence-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            browser-test-results.json
+            test-results
+          if-no-files-found: ignore
+          retention-days: 14
+
+  build-pages-artifact:
+    if: >-
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      github.ref == 'refs/heads/main'
+    needs:
+      - continuity-kernel-guardrails
+      - continuity-kernel-runtime-route-test-env
+      - dependency-security-audit
+      - admin-control-center-browser-execution
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: read
+    steps:
+      - name: Checkout validated revision
+        uses: actions/checkout@v6
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v6
+
+      - name: Stage public site
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .site
+          mkdir -p .site
+          shopt -s dotglob nullglob
+
+          for file in *.html *.css *.js *.png *.jpg *.jpeg *.svg *.ico *.webmanifest *.txt *.xml; do
+            cp -R "$file" .site/
+          done
+
+          for file in CNAME robots.txt sitemap.xml; do
+            if [ -e "$file" ]; then
+              cp -R "$file" .site/
+            fi
+          done
+
+          for dir in assets images reviews viewer .well-known; do
+            if [ -e "$dir" ]; then
+              cp -R "$dir" .site/
+            fi
+          done
+
+      - name: Upload validated Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          name: ${{ env.PAGES_ARTIFACT_NAME }}
+          path: .site
+
+  deploy-pages:
+    if: >-
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      github.ref == 'refs/heads/main'
+    needs: build-pages-artifact
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy validated revision to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
+        with:
+          artifact_name: ${{ env.PAGES_ARTIFACT_NAME }}
