@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 import unittest
 from pathlib import Path
 
@@ -17,14 +16,21 @@ PLAYWRIGHT_CONFIG_PATH = REPOSITORY_ROOT / "playwright.config.mjs"
 
 
 def _job_block(workflow: str, job_id: str) -> str:
-    match = re.search(
-        rf"^  {re.escape(job_id)}:\n(?P<body>.*?)(?=^  [A-Za-z0-9_-]+:\n|\Z)",
-        workflow,
-        flags=re.MULTILINE | re.DOTALL,
-    )
-    if match is None:
-        raise AssertionError(f"Workflow job is missing: {job_id}")
-    return match.group("body")
+    lines = workflow.splitlines()
+    header = f"  {job_id}:"
+    try:
+        start_index = lines.index(header) + 1
+    except ValueError as exc:
+        raise AssertionError(f"Workflow job is missing: {job_id}") from exc
+
+    end_index = len(lines)
+    for index in range(start_index, len(lines)):
+        line = lines[index]
+        if line.startswith("  ") and not line.startswith("    ") and line.endswith(":"):
+            end_index = index
+            break
+
+    return "\n".join(lines[start_index:end_index])
 
 
 class PagesReleaseGateContractTests(unittest.TestCase):
